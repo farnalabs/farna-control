@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "modulo.fullname" . }}-backend
-  namespace: {{ include "modulo.namespace" . }}
+  name: {{ include "farna-control.fullname" . }}-backend
+  namespace: {{ include "farna-control.namespace" . }}
   labels:
-    {{- include "modulo.labels" . | nindent 4 }}
+    {{- include "farna-control.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   type: {{ .Values.backend.service.type }}
@@ -14,16 +14,16 @@ spec:
       protocol: TCP
       name: http-backend
   selector:
-    {{- include "modulo.selectorLabels" . | nindent 4 }}
+    {{- include "farna-control.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "modulo.fullname" . }}-saq-system
-  namespace: {{ include "modulo.namespace" . }}
+  name: {{ include "farna-control.fullname" . }}-saq-system
+  namespace: {{ include "farna-control.namespace" . }}
   labels:
-    {{- include "modulo.labels" . | nindent 4 }}
+    {{- include "farna-control.labels" . | nindent 4 }}
     app.kubernetes.io/component: saq-system
 spec:
   type: {{ .Values.saqSystem.service.type }}
@@ -33,16 +33,16 @@ spec:
       protocol: TCP
       name: http-saq-system
   selector:
-    {{- include "modulo.selectorLabels" . | nindent 4 }}
+    {{- include "farna-control.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: saq-system
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "modulo.fullname" . }}-frontend
-  namespace: {{ include "modulo.namespace" . }}
+  name: {{ include "farna-control.fullname" . }}-frontend
+  namespace: {{ include "farna-control.namespace" . }}
   labels:
-    {{- include "modulo.labels" . | nindent 4 }}
+    {{- include "farna-control.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
 spec:
   type: {{ .Values.frontend.service.type }}
@@ -52,5 +52,5 @@ spec:
       protocol: TCP
       name: http-frontend
   selector:
-    {{- include "modulo.selectorLabels" . | nindent 4 }}
+    {{- include "farna-control.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: frontend

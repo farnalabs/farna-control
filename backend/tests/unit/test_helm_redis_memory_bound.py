@@ -74,7 +74,7 @@ def test_helm_embedded_redis_auth_runtime_wiring() -> None:
     assert "key: REDIS_PASSWORD" in text
     assert "$(REDIS_PASSWORD)" not in text
     assert "REDIS_URL" in helpers
-    assert "modulo.redisPassword" in helpers
+    assert "farna-control.redisPassword" in helpers
     assert 'printf "redis://:%s@%s-redis:6379/%d"' in helpers
 
     rendered = _helm_template({"redis.password": "runtime-test-password"})
@@ -94,7 +94,7 @@ def test_helm_embedded_redis_auth_runtime_wiring() -> None:
                 break
         assert redis_url_b64 is not None, "REDIS_URL not found in rendered Secret"
         redis_url_plain = base64.b64decode(redis_url_b64).decode()
-        assert redis_url_plain == "redis://:runtime-test-password@redis-auth-test-modulo-redis:6379/0"
+        assert redis_url_plain == "redis://:runtime-test-password@redis-auth-test-farna-control-redis:6379/0"
 
         assert base64.b64encode(b"runtime-test-password").decode() in rendered
     else:
