@@ -548,11 +548,14 @@ jobs:
           fi
 
   integration-tests:
-    name: "Pre-deploy: Integration tests"
+    name: "Pre-deploy: Integration tests shard ${{ matrix.shard }}/3"
     needs: [deploy-throttle]
     if: needs.deploy-throttle.outputs.deployed == 'true'
+    strategy:
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubicloud-standard-2
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - name: Echo run identity (pre-checkout)
         shell: bash
@@ -649,11 +652,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          SHARD="${{ matrix.shard }}"
+          TOTAL_SHARDS=3
+          export COVERAGE_FILE=".coverage.integration-${SHARD}"
+          SHARD_ARGS=()
+          INDEX=0
+          while IFS= read -r test_file; do
+            INDEX=$((INDEX + 1))
+            if [ "$(( (INDEX - 1) % TOTAL_SHARDS + 1 ))" -ne "$SHARD" ]; then
+              SHARD_ARGS+=("--ignore=${test_file}")
+            fi
+          done < <(find tests/integration -type f -name 'test_*.py' ! -name 'test_tier1b_*.py' | LC_ALL=C sort)
+          echo "Running integration shard ${SHARD}/${TOTAL_SHARDS} with COVERAGE_FILE=${COVERAGE_FILE}"
           MAX_ATTEMPTS=2
           BACKOFF_SECONDS=30
           for attempt in $(seq 1 $MAX_ATTEMPTS); do
             echo "--- Integration tests attempt $attempt of $MAX_ATTEMPTS ---"
-            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 2 --timeout=300 --cov=src/farna --cov-report=xml --cov-fail-under=0 -q -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings; then
+            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 2 --timeout=300 --cov=src/farna --cov-report=xml --cov-fail-under=0 -q -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
               echo "Integration tests passed on attempt $attempt"
               exit 0
             else
@@ -667,6 +682,7 @@ jobs:
               fi
             fi
           done
+
         env:
           DATABASE_URL: "postgresql+asyncpg://farna_control_test:farna_control_test@localhost:5433/farna_control_test"
           TESTCONTAINERS_RYUK_DISABLED: "true"
