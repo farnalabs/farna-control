@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
@@ -387,15 +388,30 @@ def _short(sha: str) -> str:
 # empty. ``test_deploy_health.py`` parses deploy.yml and asserts these exact
 # display names, so a rename in the workflow fails CI instead of silently
 # disabling classification again.
+def _normalise_job_name(job_name: str) -> str:
+    """Collapse GitHub matrix-expanded display names to a stable lookup key."""
+    return re.sub(r"\s+shard\s+(?:\d+/\d+|\$\{\{\s*matrix\.shard\s*\}\}/\d+)$", "", job_name)
+
+
+def _stage_for_job_name(job_name: str) -> str | None:
+    """Look up a job stage after normalising both workflow and API names."""
+    normalised_name = _normalise_job_name(job_name)
+    for known_name, stage in JOB_TO_STAGE.items():
+        if _normalise_job_name(known_name) == normalised_name:
+            return stage
+    return None
+
+
 JOB_TO_STAGE: dict[str, str] = {
+
     # Job id: deploy-throttle (skip-vs-deploy decision; blocks the run)
     "Deploy throttle (batch deploys)": "deploy_throttle",
     # Job ids: backend-lint / backend-unit / frontend-checks (pre-deploy checks)
     "Pre-deploy: Backend lint": "pre_deploy_lint",
     "Pre-deploy: Backend unit tests": "pre_deploy_lint",
     "Pre-deploy: Frontend checks": "pre_deploy_lint",
-    # Job id: integration-tests
-    "Pre-deploy: Integration tests": "integration_test",
+    # Job id: integration-tests (matrix-expanded into shard display names)
+    "Pre-deploy: Integration tests shard ${{ matrix.shard }}/3": "integration_test",
     # Job id: security-audit (semgrep, pip-audit)
     "Pre-deploy: Security audit": "pre_deploy_lint",
     # Job id: pre-deploy-gate (aggregate gate failing when a child failed)
@@ -419,7 +435,7 @@ DEPLOYMENT_ORDER: tuple[str, ...] = (
     "Pre-deploy: Backend lint",
     "Pre-deploy: Backend unit tests",
     "Pre-deploy: Frontend checks",
-    "Pre-deploy: Integration tests",
+    "Pre-deploy: Integration tests shard ${{ matrix.shard }}/3",
     "Pre-deploy: Security audit",
     "Pre-deploy gate",
     "Deploy to staging",
@@ -445,11 +461,11 @@ def _classify_failure_stage(job_conclusions: dict[str, str]) -> str:
     GitHub job DISPLAY names (``jobs[].name``) mapped to conclusions.
     """
     for job_name in DEPLOYMENT_ORDER:
-        stage = JOB_TO_STAGE.get(job_name)
+        stage = _stage_for_job_name(job_name)
         if stage and _failed(job_conclusions.get(job_name)):
             return stage
     for job_name, conclusion in job_conclusions.items():
-        stage = JOB_TO_STAGE.get(job_name)
+        stage = _stage_for_job_name(job_name)
         if stage and _failed(conclusion):
             return stage
     return "unknown"
