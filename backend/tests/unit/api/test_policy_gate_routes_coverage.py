@@ -190,6 +190,7 @@ def _gate_row(*, action: str = "warn", version: int | None = 1, node_id: uuid.UU
     # construction + the update snapshot); the stand-in must carry a real
     # string, not an auto-spied MagicMock child.
     row.evaluation_mode = "automatic"
+    row.reason = None
     row.version = version
     row.pre_version_raw = None
     row.deleted_at = None

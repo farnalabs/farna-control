@@ -897,9 +897,9 @@ async def update_policy_gate(
             author_warnings = await _collect_author_warnings(session, principal, eval_row, eval_id)
 
             # Snapshot pre_version_raw: KEY SET must equal the set of mutable
-            # fields (`action` + `evaluation_mode`, FAR-939 chunk 12) — not a
+            # fields (`action`, `evaluation_mode`, and `reason`) — not a
             # hardcoded list (criteria 17/18).
-            mutable_fields = {"action", "evaluation_mode"}
+            mutable_fields = {"action", "evaluation_mode", "reason"}
             snapshot = {field: getattr(gate, field) for field in mutable_fields}
             previous_action = gate.action
             if previous_action != req.action:

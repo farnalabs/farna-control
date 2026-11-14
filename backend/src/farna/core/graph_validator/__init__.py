@@ -3349,7 +3349,7 @@ class GraphValidator:
             :func:`_check_sandbox_model_var` for how *pipeline_name* /
             *unverified_registry_ok* select the save-time vs run-time facts.
         """
-        _reserved_env_prefixes = ("MODULO_", "OPENCODE_API_KEY")
+        _reserved_env_prefixes = ("FARNA_CONTROL_", "MODULO_", "OPENCODE_API_KEY")
 
         _check_sandbox_policy_fields_only_on_sandbox_nodes(graph_json, result)
         for node in graph_json.get("nodes", []):
