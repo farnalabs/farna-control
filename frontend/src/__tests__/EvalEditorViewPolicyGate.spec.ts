@@ -253,8 +253,8 @@ describe('EvalEditorView — policy gate (FAR-1106 chunk 6, spec §7a)', () => {
       .split(',')
       .map((s) => s.replace(/["'\s]/g, ''))
       .filter(Boolean)
-    // FAR-939: evaluation_mode joined the mutable set — the two-field contract.
-    expect(mutableFields).toEqual(['action', 'evaluation_mode'])
+    // FAR-939/FAR-3148: evaluation_mode and reason are in the mutable set.
+    expect(mutableFields).toEqual(['action', 'evaluation_mode', 'reason'])
 
     // The pre-delete snapshot iterates the mutable fields — not a hardcoded list.
     expect(source).toMatch(/for field in mutable_fields/)
