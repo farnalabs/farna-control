@@ -200,7 +200,7 @@ _JOB_DISPLAY_NAMES: dict[str, str] = {
     "backend-lint": "Pre-deploy: Backend lint",
     "backend-unit": "Pre-deploy: Backend unit tests",
     "frontend-checks": "Pre-deploy: Frontend checks",
-    "integration-tests": "Pre-deploy: Integration tests",
+    "integration-tests": "Pre-deploy: Integration tests shard ${{ matrix.shard }}/3",
     "security-audit": "Pre-deploy: Security audit",
     "pre-deploy-gate": "Pre-deploy gate",
     "deploy-staging": "Deploy to staging",
@@ -249,6 +249,10 @@ def test_job_to_stage_matches_deploy_yml_display_names() -> None:
         assert health.JOB_TO_STAGE[display_name] == _JOB_STAGES[job_id]
     assert set(health.JOB_TO_STAGE) == set(_JOB_DISPLAY_NAMES.values())
     assert tuple(_JOB_DISPLAY_NAMES.values()) == health.DEPLOYMENT_ORDER
+
+
+def test_matrix_shard_job_names_are_normalised_for_classification() -> None:
+    assert health._classify_failure_stage({"Pre-deploy: Integration tests shard 2/3": "failure"}) == "integration_test"
 
 
 def test_first_failed_job_in_deployment_order_wins() -> None:
