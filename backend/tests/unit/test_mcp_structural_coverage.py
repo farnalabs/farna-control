@@ -124,6 +124,8 @@ _EXPECTED_TOOLS = frozenset(
         "get_eval_suite",
         "get_schema_versions",
         "get_pipeline_diff",
+        # FAR-2236: published System Maps overview (viewer-readable).
+        "get_system_map_overview",
         # FAR-2288: internal-preview System Maps discovery (gated by the
         # system_maps feature + dev mode + operator/admin + system_maps_access).
         "discover_system_map",
