@@ -686,7 +686,7 @@ def _expected_pre_version_raw(*, action: str, evaluation_mode: str) -> dict[str,
     """
     from farna.api.routes.evals import PolicyGateUpdateRequest  # local import; avoid app import at module scope
 
-    pinned: dict[str, str] = {"action": action, "evaluation_mode": evaluation_mode}
+    pinned: dict[str, str | None] = {"action": action, "evaluation_mode": evaluation_mode, "reason": None}
     model_fields = list(PolicyGateUpdateRequest.model_fields)
     assert sorted(pinned) == sorted(model_fields), f"PolicyGateUpdateRequest's field set changed: pin the pre-edit value for every mutable field here. model_fields={sorted(model_fields)} pinned={sorted(pinned)}"
     return {field: pinned[field] for field in model_fields}
@@ -713,7 +713,11 @@ async def test_pg_spec_c18_versions_bump_monotonically_with_snapshot(db_engine: 
     # wire preserves the live mode, so both writes stay "automatic").
     assert body2["pre_version_raw"] == _expected_pre_version_raw(action="warn", evaluation_mode="automatic")
 
-    third = await client.put(f"/api/v1/evals/{eval_id}/policy-gate", json={"action": "warn"}, headers=env.headers)
+    third = await client.put(
+        f"/api/v1/evals/{eval_id}/policy-gate",
+        json={"action": "warn", "reason": "Restore advisory-only enforcement for this eval."},
+        headers=env.headers,
+    )
     assert third.status_code == 200, third.text
     body3 = third.json()
     assert body3["version"] == 3

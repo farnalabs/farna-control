@@ -911,6 +911,7 @@ async def update_policy_gate(
             gate.pre_version_raw = snapshot
             gate.version = (gate.version or 1) + 1
             gate.action = req.action
+            gate.reason = reason
             # §3.1 preserve-on-omit: an omitted field PRESERVES the live
             # mode (the frontend gate write tracks only ``action``, so it
             # must never reset a ``human`` gate); an explicit value —
