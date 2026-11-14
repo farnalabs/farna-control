@@ -150,8 +150,8 @@ def test_awaited_asyncmock_coroutines_are_not_reported(tmp_path: Path) -> None:
 
 
 def test_opt_out_disables_the_attribution_message(tmp_path: Path) -> None:
-    """``MODULO_TEST_COROUTINE_ATTRIBUTION=0`` removes the guard for debugging."""
-    result = _run_scratch(tmp_path, _LEAK_MODULE, MODULO_TEST_COROUTINE_ATTRIBUTION="0")
+    """``FARNA_CONTROL_MODULO_TEST_COROUTINE_ATTRIBUTION=0`` removes the guard for debugging."""
+    result = _run_scratch(tmp_path, _LEAK_MODULE, FARNA_CONTROL_MODULO_TEST_COROUTINE_ATTRIBUTION="0")
     output = result.stdout + result.stderr
 
     assert "never-awaited AsyncMock coroutine(s) created during" not in output
