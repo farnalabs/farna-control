@@ -484,7 +484,10 @@ def test_bridge_client_skips_non_intercepted_tool():
 def test_bridge_client_source_reads_sandbox_script():
     source = bridge_client_source()
     assert "class BridgeClient" in source
-    assert "FARNA_CONTROL_MODULO_BRIDGE_EVENT" in source
+    # The generated sandbox client reads the marker emitted by the wrapped
+    # agent process. This protocol variable is intentionally unprefixed so the
+    # stdlib-only script and its shell wrapper share the same contract.
+    assert "MODULO_BRIDGE_EVENT" in source
 
 
 async def test_callback_server_returns_pass_for_unknown_path():
@@ -1213,7 +1216,7 @@ def test_bridge_client_source_ships_escalate_protocol():
     """The sandbox-side source written by ``bridge_client_source`` carries the
     escalate marker + decision handling (single source of truth)."""
     source = bridge_client_source()
-    assert "FARNA_CONTROL_MODULO_BRIDGE_ESCALATED" in source
+    assert "MODULO_BRIDGE_ESCALATED" in source
     assert "ESCALATED_EXIT_CODE" in source
     assert '"escalate"' in source
 

@@ -76,6 +76,9 @@ class PolicyGate(SoftDeleteMixin, OrgScoped):
     # JSON-graph identifier (pipelines.graph_nodes_json), not a materialised row.
     node_id: Mapped[uuid.UUID] = mapped_column(Uuid(), nullable=False)
     action: Mapped[str] = mapped_column(Text, nullable=False)
+    # Audit reason supplied when an operator changes the gate action. This is
+    # part of the mutable policy configuration and is snapshotted on update.
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # FAR-939 chunk 12 — evaluation mode (migration 0316_policy_gate_evaluation_mode):
     # 'automatic' = the gate's evaluation result comes from the automated eval
     # loop (current behaviour); 'human' = it comes from the human's decision at
