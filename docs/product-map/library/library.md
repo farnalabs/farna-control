@@ -4,9 +4,6 @@ prd: N/A
 adr: []
 code:
   - backend/src/farna/api/routes/library.py
-  - backend/src/farna/api/routes/community_library.py
-  - backend/src/farna/core/library_service/community.py
-  - backend/src/farna/core/library_sync
   - frontend/src/views/CollectionCreateView.vue
   - frontend/src/views/CollectionDetailView.vue
 unit-tests:
@@ -16,18 +13,12 @@ unit-tests:
   - backend/tests/unit/library_service/test_contribution_flow.py
   - backend/tests/unit/library_service/test_ratings.py
   - backend/tests/unit/library_service/test_composite_library.py
-  - backend/tests/unit/library_sync/test_sync.py
-  - backend/tests/unit/library_sync/test_community_install.py
-  - backend/tests/unit/library_sync/test_library_manifest.py
-  - backend/tests/unit/library_sync/test_client.py
 bdd:
   - backend/tests/bdd/features/library/browse.feature
   - backend/tests/bdd/features/library/copy_to_adapt.feature
   - backend/tests/bdd/features/library/ratings.feature
   - backend/tests/bdd/features/library/tiering.feature
   - backend/tests/bdd/features/library/auto_update.feature
-  - backend/tests/bdd/features/library/community_registry.feature
-  - backend/tests/bdd/features/library/contribute.feature
   - backend/tests/bdd/features/library/schemas.feature
   - backend/tests/bdd/features/composites/composite_library.feature
   - backend/tests/bdd/features/workflows/import.feature

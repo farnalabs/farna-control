@@ -82,9 +82,8 @@ def client() -> Generator[TestClient, None, None]:
 
 class TestCommunityLibraryRoutes:
     def test_list_includes_manifest_timestamp(self) -> None:
-        from fastapi import FastAPI
-
         from farna.api.routes.community_library import router
+        from fastapi import FastAPI
 
         route_app = FastAPI()
         route_app.include_router(router)

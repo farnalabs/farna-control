@@ -342,19 +342,6 @@ the configured policy), and `capacity_recovered` when it drops back. If the
 
 ---
 
-## Hosted Community Library
-
-Client sync for the hosted community library of pipeline primitives.
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `MODULO_LIBRARY_ENDPOINT` | No | `""` | Library server endpoint URL. Empty disables library sync. |
-| `MODULO_LIBRARY_ROOT_PUBLIC_KEY` | No | `""` | Ed25519 PEM public key for verifying signed library manifests |
-| `MODULO_LIBRARY_SYNC_INTERVAL_SECONDS` | No | `300` | Seconds between library sync polls |
-| `MODULO_LIBRARY_SYNC_TIMEOUT_SECONDS` | No | `15` | HTTP timeout for library sync requests |
-
----
-
 ## SAQ (task queue / workers)
 
 | Variable | Required | Default | Description |

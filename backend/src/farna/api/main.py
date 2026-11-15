@@ -74,7 +74,6 @@ from farna.api.routes.api_keys import router as api_keys_router
 from farna.api.routes.assistant import router as assistant_router
 from farna.api.routes.audit import router as audit_router
 from farna.api.routes.auth import router as auth_router
-from farna.api.routes.community_library import router as community_library_router
 from farna.api.routes.compliance import router as compliance_router
 from farna.api.routes.composite_templates import router as composite_templates_router
 from farna.api.routes.connectors import router as connectors_router
@@ -1318,7 +1317,6 @@ app.include_router(viewmodel_router)
 app.include_router(api_keys_router)
 app.include_router(audit_router)
 app.include_router(library_router)
-app.include_router(community_library_router)
 app.include_router(compliance_router)
 app.include_router(lifecycle_maps_router)
 app.include_router(system_maps_published_router)
