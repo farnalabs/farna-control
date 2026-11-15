@@ -554,8 +554,9 @@ jobs:
     strategy:
       matrix:
         shard: [1, 2, 3, 4]
-    runs-on: ubicloud-standard-2
-    # 659 tests at 4.1 s/test with -n 2 extrapolate to ~45 minutes per shard.
+    runs-on: ubicloud-standard-4
+    # Memory headroom matters more than wall-clock here; shard-level parallelism
+    # is still provided by the 4-way job matrix.
     timeout-minutes: 75
     steps:
       - name: Echo run identity (pre-checkout)
@@ -684,7 +685,7 @@ jobs:
           for attempt in $(seq 1 $MAX_ATTEMPTS); do
             echo "--- Integration tests attempt $attempt of $MAX_ATTEMPTS ---"
             # With pytest-timeout's default signal method, a syscall-blocked test can ignore SIGALRM, so --timeout=300 never fires and the runner kills the job after minutes of silence. The thread method can interrupt it and name the test.
-            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 2 --dist loadgroup --timeout=300 --timeout-method=thread --cov=src/farna --cov-report=xml --cov-fail-under=0 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
+            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 1 --dist loadgroup --timeout=300 --timeout-method=thread --cov=src/farna --cov-report=xml --cov-fail-under=0 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
               echo "Integration tests passed on attempt $attempt"
               exit 0
             else
