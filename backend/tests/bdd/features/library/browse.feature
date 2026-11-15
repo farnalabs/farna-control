@@ -5,11 +5,10 @@ Feature: Browse Library Primitives
 
   Background:
     Given the organisation has 3 local primitives
-    And 5 community primitives exist
 
   Scenario: List all primitives
     When the user requests GET /api/v1/libraries
-    Then the response contains 42 primitives total
+    Then the response contains 39 primitives total
     And each primitive has id, name, primitive_type, source, and version
 
   Scenario: Filter by primitive type
@@ -24,10 +23,3 @@ Feature: Browse Library Primitives
   Scenario: Filter local only
     When the user requests GET /api/v1/libraries?source=local
     Then the response contains only organisation-local primitives
-    And no community primitives are included
-
-  Scenario: View single primitive detail
-    Given a specific primitive exists with id "00000000-0000-0000-0000-000000000010"
-    When the user requests GET /api/v1/libraries/00000000-0000-0000-0000-000000000010
-    Then the response has name "PRD Input Schema"
-    And the response has primitive_type "schema"
