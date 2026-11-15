@@ -411,7 +411,7 @@ jobs:
           ALL_COUNT=$(jq 'length' /tmp/all_prs.json)
           echo "Found $ALL_COUNT open PR(s)"
 
-          # Filter to only PRs approved by farnalabs or modulo-reviewbot
+          # Filter to only PRs approved by farnalabs or farna-reviewbot
           APPROVED_COUNT=0
           echo "[]" > /tmp/prs.json
           rm -f /tmp/ci_pending_prs.txt
@@ -462,7 +462,7 @@ jobs:
             APPROVERS=$(gh pr view "$NUM" --json reviews --jq '.reviews[]? | select(.state == "APPROVED") | .author.login' 2>/dev/null | sort -u)
 
             MERGEABLE=false
-            if echo "$APPROVERS" | grep -qE '^(farnalabs|modulo-reviewbot)$'; then
+            if echo "$APPROVERS" | grep -qE '^(farnalabs|farna-reviewbot)$'; then
               echo "approved by $APPROVERS"
               MERGEABLE=true
             fi
@@ -578,7 +578,7 @@ jobs:
         run: |
           echo "No approved PRs to process."
           echo "Total open: ${{ steps.collect.outputs.all_count }}, approved: 0"
-          echo "PRs need an APPROVED review from farnalabs or modulo-reviewbot."
+          echo "PRs need an APPROVED review from farnalabs or farna-reviewbot."
           # FAR-2157: an empty queue is a legitimate no-op, but a green merge
           # pass that merged NOTHING is otherwise indistinguishable from one
           # that merged twelve PRs. Say so, in the summary and with a marker
@@ -2176,7 +2176,7 @@ jobs:
           # Workflows-capable credential, used ONLY for PRs that touch
           # .github/workflows/* (selected per-PR in the loop below).
           # MODULO_REVIEWBOT_TOKEN is a classic PAT (vault: github-reviewbot-pat,
-          # login modulo-reviewbot) whose X-OAuth-Scopes include `workflow` and
+          # login farna-reviewbot) whose X-OAuth-Scopes include `workflow` and
           # whose repo permissions include push:true on farnalabs/farna-control (both
           # probed live 2026-10-01). GITHUB_TOKEN - the github-actions App
           # installation token - has no `workflows` permission key at all and

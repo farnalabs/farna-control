@@ -1,7 +1,7 @@
 name: "Fast Lane: Post-merge audit"
 
 # Verify that every fast-lane merge received a post-merge review comment
-# from the reviewer identity (modulo-reviewbot).
+# from the reviewer identity (farna-reviewbot).
 #
 # This workflow catches the class of silent failure where the PR Reviewer
 # pipeline dispatches but the reviewer does nothing — a reviewer that

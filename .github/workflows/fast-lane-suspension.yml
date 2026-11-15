@@ -2,11 +2,11 @@ name: "Fast Lane: Suspension Signal"
 
 # ADR 041 Decision 3.4 — the consumer of the fast-lane suspension signal.
 #
-# When the PR Reviewer (modulo-reviewbot) posts a comment carrying the
+# When the PR Reviewer (farna-reviewbot) posts a comment carrying the
 # <!-- FAST_LANE_SUSPENSION: <severity> --> marker on a merged PR, this
 # workflow:
 #
-#   1. Authorises ONLY the reviewer identity (modulo-reviewbot).
+#   1. Authorises ONLY the reviewer identity (farna-reviewbot).
 #   2. Parses the marker and computes the 24h suspension window.
 #   3. Sets FAST_LANE_SUSPENDED_UNTIL and FAST_LANE_SUSPENSION_REASON
 #      repository variables via the GitHub API.
@@ -50,11 +50,11 @@ jobs:
           REPO: ${{ github.repository }}
         shell: bash
         run: |
-          # Only modulo-reviewbot may suspend the fast lane.  Anyone can
+          # Only farna-reviewbot may suspend the fast lane.  Anyone can
           # comment on a public repo; an unauthenticated or third-party
           # comment must NOT be able to set this variable.
-          if [ "$ACTOR" != "modulo-reviewbot" ]; then
-            echo "::error::Suspension comment rejected: actor '$ACTOR' is not modulo-reviewbot. Fast-lane suspension denied."
+          if [ "$ACTOR" != "farna-reviewbot" ]; then
+            echo "::error::Suspension comment rejected: actor '$ACTOR' is not farna-reviewbot. Fast-lane suspension denied."
             exit 1
           fi
           echo "Actor authorised: $ACTOR"

@@ -10,7 +10,7 @@ the same head SHA now has two dispatch paths. These tests pin the mechanism that
 coalesces them:
 
 * the decision is by head SHA and consult NO review identity — a review posted
-  by any identity (``modulo-reviewbot`` today) counts, which is what lets the
+  by any identity (``farna-reviewbot`` today) counts, which is what lets the
   late completion dispatch be skipped;
 * a first review, and a genuinely new non-merge commit, still dispatch;
 * unreadable input fails OPEN (dispatch) — a review must never be dropped on a
@@ -41,7 +41,7 @@ HEAD = "a" * 40
 PREVIOUS = "b" * 40
 
 
-def _review(state: str, commit_id: str, login: str = "modulo-reviewbot") -> dict:
+def _review(state: str, commit_id: str, login: str = "farna-reviewbot") -> dict:
     return {
         "state": state,
         "commit_id": commit_id,
@@ -65,11 +65,11 @@ def test_skips_when_the_head_sha_has_already_been_reviewed() -> None:
 def test_the_skip_is_independent_of_who_posted_the_review() -> None:
     """No review identity is consulted, so any reviewer's review coalesces the dispatch.
 
-    ``pr-review.yml`` posts through ``modulo-reviewbot``; the decision must not
+    ``pr-review.yml`` posts through ``farna-reviewbot``; the decision must not
     depend on that login (or on any allowlist of it), or a rebrand / token
     rotation would silently start double-reviewing every head SHA.
     """
-    for login in ("modulo-reviewbot", "farnalabs", "github-actions[bot]"):
+    for login in ("farna-reviewbot", "farnalabs", "github-actions[bot]"):
         skip, _ = dedup.decide([_review("CHANGES_REQUESTED", HEAD, login=login)], [_commit(HEAD)], HEAD)
         assert skip is True
 
