@@ -9,13 +9,13 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from farna.core import crypto as pem_crypto
 from farna.core.registry import _BUILTIN_REGISTRY, verify_primitive_signature
 from farna.core.registry.crypto import (
     generate_keypair,
     sign_primitive,
     verify_signature,
 )
-from farna.core import crypto as pem_crypto
 
 
 def _rsa_keypair_pems() -> tuple[str, str]:

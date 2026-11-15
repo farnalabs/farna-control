@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 from click.testing import CliRunner
-from farna.core.crypto import generate_keypair
 
 from farna.cli.evidence import evidence as evidence_cli
 from farna.core.audit_logger import compute_event_hash
 from farna.core.audit_logger.hashing import compute_event_hash as direct_compute_event_hash
+from farna.core.crypto import generate_keypair
 from farna.core.evidence_pack import (
     AUDIT_EVENTS_FILE,
     EvidenceSigningError,
