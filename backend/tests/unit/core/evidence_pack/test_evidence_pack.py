@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 from click.testing import CliRunner
-from farna.registry.crypto import generate_keypair
+from farna.core.crypto import generate_keypair
 
 from farna.cli.evidence import evidence as evidence_cli
 from farna.core.audit_logger import compute_event_hash

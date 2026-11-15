@@ -15,7 +15,7 @@ from farna.core.registry.crypto import (
     sign_primitive,
     verify_signature,
 )
-from farna.registry import crypto as pem_crypto
+from farna.core import crypto as pem_crypto
 
 
 def _rsa_keypair_pems() -> tuple[str, str]:
