@@ -256,9 +256,22 @@ READ_EXEMPT: dict[tuple[str, str], str] = {
 }
 
 
+_SUPPORTED_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+
+
+def _route_keys(route) -> set[tuple[str, str]]:
+    methods = (route.methods or set()) - {"HEAD", "OPTIONS"}
+    unsupported = methods - _SUPPORTED_HTTP_METHODS
+    if unsupported:
+        raise AssertionError(f"Unsupported HTTP methods on {route.path}: {sorted(unsupported)}")
+    return {(method, route.path) for method in methods}
+
+
 def _route_key(route) -> tuple[str, str]:
-    methods = sorted((route.methods or set()) - {"HEAD", "OPTIONS"})
-    return (methods[0] if methods else "?", route.path)
+    keys = _route_keys(route)
+    if len(keys) != 1:
+        raise AssertionError(f"Multi-method route requires per-method coverage keys: {sorted(keys)}")
+    return next(iter(keys))
 
 
 def test_every_mutating_route_is_tagged_or_exempt() -> None:
@@ -266,21 +279,22 @@ def test_every_mutating_route_is_tagged_or_exempt() -> None:
     mutating = get_mutating_routes(app)
     untagged = []
     for route in mutating:
-        key = _route_key(route)
+        keys = _route_keys(route)
         tag = get_permission_tag(route)
-        in_exempt = key in EXEMPT
-        if tag is None and not in_exempt:
-            untagged.append(f"{key[0]} {key[1]}")
-        elif tag is not None and in_exempt:
-            # Tagged AND exempt = contradiction — must be one or the other.
-            pytest.fail(f"Route {key} is both tagged and in the exempt allowlist: {tag}")
+        for key in keys:
+            in_exempt = key in EXEMPT
+            if tag is None and not in_exempt:
+                untagged.append(f"{key[0]} {key[1]}")
+            elif tag is not None and in_exempt:
+                # Tagged AND exempt = contradiction — must be one or the other.
+                pytest.fail(f"Route {key} is both tagged and exempt in the allowlist: {tag}")
 
     assert not untagged, "Mutating routes without a permission tag or exemption:\n" + "\n".join(untagged)
 
 
 def test_exempt_allowlist_entries_exist() -> None:
     """Every exempt entry must actually be a mutating route (no stale entries)."""
-    mutating_keys = {_route_key(r) for r in get_mutating_routes(app)}
+    mutating_keys = {key for route in get_mutating_routes(app) for key in _route_keys(route)}
     missing = [k for k in EXEMPT if k not in mutating_keys]
     assert not missing, "Exempt entries that are not mutating routes:\n" + "\n".join(str(m) for m in missing)
 
@@ -297,25 +311,26 @@ def test_every_read_route_is_authorised_or_exempt() -> None:
     reads = get_read_routes(app)
     unauthorised = []
     for route in reads:
-        key = _route_key(route)
+        keys = _route_keys(route)
         tag = get_permission_tag(route)
-        if tag is not None:
+        for key in keys:
+            if tag is not None:
+                if key in READ_EXEMPT:
+                    # Tagged AND exempt = contradiction — must be one or the other.
+                    pytest.fail(f"Read route {key} is both tagged and in the read exempt allowlist: {tag}")
+                continue
+            if get_applied_dependency_names(route) & PRINCIPAL_DEPENDENCIES:
+                continue
             if key in READ_EXEMPT:
-                # Tagged AND exempt = contradiction — must be one or the other.
-                pytest.fail(f"Read route {key} is both tagged and in the read exempt allowlist: {tag}")
-            continue
-        if get_applied_dependency_names(route) & PRINCIPAL_DEPENDENCIES:
-            continue
-        if key in READ_EXEMPT:
-            continue
-        unauthorised.append(f"{key[0]} {key[1]}")
+                continue
+            unauthorised.append(f"{key[0]} {key[1]}")
 
     assert not unauthorised, "Read routes with no permission tag, no principal dependency, and no read-exempt entry:\n" + "\n".join(unauthorised)
 
 
 def test_read_exempt_allowlist_entries_exist() -> None:
     """Every read-exempt entry must be a GET route (no stale entries)."""
-    read_keys = {_route_key(r) for r in get_read_routes(app)}
+    read_keys = {key for route in get_read_routes(app) for key in _route_keys(route)}
     missing = [k for k in READ_EXEMPT if k not in read_keys]
     assert not missing, "Read-exempt entries that are not GET routes:\n" + "\n".join(str(m) for m in missing)
 

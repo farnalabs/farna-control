@@ -9,7 +9,10 @@ scope still resolves through the same registry.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import os
+from collections.abc import Callable
 
 from fastapi.routing import APIRoute
 
@@ -35,10 +38,22 @@ from tests.unit.api.route_introspection import (
 )
 from tests.unit.api.test_route_introspection import EXEMPT, PRINCIPAL_DEPENDENCIES, READ_EXEMPT
 
+_SUPPORTED_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+
+
+def _route_keys(route: APIRoute) -> set[tuple[str, str]]:
+    methods = (getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"}
+    unsupported = methods - _SUPPORTED_HTTP_METHODS
+    if unsupported:
+        raise AssertionError(f"Unsupported HTTP methods on {route.path}: {sorted(unsupported)}")
+    return {(method, route.path) for method in methods}
+
 
 def _route_key(route: APIRoute) -> tuple[str, str]:
-    methods = sorted((getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"})
-    return (methods[0] if methods else "?", route.path)
+    keys = _route_keys(route)
+    if len(keys) != 1:
+        raise AssertionError(f"Multi-method route requires per-method coverage keys: {sorted(keys)}")
+    return next(iter(keys))
 
 
 def test_authenticated_rest_entry_points_have_a_gate_or_explicit_exemption() -> None:
@@ -52,40 +67,101 @@ def test_authenticated_rest_entry_points_have_a_gate_or_explicit_exemption() -> 
     """
     violations: list[str] = []
     for route in get_all_apiroutes(app):
-        key = _route_key(route)
+        keys = _route_keys(route)
         tag = get_permission_tag(route)
         applied = get_applied_dependency_names(route)
-        methods = getattr(route, "methods", None) or set()
         if tag is not None:
             continue
-        if methods & {"POST", "PUT", "PATCH", "DELETE"}:
-            reason = EXEMPT.get(key)
-            if not reason:
-                violations.append(f"{key[0]} {key[1]}: missing mutating-route exemption marker")
-            continue
-        if "GET" in methods:
-            if applied & PRINCIPAL_DEPENDENCIES:
+        for method, path in keys:
+            key = (method, path)
+            if method in {"POST", "PUT", "PATCH", "DELETE"}:
+                reason = EXEMPT.get(key)
+                if not reason:
+                    violations.append(f"{method} {path}: missing mutating-route exemption marker")
                 continue
-            reason = READ_EXEMPT.get(key)
-            if not reason:
-                violations.append(f"GET {key[1]}: missing public/pre-auth exemption marker")
+            if method == "GET":
+                if applied & PRINCIPAL_DEPENDENCIES:
+                    continue
+                reason = READ_EXEMPT.get(key)
+                if not reason:
+                    violations.append(f"GET {path}: missing public/pre-auth exemption marker")
 
     assert not violations, "Unauthorised REST entry points:\n" + "\n".join(violations)
 
 
-def test_rest_exemption_markers_are_live_and_documented() -> None:
-    """Every explicit exemption marker names one live route and explains it."""
-    mutating_keys = {_route_key(route) for route in get_mutating_routes(app)}
-    read_keys = {_route_key(route) for route in get_read_routes(app)}
+def _route_for_key(key: tuple[str, str]) -> APIRoute | None:
+    method, path = key
+    return next(
+        (route for route in get_all_apiroutes(app) if method in _route_keys(route) and route.path == path),
+        None,
+    )
+
+
+def _exemption_has_live_evidence(route: APIRoute, reason: str) -> bool:
+    """Check the route's actual guard, not just its exemption description."""
+    source = inspect.getsource(route.endpoint)
+    dependencies = get_applied_dependency_names(route)
+    if "inline _require_admin" in reason or "inline _require_org_admin" in reason:
+        return "_require_admin" in source or "org_role" in source
+    if "admin/operator" in reason:
+        return "org_role" in source and "operator" in source
+    if "SCIM" in reason:
+        return "get_scim_principal" in dependencies
+    if "HMAC" in reason or "Slack" in reason or "Stripe" in reason:
+        return "signature" in source.lower() or "hmac" in source.lower()
+    if "shared-secret Bearer" in reason:
+        return "authorization" in source and "_require_drain_token" in source
+    if "auth (no principal" in reason:
+        return route.endpoint.__name__ in {"login", "demo_login", "accept_invite", "refresh", "logout"}
+    if "SAML ACS" in reason:
+        return "get_anonymous_plan_context" in dependencies and "sso" in source.lower()
+    if "public error ingestion" in reason:
+        return all(anchor in source for anchor in ("client_ip", "source", "daily"))
+    if "community publish" in reason:
+        return "require_system_admin" in dependencies or "require_system_admin" in source
+    if "self-profile" in reason or "user content" in reason or "onboarding" in reason or "Assistant" in reason or "OAuth" in reason or "setup flow" in reason or "consent" in reason:
+        return bool(dependencies & PRINCIPAL_DEPENDENCIES)
+    if "health probe" in reason:
+        return route.endpoint.__name__ in {"liveness", "readiness"}
+    if "OAuth discovery metadata" in reason:
+        return "metadata" in route.endpoint.__name__
+    if "pre-auth" in reason:
+        return route.endpoint.__name__ in {"login_context", "org_login", "oidc_login", "oidc_callback", "saml_login", "saml_metadata", "saml_login_provider", "saml_metadata_provider", "consent_context"}
+    if "public" in reason or "static" in reason or "catalogue" in reason or "liveness" in reason or "deployment-level" in reason or "deploy-pipeline" in reason or "anonymous" in reason:
+        return route.endpoint.__name__ in {
+            "deployment_info",
+            "list_connector_types",
+            "manifest_endpoint",
+            "list_registry_primitives_endpoint",
+            "get_registry_primitive_endpoint",
+            "list_publishers_endpoint",
+            "get_registry_primitive",
+            "pull_registry_primitive_v2",
+            "ping",
+            "license_info",
+            "consent_context",
+        }
+    return False
+
+
+def test_rest_exemption_markers_are_live_documented_and_guarded() -> None:
+    """Every exemption names a live route and has evidence of its real guard."""
+    mutating_keys = {key for route in get_mutating_routes(app) for key in _route_keys(route)}
+    read_keys = {key for route in get_read_routes(app) for key in _route_keys(route)}
     stale_mutating = sorted(set(EXEMPT) - mutating_keys)
     stale_reads = sorted(set(READ_EXEMPT) - read_keys)
     undocumented = [
         *(f"mutating {key}" for key, reason in EXEMPT.items() if not reason.strip()),
         *(f"read {key}" for key, reason in READ_EXEMPT.items() if not reason.strip()),
     ]
+    unguarded = [
+        *(f"mutating {key}: {reason}" for key, reason in EXEMPT.items() if (route := _route_for_key(key)) is not None and not _exemption_has_live_evidence(route, reason)),
+        *(f"read {key}: {reason}" for key, reason in READ_EXEMPT.items() if (route := _route_for_key(key)) is not None and not _exemption_has_live_evidence(route, reason)),
+    ]
     assert not stale_mutating, f"stale mutating-route exemption markers: {stale_mutating}"
     assert not stale_reads, f"stale read-route exemption markers: {stale_reads}"
     assert not undocumented, f"exemption markers must carry a reason: {undocumented}"
+    assert not unguarded, "REST exemptions lack evidence of their underlying guard:\n" + "\n".join(unguarded)
 
 
 def test_mcp_entry_points_are_registered_and_resolve_through_central_registry() -> None:
@@ -108,3 +184,42 @@ def test_mcp_entry_points_are_registered_and_resolve_through_central_registry() 
     for tool, permission in TOOL_SCOPE_REQUIREMENTS.items():
         assert resolve_required(permission), f"MCP tool {tool} has an unresolved permission key {permission!r}"
     assert registered, "MCP inventory is empty; authorization coverage would be vacuous"
+
+
+def _reachable_function_names(function: Callable[..., object]) -> set[str]:
+    """Return functions reachable from an MCP handler through direct calls."""
+    source = inspect.getsource(function)
+    module = inspect.getmodule(function)
+    assert module is not None
+    tree = ast.parse(inspect.getsource(module))
+    functions = {node.name: node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    calls = {name: {node.func.id for node in ast.walk(function_node) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in functions} for name, function_node in functions.items()}
+    root = function.__name__
+    if root not in functions:
+        raise AssertionError(f"MCP handler source is not available for {root}: {source[:80]!r}")
+    reached: set[str] = set()
+    pending = [root]
+    while pending:
+        name = pending.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        pending.extend(calls.get(name, set()) - reached)
+    return reached
+
+
+def test_mcp_handlers_reach_the_shared_runtime_scope_gate() -> None:
+    """Every registered MCP handler must call the live scope chokepoint.
+
+    Checking only ``TOOL_SCOPE_REQUIREMENTS`` proves bookkeeping, not runtime
+    enforcement. Follow direct helper calls through each registered handler so a
+    tool cannot be listed in the policy while bypassing ``check_tool_scope``.
+    """
+    from farna.api.mcp_server import mcp
+
+    bypasses: list[str] = []
+    for name, registered_tool in mcp._tool_manager._tools.items():
+        reached = _reachable_function_names(registered_tool.fn)
+        if "_check_agent_tool_scope" not in reached and "_check_node_allowed_tools" not in reached:
+            bypasses.append(name)
+    assert not bypasses, "MCP handlers bypass the shared runtime scope gate: " + ", ".join(sorted(bypasses))
