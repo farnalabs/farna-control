@@ -10,9 +10,10 @@ contract - importable WITHOUT SQLAlchemy/models; asyncpg-level only.
 2. Create the alembic_version table with VARCHAR(255) for branch migrations
 3. Derive and export MODULO_SYSTEM_DATABASE_URL - if explicitly set it is fixed
    like the other URLs; otherwise it is derived from the fixed DATABASE_URL by
-   swapping the username to farna_control_system (the password is preserved so
-   bootstrap_role.py can create the role). The result is exported to the
-   environment and written to /tmp/system_database_url.env.
+   swapping the username to farna_control_system. The derived value is exported
+   for the entrypoint env-file contract, but is not used by bootstrap_role.py to
+   reconcile the role password without an explicit system URL. The result is
+   written to /tmp/system_database_url.env.
 4. Write the fixed DATABASE_ADMIN_URL / DATABASE_URL / MODULO_SYSTEM_DATABASE_URL
    to files for the shell script
 """
@@ -147,9 +148,10 @@ def main() -> None:
     # MODULO_SYSTEM_DATABASE_URL: the farna_control_system role (LOGIN, BYPASSRLS) URL used
     # by system crons (metrics_dump, analytics_facts_maintenance, journey_reconcile,
     # retention_cleanup, dispatcher_reconcile) and the SSO pre-auth provider lookup.
-    # If set, fix it like the others. If not, do not derive a system URL here:
-    # the absence of an explicit URL is meaningful to bootstrap_role.py, which
-    # must preserve an existing system-role password on warm boots.
+    # If set, fix it like the others. If not, derive the URL for the entrypoint's
+    # env-file contract, but do not pass that derived credential into role
+    # reconciliation: bootstrap_role.py must preserve an existing system-role
+    # password on warm boots without an explicit system URL.
     system_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
     if system_url:
         system_url = fix_database_url(system_url)
@@ -160,6 +162,11 @@ def main() -> None:
     elif runtime_url:
         system_url = derive_system_database_url(runtime_url)
         if system_url:
+            # Keep the derived URL available to callers that need the canonical
+            # setting, while bootstrap_role.py deliberately reads only the
+            # legacy entrypoint alias so this derived password cannot reconcile
+            # the system role on a warm boot without an explicit URL.
+            os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] = system_url
             print(  # noqa: T201
                 "WARNING: FARNA_CONTROL_SYSTEM_DATABASE_URL is not configured; derived system URL is available for the container entrypoint only.",
                 file=sys.stderr,

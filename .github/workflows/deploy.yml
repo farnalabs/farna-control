@@ -547,18 +547,18 @@ jobs:
             exit 1
           fi
 
-  # FAR-2515 mitigation: fewer tests per shard means less memory accumulates before
-  # the integration-suite leak tips the runner over; the leak itself is tracked separately.
+  # FAR-2515 mitigation: more, smaller shards mean less memory accumulates in each
+  # job before the integration-suite leak tips the runner over; the leak itself is tracked separately.
   integration-tests:
-    name: "Pre-deploy: Integration tests shard ${{ matrix.shard }}/8"
+    name: "Pre-deploy: Integration tests shard ${{ matrix.shard }}/10"
     needs: [deploy-throttle]
     if: needs.deploy-throttle.outputs.deployed == 'true'
     strategy:
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     runs-on: ubicloud-standard-4
     # Memory headroom matters more than wall-clock here; shard-level parallelism
-    # is still provided by the 8-way job matrix.
+    # is still provided by the 10-way job matrix.
     timeout-minutes: 75
     steps:
       - name: Echo run identity (pre-checkout)
@@ -645,10 +645,11 @@ jobs:
         run: |
           set -euo pipefail
           SHARD="${{ matrix.shard }}"
-          TOTAL_SHARDS=8
+          TOTAL_SHARDS=10
           export COVERAGE_FILE=".coverage.integration-${SHARD}"
           SHARD_ARGS=()
-          NON_AUTH_SHARDS=(1 2 3 5 6 7 8)
+          NON_AUTH_SHARDS=(1 2 3 5 6 7 8 9 10)
+
           NON_AUTH_INDEX=0
           while IFS= read -r test_file; do
             # Keep the Keycloak/OIDC/SAML integration files together in a
@@ -656,8 +657,8 @@ jobs:
             # slower than the database-only tests and was concentrated in
             # round-robin shard 1, causing a silent runner shutdown before
             # pytest could emit more output. Shard 4 remains dedicated to
-            # these files; all other files round-robin across the seven
-            # remaining shards so every shard number 1..8 is covered.
+            # these files; all other files round-robin across the nine
+            # remaining shards so every shard number 1..10 is covered.
             if [[ "$test_file" == tests/integration/auth/test_keycloak_* || \
                   "$test_file" == tests/integration/auth/test_oidc_* || \
                   "$test_file" == tests/integration/auth/test_saml_* || \
