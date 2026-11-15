@@ -1233,8 +1233,8 @@ jobs:
       - name: Notify fixer of conflicts
         if: steps.merge.outputs.conflict_count != '0' && steps.merge.outputs.conflict_count != ''
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           # 120s, not the 300s default: this job has a 60-min timeout with only
           # ~8 min measured headroom (37.0-min baseline, validation 34.3 min)
@@ -1606,7 +1606,7 @@ jobs:
           # same PAT. Two mechanisms, two Authorization headers on the wire, and
           # GitHub answered `remote: Duplicate header: "Authorization"` - so the
           # push never happened. Keep exactly one mechanism.
-          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.MODULO_REVIEWBOT_TOKEN }}@github.com/.insteadOf'
+          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}@github.com/.insteadOf'
         shell: bash
         run: |
           TIMESTAMP=$(date +%s)
@@ -1868,8 +1868,8 @@ jobs:
         # must be reported even if the batch later fails validation.
         if: always() && (steps.merge.outputs.migration_collision_count != '0' || steps.migration_heads.outputs.offenders_found == 'true')
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           # 120s, not the 300s default: this job has a 60-min timeout with only
           # ~8 min measured headroom (37.0-min baseline, validation 34.3 min)
@@ -2175,7 +2175,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           # Workflows-capable credential, used ONLY for PRs that touch
           # .github/workflows/* (selected per-PR in the loop below).
-          # MODULO_REVIEWBOT_TOKEN is a classic PAT (vault: github-reviewbot-pat,
+          # FARNA_CONTROL_REVIEWBOT_TOKEN is a classic PAT (vault: github-reviewbot-pat,
           # login modulo-reviewbot) whose X-OAuth-Scopes include `workflow` and
           # whose repo permissions include push:true on farnalabs/farna-control (both
           # probed live 2026-10-01). GITHUB_TOKEN - the github-actions App
@@ -2183,7 +2183,7 @@ jobs:
           # never can, so GitHub refuses it server-side on any PR that modifies
           # a workflow file (2026-10-01: merge-queue run 36798142570, PR #1127
           # stuck approved + green for ~21h behind a silently-successful run).
-          WORKFLOW_PAT: ${{ secrets.MODULO_REVIEWBOT_TOKEN }}
+          WORKFLOW_PAT: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}
           # FAR-530: the merge step's own output is the authoritative record of
           # which PRs squash-merged into the queue branch (oldest first). It does
           # not depend on ref ordering the way a git-log range scrape does.
@@ -2306,7 +2306,7 @@ jobs:
                 echo "  PR #$NUM: could not determine workflow-file status (got '$WF_COUNT') - merging with github.token" ;;
               *)
                 if [ -z "$WORKFLOW_PAT" ]; then
-                  echo "::error::PR #$NUM modifies .github/workflows/* but secrets.MODULO_REVIEWBOT_TOKEN is empty - GITHUB_TOKEN cannot merge it (the GitHub App has no workflows permission)."
+                  echo "::error::PR #$NUM modifies .github/workflows/* but secrets.FARNA_CONTROL_REVIEWBOT_TOKEN is empty - GITHUB_TOKEN cannot merge it (the GitHub App has no workflows permission)."
                   FAILED="$FAILED $NUM"
                   continue
                 fi
@@ -3000,7 +3000,7 @@ jobs:
           # Authorization headers and GitHub rejected the push with
           # `remote: Duplicate header: "Authorization"`, which is why this step
           # could not preserve a branch at all.
-          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.MODULO_REVIEWBOT_TOKEN }}@github.com/.insteadOf'
+          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}@github.com/.insteadOf'
         shell: bash
         run: |
           TIMESTAMP=$(date +%s)
@@ -3020,8 +3020,8 @@ jobs:
       - name: Notify branch-fixer on CI failure
         if: failure() && steps.merge.outputs.merged_count != '0'
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           # 120s, not the 300s default: this job has a 60-min timeout with only
           # ~8 min measured headroom (37.0-min baseline, validation 34.3 min)

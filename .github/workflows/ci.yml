@@ -2063,7 +2063,7 @@ jobs:
         if: contains(needs.*.result, 'failure') || cancelled()
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
           PR_NUM: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_STATUS: ${{ needs.current-head-gate.outputs.current }}
@@ -2097,7 +2097,7 @@ jobs:
         if: (contains(needs.*.result, 'failure') || cancelled()) && steps.superseded-check.outputs.superseded != 'true' && !contains(github.event.pull_request.labels.*.name, 'manual-delivery')
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           PR_NUM: ${{ github.event.pull_request.number }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -2140,7 +2140,7 @@ jobs:
         if: (contains(needs.*.result, 'failure') || cancelled()) && steps.superseded-check.outputs.superseded != 'true' && steps.retry-check.outputs.exhausted != 'true' && !contains(github.event.pull_request.labels.*.name, 'manual-delivery')
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUM: ${{ github.event.pull_request.number }}
@@ -2211,7 +2211,7 @@ jobs:
       # actions/workflows/branch-fixer.yml/runs against BRANCH_FIXER_CAP=5);
       # removed after pre-PR review (F1). It could not bound what it claimed:
       # notify-pr-failure dispatches the Branch Fixer by DIRECT WEBHOOK POST
-      # to MODULO_BRANCH_FIXER_WEBHOOK_URL, which creates ZERO
+      # to FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL, which creates ZERO
       # branch-fixer.yml runs (branch-fixer.yml is a workflow_dispatch-only
       # wrapper that POSTs the same webhook; its runs are produced only by
       # app-side / devtools dispatches). The counter therefore read ~0 during
@@ -2246,13 +2246,13 @@ jobs:
       - name: Trigger Modulo Branch Fixer
         if: (contains(needs.*.result, 'failure') || cancelled()) && steps.superseded-check.outputs.superseded != 'true' && steps.retry-check.outputs.exhausted != 'true' && steps.queue-check.outputs.queue_in_flight != 'true' && !contains(github.event.pull_request.labels.*.name, 'manual-delivery')
         env:
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_NUM: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
         shell: bash
         run: |
@@ -2337,17 +2337,17 @@ jobs:
               transient)
                 DISPATCH_FAILURE="webhook unreachable"
                 DISPATCH_CAUSE="the Branch Fixer webhook or a gateway in front of it was unavailable (HTTP ${LAST_HTTP}) for the whole retry budget"
-                DISPATCH_ACTION="Check that control.farna.dev is healthy and that MODULO_BRANCH_FIXER_WEBHOOK_URL points at it, then re-run this CI job."
+                DISPATCH_ACTION="Check that control.farna.dev is healthy and that FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL points at it, then re-run this CI job."
                 ;;
               config)
                 DISPATCH_FAILURE="webhook secret unavailable"
                 DISPATCH_CAUSE="${LAST_DETAIL} for this run, so no request was sent. GitHub withholds Actions secrets from dependabot[bot] PRs; they need Dependabot secrets"
-                DISPATCH_ACTION="Add MODULO_BRANCH_FIXER_WEBHOOK_URL and MODULO_BRANCH_FIXER_HMAC_SECRET under Settings > Secrets and variables > Dependabot, then re-run this CI job."
+                DISPATCH_ACTION="Add FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL and FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET under Settings > Secrets and variables > Dependabot, then re-run this CI job."
                 ;;
               *)
                 DISPATCH_FAILURE="non-retryable rejection"
                 DISPATCH_CAUSE="the Branch Fixer webhook rejected the request outright (HTTP ${LAST_HTTP}) - retrying cannot help"
-                DISPATCH_ACTION="Check MODULO_BRANCH_FIXER_HMAC_SECRET and the webhook payload; this needs a code or configuration fix, not a retry."
+                DISPATCH_ACTION="Check FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET and the webhook payload; this needs a code or configuration fix, not a retry."
                 ;;
             esac
             echo "::error::Branch Fixer webhook dispatch failed — ${DISPATCH_FAILURE} after ${ATTEMPTS} attempt(s) in ${DISPATCH_ELAPSED}s (last HTTP ${LAST_HTTP}: ${LAST_DETAIL}). CI failure was not handed to the autonomous fix loop."
@@ -2491,8 +2491,8 @@ jobs:
         # fixer job which use the same pattern).
         if: contains(needs.*.result, 'failure')
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           MAIN_SHA: ${{ github.sha }}
         shell: bash

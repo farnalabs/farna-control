@@ -82,7 +82,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DISPATCH_URL: ${{ secrets.MODULO_PR_REVIEW_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_PR_REVIEW_WEBHOOK_SECRET }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET }}
           DISPATCH_LABEL: "Modulo PR Review"
           DISPATCH_ACCEPT_ANY_2XX: "1"
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
