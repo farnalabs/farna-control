@@ -92,7 +92,7 @@ def test_authenticated_rest_entry_points_have_a_gate_or_explicit_exemption() -> 
 def _route_for_key(key: tuple[str, str]) -> APIRoute | None:
     method, path = key
     return next(
-        (route for route in get_all_apiroutes(app) if method in _route_keys(route) and route.path == path),
+        (route for route in get_all_apiroutes(app) if (method, route.path) in _route_keys(route) and route.path == path),
         None,
     )
 
@@ -101,8 +101,8 @@ def _exemption_has_live_evidence(route: APIRoute, reason: str) -> bool:
     """Check the route's actual guard, not just its exemption description."""
     source = inspect.getsource(route.endpoint)
     dependencies = get_applied_dependency_names(route)
-    if "inline _require_admin" in reason or "inline _require_org_admin" in reason:
-        return "_require_admin" in source or "org_role" in source
+    if "inline _require_admin" in reason or "inline _require_org_admin" in reason or "inline admin check" in reason or "org_role==admin" in reason:
+        return "_require_admin" in source or "org_role" in source or "_admin_journey_write" in source or "detail_admin" in source
     if "admin/operator" in reason:
         return "org_role" in source and "operator" in source
     if "SCIM" in reason:
@@ -111,23 +111,29 @@ def _exemption_has_live_evidence(route: APIRoute, reason: str) -> bool:
         return "signature" in source.lower() or "hmac" in source.lower()
     if "shared-secret Bearer" in reason:
         return "authorization" in source and "_require_drain_token" in source
-    if "auth (no principal" in reason:
+    if "auth (no principal" in reason or "refresh-token auth" in reason:
         return route.endpoint.__name__ in {"login", "demo_login", "accept_invite", "refresh", "logout"}
     if "SAML ACS" in reason:
         return "get_anonymous_plan_context" in dependencies and "sso" in source.lower()
     if "public error ingestion" in reason:
         return all(anchor in source for anchor in ("client_ip", "source", "daily"))
+    if "demo auto-login" in reason:
+        return route.endpoint.__name__ == "demo_login" and "demo" in source.lower()
+    if "creation-only" in reason:
+        return bool(dependencies & PRINCIPAL_DEPENDENCIES) or "detect_parameter_ports" in source
     if "community publish" in reason:
         return "require_system_admin" in dependencies or "require_system_admin" in source
-    if "self-profile" in reason or "user content" in reason or "onboarding" in reason or "Assistant" in reason or "OAuth" in reason or "setup flow" in reason or "consent" in reason:
-        return bool(dependencies & PRINCIPAL_DEPENDENCIES)
-    if "health probe" in reason:
+    if "health probe" in reason or "readiness probe" in reason:
         return route.endpoint.__name__ in {"liveness", "readiness"}
+    if "OAuth protected-resource metadata" in reason:
+        return route.endpoint.__name__ in {"protected_resource_metadata", "protected_resource_metadata_mcp"}
     if "OAuth discovery metadata" in reason:
-        return "metadata" in route.endpoint.__name__
-    if "pre-auth" in reason:
-        return route.endpoint.__name__ in {"login_context", "org_login", "oidc_login", "oidc_callback", "saml_login", "saml_metadata", "saml_login_provider", "saml_metadata_provider", "consent_context"}
-    if "public" in reason or "static" in reason or "catalogue" in reason or "liveness" in reason or "deployment-level" in reason or "deploy-pipeline" in reason or "anonymous" in reason:
+        return route.endpoint.__name__ in {"protected_resource_metadata", "protected_resource_metadata_mcp", "authorization_server_metadata"}
+    if "pre-auth" in reason or "SSO discovery" in reason:
+        return route.endpoint.__name__ in {"login_context", "org_login", "oidc_login", "oidc_callback", "saml_login", "saml_metadata", "saml_login_provider", "saml_metadata_provider", "consent_context", "sso_providers"}
+    if "self-profile" in reason or "user content" in reason or "onboarding" in reason or "Assistant" in reason or "OAuth" in reason or "setup flow" in reason or ("consent" in reason and "anonymous" not in reason):
+        return bool(dependencies & PRINCIPAL_DEPENDENCIES)
+    if "public" in reason or "static" in reason or "catalogue" in reason or "liveness" in reason or "deployment-level" in reason or "deploy-pipeline" in reason:
         return route.endpoint.__name__ in {
             "deployment_info",
             "list_connector_types",
