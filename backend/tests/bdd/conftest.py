@@ -11,11 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("FARNA_CONTROL_MODULO_CSRF_ENABLED", "false")
+os.environ.setdefault("MODULO_CSRF_ENABLED", "false")
 os.environ.setdefault("REDIS_URL", "")
-os.environ.setdefault("FARNA_CONTROL_MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
-os.environ.setdefault("FARNA_CONTROL_MODULO_DB", "sqlite")
+os.environ.setdefault("MODULO_DB", "sqlite")
 os.environ.setdefault("SECRET_KEY", "a" * 32)
 os.environ.setdefault("FERNET_KEY", "b" * 32)
 # FAR-2200 withdrew Lifecycle Maps from Alpha-facing surfaces: the routes and
@@ -23,7 +23,7 @@ os.environ.setdefault("FERNET_KEY", "b" * 32)
 # ``MODULO_DEV_MODE`` plus an operator principal. The BDD suite exercises that
 # retained internal surface (the ``client`` fixture is an org admin, which
 # satisfies the operator role), so it runs with developer mode enabled.
-os.environ.setdefault("FARNA_CONTROL_MODULO_DEV_MODE", "true")
+os.environ.setdefault("MODULO_DEV_MODE", "true")
 
 from farna.auth.jwt import AuthenticatedPrincipal
 from farna.settings import Settings

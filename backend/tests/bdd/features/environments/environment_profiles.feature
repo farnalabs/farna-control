@@ -108,7 +108,7 @@ Feature: Environment Profiles
     Given a RuntimeProviderHub with only the "local" provider registered
     And an environment profile with provider_type "e2b" and no provider_hint
     When I resolve the profile against the hub
-    Then the resolve raises ProviderNotConfiguredError mentioning "MODULO_E2B_API_KEY"
+    Then the resolve raises ProviderNotConfiguredError mentioning "FARNA_CONTROL_MODULO_E2B_API_KEY"
 
   Scenario: Workspace creation via RuntimeProvider
     Given a LocalRuntimeProvider
