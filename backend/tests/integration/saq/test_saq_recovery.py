@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any, Self
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -108,10 +109,15 @@ class TestNoSaqEvictionRedispatch:
             dispatch_phase=None,
         )
 
+        async def _empty_scan(*_: Any, **__: Any) -> AsyncIterator[bytes]:
+            if False:
+                yield b""
+
         redis = MagicMock()
         redis.delete = AsyncMock(return_value=1)
         redis.zrem = AsyncMock(return_value=1)
         redis.lrem = AsyncMock(return_value=1)
+        redis.scan_iter = MagicMock(side_effect=_empty_scan)
         redis.aclose = AsyncMock()
 
         class _Result:
@@ -469,7 +475,12 @@ class TestFireDueTriggersSingleFire:
             def __call__(self) -> _FakeSession:
                 return _FakeSession(self._rows)
 
+        async def _empty_scan(*_: Any, **__: Any) -> AsyncIterator[bytes]:
+            if False:
+                yield b""
+
         redis = MagicMock()
+        redis.scan_iter = MagicMock(side_effect=_empty_scan)
         redis.aclose = AsyncMock()
         q = MagicMock()
         q.name = "runs"
