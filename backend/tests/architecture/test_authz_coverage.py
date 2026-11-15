@@ -9,6 +9,20 @@ scope still resolves through the same registry.
 
 from __future__ import annotations
 
+import os
+
+from fastapi.routing import APIRoute
+
+# The app import constructs the database engine during module import. Keep this
+# architecture test runnable as a standalone file, like the other app-importing
+# architecture tests, without requiring a developer .env file.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://localhost/test")
+os.environ.setdefault("SECRET_KEY", "a" * 32)
+os.environ.setdefault("FERNET_KEY", "a" * 32)
+os.environ.setdefault("REDIS_URL", "")
+os.environ.setdefault("FARNA_CONTROL_MODULO_ADMIN_PASSWORD", "test")
+os.environ.setdefault("FARNA_CONTROL_MODULO_CSRF_ENABLED", "false")
+
 from farna.api.main import app
 from farna.auth.permissions import resolve_required
 from farna.core.mcp.scope_validator import READ_ONLY_TOOLS, TOOL_SCOPE_REQUIREMENTS
@@ -22,7 +36,7 @@ from tests.unit.api.route_introspection import (
 from tests.unit.api.test_route_introspection import EXEMPT, PRINCIPAL_DEPENDENCIES, READ_EXEMPT
 
 
-def _route_key(route: object) -> tuple[str, str]:
+def _route_key(route: APIRoute) -> tuple[str, str]:
     methods = sorted((getattr(route, "methods", None) or set()) - {"HEAD", "OPTIONS"})
     return (methods[0] if methods else "?", route.path)
 
