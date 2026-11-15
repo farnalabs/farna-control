@@ -555,7 +555,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     runs-on: ubicloud-standard-2
-    timeout-minutes: 45
+    # 659 tests at 4.1 s/test with -n 2 extrapolate to ~45 minutes per shard.
+    timeout-minutes: 75
     steps:
       - name: Echo run identity (pre-checkout)
         shell: bash
@@ -596,26 +597,8 @@ jobs:
         working-directory: backend
         run: bash ../scripts/uv_sync_with_retry.sh --frozen
 
-      # Expensive tests
-      - name: Start Postgres
-        shell: bash
-        run: |
-          docker rm -f modulo-ci-pg 2>/dev/null || true
-          docker run -d --name modulo-ci-pg \
-            -e POSTGRES_USER=farna_control_test \
-            -e POSTGRES_PASSWORD=farna_control_test \
-            -e POSTGRES_DB=farna_control_test \
-            -p 5433:5432 \
-            postgres:16-alpine
-          for _ in $(seq 1 60); do
-            docker exec modulo-ci-pg pg_isready -U farna_control_test 2>/dev/null && { echo "Postgres ready"; break; }
-            sleep 2
-          done
-          # Fail fast: a never-ready Postgres must not sleep through the loop and
-          # only surface as a confusing failure in the test step.
-          docker exec modulo-ci-pg pg_isready -U farna_control_test 2>/dev/null \
-            || { echo "::error::Postgres did not become ready within 120s"; exit 1; }
-
+      # Redis is required by test_rate_bucket_redis.py, which connects to
+      # localhost:6379 when RATE_LIMIT_REDIS_URL is not set.
       - name: Start Redis
         shell: bash
         run: |
@@ -701,11 +684,10 @@ jobs:
           DATABASE_URL: "postgresql+asyncpg://farna_control_test:farna_control_test@localhost:5433/farna_control_test"
           TESTCONTAINERS_RYUK_DISABLED: "true"
 
-      - name: Stop containers
+      - name: Stop Redis
         if: always()
         shell: bash
         run: |
-          docker rm -f modulo-ci-pg 2>/dev/null || true
           docker rm -f modulo-ci-redis 2>/dev/null || true
 
   security-audit:
