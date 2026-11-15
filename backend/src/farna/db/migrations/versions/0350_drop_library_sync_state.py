@@ -3,8 +3,8 @@
 Remove the community library sync state table as part of removing the
 community library backend feature.
 
-Revision ID: 0350
-Revises: 0349
+Revision ID: 0350_drop_library_sync_state
+Revises: 0349_drop_organisations_cost_columns
 Create Date: 2026-11-15
 
 """
@@ -12,8 +12,8 @@ Create Date: 2026-11-15
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0350"
-down_revision = "0349"
+revision = "0350_drop_library_sync_state"
+down_revision = "0349_drop_organisations_cost_columns"
 branch_labels = None
 depends_on = None
 
