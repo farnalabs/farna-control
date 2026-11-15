@@ -614,25 +614,6 @@ jobs:
           docker exec modulo-ci-redis redis-cli ping 2>/dev/null \
             || { echo "::error::Redis did not become ready within 120s"; exit 1; }
 
-      - name: Start resource sampler
-        shell: bash
-        run: |
-          cat > /tmp/resource-sampler.sh <<'SAMPLER'
-          while true; do
-            echo "=== sampler $(date -Is) ==="
-            free -m | head -2 || true
-            df -h / /var/lib/docker 2>/dev/null | tail -3 || true
-            echo "containers_all=$(docker ps -aq 2>/dev/null | wc -l) running=$(docker ps -q 2>/dev/null | wc -l)"
-            docker ps -a --format '{{.ID}} {{.Status}} {{.Names}}' 2>/dev/null | head -15 || true
-            docker system df 2>/dev/null | head -6 || true
-            sleep 15
-          done
-          SAMPLER
-          chmod +x /tmp/resource-sampler.sh
-          nohup bash /tmp/resource-sampler.sh &
-          echo $! > /tmp/sampler.pid
-          echo "resource sampler started pid=$(cat /tmp/sampler.pid)"
-
       # Per-test timeout: without it a single hung test stalls the whole job
       # silently until the job-level kill (observed 2026-08-27, run
       # 33063471418: zero output for 41 min after 93%). 300s matches ci.yml.
@@ -681,7 +662,24 @@ jobs:
           done < <(find tests/integration -type f -name 'test_*.py' ! -name 'test_tier1b_*.py' | LC_ALL=C sort)
 
           echo "Running integration shard ${SHARD}/${TOTAL_SHARDS} with COVERAGE_FILE=${COVERAGE_FILE}"
+          cat > /tmp/resource-sampler.sh <<'SAMPLER'
+          while true; do
+            echo "=== sampler $(date -Is) ==="
+            free -m | head -2 || true
+            df -h / /var/lib/docker 2>/dev/null | tail -3 || true
+            echo "containers_all=$(docker ps -aq 2>/dev/null | wc -l) running=$(docker ps -q 2>/dev/null | wc -l)"
+            docker ps -a --format '{{.ID}} {{.Status}} {{.Names}}' 2>/dev/null | head -15 || true
+            docker system df 2>/dev/null | head -6 || true
+            sleep 15
+          done
+          SAMPLER
+          chmod +x /tmp/resource-sampler.sh
+          bash /tmp/resource-sampler.sh &
+          SAMPLER_PID=$!
+          echo "resource sampler started pid=${SAMPLER_PID}"
+          trap 'kill "${SAMPLER_PID}" 2>/dev/null || true' EXIT
           MAX_ATTEMPTS=2
+
           BACKOFF_SECONDS=30
           for attempt in $(seq 1 $MAX_ATTEMPTS); do
             echo "--- Integration tests attempt $attempt of $MAX_ATTEMPTS ---"
@@ -709,7 +707,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [ -f /tmp/sampler.pid ]; then kill "$(cat /tmp/sampler.pid)" 2>/dev/null || true; fi
           docker rm -f modulo-ci-redis 2>/dev/null || true
 
   security-audit:
