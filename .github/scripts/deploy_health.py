@@ -411,7 +411,7 @@ JOB_TO_STAGE: dict[str, str] = {
     "Pre-deploy: Backend unit tests": "pre_deploy_lint",
     "Pre-deploy: Frontend checks": "pre_deploy_lint",
     # Job id: integration-tests (matrix-expanded into shard display names)
-    "Pre-deploy: Integration tests shard ${{ matrix.shard }}/8": "integration_test",
+    "Pre-deploy: Integration tests shard ${{ matrix.shard }}/10": "integration_test",
     # Job id: security-audit (semgrep, pip-audit)
     "Pre-deploy: Security audit": "pre_deploy_lint",
     # Job id: pre-deploy-gate (aggregate gate failing when a child failed)
@@ -435,7 +435,7 @@ DEPLOYMENT_ORDER: tuple[str, ...] = (
     "Pre-deploy: Backend lint",
     "Pre-deploy: Backend unit tests",
     "Pre-deploy: Frontend checks",
-    "Pre-deploy: Integration tests shard ${{ matrix.shard }}/8",
+    "Pre-deploy: Integration tests shard ${{ matrix.shard }}/10",
     "Pre-deploy: Security audit",
     "Pre-deploy gate",
     "Deploy to staging",
