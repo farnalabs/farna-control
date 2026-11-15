@@ -45,7 +45,6 @@ def _settings(**overrides: object) -> MagicMock:
         "saq_auth_password": "pw",
         "saq_auth_username": "admin",
         "fernet_key": "x" * 44,
-        "modulo_library_sync_interval_seconds": 300,
         # FAR-2093: the startup hook applies the licence anchor, so the
         # settings the tests drive it with must carry the licence fields.
         "debug": False,

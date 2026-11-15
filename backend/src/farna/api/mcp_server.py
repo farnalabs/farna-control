@@ -42,7 +42,6 @@ from jwt import InvalidTokenError as JWTError
 # single-module source-spec resolution imports-then-rolls-back modules
 # (coverage 7.16.2), which can delete `pydantic.root_model` while leaving a
 # dangling `RootModel` attribute, crashing that specialization. See
-# tests/unit/library_sync/test_coverage_source_import_guard.py.
 import pydantic.root_model  # noqa: F401  # isort: skip
 
 from mcp.server.fastmcp import FastMCP

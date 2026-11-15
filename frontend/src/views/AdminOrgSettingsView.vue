@@ -329,27 +329,7 @@
       <!-- Product Analytics -->
       <ProductAnalyticsSettings />
 
-      <!-- Community Objects -->
-      <SectionCard
-        :title="$t('views.AdminOrgSettingsView.community_objects')"
-        :description="$t('views.AdminOrgSettingsView.community_objects_description')"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium">{{ $t('views.AdminOrgSettingsView.community_objects_toggle') }}</p>
-            <p class="text-xs text-muted-foreground">{{ $t('views.AdminOrgSettingsView.community_objects_toggle_hint') }}</p>
-          </div>
-          <ToggleSwitch
-            :checked="communityObjectsEnabled"
-            :disabled="communityObjectsSaving"
-            :toggling="communityObjectsSaving"
-            :label="$t('views.AdminOrgSettingsView.community_objects_toggle')"
-            data-testid="community-objects-toggle"
-            @toggle="toggleCommunityObjects"
-          />
-        </div>
-        <div v-if="communityObjectsError" class="mt-2 text-xs text-destructive" role="alert">{{ communityObjectsError }}</div>
-      </SectionCard>
+
       </div>
     </template>
     </FeatureGate>
@@ -429,40 +409,6 @@ const exportData = reactive({
   exportedAt: '',
 })
 const exportError = ref<string | null>(null)
-
-const communityObjectsEnabled = ref(true)
-const communityObjectsSaving = ref(false)
-const communityObjectsError = ref<string | null>(null)
-
-async function loadCommunityObjects() {
-  try {
-    const resp = await api.GET('/api/v1/admin/org/community-objects')
-    if (!resp.error && resp.data) {
-      communityObjectsEnabled.value = resp.data.community_objects_enabled ?? true
-    }
-  } catch {
-    // fail-open: default is enabled
-  }
-}
-
-async function toggleCommunityObjects(next: boolean) {
-  communityObjectsSaving.value = true
-  communityObjectsError.value = null
-  try {
-    const resp = await api.PUT('/api/v1/admin/org/community-objects', {
-      body: { community_objects_enabled: next },
-    })
-    if (resp.error) {
-      communityObjectsError.value = formatApiError(resp.error)
-    } else {
-      communityObjectsEnabled.value = next
-    }
-  } catch (e: unknown) {
-    communityObjectsError.value = formatApiError(e)
-  } finally {
-    communityObjectsSaving.value = false
-  }
-}
 
 // ---------------------------------------------------------------------------
 // HITL review window — ORG default (FAR-1257).
@@ -784,7 +730,6 @@ function resetExport() {
 }
 
 planStore.fetchPlan()
-void loadCommunityObjects()
 void loadHitlReviewWindow()
 void loadMcpAuthority()
 void loadOrgFeatureFlags()

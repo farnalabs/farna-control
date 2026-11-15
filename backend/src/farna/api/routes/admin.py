@@ -232,8 +232,6 @@ _DB_BACKSTOP_DECISION: dict[str, str] = {
     "admin_update_hitl_review_window": "shared_helper",
     "admin_get_work_item_agent_minting": "shared_helper",
     "admin_update_work_item_agent_minting": "shared_helper",
-    "admin_get_community_objects": "shared_helper",
-    "admin_update_community_objects": "shared_helper",
     "admin_get_run_concurrency": "shared_helper",
     "admin_update_run_concurrency": "shared_helper",
     "admin_dismiss_journey": "shared_helper",  # _admin_journey_write

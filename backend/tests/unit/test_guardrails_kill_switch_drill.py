@@ -34,7 +34,7 @@ _TABLES: list[Any] = [SystemAuditEvent.__table__]
 
 
 def _settings() -> MagicMock:
-    return MagicMock(modulo_library_sync_interval_seconds=300)
+    return MagicMock()
 
 
 @pytest.fixture

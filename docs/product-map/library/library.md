@@ -41,7 +41,6 @@ The library (`/library`, `/library/:id/create-pipeline`) is the reusable-primiti
 pipeline-template surface. Primitives (agents, schemas, workflows, connectors) are listed,
 type-filtered, searched and detail-viewed; community primitives are copied into the org and
 adapted (forked) with an owner team; community sync/install, contribution, ratings and
-auto-update are served by `core/library_sync` + `core/library_service/community.py`; and
 each primitive carries an integration tier (native / preview / in_dev) per ADR 010.
 Library collections (FAR-760) are authored at `/library/collections/new` and viewed at
 `/library/collections/:id`, gated behind the `library_collection` feature flag.
@@ -60,7 +59,6 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       `include_in_dev=true` reveals them only to authorized roles (403 for viewers)
       (`tiering.feature`)
 - [x] Community sync/install and the community registry are covered
-      (`community_registry.feature`, `core/library_sync`, `test_community_install.py`)
 - [x] Fixture contributions are exercised end to end through
       `/api/v1/library/contribute` (`contributions.py`): a `draft` is created (201),
       missing fields are rejected 422, a draft is submitted to the `review_queue`,
@@ -235,5 +233,4 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 - 2026-08-27: **product-map review pass** – added this behavior-tracker
   for the registered manifest feature `feat-library`, which previously had no
   `docs/product-map/` entry. Behaviors verified against `api/routes/library.py`,
-  `core/library_sync`, `core/library_service/*` and the library BDD/unit suites.
   Status: covered.

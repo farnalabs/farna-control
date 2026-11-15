@@ -3,12 +3,6 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 
-const communityState = vi.hoisted(() => ({
-  enabled: true,
-  error: undefined as unknown,
-  reject: false,
-}))
-
 // FAR-1257: org default HITL review window endpoint state.
 const hitlWindowState = vi.hoisted(() => ({
   data: { hitl_review_window_seconds: null as number | null, is_default: true } as unknown,
@@ -92,15 +86,6 @@ vi.mock('../lib/api/client', () => ({
         }
         return Promise.resolve({ data: hitlWindowState.data, error: hitlWindowState.error })
       }
-      if (url === '/api/v1/admin/org/community-objects') {
-        if (communityState.reject) {
-          return Promise.reject(new Error('network down'))
-        }
-        return Promise.resolve({
-          data: { community_objects_enabled: communityState.enabled },
-          error: communityState.error,
-        })
-      }
       if (url === '/api/v1/admin/org/mcp-human-linked-hitl-authority') {
         if (mcpAuthorityState.reject) {
           return Promise.reject(new Error('setting unreachable'))
@@ -164,9 +149,6 @@ describe('AdminOrgSettingsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    communityState.enabled = true
-    communityState.error = undefined
-    communityState.reject = false
     mcpAuthorityState.data = { enabled: true, overridden: false }
     mcpAuthorityState.error = undefined
     mcpAuthorityState.reject = false
@@ -763,74 +745,6 @@ describe('AdminOrgSettingsView', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders the community objects kill switch', async () => {
-    const wrapper = await mountView()
-    const toggle = wrapper.find('[data-testid="community-objects-toggle"]')
-    expect(toggle.exists()).toBe(true)
-    expect(toggle.attributes('aria-checked')).toBe('true')
-    wrapper.unmount()
-  })
-
-  it('reflects a disabled community objects flag loaded from the API', async () => {
-    communityState.enabled = false
-    const wrapper = await mountView()
-    const toggle = wrapper.find('[data-testid="community-objects-toggle"]')
-    expect(toggle.attributes('aria-checked')).toBe('false')
-    wrapper.unmount()
-  })
-
-  it('fails open (stays enabled) when the community objects flag cannot be loaded', async () => {
-    communityState.reject = true
-    const wrapper = await mountView()
-    const toggle = wrapper.find('[data-testid="community-objects-toggle"]')
-    expect(toggle.attributes('aria-checked')).toBe('true')
-    wrapper.unmount()
-  })
-
-  it('toggles community objects off and persists the change', async () => {
-    const wrapper = await mountView()
-    const putMock = vi.mocked(api.PUT)
-    putMock.mockResolvedValue({ data: {}, error: undefined } as any)
-
-    const toggle = wrapper.find('[data-testid="community-objects-toggle"]')
-    await toggle.trigger('click')
-    await vi.waitFor(() => {
-      expect(toggle.attributes('aria-checked')).toBe('false')
-    })
-
-    expect(putMock).toHaveBeenCalledWith(
-      '/api/v1/admin/org/community-objects',
-      expect.objectContaining({ body: { community_objects_enabled: false } }),
-    )
-    wrapper.unmount()
-  })
-
-  it('shows an error when the community objects toggle request fails', async () => {
-    const wrapper = await mountView()
-    vi.mocked(api.PUT).mockResolvedValueOnce({ data: null, error: 'Server exploded' } as any)
-
-    const toggle = wrapper.find('[data-testid="community-objects-toggle"]')
-    await toggle.trigger('click')
-    await vi.waitFor(() => {
-      expect(wrapper.text()).toContain('Server exploded')
-    })
-    expect(toggle.attributes('aria-checked')).toBe('true')
-    wrapper.unmount()
-  })
-
-  it('shows an error when the community objects toggle request throws', async () => {
-    const wrapper = await mountView()
-    vi.mocked(api.PUT).mockRejectedValueOnce(new Error('network down'))
-
-    const toggle = wrapper.find('[data-testid="community-objects-toggle"]')
-    await toggle.trigger('click')
-    await vi.waitFor(() => {
-      expect(wrapper.text()).toContain('network down')
-    })
-    wrapper.unmount()
-  })
-
-  // -- FAR-1972: human-linked MCP HITL authority ----------------------------
 
   it('loads the human-linked MCP authority setting and renders the toggle on', async () => {
     const wrapper = await mountWindowView()

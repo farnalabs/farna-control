@@ -667,24 +667,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/org/community-objects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Admin Get Community Objects */
-        get: operations["admin_get_community_objects_api_v1_admin_org_community_objects_get"];
-        /** Admin Update Community Objects */
-        put: operations["admin_update_community_objects_api_v1_admin_org_community_objects_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/org/run-concurrency": {
         parameters: {
             query?: never;
@@ -4738,28 +4720,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/library/contribute/{primitive_id}/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish Contribution Endpoint
-         * @description Publish a reviewed fixture contribution to the community library.
-         *
-         *     Only org admins may publish contributions (``contribution.publish``).
-         */
-        post: operations["publish_contribution_endpoint_api_v1_library_contribute__primitive_id__publish_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/library/contribute/{primitive_id}/versions": {
         parameters: {
             query?: never;
@@ -6508,66 +6468,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/libraries/community/contribute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Community Contribute Endpoint
-         * @description Submit a community library contribution.
-         */
-        post: operations["community_contribute_endpoint_api_v1_libraries_community_contribute_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/community/contributions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Community Contributions Endpoint
-         * @description List the org's own community contributions, optionally filtered by status.
-         */
-        get: operations["list_community_contributions_endpoint_api_v1_libraries_community_contributions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/admin/library/community/publish/{primitive_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Admin Publish Contribution Endpoint
-         * @description Publish a community contribution to the community library (admin only).
-         */
-        post: operations["admin_publish_contribution_endpoint_api_v1_libraries_admin_library_community_publish__primitive_id__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/libraries/collections": {
         parameters: {
             query?: never;
@@ -6808,66 +6708,6 @@ export interface paths {
          *     version row.
          */
         post: operations["upgrade_collection_endpoint_api_v1_libraries_collections__primitive_id__installs__install_id__upgrade_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/community": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Community
-         * @description List synced community entries, fail-open to an empty list.
-         */
-        get: operations["list_community_api_v1_libraries_community_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/community/{entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Entry
-         * @description Return a single community entry, including its parsed blob content.
-         */
-        get: operations["get_entry_api_v1_libraries_community__entry_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/community/{entry_id}/install": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Install
-         * @description Install a community entry into the calling organisation.
-         */
-        post: operations["install_api_v1_libraries_community__entry_id__install_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13684,47 +13524,6 @@ export interface components {
             /** Warnings */
             warnings?: string[];
         };
-        /** CommunityContributeRequest */
-        CommunityContributeRequest: {
-            /** Primitive Type */
-            primitive_type: string;
-            /** Name */
-            name: string;
-            /** Slug */
-            slug: string;
-            /** Description */
-            description?: string | null;
-            /** Tags */
-            tags?: string[];
-            /** Content Json */
-            content_json: {
-                [key: string]: unknown;
-            };
-            /** Source Url */
-            source_url?: string | null;
-        };
-        /** CommunityContributionListResponse */
-        CommunityContributionListResponse: {
-            /** Items */
-            items: components["schemas"]["LibraryPrimitiveResponse"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-        };
-        /**
-         * CommunityObjectsResponse
-         * @description Public admin response for the community-objects kill-switch flag.
-         */
-        CommunityObjectsResponse: {
-            /**
-             * Community Objects Enabled
-             * @default true
-             */
-            community_objects_enabled: boolean;
-        };
         /** CompareEvalsRequest */
         CompareEvalsRequest: {
             /**
@@ -16554,11 +16353,6 @@ export interface components {
             } | null;
             /** Pipeline Name Override */
             pipeline_name_override?: string | null;
-        };
-        /** InstallRequest */
-        InstallRequest: {
-            /** Target Team Id */
-            target_team_id?: string | null;
         };
         /** InstanceSwitchUpdateRequest */
         InstanceSwitchUpdateRequest: {
@@ -24226,11 +24020,6 @@ export interface components {
             /** Evidence Refs */
             evidence_refs?: components["schemas"]["EvidenceReference"][];
         };
-        /** UpdateCommunityObjectsRequest */
-        UpdateCommunityObjectsRequest: {
-            /** Community Objects Enabled */
-            community_objects_enabled: boolean;
-        };
         /** UpdateCostControlsRequest */
         UpdateCostControlsRequest: {
             /** Budget */
@@ -26555,72 +26344,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemAgentMintingResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    admin_get_community_objects_api_v1_admin_org_community_objects_get: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommunityObjectsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    admin_update_community_objects_api_v1_admin_org_community_objects_put: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateCommunityObjectsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommunityObjectsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -35475,39 +35198,6 @@ export interface operations {
             };
         };
     };
-    publish_contribution_endpoint_api_v1_library_contribute__primitive_id__publish_post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path: {
-                primitive_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContributionStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
     list_contribution_versions_endpoint_api_v1_library_contribute__primitive_id__versions_get: {
         parameters: {
             query?: {
@@ -38709,108 +38399,6 @@ export interface operations {
             };
         };
     };
-    community_contribute_endpoint_api_v1_libraries_community_contribute_post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CommunityContributeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LibraryPrimitiveResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    list_community_contributions_endpoint_api_v1_libraries_community_contributions_get: {
-        parameters: {
-            query?: {
-                contribution_status?: string | null;
-                page?: number;
-                page_size?: number;
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommunityContributionListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    admin_publish_contribution_endpoint_api_v1_libraries_admin_library_community_publish__primitive_id__post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path: {
-                primitive_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LibraryPrimitiveResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
     create_collection_endpoint_api_v1_libraries_collections_post: {
         parameters: {
             query?: {
@@ -39175,111 +38763,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollectionUpgradeResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    list_community_api_v1_libraries_community_get: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    get_entry_api_v1_libraries_community__entry_id__get: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    install_api_v1_libraries_community__entry_id__install_post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path: {
-                entry_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InstallRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LibraryPrimitiveResponse"];
                 };
             };
             /** @description Validation Error */

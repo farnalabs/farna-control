@@ -36,7 +36,7 @@ os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 # inside ``sys_modules_saved()``, and ``SysModuleSaver.restore()`` then
 # deletes every module imported during that block from ``sys.modules``.
 # That block's import chain (``library_service`` -> ``community`` ->
-# ``library_sync`` -> ``settings`` -> ``pydantic_settings.sources.utils``)
+# settings -> pydantic_settings.sources.utils)
 # triggers pydantic's lazy ``pydantic.root_model`` load; the rollback removes
 # the submodule from ``sys.modules`` but leaves the ``RootModel`` attribute
 # bound on the already-imported ``pydantic`` package. Every later
@@ -51,7 +51,7 @@ os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 # later RootModel generic specialization can resolve its module. A pre-import
 # inside product code would NOT work: product modules first execute inside the
 # rollback block, so their import is deleted again. Guarded by
-# ``tests/unit/library_sync/test_coverage_source_import_guard.py``.
+# coverage import guard test.
 import sys
 from pathlib import Path
 

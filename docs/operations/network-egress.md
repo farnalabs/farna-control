@@ -99,15 +99,6 @@ webhook payloads are sent to hardcoded endpoints.
 
 ## 6. Plugin Registry / Library
 
-The library registry is a local database table. Community library
-browse/install is implemented (FAR-363): when `MODULO_LIBRARY_ENDPOINT` is
-set (default empty, meaning no library is configured), the SAQ
-`library_sync` cron polls that endpoint for the signed manifest (outbound
-HTTPS every `MODULO_LIBRARY_SYNC_INTERVAL_SECONDS`, default 300s) and caches
-the catalog locally; installs fetch content-addressed blobs from the same
-endpoint with SHA-256 verification. With the default empty endpoint,
-library browsing makes no outbound calls.
-
 ---
 
 ## 7. Licensing
@@ -137,7 +128,6 @@ No third-party CDNs, analytics scripts, or tracking pixels are loaded.
 | Connectors | None | Yes – per-connector API config |
 | Webhooks | None | Yes – per-webhook URL config |
 | SSO/OIDC | None | Yes – IdP discovery URL |
-| Library registry | None | Yes – when `MODULO_LIBRARY_ENDPOINT` is set |
 | License check | None | None |
 | Frontend | None | None |
 

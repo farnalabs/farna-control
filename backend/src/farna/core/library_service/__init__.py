@@ -113,18 +113,6 @@ def _parse_version_key(version: str | None) -> tuple[int, ...]:
         return (0,)
 
 
-def _resolve_primitive_types(
-    primitive_type: str | None,
-    primitive_types: list[str] | None,
-) -> list[str] | None:
-    """Merge single and plural type filters into one set, or None when unfiltered."""
-    if primitive_types:
-        return primitive_types
-    if primitive_type is not None:
-        return [primitive_type]
-    return None
-
-
 async def _with_org_txn[T](
     session: AsyncSession,
     org_id: uuid.UUID,
