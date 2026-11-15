@@ -542,10 +542,15 @@ def _make_pinned_discovery(discovery: dict[str, Any]) -> MagicMock:
     """Fake ``pinned_async_client`` context manager serving a discovery doc."""
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
-    resp.json = MagicMock(return_value=discovery)
-    http_client = AsyncMock()
-    http_client.get = AsyncMock(return_value=resp)
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=http_client)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    return cm
+    resp.headers = {}
+
+    async def _aiter_bytes() -> Any:
+        yield json.dumps(discovery).encode("utf-8")
+
+    resp.aiter_bytes = _aiter_bytes
+    stream = MagicMock()
+    stream.__aenter__ = AsyncMock(return_value=resp)
+    stream.__aexit__ = AsyncMock(return_value=False)
+    http_client = MagicMock()
+    http_client.stream = MagicMock(return_value=stream)
+    return http_client

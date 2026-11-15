@@ -162,16 +162,19 @@ def _http_client(get_json: dict | None = None, get_text: str = "") -> MagicMock:
     resp.status_code = 200
     resp.is_success = True
     resp.raise_for_status = MagicMock()
-    resp.json = MagicMock(return_value=get_json if get_json is not None else {})
-    resp.text = get_text
-    client.get = AsyncMock(return_value=resp)
+    resp.headers = {}
+    body = json.dumps(get_json if get_json is not None else {}).encode("utf-8") if get_json is not None else get_text.encode("utf-8")
+
+    async def _aiter_bytes() -> AsyncGenerator[bytes, None]:
+        yield body
+
+    resp.aiter_bytes = _aiter_bytes
+    stream = MagicMock()
+    stream.__aenter__ = AsyncMock(return_value=resp)
+    stream.__aexit__ = AsyncMock(return_value=None)
+    client.stream = MagicMock(return_value=stream)
     client.aclose = AsyncMock()
     client.timeout = None
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=client)
-    cm.__aexit__ = AsyncMock(return_value=None)
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=None)
     return client
 
 
