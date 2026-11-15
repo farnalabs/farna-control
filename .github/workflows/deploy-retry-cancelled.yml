@@ -1,0 +1,83 @@
+name: "Deploy Retry Cancelled Jobs"
+
+on:
+  workflow_run:
+    workflows: ["Deploy: Staging + Prod"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  retry-cancelled:
+    name: Retry cancelled jobs from failed deploy run
+    if: ${{ github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled' }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Read triggering run attempt
+        id: run_info
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          # Get the run attempt number
+          RUN_ATTEMPT=$(gh api "repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}" --jq '.run_attempt')
+          echo "run_attempt=${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          echo "Triggering run ID: ${RUN_ID}, attempt: ${RUN_ATTEMPT}"
+
+      - name: Check attempt limit
+        id: attempt_check
+        run: |
+          set -euo pipefail
+          ATTEMPT="${{ steps.run_info.outputs.run_attempt }}"
+          if [ "${ATTEMPT}" -ge 3 ]; then
+            echo "run_attempt ${ATTEMPT} >= 3: attempts exhausted, will not retry"
+            echo "should_retry=false" >> "$GITHUB_OUTPUT"
+            echo "reason=run_attempt ${ATTEMPT} >= 3 (max 2 retries allowed)" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_attempt ${ATTEMPT} < 3: eligible for retry"
+            echo "should_retry=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Count cancelled jobs
+        id: cancelled_jobs
+        if: ${{ steps.attempt_check.outputs.should_retry == 'true' }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+
+          # Get all jobs for the run and count cancelled ones
+          CANCELLED_COUNT=$(gh api "repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}/jobs" --paginate --jq '[.jobs[] | select(.conclusion == "cancelled")] | length')
+          echo "cancelled_count=${CANCELLED_COUNT}" >> "$GITHUB_OUTPUT"
+          echo "Found ${CANCELLED_COUNT} cancelled job(s) in run ${RUN_ID}"
+
+      - name: Retry cancelled jobs
+        if: ${{ steps.attempt_check.outputs.should_retry == 'true' && steps.cancelled_jobs.outputs.cancelled_count > 0 }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          CANCELLED_COUNT="${{ steps.cancelled_jobs.outputs.cancelled_count }}"
+
+          echo "Retrying ${CANCELLED_COUNT} cancelled job(s) for run ${RUN_ID} (attempt ${{ steps.run_info.outputs.run_attempt }})"
+          gh api -X POST "repos/${OWNER}/${REPO}/actions/runs/${RUN_ID}/rerun-failed-jobs"
+          echo "Successfully triggered rerun-failed-jobs for run ${RUN_ID}"
+
+      - name: No cancelled jobs to retry
+        if: ${{ steps.attempt_check.outputs.should_retry == 'true' && steps.cancelled_jobs.outputs.cancelled_count == 0 }}
+        run: |
+          echo "No cancelled jobs found in run ${{ github.event.workflow_run.id }} - nothing to retry (genuine test failure, not a preemption)"
+
+      - name: Attempts exhausted
+        if: ${{ steps.attempt_check.outputs.should_retry == 'false' }}
+        run: |
+          echo "Run attempt limit reached (${{ steps.run_info.outputs.run_attempt }} >= 3) - not retrying. Deploy legitimately stays failed."

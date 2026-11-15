@@ -120,13 +120,13 @@ def _real_attestation_payload(sha256: str) -> list[dict[str, Any]]:
                     "predicateType": "https://slsa.dev/provenance/v1",
                     "subject": [
                         {
-                            "name": "ghcr.io/farnalabs/modulo",
+                            "name": "ghcr.io/farnalabs/farna-control",
                             "digest": {"sha256": sha256},
                         }
                     ],
                     "predicate": {"buildDefinition": {"buildType": "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1"}},
                 },
-                "signature": {"certificate": {"subjectAlternativeName": ("https://github.com/farnalabs/modulo/.github/workflows/release-unified.yml@refs/tags/v0.1.0-rc1")}},
+                "signature": {"certificate": {"subjectAlternativeName": ("https://github.com/farnalabs/farna-control/.github/workflows/release-unified.yml@refs/tags/v0.1.0-rc1")}},
                 "verifiedTimestamps": [
                     {
                         "type": "Tlog",
@@ -134,7 +134,7 @@ def _real_attestation_payload(sha256: str) -> list[dict[str, Any]]:
                         "timestamp": "2026-11-08T00:00:00Z",
                     }
                 ],
-                "verifiedIdentity": {"subjectAlternativeName": ("https://github.com/farnalabs/modulo/.github/workflows/release-unified.yml@refs/tags/v0.1.0-rc1")},
+                "verifiedIdentity": {"subjectAlternativeName": ("https://github.com/farnalabs/farna-control/.github/workflows/release-unified.yml@refs/tags/v0.1.0-rc1")},
             },
         }
     ]
@@ -198,7 +198,7 @@ def test_rc_validation_renders_matrix_compose_without_a_concrete_tag() -> None:
 def test_rc_validation_matrix_renders_phase_tags_through_compose_substitution(tmp_path: Path) -> None:
     compose_file = tmp_path / "docker-compose.prod.yml"
     compose_file.write_text(
-        "services:\n  modulo:\n    image: ghcr.io/farnalabs/modulo:v1.1.0-rc1\n",
+        "services:\n  modulo:\n    image: ghcr.io/farnalabs/farna-control:v1.1.0-rc1\n",
         encoding="utf-8",
     )
     helper = REPO_ROOT / "scripts" / "render_validation_compose.py"
@@ -213,7 +213,7 @@ def test_rc_validation_matrix_renders_phase_tags_through_compose_substitution(tm
     rendered = yaml.safe_load(compose_file.read_text(encoding="utf-8"))
     expression = rendered["services"]["modulo"]["image"]
     selector = "${TAG:?TAG is required - set the image tag for this matrix phase}"
-    assert expression == f"ghcr.io/farnalabs/modulo:{selector}"
+    assert expression == f"ghcr.io/farnalabs/farna-control:{selector}"
 
     # The selector must REQUIRE TAG: an unset variable has to fail rather than
     # silently render an empty tag that no registry can resolve.
@@ -229,10 +229,10 @@ def test_rc_validation_matrix_renders_phase_tags_through_compose_substitution(tm
     rendered_images = {phase: _expand_compose_env(expression, {"TAG": tag}) for phase, tag in phases.items()}
 
     assert rendered_images == {
-        "clean-install-old": "ghcr.io/farnalabs/modulo:v1.0.0",
-        "upgrade-new": "ghcr.io/farnalabs/modulo:v1.1.0-rc1",
-        "failed-upgrade": "ghcr.io/farnalabs/modulo:v1.1.0-rc1",
-        "rollback-old": "ghcr.io/farnalabs/modulo:v1.0.0",
+        "clean-install-old": "ghcr.io/farnalabs/farna-control:v1.0.0",
+        "upgrade-new": "ghcr.io/farnalabs/farna-control:v1.1.0-rc1",
+        "failed-upgrade": "ghcr.io/farnalabs/farna-control:v1.1.0-rc1",
+        "rollback-old": "ghcr.io/farnalabs/farna-control:v1.0.0",
     }
     assert rendered_images["clean-install-old"] == rendered_images["rollback-old"]
     assert rendered_images["upgrade-new"] == rendered_images["failed-upgrade"]
@@ -242,14 +242,14 @@ def test_rc_validation_matrix_renders_phase_tags_through_compose_substitution(tm
 def test_render_helper_renders_a_concrete_tag_on_request(tmp_path: Path) -> None:
     compose_file = tmp_path / "docker-compose.prod.yml"
     compose_file.write_text(
-        "services:\n  modulo:\n    image: ghcr.io/farnalabs/modulo:v1.1.0-rc1\n",
+        "services:\n  modulo:\n    image: ghcr.io/farnalabs/farna-control:v1.1.0-rc1\n",
         encoding="utf-8",
     )
 
     _render_helper().render_matrix_compose(compose_file, "v1.0.0")
 
     rendered = yaml.safe_load(compose_file.read_text(encoding="utf-8"))
-    assert rendered["services"]["modulo"]["image"] == "ghcr.io/farnalabs/modulo:v1.0.0"
+    assert rendered["services"]["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v1.0.0"
 
 
 def test_render_helper_fails_when_no_modulo_image_line_exists(tmp_path: Path) -> None:
@@ -262,7 +262,7 @@ def test_render_helper_fails_when_no_modulo_image_line_exists(tmp_path: Path) ->
 
 def test_render_helper_refuses_multiple_modulo_image_lines(tmp_path: Path) -> None:
     compose_file = tmp_path / "docker-compose.prod.yml"
-    original = "services:\n  modulo:\n    image: ghcr.io/farnalabs/modulo:v1.0.0\n  worker:\n    image: ghcr.io/farnalabs/modulo:v1.0.0\n"
+    original = "services:\n  modulo:\n    image: ghcr.io/farnalabs/farna-control:v1.0.0\n  worker:\n    image: ghcr.io/farnalabs/farna-control:v1.0.0\n"
     compose_file.write_text(original, encoding="utf-8")
 
     with pytest.raises(ValueError, match="expected exactly one modulo image to render, found 2"):
@@ -371,7 +371,7 @@ def test_image_digest_verification_accepts_real_attestation_verify_shape() -> No
     digest = "sha256:" + "a" * 64
     attestation = _real_attestation_payload("a" * 64)
 
-    assert validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", digest, attestation) == digest
+    assert validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", digest, attestation) == digest
 
 
 def test_image_digest_verification_rejects_subject_at_the_wrong_nesting() -> None:
@@ -382,7 +382,7 @@ def test_image_digest_verification_rejects_subject_at_the_wrong_nesting() -> Non
     attestation = {"verificationResult": {"subject": [{"digest": {"sha256": "a" * 64}}]}}
 
     with pytest.raises(validator.ReleaseValidationError, match="does not contain resolved digest"):
-        validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", digest, attestation)
+        validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", digest, attestation)
 
 
 def test_image_digest_verification_rejects_a_foreign_attested_subject() -> None:
@@ -391,7 +391,7 @@ def test_image_digest_verification_rejects_a_foreign_attested_subject() -> None:
     attestation = _real_attestation_payload("b" * 64)
 
     with pytest.raises(validator.ReleaseValidationError, match="does not contain resolved digest"):
-        validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", digest, attestation)
+        validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", digest, attestation)
 
 
 def test_image_digest_verification_accepts_a_bare_top_level_statement() -> None:
@@ -399,15 +399,15 @@ def test_image_digest_verification_accepts_a_bare_top_level_statement() -> None:
     digest = "sha256:" + "a" * 64
     attestation = {"subject": [{"digest": {"sha256": "a" * 64}}]}
 
-    assert validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", digest, attestation) == digest
+    assert validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", digest, attestation) == digest
 
 
 @pytest.mark.parametrize(
     "image",
     [
-        "ghcr.io/attacker/modulo:v1.2.3",
-        "ghcr.io/farnalabs/modulo-evil:v1.2.3",
-        "docker.io/farnalabs/modulo:v1.2.3",
+        "ghcr.io/attacker/farna-control:v1.2.3",
+        "ghcr.io/farnalabs/farna-control-evil:v1.2.3",
+        "docker.io/farnalabs/farna-control:v1.2.3",
     ],
 )
 def test_image_digest_verification_rejects_foreign_images(image: str) -> None:
@@ -424,7 +424,7 @@ def test_image_digest_verification_fails_closed_for_missing_provenance() -> None
     digest = "sha256:" + "a" * 64
 
     with pytest.raises(validator.ReleaseValidationError, match="does not contain resolved digest"):
-        validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", digest, {})
+        validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", digest, {})
 
 
 def test_image_digest_verification_ignores_unrelated_nested_sha256_metadata() -> None:
@@ -434,7 +434,7 @@ def test_image_digest_verification_ignores_unrelated_nested_sha256_metadata() ->
     attestation[0]["verificationResult"]["statement"]["predicate"] = {"metadata": {"sha256": "a" * 64}}
 
     with pytest.raises(validator.ReleaseValidationError, match="does not contain resolved digest"):
-        validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", requested, attestation)
+        validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", requested, attestation)
 
 
 def test_image_digest_verification_rejects_malformed_subject_digest() -> None:
@@ -443,7 +443,7 @@ def test_image_digest_verification_rejects_malformed_subject_digest() -> None:
     attestation = _real_attestation_payload("not-a-digest")
 
     with pytest.raises(validator.ReleaseValidationError, match="does not contain resolved digest"):
-        validator.verify_image_digest("ghcr.io/farnalabs/modulo:v1.2.3", requested, attestation)
+        validator.verify_image_digest("ghcr.io/farnalabs/farna-control:v1.2.3", requested, attestation)
 
 
 def test_image_digest_cli_accepts_attestation_json_and_rejects_missing_digest(
@@ -460,7 +460,7 @@ def test_image_digest_cli_accepts_attestation_json_and_rejects_missing_digest(
         str(script),
         "verify-image-digest",
         "--image",
-        "ghcr.io/farnalabs/modulo:v1.2.3",
+        "ghcr.io/farnalabs/farna-control:v1.2.3",
         "--digest",
         digest,
         "--attestation-json",
