@@ -192,6 +192,12 @@ def settings_mock(db_url: str) -> MagicMock:
     sm.database_url = db_url
     sm.fernet_key = _VALID_32
     sm.modulo_secrets_backend = "fernet"
+    # Keep the polling test on its local connector budget.  A bare MagicMock
+    # attribute is truthy, so leaving ``redis_url`` unspecified makes the
+    # production builder create a real Redis client during this test and leaves
+    # its asyncio transport dependent on teardown timing.
+    sm.redis_url = None
+    sm.modulo_db = "postgres"
     return sm
 
 
