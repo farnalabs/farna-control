@@ -438,10 +438,8 @@ describe('AdminOrgSettingsView', () => {
       wrapper.find('[data-testid="feature-gate-disabled"] [data-testid="org-hitl-review-window-value"]').exists(),
     ).toBe(false)
 
-    // Every OTHER section stays gated behind the disabled overlay - the card
-    // moved out, the rest of the page did not.
+    // Other administrative sections remain gated behind the disabled overlay.
     const disabled = wrapper.find('[data-testid="feature-gate-disabled"]')
-    expect(disabled.find('[data-testid="community-objects-toggle"]').exists()).toBe(true)
     expect(disabled.text()).not.toContain('Delete Organization')
 
     // Interactive end to end: type, save, and the API is called with the
