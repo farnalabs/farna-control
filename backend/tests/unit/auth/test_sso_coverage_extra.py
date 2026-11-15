@@ -8,6 +8,7 @@ non-dict group-mapping guard). All network calls are mocked.
 
 import json
 import uuid
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -124,24 +125,39 @@ def test_require_json_object_valid() -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _invalid_json_chunks():
+    yield b"not-json"
+
+
+@asynccontextmanager
+async def _response_stream(response: MagicMock):
+    yield response
+
+
 async def test_fetch_discovery_json_decode_error() -> None:
     response = MagicMock()
-    response.json.side_effect = json.JSONDecodeError("bad", "doc", 0)
-    client = AsyncMock()
-    client.get.return_value = response
-    pacer = AsyncMock()
-    pacer.return_value.__aenter__.return_value = client
+    response.headers = {}
+    response.raise_for_status.return_value = None
+    response.aiter_bytes = lambda: _invalid_json_chunks()
+    client = MagicMock()
+    client.stream.return_value = _response_stream(response)
+
+    pacer = AsyncMock(return_value=client)
+
     with patch("farna.auth.sso.pinned_async_client", pacer), pytest.raises(ValueError, match="Invalid JSON in discovery document"):
         await _fetch_discovery("https://issuer.example/discovery")
 
 
 async def test_fetch_discovery_pinned_json_decode_error() -> None:
     response = MagicMock()
-    response.json.side_effect = json.JSONDecodeError("bad", "doc", 0)
-    client = AsyncMock()
-    client.get.return_value = response
-    pacer = AsyncMock()
-    pacer.return_value.__aenter__.return_value = client
+    response.headers = {}
+    response.raise_for_status.return_value = None
+    response.aiter_bytes = lambda: _invalid_json_chunks()
+    client = MagicMock()
+    client.stream.return_value = _response_stream(response)
+
+    pacer = AsyncMock(return_value=client)
+
     with (
         patch("farna.auth.sso.pinned_async_client", pacer),
         pytest.raises(ValueError, match="Invalid JSON in discovery document"),
@@ -540,10 +556,10 @@ async def test_resolve_saml_config_metadata_url_fetch_error() -> None:
         provider_type="saml",
         enabled=True,
     )
-    client = AsyncMock()
-    client.get.side_effect = httpx.ConnectError("x")
-    pacer = AsyncMock()
-    pacer.return_value.__aenter__.return_value = client
+    client = MagicMock()
+    client.stream.side_effect = httpx.ConnectError("x")
+
+    pacer = AsyncMock(return_value=client)
     with (
         patch("farna.auth.sso.get_enabled_saml_provider", new_callable=AsyncMock, return_value=db_saml),
         patch("farna.auth.sso.validate_outbound_url_async", new_callable=AsyncMock),
@@ -563,10 +579,18 @@ async def test_resolve_saml_config_metadata_url_fetch_success() -> None:
         provider_type="saml",
         enabled=True,
     )
-    client = AsyncMock()
-    client.get.return_value = MagicMock(text="<metadata/>")
-    pacer = AsyncMock()
-    pacer.return_value.__aenter__.return_value = client
+    response = MagicMock()
+    response.headers = {}
+    response.raise_for_status.return_value = None
+
+    async def _metadata_chunks():
+        yield b"<metadata/>"
+
+    response.aiter_bytes = _metadata_chunks
+    client = MagicMock()
+    client.stream.return_value = _response_stream(response)
+
+    pacer = AsyncMock(return_value=client)
     with (
         patch("farna.auth.sso.get_enabled_saml_provider", new_callable=AsyncMock, return_value=db_saml),
         patch("farna.auth.sso.validate_outbound_url_async", new_callable=AsyncMock),

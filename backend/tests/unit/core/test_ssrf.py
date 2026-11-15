@@ -19,8 +19,9 @@ import logging
 import ssl
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpcore
 import httpx
@@ -31,6 +32,52 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from farna.core import ssrf
+
+
+class _StreamingResponse:
+    def __init__(self, chunks: list[bytes], headers: dict[str, str] | None = None) -> None:
+        self._chunks = chunks
+        self.headers = headers or {}
+
+    def raise_for_status(self) -> None:
+        return None
+
+    async def aiter_bytes(self):
+        for chunk in self._chunks:
+            yield chunk
+
+
+@asynccontextmanager
+async def _response_stream(response: _StreamingResponse):
+    yield response
+
+
+async def test_fetch_sso_metadata_rejects_oversized_content_length() -> None:
+    response = _StreamingResponse([], {"content-length": str(ssrf.SSO_METADATA_MAX_BYTES + 1)})
+    client = MagicMock()
+    client.stream.return_value = _response_stream(response)
+
+    with pytest.raises(ssrf.SsoMetadataFetchError, match="exceeds size limit"):
+        await ssrf.fetch_sso_metadata("https://idp.example/metadata", kind="SAML", client_factory=AsyncMock(return_value=client))
+
+
+async def test_fetch_sso_metadata_rejects_oversized_chunked_body() -> None:
+    response = _StreamingResponse([b"x" * ssrf.SSO_METADATA_MAX_BYTES, b"y"])
+    client = MagicMock()
+    client.stream.return_value = _response_stream(response)
+
+    with pytest.raises(ssrf.SsoMetadataFetchError, match="exceeds size limit"):
+        await ssrf.fetch_sso_metadata("https://idp.example/metadata", kind="SAML", client_factory=AsyncMock(return_value=client))
+
+
+async def test_fetch_sso_metadata_accepts_normal_body() -> None:
+    response = _StreamingResponse([b'{"issuer":"https://idp.example"}'])
+    client = MagicMock()
+    client.stream.return_value = _response_stream(response)
+
+    result = await ssrf.fetch_sso_metadata("https://idp.example/metadata", kind="OIDC discovery", client_factory=AsyncMock(return_value=client))
+
+    assert result == '{"issuer":"https://idp.example"}'
 
 
 @pytest.mark.parametrize(
