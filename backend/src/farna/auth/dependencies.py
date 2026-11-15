@@ -557,7 +557,7 @@ async def _verify_identity(principal: AuthenticatedPrincipal) -> str | None:
     return live_role
 
 
-async def require_system_admin(  # NOSONAR S7503 - FastAPI dependency coroutine seam
+async def require_system_admin(  # NOSONAR S7503 - FastAPI dependency coroutine seam  # vulture: ignore - FastAPI dependency entry point
     current_user: AuthenticatedPrincipal = Depends(get_current_user),
 ) -> AuthenticatedPrincipal:
     """Require the current user to have system admin privileges."""

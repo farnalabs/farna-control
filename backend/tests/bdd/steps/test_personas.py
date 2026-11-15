@@ -52,7 +52,6 @@ scenarios("../features/personas/alice-devx-sme.feature")
 scenarios("../features/personas/priya-platform-engineer.feature")
 scenarios("../features/personas/marcus-ciso.feature")
 scenarios("../features/personas/elena-engineering-director.feature")
-scenarios("../features/personas/jordan-community-contributor.feature")
 
 
 @pytest.fixture

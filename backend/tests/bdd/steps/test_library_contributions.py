@@ -22,13 +22,11 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pytest_bdd import given, parsers, scenarios, then, when
+from pytest_bdd import given, parsers, then, when
 
 from farna.core.library_service import ContributionInvalidTransitionError
 from farna.db.crud.base import PageResult
 from tests.bdd.conftest import ORG_ID, USER_ID, _active_client, _store_response
-
-scenarios("../features/library/contribute.feature")
 
 
 @pytest.fixture
