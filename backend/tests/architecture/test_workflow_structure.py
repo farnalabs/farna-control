@@ -427,9 +427,8 @@ def test_ci_yml_dispatches_no_reviewer_webhook() -> None:
     (payload construction or HMAC signing against the review secret) must be
     gone from product CI too."""
     raw = _code(CI_YML.read_text(encoding="utf-8"))
-    # The secret name is MODULO_PR_REVIEW_WEBHOOK_SECRET (legacy alias),
-    # not FARNA_CONTROL_MODULO_PR_REVIEW_WEBHOOK_SECRET.
-    assert "MODULO_PR_REVIEW_WEBHOOK_SECRET" not in raw, "ci.yml signs PR-review webhooks (MODULO_PR_REVIEW_WEBHOOK_SECRET) — reviewer dispatch must live only in pr-review.yml (FAR-1843)"
+    # The secret name is FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET.
+    assert "FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET" not in raw, "ci.yml signs PR-review webhooks (FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET) — reviewer dispatch must live only in pr-review.yml (FAR-1843)"
 
 
 # --- D2/D5: merge-queue CI gate is product-CI-only -------------------------
@@ -692,8 +691,8 @@ def test_merge_queue_configures_the_git_credential_exactly_once() -> None:
         name = step.get("name", "<unnamed>")
         step_env = step.get("env") or {}
         key0 = str(step_env.get("GIT_CONFIG_KEY_0", ""))
-        if "MODULO_REVIEWBOT_TOKEN" not in key0 or "insteadOf" not in key0:
-            violations.append(f"  {name!r}: does not route the push through the single insteadOf rewrite carrying secrets.MODULO_REVIEWBOT_TOKEN — a branch containing .github/workflows/* needs the workflows-scoped PAT (FAR-1940)")
+        if "FARNA_CONTROL_REVIEWBOT_TOKEN" not in key0 or "insteadOf" not in key0:
+            violations.append(f"  {name!r}: does not route the push through the single insteadOf rewrite carrying secrets.FARNA_CONTROL_REVIEWBOT_TOKEN — a branch containing .github/workflows/* needs the workflows-scoped PAT (FAR-1940)")
         arm = _failure_branch(step.get("run") or "")
         if "::error::" not in arm:
             violations.append(f"  {name!r}: push failure is swallowed — the failure arm must emit an ::error:: annotation")
@@ -933,7 +932,7 @@ _PRE_FIX_STEP = (
     "      - name: Trigger Modulo Branch Fixer\n"
     "        shell: bash\n"
     "        env:\n"
-    "          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}\n"
+    "          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}\n"
     "          PR_NUM: ${{ github.event.pull_request.number }}\n"
     "        run: |\n"
     '          if [ "$DISPATCHED" != "true" ]; then\n'
@@ -956,7 +955,7 @@ jobs:
       - name: Trigger Modulo Branch Fixer
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
           if [ "$DISPATCHED" != "true" ]; then

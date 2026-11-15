@@ -186,16 +186,16 @@ jobs:
         id: check
         shell: bash
         env:
-          # FAR-528: github.token, NOT MODULO_REVIEWBOT_TOKEN. The Reviewbot PAT
+          # FAR-528: github.token, NOT FARNA_CONTROL_REVIEWBOT_TOKEN. The Reviewbot PAT
           # cannot read the Actions runs API (GitHub returns 404, not 403, for
           # resources a token can't see), which made the in-progress check below
           # fail and starve production deploys behind green checkmarks. The
           # workflow's github.token has Actions read ONLY via the job-level
           # permissions block above — this repo's default workflow permissions
-          # are restricted (contents: read), which is why MODULO_REVIEWBOT_TOKEN
+          # are restricted (contents: read), which is why FARNA_CONTROL_REVIEWBOT_TOKEN
           # (no Actions scope) returned 404 for the Actions runs API (GitHub
           # returns 404, not 403, for resources a token cannot see).
-          # Other steps keep MODULO_REVIEWBOT_TOKEN (PR Reviewer needs that
+          # Other steps keep FARNA_CONTROL_REVIEWBOT_TOKEN (PR Reviewer needs that
           # identity for cross-identity PR comments).
           GH_TOKEN: ${{ github.token }}
           INTERVAL_HOURS: ${{ vars.DEPLOY_INTERVAL_HOURS || 3 }}
@@ -936,8 +936,8 @@ jobs:
 
       - name: Dispatch Branch Fixer webhook
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
@@ -1042,8 +1042,8 @@ jobs:
 
       - name: Dispatch Branch Fixer webhook
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
@@ -1095,8 +1095,8 @@ jobs:
 
       - name: Dispatch Branch Fixer webhook
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
@@ -1156,8 +1156,8 @@ jobs:
 
       - name: Dispatch Branch Fixer webhook (triage)
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
@@ -2086,7 +2086,7 @@ jobs:
       - name: Self-report deployed PRs to Modulo (fail-open, best-effort)
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
           MODULO_SELF_REPORT_URL: ${{ secrets.MODULO_SELF_REPORT_URL }}
           MODULO_SELF_REPORT_TOKEN: ${{ secrets.MODULO_SELF_REPORT_TOKEN }}
         run: |
@@ -3815,8 +3815,8 @@ jobs:
 
       - name: Dispatch Branch Fixer webhook (triage)
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
