@@ -75,6 +75,7 @@ def test_promoted_bootstrap_main_writes_fixed_env_files(
     # Pre-registering via setenv guarantees monkeypatch restores whatever
     # main() writes directly into os.environ (it mutates the env, not a copy).
     monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
+    monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "stale-legacy-system-url")
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()  # avoid the "coroutine was never awaited" RuntimeWarning
@@ -93,6 +94,7 @@ def test_promoted_bootstrap_main_writes_fixed_env_files(
     assert written["/tmp/system_database_url.env"] == "postgresql+asyncpg://farna_control_system:pw@db.internal:5432/modulo"
     assert os.environ["DATABASE_ADMIN_URL"] == "postgresql+asyncpg://admin:pw@db.internal:5432/modulo?sslmode=require"
     assert os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] == "postgresql+asyncpg://farna_control_system:pw@db.internal:5432/modulo"
+    assert os.environ["MODULO_SYSTEM_DATABASE_URL"] == "stale-legacy-system-url"
 
 
 def test_promoted_main_warns_when_system_url_derivation_fails(
