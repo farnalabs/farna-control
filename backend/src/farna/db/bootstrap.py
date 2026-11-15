@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 import asyncpg
 
 # split_postgres_sslmode is imported, not defined, here (FAR-1469): the
-# canonical helper lives in ``modulo.db.url_utils`` — a stdlib-only LEAF module
+# canonical helper lives in ``farna.db.url_utils`` — a stdlib-only LEAF module
 # — so importing it adds no dependency beyond what this dependency-light boot
 # path already takes (fix_database_url / derive_system_database_url) and there
 # is no import cycle. One implementation, no interim copy.
@@ -147,27 +147,26 @@ def main() -> None:
     # MODULO_SYSTEM_DATABASE_URL: the farna_control_system role (LOGIN, BYPASSRLS) URL used
     # by system crons (metrics_dump, analytics_facts_maintenance, journey_reconcile,
     # retention_cleanup, dispatcher_reconcile) and the SSO pre-auth provider lookup.
-    # If set, fix it like the others. If not, derive it from the fixed DATABASE_URL
-    # by swapping the username to farna_control_system -- the password stays the same, and
-    # bootstrap_role.py reads it from the URL to create the role.
+    # If set, fix it like the others. If not, do not derive a system URL here:
+    # the absence of an explicit URL is meaningful to bootstrap_role.py, which
+    # must preserve an existing system-role password on warm boots.
     system_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
     if system_url:
         system_url = fix_database_url(system_url)
-    elif runtime_url:
-        system_url = derive_system_database_url(runtime_url)
-        if system_url:
-            print(  # noqa: T201
-                "WARNING: FARNA_CONTROL_SYSTEM_DATABASE_URL is not configured; derived system URL reuses the app password. Configure an explicit system-role URL to avoid authentication failure.",
-                file=sys.stderr,
-            )
-        if not system_url:
-            print(  # noqa: T201
-                "WARNING: cannot derive MODULO_SYSTEM_DATABASE_URL (DATABASE_URL has no usable password/userinfo) - system crons will fall back to farna_control_app",
-                file=sys.stderr,
-            )
-
-    if system_url:
         os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] = system_url
         # Short-lived container bootstrap env file, consistent with the
         # /tmp/database_url.env and /tmp/database_admin_url.env files written above.
         _write_env_file("/tmp/system_database_url.env", system_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
+    elif runtime_url:
+        system_url = derive_system_database_url(runtime_url)
+        if system_url:
+            print(  # noqa: T201
+                "WARNING: FARNA_CONTROL_SYSTEM_DATABASE_URL is not configured; derived system URL is available for the container entrypoint only.",
+                file=sys.stderr,
+            )
+            _write_env_file("/tmp/system_database_url.env", system_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
+        else:
+            print(  # noqa: T201
+                "WARNING: cannot derive MODULO_SYSTEM_DATABASE_URL (DATABASE_URL has no usable password/userinfo) - system crons will fall back to farna_control_app",
+                file=sys.stderr,
+            )
