@@ -175,7 +175,7 @@ def test_resolves_main_sha_for_the_fingerprint() -> None:
     workflow. This job has no actions/checkout step and therefore no git remote,
     so it is fetched through the GitHub API."""
     raw = _raw()
-    assert "repos/farnalabs/modulo/commits/main" in raw, "Workflow does not resolve the tip of main (FAR-1935)"
+    assert "repos/farnalabs/farna-control/commits/main" in raw, "Workflow does not resolve the tip of main (FAR-1935)"
     assert "MAIN_SHA=" in raw, "Workflow never assigns MAIN_SHA (FAR-1935)"
 
 
@@ -278,7 +278,7 @@ def test_dispatch_failure_comment_is_idempotent_via_marker() -> None:
     idempotency the manual-delivery note in this workflow uses."""
     block = _dispatch_step_block()
     assert "<!-- pr-conflict-reconciler:undelivered-dispatch -->" in block, "Undelivered-dispatch comment must carry a dedup marker (FAR-1949 review)"
-    assert 'gh pr view "$PR_NUM" --repo farnalabs/modulo --json comments' in block, "Undelivered-dispatch arm must check for an existing marker comment (FAR-1949 review)"
+    assert 'gh pr view "$PR_NUM" --repo farnalabs/farna-control --json comments' in block, "Undelivered-dispatch arm must check for an existing marker comment (FAR-1949 review)"
     assert "UNDELIVERED_MARKER" in block, "Marker must be used in the jq existence check (FAR-1949 review)"
     assert "already carries an undelivered-dispatch note" in block, "Undelivered-dispatch arm must skip reposting when the marker exists (FAR-1949 review)"
 
