@@ -396,6 +396,7 @@ class TestUnconfiguredPasswordPreserve:
     async def test_bootstrap_preserves_system_password_when_url_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake = _clean_posture_conn()
         monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL", raising=False)
         monkeypatch.setenv("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL", "")
         with patch("farna.db.bootstrap_role.asyncpg.connect", new=AsyncMock(return_value=fake)):
             await _bootstrap(
@@ -408,7 +409,7 @@ class TestUnconfiguredPasswordPreserve:
 
     async def test_bootstrap_sets_system_password_from_configured_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake = _clean_posture_conn()
-        monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "postgres://farna_control_system:syspw@db:5432/modulo")
+        monkeypatch.setenv("FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL", "postgres://farna_control_system:syspw@db:5432/modulo")
         monkeypatch.setenv("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL", "")
         with patch("farna.db.bootstrap_role.asyncpg.connect", new=AsyncMock(return_value=fake)):
             await _bootstrap(
