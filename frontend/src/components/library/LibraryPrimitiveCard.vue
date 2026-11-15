@@ -11,17 +11,10 @@
         <h3 class="mt-2 text-base font-medium text-foreground">{{ prim.name }}</h3>
       </div>
       <span
-        v-if="badge === 'modulo' && prim.source === 'modulo'"
+        v-if="badge === 'modulo'"
         class="text-xs text-primary-text font-medium bg-primary/10 px-2 py-0.5 rounded"
       >
         {{ $t('views.LibraryView.modulo_badge') }}
-      </span>
-      <span
-        v-else-if="badge === 'community' || (badge === 'modulo' && prim.source === 'community')"
-        class="text-xs text-muted-foreground font-medium bg-muted px-2 py-0.5 rounded"
-        data-testid="library-community-badge"
-      >
-        {{ $t('views.LibraryView.community_badge') }}
       </span>
       <span
         v-else-if="badge === 'preview'"
@@ -109,7 +102,7 @@ export interface LibraryPrimitive {
 
 withDefaults(defineProps<{
   prim: LibraryPrimitive
-  badge: 'modulo' | 'community' | 'preview' | 'collection'
+  badge: 'modulo' | 'preview' | 'collection'
   showTags?: boolean
   showAutoUpdate?: boolean
   toggleLoading?: Record<string, boolean>

@@ -4738,28 +4738,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/library/contribute/{primitive_id}/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish Contribution Endpoint
-         * @description Publish a reviewed fixture contribution to the community library.
-         *
-         *     Only org admins may publish contributions (``contribution.publish``).
-         */
-        post: operations["publish_contribution_endpoint_api_v1_library_contribute__primitive_id__publish_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/library/contribute/{primitive_id}/versions": {
         parameters: {
             query?: never;
@@ -6502,66 +6480,6 @@ export interface paths {
          *     can be copied and adapted without touching the source.
          */
         post: operations["create_lifecycle_map_from_primitive_endpoint_api_v1_libraries__primitive_id__create_lifecycle_map_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/community/contribute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Community Contribute Endpoint
-         * @description Submit a community library contribution.
-         */
-        post: operations["community_contribute_endpoint_api_v1_libraries_community_contribute_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/community/contributions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Community Contributions Endpoint
-         * @description List the org's own community contributions, optionally filtered by status.
-         */
-        get: operations["list_community_contributions_endpoint_api_v1_libraries_community_contributions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/libraries/admin/library/community/publish/{primitive_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Admin Publish Contribution Endpoint
-         * @description Publish a community contribution to the community library (admin only).
-         */
-        post: operations["admin_publish_contribution_endpoint_api_v1_libraries_admin_library_community_publish__primitive_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -35475,39 +35393,6 @@ export interface operations {
             };
         };
     };
-    publish_contribution_endpoint_api_v1_library_contribute__primitive_id__publish_post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path: {
-                primitive_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContributionStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
     list_contribution_versions_endpoint_api_v1_library_contribute__primitive_id__versions_get: {
         parameters: {
             query?: {
@@ -38696,108 +38581,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LifecycleMapResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    community_contribute_endpoint_api_v1_libraries_community_contribute_post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CommunityContributeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LibraryPrimitiveResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    list_community_contributions_endpoint_api_v1_libraries_community_contributions_get: {
-        parameters: {
-            query?: {
-                contribution_status?: string | null;
-                page?: number;
-                page_size?: number;
-                _fresh?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommunityContributionListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    admin_publish_contribution_endpoint_api_v1_libraries_admin_library_community_publish__primitive_id__post: {
-        parameters: {
-            query?: {
-                _fresh?: boolean;
-            };
-            header?: never;
-            path: {
-                primitive_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LibraryPrimitiveResponse"];
                 };
             };
             /** @description Validation Error */
