@@ -630,6 +630,7 @@ jobs:
       # Retry wrapper: 2 attempts max, 30s backoff. Flaky integration tests
       # (transient container/network issues) get a second chance before failing
       # the pre-deploy gate.
+      # -v deliberately names the last completed test so a silent kill can be localised and keeps output flowing.
       - name: Integration tests
         working-directory: backend
         shell: bash
@@ -665,7 +666,7 @@ jobs:
           BACKOFF_SECONDS=30
           for attempt in $(seq 1 $MAX_ATTEMPTS); do
             echo "--- Integration tests attempt $attempt of $MAX_ATTEMPTS ---"
-            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 2 --dist loadgroup --timeout=300 --cov=src/farna --cov-report=xml --cov-fail-under=0 -q -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
+            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 2 --dist loadgroup --timeout=300 --cov=src/farna --cov-report=xml --cov-fail-under=0 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
               echo "Integration tests passed on attempt $attempt"
               exit 0
             else
