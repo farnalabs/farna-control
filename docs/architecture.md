@@ -1124,19 +1124,42 @@ Note: duplicate ADR numbers were resolved by FAR-1157 (devtools commit `b65b5de`
 
 ## Import Contracts (enforced by import-linter)
 
-The eight contracts in `backend/.importlinter`, all `forbidden` type. Each has explicit
-`ignore_imports` seams where a deliberate exception exists.
+`backend/.importlinter` is the sole source of truth for Python module boundaries. The
+CI and pre-commit `lint-imports` command reads that file directly; there is no parallel
+module manifest or graph scanner. The contracts are an incremental ratchet over the
+current modular monolith, not a claim that the package has already been fully split.
 
-| Contract name | Source | Forbidden |
+The nine current contracts are deliberately small and green against the existing tree:
+
+| Contract name | Source | Forbidden or protected surface |
 |---|---|---|
 | API layer uses pipeline_engine, not LangGraph directly | `farna.api` | `langgraph` |
 | Connectors layer is independent of API | `farna.connectors` | `farna.api`, `farna.auth` |
 | Core is zero-coupled to modulo-cloud | `farna.core`, `farna.api`, `farna.connectors` | `modulo_cloud` |
-| OTel bridge does not import core business logic | `farna.otel_bridge` | `farna.core.pipeline_engine`, `farna.core.hitl_manager`, `farna.core.eval_engine` |
+| OTel bridge does not import core business logic | `farna.otel_bridge` | selected `farna.core` packages |
 | Core layer never sees FastAPI | `farna.core` | `farna.api` |
 | DB layer has no business logic imports | `farna.db` | `farna.core`, `farna.api` |
 | Connectors don't reach into core | `farna.connectors` | `farna.core` |
-| Concrete runtime providers are only imported inside `core/runtime_provider` (FAR-587) | `modulo` | `farna.core.runtime_provider.{docker,e2b,k8s,local,local_docker}` |
+| Concrete runtime providers are only imported inside `core/runtime_provider` | `farna` | concrete runtime-provider modules |
+| Shared utility package has an explicit consumer boundary | selected top-level packages | `farna.util`, imported only by listed consumers |
+
+### Boundary exceptions
+
+An `ignore_imports` entry is a deliberate transitional seam, not a general escape hatch.
+Every exception must remain in `backend/.importlinter`, include a nearby explanation, and
+keep the contract green. Add an exception only when the import is present in the current
+tree and the narrow seam is understood. Removing an exception is preferred when the
+production dependency disappears. The architecture tests in
+`backend/tests/architecture/test_import_linter_policy.py` ratchet this policy shape;
+they do not reimplement import-linter's dependency graph.
+
+Import-linter cannot express every semantic rule. The narrowly scoped
+`test_module_boundaries.py` test therefore protects the concrete runtime-provider
+implementation modules from direct consumers, while the import-linter `protected`
+contract protects the shared utility package's allowed consumer set. New boundary rules
+should first be added as import-linter contracts. Add a focused architecture test only
+when the rule is genuinely outside import-linter's contract vocabulary, and document the
+reason beside the test.
 
 ## Testing Strategy
 
