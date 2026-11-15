@@ -113,12 +113,13 @@ import asyncio
 import concurrent.futures
 import contextlib
 import ipaddress
+import json
 import logging
 import os
 import socket
 import ssl
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -1433,6 +1434,61 @@ async def pinned_async_client(
         follow_redirects=follow_redirects,
         **client_kwargs,
     )
+
+
+SSO_METADATA_MAX_BYTES = 2 * 1024 * 1024
+SSO_METADATA_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+
+
+class SsoMetadataFetchError(ValueError):
+    """Raised when an SSO metadata response cannot be safely fetched or parsed."""
+
+
+async def fetch_sso_metadata(url: str, *, kind: str, client_factory: Callable[..., Awaitable[httpx.AsyncClient]] | None = None) -> str:
+    """Fetch bounded SSO metadata through the pinned transport.
+
+    ``kind`` is included in the stable error text so authentication and admin
+    connection-test callers can classify failures without exposing provider
+    response bodies. The transport validates and pins the URL before connect;
+    redirects remain disabled and the response is bounded before parsing.
+    """
+    try:
+        factory = client_factory or pinned_async_client
+        async with await factory(url) as client:
+            response = await client.get(url, timeout=SSO_METADATA_TIMEOUT)
+            response.raise_for_status()
+            headers = getattr(response, "headers", {})
+            content_length = headers.get("content-length") if isinstance(headers, Mapping) else None
+            if isinstance(content_length, str) and content_length.isdigit() and int(content_length) > SSO_METADATA_MAX_BYTES:
+                raise SsoMetadataFetchError(f"{kind} metadata response exceeds size limit")
+            raw_body = getattr(response, "content", None)
+            if isinstance(raw_body, bytes):
+                body = raw_body
+            else:
+                text_body = getattr(response, "text", None)
+                if isinstance(text_body, str):
+                    body = text_body.encode("utf-8")
+                else:
+                    decoded = response.json()
+                    if isinstance(decoded, Awaitable):
+                        decoded = await decoded
+                    body = json.dumps(decoded).encode("utf-8")
+    except SsoMetadataFetchError:
+        raise
+    except httpx.HTTPStatusError as exc:
+        raise SsoMetadataFetchError(f"{kind} metadata request returned HTTP {exc.response.status_code}") from exc
+    except httpx.TimeoutException as exc:
+        raise SsoMetadataFetchError(f"{kind} metadata request timed out") from exc
+    except httpx.RequestError as exc:
+        raise SsoMetadataFetchError("Failed to fetch discovery document" if kind == "OIDC discovery" else f"Failed to fetch {kind.lower()} document") from exc
+    except json.JSONDecodeError:
+        raise
+    if len(body) > SSO_METADATA_MAX_BYTES:
+        raise SsoMetadataFetchError(f"{kind} metadata response exceeds size limit")
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise SsoMetadataFetchError(f"{kind} metadata response is not UTF-8") from exc
 
 
 def normalize_url_host(url: str) -> str:

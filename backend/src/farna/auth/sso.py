@@ -25,7 +25,9 @@ from farna.auth.secret_storage import decode_stored_secret
 from farna.core.feature_flags import resolve_sso_unrestricted_provisioning
 from farna.core.runtime_config.key_bridge import get_public_url
 from farna.core.ssrf import (
+    SsoMetadataFetchError,
     derive_oidc_allowed_hosts,
+    fetch_sso_metadata,
     pinned_async_client,
     require_url_host_in_allowlist,
     validate_outbound_url_async,
@@ -1121,27 +1123,18 @@ def _require_json_object(value: object, context: str) -> dict[str, object]:
 
 
 async def _fetch_discovery(discovery_url: str) -> dict[str, object]:
-    # Pinned client: SSRF-validates + pins the connect so the base discovery
-    # fetch on the env-var path is protected exactly like the DB-provider path.
-    async with await pinned_async_client(discovery_url) as client:
-        resp = await client.get(discovery_url, timeout=httpx.Timeout(10.0, connect=5.0))
-        resp.raise_for_status()
-        try:
-            decoded = resp.json()
-        except json.JSONDecodeError as exc:
+    try:
+        body = await fetch_sso_metadata(discovery_url, kind="OIDC discovery", client_factory=pinned_async_client)
+        decoded = json.loads(body)
+    except (json.JSONDecodeError, SsoMetadataFetchError) as exc:
+        if isinstance(exc, json.JSONDecodeError):
             raise ValueError(f"Invalid JSON in discovery document: {exc}") from None
-        return _require_json_object(decoded, "OIDC discovery document")
+        raise
+    return _require_json_object(decoded, "OIDC discovery document")
 
 
 async def _fetch_discovery_pinned(discovery_url: str) -> dict[str, object]:
-    async with await pinned_async_client(discovery_url) as client:
-        resp = await client.get(discovery_url, timeout=httpx.Timeout(10.0, connect=5.0))
-        resp.raise_for_status()
-        try:
-            decoded = resp.json()
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON in discovery document: {exc}") from None
-        return _require_json_object(decoded, "OIDC discovery document")
+    return await _fetch_discovery(discovery_url)
 
 
 def _enforce_oidc_endpoint_host(url: str, discovery_url: str, issuer: str | None, purpose: str) -> None:
@@ -1322,15 +1315,12 @@ async def _saml_config_from_db(
     if not idp_metadata and db_saml.metadata_url:
         try:
             await validate_outbound_url_async(db_saml.metadata_url)
+            idp_metadata = await fetch_sso_metadata(db_saml.metadata_url, kind="SAML IdP", client_factory=pinned_async_client)
         except ValueError as exc:
-            raise ValueError(f"Rejected SAML metadata_url for provider: {exc}") from None
-        try:
-            async with await pinned_async_client(db_saml.metadata_url) as client:
-                resp = await client.get(db_saml.metadata_url, timeout=httpx.Timeout(15.0, connect=5.0))
-                resp.raise_for_status()
-                idp_metadata = resp.text
-        except httpx.HTTPError as exc:
-            raise ValueError("Failed to fetch SAML IdP metadata from provider metadata_url") from exc
+            message = str(exc)
+            if message.startswith("blocked"):
+                raise ValueError(f"Rejected SAML metadata_url for provider: {message}") from None
+            raise ValueError(f"Failed to fetch SAML IdP metadata from provider metadata_url: {message}") from exc
     if not idp_metadata:
         raise ValueError("SAML provider is missing IdP metadata (set metadata_xml or metadata_url)")
     # Per-provider entity_id default (FAR-1001): when the DB provider
@@ -1357,7 +1347,7 @@ async def _saml_config_from_env(settings: Settings) -> tuple[str, str, str | Non
     """
     try:
         idp_metadata = await _saml_fetch_idp_metadata(settings)
-    except (httpx.HTTPError, ValueError) as exc:
+    except ValueError as exc:
         raise ValueError(f"Failed to fetch IdP metadata: {exc}") from None
     return (
         idp_metadata,
@@ -1677,10 +1667,7 @@ async def _saml_fetch_idp_metadata(settings: Settings) -> str:
     if settings.modulo_saml_idp_metadata_xml:
         return settings.modulo_saml_idp_metadata_xml
     if settings.modulo_saml_idp_metadata_url:
-        async with await pinned_async_client(settings.modulo_saml_idp_metadata_url) as client:
-            resp = await client.get(settings.modulo_saml_idp_metadata_url, timeout=httpx.Timeout(15.0, connect=5.0))
-            resp.raise_for_status()
-            return resp.text
+        return await fetch_sso_metadata(settings.modulo_saml_idp_metadata_url, kind="SAML IdP", client_factory=pinned_async_client)
     raise ValueError("SAML IdP metadata not configured (set MODULO_SAML_IDP_METADATA_URL or _XML)")
 
 

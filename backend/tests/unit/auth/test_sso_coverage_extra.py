@@ -129,10 +129,10 @@ async def test_fetch_discovery_json_decode_error() -> None:
     response.json.side_effect = json.JSONDecodeError("bad", "doc", 0)
     client = AsyncMock()
     client.get.return_value = response
-    with patch("farna.auth.sso.httpx.AsyncClient") as client_type:
-        client_type.return_value.__aenter__.return_value = client
-        with pytest.raises(ValueError, match="Invalid JSON in discovery document"):
-            await _fetch_discovery("https://issuer.example/discovery")
+    pacer = AsyncMock()
+    pacer.return_value.__aenter__.return_value = client
+    with patch("farna.auth.sso.pinned_async_client", pacer), pytest.raises(ValueError, match="Invalid JSON in discovery document"):
+        await _fetch_discovery("https://issuer.example/discovery")
 
 
 async def test_fetch_discovery_pinned_json_decode_error() -> None:
