@@ -41,6 +41,7 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
+from fastapi import APIRouter, FastAPI
 
 from farna.api.main import app
 from tests.unit.api.route_introspection import (
@@ -297,6 +298,26 @@ def test_exempt_allowlist_entries_exist() -> None:
     mutating_keys = {key for route in get_mutating_routes(app) for key in _route_keys(route)}
     missing = [k for k in EXEMPT if k not in mutating_keys]
     assert not missing, "Exempt entries that are not mutating routes:\n" + "\n".join(str(m) for m in missing)
+
+
+def test_get_all_apiroutes_recurses_through_nested_included_routers() -> None:
+    """Nested router inclusion must not hide routes from authorization coverage."""
+    nested = APIRouter(prefix="/nested")
+
+    @nested.get("/leaf")
+    async def nested_leaf() -> dict[str, str]:
+        return {"status": "ok"}
+
+    middle = APIRouter(prefix="/middle")
+    middle.include_router(nested)
+    fixture = FastAPI()
+    fixture.include_router(middle)
+
+    routes = get_all_apiroutes(fixture)
+
+    assert {(route.path, frozenset(route.methods)) for route in routes} == {
+        ("/nested/leaf", frozenset({"GET"})),
+    }
 
 
 def test_every_read_route_is_authorised_or_exempt() -> None:
