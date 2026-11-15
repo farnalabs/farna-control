@@ -20,7 +20,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Drop the library_sync_state table created in migration 0122
-    op.drop_table("library_sync_state")
+    op.drop_table("library_sync_state", if_exists=True)
 
 
 def downgrade() -> None:
