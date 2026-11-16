@@ -156,13 +156,13 @@ DEV_ANCHOR_NOT_TRUSTED_ERROR = (
 )
 
 #: Actionable startup error for an instance that is configured to ACCEPT a
-#: licence (``MODULO_LICENSE_KEY``) while only the development anchor exists.
+#: licence (``FARNA_CONTROL_LICENSE_KEY`` or ``MODULO_LICENSE_KEY``) while only the development anchor exists.
 DEV_ANCHOR_STARTUP_ERROR = (
-    "FARNA_CONTROL_LICENSE_KEY is configured but FARNA_CONTROL_LICENSE_PUBLIC_KEY is not (or is the built-in "
+    "FARNA_CONTROL_LICENSE_KEY (or MODULO_LICENSE_KEY) is configured but FARNA_CONTROL_LICENSE_PUBLIC_KEY is not (or is the built-in "
     "development key), and debug is off. The built-in development public key is not a trust "
     "anchor outside debug, so no licence can be verified. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or "
-    "Ed25519 public key (64 hex chars) that signed your licence, or unset FARNA_CONTROL_LICENSE_KEY to "
-    "run on the Community tier."
+    "MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key (64 hex chars) that signed your licence, or unset "
+    "FARNA_CONTROL_LICENSE_KEY to run on the Community tier."
 )
 
 # In-memory store for the current validated license.

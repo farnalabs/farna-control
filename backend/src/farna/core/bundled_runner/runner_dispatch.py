@@ -360,8 +360,9 @@ async def resolve_sandbox_dispatch_route(
     - ``e2b`` -> e2b route (the caller applies the LOUD timeout validation
       before provisioning).
     - ``runner_docker`` -> hub-resolved Docker provider (the registration
-      matrix per ADR 029: ``MODULO_DOCKER_HOST`` or ``DOCKER_HOST``
+      matrix per ADR 029: ``FARNA_CONTROL_DOCKER_HOST`` or ``DOCKER_HOST``
       registers the provider), plus the locked-ephemeral check.
+
     - ``kubernetes`` (FAR-1051) -> hub-resolved Kubernetes provider — the
       registration matrix's ``MODULO_KUBERNETES_ENABLED`` gate — so an
       unregistered provider fails LOUD here with the typed config error

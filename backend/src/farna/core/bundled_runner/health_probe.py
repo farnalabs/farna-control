@@ -160,7 +160,7 @@ class EngineProbeOutcome:
 
 
 def _resolve_docker_host() -> str | None:
-    # Same endpoint chain as the provider + reconciler: MODULO_DOCKER_HOST
+    # Same endpoint chain as the provider + reconciler: FARNA_CONTROL_DOCKER_HOST
     # first (the filtered socket-proxy), then DOCKER_HOST, else None (the
     # engine's local socket).
     return os.environ.get("FARNA_CONTROL_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
@@ -170,7 +170,7 @@ def docker_engine_configured() -> bool:
     """True when this deployment has a Docker engine endpoint it could reach.
 
     FAR-2239: a deployment with no engine at all (e.g. the Fly app: no
-    ``MODULO_DOCKER_HOST``/``DOCKER_HOST`` and no local socket) is *not
+    ``FARNA_CONTROL_DOCKER_HOST``/``DOCKER_HOST`` and no local socket) is *not
     configured* for the Bundled Runner, which is a different thing from a
     configured engine that is failing. The Runners page uses this to show a
     neutral "not available" state instead of a red "engine unreachable".
@@ -178,7 +178,7 @@ def docker_engine_configured() -> bool:
     The answer must agree with the orphan sweep's engine-less decision, so it
     delegates to :func:`runner_reconciler.docker_endpoint_skip_reason` rather
     than re-implementing endpoint detection: that mirrors aiodocker's FULL host
-    resolution chain (``MODULO_DOCKER_HOST``/``DOCKER_HOST``, ``DOCKER_CONTEXT``
+    resolution chain (``FARNA_CONTROL_DOCKER_HOST``/``DOCKER_HOST``, ``DOCKER_CONTEXT``
     / ``~/.docker/config.json``, then the auto-detected local sockets checked
     with ``is_socket()``). A weaker copy here would report "not configured" for
     a deployment whose engine is reachable via a Docker context or an
