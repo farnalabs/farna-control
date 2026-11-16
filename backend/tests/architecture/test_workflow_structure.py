@@ -183,6 +183,20 @@ def _job_named(workflow: dict, name: str) -> dict:
     raise AssertionError(f"no job named {name!r} — the job moved; update this test deliberately")
 
 
+def test_pr_review_webhook_uses_a_registered_pull_request_event_type() -> None:
+    """The review trigger accepts the webhook's pull-request event type.
+
+    The receiver validates the payload action against its trigger configuration.
+    ``check_run`` is a GitHub event name, but it is not accepted by the review
+    trigger, so using it makes every review dispatch fail with HTTP 400 before
+    the review pipeline starts.
+    """
+    step = _step("Trigger Modulo PR Review", "Send webhook to Modulo PR Review Agent")
+    run = str(step.get("run") or "")
+    assert '{action: "pull_request"' in run, "pr-review.yml must dispatch the event type accepted by the review trigger"
+    assert '{action: "check_run"' not in run, "pr-review.yml must not dispatch the rejected check_run event type"
+
+
 def test_pr_review_dispatches_on_red_ci_too() -> None:
     """The reviewer job gate must skip ONLY a cancelled product-CI run.
 

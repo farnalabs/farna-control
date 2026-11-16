@@ -25,9 +25,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = REPO_ROOT / "scripts" / "dispatch_with_retry.sh"
+PR_REVIEW_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pr-review.yml"
 
 #: This module executes the shipped script for real, under a POSIX shell, with
 #: stubbed binaries placed first on PATH - so it needs executable-bit semantics,
@@ -185,6 +187,15 @@ def run_dispatch(tmp_path: Path, **kwargs) -> subprocess.CompletedProcess[str]:
         timeout=60,
         check=False,
     )
+
+
+def test_pr_review_webhook_payload_uses_pull_request_event_type() -> None:
+    workflow = yaml.safe_load(PR_REVIEW_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["trigger-modulo-review"]["steps"]
+    webhook_step = next(step for step in steps if step.get("name") == "Send webhook to Modulo PR Review Agent")
+    run = str(webhook_step["run"])
+    assert '{action: "pull_request"' in run
+    assert '{action: "check_run"' not in run
 
 
 def invocation_count(tmp_path: Path) -> int:
