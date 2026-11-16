@@ -128,7 +128,7 @@ def _e2b_provider_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.Mon
     keep the real function \u2014 the fixture only replaces the module attribute
     the dispatch looks up at call time.
 
-    ``E2B_API_KEY`` is seeded so the seam helpers' key pre-checks pass; tests
+    ``FARNA_CONTROL_E2B_KEY`` is seeded so the seam helpers' key pre-checks pass; tests
     that assert a missing-credential refusal ``delenv`` it themselves.
 
     GATED by ``_e2b_bridge_needed`` (same conservative-predicate shape as
@@ -137,14 +137,14 @@ def _e2b_provider_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.Mon
     ``farna.core.pipeline_engine.node_runner`` — a ~4.5 s chain measured
     2026-10-13 — and paying that on the first setup of every unit session
     dragged pure-logic packages onto the dispatch stack they never touch.
-    The gate skips ONLY the install; the ``E2B_API_KEY`` seed stays
+    The gate skips ONLY the install; the ``FARNA_CONTROL_E2B_KEY`` seed stays
     unconditional so the environment every test observes is byte-identical
     to the ungated fixture (the seed is not the cost, and gating it would
     change env behaviour for no perf gain). See ``_e2b_bridge_needed`` for
     the conservative-correctness argument and
     ``tests/architecture/test_unit_e2b_bridge_gate.py`` for the pin.
     """
-    monkeypatch.setenv("E2B_API_KEY", "bridge-test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "bridge-test-key")
     if not _e2b_bridge_needed(request):
         return
     install_bridge(monkeypatch)

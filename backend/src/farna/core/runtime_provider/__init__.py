@@ -197,7 +197,7 @@ class BackendUnreachableError(RuntimeProviderError):
 # behaviour can never drift apart.
 
 _DOCKER_ENV_VARS: tuple[str, ...] = ("FARNA_CONTROL_MODULO_DOCKER_HOST", "DOCKER_HOST")
-_E2B_ENV_VAR = "FARNA_CONTROL_MODULO_E2B_API_KEY"
+_E2B_ENV_VAR = "FARNA_CONTROL_E2B_KEY"
 _KUBERNETES_ENV_VAR = "FARNA_CONTROL_MODULO_KUBERNETES_ENABLED"
 
 # Falsy spellings that deliberately DO NOT register the provider — any other
@@ -871,7 +871,7 @@ def build_hub(max_local_concurrency: int = 2) -> RuntimeProviderHub:
     Registration matrix (env-gated, operator opt-in = consent):
 
     - ``local`` — always registered (host-process fallback tier).
-    - ``e2b`` — registered when ``MODULO_E2B_API_KEY`` is set (env var or
+    - ``e2b`` — registered when ``FARNA_CONTROL_E2B_KEY`` is set (env var or
       runtime override — both resolved via ``key_bridge.get_e2b_api_key``,
       the same bridge the node-runner enforcement check uses, FAR-1159).
     - ``runner_docker`` (aliases ``docker`` / ``local_docker``) — registered

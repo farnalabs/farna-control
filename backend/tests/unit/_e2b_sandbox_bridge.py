@@ -130,7 +130,7 @@ class MockSandboxBridge:
         self.events.append("create")
         sandbox = await AsyncSandbox.create(
             template=spec.image_ref or "base",
-            api_key=get_e2b_api_key() or os.environ.get("E2B_API_KEY"),
+            api_key=get_e2b_api_key() or os.environ.get("FARNA_CONTROL_E2B_KEY"),
             timeout=int(spec.timeout_seconds),
             allow_internet_access=spec.egress_policy is None,
             metadata=dict(spec.workspace_metadata) or None,

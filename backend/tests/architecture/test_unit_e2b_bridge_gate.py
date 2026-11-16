@@ -12,7 +12,7 @@ A gate that cannot fail is not a guard, so these tests pin:
 
 - the SKIP path: no stack marker, no source token -> ``install_bridge`` never
   runs, and ``node_runner`` is NOT left imported as a side effect (the fixture
-  still seeds ``E2B_API_KEY``, which is deliberately ungated);
+  still seeds ``FARNA_CONTROL_E2B_KEY``, which is deliberately ungated);
 - the INSTALL path via the ``sys.modules`` marker (dispatch stack already
   loaded — the case where installing is free because the import is paid);
 - the INSTALL path via source mention (the lazy in-body-import shape, where
@@ -89,7 +89,7 @@ def test_bridge_gate_skips_without_hint_and_does_not_import_node_runner(
     assert _unit_conftest._E2B_BRIDGE_MARKER not in sys.modules
     # The env seed is deliberately ungated (it is not the cost): pinned here
     # so a future "gate the whole body" edit has to update this consciously.
-    assert os.environ["E2B_API_KEY"] == "bridge-test-key"
+    assert os.environ["FARNA_CONTROL_E2B_KEY"] == "bridge-test-key"
     assert not _unit_conftest._e2b_bridge_needed(request)
 
 

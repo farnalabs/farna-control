@@ -100,7 +100,7 @@ By default, agents run **in-process** via `LocalRuntimeProvider`. The app
 container runs them as subprocesses, capped at 2 concurrent. No sandbox,
 no isolation, no scaling – but it's free and works immediately.
 
-**To add sandboxed agents:** set `MODULO_E2B_API_KEY` as an env var and restart.
+**To add sandboxed agents:** set `FARNA_CONTROL_E2B_KEY` as an env var and restart.
 The `RuntimeProviderHub` auto-detects the key and makes E2B available for
 profiles that request it. Existing pipelines continue to work unchanged –
 the ABC (abstract base class) hides the backend.

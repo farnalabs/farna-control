@@ -228,16 +228,13 @@ class E2BRuntimeProvider(RuntimeProvider):
 
     The E2B API key is resolved in this order:
     1. ``api_key`` argument passed to the constructor
-    2. runtime override / ``MODULO_E2B_API_KEY`` env var
+    2. runtime override / ``FARNA_CONTROL_E2B_KEY`` env var
        (``key_bridge.get_e2b_api_key`` — the same bridge the provider-
        registration gate and node-runner enforcement check use, FAR-1159)
 
     The resolved key is passed to every ``AsyncSandbox.create`` call as
-    ``api_key=`` (FAR-1171): without it the E2B SDK would resolve its own
-    credential from the legacy ``E2B_API_KEY`` env var, and a runtime-key
-    rotation via ``PUT /api/v1/admin/runtime-config`` would change the
-    registration gate and the node-runner enforcement check but not the
-    credential actually used to provision sandboxes.
+    ``api_key=`` (FAR-1171), so all direct E2B execution uses the same
+    runtime-config bridge as provider registration.
 
     To store per-organisation keys securely, use ``FernetSecretsBackend`` at
     the service layer and pass the resolved key to the constructor.
@@ -248,7 +245,7 @@ class E2BRuntimeProvider(RuntimeProvider):
     def __init__(self, api_key: str | None = None) -> None:
         self._api_key = api_key or get_e2b_api_key()
         if not self._api_key:
-            raise ValueError("E2B API key is required. Pass api_key= or set MODULO_E2B_API_KEY.")
+            raise ValueError("E2B API key is required. Pass api_key= or set FARNA_CONTROL_E2B_KEY.")
         self._sandboxes: dict[str, Any] = {}
         # Strong references to in-flight stream waiter tasks (asyncio holds
         # only weak refs to tasks; RUF006). Discarded as each resolves.
@@ -362,8 +359,8 @@ class E2BRuntimeProvider(RuntimeProvider):
         provision_wait_s = spec.timeout_seconds or _MAX_PROVISION_TIMEOUT
 
         # FAR-1171: pass the resolved key explicitly — the SDK's ConnectionConfig
-        # only falls back to the E2B_API_KEY env var when api_key is falsy, and
-        # ``__init__`` guarantees ``self._api_key`` is non-empty (fail-closed).
+        # only falls back to ambient SDK configuration when api_key is falsy,
+        # and ``__init__`` guarantees ``self._api_key`` is non-empty (fail-closed).
         create_kwargs: dict[str, Any] = {"template": template_id, "api_key": self._api_key}
         if lifetime_s is None:
             # Defensive only: every production caller stamps a positive
@@ -532,13 +529,12 @@ class E2BRuntimeProvider(RuntimeProvider):
         Contract (T6): never raises — invalid ref, missing key, network
         failure and parse failure all yield ``b""`` (or the raw fallback for
         parse-level failures), so callers keep the legacy "never raises /
-        empty on no key" behaviour. Key resolution keeps the legacy fallback
-        chain: runtime override / ``MODULO_E2B_API_KEY`` bridge, then the
-        legacy ``E2B_API_KEY`` env var, then the constructor-held key.
+        empty on no key" behaviour. Key resolution uses the shared
+        ``FARNA_CONTROL_E2B_KEY`` bridge, then the constructor-held key.
         """
         if not isinstance(provider_ref, str) or not provider_ref:
             return b""
-        api_key = get_e2b_api_key() or os.environ.get("E2B_API_KEY") or self._api_key
+        api_key = get_e2b_api_key() or self._api_key
         if not api_key:
             return b""
 

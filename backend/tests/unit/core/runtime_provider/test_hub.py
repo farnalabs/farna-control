@@ -153,10 +153,10 @@ def test_resolve_unregistered_provider_type_raises_with_env_var() -> None:
     hub = RuntimeProviderHub()
     hub.register("local", LocalRuntimeProvider())
 
-    with pytest.raises(ProviderNotConfiguredError, match="FARNA_CONTROL_MODULO_E2B_API_KEY") as exc_info:
+    with pytest.raises(ProviderNotConfiguredError, match="FARNA_CONTROL_E2B_KEY") as exc_info:
         hub.resolve(SimpleNamespace(provider_type="e2b"))
     assert exc_info.value.provider_type == "e2b"
-    assert exc_info.value.env_var == "FARNA_CONTROL_MODULO_E2B_API_KEY"
+    assert exc_info.value.env_var == "FARNA_CONTROL_E2B_KEY"
 
 
 def test_resolve_docker_type_without_docker_env_raises_with_remediation() -> None:

@@ -488,7 +488,7 @@ Rate limiting uses Redis sliding window (ZADD + ZREMRANGEBYSCORE). Falls back to
 | `DOCKER_TLS_VERIFY` | No | unset | Set to `1` to use TLS for the Docker endpoint. A non-loopback `tcp://` endpoint is rejected at provider registration unless `DOCKER_TLS_VERIFY` or `DOCKER_CERT_PATH` is truthy, or the insecure escape hatch below is set (FAR-1038). |
 | `DOCKER_CERT_PATH` | No | unset | Directory holding `ca.pem` (server TLS) and optionally `cert.pem` / `key.pem` (mutual TLS). A truthy value also satisfies the remote-endpoint TLS gate. |
 | `MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT` | No | unset | Escape hatch: set to a non-empty, non-false value to allow a remote `tcp://` Docker endpoint without TLS. Logs a prominent warning at provider construction; not for a public-IP endpoint. |
-| `MODULO_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider (read directly from env, not via Settings) |
+| `FARNA_CONTROL_E2B_KEY` | For E2B | – | E2B sandbox API key for runtime provider (read directly from env, not via Settings) |
 | `MODULO_KUBERNETES_ENABLED` | For Kubernetes | – | Registers the `kubernetes`/`k8s` runtime provider when set to any value except an explicit negative (`0`, `false`, `no`, `off`); unset/falsy leaves it unregistered. In-cluster auth is used when `KUBERNETES_SERVICE_HOST` is set, otherwise the standard kubeconfig chain (`KUBECONFIG` / default path). |
 | `MODULO_KUBERNETES_NAMESPACE` | No | `modulo` | Namespace the provider creates workspace pods in. |
 | `MODULO_KUBERNETES_SERVICE_ACCOUNT` | No | `default` | ServiceAccount the workspace pods run under. |

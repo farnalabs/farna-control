@@ -822,7 +822,7 @@ async def e2b_endpoint_skip_reason() -> str | None:
     when the deployment would REGISTER the E2B runtime provider, so the
     check delegates to the registration matrix itself
     (:func:`modulo.core.runtime_provider.build_hub` — the
-    ``MODULO_E2B_API_KEY`` gate via the key bridge) instead of
+    ``FARNA_CONTROL_E2B_KEY`` gate via the key bridge) instead of
     re-implementing the flag semantics here and letting the two drift. That
     is also why an unregistered provider is a SKIP and not a failure: no
     provider means no sandboxes were ever created for this sweep to
@@ -845,7 +845,7 @@ async def e2b_endpoint_skip_reason() -> str | None:
         return "the runtime-provider hub could not be built — see logs; the E2B sandbox sweep cannot run"
     try:
         if provider_hub.get("e2b") is None:
-            return "the E2B runtime provider is not registered — set MODULO_E2B_API_KEY to enable the E2B sandbox orphan sweep"
+            return "the E2B runtime provider is not registered — set FARNA_CONTROL_E2B_KEY to enable the E2B sandbox orphan sweep"
         return None
     finally:
         await provider_hub.aclose()

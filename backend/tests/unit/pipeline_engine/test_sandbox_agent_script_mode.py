@@ -57,7 +57,7 @@ def _remote_e2b_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     point). These tests exercise script-mode dispatch, so set a fake key for
     the duration of each test.
     """
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "test-e2b-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-e2b-key")
 
 
 def _read_router(output_json: str, log_content: str = ""):
@@ -657,8 +657,8 @@ def test_script_mode_local_provider_is_refused(monkeypatch: pytest.MonkeyPatch):
     actually requested. A plain script-mode node (no egress/resource config)
     has nothing to enforce and still constructs.
     """
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
 
     # Enforcement requested (egress_policy="deny_all") -> refused without a key.
     denied = _script_node_def(egress_policy="deny_all")
@@ -677,7 +677,7 @@ def test_script_mode_local_provider_is_refused(monkeypatch: pytest.MonkeyPatch):
 
 def test_script_mode_enforcement_reads_e2b_override(monkeypatch: pytest.MonkeyPatch):
     """FAR-1159 prove-the-fix: the enforcement gate resolves
-    MODULO_E2B_API_KEY via the runtime-config bridge.
+    FARNA_CONTROL_E2B_KEY via the runtime-config bridge.
 
     An override satisfies the gate exactly like the env var (fails without
     the bridge — the gate would read only os.environ and refuse), an explicit
@@ -685,22 +685,22 @@ def test_script_mode_enforcement_reads_e2b_override(monkeypatch: pytest.MonkeyPa
     """
     from farna.core.runtime_config.store import get_runtime_config_store
 
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     store = get_runtime_config_store()
     denied = _script_node_def(egress_policy="deny_all")
 
-    store.set_override("FARNA_CONTROL_MODULO_E2B_API_KEY", "hot-key")
+    store.set_override("FARNA_CONTROL_E2B_KEY", "hot-key")
     try:
         # Override present, env absent -> enforcement constructs (no refusal).
         make_sandbox_agent_fn(denied)
 
         # Explicit empty override disables the key -> refused (fail closed).
-        store.set_override("FARNA_CONTROL_MODULO_E2B_API_KEY", "")
+        store.set_override("FARNA_CONTROL_E2B_KEY", "")
         with pytest.raises(ValueError, match="requires a remote E2B provider"):
             make_sandbox_agent_fn(denied)
     finally:
-        store.clear_override("FARNA_CONTROL_MODULO_E2B_API_KEY")
+        store.clear_override("FARNA_CONTROL_E2B_KEY")
 
     # No override, no env -> refused (fail closed, unchanged behaviour).
     with pytest.raises(ValueError, match="requires a remote E2B provider"):
@@ -1211,8 +1211,8 @@ def test_shared_validator_rejects_invalid_allowlist_entries():
 def test_script_mode_local_provider_refused_for_selected(monkeypatch: pytest.MonkeyPatch):
     """egress_policy='selected' without a remote E2B provider is refused —
     the allowlist has no local enforcement point (fail-closed)."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
 
     node_def = _script_node_def(
         egress_policy="selected",
