@@ -48,10 +48,10 @@ _ENV_KEYS_TO_DROP = (
     "XDG_STATE_HOME",
     "XDG_DATA_HOME",
     "VERSION",
-    "FARNA_CONTROL_MODULO_INSTALL_ROOT",
-    "FARNA_CONTROL_MODULO_BIN_DIR",
-    "FARNA_CONTROL_MODULO_DATA_DIR",
-    "FARNA_CONTROL_MODULO_LEGACY_SHIM_PATH",
+    "FARNA_CONTROL_INSTALL_ROOT",
+    "FARNA_CONTROL_BIN_DIR",
+    "FARNA_CONTROL_DATA_DIR",
+    "FARNA_CONTROL_LEGACY_SHIM_PATH",
 )
 
 
@@ -69,11 +69,11 @@ def _install_env(tmp_path: Path, *, path_prefix: Path | None = None) -> dict[str
     env.update(
         {
             "HOME": str(home),
-            "FARNA_CONTROL_MODULO_INSTALL_ROOT": str(tmp_path / "install-root"),
-            "FARNA_CONTROL_MODULO_BIN_DIR": str(tmp_path / "bin"),
+            "FARNA_CONTROL_INSTALL_ROOT": str(tmp_path / "install-root"),
+            "FARNA_CONTROL_BIN_DIR": str(tmp_path / "bin"),
             # A real /usr/local/bin/modulo on the host must not mask the
             # failure this test is inducing.
-            "FARNA_CONTROL_MODULO_LEGACY_SHIM_PATH": str(tmp_path / "no-legacy-shim"),
+            "FARNA_CONTROL_LEGACY_SHIM_PATH": str(tmp_path / "no-legacy-shim"),
         }
     )
     if path_prefix is not None:

@@ -602,6 +602,6 @@ def _build_instance_metadata(_factory: Any) -> dict[str, Any]:
     return {
         "version": get_version(),
         "git_sha": os.environ.get("GIT_SHA", ""),
-        "deployment_mode": os.environ.get("FARNA_CONTROL_MODULO_DEPLOYMENT_MODE", "self-hosted"),
+        "deployment_mode": os.environ.get("FARNA_CONTROL_DEPLOYMENT_MODE", "self-hosted"),
         "schema_version": SCHEMA_VERSION,
     }

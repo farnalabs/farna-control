@@ -53,7 +53,7 @@ __all__ = [
     "CONTRIBUTION_DRAFT",
     "CONTRIBUTION_PUBLISHED",
     "CONTRIBUTION_REVIEW_QUEUE",
-    "FARNA_CONTROL_MODULO_ORG_ID",
+    "FARNA_CONTROL_ORG_ID",
     "CommunityPrimitiveReadOnlyError",
     "ContributionInvalidTransitionError",
     "ContributionNotFoundError",

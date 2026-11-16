@@ -163,7 +163,7 @@ def _resolve_docker_host() -> str | None:
     # Same endpoint chain as the provider + reconciler: MODULO_DOCKER_HOST
     # first (the filtered socket-proxy), then DOCKER_HOST, else None (the
     # engine's local socket).
-    return os.environ.get("FARNA_CONTROL_MODULO_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
+    return os.environ.get("FARNA_CONTROL_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
 
 
 def docker_engine_configured() -> bool:

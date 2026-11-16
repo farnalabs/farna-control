@@ -300,8 +300,8 @@ def _load_config(config_path: str | None) -> dict[str, Any]:
 
 
 def _build_client() -> tuple[BridgeClient, dict[str, Any]]:
-    endpoint = os.environ.get("FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
-    config_path = os.environ.get("FARNA_CONTROL_MODULO_BRIDGE_CONFIG")
+    endpoint = os.environ.get("FARNA_CONTROL_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
+    config_path = os.environ.get("FARNA_CONTROL_BRIDGE_CONFIG")
     config = _load_config(config_path)
     return BridgeClient(endpoint, patterns=config.get("patterns", DEFAULT_PATTERNS)), config
 
@@ -433,7 +433,7 @@ def _build_cli_client(args: argparse.Namespace) -> BridgeClient:
     """Build the bridge client from the CLI flags / environment."""
     if args.config:
         config = _load_config(args.config)
-        endpoint = args.endpoint or os.environ.get("FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
+        endpoint = args.endpoint or os.environ.get("FARNA_CONTROL_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
         return BridgeClient(endpoint, patterns=config.get("patterns", DEFAULT_PATTERNS))
     if args.endpoint:
         return BridgeClient(args.endpoint)
