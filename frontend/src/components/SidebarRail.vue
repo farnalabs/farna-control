@@ -16,7 +16,7 @@
       :class="size === 'touch' ? 'h-11 w-11' : 'h-10 w-10'"
       :aria-label="$t('components.AppLayout.modulo')"
     >
-      <LogoMark :size="24" transparent />
+      <LogoMark :size="24" transparent class="text-foreground" />
     </router-link>
 
     <!-- The accessible name must CONTAIN the visible text (the initial), or axe
