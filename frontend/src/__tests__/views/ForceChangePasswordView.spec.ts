@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 const routerReplace = vi.fn()
 const setMustChangePassword = vi.fn()
 const clearAccessToken = vi.fn()
+const setAccessToken = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ replace: routerReplace }),
@@ -15,6 +16,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('../../lib/api/client', () => ({
   clearAccessToken: () => clearAccessToken(),
+  setAccessToken: (token: string) => setAccessToken(token),
   getAccessToken: vi.fn(() => 'token'),
 }))
 
@@ -25,7 +27,7 @@ vi.mock('../../lib/mustChangePassword', () => ({
 const ChangePasswordFormStub = {
   name: 'ChangePasswordForm',
   props: ['quiet'],
-  template: '<form @submit.prevent><button type="button" data-testid="cpf-changed" @click="$emit(\'changed\')">changed</button></form>',
+  template: '<form @submit.prevent><button type="button" data-testid="cpf-changed" @click="$emit(\'changed\', \'fresh-token\')">changed</button></form>',
   emits: ['changed'],
 }
 
@@ -61,7 +63,9 @@ describe('ForceChangePasswordView', () => {
     })
     await wrapper.find('[data-testid="cpf-changed"]').trigger('click')
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[aria-live="polite"]').exists()).toBe(true)
+      expect(wrapper.find('[aria-live="polite"]').exists()).toBe(true)
+      expect(setAccessToken).toHaveBeenCalledWith('fresh-token')
+
   })
 
   it('keeps the success announcement until the delayed session exit completes', async () => {
@@ -78,8 +82,7 @@ describe('ForceChangePasswordView', () => {
       vi.advanceTimersByTime(1)
 
       expect(setMustChangePassword).toHaveBeenCalledWith(false)
-      expect(clearAccessToken).toHaveBeenCalled()
-      expect(routerReplace).toHaveBeenCalledWith('/login')
+      expect(routerReplace).toHaveBeenCalledWith('/')
       wrapper.unmount()
     } finally {
       vi.useRealTimers()

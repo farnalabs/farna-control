@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StrictBool
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ from farna.api.routes.admin_assistant import (
     get_user_skill_or_404,
     get_user_skills,
 )
+from farna.api.routes.auth import mint_password_change_response
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.auth.passwords import hash_password, validate_password_strength, verify_password
@@ -37,10 +39,12 @@ from farna.db.crud.account import (
     set_hitl_email_preference,
     update_account_preferences,
 )
-from farna.db.crud.token_family import blacklist_family, list_families_for_account
+from farna.db.crud.token_family import blacklist_family, create_family, list_families_for_account
 from farna.db.models.account import Account
 from farna.db.models.assistant_skill import AssistantSkill
+from farna.db.models.token_family import TokenFamily
 from farna.db.rls import set_rls_org
+from farna.settings import Settings, get_settings
 
 _CODE_ROUTES_ME = "routes.me"
 _MSG_ACCOUNT_NOT_FOUND = "Account not found"
@@ -243,7 +247,10 @@ async def change_password(
     req: PasswordChangeRequest,
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
     session: AsyncSession = Depends(get_db_session),
-) -> dict[str, str]:
+    settings: Settings = Depends(get_settings),
+) -> JSONResponse:
+    new_family: TokenFamily | None = None
+    account: Account
     try:
         async with session.begin():
             # NOTE: do NOT scope the transaction to the user's org up front.
@@ -294,6 +301,8 @@ async def change_password(
                     )
                     raise
 
+            new_family = await create_family(session, current_user.account_id, current_user.organisation_id)
+
             # Audit is fail-open-with-alert: the password change ALWAYS commits;
             # a failed audit write is loudly logged and never rolls back the change.
             # Establish the org context now (the token-family ops above ran with it
@@ -323,7 +332,14 @@ async def change_password(
             detail=MSG_THIS_FEATURE_NOT_AVAILABLE,
         ) from None
 
-    return {"detail": "Password changed successfully"}
+    if new_family is None:
+        raise RuntimeError("Password change did not create a token family")
+    return mint_password_change_response(
+        account=account,
+        current_user=current_user,
+        family=new_family,
+        settings=settings,
+    )
 
 
 # ── User-level Assistant Skills ────────────────────────────────────────────
