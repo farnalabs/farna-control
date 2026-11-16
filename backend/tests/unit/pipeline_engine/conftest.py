@@ -225,7 +225,7 @@ def install_fake_dispatch(
     """Route the FAR-1050 R4 dispatch seam (``_build_dispatch_provider``) to a fake.
 
     Opt-in: only a flag-ON dispatch test needs it. Without it the real seam
-    builds a hub (and, with a legacy ``FARNA_CONTROL_E2B_KEY`` set, a REAL E2B provider
+    builds a hub (and, with a ``FARNA_CONTROL_E2B_KEY`` set, a REAL E2B provider
     that would attempt a network ``AsyncSandbox.create``).
     """
     provider = FakeDispatchProvider(ref=ref, **kwargs)

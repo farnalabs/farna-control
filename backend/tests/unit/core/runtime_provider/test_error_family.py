@@ -123,7 +123,7 @@ def test_config_errors_are_not_caught_by_new_family_handlers() -> None:
     """And the converse: ``except RuntimeProviderError`` must not catch the
     untouched hierarchy — existing handlers keep owning those errors."""
     config_errors: tuple[BaseException, ...] = (
-        ProviderNotConfiguredError("e2b", "FARNA_CONTROL_E2B_API_KEY"),
+        ProviderNotConfiguredError("e2b", "FARNA_CONTROL_E2B_KEY"),
         UnknownProviderTypeError("nomad", frozenset({"local", "e2b"})),
     )
     for exc in config_errors:
@@ -138,7 +138,7 @@ def test_config_error_hierarchy_handlers_behave_exactly_as_before() -> None:
     hub = RuntimeProviderHub()
     hub.register("local", LocalRuntimeProvider())
 
-    with pytest.raises(ProviderNotConfiguredError, match="FARNA_CONTROL_E2B_API_KEY"):
+    with pytest.raises(ProviderNotConfiguredError, match="FARNA_CONTROL_E2B_KEY"):
         hub.resolve(SimpleNamespace(provider_type="e2b"))
 
     # FAR-1051: "kubernetes" is a VOCABULARY member now, so the unknown-type
@@ -430,10 +430,10 @@ async def test_sandbox_test_stream_config_error_still_gets_remediation_copy(
     through the INNER handler with its remediation copy (behaviour unchanged)."""
     from farna.api.routes import environment_profiles as ep
 
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     profile = SimpleNamespace(id=uuid.uuid4(), provider_type="e2b")
     # An empty real hub: resolve("e2b") raises the untouched PNCE with the
-    # MODULO_E2B_API_KEY remediation (env var deliberately unset).
+    # FARNA_CONTROL_E2B_KEY remediation (env var deliberately unset).
     with patch.object(ep, "_get_hub", return_value=RuntimeProviderHub()):
         events: list[str] = []
         stream = ep._sandbox_test_stream(profile)
@@ -443,7 +443,7 @@ async def test_sandbox_test_stream_config_error_still_gets_remediation_copy(
     body = "".join(events)
     assert "failed" in body
     assert "No runtime provider registered" in body
-    assert "FARNA_CONTROL_E2B_API_KEY" in body
+    assert "FARNA_CONTROL_E2B_KEY" in body
 
 
 # ---------------------------------------------------------------------------

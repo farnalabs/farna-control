@@ -303,17 +303,17 @@ class TestConsumerWiring:
 
     def test_e2b_registration_gate_reads_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-1159 prove-the-fix: the build_hub registration gate resolves
-        MODULO_E2B_API_KEY via the bridge — an override registers E2B with no
+        FARNA_CONTROL_E2B_KEY via the bridge — an override registers E2B with no
         env var, and clearing it fails closed (provider not registered)."""
         from farna.core.runtime_config.store import get_runtime_config_store
         from farna.core.runtime_provider import build_hub
         from farna.core.runtime_provider.e2b import E2BRuntimeProvider
 
-        monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
         monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
         monkeypatch.delenv("DOCKER_HOST", raising=False)
         store = get_runtime_config_store()
-        store.set_override("FARNA_CONTROL_E2B_API_KEY", "hot-key")
+        store.set_override("FARNA_CONTROL_E2B_KEY", "hot-key")
         try:
             # Fails without the bridge: the gate reads os.environ directly.
             hub = build_hub()
@@ -321,7 +321,7 @@ class TestConsumerWiring:
             assert isinstance(provider, E2BRuntimeProvider)
             assert provider._api_key == "hot-key"
         finally:
-            store.clear_override("FARNA_CONTROL_E2B_API_KEY")
+            store.clear_override("FARNA_CONTROL_E2B_KEY")
         # Fail-closed after clear: no override, no env -> E2B not registered.
         assert build_hub().get("e2b") is None
 
@@ -331,20 +331,20 @@ class TestConsumerWiring:
         from farna.core.runtime_config.store import get_runtime_config_store
         from farna.core.runtime_provider.e2b import E2BRuntimeProvider
 
-        monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
         store = get_runtime_config_store()
 
         # Fail-closed: neither override nor env -> typed refusal.
         with pytest.raises(ValueError, match="E2B API key is required"):
             E2BRuntimeProvider()
 
-        store.set_override("FARNA_CONTROL_E2B_API_KEY", "hot-key")
+        store.set_override("FARNA_CONTROL_E2B_KEY", "hot-key")
         try:
             # Fails without the bridge: the constructor reads os.environ only.
             provider = E2BRuntimeProvider()
             assert provider._api_key == "hot-key"
         finally:
-            store.clear_override("FARNA_CONTROL_E2B_API_KEY")
+            store.clear_override("FARNA_CONTROL_E2B_KEY")
 
         # Fail-closed again once the override is cleared.
         with pytest.raises(ValueError, match="E2B API key is required"):

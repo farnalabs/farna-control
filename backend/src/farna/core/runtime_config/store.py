@@ -89,7 +89,7 @@ _KEY_CONFIG: dict[str, _KeyConfig] = {
     # Bridged with BOTH read sites moved together (FAR-1159): the
     # provider-registration gate and the node-runner enforcement check
     # resolve through key_bridge.get_e2b_api_key so they cannot disagree.
-    "FARNA_CONTROL_E2B_API_KEY": _KeyConfig(
+    "FARNA_CONTROL_E2B_KEY": _KeyConfig(
         hot_reloadable=True,
         consumers=("farna.core.runtime_config.key_bridge:get_e2b_api_key",),
     ),

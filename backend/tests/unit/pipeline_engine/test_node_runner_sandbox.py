@@ -295,7 +295,7 @@ async def test_env_var_secret_ref_missing_omits_key_and_warns(caplog):
         # Keep the seeded E2B credential: the dispatch resolves its provider
         # through the ABC (FAR-1050 R6) and this test is about the unresolved
         # ``{{ secrets.FOO }}`` ref, not about credential resolution.
-        patch.dict(os.environ, {"E2B_API_KEY": os.environ.get("E2B_API_KEY", "bridge-test-key")}, clear=True),
+        patch.dict(os.environ, {"FARNA_CONTROL_E2B_KEY": os.environ.get("FARNA_CONTROL_E2B_KEY", "bridge-test-key")}, clear=True),
     ):
         result = await fn(_run_state())
 
@@ -1973,8 +1973,8 @@ def test_no_output_json_message_survives_executor_terminal_fail_surface():
 
 async def test_read_log_tail_via_provider_returns_empty_without_api_key(monkeypatch):
     """No E2B key configured -> helper returns '' without attempting a fetch."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     with patch("urllib.request.urlopen") as _urlopen:
         assert not await _read_log_tail_via_provider("sbx-nokey")
     _urlopen.assert_not_called()
@@ -1982,7 +1982,7 @@ async def test_read_log_tail_via_provider_returns_empty_without_api_key(monkeypa
 
 async def test_read_log_tail_via_provider_never_raises_on_network_failure(monkeypatch):
     """A failing urlopen (no network / non-2xx / garbage) is swallowed -> ''."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     with patch("urllib.request.urlopen", side_effect=OSError("boom")):
         assert not await _read_log_tail_via_provider("sbx-netfail")
     with patch("urllib.request.urlopen", side_effect=urllib.request.HTTPError("url", 401, "unauthorized", None, None)):
@@ -1991,7 +1991,7 @@ async def test_read_log_tail_via_provider_never_raises_on_network_failure(monkey
 
 async def test_read_log_tail_via_provider_returns_empty_for_invalid_id(monkeypatch):
     """A non-string/None sandbox id never triggers a network call."""
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     with patch("urllib.request.urlopen") as _urlopen:
         assert not await _read_log_tail_via_provider(None)
     _urlopen.assert_not_called()

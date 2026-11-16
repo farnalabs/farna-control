@@ -30,7 +30,7 @@ _AGENT_ID = str(uuid.uuid4())
 @pytest.fixture(autouse=True)
 def _remote_e2b_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     """Script mode requires a remote E2B provider (same seam as the script tests)."""
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-e2b-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-e2b-key")
 
 
 def _read_router(output_json: str):

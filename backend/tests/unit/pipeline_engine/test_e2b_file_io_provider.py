@@ -390,8 +390,8 @@ async def test_provider_resolution_fails_closed_without_a_sandbox_ref(fake_file_
 async def test_provider_resolution_fails_closed_without_a_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     builder = MagicMock(side_effect=AssertionError("must not build a provider without a key"))
     monkeypatch.setattr("farna.core.pipeline_engine.node_runner._build_file_io_provider", builder)
 
@@ -403,7 +403,7 @@ async def test_provider_resolution_fails_closed_without_a_credential(
 async def test_provider_resolution_fails_closed_when_the_builder_yields_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     monkeypatch.setattr(
         "farna.core.pipeline_engine.node_runner._build_file_io_provider",
         MagicMock(return_value=None),

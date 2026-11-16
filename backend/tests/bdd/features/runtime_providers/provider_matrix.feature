@@ -15,7 +15,7 @@ Feature: Runtime provider platform matrix (ADR 044 / ADR 029)
     And the hub has no "runner_docker" provider
     And an environment profile requesting provider_type "local" resolves to provider "local"
     And an environment profile requesting provider_type "e2b" fails with ProviderNotConfiguredError mentioning "FARNA_CONTROL_E2B_KEY"
-    And an environment profile requesting provider_type "runner_docker" fails with ProviderNotConfiguredError mentioning "MODULO_DOCKER_HOST"
+    And an environment profile requesting provider_type "runner_docker" fails with ProviderNotConfiguredError mentioning "FARNA_CONTROL_DOCKER_HOST"
 
   Scenario: FARNA_CONTROL_E2B_KEY registers the e2b provider
     Given FARNA_CONTROL_E2B_KEY is set to "test-key"
@@ -23,8 +23,8 @@ Feature: Runtime provider platform matrix (ADR 044 / ADR 029)
     Then the hub has an "e2b" provider
     And an environment profile requesting provider_type "e2b" resolves to provider "e2b"
 
-  Scenario: MODULO_DOCKER_HOST registers the runner_docker provider
-    Given MODULO_DOCKER_HOST is set to "tcp://localhost:2375"
+  Scenario: FARNA_CONTROL_DOCKER_HOST registers the runner_docker provider
+    Given FARNA_CONTROL_DOCKER_HOST is set to "tcp://localhost:2375"
     When I build the runtime provider hub from the environment
     Then the hub has a "runner_docker" provider
     And every docker-family alias resolves to the same "runner_docker" provider
@@ -35,7 +35,7 @@ Feature: Runtime provider platform matrix (ADR 044 / ADR 029)
     Then the hub has a "runner_docker" provider
 
   Scenario: Unrelated MODULO_RUNNER_* variables do not register Docker
-    Given MODULO_RUNNER_TEMPLATE_ID is set to "opencode"
+    Given FARNA_CONTROL_RUNNER_TEMPLATE_ID is set to "opencode"
     When I build the runtime provider hub from the environment
     Then the hub has no "runner_docker" provider
 

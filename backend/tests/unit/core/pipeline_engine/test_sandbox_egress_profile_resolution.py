@@ -167,7 +167,7 @@ class TestProfileNetworkPolicyEgressResolution:
 
     async def test_node_level_value_wins_over_profile(self, monkeypatch):
         """When node egress_policy is explicitly set, the profile is ignored."""
-        monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+        monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
         node_def = _script_node_def(egress_policy="deny_all")
         fn = make_sandbox_agent_fn(node_def, session_factory=_SESSION_FACTORY_MOCK)
         sandbox = _make_sandbox_mock()

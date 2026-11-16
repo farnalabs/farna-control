@@ -282,7 +282,7 @@ class TestRuntimeConfigRoute:
             "AWS_SECRET_ACCESS_KEY",
             "FARNA_CONTROL_SCIM_TOKEN",
             "FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN",
-            "FARNA_CONTROL_E2B_API_KEY",
+            "FARNA_CONTROL_E2B_KEY",
             "FARNA_CONTROL_LICENSE_KEY",
             "FARNA_CONTROL_SAML_SP_PRIVATE_KEY",
             "DATABASE_URL",

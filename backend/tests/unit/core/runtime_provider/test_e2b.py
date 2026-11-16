@@ -44,7 +44,8 @@ def mock_sandbox_cls(mock_sandbox: MagicMock) -> Generator[MagicMock, None, None
 # ---------------------------------------------------------------------------
 
 
-def test_constructor_requires_api_key() -> None:
+def test_constructor_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     with pytest.raises(ValueError, match="E2B API key is required"):
         E2BRuntimeProvider(api_key=None)
 
@@ -55,13 +56,13 @@ def test_constructor_accepts_explicit_key() -> None:
 
 
 def test_constructor_falls_back_to_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "sk-from-env")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "sk-from-env")
     provider = E2BRuntimeProvider(api_key=None)
     assert provider._api_key == "sk-from-env"
 
 
 def test_constructor_env_var_overrides_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "sk-env")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "sk-env")
     provider = E2BRuntimeProvider()
     assert provider._api_key == "sk-env"
 
@@ -681,8 +682,8 @@ async def test_create_workspace_passes_resolved_key_to_create(
     """FAR-1171: the constructor's resolved key is the credential handed to
     the SDK's create call.
 
-    Without ``api_key=`` the SDK's ConnectionConfig resolves the legacy
-    ``E2B_API_KEY`` env var instead — the gate and the live call diverge.
+    Without ``api_key=`` the SDK would resolve process environment state itself —
+    the gate and the live call could diverge.
     """
     provider = E2BRuntimeProvider(api_key="sk-explicit")
     await provider.create_workspace(workspace_spec)
@@ -696,18 +697,18 @@ async def test_runtime_override_key_reaches_create_not_legacy_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """FAR-1171 prove-the-fix: a runtime-config override (key rotation) is the
-    credential the create path uses — the legacy ``E2B_API_KEY`` env var loses.
+    credential the create path uses — the process environment loses.
 
     Fails without the fix: ``AsyncSandbox.create`` is called with no
-    ``api_key=`` and the SDK would resolve ``E2B_API_KEY`` (stale) itself.
+    ``api_key=`` and the SDK would resolve process environment state itself.
     """
     from farna.core.runtime_config.store import RuntimeConfigStore, get_runtime_config_store
 
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.setenv("E2B_API_KEY", "stale-legacy-env-key")
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "stale-process-env-key")
     RuntimeConfigStore.reset()
     store = get_runtime_config_store()
-    store.set_override("FARNA_CONTROL_E2B_API_KEY", "hot-rotated-key")
+    store.set_override("FARNA_CONTROL_E2B_KEY", "hot-rotated-key")
     try:
         with patch("e2b.AsyncSandbox") as mock_cls:
             mock_cls.create = AsyncMock(return_value=MagicMock(sandbox_id="sbx-rot-001"))
@@ -721,7 +722,7 @@ async def test_runtime_override_key_reaches_create_not_legacy_env(
         _args, kwargs = mock_cls.create.call_args
         assert kwargs.get("api_key") == "hot-rotated-key"
     finally:
-        store.clear_override("FARNA_CONTROL_E2B_API_KEY")
+        store.clear_override("FARNA_CONTROL_E2B_KEY")
         RuntimeConfigStore.reset()
 
 
@@ -732,7 +733,7 @@ def test_create_workspace_fails_closed_without_any_key(
     before any sandbox call can be attempted."""
     from farna.core.runtime_config.store import RuntimeConfigStore
 
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     RuntimeConfigStore.reset()
     # pytest.raises is the assertion: the typed refusal fires before any
     # AsyncSandbox.create call could be attempted.

@@ -17,7 +17,7 @@ remaining hot-reloadable keys use so a runtime override
   real origin" test (falsy or the ``http://localhost:8000`` placeholder),
   shared by the OAuth flow and the discovery documents so they cannot
   disagree.
-- :func:`get_e2b_api_key` — keyed bridge for ``MODULO_E2B_API_KEY``
+- :func:`get_e2b_api_key` — keyed bridge for ``FARNA_CONTROL_E2B_KEY``
   (FAR-1159): the provider-registration gate and the node-runner
   enforcement check both resolve through it, fail-closed.
 - :func:`apply_log_level` — an *apply-on-write* hook: logging levels are
@@ -126,7 +126,7 @@ def public_url_is_configured(settings: Settings) -> bool:
 
 
 def get_e2b_api_key() -> str | None:
-    """Effective ``MODULO_E2B_API_KEY``: runtime override wins over the env var.
+    """Effective ``FARNA_CONTROL_E2B_KEY``: runtime override wins over the env var.
 
     Single source of truth for BOTH the provider-registration gate
     (``build_hub``) and the node-runner script-enforcement refusal, so the
@@ -134,10 +134,10 @@ def get_e2b_api_key() -> str | None:
     configured (FAR-1159). Fail-closed: no override and no env var →
     ``None`` (the provider does not register; enforcement refuses), and an
     explicit empty override disables the key rather than falling back to
-    the env value. Callers that historically also accept the legacy
-    ``E2B_API_KEY`` env var layer it themselves.
+    the env value. All callers use this bridge, so runtime overrides and the canonical
+    ``FARNA_CONTROL_E2B_KEY`` environment value cannot diverge.
     """
-    return override_or("FARNA_CONTROL_E2B_API_KEY", os.environ.get("FARNA_CONTROL_E2B_API_KEY") or "") or None
+    return override_or("FARNA_CONTROL_E2B_KEY", os.environ.get("FARNA_CONTROL_E2B_KEY") or "") or None
 
 
 # ── apply-on-write hooks ────────────────────────────────────────────────────

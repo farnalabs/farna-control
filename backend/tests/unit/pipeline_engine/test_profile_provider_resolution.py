@@ -147,7 +147,7 @@ async def test_build_dispatch_provider_resolves_kubernetes_through_the_hub(
 ) -> None:
     """A registered Kubernetes provider is what create_workspace runs against."""
     monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", "1")
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
 
     provider = await _build_dispatch_provider("kubernetes")
 
@@ -163,8 +163,8 @@ async def test_build_dispatch_provider_refuses_unregistered_kubernetes_with_reme
     ``ProviderNotConfiguredError`` naming the env var that would register it —
     it never resolves the E2B provider instead."""
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
 
     with pytest.raises(ProviderNotConfiguredError) as excinfo:
         await _build_dispatch_provider("kubernetes")
@@ -178,8 +178,8 @@ async def test_build_dispatch_provider_legacy_route_without_a_key_returns_none(
 ) -> None:
     """The legacy arm is untouched: no key -> ``None``, so the caller fails
     closed with its own typed refusal (never a silent other-provider build)."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     monkeypatch.setattr("farna.core.runtime_config.key_bridge.override_or", lambda *_a, **_k: None)
 
     assert await _build_dispatch_provider() is None
@@ -190,7 +190,7 @@ async def test_build_dispatch_provider_legacy_route_with_a_key_returns_e2b(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The legacy arm resolves the E2B provider exactly as before."""
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
 
     provider = await _build_dispatch_provider("e2b")
 
@@ -230,7 +230,7 @@ async def test_isolation_refuses_unregistered_profile_provider(
     """Enforcement-critical: an unregistered profile provider raises the
     typed config error, never a tier refusal that names the WRONG env var."""
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
 
     with pytest.raises(ProviderNotConfiguredError) as excinfo:
         await _apply_isolation_via_provider(
@@ -245,12 +245,12 @@ async def test_isolation_refuses_unregistered_profile_provider(
 async def test_isolation_legacy_route_keeps_the_e2b_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
     """Regression: the profile-less route still fails closed with the SAME
     E2B remediation message it has always raised."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     builder = MagicMock(side_effect=AssertionError("must not build a provider without a key"))
     monkeypatch.setattr(nr, "_build_isolation_provider", builder)
 
-    with pytest.raises(SandboxTierRefusedError, match="FARNA_CONTROL_E2B_API_KEY"):
+    with pytest.raises(SandboxTierRefusedError, match="FARNA_CONTROL_E2B_KEY"):
         await _apply_isolation_via_provider("modulo-ws-1", **_isolation_kwargs())
     builder.assert_not_called()
 
@@ -304,7 +304,7 @@ async def test_file_io_routes_to_the_profile_provider(monkeypatch: pytest.Monkey
 async def test_file_io_refuses_unregistered_profile_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     """No E2B key can rescue a Kubernetes profile's file I/O."""
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
 
     with pytest.raises(ProviderNotConfiguredError) as excinfo:
         await _file_io_provider_for("modulo-ws-1", provider_type="kubernetes")
@@ -431,7 +431,7 @@ async def test_legacy_e2b_arm_keeps_its_unclosed_per_call_provider(
     its key-based per-call provider is still built per call and NOT closed
     here, exactly as before the FAR-1051 follow-up."""
     provider = _CloseTrackingProvider()
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     monkeypatch.setattr(nr, "_build_file_io_provider", MagicMock(return_value=provider))
 
     await _write_file_via_provider("sbx-1", "/home/user/prompt.md", "hi")

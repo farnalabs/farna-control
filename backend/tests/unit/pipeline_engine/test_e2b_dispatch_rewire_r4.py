@@ -193,8 +193,8 @@ def test_require_dispatch_provider_fails_closed_with_typed_error() -> None:
 async def test_build_dispatch_provider_returns_none_without_a_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     monkeypatch.setattr("farna.core.runtime_config.key_bridge.override_or", lambda *_a, **_k: None)
     assert await _build_dispatch_provider() is None
 
@@ -209,7 +209,7 @@ async def test_build_dispatch_provider_returns_none_when_hub_build_fails(
 async def test_build_dispatch_provider_returns_the_e2b_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     from farna.core.runtime_provider.e2b import E2BRuntimeProvider
 
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     provider = await _build_dispatch_provider()
     assert isinstance(provider, E2BRuntimeProvider)
 

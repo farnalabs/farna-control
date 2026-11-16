@@ -188,7 +188,7 @@ def _legacy_must_not_run(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
 
 
 async def test_isolation_routes_through_provider_apply_isolation(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     builder = _patch_isolation_builder(monkeypatch, fake)
     legacy = _legacy_must_not_run(monkeypatch)
@@ -226,7 +226,7 @@ async def test_isolation_routes_through_provider_apply_isolation(monkeypatch: py
 async def test_provider_predicate_still_gates_no_policy_no_invocation(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
     """The `_should_apply_sandbox_policy` predicate is unchanged: a node
     with no isolation controls triggers NEITHER path, even the provider path."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     builder = _patch_isolation_builder(monkeypatch, fake)
     legacy = _patch_legacy_sandbox_policy(monkeypatch)
@@ -255,7 +255,7 @@ async def test_provider_capability_refusal_maps_to_terminal_named_code(monkeypat
     from farna.core.pipeline_engine import runtime_retry
     from farna.core.pipeline_engine.error_codes import LEGACY_ALIASES
 
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     _patch_isolation_builder(monkeypatch, _RefusingIsolationProvider())
     legacy = _legacy_must_not_run(monkeypatch)
 
@@ -316,12 +316,11 @@ def test_build_isolation_provider_returns_none_when_hub_init_fails(
 
 
 async def test_helper_fails_closed_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     builder = MagicMock(side_effect=AssertionError("must not build a provider without a key"))
     monkeypatch.setattr("farna.core.pipeline_engine.node_runner._build_isolation_provider", builder)
 
-    with pytest.raises(SandboxTierRefusedError, match="MODULO_E2B_API_KEY"):
+    with pytest.raises(SandboxTierRefusedError, match="FARNA_CONTROL_E2B_KEY"):
         await _apply_isolation_via_provider(
             "sbx-1",
             org_id=_ORG_ID,
@@ -335,7 +334,7 @@ async def test_helper_fails_closed_without_key(monkeypatch: pytest.MonkeyPatch) 
 
 
 async def test_helper_fails_closed_on_invalid_sandbox_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     builder = MagicMock(side_effect=AssertionError("must not build a provider without a sandbox id"))
     monkeypatch.setattr("farna.core.pipeline_engine.node_runner._build_isolation_provider", builder)
 
@@ -363,10 +362,10 @@ async def test_helper_fails_closed_on_invalid_sandbox_id(monkeypatch: pytest.Mon
 
 
 async def test_helper_fails_closed_when_provider_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     _patch_isolation_builder(monkeypatch, None)
 
-    with pytest.raises(SandboxTierRefusedError, match="MODULO_E2B_API_KEY"):
+    with pytest.raises(SandboxTierRefusedError, match="FARNA_CONTROL_E2B_KEY"):
         await _apply_isolation_via_provider(
             "sbx-1",
             org_id=_ORG_ID,
@@ -381,7 +380,7 @@ async def test_helper_fails_closed_when_provider_unavailable(monkeypatch: pytest
 async def test_helper_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
     """CancelledError from the provider primitive is re-raised, never
     converted to a tier refusal (cancellation is not a refusal)."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     exploding = _RecordingIsolationProvider()
     exploding.apply_isolation = AsyncMock(side_effect=asyncio.CancelledError())  # type: ignore[method-assign]
     _patch_isolation_builder(monkeypatch, exploding)
@@ -401,7 +400,7 @@ async def test_helper_propagates_cancellation(monkeypatch: pytest.MonkeyPatch) -
 async def test_helper_builds_spec_and_policy_with_nil_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
     """Session-factory-less dispatch: unparseable org/run and absent profile
     fall back to the nil UUID / None; the policy carries the controls."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
 
@@ -487,7 +486,7 @@ async def test_sentinel_only_node_gets_no_guard_at_all(monkeypatch: pytest.Monke
     ``single_pr_per_run`` flag gets NO policy step and NO guard - the sentinel
     keeps only its FAR-228 idempotency meaning and must never arm the
     one-PR-per-run ``gh`` guard."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     builder = _patch_isolation_builder(monkeypatch, fake)
     legacy = _legacy_must_not_run(monkeypatch)
@@ -511,7 +510,7 @@ async def test_flagged_node_routes_isolation_with_the_typed_flag(monkeypatch: py
     routes through ``provider.apply_isolation`` with
     ``policy.single_pr_per_run=True`` - the TYPED carrier - and the spec
     carries NO sentinel metadata key (the old carrier is deleted)."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     builder = _patch_isolation_builder(monkeypatch, fake)
     legacy = _legacy_must_not_run(monkeypatch)
@@ -543,7 +542,7 @@ async def test_flagged_only_isolation_failure_does_not_fail_the_run(monkeypatch:
     node's isolation invocation cannot run (no provider), the run PROCEEDS
     exactly as it did before FAR-1264 (degrading to the prompt-level guard)
     instead of dying with a tier refusal."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     _patch_isolation_builder(monkeypatch, None)
 
     fn = make_sandbox_agent_fn(_base_node_def(read_only=False, single_pr_per_run=True))
@@ -562,7 +561,7 @@ async def test_isolation_cancellation_propagates_through_the_call_site(monkeypat
     """Cancellation is re-raised, never swallowed by the best-effort swallow
     (which handles ordinary failures only): a cancelled dispatch must stay
     cancelled through the FAR-1264/1273 call-site guard."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     provider = _RecordingIsolationProvider()
     provider.apply_isolation = AsyncMock(side_effect=asyncio.CancelledError())  # type: ignore[method-assign]
     _patch_isolation_builder(monkeypatch, provider)
@@ -581,7 +580,7 @@ async def test_enforcement_node_isolation_failure_still_fails_closed(monkeypatch
     """The best-effort swallow applies ONLY to flag-only invocations: a
     node that asked for an enforcement control (read_only here) keeps the
     pre-existing fail-closed tier refusal."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     _patch_isolation_builder(monkeypatch, None)
 
     fn = make_sandbox_agent_fn(_base_node_def())
@@ -600,7 +599,7 @@ async def test_helper_threads_single_pr_per_run_into_the_typed_policy(
     """``_apply_isolation_via_provider`` threads the flag onto the typed
     ``IsolationPolicy`` (the single carrier the E2B call site reads), and the
     default (flag omitted) is ``False`` with an untouched spec."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
 
@@ -654,7 +653,7 @@ async def test_sentinel_without_flag_emits_the_disarm_warning(
     at the dispatch decision point so the guard's disarm is observable in
     logs/metrics - node id + pipeline id - while the run FAILS OPEN (it
     proceeds unchanged, no guard, no raised error)."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
 
@@ -685,7 +684,7 @@ async def test_flagged_node_emits_no_disarm_warning(
     """The warning is about the MISSING flag, not about sentinels: a node that
     carries BOTH the sentinel and ``single_pr_per_run`` (the migrated shape)
     arms the guard and must NOT warn."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
 
@@ -715,7 +714,7 @@ async def test_helper_threads_guard_owner_into_the_typed_policy(
     """FAR-1315: ``guard_owner`` (the claiming node's identity) rides the SAME
     typed carrier as the flag from the call site to the provider, and its
     default stays ``None`` so every policy built without it is unchanged."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
 
@@ -762,7 +761,7 @@ async def test_flagged_node_threads_guard_owner_at_the_real_call_site(
     ``make_sandbox_agent_fn(...)`` dispatch and pins the recorded policy's
     owner to THIS node's id, the analogue of the ``single_pr_per_run is True``
     assertion beside it."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
 
@@ -792,7 +791,7 @@ async def test_flagged_node_settles_the_run_claim_ledger_on_finish(
     owner — so the next flagged node of the run installs a pre-planted
     refusal after an observed claim, or a fresh live guard after a
     claim-less finish."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
     recorded: list[tuple[Any, ...]] = []
@@ -828,7 +827,7 @@ async def test_unflagged_node_never_settles_the_run_claim_ledger(
     """Regression: the settle gate is the explicit flag — a node running the
     policy step for an enforcement control only must never touch the ledger
     (its own output could otherwise be mistaken for a claim sentinel)."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     fake = _RecordingIsolationProvider()
     _patch_isolation_builder(monkeypatch, fake)
     recorded: list[tuple[Any, ...]] = []
@@ -922,7 +921,7 @@ async def _dispatch_flagged_e2b(
     from farna.core.pipeline_engine.sandbox_policy import reset_run_pr_guard_claims
 
     reset_run_pr_guard_claims()
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     provider = _ClaimingIsolationProvider(install_status=install_status)
     _patch_isolation_builder(monkeypatch, provider)
     dispatch = install_fake_dispatch(
@@ -1150,7 +1149,7 @@ async def test_cancel_during_the_claim_harvest_still_tears_down(
     Fail-without-fix: with the old ``wait_for(shield(...))`` form this test
     sees the CancelledError but ``dispatch.events`` never contains
     ``destroy_by_ref``/``close`` and the marker-clear mock is never awaited."""
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     provider = _ClaimingIsolationProvider()
     _patch_isolation_builder(monkeypatch, provider)
     dispatch = _BlockingHarvestDispatch(ref="sbx-cancel-harvest")
@@ -1192,7 +1191,7 @@ async def test_flagged_dispatch_skips_the_harvest_without_a_sandbox_id(
     from farna.core.pipeline_engine.sandbox_policy import reset_run_pr_guard_claims
 
     reset_run_pr_guard_claims()
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     _patch_isolation_builder(monkeypatch, _ClaimingIsolationProvider())
     # An empty dispatch ref makes ``_sandbox_id`` stay unset (None).
     install_fake_dispatch(monkeypatch, ref="")
@@ -1221,7 +1220,7 @@ async def test_flagged_dispatch_teardown_runs_when_settle_raises_cancelled(
 
     monkeypatch.setattr(sandbox_policy, "settle_run_pr_guard", _cancel_settle)
     reset_run_pr_guard_claims()
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     provider = _ClaimingIsolationProvider()
     _patch_isolation_builder(monkeypatch, provider)
     dispatch = install_fake_dispatch(monkeypatch, ref="sbx-cancel-settle")
@@ -1256,7 +1255,7 @@ async def test_flagged_dispatch_keeps_the_original_cancellation_when_settle_also
 
     monkeypatch.setattr(sandbox_policy, "settle_run_pr_guard", _cancel_settle)
     reset_run_pr_guard_claims()
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     provider = _ClaimingIsolationProvider()
     _patch_isolation_builder(monkeypatch, provider)
     dispatch = _BlockingHarvestDispatch(ref="sbx-double-cancel")

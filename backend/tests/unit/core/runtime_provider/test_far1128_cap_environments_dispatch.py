@@ -28,7 +28,7 @@ from farna.core.runtime_provider.local import LocalRuntimeProvider
 
 
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_RUNNER_DOCKER_HOST", raising=False)

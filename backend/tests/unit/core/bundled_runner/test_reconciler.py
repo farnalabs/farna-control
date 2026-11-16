@@ -56,6 +56,7 @@ def _configured_docker_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     Skip-path tests delenv this and patch the filesystem probes explicitly.
     """
     monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", "tcp://docker-socket-proxy:2375")
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
 
 
 def _container(run_id: str, age_s: float, cid: str = "c-1") -> _LabelledContainer:
@@ -779,7 +780,7 @@ async def test_node_runner_dispatch_spec_carries_the_run_id_the_reconciler_keys_
     # Route the dispatch's provider / file-IO / log-tail seams to fakes so the
     # real spec build runs with no live sandbox, cluster or network.
     file_io = FakeFileIOProvider(files={"/home/user/output.json": b'{"status": "completed", "summary": "done"}'})
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     monkeypatch.setattr(
         "farna.core.pipeline_engine.node_runner._build_file_io_provider",
         MagicMock(return_value=file_io),
@@ -1032,19 +1033,18 @@ async def test_e2b_skip_reason_names_the_registration_env_var(
 ) -> None:
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
-    monkeypatch.delenv("MODULO_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
 
     reason = await runner_reconciler.e2b_endpoint_skip_reason()
 
     assert reason is not None
-    assert "MODULO_E2B_API_KEY" in reason
+    assert "FARNA_CONTROL_E2B_KEY" in reason
 
 
 async def test_e2b_skip_reason_none_when_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     """The applicability check delegates to the registration matrix: with the
     key set the sweep's E2B half runs."""
-    monkeypatch.setenv("MODULO_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
     # Mock build_hub to return a hub with e2b provider
     from farna.core.runtime_provider.hub import RuntimeProviderHub
 

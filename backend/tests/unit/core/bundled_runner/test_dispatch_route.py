@@ -242,8 +242,8 @@ async def test_kubernetes_without_opt_in_is_dispatch_unbound(monkeypatch: pytest
     config error carries the remediation env var — never E2B, never local,
     even with an E2B key sitting in the environment."""
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
-    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
 
     with pytest.raises(SandboxDispatchUnboundError, match="FARNA_CONTROL_KUBERNETES_ENABLED"):
         await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("kubernetes")), _ORG, _PROFILE_ID)
