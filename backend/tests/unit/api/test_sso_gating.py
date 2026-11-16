@@ -901,7 +901,7 @@ class TestOidcLoginPublicUrlBridge:
 
         RuntimeConfigStore.reset()
         store = get_runtime_config_store()
-        store.set_override("FARNA_CONTROL_MODULO_PUBLIC_URL", "https://hot.example.com")
+        store.set_override("FARNA_CONTROL_PUBLIC_URL", "https://hot.example.com")
         try:
             with patch(
                 "farna.api.routes.sso.oidc_get_authorize_url",
@@ -909,7 +909,7 @@ class TestOidcLoginPublicUrlBridge:
             ):
                 resp = client_with_sso.get("/api/v1/auth/oidc/google/login", follow_redirects=False)
         finally:
-            store.clear_override("FARNA_CONTROL_MODULO_PUBLIC_URL")
+            store.clear_override("FARNA_CONTROL_PUBLIC_URL")
             RuntimeConfigStore.reset()
 
         assert resp.status_code == 307, resp.text

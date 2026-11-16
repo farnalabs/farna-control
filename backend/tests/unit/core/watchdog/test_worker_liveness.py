@@ -475,8 +475,8 @@ class TestWorkerLivenessWatchdog:
         fan-out still fires on every channel."""
         fake = _FakeWatchdogRedis()
         for overrides in (
-            {"FARNA_CONTROL_MODULO_ENV": "staging"},  # allowlist unset
-            {"FARNA_CONTROL_MODULO_ENV": "staging", "ALERT_ENVIRONMENTS": "production,staging"},  # env included
+            {"FARNA_CONTROL_ENV": "staging"},  # allowlist unset
+            {"FARNA_CONTROL_ENV": "staging", "ALERT_ENVIRONMENTS": "production,staging"},  # env included
         ):
             settings = _make_settings(
                 **overrides,
@@ -1706,7 +1706,7 @@ def _webhook_context_settings(*, email: bool = True) -> Settings:
     overrides: dict[str, Any] = {
         "ALERT_WEBHOOK_URL": "https://hooks.slack.com/services/T/X/B",
         "ALERT_TEAMS_WEBHOOK_URL": "https://outlook.office.com/webhook/abc",
-        "FARNA_CONTROL_MODULO_ENV": "staging",
+        "FARNA_CONTROL_ENV": "staging",
         "ALERT_CONTEXT": "runbook: https://example.com/runbook\npage the on-call",
     }
     if email:

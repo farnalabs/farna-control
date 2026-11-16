@@ -1304,9 +1304,10 @@ async def _read_log_tail_via_provider(
     """Read the workspace log tail via the ``read_log_tail`` ABC primitive (FAR-1050 R1).
 
     The only log-probe path since FAR-1050 R6 retired the legacy urllib
-    helper. Resolves the key through the ``FARNA_CONTROL_E2B_KEY`` runtime
-    bridge; empty on no key. Never raises — provider build failure, provider
-    error and fetch failure all yield ``""`` (``CancelledError`` propagates).
+    helper. Resolves the key through the runtime bridge /
+    ``MODULO_E2B_API_KEY``, then the legacy ``E2B_API_KEY`` env var; empty on
+    no key. Never raises — provider build failure, provider error and fetch
+    failure all yield ``""`` (``CancelledError`` propagates).
 
     FAR-1051: ``provider_type`` (the run's bound profile's declared type)
     selects a non-E2B provider through the hub, so a ``kubernetes`` dispatch
@@ -1338,7 +1339,7 @@ async def _read_log_tail_via_provider(
         return bytes(profile_raw).decode("utf-8", errors="replace")
     from farna.core.runtime_config.key_bridge import get_e2b_api_key
 
-    api_key = get_e2b_api_key()
+    api_key = get_e2b_api_key() or os.environ.get("E2B_API_KEY")
     if not api_key:
         return ""
     try:
@@ -1393,8 +1394,8 @@ async def _apply_isolation_via_provider(
     FAR-1051 provider resolution: ``provider_type`` is the run's bound
     environment profile's declared type. ``None``/``"e2b"`` is the legacy
     profile-less route and resolves EXACTLY as before (key resolution
-    mirrors the enforcement gate: the ``FARNA_CONTROL_E2B_KEY`` runtime bridge.
-    Any other declared type
+    mirrors the enforcement gate: runtime bridge / ``MODULO_E2B_API_KEY``,
+    then the legacy ``E2B_API_KEY`` env var). Any other declared type
     resolves through the hub, so a ``kubernetes`` profile reaches the
     Kubernetes provider — and an unregistered one raises the typed
     ``ProviderNotConfiguredError`` carrying its remediation env var, never
@@ -1448,10 +1449,10 @@ async def _apply_isolation_via_provider(
     # closed here.
     _seam_built_provider: RuntimeProvider | None = None
     if _is_legacy_e2b_route(provider_type):
-        api_key = get_e2b_api_key()
+        api_key = get_e2b_api_key() or os.environ.get("E2B_API_KEY")
         provider = _build_isolation_provider(api_key) if api_key else None
         if provider is None:
-            raise SandboxTierRefusedError("sandbox isolation could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_KEY and restart)")
+            raise SandboxTierRefusedError("sandbox isolation could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_API_KEY and restart)")
     elif borrowed_provider is not None:
         # FAR-1051: reuse the dispatch's already-resolved provider — no hub
         # build per policy step; the dispatch's finally closes it.
@@ -1523,7 +1524,8 @@ async def _file_io_provider_for(  # NOSONAR S7503 - async seam, see docstring
     credential, or a provider-construction failure raises
     :class:`RuntimeProviderError` — there is no legacy ``sandbox.files``
     handle to fall back to (FAR-1050 R6 deleted it). Key resolution mirrors
-    the R1/R3 helpers through the shared ``FARNA_CONTROL_E2B_KEY`` bridge.
+    the R1/R3 helpers (runtime bridge / ``MODULO_E2B_API_KEY``, then the
+    legacy ``E2B_API_KEY`` env var).
 
     FAR-1051: ``provider_type`` is the run's bound profile's declared type
     (``None``/``"e2b"`` = the legacy route, unchanged above). Another
@@ -1553,10 +1555,10 @@ async def _file_io_provider_for(  # NOSONAR S7503 - async seam, see docstring
         if borrowed_provider is not None:
             return borrowed_provider, sandbox_id
         return _build_profile_provider(str(provider_type)), sandbox_id
-    api_key = get_e2b_api_key()
+    api_key = get_e2b_api_key() or os.environ.get("E2B_API_KEY")
     provider = _build_file_io_provider(api_key) if api_key else None
     if provider is None:
-        raise RuntimeProviderError("sandbox file I/O could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_KEY and restart)")
+        raise RuntimeProviderError("sandbox file I/O could not resolve the E2B runtime provider (set MODULO_E2B_API_KEY and restart)")
     return provider, sandbox_id
 
 
@@ -1816,7 +1818,7 @@ async def _build_dispatch_provider(  # NOSONAR S7503 - async seam, see docstring
     returns the provider for the run's profile type. The legacy route
     (``provider_type`` unset / ``"e2b"`` — the profile-less default) returns
     the hub's registered ``e2b`` provider, or ``None`` when it is not
-    registered (no ``FARNA_CONTROL_E2B_KEY`` / runtime override) or the hub
+    registered (no ``MODULO_E2B_API_KEY`` / runtime override) or the hub
     cannot be constructed; the caller fails CLOSED with a typed error rather
     than silently falling back to ``AsyncSandbox.create``.
 
@@ -1859,7 +1861,7 @@ def _require_dispatch_provider(provider: "RuntimeProvider | None") -> "RuntimePr
     from farna.core.runtime_provider import RuntimeProviderError
 
     if provider is None:
-        raise RuntimeProviderError("FAR-1050 dispatch could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_KEY and restart) — refusing to provision without a provider")
+        raise RuntimeProviderError("FAR-1050 dispatch could not resolve the E2B runtime provider (set MODULO_E2B_API_KEY and restart) — refusing to provision without a provider")
     return provider
 
 
@@ -3925,12 +3927,12 @@ async def _resolve_schema_validator_mode(
     """
     # Fast path: no session factory → env/default
     if session_factory is None:
-        return os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        return os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
 
     _org_raw = state.get("_org_id")
     _org_uuid = _parse_uuid_opt(_org_raw)
     if _org_uuid is None:
-        return os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        return os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
 
     from farna.db.settings_resolver import resolve_schema_validator_mode
 
@@ -3953,7 +3955,7 @@ async def _resolve_schema_validator_mode(
             },
         )
         # Return cached value if available, else env/default
-        return cached or os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        return cached or os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
     else:
         # Cache the resolved value as last-known-good
         _SCHEMA_MODE_CACHE[str(_org_uuid)] = mode
@@ -10101,10 +10103,10 @@ def _build_sandbox_envs(
        ``GITHUB_TOKEN`` override keeps working because this layer merges LAST.
     """
     sandbox_envs: dict[str, str] = {
-        "FARNA_CONTROL_MODULO_RUN_ID": run_id,
-        "FARNA_CONTROL_MODULO_PIPELINE_ID": pipeline_id,
-        "FARNA_CONTROL_MODULO_ORG_ID": org_id,
-        "FARNA_CONTROL_MODULO_INPUT_PAYLOAD": input_json,
+        "FARNA_CONTROL_RUN_ID": run_id,
+        "FARNA_CONTROL_PIPELINE_ID": pipeline_id,
+        "FARNA_CONTROL_ORG_ID": org_id,
+        "FARNA_CONTROL_INPUT_PAYLOAD": input_json,
     }
     if sandbox_mode != "script":
         sandbox_envs["APP_MODULO_OPENCODE_API_KEY"] = os.environ.get("APP_MODULO_OPENCODE_API_KEY", "")
@@ -10251,14 +10253,15 @@ def _resolved_e2b_key_for_enforcement() -> str | None:
     """Resolved remote E2B credential (FAR-1159, FAR-1171).
 
     Serves BOTH the script-enforcement refusal AND the E2B
-    ``AsyncSandbox.create`` credential: resolves ``FARNA_CONTROL_E2B_KEY``
+    ``AsyncSandbox.create`` credential: resolves ``MODULO_E2B_API_KEY``
     through the runtime-config bridge (override wins over env — the same
     bridge the provider-registration gate uses, so the paths cannot
-    disagree). ``None`` => fail closed.
+    disagree) and layers the legacy ``E2B_API_KEY`` env fallback exactly as
+    before. ``None`` => fail closed.
     """
     from farna.core.runtime_config.key_bridge import get_e2b_api_key
 
-    return get_e2b_api_key()
+    return get_e2b_api_key() or os.environ.get("E2B_API_KEY")
 
 
 def _run_identity_strs(state: dict[str, Any]) -> tuple[str, str, str]:
@@ -11338,7 +11341,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         # written (they're advisory), but the env var must be present for any
         # consumer that checks it.
         _schema_dir_for_sandbox: dict[str, str] = {
-            "FARNA_CONTROL_MODULO_SCHEMA_DIR": "/home/user/schemas",
+            "FARNA_CONTROL_SCHEMA_DIR": "/home/user/schemas",
         }
 
         _provision_timeout = _sandbox_provisioning_timeout()
@@ -11611,7 +11614,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         _node_scope = node_def.get("capability_scope") or {}
         _allowed_tools = _node_scope.get("allowed_tools")
         if _allowed_tools:
-            env_vars_extra["FARNA_CONTROL_MODULO_ALLOWED_TOOLS"] = ",".join(str(t) for t in _allowed_tools)
+            env_vars_extra["FARNA_CONTROL_ALLOWED_TOOLS"] = ",".join(str(t) for t in _allowed_tools)
 
         # FAR-212 PR B: apply the enforced sandbox policy AFTER the Modulo-owned
         # context files / prompt / input are written but BEFORE the agent/script
@@ -11956,7 +11959,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # issuance failure leaves the key absent (the sandbox still runs).
             _issued_credential = await _issue_run_credential_for_sandbox()
             if _issued_credential is not None:
-                sandbox_envs["FARNA_CONTROL_MODULO_API_KEY"] = _issued_credential.secret
+                sandbox_envs["FARNA_CONTROL_API_KEY"] = _issued_credential.secret
                 sandbox_envs[RUN_CREDENTIAL_PROVENANCE_ENV] = _issued_credential.provenance
             _bridge_wrapped_command = rendered_agent_command
             # FAR-211: start the loop-interception callback server + write
@@ -12010,8 +12013,8 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                             ),
                             timeout=_SANDBOX_IO_TIMEOUT,
                         )
-                        sandbox_envs["FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT"] = f"http://127.0.0.1:{_bridge_port}"
-                        sandbox_envs["FARNA_CONTROL_MODULO_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
+                        sandbox_envs["FARNA_CONTROL_BRIDGE_ENDPOINT"] = f"http://127.0.0.1:{_bridge_port}"
+                        sandbox_envs["FARNA_CONTROL_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
                         # FAR-664 (newline-safe bridge handoff): the rendered
                         # agent command is handed to the bridge via a FILE, not
                         # inline after ``--``. An inline interpolation word-
@@ -13686,7 +13689,7 @@ def _build_sandbox_node_config(
             f"sandbox_agent node '{node_id}' mode='script' requests egress/resource/"
             "sandbox-policy enforcement (egress_policy='deny_all'/'selected', resource_limits, "
             "read_only, or git_credentials scoped/none) which requires a "
-            "remote E2B provider (set FARNA_CONTROL_E2B_KEY) — local "
+            "remote E2B provider (set MODULO_E2B_API_KEY or E2B_API_KEY) — local "
             "providers have no egress, resource-limit, or sandbox-policy enforcement point for script mode"
         )
     output_schema_json: dict[str, Any] | None = node_def.get("output_schema_json")

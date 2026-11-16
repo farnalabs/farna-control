@@ -417,7 +417,7 @@ def _streak_deactivate_enabled() -> bool:
     the ``MODULO_STREAK_DEACTIVATE_KILL_SWITCH`` env var ('0'/'false'/'off'/'no'
     disables).
     """
-    raw = os.environ.get("FARNA_CONTROL_MODULO_STREAK_DEACTIVATE_KILL_SWITCH")
+    raw = os.environ.get("FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH")
     if raw is None:
         return STREAK_DEACTIVATE_ENABLED_DEFAULT
     return raw.strip().lower() not in ("0", "false", "off", "no")
@@ -439,7 +439,7 @@ def _streak_min_window_hours_default(trigger_type: str = "ongoing") -> int:
 
     Per-trigger ``no_delivery_min_window_hours`` config overrides both.
     """
-    env_name = "FARNA_CONTROL_MODULO_CRON_STREAK_MIN_WINDOW_HOURS" if trigger_type == "cron" else "FARNA_CONTROL_MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS"
+    env_name = "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS" if trigger_type == "cron" else "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS"
     raw = os.environ.get(env_name)
     if raw is None:
         return CRON_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT if trigger_type == "cron" else ONGOING_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT

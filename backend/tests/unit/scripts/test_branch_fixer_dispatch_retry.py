@@ -56,9 +56,9 @@ _EXPRESSION_VALUES = {
     "github.event.pull_request.number": "42",
     "github.event.pull_request.head.ref": "fix/test-branch",
     "github.event.pull_request.head.sha": "deadbeefcafe",
-    "secrets.MODULO_REVIEWBOT_TOKEN || github.token": "ghs_test_token",
-    "secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL": "https://control.farna.dev/api/webhooks/branch-fixer",
-    "secrets.MODULO_BRANCH_FIXER_HMAC_SECRET": "test-hmac-secret",
+    "secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token": "ghs_test_token",
+    "secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL": "https://control.farna.dev/api/webhooks/branch-fixer",
+    "secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET": "test-hmac-secret",
 }
 
 _EXPRESSION = re.compile(r"\$\{\{\s*(.+?)\s*\}\}")

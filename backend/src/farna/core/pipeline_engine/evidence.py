@@ -216,7 +216,7 @@ def evidence_enabled() -> bool:
     outside this work's file scope — the field can ship in a follow-up without
     a code change here.
     """
-    env = os.environ.get("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED")
+    env = os.environ.get("FARNA_CONTROL_HEURISTIC_ENABLED")
     if env is not None:
         return env.strip().lower() in {"1", "true", "yes", "on"}
     try:

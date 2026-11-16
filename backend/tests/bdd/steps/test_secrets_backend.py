@@ -213,7 +213,7 @@ def step_org_read_secret(request, label: str, key: str) -> None:
 
 @when("I ask the factory for the default secret backend")
 def step_factory_default(request, monkeypatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_SECRETS_BACKEND", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_SECRETS_BACKEND", raising=False)
     _capture_factory(
         request,
         lambda: create_secrets_backend(fernet_key=Fernet.generate_key().decode()),

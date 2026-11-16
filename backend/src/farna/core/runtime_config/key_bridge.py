@@ -17,7 +17,7 @@ remaining hot-reloadable keys use so a runtime override
   real origin" test (falsy or the ``http://localhost:8000`` placeholder),
   shared by the OAuth flow and the discovery documents so they cannot
   disagree.
-- :func:`get_e2b_api_key` — keyed bridge for ``FARNA_CONTROL_E2B_KEY``
+- :func:`get_e2b_api_key` — keyed bridge for ``MODULO_E2B_API_KEY``
   (FAR-1159): the provider-registration gate and the node-runner
   enforcement check both resolve through it, fail-closed.
 - :func:`apply_log_level` — an *apply-on-write* hook: logging levels are
@@ -102,7 +102,7 @@ def get_public_url(settings: Settings) -> str:
     that inject a Settings instance keep working, and an admin override
     (``PUT /api/v1/admin/runtime-config``) wins only when one is set.
     """
-    return override_or("FARNA_CONTROL_MODULO_PUBLIC_URL", settings.modulo_public_url)
+    return override_or("FARNA_CONTROL_PUBLIC_URL", settings.modulo_public_url)
 
 
 #: The Settings/runtime-store default for ``MODULO_PUBLIC_URL``. It is a
@@ -126,13 +126,18 @@ def public_url_is_configured(settings: Settings) -> bool:
 
 
 def get_e2b_api_key() -> str | None:
-    """Return the effective ``FARNA_CONTROL_E2B_KEY`` value.
+    """Effective ``MODULO_E2B_API_KEY``: runtime override wins over the env var.
 
-    The runtime override wins over the environment variable, and an explicit
-    empty override disables the environment value. This is the single source
-    of truth for provider registration and every direct E2B execution path.
+    Single source of truth for BOTH the provider-registration gate
+    (``build_hub``) and the node-runner script-enforcement refusal, so the
+    two paths can never disagree about whether the remote E2B provider is
+    configured (FAR-1159). Fail-closed: no override and no env var →
+    ``None`` (the provider does not register; enforcement refuses), and an
+    explicit empty override disables the key rather than falling back to
+    the env value. Callers that historically also accept the legacy
+    ``E2B_API_KEY`` env var layer it themselves.
     """
-    return override_or("FARNA_CONTROL_E2B_KEY", os.environ.get("FARNA_CONTROL_E2B_KEY") or "") or None
+    return override_or("FARNA_CONTROL_E2B_API_KEY", os.environ.get("FARNA_CONTROL_E2B_API_KEY") or "") or None
 
 
 # ── apply-on-write hooks ────────────────────────────────────────────────────
@@ -154,7 +159,7 @@ def apply_log_level() -> None:
     global _BOOT_LOG_LEVEL
 
     root = logging.getLogger()
-    override = get_override("FARNA_CONTROL_MODULO_LOG_LEVEL")
+    override = get_override("FARNA_CONTROL_LOG_LEVEL")
     if override is None:
         if _BOOT_LOG_LEVEL is not None:
             root.setLevel(_BOOT_LOG_LEVEL)
@@ -172,5 +177,5 @@ def apply_log_level() -> None:
 
 
 APPLY_HOOKS: dict[str, Callable[[], None]] = {
-    "FARNA_CONTROL_MODULO_LOG_LEVEL": apply_log_level,
+    "FARNA_CONTROL_LOG_LEVEL": apply_log_level,
 }

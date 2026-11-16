@@ -130,16 +130,16 @@ class TestIsSensitiveEnvKey:
         assert is_sensitive_env_key("SECRET_KEY") is True
 
     def test_modulo_users_is_sensitive(self) -> None:
-        assert is_sensitive_env_key("FARNA_CONTROL_MODULO_USERS") is True
+        assert is_sensitive_env_key("FARNA_CONTROL_USERS") is True
 
     def test_fernet_key_is_sensitive(self) -> None:
         assert is_sensitive_env_key("FERNET_KEY") is True
 
     def test_modulo_admin_password_is_sensitive(self) -> None:
-        assert is_sensitive_env_key("FARNA_CONTROL_MODULO_ADMIN_PASSWORD") is True
+        assert is_sensitive_env_key("FARNA_CONTROL_ADMIN_PASSWORD") is True
 
     def test_non_sensitive_key(self) -> None:
-        assert is_sensitive_env_key("FARNA_CONTROL_MODULO_LOG_LEVEL") is False
+        assert is_sensitive_env_key("FARNA_CONTROL_LOG_LEVEL") is False
 
     def test_encryption_pattern(self) -> None:
         assert is_sensitive_env_key("MY_ENCRYPTION_KEY") is True
@@ -182,7 +182,7 @@ class TestRuntimeConfigRoute:
                         assert val == SENSITIVE_VALUE_MASK or val.startswith("postgresql"), f"DATABASE_URL.{field} should be masked or have real value: {val}"
 
     def test_put_override_returns_200(self, admin_client: TestClient) -> None:
-        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_MODULO_LOG_LEVEL": "DEBUG"}})
+        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_LOG_LEVEL": "DEBUG"}})
         assert resp.status_code == 200
         data = resp.json()
         assert "items" in data
@@ -210,12 +210,12 @@ class TestRuntimeConfigRoute:
 
     def test_put_invalid_log_level_returns_400(self, admin_client: TestClient) -> None:
         """A value the consumer would ignore must be rejected up front."""
-        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_MODULO_LOG_LEVEL": "NOTALEVEL"}})
+        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_LOG_LEVEL": "NOTALEVEL"}})
         assert resp.status_code == 400
         assert "Invalid log level" in resp.json()["detail"]
 
     def test_put_non_integer_concurrency_returns_400(self, admin_client: TestClient) -> None:
-        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY": "lots"}})
+        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_MAX_LOCAL_CONCURRENCY": "lots"}})
         assert resp.status_code == 400
         assert "must be an integer" in resp.json()["detail"]
 
@@ -223,7 +223,7 @@ class TestRuntimeConfigRoute:
         """MODULO_LOG_LEVEL override is applied to the root logger immediately."""
         import logging
 
-        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_MODULO_LOG_LEVEL": "ERROR"}})
+        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_LOG_LEVEL": "ERROR"}})
         assert resp.status_code == 200
         assert logging.getLogger().level == logging.ERROR
 
@@ -235,10 +235,10 @@ class TestRuntimeConfigRoute:
         def _explode() -> None:
             raise RuntimeError("hook blew up")
 
-        monkeypatch.setitem(route_mod.APPLY_HOOKS, "FARNA_CONTROL_MODULO_LOG_LEVEL", _explode)
-        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_MODULO_LOG_LEVEL": "ERROR"}})
+        monkeypatch.setitem(route_mod.APPLY_HOOKS, "FARNA_CONTROL_LOG_LEVEL", _explode)
+        resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_LOG_LEVEL": "ERROR"}})
         assert resp.status_code == 200
-        assert get_runtime_config_store().get_override("FARNA_CONTROL_MODULO_LOG_LEVEL") == "ERROR"
+        assert get_runtime_config_store().get_override("FARNA_CONTROL_LOG_LEVEL") == "ERROR"
 
     def test_put_clear_boot_only_key_is_allowed(self, admin_client: TestClient) -> None:
         """Clearing (never setting) stays allowed for every known key."""
@@ -247,8 +247,8 @@ class TestRuntimeConfigRoute:
 
     def test_put_clear_returns_200(self, admin_client: TestClient) -> None:
         store = get_runtime_config_store()
-        store.set_override("FARNA_CONTROL_MODULO_LOG_LEVEL", "DEBUG")
-        resp = admin_client.put("/api/v1/admin/runtime-config", json={"clear": ["FARNA_CONTROL_MODULO_LOG_LEVEL"]})
+        store.set_override("FARNA_CONTROL_LOG_LEVEL", "DEBUG")
+        resp = admin_client.put("/api/v1/admin/runtime-config", json={"clear": ["FARNA_CONTROL_LOG_LEVEL"]})
         assert resp.status_code == 200
 
     def test_put_invalid_overrides_type_returns_400(self, admin_client: TestClient) -> None:
@@ -276,15 +276,15 @@ class TestRuntimeConfigRoute:
             "SECRET_KEY",
             "FERNET_KEY",
             "FERNET_KEY_OLD",
-            "FARNA_CONTROL_MODULO_USERS",
-            "FARNA_CONTROL_MODULO_ADMIN_PASSWORD",
+            "FARNA_CONTROL_USERS",
+            "FARNA_CONTROL_ADMIN_PASSWORD",
             "VAULT_TOKEN",
             "AWS_SECRET_ACCESS_KEY",
-            "FARNA_CONTROL_MODULO_SCIM_TOKEN",
-            "FARNA_CONTROL_MODULO_RATELIMIT_BYPASS_TOKEN",
-            "FARNA_CONTROL_E2B_KEY",
-            "FARNA_CONTROL_MODULO_LICENSE_KEY",
-            "FARNA_CONTROL_MODULO_SAML_SP_PRIVATE_KEY",
+            "FARNA_CONTROL_SCIM_TOKEN",
+            "FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN",
+            "FARNA_CONTROL_E2B_API_KEY",
+            "FARNA_CONTROL_LICENSE_KEY",
+            "FARNA_CONTROL_SAML_SP_PRIVATE_KEY",
             "DATABASE_URL",
         }
         for item in items:

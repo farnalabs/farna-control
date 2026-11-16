@@ -1136,7 +1136,7 @@ class TestCheckSuspensionPermissionError:
         assert eligible is False
         assert "fail-closed" in detail
         assert "token cannot read repository variables" in detail
-        assert "MODULO_REVIEWBOT_TOKEN" in detail
+        assert "FARNA_CONTROL_REVIEWBOT_TOKEN" in detail
 
     @patch("fast_lane_classify.subprocess.run")
     def test_forbidden_403_denies_with_config_cause(self, mock_run: MagicMock) -> None:

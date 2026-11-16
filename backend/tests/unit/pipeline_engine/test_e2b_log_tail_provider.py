@@ -179,7 +179,7 @@ def test_build_log_tail_provider_returns_none_when_hub_init_fails(
 
 
 async def test_log_tail_caller_hits_provider_not_urllib(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     fake = FakeRuntimeProvider(b"provider-fixed-tail")
     builder = MagicMock(return_value=fake)
     monkeypatch.setattr("farna.core.pipeline_engine.node_runner._build_log_tail_provider", builder)
@@ -227,7 +227,7 @@ async def test_timeout_kill_path_uses_provider(monkeypatch: pytest.MonkeyPatch, 
     ``commands.run`` raises so ``cmd_result`` is None; the dispatch must call
     ``_read_log_tail_via_provider`` (not the legacy urllib helper) before the kill.
     """
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     fake = FakeRuntimeProvider(b"timeout-tail")
     monkeypatch.setattr(
         "farna.core.pipeline_engine.node_runner._build_log_tail_provider",
@@ -265,7 +265,7 @@ async def test_timeout_kill_path_uses_provider(monkeypatch: pytest.MonkeyPatch, 
 
 async def test_schema_failure_path_uses_provider(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
     """T6 site 3 (declared-schema violation → SandboxNodeFailedError) uses provider."""
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     # FAR-1050 R2b: output.json is read through ``read_file`` now, so the
     # payload the schema validator sees comes from the fake's byte store.
     fake_file_io.files["/home/user/output.json"] = b'{"summary": "done"}'
@@ -297,7 +297,7 @@ async def test_generic_exception_path_uses_provider(monkeypatch: pytest.MonkeyPa
     provider's ``write_file``) — ``sandbox.files.write`` is a plain mock that
     must stay untouched, which is what makes this test prove the routing.
     """
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     fake_file_io.write_error = RuntimeError("e2b file write exploded")
     fake = FakeRuntimeProvider(b"exc-tail")
     monkeypatch.setattr(
@@ -330,8 +330,8 @@ async def test_generic_exception_path_uses_provider(monkeypatch: pytest.MonkeyPa
 
 
 async def test_helper_returns_empty_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("E2B_API_KEY", raising=False)
     builder = MagicMock(side_effect=AssertionError("must not build a provider without a key"))
     monkeypatch.setattr("farna.core.pipeline_engine.node_runner._build_log_tail_provider", builder)
     assert not await _read_log_tail_via_provider("sbx-1")
@@ -347,7 +347,7 @@ async def test_helper_returns_empty_on_invalid_ref(monkeypatch: pytest.MonkeyPat
 
 
 async def test_helper_returns_empty_when_provider_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     monkeypatch.setattr(
         "farna.core.pipeline_engine.node_runner._build_log_tail_provider",
         MagicMock(return_value=None),
@@ -356,7 +356,7 @@ async def test_helper_returns_empty_when_provider_unavailable(monkeypatch: pytes
 
 
 async def test_helper_returns_empty_on_provider_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     exploding = MagicMock()
     exploding.read_log_tail = AsyncMock(side_effect=RuntimeError("provider backend down"))
     monkeypatch.setattr(
@@ -367,7 +367,7 @@ async def test_helper_returns_empty_on_provider_exception(monkeypatch: pytest.Mo
 
 
 async def test_helper_decodes_provider_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     fake = FakeRuntimeProvider("héllo tail".encode())
     monkeypatch.setattr(
         "farna.core.pipeline_engine.node_runner._build_log_tail_provider",

@@ -243,8 +243,8 @@ _HARVEST_DRAIN_TIMEOUT = 5.0
 # Harvest probe tokens: what ``harvest_gh_pr_claim_via_exec``'s one-shot shell
 # probe prints for receipt-present / receipt-absent. Kept as constants so the
 # probe script and the parser that reads it back cannot drift apart.
-_GH_PR_CLAIM_RECEIPT_PRESENT = "FARNA_CONTROL_MODULO_CLAIM_RECEIPT_PRESENT"
-_GH_PR_CLAIM_RECEIPT_ABSENT = "FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT"
+_GH_PR_CLAIM_RECEIPT_PRESENT = "FARNA_CONTROL_CLAIM_RECEIPT_PRESENT"
+_GH_PR_CLAIM_RECEIPT_ABSENT = "FARNA_CONTROL_CLAIM_RECEIPT_ABSENT"
 
 # FAR-1315 re-gate: install statuses under which a HARVESTED RECEIPT is
 # meaningful. Only these say a shim actually landed in this node's workspace,
@@ -1059,9 +1059,9 @@ def build_gh_pr_guard_script(marker_path: str, *, pre_spent: bool = False) -> st
         "  if ! { printf '%s\\n' '#!/bin/sh'\n"
         '    printf "REAL_BIN=\'%s\'\\n" "$real"\n'
         '    printf "MARKER=\'%s\'\\n" "$MARKER"\n'
-        "    cat <<'FARNA_CONTROL_MODULO_GH_GUARD_EOF'\n"
+        "    cat <<'FARNA_CONTROL_GH_GUARD_EOF'\n"
         f"{_GH_PR_GUARD_SHIM_BODY}"
-        "FARNA_CONTROL_MODULO_GH_GUARD_EOF\n"
+        "FARNA_CONTROL_GH_GUARD_EOF\n"
         f'  }} > "$tmp" 2>/dev/null; then rm -f "$tmp" 2>/dev/null || true; '
         'echo "modulo: gh guard: cannot write shim in $d" >&2; continue; fi\n'
         '  if ! chmod 755 "$tmp" 2>/dev/null; then rm -f "$tmp" 2>/dev/null || true; '

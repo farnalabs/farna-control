@@ -412,11 +412,11 @@ def test_ambient_pg_env_pass_clean() -> None:
 
 
 def test_settings_source_warns_modulo_db_not_postgres() -> None:
-    probes = _probes(env_value=lambda name: {"FARNA_CONTROL_MODULO_DB": "sqlite"}.get(name))
+    probes = _probes(env_value=lambda name: {"FARNA_CONTROL_DB": "sqlite"}.get(name))
     result = check_settings_source(Path(), _state(), probes)
     assert result.ok is True
     assert result.warning is True
-    assert "FARNA_CONTROL_MODULO_DB" in result.detail
+    assert "FARNA_CONTROL_DB" in result.detail
 
 
 def test_settings_source_warns_database_url_port_conflict() -> None:
