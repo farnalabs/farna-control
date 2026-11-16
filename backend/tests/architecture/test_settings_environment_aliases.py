@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +45,23 @@ def test_doubled_environment_prefix_is_absent_from_source_tree() -> None:
     """The canonical shape is FARNA_CONTROL_<NAME>; bare MODULO_* remains legacy."""
     repo_root = Path(__file__).resolve().parents[3]
     guard_file = Path(__file__).resolve()
-    source_files = [path for path in repo_root.rglob("*") if path.is_file() and ".git" not in path.parts and "__pycache__" not in path.parts and path != guard_file and path.suffix in {".py", ".sh", ".md", ".yaml", ".yml", ".toml", ".env"}]
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        raise AssertionError("Unable to enumerate tracked source files: git is unavailable")
+    try:
+        tracked_files = subprocess.run(  # noqa: S603
+            [git_executable, "ls-files"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise AssertionError(f"Unable to enumerate tracked source files with git: {exc}") from exc
+
+    suffixes = (".py", ".sh", ".md", ".yaml", ".yml", ".toml", ".env")
+    source_files = [repo_root / relative_path for relative_path in tracked_files if relative_path.endswith(suffixes) or ".env." in Path(relative_path).name]
+    source_files = [path for path in source_files if path.resolve() != guard_file.resolve()]
     offenders = [path for path in source_files if _FORBIDDEN_PREFIX in path.read_text(encoding="utf-8", errors="replace")]
     assert not offenders, "Forbidden FARNA_CONTROL_MODULO_ environment names found in source files; use FARNA_CONTROL_<NAME> and keep bare MODULO_* as the accepted legacy name."
