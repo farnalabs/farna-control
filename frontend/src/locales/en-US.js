@@ -5704,7 +5704,8 @@ export default {
       "failed_to_load": "Couldn't load notifications",
       "retry": "Retry",
       "no_notifications": "No notifications",
-      "view_all": "View all notifications"
+      "view_all": "View all notifications",
+      "close": "Close notifications"
     },
     "PageTabs": {
       "section_navigation": "Section navigation",

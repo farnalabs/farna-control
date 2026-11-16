@@ -291,6 +291,22 @@ describe('NotificationDropdown (FAR-249)', () => {
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
+  it('renders a labelled close button with a 44px mobile tap target (FAR-2540)', async () => {
+    const wrapper = await mountDropdown()
+    const close = wrapper.find('[data-testid="notification-dropdown-close"]')
+    expect(close.exists()).toBe(true)
+    expect(close.element.tagName).toBe('BUTTON')
+    expect(close.attributes('type')).toBe('button')
+    expect(close.attributes('aria-label')).toBe('Close notifications')
+    expect(close.classes()).toContain('h-11')
+    expect(close.classes()).toContain('w-11')
+  })
+
+  it('emits close when the close button is clicked (FAR-2540)', async () => {
+    const wrapper = await mountDropdown()
+    await wrapper.find('[data-testid="notification-dropdown-close"]').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
   it('renders a view-all link to the notifications page', async () => {
     const wrapper = await mountDropdown()
     const link = wrapper.find('[data-testid="notification-dropdown-view-all"]')

@@ -379,10 +379,34 @@ function withFocusableListContainer(existing: unknown): PtSection {
   return { ...(existing as Record<string, unknown> | undefined), tabindex: '0' }
 }
 
+// FAR-2540: on a phone the overlay (portalled to <body>) must never be wider
+// than the viewport: a long option label would otherwise widen the panel past
+// the screen edge and it would render detached from its trigger. Capping the
+// overlay at the viewport width minus a 0.5rem gutter each side keeps it fully
+// on screen; the option text wraps/truncates instead. Desktop is unaffected
+// (the cap only binds on viewports narrower than the panel).
+const OVERLAY_VIEWPORT_CAP = 'max-w-[calc(100vw-1rem)]'
+
+function withViewportCap(existing: unknown): PtSection {
+  const cap = (extra: Record<string, unknown>): Record<string, unknown> => {
+    const cls = extra.class
+    return {
+      ...extra,
+      class: typeof cls === 'string' && cls ? `${cls} ${OVERLAY_VIEWPORT_CAP}` : OVERLAY_VIEWPORT_CAP,
+    }
+  }
+  if (typeof existing === 'function') {
+    const existingFn = existing as (opts: unknown) => Record<string, unknown>
+    return (opts) => cap(existingFn(opts))
+  }
+  return cap((existing as Record<string, unknown> | undefined) ?? {})
+}
+
 const mergedPt = computed(() => {
   const consumerPt = attrs.pt as Record<string, unknown> | undefined
   return {
     ...consumerPt,
+    overlay: withViewportCap(consumerPt?.overlay),
     listContainer: withFocusableListContainer(consumerPt?.listContainer),
   }
 })

@@ -61,6 +61,20 @@ describe('AppSelect', () => {
     expect(select.props('appendTo')).toBe('self')
   })
 
+  it('caps the overlay at the viewport width so it cannot render off-screen (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, { props: { modelValue: '' } })
+    const pt = wrapper.findComponent(innerSelect).props('pt') as { overlay: { class: string } }
+    expect(pt.overlay.class).toContain('max-w-[calc(100vw-1rem)]')
+  })
+
+  it('keeps a consumer overlay class when adding the viewport cap (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, {
+      props: { modelValue: '' },
+      attrs: { pt: { overlay: { class: 'custom-overlay' } } },
+    })
+    const pt = wrapper.findComponent(innerSelect).props('pt') as { overlay: { class: string } }
+    expect(pt.overlay.class).toBe('custom-overlay max-w-[calc(100vw-1rem)]')
+  })
   it('forwards an explicit appendTo prop to the underlying Select', () => {
     const wrapper = mount(AppSelect, {
       props: { modelValue: '', appendTo: 'body' },
