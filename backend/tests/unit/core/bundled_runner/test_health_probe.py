@@ -520,7 +520,7 @@ class _NoAutoBeginSession:
 
     ``saq_worker._make_system_session_factory`` builds its sessionmaker with
     ``autobegin=False``: calling ``session.execute()`` without a transaction
-    raises ``InvalidRequestError`` (observed on app.modulo.run, where the
+    raises ``InvalidRequestError`` (observed on control.farna.dev, where the
     probe died in Phase 1 every tick before the fix). Like the real session,
     ``session.begin()`` starts a transaction and ``in_transaction`` reflects it.
     """
@@ -582,7 +582,7 @@ class TestRunRunnerHealthProbeSystemSessionFactory:
     raised ``InvalidRequestError`` on every tick, SAQ retried and failed, the
     wrapper persisted ``error=probe_failed, orgs_probed=0``, and no probe-cache
     rows ever landed — the deployment read a permanent ``stale`` (observed on
-    app.modulo.run, 2026-09-12)."""
+    control.farna.dev, 2026-09-12)."""
 
     @pytest.mark.asyncio
     async def test_phase1_read_runs_inside_explicit_begin(self) -> None:
