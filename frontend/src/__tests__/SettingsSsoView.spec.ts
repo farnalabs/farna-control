@@ -882,14 +882,12 @@ describe('SettingsSsoView — mobile card layout (FAR-2541)', () => {
     expect(card.classes()).toContain('sm:flex-row')
   })
 
-  it('keeps toggle in the header row and lets details wrap with min-w-0 + break-all', async () => {
+  it('lets details wrap with min-w-0 + break-all', async () => {
     const longId = `${'a'.repeat(120)}.apps.googleusercontent.com`
     ;(api.GET as Mock).mockResolvedValue({ data: [provider({ client_id: longId })], error: undefined })
     const wrapper = mountView()
     await nextTick()
 
-    const header = wrapper.find('[data-sso-layout="header"]')
-    expect(header.find('[data-testid="settings-sso-toggle"]').exists()).toBe(true)
     const details = wrapper.find('[data-sso-layout="details"]')
     expect(details.classes()).toContain('min-w-0')
     expect(details.classes()).toContain('break-all')
@@ -906,5 +904,28 @@ describe('SettingsSsoView — mobile card layout (FAR-2541)', () => {
     expect(actions.find('[data-testid="settings-sso-test"]').classes()).toContain('whitespace-nowrap')
     expect(actions.find('[data-testid="settings-sso-edit"]').exists()).toBe(true)
     expect(actions.find('[data-testid="table-action-delete"]').exists()).toBe(true)
+  })
+
+  it('lets the name button shrink at sm: and up (no sm:flex-none) so long ids cannot overflow', async () => {
+    const wrapper = mountView()
+    await nextTick()
+
+    const nameBtn = wrapper.find('[data-sso-layout="header"] button')
+    expect(nameBtn.classes()).toContain('min-w-0')
+    expect(nameBtn.classes()).toContain('flex-1')
+    expect(nameBtn.classes()).not.toContain('sm:flex-none')
+  })
+
+  it('keeps DOM order equal to visual order: name, Test, Edit, Delete, toggle (no order-* utilities)', async () => {
+    const wrapper = mountView()
+    await nextTick()
+
+    const row = wrapper.find('[data-sso-layout="card"]')
+    const ids = ['[data-sso-layout="header"] button', '[data-testid="settings-sso-test"]', '[data-testid="settings-sso-edit"]', '[data-testid="table-action-delete"]', '[data-testid="settings-sso-toggle"]']
+    const html = row.html()
+    const positions = ids.map((sel) => html.indexOf(row.find(sel).html().slice(0, 60)))
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+    expect(row.find('[data-sso-layout="actions"] [data-testid="settings-sso-toggle"]').exists()).toBe(true)
+    expect(html).not.toMatch(/sm:order-|sm:contents[^"]*order-/)
   })
 })

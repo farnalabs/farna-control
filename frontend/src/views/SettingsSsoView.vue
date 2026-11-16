@@ -52,7 +52,7 @@
               <div class="flex min-w-0 items-center justify-between gap-3 sm:contents" data-sso-layout="header">
                 <button
                   type="button"
-                  class="flex min-w-0 flex-1 items-center gap-3 text-left sm:mr-auto sm:flex-none"
+                  class="flex min-w-0 flex-1 items-center gap-3 text-left"
                   :aria-label="`${$t('views.SettingsSsoView.edit_provider')}: ${provider.name}`"
                   @click.stop="openEditForm(provider)"
                 >
@@ -71,28 +71,6 @@
                     </span>
                   </span>
                 </button>
-                <span tabindex="0"
-                  class="relative inline-flex shrink-0 cursor-pointer items-center sm:order-3"
-                  data-testid="settings-sso-toggle"
-                  :aria-label="$t('views.SettingsSsoView.toggle_provider')"
-                  role="switch"
-                  :aria-checked="provider.enabled"
-                  :class="{ 'opacity-50 pointer-events-none': togglingId === provider.id }"
-                  @click.stop.prevent="toggleProvider(provider)"
-                  @keydown.enter.stop.prevent="toggleProvider(provider)"
-                  @keydown.space.stop.prevent="toggleProvider(provider)"
-                >
-                  <div
-                    class="h-6 w-11 rounded-full transition-colors"
-                    :class="provider.enabled ? 'bg-primary' : 'bg-input'"
-                  >
-                    <div
-                      class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                      :class="provider.enabled ? 'translate-x-[1.375rem]' : 'translate-x-0.5'"
-                      style="margin-top: 2px;"
-                    />
-                  </div>
-                </span>
               </div>
               <p
                 class="min-w-0 break-all text-sm text-muted-foreground sm:hidden"
@@ -102,7 +80,7 @@
                 <span v-if="provider.client_id" class="ml-2">&middot; {{ provider.client_id }}</span>
                 <span v-if="provider.entity_id" class="ml-2">&middot; {{ provider.entity_id }}</span>
               </p>
-              <div class="flex flex-wrap items-center gap-2 sm:order-2 sm:shrink-0" data-sso-layout="actions" @click.stop @keydown.stop>
+              <div class="flex flex-wrap items-center gap-2 sm:shrink-0" data-sso-layout="actions" @click.stop @keydown.stop>
                 <button type="button"
                   :disabled="testingId === provider.id"
                   class="whitespace-nowrap rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
@@ -124,6 +102,28 @@
                   </svg>
                 </button>
                 <TableActions class="whitespace-nowrap" :actions="ssoActions(provider)" />
+                <span tabindex="0"
+                  class="relative inline-flex shrink-0 cursor-pointer items-center"
+                  data-testid="settings-sso-toggle"
+                  :aria-label="$t('views.SettingsSsoView.toggle_provider')"
+                  role="switch"
+                  :aria-checked="provider.enabled"
+                  :class="{ 'opacity-50 pointer-events-none': togglingId === provider.id }"
+                  @click.stop.prevent="toggleProvider(provider)"
+                  @keydown.enter.stop.prevent="toggleProvider(provider)"
+                  @keydown.space.stop.prevent="toggleProvider(provider)"
+                >
+                  <div
+                    class="h-6 w-11 rounded-full transition-colors"
+                    :class="provider.enabled ? 'bg-primary' : 'bg-input'"
+                  >
+                    <div
+                      class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
+                      :class="provider.enabled ? 'translate-x-[1.375rem]' : 'translate-x-0.5'"
+                      style="margin-top: 2px;"
+                    />
+                  </div>
+                </span>
               </div>
             </div>
 

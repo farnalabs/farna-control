@@ -25,13 +25,32 @@ const MOCK_PROVIDER = {
   preset: 'google',
 }
 
+let mockProvider = { ...MOCK_PROVIDER }
+
+async function expectCardContained(page: import('@playwright/test').Page) {
+  const card = page.locator('[data-sso-layout="card"]')
+  const cardBox = await card.boundingBox()
+  expect(cardBox).not.toBeNull()
+  const inside = await card.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    return Array.from(el.querySelectorAll('button, [role="switch"]')).every((c) => {
+      const b = c.getBoundingClientRect()
+      return b.left >= r.left - 1 && b.right <= r.right + 1
+    })
+  })
+  expect(inside).toBe(true)
+  const overflow = await card.evaluate((el) => el.scrollWidth - el.clientWidth)
+  expect(overflow).toBeLessThanOrEqual(0)
+}
+
 test.describe('Settings SSO provider card layout', { tag: '@regression' }, () => {
   test.beforeEach(async ({ page, env }) => {
+    mockProvider = { ...MOCK_PROVIDER }
     await loginAsAdmin(page, env)
     // Registered after login so it takes precedence over earlier routes.
     await page.route('**/api/v1/admin/sso/providers', async (route) => {
       if (route.request().method() !== 'GET') return route.fallback()
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([MOCK_PROVIDER]) })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([mockProvider]) })
     })
   })
 
@@ -66,5 +85,14 @@ test.describe('Settings SSO provider card layout', { tag: '@regression' }, () =>
     const direction = await card.evaluate((el) => getComputedStyle(el).flexDirection)
     expect(direction).toBe('row')
     await expect(page.locator('[data-sso-layout="details"]')).toBeHidden()
+    await expectCardContained(page)
+  })
+
+  test('640px with a ~72-char client id: card contents stay inside the card', async ({ page }) => {
+    mockProvider.client_id = `${'1234567890'.repeat(5)}.apps.googleusercontent.com`
+    await page.setViewportSize({ width: 640, height: 800 })
+    await page.goto('/settings/sso')
+    await expect(page.locator('[data-sso-layout="card"]')).toBeVisible({ timeout: 15000 })
+    await expectCardContained(page)
   })
 })
