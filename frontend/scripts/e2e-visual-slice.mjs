@@ -63,6 +63,9 @@ const SLICE = [
   // spill past the viewport is a layout regression invisible to unit/type
   // checks. Single mock-API page load, deterministic against the local target.
   'tests/e2e/runs-diff.spec.ts',
+  // FAR-2540: notifications close button + MCP Client select stay inside their
+  // card/viewport at 390px. Local mocks, cheap and deterministic.
+  'tests/e2e/mobile-overlays.spec.ts',
   // Overlay geometry: a dropdown that is clipped, mis-anchored or rendered at
   // the viewport edge is a layout regression invisible to unit/type checks.
   'tests/e2e/filter-bar-overlay.spec.ts',
