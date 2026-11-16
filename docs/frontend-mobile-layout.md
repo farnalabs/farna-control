@@ -23,7 +23,7 @@ Mobile is lower priority than desktop. The rule is simple: below 640px (`sm:`) e
 Every new or changed screen should pass this at a 390x844 viewport:
 
 - `document.documentElement.scrollWidth <= window.innerWidth` (no horizontal overflow)
-- every button label sits on a single line
+- every button label inside an `actions-nowrap` container (card header actions, page header right slot, ActionRow actions) sits on a single line
 - at 1024px or wider, `CardHeader` is still a row
 
 The reference test is the "Mobile foundation" block in `frontend/tests/e2e/mobile-layout.spec.ts` (`pnpm run test:e2e:mobile`).

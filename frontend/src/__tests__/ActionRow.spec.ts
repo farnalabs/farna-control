@@ -18,7 +18,13 @@ describe('ActionRow', () => {
     const actions = wrapper.get('[data-testid="action-row-actions"]').classes()
     expect(actions).toContain('flex-wrap')
     expect(actions).toContain('sm:flex-nowrap')
-    expect(wrapper.classes()).toContain('actions-nowrap')
+    expect(actions).toContain('actions-nowrap')
+  })
+
+  it('does not apply actions-nowrap to the root or the content wrapper', () => {
+    const wrapper = mount(ActionRow, { slots: { default: '<a href="#">long link</a>', actions: '<button>Go</button>' } })
+    expect(wrapper.classes()).not.toContain('actions-nowrap')
+    expect(wrapper.get('[data-testid="action-row-content"]').classes()).not.toContain('actions-nowrap')
   })
 
   it('omits the actions block without an actions slot', () => {

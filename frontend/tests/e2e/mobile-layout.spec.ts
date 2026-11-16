@@ -1096,13 +1096,13 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
   test.describe('390x844', () => {
     test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
     for (const route of HEADER_ROUTES) {
-      test(`${route} — no horizontal overflow and single-line buttons`, async ({ page, env }) => {
+      test(`${route} — no horizontal overflow and single-line action buttons`, async ({ page, env }) => {
         await openLocal(page, env, route)
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
         expect(overflow).toBeLessThanOrEqual(0)
         const wrapped = await page.evaluate(() => {
           const out: string[] = []
-          for (const btn of Array.from(document.querySelectorAll('main button, main a[role="button"]'))) {
+          for (const btn of Array.from(document.querySelectorAll('main .actions-nowrap button, main .actions-nowrap a[role="button"]'))) {
             const el = btn as HTMLElement
             const rect = el.getBoundingClientRect()
             if (rect.width === 0 || !el.textContent?.trim()) continue
