@@ -240,6 +240,25 @@ def test_installer_signature_parser_accepts_current_and_next_key_ids(key_id: str
     assert result.stdout.splitlines() == [key_id, "a" * 128]
 
 
+def test_installer_help_documents_embedded_bundle_and_activation_contract() -> None:
+    source = _INSTALL_SH.read_text(encoding="utf-8")
+    assert "--from-bundle <dir>" in source
+    assert "requires the adjacent signed tarball" in source
+    assert 'activation_file="${INSTALL_ROOT}/env.sh"' in source
+    assert "source ${activation_file}" in source
+    assert 'export MODULO_INSTALL_ROOT="${INSTALL_ROOT}"' in source
+    assert 'export MODULO_BIN_DIR="${BIN_DIR}"' in source
+    assert "SECRET_KEY" not in source[source.index("activation_file=") : source.index("path_updated=")]
+
+
+def test_installer_embedded_bundle_mode_reuses_signed_adjacent_artifact() -> None:
+    source = _INSTALL_SH.read_text(encoding="utf-8")
+    assert 'adjacent_tarball="${bundle_parent}/${tarball_name}"' in source
+    assert 'verify_shipped_manifest "${manifest_file}" "${signature_file}" "${adjacent_tarball}"' in source
+    assert 'verify_sums_in_dir "${bundle_dir}"' in source
+    assert "--from-file and --from-bundle are mutually exclusive" in source
+
+
 def test_installer_signature_parser_preserves_explicit_rotation_slots() -> None:
     source = _INSTALL_SH.read_text(encoding="utf-8")
     assert '"${TRUST_KEY_ID_CURRENT}") candidate_keys="current"' in source

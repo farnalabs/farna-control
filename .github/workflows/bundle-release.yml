@@ -478,9 +478,18 @@ jobs:
           LAUNCHER
           chmod 755 "$BUNDLE/launcher"
 
+          # Ship the exact checked-out release-ref installer with the bundle.
+          # Do not reimplement it here: the same script is used for published
+          # and embedded/offline installs. Keep its executable mode explicit so
+          # tar preserves it for users invoking the extracted bundle directly.
+          cp -- scripts/install.sh "$BUNDLE/install.sh"
+          chmod 0755 "$BUNDLE/install.sh"
+          test -x "$BUNDLE/install.sh"
+
           echo "bundle-v${VERSION_NUM}" > "$BUNDLE/VERSION"
           test -s "$BUNDLE/VERSION"
           echo "assemble: bundle layout complete"
+
           exit 0
 
       - name: Scan shipped PostgreSQL ELF files for runtime path leakage

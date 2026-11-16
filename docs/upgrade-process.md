@@ -83,6 +83,16 @@ swap:
 - the published installer (`bash scripts/install.sh`), and
 - the launcher command (`modulo upgrade <target-version>`).
 
+The Linux bundle also carries the exact checked-out `install.sh` as an executable
+file. After extracting a verified bundle, run `install.sh --from-bundle
+/path/to/modulo-<version>-linux-<arch>` from the bundle directory's parent. The
+installer requires the adjacent tarball plus its signed release manifest and
+signature, then verifies both the signed artifact and the bundle's internal
+`SHA256SUMS`; it never guesses a download or accepts an unsigned extracted tree.
+It writes a path-only activation helper to `~/.local/opt/modulo/env.sh` and
+prints the exact `source <path>` command at the end. That command must be run by
+the caller because an installer child process cannot modify its parent's shell.
+
 `modulo upgrade` flow:
 
 1. **Enforced pre-upgrade dump.** The bundled pg_dump writes a versioned
