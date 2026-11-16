@@ -91,15 +91,15 @@ def client() -> Generator[TestClient, None, None]:
     override is cleared for the duration and restored afterwards.
     """
     store = get_runtime_config_store()
-    previous = store.get_override("FARNA_CONTROL_MODULO_PUBLIC_URL")
-    store.clear_override("FARNA_CONTROL_MODULO_PUBLIC_URL")
+    previous = store.get_override("FARNA_CONTROL_PUBLIC_URL")
+    store.clear_override("FARNA_CONTROL_PUBLIC_URL")
     app.dependency_overrides[get_settings] = _make_settings
     yield TestClient(app)
     app.dependency_overrides.clear()
     if previous is None:
-        store.clear_override("FARNA_CONTROL_MODULO_PUBLIC_URL")
+        store.clear_override("FARNA_CONTROL_PUBLIC_URL")
     else:
-        store.set_override("FARNA_CONTROL_MODULO_PUBLIC_URL", previous)
+        store.set_override("FARNA_CONTROL_PUBLIC_URL", previous)
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ def test_discovery_is_not_shadowed_by_the_spa_fallback(tmp_path: Path) -> None:
     # A pinned public URL: discovery now fails visible (500) when unconfigured,
     # so the routing-order proof needs a configured origin.
     test_app.dependency_overrides[get_settings] = _make_settings
-    mounted = _init_once_mount_spa(test_app, {"FARNA_CONTROL_MODULO_SERVE_SPA": "1", "FARNA_CONTROL_MODULO_FRONTEND_DIST": str(dist)})
+    mounted = _init_once_mount_spa(test_app, {"FARNA_CONTROL_SERVE_SPA": "1", "FARNA_CONTROL_FRONTEND_DIST": str(dist)})
     assert mounted is True
 
     # base_url matches the loopback Host/Origin allowlist the SPA mount adds.

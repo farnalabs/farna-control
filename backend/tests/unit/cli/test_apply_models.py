@@ -898,7 +898,7 @@ class TestSensitiveKeyTwin:
         assert is_sensitive_env_key is core_is_sensitive_env_key
 
         sample = {
-            "FARNA_CONTROL_MODULO_USERS": "admin:pw",
+            "FARNA_CONTROL_USERS": "admin:pw",
             "GITHUB_TOKEN": "ghp_00112233445566778899aabbccddeeff00112233",
             "LOG_LEVEL": "debug",
             "SCAN_INTERVAL": "60s",
@@ -925,7 +925,7 @@ class TestPipelineGraphSecretParity:
                 "agent": "worker",
                 "position": {"x": 0, "y": 0},
                 "env_vars": {
-                    "FARNA_CONTROL_MODULO_USERS": "admin:pw123",
+                    "FARNA_CONTROL_USERS": "admin:pw123",
                     "LOG_LEVEL": "debug",
                     # Falsy declared secret: the server displays it unmasked.
                     "PYPI_TOKEN": "",
@@ -962,7 +962,7 @@ class TestPipelineGraphSecretParity:
 
         node = self.server_view()["nodes"][0]
         # env tier: sensitive key -> whole mask; other keys value-compiled.
-        assert node["env_vars"]["FARNA_CONTROL_MODULO_USERS"] == SENSITIVE_VALUE_MASK
+        assert node["env_vars"]["FARNA_CONTROL_USERS"] == SENSITIVE_VALUE_MASK
         assert node["env_vars"]["LOG_LEVEL"] == "debug"
         # falsy declared secret is displayed unmasked (mask_sensitive_value).
         assert not node["env_vars"]["PYPI_TOKEN"]
@@ -1062,7 +1062,7 @@ class TestPipelineGraphSecretParity:
         entity = PipelineEntity.model_validate({"name": "sample", "graph": self.DECLARED})
         view = entity.managed_view(graph=self.DECLARED)
         assert view["graph"] == strip_secret_shaped_graph(self.DECLARED)
-        assert view["graph"]["nodes"][0]["env_vars"]["FARNA_CONTROL_MODULO_USERS"] == SENSITIVE_VALUE_MASK
+        assert view["graph"]["nodes"][0]["env_vars"]["FARNA_CONTROL_USERS"] == SENSITIVE_VALUE_MASK
 
     def test_declares_secrets_per_field(self) -> None:
         from farna.cli.apply.models import graph_declares_secrets
@@ -1087,7 +1087,7 @@ class TestPipelineGraphSecretParity:
 
         node = strip_secret_shaped_graph(self.DECLARED)["nodes"][0]
         assert node["env_vars"] == {
-            "FARNA_CONTROL_MODULO_USERS": SENSITIVE_VALUE_MASK,
+            "FARNA_CONTROL_USERS": SENSITIVE_VALUE_MASK,
             "LOG_LEVEL": "debug",
             "PYPI_TOKEN": "",
         }
@@ -1246,7 +1246,7 @@ class TestGraphMaskHelpers:
 
         assert graph_declares_secrets({"nodes": ["raw", 42], "edges": []}) is False
         assert graph_declares_secrets({"nodes": [{"id": "n", "env_vars": {"REPLICAS": 3}}], "edges": []}) is False
-        assert graph_declares_secrets({"nodes": [{"id": "n", "env_vars": {"FARNA_CONTROL_MODULO_USERS": ""}}], "edges": []}) is False
+        assert graph_declares_secrets({"nodes": [{"id": "n", "env_vars": {"FARNA_CONTROL_USERS": ""}}], "edges": []}) is False
         assert graph_declares_secrets({"nodes": [{"id": "n", "context_files": {"a": 42}}], "edges": []}) is False
         assert graph_declares_secrets({"nodes": [{"id": "n", "parameter_overrides": {"items": ["clean", 5]}}], "edges": []}) is False
         assert graph_declares_secrets({"nodes": [{"id": "n", "context_files": {}}], "edges": []}) is False

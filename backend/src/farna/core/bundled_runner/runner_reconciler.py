@@ -92,7 +92,7 @@ class _LabelledContainer:
 
 def deployment_identity() -> str:
     """The deployment-identity value (label rides every container filter)."""
-    return os.environ.get("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID") or socket.gethostname()
+    return os.environ.get("FARNA_CONTROL_RUNNER_MACHINE_ID") or socket.gethostname()
 
 
 class _DockerWorkspaceSource:
@@ -673,7 +673,7 @@ def _resolve_docker_host() -> str | None:
     # MODULO_DOCKER_HOST first, then DOCKER_HOST, else None (the engine's
     # local socket). The raw-socket operator override is documented in
     # docs/security/.
-    return os.environ.get("FARNA_CONTROL_MODULO_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
+    return os.environ.get("FARNA_CONTROL_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
 
 
 def _local_docker_socket_paths() -> tuple[Path, ...]:

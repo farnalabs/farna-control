@@ -514,13 +514,13 @@ def check_ambient_pg_env(_data_dir: Path, _state: Any, probes: DoctorProbes) -> 
 def check_settings_source(_data_dir: Path, state: Any, probes: DoctorProbes) -> CheckResult:
     """Check 11 — MODULO_DB named check + env-vs-state.json conflict."""
     try:
-        moduledb = probes.env_value("FARNA_CONTROL_MODULO_DB")
+        moduledb = probes.env_value("FARNA_CONTROL_DB")
         db_url = probes.env_value("DATABASE_URL")
     except Exception as exc:
         return CheckResult("settings-source", False, f"env probe failed: {exc}")
     problems: list[str] = []
     if moduledb is not None and moduledb.strip().lower() != "postgres":
-        problems.append(f"FARNA_CONTROL_MODULO_DB={moduledb!r} would route Settings away from the bundled postgres — unset it (or use the Docker Compose path for non-postgres databases)")
+        problems.append(f"FARNA_CONTROL_DB={moduledb!r} would route Settings away from the bundled postgres — unset it (or use the Docker Compose path for non-postgres databases)")
     if db_url is not None and state is not None:
         host, port = _host_port_from_database_url(db_url)
         if port is not None and port != state.postgres_port:

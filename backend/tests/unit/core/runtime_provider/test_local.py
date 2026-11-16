@@ -131,17 +131,17 @@ class TestLocalRuntimeProvider:
         assert provider.supports(FakeProfile()) is True
 
     def test_create_local_provider_from_env_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", raising=False)
         p = create_local_provider_from_env()
         assert p._max_concurrency == 2
 
     def test_create_local_provider_from_env_custom(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", "10")
+        monkeypatch.setenv("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", "10")
         p = create_local_provider_from_env()
         assert p._max_concurrency == 10
 
     def test_create_local_provider_from_env_invalid(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", "not-a-number")
+        monkeypatch.setenv("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", "not-a-number")
         p = create_local_provider_from_env()
         assert p._max_concurrency == 2
 

@@ -32,10 +32,9 @@ def test_saq_run_timeout_default() -> None:
     assert _make().saq_run_timeout == 7200
 
 
-def test_product_setting_accepts_all_three_aliases_with_canonical_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_product_setting_accepts_canonical_and_bare_legacy_with_canonical_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
     monkeypatch.setenv("MODULO_DB", "mariadb")
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DB", "mysql")
 
     settings = Settings(**_BASE_ENV)
 
@@ -44,7 +43,6 @@ def test_product_setting_accepts_all_three_aliases_with_canonical_precedence(mon
 
 def test_product_setting_accepts_original_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DB", raising=False)
     monkeypatch.setenv("MODULO_DB", "sqlite")
 
     settings = Settings(**_BASE_ENV)
@@ -52,14 +50,15 @@ def test_product_setting_accepts_original_legacy_alias(monkeypatch: pytest.Monke
     assert settings.modulo_db == "sqlite"
 
 
-def test_product_setting_accepts_doubled_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_product_setting_rejects_doubled_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
     monkeypatch.delenv("MODULO_DB", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DB", "sqlite")
+    doubled = "FARNA_CONTROL_" + "MODULO_DB"
+    monkeypatch.setenv(doubled, "sqlite")
 
     settings = Settings(**_BASE_ENV)
 
-    assert settings.modulo_db == "sqlite"
+    assert settings.modulo_db == "postgres"
 
 
 def test_saq_run_timeout_env_alias() -> None:
@@ -333,7 +332,7 @@ def test_instance_identity_never_reads_platform_env(monkeypatch: pytest.MonkeyPa
     label (docs/configuration-reference.md) — neither may leak into
     instance identity (ADR 043 Decision 5)."""
     monkeypatch.setenv("FLY_MACHINE_ID", "fly-machine-xyz")
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "runner-deployment-label")
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "runner-deployment-label")
     monkeypatch.delenv("HOSTNAME", raising=False)
     assert resolve_instance_identity() == socket.gethostname()
     assert resolve_instance_identity() != "fly-machine-xyz"
@@ -387,18 +386,18 @@ def test_hitl_cancel_grace_new_env_wins_over_deprecated(monkeypatch: pytest.Monk
 # FAR-1500 populate_by_name — constructor keys accept the field NAME as well
 # as the alias. Without it, a name-keyed kwarg for an ALIASED field was
 # silently dropped by extra="ignore": Settings(environment="staging") kept the
-# default while Settings(FARNA_CONTROL_MODULO_ENV="staging") worked, with no error either way.
+# default while Settings(FARNA_CONTROL_ENV="staging") worked, with no error either way.
 # ---------------------------------------------------------------------------
 
 
 def test_environment_accepts_the_env_alias_key() -> None:
     """The alias key (the env-var spelling) keeps working unchanged."""
-    assert _make(FARNA_CONTROL_MODULO_ENV="staging").environment == "staging"
+    assert _make(FARNA_CONTROL_ENV="staging").environment == "staging"
 
 
 def test_environment_accepts_the_field_name_key() -> None:
     """FAR-1500: a ``environment=`` kwarg now populates the field instead of
-    being silently ignored (it does NOT case-fold onto the ``FARNA_CONTROL_MODULO_ENV``
+    being silently ignored (it does NOT case-fold onto the ``FARNA_CONTROL_ENV``
     alias, which is why this key was dropped before ``populate_by_name``)."""
     assert _make(environment="staging").environment == "staging"
 
@@ -426,7 +425,7 @@ def test_the_alias_key_wins_when_both_keys_are_supplied() -> None:
     """Aliases stay authoritative: a field supplied under BOTH its alias and
     its name resolves to the alias value (the env-var spelling is unambiguous,
     the name-keyed duplicate never shadows it)."""
-    settings = _make(FARNA_CONTROL_MODULO_ENV="production", environment="staging")
+    settings = _make(FARNA_CONTROL_ENV="production", environment="staging")
     assert settings.environment == "production"
 
 
@@ -435,8 +434,8 @@ def test_populate_by_name_also_widens_env_var_matching_to_the_field_name(
 ) -> None:
     """Side effect worth pinning: ``populate_by_name`` widens ENV-var matching
     too, so ``ENVIRONMENT`` (the field name) is now read where only
-    ``FARNA_CONTROL_MODULO_ENV`` was before."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_ENV", raising=False)
+    ``FARNA_CONTROL_ENV`` was before."""
+    monkeypatch.delenv("FARNA_CONTROL_ENV", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "host-generic-var")
     assert _make().environment == "host-generic-var"
 
@@ -445,7 +444,7 @@ def test_the_env_alias_still_outranks_a_field_name_env_var(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The widening cannot shadow the documented spelling: when BOTH
-    ``FARNA_CONTROL_MODULO_ENV`` and a generic ``ENVIRONMENT`` are set, the alias wins."""
+    ``FARNA_CONTROL_ENV`` and a generic ``ENVIRONMENT`` are set, the alias wins."""
     monkeypatch.setenv("ENVIRONMENT", "host-generic-var")
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_ENV", "staging")
+    monkeypatch.setenv("FARNA_CONTROL_ENV", "staging")
     assert _make().environment == "staging"

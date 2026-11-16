@@ -69,7 +69,7 @@ async def resolve_schema_validator_mode(
     )
     if raw is None:
         # First-boot seed: env var.
-        raw = os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        raw = os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
     if not isinstance(raw, str) or raw not in _VALID_SCHEMA_VALIDATOR_MODES:
         return "lenient"
     return raw

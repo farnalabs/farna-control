@@ -80,7 +80,7 @@ def _run_ordered_pytest(extra_flags: list[str], timeout: float) -> subprocess.Co
     env = os.environ.copy()
     # Determinism: the scoped run of the test-style scanner must not constrain
     # the child, and no inherited ad-hoc pytest args may reshuffle collection.
-    env.pop("FARNA_CONTROL_MODULO_TEST_STYLE_SCOPE", None)
+    env.pop("FARNA_CONTROL_TEST_STYLE_SCOPE", None)
     env.pop("PYTEST_ADDOPTS", None)
     env.pop("PYTEST_PLUGINS", None)
 
