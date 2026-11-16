@@ -547,8 +547,6 @@ jobs:
             exit 1
           fi
 
-  # FAR-2515 mitigation: more, smaller shards mean less memory accumulates in each
-  # job before the integration-suite leak tips the runner over; the leak itself is tracked separately.
   integration-tests:
     name: "Pre-deploy: Integration tests shard ${{ matrix.shard }}/10"
     needs: [deploy-throttle]
@@ -696,8 +694,7 @@ jobs:
           for attempt in $(seq 1 $MAX_ATTEMPTS); do
             echo "--- Integration tests attempt $attempt of $MAX_ATTEMPTS ---"
             # With pytest-timeout's default signal method, a syscall-blocked test can ignore SIGALRM, so --timeout=300 never fires and the runner kills the job after minutes of silence. The thread method can interrupt it and name the test.
-            # FAR-2515: temporarily quarantine the shard-10 SAQ recovery leak pending a safe fix.
-            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' --ignore='tests/integration/saq/test_saq_recovery.py' -n 1 --dist loadgroup --timeout=300 --timeout-method=thread --cov=src/farna --cov-report=xml --cov-fail-under=0 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
+            if uv run --no-build --no-sync pytest tests/integration/ -m integration --ignore-glob='tests/integration/test_tier1b_*.py' -n 1 --dist loadgroup --timeout=300 --timeout-method=thread --cov=src/farna --cov-report=xml --cov-fail-under=0 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings "${SHARD_ARGS[@]}"; then
               echo "Integration tests passed on attempt $attempt"
               exit 0
             else
