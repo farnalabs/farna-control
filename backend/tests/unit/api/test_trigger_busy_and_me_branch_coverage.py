@@ -145,10 +145,14 @@ async def test_refused_delivery_reraises_cancellation_and_logs_other_failures(ca
 class _Principal:
     account_id = _ACCOUNT_ID
     organisation_id = _ORG_ID
+    org_role = "admin"
+    is_system_admin = False
 
 
 def _account(**values: object) -> MagicMock:
     account = MagicMock()
+    account.id = _ACCOUNT_ID
+    account.email = "test@example.com"
     account.password_hash = values.get("password_hash", "stored")
     account.must_change_password = values.get("must_change_password", True)
     account.preferences = values.get("preferences", {})
@@ -254,7 +258,8 @@ async def test_me_change_password_audit_failure_is_logged_and_programming_error_
             _Principal(),
             session,
         )
-    assert result["detail"] == "Password changed successfully"
+    assert result.status_code == 200
+    assert "Password changed successfully" in result.body.decode()
     assert "audit write failed" in caplog.text
 
     with (

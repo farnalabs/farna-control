@@ -335,6 +335,12 @@ async def change_password(
 
     if new_family is None:
         raise RuntimeError("Password change did not create a token family")
+    # FastAPI replaces the Depends marker before invoking this route, but direct
+    # callers (unit tests and internal integrations) may omit the optional
+    # dependency argument. Resolve the same cached settings those callers would
+    # receive through FastAPI rather than passing the marker into token minting.
+    if not isinstance(settings, Settings):
+        settings = get_settings()
     return mint_password_change_response(
         account=account,
         current_user=current_user,
