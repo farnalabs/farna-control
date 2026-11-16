@@ -138,7 +138,7 @@ jobs:
           # failed.  All other steps in this workflow use GITHUB_TOKEN
           # because their operations (gh pr comment, gh api read) are
           # permitted by the Actions integration token.
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}
           EXPIRY: ${{ steps.parse.outputs.expiry }}
           REASON: ${{ steps.parse.outputs.reason }}
         shell: bash
@@ -224,8 +224,8 @@ jobs:
       - name: Dispatch Branch Fixer
         if: steps.parse.outputs.severity != ''
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_BRANCH_FIXER_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           PR_NUMBER: ${{ github.event.issue.number }}
           SEVERITY: ${{ steps.parse.outputs.severity }}

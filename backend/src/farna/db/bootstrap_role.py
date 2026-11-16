@@ -577,7 +577,11 @@ async def _bootstrap(admin_url: str, app_url: str) -> None:
     # drift FAR-1519 fixes — only a configured URL may set a password.
     bg_pass = _parse_password(bg_url) or None
 
-    sys_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
+    # The entrypoint contract passes the promoted system URL under the legacy
+    # launcher name. Do not read the canonical settings alias here: it may be
+    # present from a previous process/configuration layer even when this boot
+    # has no explicit system URL, which would reset an existing role password.
+    sys_url = os.environ.get("FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL", "")
     sys_user = _parse_role(sys_url) or _SYSTEM_ROLE
     sys_pass = _parse_password(sys_url) or None
 
