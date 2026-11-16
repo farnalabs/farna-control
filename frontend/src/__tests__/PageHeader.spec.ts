@@ -125,4 +125,9 @@ describe('PageHeader', () => {
     expect(rightContainer.exists()).toBe(true)
     expect(rightContainer.classes()).toEqual(expect.arrayContaining(['flex', 'flex-wrap', 'sm:flex-nowrap', 'items-center', 'gap-2', 'w-full', 'sm:w-auto', 'sm:shrink-0']))
   })
+
+  it('marks the right-slot container so buttons never wrap their own label (FAR-2537)', () => {
+    const wrapper = mountPageHeader({ title: 'Runs' }, { rightSlot: RIGHT_SLOT_FILTERS })
+    expect(wrapper.get('[data-testid="page-header-right"]').classes()).toContain('actions-nowrap')
+  })
 })

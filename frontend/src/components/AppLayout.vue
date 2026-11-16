@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen overflow-hidden">
+  <div class="flex h-screen h-screen-dvh overflow-hidden">
     <!-- FAR-2365: the shell owns a single viewport-height scroll region. With
          `min-h-screen` + `items-start` the <main> grew to its content height,
          so its `overflow-auto` never produced a scrollbar and the document
