@@ -339,7 +339,7 @@ jobs:
             --argjson prNumber "${PR_NUMBER}" \
             --arg sha "${SHA}" \
             --arg ref "${BRANCH}" \
-            '{action: "check_run", repository: {full_name: $repo}, pull_request: {number: $prNumber, head: {sha: $sha, ref: $ref}}}')
+            '{action: "check_run", check_run: {repository: {full_name: $repo}, pull_request: {number: $prNumber, head: {sha: $sha, ref: $ref}}}}')
           # One shared retry policy (scripts/dispatch_with_retry.sh):
           # 429 (capacity) and 000/502/503/504 (transient) retry with
           # exponential backoff + jitter, an attempt cap and a wall-clock

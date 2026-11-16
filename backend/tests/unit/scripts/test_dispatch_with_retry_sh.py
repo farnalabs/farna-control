@@ -195,6 +195,7 @@ def test_pr_review_webhook_payload_uses_check_run_normal_review_action() -> None
     webhook_step = next(step for step in steps if step.get("name") == "Send webhook to Modulo PR Review Agent")
     run = str(webhook_step["run"])
     assert '{action: "check_run"' in run
+    assert "check_run: {repository: {full_name: $repo}, pull_request: {number: $prNumber, head: {sha: $sha, ref: $ref}}}" in run
     assert '{action: "pull_request"' not in run
 
 

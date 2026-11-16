@@ -193,6 +193,7 @@ def test_pr_review_webhook_uses_the_documented_normal_review_event_type() -> Non
     step = _step("Trigger Modulo PR Review", "Send webhook to Modulo PR Review Agent")
     run = str(step.get("run") or "")
     assert '{action: "check_run"' in run, "pr-review.yml must dispatch the documented check_run normal-review action"
+    assert "check_run: {repository: {full_name: $repo}, pull_request: {number: $prNumber, head: {sha: $sha, ref: $ref}}}" in run, "pr-review.yml must include the check_run payload object accepted by the trigger"
     assert '{action: "pull_request"' not in run, "pr-review.yml must not invent a pull_request review action"
 
 
