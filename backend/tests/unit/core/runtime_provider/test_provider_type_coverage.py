@@ -58,10 +58,10 @@ def test_gated_provider_types_have_documented_env_var(provider_type: str) -> Non
 def test_local_always_registered_and_gated_types_absent_without_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
 
     hub = build_hub()
 
@@ -77,19 +77,19 @@ def test_local_always_registered_and_gated_types_absent_without_env(
 
 
 def test_e2b_registered_when_canonical_signal_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    """E2B is registered when FARNA_CONTROL_E2B_KEY is set."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    """E2B is registered when MODULO_E2B_API_KEY is set."""
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "e2b_test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
 
     hub = build_hub()
     assert hub.get("e2b") is not None
 
 
 def test_e2b_not_registered_when_canonical_signal_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """E2B is NOT registered when FARNA_CONTROL_E2B_KEY is unset."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    """E2B is NOT registered when MODULO_E2B_API_KEY is unset."""
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
 
     hub = build_hub()
@@ -98,9 +98,9 @@ def test_e2b_not_registered_when_canonical_signal_absent(monkeypatch: pytest.Mon
 
 def test_docker_registered_when_modulo_docker_host_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """Docker is registered when MODULO_DOCKER_HOST is set."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", "tcp://localhost:2375")
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", "tcp://localhost:2375")
 
     hub = build_hub()
     assert hub.get("runner_docker") is not None
@@ -108,8 +108,8 @@ def test_docker_registered_when_modulo_docker_host_set(monkeypatch: pytest.Monke
 
 def test_docker_registered_when_docker_host_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """Docker is registered when DOCKER_HOST is set."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.setenv("DOCKER_HOST", "tcp://localhost:2375")
 
     hub = build_hub()
@@ -118,10 +118,10 @@ def test_docker_registered_when_docker_host_set(monkeypatch: pytest.MonkeyPatch)
 
 def test_docker_not_registered_when_unrelated_runner_var_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-996: Docker is NOT registered when only an unrelated MODULO_RUNNER_* is set."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_TEMPLATE_ID", "opencode")
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_TEMPLATE_ID", "opencode")
 
     hub = build_hub()
     assert hub.get("runner_docker") is None

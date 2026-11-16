@@ -195,12 +195,21 @@ def test_failure_at_the_end_of_the_window_still_counts() -> None:
     assert verdict.healthy is False
 
 
+_WORKFLOW = yaml.safe_load((_REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8"))
+
+
+def _matrix_display_name(shard: int) -> str:
+    """Render the integration job name from deploy.yml's matrix template."""
+    template = _WORKFLOW["jobs"]["integration-tests"]["name"]
+    return template.replace("${{ matrix.shard }}", str(shard))
+
+
 _JOB_DISPLAY_NAMES: dict[str, str] = {
     "deploy-throttle": "Deploy throttle (batch deploys)",
     "backend-lint": "Pre-deploy: Backend lint",
     "backend-unit": "Pre-deploy: Backend unit tests",
     "frontend-checks": "Pre-deploy: Frontend checks",
-    "integration-tests": "Pre-deploy: Integration tests shard ${{ matrix.shard }}/4",
+    "integration-tests": _WORKFLOW["jobs"]["integration-tests"]["name"],
     "security-audit": "Pre-deploy: Security audit",
     "pre-deploy-gate": "Pre-deploy gate",
     "deploy-staging": "Deploy to staging",
@@ -242,8 +251,7 @@ def test_job_to_stage_matches_deploy_yml_display_names() -> None:
     Pinning the map to deploy.yml here means renaming a job fails CI instead of
     silently turning every real failure into ``unknown`` again.
     """
-    workflow = yaml.safe_load((_REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8"))
-    deploy_jobs = workflow["jobs"]
+    deploy_jobs = _WORKFLOW["jobs"]
     for job_id, display_name in _JOB_DISPLAY_NAMES.items():
         assert deploy_jobs[job_id]["name"] == display_name
         assert health.JOB_TO_STAGE[display_name] == _JOB_STAGES[job_id]
@@ -252,7 +260,7 @@ def test_job_to_stage_matches_deploy_yml_display_names() -> None:
 
 
 def test_matrix_shard_job_names_are_normalised_for_classification() -> None:
-    assert health._classify_failure_stage({"Pre-deploy: Integration tests shard 2/4": "failure"}) == "integration_test"
+    assert health._classify_failure_stage({_matrix_display_name(2): "failure"}) == "integration_test"
 
 
 def test_first_failed_job_in_deployment_order_wins() -> None:

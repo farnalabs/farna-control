@@ -1161,7 +1161,7 @@ async def test_apply_agent_bindings_invalid_pair_warns(monkeypatch: pytest.Monke
     ctx = _bindings_ctx()
     backend = SimpleNamespace(id=uuid.uuid4(), name="MB", provider="openai")
     agent = SimpleNamespace(id=uuid.uuid4(), name="Agent A")
-    ad = {"model_backend_bindings": [{"model_backend_name": "MB", "target_env_var": "FARNA_CONTROL_MODULO_API_KEY", "source_field": "api_key"}]}
+    ad = {"model_backend_bindings": [{"model_backend_name": "MB", "target_env_var": "FARNA_CONTROL_API_KEY", "source_field": "api_key"}]}
 
     await mod._apply_agent_bindings(ctx, agent, ad, {"MB": backend}, ctx.warnings)
 

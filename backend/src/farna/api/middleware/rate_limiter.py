@@ -23,7 +23,7 @@ from farna.core.rate_limiter import RateLimiterRegistry, RateLimitRule, TokenBuc
 from farna.core.runtime_config.key_bridge import override_or
 from farna.settings import Settings, get_settings
 
-RATELIMIT_BYPASS_HEADER = "FARNA_CONTROL_MODULO_RATELIMIT_BYPASS_TOKEN"
+RATELIMIT_BYPASS_HEADER = "FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN"
 
 # FAR-535: process-local floor for the demo auto-login path. The demo
 # endpoint mints real sessions with zero user input, so its 10/hour cap must
@@ -380,7 +380,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         token = request.headers.get(RATELIMIT_BYPASS_HEADER, "")
         # FAR-1135: bypass token is hot-reloadable — resolve the override
         # per-request so an admin rotation takes effect without a restart.
-        bypass = override_or("FARNA_CONTROL_MODULO_RATELIMIT_BYPASS_TOKEN", self._bypass_token or "")
+        bypass = override_or("FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN", self._bypass_token or "")
         if _matches_bypass_token(token, bypass):
             return False
         path = request.url.path
@@ -531,7 +531,7 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
         token = request.headers.get(RATELIMIT_BYPASS_HEADER, "")
         # FAR-1135: bypass token is hot-reloadable — resolve the override
         # per-request so an admin rotation takes effect without a restart.
-        bypass = override_or("FARNA_CONTROL_MODULO_RATELIMIT_BYPASS_TOKEN", self._bypass_token or "")
+        bypass = override_or("FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN", self._bypass_token or "")
         if _matches_bypass_token(token, bypass):
             return False
         path = request.url.path

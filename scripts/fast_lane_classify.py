@@ -294,7 +294,7 @@ def _suspension_read_failure(stderr: str) -> tuple[bool, str] | None:
         return False, (
             "suspension check denied (fail-closed): token cannot read repository "
             f"variables — authenticate the classifier with a variables-read token "
-            f"(MODULO_REVIEWBOT_TOKEN): {stderr.strip()}"
+            f"(FARNA_CONTROL_REVIEWBOT_TOKEN): {stderr.strip()}"
         )
     return None
 

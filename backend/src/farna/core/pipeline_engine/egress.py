@@ -144,7 +144,7 @@ def spec_egress_for_canonical(policy: str | None) -> str:
 
 # --- Workspace NetworkPolicy deployment signal (FAR-2068) -----------------
 
-WORKSPACE_NETWORK_POLICY_ENV: str = "FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY"
+WORKSPACE_NETWORK_POLICY_ENV: str = "FARNA_CONTROL_WORKSPACE_NETWORK_POLICY"
 """Env var the T3 Helm chart sets when it renders the workspace NetworkPolicy.
 
 The chart sets it to ``"enabled"`` only when

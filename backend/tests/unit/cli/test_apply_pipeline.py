@@ -1539,8 +1539,8 @@ class TestFailureIsolation:
 
         from farna.cli.apply import register_apply
 
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_URL", "https://api.test")
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_API_KEY", "key")
+        monkeypatch.setenv("FARNA_CONTROL_URL", "https://api.test")
+        monkeypatch.setenv("FARNA_CONTROL_API_KEY", "key")
         routes = _mock_current_with_pipelines([])
         routes["pipelines_post"].mock(
             side_effect=[
