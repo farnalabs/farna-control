@@ -48,52 +48,31 @@
             @keydown.enter.self="openEditForm(provider)"
             @keydown.space.self.prevent="openEditForm(provider)"
           >
-            <div class="flex items-center justify-between p-4">
-              <button
-                type="button"
-                class="flex min-w-0 items-center gap-3 text-left"
-                :aria-label="`${$t('views.SettingsSsoView.edit_provider')}: ${provider.name}`"
-                @click.stop="openEditForm(provider)"
-              >
-                <span
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
-                  :class="provider.provider_type === 'oidc' ? 'badge badge-context-blue' : 'badge badge-context-amber'"
-                >
-                  {{ provider.provider_type === 'oidc' ? 'O' : 'S' }}
-                </span>
-                <span class="block min-w-0">
-                  <span class="block font-medium">{{ provider.name }}</span>
-                  <span class="block break-all text-sm text-muted-foreground">
-                    {{ provider.provider_type.toUpperCase() }}
-                    <span v-if="provider.client_id" class="ml-2">&middot; {{ provider.client_id }}</span>
-                    <span v-if="provider.entity_id" class="ml-2">&middot; {{ provider.entity_id }}</span>
-                  </span>
-                </span>
-              </button>
-              <div class="flex shrink-0 items-center gap-2" @click.stop @keydown.stop>
-                <button type="button"
-                  :disabled="testingId === provider.id"
-                  class="rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
-                  data-testid="settings-sso-test"
-                  :title="$t('views.SettingsSsoView.test')"
-                  @click.stop="testConnection(provider.id)"
-                >
-                  {{ testingId === provider.id ? $t('views.SettingsSsoView.testing') : $t('views.SettingsSsoView.test') }}
-                </button>
-                <button type="button"
-                  class="rounded p-1 text-muted-foreground hover:bg-accent"
-                  data-testid="settings-sso-edit"
-                  :aria-label="$t('views.SettingsSsoView.edit_provider')"
-                  :title="$t('views.SettingsSsoView.edit_provider')"
+            <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-end sm:gap-2" data-sso-layout="card">
+              <div class="flex min-w-0 items-center justify-between gap-3 sm:contents" data-sso-layout="header">
+                <button
+                  type="button"
+                  class="flex min-w-0 flex-1 items-center gap-3 text-left sm:mr-auto sm:flex-none"
+                  :aria-label="`${$t('views.SettingsSsoView.edit_provider')}: ${provider.name}`"
                   @click.stop="openEditForm(provider)"
                 >
-                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
-                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  </svg>
+                  <span
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                    :class="provider.provider_type === 'oidc' ? 'badge badge-context-blue' : 'badge badge-context-amber'"
+                  >
+                    {{ provider.provider_type === 'oidc' ? 'O' : 'S' }}
+                  </span>
+                  <span class="block min-w-0">
+                    <span class="block break-words font-medium">{{ provider.name }}</span>
+                    <span class="hidden break-all text-sm text-muted-foreground sm:block">
+                      {{ provider.provider_type.toUpperCase() }}
+                      <span v-if="provider.client_id" class="ml-2">&middot; {{ provider.client_id }}</span>
+                      <span v-if="provider.entity_id" class="ml-2">&middot; {{ provider.entity_id }}</span>
+                    </span>
+                  </span>
                 </button>
-                <TableActions :actions="ssoActions(provider)" />
                 <span tabindex="0"
-                  class="relative inline-flex cursor-pointer items-center"
+                  class="relative inline-flex shrink-0 cursor-pointer items-center sm:order-3"
                   data-testid="settings-sso-toggle"
                   :aria-label="$t('views.SettingsSsoView.toggle_provider')"
                   role="switch"
@@ -114,6 +93,37 @@
                     />
                   </div>
                 </span>
+              </div>
+              <p
+                class="min-w-0 break-all text-sm text-muted-foreground sm:hidden"
+                data-sso-layout="details"
+              >
+                {{ provider.provider_type.toUpperCase() }}
+                <span v-if="provider.client_id" class="ml-2">&middot; {{ provider.client_id }}</span>
+                <span v-if="provider.entity_id" class="ml-2">&middot; {{ provider.entity_id }}</span>
+              </p>
+              <div class="flex flex-wrap items-center gap-2 sm:order-2 sm:shrink-0" data-sso-layout="actions" @click.stop @keydown.stop>
+                <button type="button"
+                  :disabled="testingId === provider.id"
+                  class="whitespace-nowrap rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                  data-testid="settings-sso-test"
+                  :title="$t('views.SettingsSsoView.test')"
+                  @click.stop="testConnection(provider.id)"
+                >
+                  {{ testingId === provider.id ? $t('views.SettingsSsoView.testing') : $t('views.SettingsSsoView.test') }}
+                </button>
+                <button type="button"
+                  class="rounded p-1 text-muted-foreground hover:bg-accent"
+                  data-testid="settings-sso-edit"
+                  :aria-label="$t('views.SettingsSsoView.edit_provider')"
+                  :title="$t('views.SettingsSsoView.edit_provider')"
+                  @click.stop="openEditForm(provider)"
+                >
+                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+                    <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </button>
+                <TableActions class="whitespace-nowrap" :actions="ssoActions(provider)" />
               </div>
             </div>
 

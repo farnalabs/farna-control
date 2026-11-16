@@ -871,3 +871,40 @@ describe('SettingsSsoView — row click opens edit (FAR-974 #2)', () => {
     expect(textEl.exists()).toBe(true)
   })
 })
+
+describe('SettingsSsoView — mobile card layout (FAR-2541)', () => {
+  it('stacks the card vertically below 640px and restores the row from sm: up', async () => {
+    const wrapper = mountView()
+    await nextTick()
+
+    const card = wrapper.find('[data-sso-layout="card"]')
+    expect(card.classes()).toContain('flex-col')
+    expect(card.classes()).toContain('sm:flex-row')
+  })
+
+  it('keeps toggle in the header row and lets details wrap with min-w-0 + break-all', async () => {
+    const longId = `${'a'.repeat(120)}.apps.googleusercontent.com`
+    ;(api.GET as Mock).mockResolvedValue({ data: [provider({ client_id: longId })], error: undefined })
+    const wrapper = mountView()
+    await nextTick()
+
+    const header = wrapper.find('[data-sso-layout="header"]')
+    expect(header.find('[data-testid="settings-sso-toggle"]').exists()).toBe(true)
+    const details = wrapper.find('[data-sso-layout="details"]')
+    expect(details.classes()).toContain('min-w-0')
+    expect(details.classes()).toContain('break-all')
+    expect(details.classes()).toContain('sm:hidden')
+    expect(details.text()).toContain(longId)
+  })
+
+  it('puts Test / Edit / Delete in a wrapping actions row with unsplittable labels', async () => {
+    const wrapper = mountView()
+    await nextTick()
+
+    const actions = wrapper.find('[data-sso-layout="actions"]')
+    expect(actions.classes()).toContain('flex-wrap')
+    expect(actions.find('[data-testid="settings-sso-test"]').classes()).toContain('whitespace-nowrap')
+    expect(actions.find('[data-testid="settings-sso-edit"]').exists()).toBe(true)
+    expect(actions.find('[data-testid="table-action-delete"]').exists()).toBe(true)
+  })
+})
