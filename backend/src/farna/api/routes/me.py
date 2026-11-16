@@ -263,8 +263,8 @@ async def change_password(
             # token family for the account must be revoked, regardless of which org
             # it was minted under. Scoping to the current org would silently leave
             # cross-org / NULL-org families live (a token-invalidation gap).
-            account = await get_account_by_id(session, current_user.account_id)
-            account = _require_human_account(account)
+            account_record = await get_account_by_id(session, current_user.account_id)
+            account = _require_human_account(account_record)
 
             if not account.password_hash or not verify_password(req.current_password, account.password_hash):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
