@@ -189,13 +189,13 @@ def run_dispatch(tmp_path: Path, **kwargs) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_pr_review_webhook_payload_uses_pull_request_event_type() -> None:
+def test_pr_review_webhook_payload_uses_check_run_normal_review_action() -> None:
     workflow = yaml.safe_load(PR_REVIEW_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["trigger-modulo-review"]["steps"]
     webhook_step = next(step for step in steps if step.get("name") == "Send webhook to Modulo PR Review Agent")
     run = str(webhook_step["run"])
-    assert '{action: "pull_request"' in run
-    assert '{action: "check_run"' not in run
+    assert '{action: "check_run"' in run
+    assert '{action: "pull_request"' not in run
 
 
 def invocation_count(tmp_path: Path) -> int:

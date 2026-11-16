@@ -183,18 +183,17 @@ def _job_named(workflow: dict, name: str) -> dict:
     raise AssertionError(f"no job named {name!r} — the job moved; update this test deliberately")
 
 
-def test_pr_review_webhook_uses_a_registered_pull_request_event_type() -> None:
-    """The review trigger accepts the webhook's pull-request event type.
+def test_pr_review_webhook_uses_the_documented_normal_review_event_type() -> None:
+    """The review trigger receives the documented normal-review action.
 
-    The receiver validates the payload action against its trigger configuration.
-    ``check_run`` is a GitHub event name, but it is not accepted by the review
-    trigger, so using it makes every review dispatch fail with HTTP 400 before
-    the review pipeline starts.
+    The deployed PR Reviewer prompt treats an empty action, ``check_run``, or
+    any other action as a normal review. The live trigger rejects ``pull_request``
+    as well, so the workflow must keep the established ``check_run`` contract.
     """
     step = _step("Trigger Modulo PR Review", "Send webhook to Modulo PR Review Agent")
     run = str(step.get("run") or "")
-    assert '{action: "pull_request"' in run, "pr-review.yml must dispatch the event type accepted by the review trigger"
-    assert '{action: "check_run"' not in run, "pr-review.yml must not dispatch the rejected check_run event type"
+    assert '{action: "check_run"' in run, "pr-review.yml must dispatch the documented check_run normal-review action"
+    assert '{action: "pull_request"' not in run, "pr-review.yml must not invent a pull_request review action"
 
 
 def test_pr_review_dispatches_on_red_ci_too() -> None:
