@@ -246,8 +246,11 @@ def test_installer_help_documents_embedded_bundle_and_activation_contract() -> N
     assert "requires the adjacent signed tarball" in source
     assert 'activation_file="${INSTALL_ROOT}/env.sh"' in source
     assert "source ${activation_file}" in source
-    assert 'export MODULO_INSTALL_ROOT="${INSTALL_ROOT}"' in source
-    assert 'export MODULO_BIN_DIR="${BIN_DIR}"' in source
+    assert 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"' in source
+    assert 'export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"' in source
+    assert 'export MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"' in source
+    assert 'export MODULO_BIN_DIR="${FARNA_CONTROL_BIN_DIR}"' in source
+    assert "FARNA_CONTROL_MODULO_" not in source
     assert "SECRET_KEY" not in source[source.index("activation_file=") : source.index("path_updated=")]
 
 
