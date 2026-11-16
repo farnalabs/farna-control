@@ -67,6 +67,13 @@ describe('AppSelect', () => {
     expect(pt.overlay.class).toContain('max-w-[calc(100vw-1rem)]')
   })
 
+  it('does not make the shared root label shrinkable, so other consumers keep their layout (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, { props: { modelValue: '' }, attrs: { class: 'w-36' } })
+    const rootClasses = wrapper.element.classList
+    expect(rootClasses.contains('min-w-0')).toBe(false)
+    expect(rootClasses.contains('max-w-full')).toBe(false)
+  })
+
   it('keeps a consumer overlay class when adding the viewport cap (FAR-2540)', () => {
     const wrapper = mount(AppSelect, {
       props: { modelValue: '' },
