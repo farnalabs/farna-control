@@ -49,10 +49,11 @@ def _canonicalize_env_keys(node_data: dict[str, Any]) -> dict[str, Any]:
     canonical: dict[str, Any] = {}
     for raw_key, value in env_vars.items():
         key = raw_key
-        if raw_key.startswith("MODULO_"):
+        doubled_prefix = "FARNA_CONTROL_" + "MODULO_"
+        if raw_key.startswith(doubled_prefix):
+            key = f"FARNA_CONTROL_{raw_key.removeprefix(doubled_prefix)}"
+        elif raw_key.startswith("MODULO_"):
             key = f"FARNA_CONTROL_{raw_key.removeprefix('MODULO_')}"
-        elif raw_key.startswith("FARNA_CONTROL_MODULO_"):
-            key = f"FARNA_CONTROL_{raw_key.removeprefix('FARNA_CONTROL_MODULO_')}"
         canonical[key] = value
     node_data["env_vars"] = canonical
     return node_data

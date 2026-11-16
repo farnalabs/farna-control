@@ -1452,7 +1452,7 @@ async def _apply_isolation_via_provider(
         api_key = get_e2b_api_key() or os.environ.get("E2B_API_KEY")
         provider = _build_isolation_provider(api_key) if api_key else None
         if provider is None:
-            raise SandboxTierRefusedError("sandbox isolation could not resolve the E2B runtime provider (set FARNA_CONTROL_MODULO_E2B_API_KEY and restart)")
+            raise SandboxTierRefusedError("sandbox isolation could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_API_KEY and restart)")
     elif borrowed_provider is not None:
         # FAR-1051: reuse the dispatch's already-resolved provider — no hub
         # build per policy step; the dispatch's finally closes it.
@@ -3927,12 +3927,12 @@ async def _resolve_schema_validator_mode(
     """
     # Fast path: no session factory → env/default
     if session_factory is None:
-        return os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        return os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
 
     _org_raw = state.get("_org_id")
     _org_uuid = _parse_uuid_opt(_org_raw)
     if _org_uuid is None:
-        return os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        return os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
 
     from farna.db.settings_resolver import resolve_schema_validator_mode
 
@@ -3955,7 +3955,7 @@ async def _resolve_schema_validator_mode(
             },
         )
         # Return cached value if available, else env/default
-        return cached or os.environ.get("FARNA_CONTROL_MODULO_SCHEMA_VALIDATOR_MODE", "lenient")
+        return cached or os.environ.get("FARNA_CONTROL_SCHEMA_VALIDATOR_MODE", "lenient")
     else:
         # Cache the resolved value as last-known-good
         _SCHEMA_MODE_CACHE[str(_org_uuid)] = mode
@@ -10103,10 +10103,10 @@ def _build_sandbox_envs(
        ``GITHUB_TOKEN`` override keeps working because this layer merges LAST.
     """
     sandbox_envs: dict[str, str] = {
-        "FARNA_CONTROL_MODULO_RUN_ID": run_id,
-        "FARNA_CONTROL_MODULO_PIPELINE_ID": pipeline_id,
-        "FARNA_CONTROL_MODULO_ORG_ID": org_id,
-        "FARNA_CONTROL_MODULO_INPUT_PAYLOAD": input_json,
+        "FARNA_CONTROL_RUN_ID": run_id,
+        "FARNA_CONTROL_PIPELINE_ID": pipeline_id,
+        "FARNA_CONTROL_ORG_ID": org_id,
+        "FARNA_CONTROL_INPUT_PAYLOAD": input_json,
     }
     if sandbox_mode != "script":
         sandbox_envs["APP_MODULO_OPENCODE_API_KEY"] = os.environ.get("APP_MODULO_OPENCODE_API_KEY", "")
@@ -11341,7 +11341,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         # written (they're advisory), but the env var must be present for any
         # consumer that checks it.
         _schema_dir_for_sandbox: dict[str, str] = {
-            "FARNA_CONTROL_MODULO_SCHEMA_DIR": "/home/user/schemas",
+            "FARNA_CONTROL_SCHEMA_DIR": "/home/user/schemas",
         }
 
         _provision_timeout = _sandbox_provisioning_timeout()
@@ -11614,7 +11614,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         _node_scope = node_def.get("capability_scope") or {}
         _allowed_tools = _node_scope.get("allowed_tools")
         if _allowed_tools:
-            env_vars_extra["FARNA_CONTROL_MODULO_ALLOWED_TOOLS"] = ",".join(str(t) for t in _allowed_tools)
+            env_vars_extra["FARNA_CONTROL_ALLOWED_TOOLS"] = ",".join(str(t) for t in _allowed_tools)
 
         # FAR-212 PR B: apply the enforced sandbox policy AFTER the Modulo-owned
         # context files / prompt / input are written but BEFORE the agent/script
@@ -11959,7 +11959,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # issuance failure leaves the key absent (the sandbox still runs).
             _issued_credential = await _issue_run_credential_for_sandbox()
             if _issued_credential is not None:
-                sandbox_envs["FARNA_CONTROL_MODULO_API_KEY"] = _issued_credential.secret
+                sandbox_envs["FARNA_CONTROL_API_KEY"] = _issued_credential.secret
                 sandbox_envs[RUN_CREDENTIAL_PROVENANCE_ENV] = _issued_credential.provenance
             _bridge_wrapped_command = rendered_agent_command
             # FAR-211: start the loop-interception callback server + write
@@ -12013,8 +12013,8 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                             ),
                             timeout=_SANDBOX_IO_TIMEOUT,
                         )
-                        sandbox_envs["FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT"] = f"http://127.0.0.1:{_bridge_port}"
-                        sandbox_envs["FARNA_CONTROL_MODULO_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
+                        sandbox_envs["FARNA_CONTROL_BRIDGE_ENDPOINT"] = f"http://127.0.0.1:{_bridge_port}"
+                        sandbox_envs["FARNA_CONTROL_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
                         # FAR-664 (newline-safe bridge handoff): the rendered
                         # agent command is handed to the bridge via a FILE, not
                         # inline after ``--``. An inline interpolation word-

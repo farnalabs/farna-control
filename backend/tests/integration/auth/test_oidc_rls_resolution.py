@@ -157,7 +157,7 @@ async def two_orgs(db_engine: AsyncEngine) -> dict[str, str]:
 async def system_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Engine on the real ``farna_control_system`` role (BYPASSRLS)."""
     engine = create_async_engine(
-        os.environ["FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL"],
+        os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"],
         echo=False,
         poolclass=NullPool,
     )

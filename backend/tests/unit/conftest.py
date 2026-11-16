@@ -14,7 +14,7 @@ from tests.unit._e2b_sandbox_bridge import install_bridge
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://localhost/test")
 os.environ.setdefault("SECRET_KEY", "a" * 32)
-os.environ.setdefault("FARNA_CONTROL_MODULO_ADMIN_PASSWORD", "test")
+os.environ.setdefault("FARNA_CONTROL_ADMIN_PASSWORD", "test")
 
 
 @pytest.fixture(autouse=True)
@@ -587,7 +587,7 @@ def _far681_any_credential_default(request: pytest.FixtureRequest) -> None:
 # ``MODULO_TEST_COROUTINE_ATTRIBUTION=0`` disables the instrumentation for a
 # local debugging session. It is ON by default, so the CI unit run (``pytest
 # tests/unit/``) always has it without extra wiring.
-_ATTRIBUTION_ENV = "FARNA_CONTROL_MODULO_TEST_COROUTINE_ATTRIBUTION"
+_ATTRIBUTION_ENV = "FARNA_CONTROL_TEST_COROUTINE_ATTRIBUTION"
 _ATTRIBUTION_ENABLED = os.environ.get(_ATTRIBUTION_ENV, "1").strip().lower() not in {"0", "false", "no", "off"}
 
 #: ``sys.set_coroutine_origin_tracking_depth`` frames per coroutine. Deep enough

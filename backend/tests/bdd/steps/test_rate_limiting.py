@@ -423,7 +423,7 @@ def when_post_with_bypass(
     with TestClient(app) as client:
         resp = client.post(
             path,
-            headers={"FARNA_CONTROL_MODULO_RATELIMIT_BYPASS_TOKEN": ctx.get("bypass_token", "")},
+            headers={"FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN": ctx.get("bypass_token", "")},
         )
         _store_response(request, ctx, resp)
 

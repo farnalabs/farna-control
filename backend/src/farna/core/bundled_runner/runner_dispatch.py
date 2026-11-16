@@ -337,7 +337,7 @@ def _build_dispatch_hub_provider(profile: Any) -> tuple[Any, Any]:
         settings = get_settings()
         # FAR-1135: MODULO_MAX_LOCAL_CONCURRENCY is hot-reloadable.
         concurrency = override_int_or(
-            "FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY",
+            "FARNA_CONTROL_MAX_LOCAL_CONCURRENCY",
             int(getattr(settings, "modulo_max_local_concurrency", 2) or 2),
         )
         hub = build_hub(max_local_concurrency=concurrency)
@@ -1199,7 +1199,7 @@ async def _resolve_sandbox_envs_with_script_setup(
     node_scope = node_def.get("capability_scope") or {}
     allowed_tools = node_scope.get("allowed_tools")
     if allowed_tools:
-        env_vars_extra["FARNA_CONTROL_MODULO_ALLOWED_TOOLS"] = ",".join(str(t) for t in allowed_tools)
+        env_vars_extra["FARNA_CONTROL_ALLOWED_TOOLS"] = ",".join(str(t) for t in allowed_tools)
     sandbox_envs = _build_sandbox_envs(
         run_id=run_id,
         pipeline_id=pipeline_id,
@@ -1248,7 +1248,7 @@ async def _resolve_sandbox_envs_with_script_setup(
         sandbox_timeout=sandbox_timeout,
     )
     if issued is not None:
-        sandbox_envs["FARNA_CONTROL_MODULO_API_KEY"] = issued.secret
+        sandbox_envs["FARNA_CONTROL_API_KEY"] = issued.secret
         sandbox_envs[RUN_CREDENTIAL_PROVENANCE_ENV] = issued.provenance
 
     return sandbox_envs, script_lease_claimed
@@ -2229,8 +2229,8 @@ async def _maybe_start_loop_bridge(
             "/home/user/modulo_bridge_config.json",
             json.dumps(loop_intercept.model_dump(mode="json")),
         )
-        sandbox_envs["FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT"] = f"http://host.docker.internal:{bridge_port}"
-        sandbox_envs["FARNA_CONTROL_MODULO_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
+        sandbox_envs["FARNA_CONTROL_BRIDGE_ENDPOINT"] = f"http://host.docker.internal:{bridge_port}"
+        sandbox_envs["FARNA_CONTROL_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
         return f"python3 /home/user/modulo_bridge.py --wrap -- {rendered_command}"
     except asyncio.CancelledError:
         raise

@@ -54,7 +54,7 @@ _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
         "src/farna/db/migrations/env.py",
         "src/farna/api/main.py",
     ),
-    "FARNA_CONTROL_MODULO_ENV": (
+    "FARNA_CONTROL_ENV": (
         "src/farna/api/middleware/catch_all.py",
         "src/farna/api/routes/deployment.py",
         "src/farna/api/routes/webhooks.py",
@@ -65,9 +65,9 @@ _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
         "src/farna/core/error_tracking/__init__.py",
     ),
     # MODULO_ENV is a legacy alias used in the compose but the code reads
-    # FARNA_CONTROL_MODULO_ENV. The compose should be fixed to use the canonical
+    # FARNA_CONTROL_ENV. The compose should be fixed to use the canonical
     # name; this allowlist entry prevents the test from failing on the pre-existing
-    # compose bug. Read sites are the same as FARNA_CONTROL_MODULO_ENV.
+    # compose bug. Read sites are the same as FARNA_CONTROL_ENV.
     "MODULO_ENV": (
         "src/farna/api/middleware/catch_all.py",
         "src/farna/api/routes/deployment.py",
@@ -275,7 +275,7 @@ def test_env_example_documents_the_required_secrets():
 
     for name in ("SECRET_KEY", "FERNET_KEY"):
         assert name in active, f".env.prod.example must document {name} as a settable variable - it is required by Settings and has no default"
-    for stale in ("FARNA_CONTROL_MODULO_SECRET_KEY", "FARNA_CONTROL_MODULO_REDIS_URL", "FARNA_CONTROL_MODULO_FERNET_KEY"):
+    for stale in ("FARNA_CONTROL_SECRET_KEY", "FARNA_CONTROL_REDIS_URL", "FARNA_CONTROL_FERNET_KEY"):
         assert stale not in active, f".env.prod.example still documents {stale}, which Settings does not read - an operator setting it gets a crash-looping backend (FAR-1506)"
 
 

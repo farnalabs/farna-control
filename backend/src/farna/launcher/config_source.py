@@ -211,7 +211,7 @@ class LauncherConfigSource:
         resolved: dict[str, Any] = {}
         for env_name, field_name in {
             **_COMPOSED_FIELDS,
-            "FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL": "farna_control_system_database_url",
+            "FARNA_CONTROL_SYSTEM_DATABASE_URL": "farna_control_system_database_url",
         }.items():
             value = _resolve_composed_field(
                 env_name,

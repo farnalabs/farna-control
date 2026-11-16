@@ -174,7 +174,7 @@ async def _ingest_webhook_dispatch_error(run_id: str, org_id: str, detail: str) 
                     "message": f"webhook dispatch failed for run {run_id}: {detail}",
                     "source": "saq",
                     "context_json": {"function": "webhook_dispatch", "run_id": run_id},
-                    "environment": os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+                    "environment": os.environ.get("FARNA_CONTROL_ENV", "development"),
                     "version": get_version(),
                 },
             )
