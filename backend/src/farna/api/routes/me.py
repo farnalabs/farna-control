@@ -22,7 +22,7 @@ from farna.api.routes.admin_assistant import (
     get_user_skill_or_404,
     get_user_skills,
 )
-from farna.api.routes.auth import mint_password_change_response
+from farna.api.routes.auth import PasswordChangeResponse, mint_password_change_response
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.auth.passwords import hash_password, validate_password_strength, verify_password
@@ -234,6 +234,7 @@ async def update_hitl_email_preferences(
 
 @router.put(
     "/me/password",
+    response_model=PasswordChangeResponse,
     status_code=status.HTTP_200_OK,
     dependencies=[
         Depends(
