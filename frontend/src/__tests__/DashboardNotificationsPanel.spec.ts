@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick, ref } from 'vue'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
 const { mockFetchNotifications, mockReviewLater, mockFetchUnreadCount, mockRegisterHandler, mockDismissNotification, mockMarkAllRead, mockFetchDashboardNotifications } = vi.hoisted(() => ({
@@ -117,6 +117,17 @@ describe('DashboardNotificationsPanel', () => {
     // an unconfigured mock.
     mockMarkAllRead.mockResolvedValue({ status: 'marked_read', marked: 0 })
     mockFetchDashboardNotifications.mockResolvedValue({ notifications: [], total_unread: 0 })
+  })
+
+  it('always starts collapsed without restoring a persisted expanded preference', async () => {
+    localStorage.setItem('notif-panel-collapsed', 'false')
+    const wrapper = mount(DashboardNotificationsPanel)
+    await flushPromises()
+    await nextTick()
+
+    const toggle = wrapper.find('[data-testid="notifications-panel-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('#notifications-panel-content').exists()).toBe(false)
   })
 
   it('always renders the "View all notifications" link when expanded', async () => {

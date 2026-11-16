@@ -199,8 +199,8 @@
             <Sparkline class="h-16 w-full" :data="trendRejectionRate" :labels="trendLabels" unit="%" color="hsl(var(--destructive-text))" :show-y-axis="true" :show-x-ticks="true" />
           </div>
         </div>
-        <div v-else class="flex flex-col items-center justify-center gap-1 py-6 text-sm text-muted-foreground" aria-live="polite">
-          <p class="italic">{{ $t('views.DashboardView.no_data_trends') }}</p>
+        <div v-else class="mt-2 flex h-12 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground" aria-live="polite">
+          {{ $t('views.DashboardView.no_data_trends') }}
         </div>
       </div>
       <!-- Recent runs list -->
@@ -252,6 +252,7 @@ import { useSystemMapsStore } from '../stores/systemMaps'
 import { useDashboardStore } from '../stores/dashboard'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import StatCard from '../components/StatCard.vue'
 import { DataTable, type Column } from '../components/ui/data-table'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'
