@@ -1288,8 +1288,7 @@ class Settings(BaseSettings):
         elif self.modulo_db.lower() in ("mariadb", "mysql"):
             _log.warning("settings.mariadb_mode")
             if self.database_url.startswith(_POSTGRES_ASYNC_PREFIX):
-                self.database_url = "mysql+aiomysql://farna_control:farna_control@localhost:5435/farna_control"
-                _log.info("settings.database_url_auto_set", extra={"database_url": self.database_url})
+                raise ValueError(f"MODULO_DB is set to '{self.modulo_db}' but DATABASE_URL is still a Postgres URL; set DATABASE_URL to a mysql+aiomysql:// DSN")
         return self
 
     @model_validator(mode="after")
