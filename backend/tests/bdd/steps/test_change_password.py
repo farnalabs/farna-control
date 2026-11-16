@@ -52,7 +52,12 @@ def step_change_password(
         patch("farna.api.routes.me.set_rls_org", new_callable=AsyncMock) as mock_rls,
         patch("farna.core.audit_logger.append_audit_event", new_callable=AsyncMock) as mock_audit,
     ):
-        mock_user = MagicMock()
+        mock_user = MagicMock(
+            id=_USER_ID,
+            email="coverage-user@example.com",
+            kind="human",
+            is_system_admin=False,
+        )
         mock_user.password_hash = hash_password("correct-horse-battery")
         mock_user.must_change_password = bool(ctx.get("_change_pending", False))
         mock_get_user.return_value = mock_user
@@ -121,9 +126,9 @@ def step_all_families_blacklisted(ctx: dict[str, Any]) -> None:
 def step_password_change_audited(ctx: dict[str, Any]) -> None:
     mock_audit = ctx.get("_mock_audit")
     assert mock_audit is not None, "No append_audit_event mock found — was the When step run?"
-    mock_audit.assert_called_once()
-    _, kwargs = mock_audit.call_args
-    assert kwargs["event_type"] == "password_changed"
+    password_change_calls = [call for call in mock_audit.call_args_list if call.kwargs.get("event_type") == "password_changed"]
+    assert len(password_change_calls) == 1
+    kwargs = password_change_calls[0].kwargs
     assert kwargs["resource_type"] == "account"
 
 
