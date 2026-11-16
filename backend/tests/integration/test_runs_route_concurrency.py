@@ -47,7 +47,7 @@ from farna.api.main import app
 from farna.auth.jwt import create_access_token
 from farna.settings import Settings, get_settings
 
-os.environ.setdefault("FARNA_CONTROL_MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("REDIS_URL", "")
 
 pytestmark = pytest.mark.integration

@@ -442,14 +442,14 @@ async def test_apply_sandbox_policy_multi_host_helper_reachable() -> None:
         git_credentials="scoped",
         egress_policy="default",
         egress_allowlist=None,
-        allowed_hosts={"github.com": "FARNA_CONTROL_MODULO_GIT_CRED_0", "gitlab.com": "FARNA_CONTROL_MODULO_GIT_CRED_1"},
+        allowed_hosts={"github.com": "FARNA_CONTROL_GIT_CRED_0", "gitlab.com": "FARNA_CONTROL_GIT_CRED_1"},
     )
     # The installed helper must be the multi-host variant (both host case arms).
     assert "github.com" in sandbox.commands.runs[0]
     assert "gitlab.com" in sandbox.commands.runs[0]
     # Must not be the single-host scoped script (which only ever grants
     # github.com and never references a second host).
-    assert "FARNA_CONTROL_MODULO_GIT_CRED_1" in sandbox.commands.runs[0]
+    assert "FARNA_CONTROL_GIT_CRED_1" in sandbox.commands.runs[0]
 
 
 @pytest.mark.asyncio
@@ -466,7 +466,7 @@ async def test_apply_sandbox_policy_scoped_without_allowed_hosts_is_single_host(
         allowed_hosts=None,
     )
     assert "github.com" in sandbox.commands.runs[0]
-    assert "FARNA_CONTROL_MODULO_GIT_CRED" not in sandbox.commands.runs[0]
+    assert "FARNA_CONTROL_GIT_CRED" not in sandbox.commands.runs[0]
 
 
 @pytest.mark.asyncio
@@ -498,7 +498,7 @@ async def test_apply_sandbox_policy_multi_host_invalid_host_raises() -> None:
             git_credentials="scoped",
             egress_policy="default",
             egress_allowlist=None,
-            allowed_hosts={"bad|host": "FARNA_CONTROL_MODULO_GIT_CRED_0"},
+            allowed_hosts={"bad|host": "FARNA_CONTROL_GIT_CRED_0"},
         )
 
 
@@ -817,7 +817,7 @@ def _install_guard(bindir: Path, workdir: Path, marker: str, *, pre_spent: bool 
     result = _run_in_sh(body, cwd=workdir)
     assert result.returncode == 0, f"guard install failed: {result.stdout}\n{result.stderr}"
     assert (bindir / "gh.modulo-real").is_file(), "the real gh must be preserved before its path is shadowed"
-    assert "FARNA_CONTROL_MODULO_GH_GUARD_EOF" not in result.stderr, "install heredoc must terminate cleanly"
+    assert "FARNA_CONTROL_GH_GUARD_EOF" not in result.stderr, "install heredoc must terminate cleanly"
 
 
 def _gh(bindir: Path, workdir: Path, command: str) -> subprocess.CompletedProcess[str]:
@@ -1527,10 +1527,10 @@ async def test_harvest_gh_pr_claim_via_exec_parses_the_probe_reply() -> None:
 
     async def _present(command: list[str]) -> SimpleNamespace:
         assert command[:2] == ["sh", "-c"]
-        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_PRESENT", stderr="")
+        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_CLAIM_RECEIPT_PRESENT", stderr="")
 
     async def _absent(command: list[str]) -> SimpleNamespace:
-        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT", stderr="")
+        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT", stderr="")
 
     async def _silent(command: list[str]) -> SimpleNamespace:
         return SimpleNamespace(exit_code=0, stdout="", stderr="")
@@ -1539,7 +1539,7 @@ async def test_harvest_gh_pr_claim_via_exec_parses_the_probe_reply() -> None:
         raise RuntimeError("exec transport down")
 
     async def _nonzero(command: list[str]) -> SimpleNamespace:
-        return SimpleNamespace(exit_code=1, stdout="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_PRESENT", stderr="sh: boom")
+        return SimpleNamespace(exit_code=1, stdout="FARNA_CONTROL_CLAIM_RECEIPT_PRESENT", stderr="sh: boom")
 
     assert await harvest_gh_pr_claim_via_exec(_present, run_scope=scope) is True
     assert await harvest_gh_pr_claim_via_exec(_absent, run_scope=scope) is False
@@ -1551,7 +1551,7 @@ async def test_harvest_gh_pr_claim_via_exec_parses_the_probe_reply() -> None:
 
     async def _capture(command: list[str]) -> SimpleNamespace:
         captured.append(command[-1])
-        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT", stderr="")
+        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT", stderr="")
 
     await harvest_gh_pr_claim_via_exec(_capture, run_scope=scope)
     assert gh_pr_claim_receipt_path(scope) in captured[0]
@@ -1663,10 +1663,10 @@ async def test_harvest_bounded_returns_the_probe_result() -> None:
     scope = str(uuid.uuid4())
 
     async def _present(command: list[str]) -> SimpleNamespace:
-        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_PRESENT", stderr="")
+        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_CLAIM_RECEIPT_PRESENT", stderr="")
 
     async def _absent(command: list[str]) -> SimpleNamespace:
-        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT", stderr="")
+        return SimpleNamespace(exit_code=0, stdout="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT", stderr="")
 
     async def _boom(command: list[str]) -> SimpleNamespace:
         raise RuntimeError("exec transport down")

@@ -99,7 +99,7 @@ def _patch_node_runner(monkeypatch: pytest.MonkeyPatch) -> None:
         "ScriptSideEffectUnknownError": _FakeError,
         "SupersededNodeError": _FakeError,
         "_SandboxNodeOutput": _FakeOutput,
-        "_build_sandbox_envs": lambda **kw: {"FARNA_CONTROL_MODULO_RUN_ID": kw.get("run_id", "")},
+        "_build_sandbox_envs": lambda **kw: {"FARNA_CONTROL_RUN_ID": kw.get("run_id", "")},
         "_build_sandbox_node_envelope": lambda **kw: {"envelope": True, **kw},
         "_compute_sandbox_cost": lambda *a, **k: 0.0,
         "_configure_stall_detector": lambda **kw: SimpleNamespace(touch=lambda *a, **k: None),
@@ -297,8 +297,8 @@ async def test_resolve_sandbox_envs_fail_open_when_credential_issuance_returns_n
         input_json="{}",
         provider="runner_docker",
     )
-    assert "FARNA_CONTROL_MODULO_API_KEY" not in envs
-    assert "FARNA_CONTROL_MODULO_CREDENTIAL_PROVENANCE" not in envs
+    assert "FARNA_CONTROL_API_KEY" not in envs
+    assert "FARNA_CONTROL_CREDENTIAL_PROVENANCE" not in envs
 
 
 async def test_run_llm_mode_happy_path(patch_node_runner) -> None:
@@ -1080,7 +1080,7 @@ class _HarvestReplyProvider(_FakeProvider):
         self._harvest_reply = harvest_reply
 
     async def exec_command(self, ref, cmd, *, cmd_timeout=None):
-        if cmd and "FARNA_CONTROL_MODULO_CLAIM_RECEIPT" in cmd[-1]:
+        if cmd and "FARNA_CONTROL_CLAIM_RECEIPT" in cmd[-1]:
             self.exec_calls.append(list(cmd))
             return _ExecResult(exit_code=0, stdout=self._harvest_reply, stderr="")
         return await super().exec_command(ref, cmd, cmd_timeout=cmd_timeout)
@@ -1128,7 +1128,7 @@ async def test_flagged_node_spends_from_the_harvested_receipt_without_a_sentinel
 
     run_id, state = _fresh_flagged_state()
     provider = _HarvestReplyProvider(
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_PRESENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_PRESENT",
         stream_chunks=[("stdout", "post-create agent noise\n")],
     )
     try:
@@ -1149,7 +1149,7 @@ async def test_flagged_node_shim_read_transcript_never_spends_on_the_runner_tier
 
     run_id, state = _fresh_flagged_state()
     provider = _HarvestReplyProvider(
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT",
         stream_chunks=[("stdout", shim_created_pr_stdout(tmp_path))],
     )
     try:
@@ -1206,7 +1206,7 @@ async def test_pr_url_never_outranks_a_definitive_receipt_false_on_the_runner_ti
     )
     run_id, state = _fresh_flagged_state()
     provider = _HarvestReplyProvider(
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT",
         stream_chunks=[("stdout", f"attempted create, reporting {url}\n")],
     )
     try:
@@ -1247,7 +1247,7 @@ async def test_absent_install_leaves_the_receipt_meaningless_on_the_runner_tier(
             return await super().exec_command(ref, cmd, cmd_timeout=cmd_timeout)
 
     provider = _AbsentInstallProvider(
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT",
         stream_chunks=[("stdout", shim_created_pr_stdout(tmp_path))],
     )
     try:
@@ -1278,7 +1278,7 @@ async def test_cancel_during_the_claim_harvest_still_tears_down_on_the_runner_ti
 
     class _BlockingHarvestProvider(_FakeProvider):
         async def exec_command(self, ref, cmd, *, cmd_timeout=None):
-            if cmd and "FARNA_CONTROL_MODULO_CLAIM_RECEIPT" in cmd[-1]:
+            if cmd and "FARNA_CONTROL_CLAIM_RECEIPT" in cmd[-1]:
                 harvest_started.set()
                 await asyncio.Event().wait()  # parks until the probe is cancelled
             return await super().exec_command(ref, cmd, cmd_timeout=cmd_timeout)
@@ -1449,7 +1449,7 @@ async def test_flagged_dispatch_keeps_the_original_cancellation_when_settle_also
 
     class _BlockingHarvestProvider(_FakeProvider):
         async def exec_command(self, ref, cmd, *, cmd_timeout=None):
-            if cmd and "FARNA_CONTROL_MODULO_CLAIM_RECEIPT" in cmd[-1]:
+            if cmd and "FARNA_CONTROL_CLAIM_RECEIPT" in cmd[-1]:
                 harvest_started.set()
                 await asyncio.Event().wait()  # parks until the probe is cancelled
             return await super().exec_command(ref, cmd, cmd_timeout=cmd_timeout)

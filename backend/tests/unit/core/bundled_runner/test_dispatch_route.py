@@ -167,8 +167,8 @@ async def test_legacy_inert_local_docker_provider_is_dispatch_unbound() -> None:
 
 async def test_runner_docker_route_resolves_hub_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     """With the registration signal set, the hub resolves the Docker provider."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "unit-test-machine")
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", "tcp://localhost:2375")
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "unit-test-machine")
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", "tcp://localhost:2375")
     route = await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("runner_docker")), _ORG, _PROFILE_ID)
     try:
         assert route.provider_type == "runner_docker"
@@ -187,9 +187,9 @@ async def test_runner_docker_without_endpoint_env_is_dispatch_unbound(monkeypatc
     """Registration matrix (ADR 029): with NO MODULO_RUNNER_* and no Docker
     endpoint env, `runner_docker` is not registered — the typed config error
     carries remediation copy instead of a silent fallback."""
-    for var in ("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "MODULO_DOCKER_HOST", "DOCKER_HOST", "FARNA_CONTROL_MODULO_DOCKER_HOST"):
+    for var in ("FARNA_CONTROL_RUNNER_MACHINE_ID", "MODULO_DOCKER_HOST", "DOCKER_HOST", "FARNA_CONTROL_DOCKER_HOST"):
         monkeypatch.delenv(var, raising=False)
-    with pytest.raises(SandboxDispatchUnboundError, match="MODULO_DOCKER_HOST"):
+    with pytest.raises(SandboxDispatchUnboundError, match="FARNA_CONTROL_DOCKER_HOST"):
         await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("runner_docker")), _ORG, _PROFILE_ID)
 
 
@@ -207,7 +207,7 @@ async def test_kubernetes_profile_resolves_hub_provider(monkeypatch: pytest.Monk
     """A kubernetes profile resolves through the hub, mirroring runner_docker:
     provider + hub ride the route so node_runner reuses that ONE instance as
     the dispatch provider (and disposes the hub)."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", "1")
+    monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", "1")
     route = await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("kubernetes")), _ORG, _PROFILE_ID)
     try:
         assert route.provider_type == "kubernetes"
@@ -231,7 +231,7 @@ async def test_kubernetes_without_image_ref_is_dispatch_unbound(monkeypatch: pyt
     through to the node's E2B ``template_id`` as the pod image and fail at
     provision time (ImagePullBackOff). Route resolution fails LOUD instead,
     naming the missing image_ref, before the hub is even built."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", "1")
+    monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", "1")
 
     with pytest.raises(SandboxDispatchUnboundError, match="image_ref"):
         await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("kubernetes", image_ref=None)), _ORG, _PROFILE_ID)
@@ -241,11 +241,11 @@ async def test_kubernetes_without_opt_in_is_dispatch_unbound(monkeypatch: pytest
     """No silent fallback: without ``MODULO_KUBERNETES_ENABLED`` the typed
     config error carries the remediation env var — never E2B, never local,
     even with an E2B key sitting in the environment."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
 
-    with pytest.raises(SandboxDispatchUnboundError, match="FARNA_CONTROL_MODULO_KUBERNETES_ENABLED"):
+    with pytest.raises(SandboxDispatchUnboundError, match="FARNA_CONTROL_KUBERNETES_ENABLED"):
         await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("kubernetes")), _ORG, _PROFILE_ID)
 
 
@@ -276,7 +276,7 @@ def test_placeholder_digest_detection() -> None:
 async def test_runner_docker_placeholder_digest_is_dispatch_unbound(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail-loud (don't silently break at container-create) when the profile still
     carries the release-advanced placeholder digest — a known GA follow-up."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "unit-test-machine")
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "unit-test-machine")
     placeholder_profile = _profile(
         "runner_docker",
         image_ref="modulo-runner:opencode@sha256:" + "0" * 64,
@@ -437,7 +437,7 @@ def test_workspace_spec_kubernetes_deny_all_accepted_when_chart_policy_deployed(
     """FAR-2068: with the chart's workspace NetworkPolicy deployed (the chart
     injects the signal), a kubernetes deny_all profile maps to the spec's
     'none' egress and records the DECLARED posture metadata."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY", "enabled")
+    monkeypatch.setenv("FARNA_CONTROL_WORKSPACE_NETWORK_POLICY", "enabled")
     profile = _profile("kubernetes", network_policy="none")
     spec = _workspace_spec_for_dispatch(
         profile,
@@ -456,7 +456,7 @@ def test_workspace_spec_kubernetes_deny_all_refused_without_chart_policy(
     """FAR-2068 fail-closed default: with no workspace NetworkPolicy deployed,
     the chart injects no signal and a deny_all profile is refused at dispatch
     instead of certifying an enforcement nothing performs."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_WORKSPACE_NETWORK_POLICY", raising=False)
     profile = _profile("kubernetes", network_policy="none")
     with pytest.raises(SandboxTierRefusedError, match="workspace NetworkPolicy"):
         _workspace_spec_for_dispatch(

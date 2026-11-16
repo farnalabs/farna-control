@@ -87,7 +87,7 @@ _EGRESS_RESTRICTIVE_POLICIES: frozenset[str] = frozenset({"deny_all", "selected"
 # sandboxes); the creation marker drives the orphan sweep's grace window and
 # 24h max-lifetime backstop; the run-id key is what the sweep
 # cross-references against ACTIVE runs.
-_DEPLOYMENT_IDENTITY_ENV = "FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID"
+_DEPLOYMENT_IDENTITY_ENV = "FARNA_CONTROL_RUNNER_MACHINE_ID"
 _DEPLOYMENT_IDENTITY_METADATA_KEY = "modulo.machine.id"
 _CREATED_AT_METADATA_KEY = "modulo.created_at"
 _RUN_ID_METADATA_KEY = "modulo.run.id"

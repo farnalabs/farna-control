@@ -12,7 +12,7 @@ Exercises, without a live sandbox or network:
    failure (never raises).
 3. **Pinned payloads**: the payloads the R1 parity suite pinned are
    asserted directly against the surviving primitive.
-4. Key fallback: runtime bridge → legacy ``FARNA_CONTROL_E2B_KEY`` → constructor key.
+4. Key fallback: runtime bridge → legacy ``E2B_API_KEY`` → constructor key.
 5. Hostname confinement: ``api.e2b.app`` appears only in the provider module.
 """
 
@@ -98,8 +98,8 @@ async def test_abc_default_read_log_tail_raises_typed_capability_unsupported() -
 
 async def test_e2b_read_log_tail_parses_and_bounds_like_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = b'{"logEntries": [{"message": "error line", "level": "error"},{"message": "plain line", "level": "debug"},{"fields": "fields-only", "level": "warn"}]}'
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen", side_effect=lambda req, timeout: _fake_urlopen(payload)) as urlopen:
         tail = await provider.read_log_tail("sbx-1", max_bytes=6000)
@@ -112,7 +112,7 @@ async def test_e2b_read_log_tail_parses_and_bounds_like_legacy(monkeypatch: pyte
 async def test_e2b_read_log_tail_invalid_ref_returns_empty_without_fetch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen") as urlopen:
         assert not await provider.read_log_tail("", max_bytes=100)
@@ -122,7 +122,7 @@ async def test_e2b_read_log_tail_invalid_ref_returns_empty_without_fetch(
 
 async def test_e2b_read_log_tail_network_failure_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fetch failure yields ``b""`` — never raises (T6 contract)."""
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen", side_effect=OSError("network down")):
         assert not await provider.read_log_tail("sbx-netfail", max_bytes=100)
@@ -130,7 +130,7 @@ async def test_e2b_read_log_tail_network_failure_returns_empty(monkeypatch: pyte
 
 async def test_e2b_read_log_tail_max_bytes_bounds_newest_content(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = b'{"logEntries": [{"message": "' + (b"y" * 500) + b'", "level": "info"}]}'
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen", lambda req, timeout: _fake_urlopen(payload)):
         tail = await provider.read_log_tail("sbx-1", max_bytes=50)
@@ -139,13 +139,13 @@ async def test_e2b_read_log_tail_max_bytes_bounds_newest_content(monkeypatch: py
 
 
 async def test_e2b_read_log_tail_key_falls_back_to_legacy_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key chain: bridge → legacy ``FARNA_CONTROL_E2B_KEY`` → constructor key.
+    """Key chain: bridge → legacy ``E2B_API_KEY`` → constructor key.
 
     With no bridge value and no env var the constructor-held key is used;
     the legacy env var wins over it (legacy helper's order).
     """
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "legacy-env-key")
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.setenv("E2B_API_KEY", "legacy-env-key")
     provider = E2BRuntimeProvider(api_key="ctor-key")
     captured: list[str] = []
 
@@ -175,8 +175,8 @@ async def test_e2b_read_log_tail_skips_non_dict_and_empty_entries(monkeypatch: p
         b'{"message": "kept", "level": "info"}'  # survives
         b"]}"
     )
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "test-key")
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.setenv("E2B_API_KEY", "test-key")
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen", lambda req, timeout: _fake_urlopen(payload)):
         tail = await provider.read_log_tail("sbx-1", max_bytes=6000)
@@ -190,8 +190,8 @@ async def test_e2b_read_log_tail_no_key_returns_empty(monkeypatch: pytest.Monkey
     the defensive ``if not api_key`` guard is to clear it — proving the guard
     returns empty without touching the network.
     """
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("E2B_API_KEY", raising=False)
     provider = E2BRuntimeProvider(api_key="ctor-key")
     provider._api_key = None  # type: ignore[assignment]
     with patch("urllib.request.urlopen") as urlopen:
@@ -216,8 +216,8 @@ _PAYOUT_EXPECTATIONS: dict[bytes, bytes] = {
 @pytest.mark.parametrize("payload", _PARITY_PAYLOADS, ids=["preferred-levels", "non-list", "invalid-json", "over-bound"])
 async def test_primitive_handles_every_pinned_payload(payload: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """Each pinned payload yields the expected tail through the primitive."""
-    monkeypatch.delenv("FARNA_CONTROL_E2B_KEY", raising=False)
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "parity-key")
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
+    monkeypatch.setenv("E2B_API_KEY", "parity-key")
     provider = E2BRuntimeProvider(api_key="parity-key")
     with patch("urllib.request.urlopen", lambda req, timeout: _fake_urlopen(payload)):
         tail = await provider.read_log_tail("sbx-parity", max_bytes=6000)
@@ -231,7 +231,7 @@ async def test_primitive_handles_every_pinned_payload(payload: bytes, monkeypatc
 
 async def test_primitive_fails_open_on_network_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fetch failure yields an empty tail \u2014 never raises (T6 contract)."""
-    monkeypatch.setenv("FARNA_CONTROL_E2B_KEY", "parity-key")
+    monkeypatch.setenv("E2B_API_KEY", "parity-key")
     provider = E2BRuntimeProvider(api_key="parity-key")
     with patch("urllib.request.urlopen", side_effect=OSError("down")):
         assert not await provider.read_log_tail("sbx-parity", max_bytes=6000)

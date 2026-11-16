@@ -209,7 +209,7 @@ def rehearsal_migration_db(monkeypatch):
     with monkeypatch.context() as m:
         m.setenv("DATABASE_URL", raw)
         m.setenv("DATABASE_ADMIN_URL", raw)
-        m.setenv("FARNA_CONTROL_MODULO_BREAK_GLASS_DATABASE_URL", bg_url)
+        m.setenv("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL", bg_url)
         from farna.db.bootstrap_role import bootstrap_roles
 
         _asyncio_run(bootstrap_roles(raw, app_url))

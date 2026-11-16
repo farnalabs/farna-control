@@ -220,7 +220,7 @@ def create_local_provider_from_env() -> LocalRuntimeProvider:
     """
     from farna.core.runtime_config.key_bridge import override_or
 
-    raw = override_or("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", os.environ.get("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", "2"))
+    raw = override_or("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", os.environ.get("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", "2"))
     try:
         max_concurrency = max(1, int(raw))
     except ValueError:
