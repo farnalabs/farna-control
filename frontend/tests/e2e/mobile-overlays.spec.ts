@@ -23,6 +23,16 @@ async function boot(page: Page, env: TestEnv, path: string): Promise<void> {
   test.setTimeout(90_000)
   if (env.name === 'local') {
     await setupLocalMockApi(page)
+    await page.route('**/api/v1/api-keys**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(route.request().url().includes('/mcp-config') ? { mcp_url: 'https://mcp.modulo.run' } : []),
+      }),
+    )
+    await page.route('**/api/v1/mcp/oauth/clients**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    )
     await page.addInitScript(([token, refresh]) => {
       localStorage.setItem('modulo_access_token', token)
       localStorage.setItem('modulo_refresh_token', refresh)
@@ -69,19 +79,37 @@ test.describe('mobile overlays (FAR-2540)', () => {
     await expect(dropdown).toHaveCount(0)
   })
 
-  test('MCP Client select panel stays fully inside the viewport', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+  test('MCP Client select stays inside its card and its open panel stays on screen', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
     await boot(page, env, '/settings/mcp')
 
     const select = page.locator('#settingsmcpview-client')
     await select.scrollIntoViewIfNeeded()
-    await select.click()
+    await expect(select).toBeVisible()
 
+    const overflow = () =>
+      page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
+    // (a) no sideways page scroll, (b) the trigger sits inside its card.
+    expect(await overflow()).toBeLessThanOrEqual(0)
+    const card = page.locator('.card-content').filter({ has: select })
+    const cardBox = (await card.boundingBox())!
+    const trigger = (await select.boundingBox())!
+    expect(trigger.x).toBeGreaterThanOrEqual(cardBox.x - 1)
+    expect(trigger.x + trigger.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1)
+
+    await select.click()
     const panel = page.locator('.p-select-overlay')
     await expect(panel).toBeVisible()
-    const box = await panel.boundingBox()
-    const viewport = page.viewportSize()
-    expect(box).not.toBeNull()
-    expect(box!.x).toBeGreaterThanOrEqual(0)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width)
+    const box = (await panel.boundingBox())!
+    const viewportWidth = page.viewportSize()!.width
+
+    // (c) the open panel is on screen horizontally and anchored to the trigger.
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(viewportWidth)
+    expect(await overflow()).toBeLessThanOrEqual(0)
+    const ANCHOR_TOLERANCE_PX = 8
+    const belowGap = Math.abs(box.y - (trigger.y + trigger.height))
+    const aboveGap = Math.abs(box.y + box.height - trigger.y)
+    expect(Math.min(belowGap, aboveGap)).toBeLessThanOrEqual(ANCHOR_TOLERANCE_PX)
   })
 })

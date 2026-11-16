@@ -14,7 +14,8 @@
     Consumer layout is unchanged - the wrapper renders no visible text.  See
     AgentRunnerBindings.vue for the same pattern.
   -->
-  <label ref="rootEl">
+  <!-- FAR-2540: min-w-0 max-w-full lets this wrapper (a flex item in consumer rows) shrink below the Select's content width instead of overflowing its row on narrow screens. -->
+  <label ref="rootEl" class="min-w-0 max-w-full">
     <Select
       v-bind="forwardedAttrs"
       :input-id="resolvedInputId"
