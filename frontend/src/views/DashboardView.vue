@@ -120,7 +120,9 @@
           <h2 class="text-base font-semibold">{{ $t('views.DashboardView.team_breakdown') }}</h2>
           <span class="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">{{ $t('views.DashboardView.team') }}</span>
         </div>
-        <table class="w-full text-sm">
+        <!-- FAR-2539: clip at the card edge and scroll inside it on phones. -->
+        <div class="max-w-full overflow-x-auto" data-scroll="team-breakdown">
+        <table class="w-full min-w-max text-sm">
           <thead>
             <tr class="border-b text-left text-muted-foreground">
               <th class="pb-2 font-medium">{{ $t('views.DashboardView.team') }}</th>
@@ -171,6 +173,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <!-- Trend chart section -->
       <div v-if="planStore.featureEnabled('dashboard_charts')" class="card p-4" data-testid="dashboard-run-activity">

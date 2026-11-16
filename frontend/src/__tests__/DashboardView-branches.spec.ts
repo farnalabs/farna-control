@@ -1084,3 +1084,42 @@ describe('DashboardView branches — computed guards', () => {
     wrapper.unmount()
   })
 })
+
+// ── Team Breakdown mobile overflow (FAR-2539) ───────────────────────────
+describe('DashboardView branches — team breakdown mobile overflow', () => {
+  it('scrolls the table inside a clipping wrapper instead of painting past the card', async () => {
+    const teamSummaryData = {
+      ...mockSummaryData,
+      teams: [
+        {
+          id: 'team-a',
+          name: 'Alpha Team',
+          total_runs: 80,
+          active_pipelines: 4,
+          run_counts_by_status: { running: 2, awaiting_human: 1, failed: 3, idle: 7 },
+        },
+      ],
+    }
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') {
+        return Promise.resolve({ data: teamSummaryData, error: undefined })
+      }
+      if (url === '/api/v1/plan') return Promise.resolve({ data: mockPlanData, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+    const { usePlanStore } = await import('../stores/planStore')
+    setActivePinia(createPinia())
+    usePlanStore().currentTier = 'team'
+
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    const scroll = wrapper.get('[data-scroll="team-breakdown"]')
+    expect(scroll.classes()).toContain('overflow-x-auto')
+    expect(scroll.classes()).toContain('max-w-full')
+    expect(scroll.get('table').classes()).toContain('min-w-max')
+    expect(scroll.find('[data-testid="dashboard-team-row-team-a"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+})
