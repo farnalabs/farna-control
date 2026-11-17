@@ -151,7 +151,7 @@ class RuntimeProviderHub:
         Like the other factory arms this is an EXPLICIT configuration path —
         the caller naming the provider is the opt-in (the environment-driven
         :func:`modulo.core.runtime_provider.build_hub` carries the
-        ``MODULO_KUBERNETES_ENABLED`` gate instead). A provider type that is
+        ``FARNA_CONTROL_KUBERNETES_ENABLED`` gate instead). A provider type that is
         in the vocabulary but unhandled here still warns-and-skips; an
         unrecognised type raises :class:`UnknownProviderTypeError`.
         """
@@ -226,7 +226,7 @@ class RuntimeProviderHub:
         # FAR-1051 review: honour the same per-provider config keys
         # the docker/e2b arms do. Only pass keys the caller actually
         # supplied so the provider's own env/default fallbacks
-        # (MODULO_KUBERNETES_NAMESPACE, KUBECONFIG, etc.) still apply.
+        # (FARNA_CONTROL_KUBERNETES_NAMESPACE, KUBECONFIG, etc.) still apply.
         kubernetes_kwargs: dict[str, Any] = {key: provider_config[key] for key in ("namespace", "default_image", "kubeconfig", "provision_timeout_s") if key in provider_config}
         kubernetes_provider = KubernetesRuntimeProvider(**kubernetes_kwargs)
         self._register_or_warn(provider_name, kubernetes_provider)

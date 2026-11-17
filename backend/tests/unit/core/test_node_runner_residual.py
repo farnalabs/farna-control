@@ -261,7 +261,7 @@ def test_bridge_escalation_failure_detail_parses_marker():
 
 
 async def test_read_log_tail_via_provider_resolves_e2b_override(monkeypatch: pytest.MonkeyPatch):
-    """FAR-1159 prove-the-fix: the log probe resolves MODULO_E2B_API_KEY via
+    """FAR-1159 prove-the-fix: the log probe resolves FARNA_CONTROL_E2B_API_KEY via
     the runtime-config bridge and hands it to the provider builder — an
     override wins over the legacy env var (fails without the bridge: the
     builder would receive the stale env key)."""

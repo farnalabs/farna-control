@@ -8,7 +8,7 @@ metadata:
 data:
   FARNA_CONTROL_DB: "{{ .Values.backend.env.FARNA_CONTROL_DB | default "postgres" }}"
   FARNA_CONTROL_LOG_LEVEL: "{{ .Values.backend.env.FARNA_CONTROL_LOG_LEVEL | default "info" }}"
-  MODULO_ENV: "{{ .Values.backend.env.MODULO_ENV | default "production" }}"
+  FARNA_CONTROL_ENV: "{{ .Values.backend.env.FARNA_CONTROL_ENV | default "production" }}"
   FARNA_CONTROL_PUBLIC_URL: "{{ .Values.backend.env.FARNA_CONTROL_PUBLIC_URL | default "http://localhost:8000" }}"
   FARNA_CONTROL_MAX_LOCAL_CONCURRENCY: "{{ .Values.backend.env.FARNA_CONTROL_MAX_LOCAL_CONCURRENCY | default "2" }}"
   CORS_ORIGINS: "{{ .Values.backend.env.CORS_ORIGINS | default "http://localhost:5173" }}"
@@ -19,5 +19,5 @@ data:
   # deny_all DECLARED posture (and the provider's acceptance of an egress
   # 'none' workspace) on this signal, so a posture can never be declared when
   # its enforcing manifest does not exist.
-  MODULO_WORKSPACE_NETWORK_POLICY: "enabled"
+  FARNA_CONTROL_WORKSPACE_NETWORK_POLICY: "enabled"
   {{- end }}

@@ -96,7 +96,7 @@ services:
       modulo.test: runner-ci-proxy
 
   # The Docker ENGINE the docker-marked tests drive as the worker's
-  # MODULO_DOCKER_HOST target for the docker-marked tests' engine-kill strip
+  # FARNA_CONTROL_DOCKER_HOST target for the docker-marked tests' engine-kill strip
   # and the in-dind nested round-trip. DOCKER_TLS_CERTDIR is deliberately
   # EMPTY (plain TCP on 2375, loopback-only publish) — spike (d) shape.
   # First-run image pulls are charged to dind's OWN store (no host-cache

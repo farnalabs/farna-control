@@ -324,7 +324,7 @@ class TestWorkerLivenessWatchdog:
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """``ALERT_ENVIRONMENTS=production`` + ``MODULO_ENV=staging``: an
+        """``ALERT_ENVIRONMENTS=production`` + ``FARNA_CONTROL_ENV=staging``: an
         unhealthy fleet must send on NO channel (generic webhook, Teams and
         email all configured) and must log the suppression - while the
         watchdog keeps evaluating the condition."""
@@ -1695,7 +1695,7 @@ class TestStdoutStamp:
 # FAR-1499: the alert context rides the webhook channels too. The generic
 # Slack-compatible webhook and the Microsoft Teams MessageCard both render
 # through the SAME single text renderer as the email text part
-# (_alert_text / _recovery_text), so each carries `Environment: <MODULO_ENV>`
+# (_alert_text / _recovery_text), so each carries `Environment: <FARNA_CONTROL_ENV>`
 # and every ALERT_CONTEXT line exactly once - never twice.
 # ---------------------------------------------------------------------------
 
