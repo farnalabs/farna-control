@@ -10,6 +10,9 @@ os.environ.setdefault("SECRET_KEY", "a" * 32)
 os.environ.setdefault("FERNET_KEY", "a" * 32)
 os.environ.setdefault("REDIS_URL", "")
 os.environ.setdefault("FARNA_CONTROL_ADMIN_PASSWORD", "test")
+# The CLI suite asserts the no-seeder path; an operator .env must not
+# change that. Real env vars outrank the dotenv file, so neutralise it here.
+os.environ.setdefault("MODULO_USERS", "")
 
 
 class MockColumn:
