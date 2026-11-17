@@ -163,7 +163,7 @@ class TestApplyLogLevel:
             with caplog.at_level(logging.WARNING, logger="farna.core.runtime_config.key_bridge"):
                 key_bridge.apply_log_level()
             assert root.level == original
-            assert any("invalid MODULO_LOG_LEVEL" in r.getMessage() for r in caplog.records)
+            assert any("invalid FARNA_CONTROL_LOG_LEVEL" in r.getMessage() for r in caplog.records)
         finally:
             root.setLevel(original)
 
@@ -303,7 +303,7 @@ class TestConsumerWiring:
 
     def test_e2b_registration_gate_reads_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-1159 prove-the-fix: the build_hub registration gate resolves
-        MODULO_E2B_API_KEY via the bridge — an override registers E2B with no
+        FARNA_CONTROL_E2B_API_KEY via the bridge — an override registers E2B with no
         env var, and clearing it fails closed (provider not registered)."""
         from farna.core.runtime_config.store import get_runtime_config_store
         from farna.core.runtime_provider import build_hub

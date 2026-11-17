@@ -184,10 +184,10 @@ async def test_runner_docker_route_resolves_hub_provider(monkeypatch: pytest.Mon
 
 
 async def test_runner_docker_without_endpoint_env_is_dispatch_unbound(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Registration matrix (ADR 029): with NO MODULO_RUNNER_* and no Docker
+    """Registration matrix (ADR 029): with NO FARNA_CONTROL_RUNNER_* and no Docker
     endpoint env, `runner_docker` is not registered — the typed config error
     carries remediation copy instead of a silent fallback."""
-    for var in ("FARNA_CONTROL_RUNNER_MACHINE_ID", "MODULO_DOCKER_HOST", "DOCKER_HOST", "FARNA_CONTROL_DOCKER_HOST"):
+    for var in ("FARNA_CONTROL_RUNNER_MACHINE_ID", "FARNA_CONTROL_DOCKER_HOST", "DOCKER_HOST"):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(SandboxDispatchUnboundError, match="FARNA_CONTROL_DOCKER_HOST"):
         await resolve_sandbox_dispatch_route(_session_factory_returning(_profile("runner_docker")), _ORG, _PROFILE_ID)
@@ -238,7 +238,7 @@ async def test_kubernetes_without_image_ref_is_dispatch_unbound(monkeypatch: pyt
 
 
 async def test_kubernetes_without_opt_in_is_dispatch_unbound(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No silent fallback: without ``MODULO_KUBERNETES_ENABLED`` the typed
+    """No silent fallback: without ``FARNA_CONTROL_KUBERNETES_ENABLED`` the typed
     config error carries the remediation env var — never E2B, never local,
     even with an E2B key sitting in the environment."""
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)

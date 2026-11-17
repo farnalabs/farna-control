@@ -433,7 +433,7 @@ async def test_sandbox_test_stream_config_error_still_gets_remediation_copy(
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     profile = SimpleNamespace(id=uuid.uuid4(), provider_type="e2b")
     # An empty real hub: resolve("e2b") raises the untouched PNCE with the
-    # MODULO_E2B_API_KEY remediation (env var deliberately unset).
+    # FARNA_CONTROL_E2B_API_KEY remediation (env var deliberately unset).
     with patch.object(ep, "_get_hub", return_value=RuntimeProviderHub()):
         events: list[str] = []
         stream = ep._sandbox_test_stream(profile)

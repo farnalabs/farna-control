@@ -677,7 +677,7 @@ def test_script_mode_local_provider_is_refused(monkeypatch: pytest.MonkeyPatch):
 
 def test_script_mode_enforcement_reads_e2b_override(monkeypatch: pytest.MonkeyPatch):
     """FAR-1159 prove-the-fix: the enforcement gate resolves
-    MODULO_E2B_API_KEY via the runtime-config bridge.
+    FARNA_CONTROL_E2B_API_KEY via the runtime-config bridge.
 
     An override satisfies the gate exactly like the env var (fails without
     the bridge — the gate would read only os.environ and refuse), an explicit

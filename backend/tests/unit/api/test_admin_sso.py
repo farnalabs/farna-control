@@ -531,17 +531,19 @@ class TestOidcConnection:
         from farna.api.routes.admin_sso import _test_oidc_connection
 
         provider = _make_mock_provider()
-        mock_resp = AsyncMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json = MagicMock(
-            return_value={
-                "issuer": "https://example.com",
-                "authorization_endpoint": "https://example.com/auth",
-                "token_endpoint": "https://example.com/token",
-            }
-        )
         with (
-            patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_resp)),
+            patch(
+                "farna.api.routes.admin_sso.fetch_sso_metadata",
+                new=AsyncMock(
+                    return_value=json.dumps(
+                        {
+                            "issuer": "https://example.com",
+                            "authorization_endpoint": "https://example.com/auth",
+                            "token_endpoint": "https://example.com/token",
+                        }
+                    )
+                ),
+            ),
             patch("farna.api.routes.admin_sso.validate_outbound_url_async", new=AsyncMock()),
         ):
             result = await _test_oidc_connection(provider)

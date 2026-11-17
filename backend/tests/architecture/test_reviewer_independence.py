@@ -31,18 +31,23 @@ class TestReviewerIdentitySeparation:
     """The reviewer identity is a distinct, privileged actor in CI."""
 
     def test_fast_lane_suspension_authorises_only_the_reviewer_identity(self) -> None:
-        """Only modulo-reviewbot may suspend the fast lane.
+        """Only farna-reviewbot may suspend the fast lane.
 
         The suspension workflow rejects any other actor before performing the
         suspension action, so an author cannot lift a review escalation.
         """
         workflow = _read(".github/workflows/fast-lane-suspension.yml")
-        assert 'if [ "$ACTOR" != "modulo-reviewbot" ]' in workflow
+        assert 'if [ "$ACTOR" != "farna-reviewbot" ]' in workflow
 
     def test_merge_queue_accepts_only_author_and_reviewer_identities(self) -> None:
-        """The merge queue recognises farnalabs and modulo-reviewbot as approvers."""
+        """The merge queue recognises farnalabs and farna-reviewbot as approvers.
+
+        ``farna-reviewbot`` is the reviewer identity; the pre-rebrand
+        ``modulo-reviewbot`` is not accepted (hard cutover).
+        """
         workflow = _read(".github/workflows/merge-queue.yml")
-        assert "^(farnalabs|modulo-reviewbot)$" in workflow
+        assert "^(farnalabs|farna-reviewbot)$" in workflow
+        assert "^(farnalabs|farna-reviewbot|modulo-reviewbot)$" not in workflow
 
 
 class TestHitlHumanOnlyEnforcement:

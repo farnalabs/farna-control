@@ -181,3 +181,46 @@ describe('DataTable responsive fit (FAR-2365)', () => {
     expect(skeleton[2].attributes('style')).toBeUndefined()
   })
 })
+
+describe('DataTable empty state placement (FAR-2539)', () => {
+  function mountEmpty() {
+    return mount(DataTable, {
+      props: { columns, rows: [] },
+      slots: { empty: '<span data-testid="custom-empty">Nothing here</span>' },
+    })
+  }
+
+  it('renders the empty state outside the horizontally scrolling region', () => {
+    const wrapper = mountEmpty()
+    const scrollRegion = wrapper.get('div.overflow-x-auto')
+
+    expect(scrollRegion.find('[data-testid="custom-empty"]').exists()).toBe(false)
+    expect(wrapper.get('[data-table-part="empty"]').text()).toBe('Nothing here')
+    expect(scrollRegion.classes()).toContain('overflow-x-auto')
+  })
+
+  it('does not render the scroll-edge fade mask over an empty table', () => {
+    const wrapper = mountEmpty()
+    expect(wrapper.find('[data-table-part="scroll-fade"]').exists()).toBe(false)
+  })
+
+  it('keeps the fade mask and no empty block when rows exist', () => {
+    const wrapper = mountTable()
+    expect(wrapper.find('[data-table-part="scroll-fade"]').exists()).toBe(true)
+    expect(wrapper.find('[data-table-part="empty"]').exists()).toBe(false)
+  })
+
+  it('constrains the root to the container width', () => {
+    const wrapper = mountEmpty()
+    expect(wrapper.get('[data-table-part="root"]').classes()).toEqual(
+      expect.arrayContaining(['min-w-0', 'max-w-full']),
+    )
+  })
+
+  it('falls back to the default empty message when no empty slot is supplied', () => {
+    const wrapper = mount(DataTable, { props: { columns, rows: [] } })
+    const empty = wrapper.get('[data-table-part="empty"]')
+    expect(empty.text()).toBe('No data available.')
+    expect(wrapper.find('div.overflow-x-auto [data-table-part="empty"]').exists()).toBe(false)
+  })
+})

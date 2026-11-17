@@ -52,6 +52,8 @@ const E2E_ROOT = join(FRONTEND_ROOT, 'tests', 'e2e')
  * and is cheap/deterministic enough for a per-PR gate.
  */
 const SLICE = [
+  // FAR-2539: mobile table overflow + empty-state width at 390px (local mocks).
+  'tests/e2e/mobile-tables.spec.ts',
   // FAR-2016 instance: design-token colours (light-mode probe) + long-value
   // geometry. The exact spec whose stale probe blocked the deploy train.
   'tests/e2e/json-viewer.spec.ts',
@@ -63,11 +65,16 @@ const SLICE = [
   // spill past the viewport is a layout regression invisible to unit/type
   // checks. Single mock-API page load, deterministic against the local target.
   'tests/e2e/runs-diff.spec.ts',
+  // FAR-2540: notifications close button + MCP Client select stay inside their
+  // card/viewport at 390px. Local mocks, cheap and deterministic.
+  'tests/e2e/mobile-overlays.spec.ts',
   // Overlay geometry: a dropdown that is clipped, mis-anchored or rendered at
   // the viewport edge is a layout regression invisible to unit/type checks.
   'tests/e2e/filter-bar-overlay.spec.ts',
   'tests/e2e/select-clipping-container.spec.ts',
   'tests/e2e/pipeline-editor-select-overlay.spec.ts',
+  // FAR-2541: SSO provider card layout at 390/640/1280px, local mocks.
+  'tests/e2e/sso-mobile.spec.ts',
 ]
 
 /**

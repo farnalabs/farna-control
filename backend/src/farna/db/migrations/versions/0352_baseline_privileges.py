@@ -168,8 +168,6 @@ END $$;
         ("farna_control_app", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.library_primitives TO farna_control_app"),
         ("farna_control_system", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.library_primitives TO farna_control_system"),
         ("farna_control_migrate", "GRANT REFERENCES ON TABLE public.library_primitives TO farna_control_migrate"),
-        ("farna_control_app", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.library_sync_state TO farna_control_app"),
-        ("farna_control_system", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.library_sync_state TO farna_control_system"),
         ("farna_control_app", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lifecycle_map_stages TO farna_control_app"),
         ("farna_control_system", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lifecycle_map_stages TO farna_control_system"),
         ("farna_control_app", "GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.lifecycle_maps TO farna_control_app"),

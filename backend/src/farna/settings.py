@@ -256,16 +256,6 @@ class Settings(BaseSettings):
     stripe_secret_key: str = Field(default="", repr=False)
     stripe_webhook_secret: str = Field(default="", repr=False)
 
-    # Hosted community library — client sync (FAR-363). Empty defaults keep the
-    # app bootable without a library configured; when ``modulo_library_endpoint``
-    # is non-empty the SAQ ``library_sync`` cron polls + verifies the signed
-    # manifest and caches the catalog. The root public key is the Ed25519 PEM
-    # that verifies manifests — stored repr=False so it never leaks into logs.
-    modulo_library_endpoint: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_LIBRARY_ENDPOINT", "MODULO_LIBRARY_ENDPOINT"))
-    modulo_library_root_public_key: str = Field(default="", repr=False, validation_alias=_product_aliases("FARNA_CONTROL_LIBRARY_ROOT_PUBLIC_KEY", "MODULO_LIBRARY_ROOT_PUBLIC_KEY"))
-    modulo_library_sync_interval_seconds: int = Field(300, validation_alias=_product_aliases("FARNA_CONTROL_LIBRARY_SYNC_INTERVAL_SECONDS", "MODULO_LIBRARY_SYNC_INTERVAL_SECONDS"))
-    modulo_library_sync_timeout_seconds: int = Field(15, validation_alias=_product_aliases("FARNA_CONTROL_LIBRARY_SYNC_TIMEOUT_SECONDS", "MODULO_LIBRARY_SYNC_TIMEOUT_SECONDS"))
-
     # SSO / OIDC — JSON array of {provider_id, client_id, client_secret, discovery_url}
     modulo_oidc_providers: str = Field("[]", validation_alias=_product_aliases("FARNA_CONTROL_OIDC_PROVIDERS", "MODULO_OIDC_PROVIDERS"))
 
@@ -1049,10 +1039,10 @@ class Settings(BaseSettings):
     # out-of-process Gatus sentinel or the error-tracking pipeline — those
     # are separate systems (see docs/configuration-reference.md). None/blank
     # (default) = alerts in EVERY environment, so a self-hosted compose
-    # deployment defaulting to MODULO_ENV=development still alerts out of
+    # deployment defaulting to FARNA_CONTROL_ENV=development still alerts out of
     # the box. When set, one of these two channels sends only when
     # ``environment`` is in the list — the staging deployment
-    # (MODULO_ENV=staging, a CI-only E2E environment with no live workload)
+    # (FARNA_CONTROL_ENV=staging, a CI-only E2E environment with no live workload)
     # sets it to "production" so its readiness blips stop paging the
     # operator while production keeps alerting. The ONE parse lives in
     # ``core.alert_context.alerting_enabled_for_environment`` so both
@@ -1159,7 +1149,7 @@ class Settings(BaseSettings):
     # populate_by_name (FAR-1500): constructor kwargs may use a field's NAME as
     # well as its alias. Without it, a name-keyed kwarg for an aliased field is
     # silently dropped by ``extra="ignore"`` — ``Settings(environment="prod")``
-    # kept the default while ``Settings(MODULO_ENV="prod")`` worked, a silent
+    # kept the default while ``Settings(FARNA_CONTROL_ENV="prod")`` worked, a silent
     # footgun for every caller that constructs Settings in Python.
     #
     # What it actually changes: the alias wins when BOTH spellings are present

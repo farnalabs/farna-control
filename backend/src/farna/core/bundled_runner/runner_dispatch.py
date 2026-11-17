@@ -335,7 +335,7 @@ def _build_dispatch_hub_provider(profile: Any) -> tuple[Any, Any]:
         from farna.settings import get_settings
 
         settings = get_settings()
-        # FAR-1135: MODULO_MAX_LOCAL_CONCURRENCY is hot-reloadable.
+        # FAR-1135: FARNA_CONTROL_MAX_LOCAL_CONCURRENCY is hot-reloadable.
         concurrency = override_int_or(
             "FARNA_CONTROL_MAX_LOCAL_CONCURRENCY",
             int(getattr(settings, "modulo_max_local_concurrency", 2) or 2),
@@ -364,7 +364,7 @@ async def resolve_sandbox_dispatch_route(
       registers the provider), plus the locked-ephemeral check.
 
     - ``kubernetes`` (FAR-1051) -> hub-resolved Kubernetes provider — the
-      registration matrix's ``MODULO_KUBERNETES_ENABLED`` gate — so an
+      registration matrix's ``FARNA_CONTROL_KUBERNETES_ENABLED`` gate — so an
       unregistered provider fails LOUD here with the typed config error
       (carrying its remediation) instead of deep inside provisioning. The
       route carries provider + hub so node_runner reuses that ONE instance

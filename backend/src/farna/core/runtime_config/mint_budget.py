@@ -16,8 +16,8 @@ Design contract:
    ``0242_org_mint_budget_usage``). Window rollover is natural: a new ``window_start`` is a new row,
   so usage resets with zero code.
 - **Config** — limit + window length are env-overridable at read time
-  (``MODULO_AGENT_MINT_BUDGET_LIMIT``, default 500;
-  ``MODULO_AGENT_MINT_BUDGET_WINDOW_MINUTES``, default 60) because the
+  (``FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT``, default 500;
+  ``FARNA_CONTROL_AGENT_MINT_BUDGET_WINDOW_MINUTES``, default 60) because the
   runtime-config store's key set is process-boot-frozen and the SAQ worker
   and API processes consume this guard. Malformed values are ignored (log +
   default) rather than fatal.

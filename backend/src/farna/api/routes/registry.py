@@ -22,6 +22,8 @@ from farna.api.dependencies import get_db_session, require_permission
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
+from farna.core.crypto import verify as crypto_pem_verify
+from farna.core.crypto import verify_trust_anchor
 from farna.core.registry import (
     get_publisher_status,
     get_registry_primitive,
@@ -42,12 +44,6 @@ from farna.core.registry.crypto import (
 from farna.db.crud.library_primitive import create_library_primitive
 from farna.db.crud.publisher import get_publisher_by_key as db_get_publisher_by_key
 from farna.db.rls import set_rls_org, set_rls_user_context
-from farna.registry.crypto import (
-    verify as crypto_pem_verify,
-)
-from farna.registry.crypto import (
-    verify_trust_anchor,
-)
 from farna.util import sanitise_log_value as _sanitise_log_value
 
 _CODE_REGISTRY_VERIFY_REGISTRY_PRIMITIVE_V2 = "registry.verify_registry_primitive_v2"

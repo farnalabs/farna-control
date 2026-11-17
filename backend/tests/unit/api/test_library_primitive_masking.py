@@ -385,94 +385,6 @@ def test_read_surface_adapt_response_masks_composite(client: TestClient) -> None
     _assert_masked_composite_body(resp.json())
 
 
-def test_read_surface_community_contribute_response_masks_composite(client: TestClient) -> None:
-    prim = _make_composite_primitive()
-    with patch(
-        "farna.api.routes.library.contribute_primitive",
-        new_callable=AsyncMock,
-        return_value=prim,
-    ):
-        resp = client.post(
-            "/api/v1/libraries/community/contribute",
-            json={
-                "primitive_type": "composite",
-                "name": prim.name,
-                "slug": prim.slug,
-                "content_json": {"nodes": [dict(_COMPOSITE_SECRET_NODE)], "edges": []},
-            },
-        )
-
-    assert resp.status_code == 201, resp.text
-    _assert_masked_composite_body(resp.json())
-
-
-def test_read_surface_community_contributions_list_masks_composite(client: TestClient) -> None:
-    """GET /libraries/community/contributions — list_org_contributions response."""
-    prim = _make_composite_primitive()
-    page = PageResult(items=[prim], total=1, page=1, page_size=20)
-    with patch(
-        "farna.api.routes.library.list_org_contributions",
-        new_callable=AsyncMock,
-        return_value=page,
-    ):
-        resp = client.get("/api/v1/libraries/community/contributions")
-
-    assert resp.status_code == 200, resp.text
-    _assert_masked_composite_body(resp.json()["items"][0])
-
-
-def test_read_surface_admin_publish_response_masks_composite(client: TestClient) -> None:
-    prim = _make_composite_primitive()
-    admin_principal = AuthenticatedPrincipal(
-        username="admin",
-        organisation_id=_ORG_ID,
-        account_id=_USER_ID,
-        org_role="admin",
-        is_system_admin=True,
-    )
-    app.dependency_overrides[get_current_user] = lambda: admin_principal
-    with patch(
-        "farna.api.routes.library.publish_contribution",
-        new_callable=AsyncMock,
-        return_value=prim,
-    ):
-        resp = client.post(f"/api/v1/libraries/admin/library/community/publish/{prim.id}")
-
-    assert resp.status_code == 200, resp.text
-    _assert_masked_composite_body(resp.json())
-
-
-def test_read_surface_community_install_response_masks_composite(client: TestClient) -> None:
-    prim = _make_composite_primitive()
-    prim.source = "registry"
-    entry_id = uuid.uuid4()
-    # The install route resolves the community entry before installing (FAR-2200
-    # lifecycle-map gate); a non-lifecycle-map entry keeps the composite-masking
-    # assertion on the end-to-end install path.
-    entry = {"id": str(entry_id), "type": "composite"}
-    with (
-        patch(
-            "farna.api.routes.community_library.get_community_entry",
-            new_callable=AsyncMock,
-            return_value=entry,
-        ),
-        patch(
-            "farna.api.routes.community_library.install_community_entry",
-            new_callable=AsyncMock,
-            return_value=prim,
-        ),
-        patch("farna.api.routes.community_library.set_rls_org", new_callable=AsyncMock),
-        patch("farna.api.routes.community_library.set_rls_user_context", new_callable=AsyncMock),
-    ):
-        resp = client.post(
-            f"/api/v1/libraries/community/{entry_id}/install",
-            json={},
-        )
-
-    assert resp.status_code == 201, resp.text
-    _assert_masked_composite_body(resp.json())
-
-
 def test_read_surface_contributions_list_masks_composite(client: TestClient) -> None:
     """GET /api/v1/library/contribute — the fixture-contribution list surface."""
     prim = _make_composite_primitive()
@@ -656,43 +568,6 @@ def test_write_patch_composite_echoless_deletion_stays_removed(client: TestClien
     assert resp.status_code == 200, resp.text
     updates = update_mock.await_args.args[2]
     assert "GITHUB_TOKEN" not in updates["content_json"]["nodes"][0]["env_vars"]
-
-
-def test_write_community_contribute_composite_rejects_fresh_mask_sentinel(client: TestClient) -> None:
-    """The community contribute composite write follows the same FAR-1374 gate."""
-    sentinel_node = {"id": "n1", "env_vars": {"LIB_TOKEN": SENSITIVE_VALUE_MASK}}
-    with (
-        patch(
-            "farna.api.routes.library.contribute_primitive",
-            new_callable=AsyncMock,
-        ) as contribute_mock,
-        patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
-        patch("farna.api.routes.library.set_rls_user_context", new_callable=AsyncMock),
-    ):
-        resp = client.post(
-            "/api/v1/libraries/community/contribute",
-            json={
-                "primitive_type": "composite",
-                "name": "Echo Composite",
-                "slug": "echo-composite",
-                "content_json": {"nodes": [sentinel_node], "edges": []},
-            },
-        )
-
-    assert resp.status_code == 422, resp.text
-    assert "COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL" in resp.json()["detail"]
-    contribute_mock.assert_not_awaited()
-
-
-# ---------------------------------------------------------------------------
-# Chained masked-read -> write round-trip on the LIBRARY surface (FAR-1380)
-#
-# The write-side tests above hand-build the echo they feed the PATCH. This one
-# chains a REAL library composite read (route-level masking via the validator)
-# into the REAL PATCH — the body is the GET response's content_json VERBATIM —
-# so a regression on either side (masking lost on read, or the mask literal
-# persisted over the stored credential on write) fails here.
-# ---------------------------------------------------------------------------
 
 
 def test_masked_library_read_to_patch_round_trip_preserves_stored_secret(client: TestClient) -> None:

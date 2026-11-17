@@ -1951,3 +1951,118 @@ def test_every_product_job_is_in_every_notifier_needs_list() -> None:
             if PR_ONLY_CONDITION not in condition:
                 violations.append(f"  {notifier}: exemption {exempted!r} is no longer PR-only (`if:` = {condition!r}) — it must be listed in needs: ({reason})")
     assert not violations, "ci.yml notifier `needs:` lists do not cover every product job (FAR-2308):\n" + "\n".join(violations)
+
+
+# --- Main-failure dispatches: SHA-free fingerprint + open-fix-PR skip --------
+#
+# When main goes red, every later merge produces another red CI/deploy run and
+# each one dispatched the Branch Fixer. The main-failure fingerprint embedded
+# the commit SHA, so every run looked new to both the webhook coalesce and the
+# fixer's own fingerprint dedupe: one SonarCloud failure on 2026-11-17 raised
+# four fix PRs (#3214-#3217), one per main SHA. Main-failure fingerprints are
+# now keyed on workflow + failure identity (never the SHA), and each dispatch
+# first asks scripts/main_failure_fix_pr_open.sh whether an open PR already
+# carries the fingerprint. Per-PR dispatches keep (PR, SHA) keying and are out
+# of scope here.
+
+#: (workflow, job id, dispatch step name) of every MAIN-branch failure dispatch.
+MAIN_FAILURE_DISPATCH_SITES = (
+    (CI_YML, "notify-main-failure", "Trigger Modulo Branch Fixer"),
+    (DEPLOY_YML, "notify-deploy-failure", "Dispatch Branch Fixer webhook"),
+    (DEPLOY_YML, "notify-staging-e2e-failure", "Dispatch Branch Fixer webhook"),
+    (DEPLOY_YML, "notify-prod-smoke-failure", "Dispatch Branch Fixer webhook"),
+    (DEPLOY_YML, "notify-deploy-staging-failure", "Dispatch Branch Fixer webhook (triage)"),
+    (DEPLOY_YML, "notify-deploy-production-failure", "Dispatch Branch Fixer webhook (triage)"),
+)
+
+#: Any of these in a fingerprint assignment re-keys it on the commit.
+SHA_TOKENS = ("${MAIN_SHA}", "${HEAD_SHA}", "github.sha", "${GITHUB_SHA}")
+
+OPEN_FIX_PR_SKIP_MARKER = "bash scripts/main_failure_fix_pr_open.sh"
+
+
+def _main_failure_dispatch(path: Path, job_id: str, step_name: str) -> tuple[dict, dict]:
+    jobs = _load_yaml(path).get("jobs") or {}
+    job = jobs.get(job_id)
+    assert isinstance(job, dict), f"{path.name}: main-failure dispatch job {job_id!r} is missing"
+    steps = [s for s in (job.get("steps") or []) if isinstance(s, dict) and s.get("name") == step_name]
+    assert len(steps) == 1, f"{path.name} job {job_id!r}: expected one {step_name!r} step, found {len(steps)}"
+    return job, steps[0]
+
+
+def test_main_failure_fingerprints_do_not_embed_the_commit_sha() -> None:
+    """Every main-failure fingerprint must be stable across main commits."""
+    violations: list[str] = []
+    for path, job_id, step_name in MAIN_FAILURE_DISPATCH_SITES:
+        _job, step = _main_failure_dispatch(path, job_id, step_name)
+        run = str(step.get("run") or "")
+        assignments = [line.strip() for line in run.splitlines() if line.strip().startswith("FINGERPRINT=")]
+        if len(assignments) != 1:
+            violations.append(f"  {path.name}:{job_id}: expected exactly one FINGERPRINT= assignment, found {len(assignments)}")
+            continue
+        leaked = [token for token in SHA_TOKENS if token in assignments[0]]
+        if leaked:
+            violations.append(f"  {path.name}:{job_id}: fingerprint {assignments[0]!r} embeds the commit SHA ({', '.join(leaked)})")
+        # The fixer still needs the SHA: it stays in the payload.
+        if '--arg headSha "' not in run:
+            violations.append(f"  {path.name}:{job_id}: payload no longer carries headSha — the fixer needs it")
+    assert not violations, "Main-failure fingerprints must not be keyed on the SHA (2026-11-17: four fix PRs for one failure):\n" + "\n".join(violations)
+
+
+def test_ci_main_failure_fingerprint_keys_on_the_failed_jobs() -> None:
+    """ci.yml keys main failures on the failed `needs` jobs, failing closed to a constant."""
+    _job, step = _main_failure_dispatch(CI_YML, "notify-main-failure", "Trigger Modulo Branch Fixer")
+    run = str(step.get("run") or "")
+    env = step.get("env") or {}
+    assert str(env.get("NEEDS_JSON") or "") == "${{ toJSON(needs) }}"
+    assert 'FINGERPRINT="CI: Fast Validation|main|${FAILED_JOBS}"' in run
+    assert 'FAILED_JOBS="unknown-jobs"' in run
+
+
+def test_deploy_main_failure_fingerprints_key_on_stage_and_main() -> None:
+    for path, job_id, step_name in MAIN_FAILURE_DISPATCH_SITES:
+        if path != DEPLOY_YML:
+            continue
+        _job, step = _main_failure_dispatch(path, job_id, step_name)
+        run = str(step.get("run") or "")
+        assert 'FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|main"' in run, f"deploy.yml:{job_id}: unexpected fingerprint shape"
+
+
+def _skip_gates_the_dispatch(after_marker: str) -> bool:
+    """True when the check reads `if <check>; then exit 0; fi` (a found PR ends the step)."""
+    lines = [line.strip() for line in after_marker.splitlines()]
+    return lines[:3] == ["; then", "exit 0", "fi"]
+
+
+def test_main_failure_dispatch_skips_when_a_fix_pr_is_open() -> None:
+    """Each main-failure dispatch checks for an open fix PR BEFORE it POSTs."""
+    violations: list[str] = []
+    for path, job_id, step_name in MAIN_FAILURE_DISPATCH_SITES:
+        job, step = _main_failure_dispatch(path, job_id, step_name)
+        run = str(step.get("run") or "")
+        env = step.get("env") or {}
+        skip_at = run.find(OPEN_FIX_PR_SKIP_MARKER)
+        post_at = run.find("bash scripts/dispatch_with_retry.sh")
+        if skip_at < 0:
+            violations.append(f"  {path.name}:{job_id}: no open-fix-PR check ({OPEN_FIX_PR_SKIP_MARKER!r})")
+        elif post_at < 0 or skip_at > post_at:
+            violations.append(f"  {path.name}:{job_id}: the open-fix-PR check must run before the dispatch")
+        elif not _skip_gates_the_dispatch(run[skip_at + len(OPEN_FIX_PR_SKIP_MARKER) : post_at]):
+            violations.append(f"  {path.name}:{job_id}: the open-fix-PR check must gate the dispatch (`if ...; then exit 0; fi`)")
+        if 'FIX_FINGERPRINT="${FINGERPRINT}"' not in run:
+            violations.append(f"  {path.name}:{job_id}: the check is not given this dispatch's FINGERPRINT")
+        if str(env.get("GH_TOKEN") or "") != "${{ github.token }}":
+            violations.append(f"  {path.name}:{job_id}: step env must set GH_TOKEN for the open-PR lookup")
+        if str(env.get("REPO") or "") != "${{ github.repository }}":
+            violations.append(f"  {path.name}:{job_id}: step env must set REPO for the open-PR lookup")
+        permissions = job.get("permissions") or {}
+        if str(permissions.get("pull-requests", "")) != "write":
+            violations.append(f"  {path.name}:{job_id}: job permissions must grant `pull-requests: write` (list + evidence comment)")
+        if str(permissions.get("contents", "")) != "read":
+            violations.append(f"  {path.name}:{job_id}: job permissions must keep `contents: read` for the script checkout")
+    assert not violations, "Main-failure dispatches must skip when an open fix PR carries the fingerprint:\n" + "\n".join(violations)
+
+
+def test_open_fix_pr_skip_script_exists() -> None:
+    script = REPO / "scripts" / "main_failure_fix_pr_open.sh"
+    assert script.is_file()

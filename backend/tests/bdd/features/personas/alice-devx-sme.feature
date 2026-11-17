@@ -47,16 +47,6 @@ Feature: Alice — Head of DevX at an SME
     When I restore snapshot "pre-qa-agent"
     Then the pipeline matches the state before the agent was added
 
-  @goal-alice-library-start
-  Scenario: Alice finds and adapts a library workflow
-    Given the community library has a "PRD to tickets" workflow
-    When I browse the library
-    Then I see the workflow's description, author, and download count
-    When I copy the workflow to my workspace
-    And I customise the agent prompts for my team's conventions
-    Then the forked workflow is saved as a local primitive
-    And the forked_from metadata points to the community original
-
   @goal-alice-team-rbac @awaiting-implementation
   Scenario: Alice's team owns pipeline config but QA can only view
     Given team "devx" has role "operator"

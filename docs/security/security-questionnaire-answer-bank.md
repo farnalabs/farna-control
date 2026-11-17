@@ -173,7 +173,7 @@ provisioning, web vitals), every team-tier flag, and any flag that has not
 explicitly opted into org administration. Each `FeatureFlag` carries
 `org_admin_settable`, default `False`, so a new flag cannot be opened to org
 admins by omission, and the org surface never offers a team-tier flag. A future
-sensitive org-scoped flag (community-library access, telemetry/metrics export)
+sensitive org-scoped flag (telemetry/metrics export)
 must default to system-administrator-only.
 
 Evidence: `backend/src/farna/core/feature_flags.py`

@@ -2230,6 +2230,8 @@ export default {
       "total_evals": "total evals",
       "days_tracked": "days tracked",
       "team_breakdown": "Team Breakdown",
+      "team_breakdown_scroll_label": "Team Breakdown table",
+      "team_breakdown_scroll_instructions": "Swipe horizontally to view all team breakdown columns.",
       "team": "Team",
       "runs": "Runs",
       "completed": "Completed",
@@ -3640,10 +3642,6 @@ export default {
       "org_id": "Org ID",
       "exporting_data": "Exporting data...",
       "export_ready": "Export ready",
-      "community_objects": "Community Library",
-      "community_objects_description": "Control access to the community library — browse, install, and community-sourced agent execution.",
-      "community_objects_toggle": "Community objects enabled",
-      "community_objects_toggle_hint": "When disabled, community library browsing, installation, and community-sourced agent execution are blocked.",
       "hitl_review_window": "HITL review window",
       "hitl_review_window_description": "How long a pipeline waits at an unanswered human review gate before the run is cancelled and its concurrency slot is released. Each pipeline may override this; a pipeline with no override uses the organization default, and no organization default means the instance default applies.",
       "hitl_review_window_value": "Value",
@@ -5704,7 +5702,8 @@ export default {
       "failed_to_load": "Couldn't load notifications",
       "retry": "Retry",
       "no_notifications": "No notifications",
-      "view_all": "View all notifications"
+      "view_all": "View all notifications",
+      "close": "Close notifications"
     },
     "PageTabs": {
       "section_navigation": "Section navigation",

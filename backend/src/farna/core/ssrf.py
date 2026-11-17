@@ -86,25 +86,24 @@ and does not cover:
   not attempt to. They are mitigated by injecting a pinned client where the SDK
   supports it (``model_backends`` wire the validated transport in) — i.e. the
   SDK is told to reuse OUR pinned client rather than building its own.
-* **Core support modules that build their own client.** ``core/notifier``,
-  ``core/error_tracking/**`` (forwarders + ``alert_dispatcher``),
-  ``core/watchdog/worker_liveness`` and ``core/reports/scheduler`` construct
-  raw clients toward operator-config / per-org / multi-host endpoints. Several
-  are genuinely multi-host (the notifier fans out to per-org notification
-  endpoints), so a single pinned client cannot cover them — they need either a
-  per-host pin or per-request validation. They are pending a per-call-site pin
-  and are excluded from the semgrep gate so it does not go red while they
-  remain un-migrated. ``core/library_sync/client`` and
-  ``core/product_analytics/vendor_client`` are NOT residual: both build their
-  client through :func:`pinned_async_client` and are covered by the gate, so a
-  raw construction there is caught like anywhere else. ``cli/apply`` joins the
-  residual list for the same reason the sync world needs a pinless path: the
-  click executor is sync and no sync pinned factory exists, and the target is
-  the single operator-configured ``MODULO_URL`` the operator's credentials
-  already address, so it is excluded as documented residual (no
-  validate-then-connect attached - test harnesses use unresolvable fixture
-  URLs). A NEW raw ``httpx`` construction anywhere else in the tree is still
-  caught by the rule.
+ * **Core support modules that build their own client.** ``core/notifier``,
+   ``core/error_tracking/**`` (forwarders + ``alert_dispatcher``),
+   ``core/watchdog/worker_liveness`` and ``core/reports/scheduler`` construct
+   raw clients toward operator-config / per-org / multi-host endpoints. Several
+   are genuinely multi-host (the notifier fans out to per-org notification
+   endpoints), so a single pinned client cannot cover them — they need either a
+   per-host pin or per-request validation. They are pending a per-call-site pin
+   and are excluded from the semgrep gate so it does not go red while they
+   remain un-migrated. ``core/product_analytics/vendor_client`` builds its
+   client through :func:`pinned_async_client` and is covered by the gate, so a
+   raw construction there is caught like anywhere else. ``cli/apply`` joins the
+   residual list for the same reason the sync world needs a pinless path: the
+   click executor is sync and no sync pinned factory exists, and the target is
+   the single operator-configured ``MODULO_URL`` the operator's credentials
+   already address, so it is excluded as documented residual (no
+   validate-then-connect attached - test harnesses use unresolvable fixture
+   URLs). A NEW raw ``httpx`` construction anywhere else in the tree is still
+   caught by the rule.
 """
 
 from __future__ import annotations
@@ -118,7 +117,7 @@ import os
 import socket
 import ssl
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -1433,6 +1432,58 @@ async def pinned_async_client(
         follow_redirects=follow_redirects,
         **client_kwargs,
     )
+
+
+SSO_METADATA_MAX_BYTES = 2 * 1024 * 1024
+SSO_METADATA_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+
+
+class SsoMetadataFetchError(ValueError):
+    """Raised when an SSO metadata response cannot be safely fetched or parsed."""
+
+
+async def _iter_response_bytes(response: httpx.Response) -> AsyncIterator[bytes]:
+    """Yield response bytes without materialising an unbounded body."""
+    async for chunk in response.aiter_bytes():
+        yield chunk
+
+
+async def fetch_sso_metadata(url: str, *, kind: str, client_factory: Callable[..., Any] | None = None) -> str:
+    """Fetch bounded SSO metadata through the pinned transport.
+
+    ``kind`` is included in the stable error text so authentication and admin
+    connection-test callers can classify failures without exposing provider
+    response bodies. The transport validates and pins the URL before connect;
+    redirects remain disabled and the response is bounded before parsing.
+    """
+    factory = client_factory or pinned_async_client
+    client = await factory(url)
+    body = bytearray()
+    try:
+        async with client.stream("GET", url, timeout=SSO_METADATA_TIMEOUT) as response:
+            response.raise_for_status()
+            headers = getattr(response, "headers", {})
+            content_length = headers.get("content-length") if isinstance(headers, Mapping) else None
+            if isinstance(content_length, str) and content_length.isdigit() and int(content_length) > SSO_METADATA_MAX_BYTES:
+                raise SsoMetadataFetchError(f"{kind} metadata response exceeds size limit")
+            async for chunk in _iter_response_bytes(response):
+                if len(body) + len(chunk) > SSO_METADATA_MAX_BYTES:
+                    raise SsoMetadataFetchError(f"{kind} metadata response exceeds size limit")
+                body.extend(chunk)
+    except SsoMetadataFetchError:
+        raise
+    except httpx.HTTPStatusError as exc:
+        raise SsoMetadataFetchError(f"{kind} metadata request returned HTTP {exc.response.status_code}") from exc
+    except httpx.TimeoutException as exc:
+        raise SsoMetadataFetchError(f"{kind} metadata request timed out") from exc
+    except httpx.RequestError as exc:
+        raise SsoMetadataFetchError(f"Failed to fetch {kind.lower()} document") from exc
+    finally:
+        await client.aclose()
+    try:
+        return bytes(body).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise SsoMetadataFetchError(f"{kind} metadata response is not UTF-8") from exc
 
 
 def normalize_url_host(url: str) -> str:

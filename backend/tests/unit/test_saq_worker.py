@@ -42,7 +42,6 @@ def _settings(**overrides: object) -> MagicMock:
         "saq_auth_password": "pw",
         "saq_auth_username": "admin",
         "fernet_key": "x" * 44,
-        "modulo_library_sync_interval_seconds": 300,
     }
     base.update(overrides)
     return MagicMock(**base)
@@ -138,7 +137,6 @@ class TestFunctionsWiring:
         assert "journey_reconcile" in names
         assert "decision_record_reconcile" in names
         assert "check_missed_fire_alerts_cron" in names
-        assert "library_sync" in names
         assert "connector_health_checks" in names
         assert "health_readiness_alert" in names
 
@@ -155,8 +153,6 @@ class TestFunctionsWiring:
         assert check.await_count == 1
 
     def test_system_cron_knobs_explicit(self) -> None:
-        # _system_cron_jobs derives the library_sync cadence from settings, so
-        # the settings factory is patched (real Settings() requires env vars).
         with patch.object(sw, "get_settings", return_value=_settings()):
             jobs = {c.function.__name__: c for c in sw._system_cron_jobs()}
         assert set(jobs) == {
@@ -181,7 +177,6 @@ class TestFunctionsWiring:
             "journey_reconcile",
             "decision_record_reconcile",
             "check_missed_fire_alerts_cron",
-            "library_sync",
             "metrics_dump",
             "connector_health_checks",
             "health_readiness_alert",
@@ -290,15 +285,6 @@ class TestFunctionsWiring:
         assert drr.heartbeat == 30
         assert drr.ttl == 300
         assert drr.unique is True
-        # library_sync: cadence derives from modulo_library_sync_interval_seconds
-        # (default 300s -> */5 * * * *), fail-open (retries=1, never raises).
-        ls = jobs["library_sync"]
-        assert ls.cron == "*/5 * * * *"
-        assert ls.timeout == 300
-        assert ls.retries == 1
-        assert ls.heartbeat == 30
-        assert ls.ttl == 300
-        assert ls.unique is True
 
         # metrics_dump: ticks every 10 minutes (*/10 * * * *), aligned to the
         # in-job jitter gate (FAR-356 review — the gate only ever fires when the
@@ -345,14 +331,6 @@ class TestFunctionsWiring:
         assert lars.heartbeat == 30
         assert lars.ttl == 900
         assert lars.unique is True
-
-    def test_sync_interval_to_cron_maps_seconds_to_5_field_cron(self) -> None:
-        assert sw._sync_interval_to_cron(300) == "*/5 * * * *"
-        assert sw._sync_interval_to_cron(60) == "* * * * *"
-        assert sw._sync_interval_to_cron(30) == "* * * * *"
-        assert sw._sync_interval_to_cron(3600) == "0 */1 * * *"
-        assert sw._sync_interval_to_cron(7200) == "0 */2 * * *"
-        assert sw._sync_interval_to_cron(86400) == "0 0 * * *"
 
     def test_settings_after_process_and_metadata(self) -> None:
         with patch.object(sw, "get_settings", return_value=_settings()):
@@ -1868,51 +1846,6 @@ class TestSystemJobDelegates:
         assert result == {"emitted": 0}
         check.assert_awaited_once()
         assert "check_missed_fire_alerts.emitted" not in caplog.text
-
-    @pytest.mark.asyncio
-    async def test_library_sync_noop_when_disabled(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Empty MODULO_LIBRARY_ENDPOINT must short-circuit to a disabled no-op."""
-        with (
-            patch.object(sw, "get_settings", return_value=_settings(modulo_library_endpoint="")),
-            patch.object(sw, "_make_session_factory") as factory,
-            caplog.at_level(logging.INFO, logger="farna.core.saq_worker"),
-        ):
-            result = await sw.library_sync({})
-
-        assert result == {"status": "disabled"}
-        factory.assert_not_called()
-        assert "saq.library_sync.disabled" in caplog.text
-
-    @pytest.mark.asyncio
-    async def test_library_sync_reports_result(self) -> None:
-        session = MagicMock()
-        session_cm = MagicMock()
-        session_cm.__aenter__ = AsyncMock(return_value=session)
-        session_cm.__aexit__ = AsyncMock(return_value=False)
-        factory = MagicMock()
-        factory.return_value = session_cm
-        result_obj = MagicMock(success=True, entries_count=3, revoked_count=1, error=None)
-        with (
-            patch.object(sw, "get_settings", return_value=_settings(modulo_library_endpoint="https://library.modulo.run")),
-            patch.object(sw, "_make_session_factory", return_value=factory),
-            patch("farna.core.library_sync.sync_library", new_callable=AsyncMock, return_value=result_obj) as sync,
-        ):
-            result = await sw.library_sync({})
-
-        assert result == {"status": "ok", "entries_count": 3, "revoked_count": 1, "error": None}
-        sync.assert_awaited_once()
-        assert sync.await_args.args[0] is session
-
-    @pytest.mark.asyncio
-    async def test_library_sync_fail_open_on_cron_failure(self) -> None:
-        """A session/DB failure in the cron wrapper must never raise (fail-open)."""
-        with (
-            patch.object(sw, "get_settings", return_value=_settings(modulo_library_endpoint="https://library.modulo.run")),
-            patch.object(sw, "_make_session_factory", side_effect=RuntimeError("redis down")),
-        ):
-            result = await sw.library_sync({})
-
-        assert result == {"status": "failed", "error": "unexpected cron failure (RuntimeError: redis down)"}
 
 
 class TestRunnerHealthProbeWrapper:

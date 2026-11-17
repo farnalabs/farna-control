@@ -125,7 +125,7 @@ def validate_docker_endpoint_tls(endpoint: str | None) -> None:
     endpoint is used without TLS.  Local (unix / None / loopback) and
     compose-internal endpoints are always accepted.
 
-    The ``MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT`` escape hatch (set to any
+    The ``FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT`` escape hatch (set to any
     non-empty, non-false value) bypasses the check but logs a prominent
     warning at provider construction.
     """
@@ -135,7 +135,7 @@ def validate_docker_endpoint_tls(endpoint: str | None) -> None:
         return
     if is_insecure_endpoint_allowed():
         _log.warning(
-            "INSECURE: Docker endpoint '%s' accepted without TLS (MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT is set) — credentials will be transmitted in cleartext",
+            "INSECURE: Docker endpoint '%s' accepted without TLS (FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT is set) — credentials will be transmitted in cleartext",
             endpoint,
         )
         return

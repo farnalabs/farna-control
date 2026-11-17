@@ -20,7 +20,6 @@ from farna.core.runtime_config.key_bridge import (
     override_or,
 )
 from farna.core.runtime_config.org_flags import (
-    FLAG_COMMUNITY_OBJECTS_ENABLED,
     FLAG_WORK_ITEM_AGENT_MINTING_ENABLED,
     clear_org_flag_cache,
     is_org_flag_enabled,
@@ -43,7 +42,6 @@ __all__ = [
     "APPLY_HOOKS",
     "BOOT_ONLY_REASONS",
     "DEFAULT_VALUES",
-    "FLAG_COMMUNITY_OBJECTS_ENABLED",
     "FLAG_WORK_ITEM_AGENT_MINTING_ENABLED",
     "HOT_RELOADABLE_KEYS",
     "KEY_CONSUMERS",

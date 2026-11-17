@@ -51,7 +51,7 @@ import { api } from '../../lib/api/client'
 import { formatApiError } from '../../lib/api/formatError'
 import { passwordRuleKey, validatePasswordClient } from '../../lib/passwordRules'
 
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const emit = defineEmits<{ (e: 'changed', accessToken?: string): void }>()
 
 // When `quiet` is set, the success note is suppressed (the forced-change flow
 // leaves the screen immediately, so the message would only flash).
@@ -97,7 +97,8 @@ async function changePassword() {
       currentPassword.value = ''
       newPassword.value = ''
       confirmPassword.value = ''
-      emit('changed')
+      emit('changed', data.access_token)
+
     }
   } catch (e) {
     passError.value = formatApiError(e)

@@ -3,6 +3,7 @@
 import base64
 import json
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -137,6 +138,13 @@ def _make_resp(status: int = 200, json_data: object = None) -> MagicMock:
     resp = MagicMock(spec=httpx.Response)
     resp.status_code = status
     resp.json.return_value = json_data or {}
+    resp.headers = {}
+    body = json.dumps(json_data if json_data is not None else {}).encode("utf-8")
+
+    async def _aiter_bytes() -> AsyncIterator[bytes]:
+        yield body
+
+    resp.aiter_bytes = _aiter_bytes
     if status < 400:
         resp.raise_for_status.return_value = None
     else:
@@ -148,22 +156,40 @@ def _make_resp(status: int = 200, json_data: object = None) -> MagicMock:
     return resp
 
 
+class _AsyncStreamContext:
+    """Async context manager yielding a prepared response for ``client.stream``."""
+
+    def __init__(self, response: MagicMock) -> None:
+        self._response = response
+
+    async def __aenter__(self) -> MagicMock:
+        return self._response
+
+    async def __aexit__(self, *exc_info: object) -> bool:
+        return False
+
+
 def _make_httpx_mock(get_map: dict[str, MagicMock], post_map: dict[str, MagicMock] | None = None) -> MagicMock:
-    """Create an AsyncMock httpx client with configured get/post responses."""
+    """Create an AsyncMock httpx client with configured stream/post responses.
+
+    SSO metadata is fetched through ``client.stream`` (bounded reads), so the
+    mock must serve the same URL map there as well as ``post`` for token
+    exchange.
+    """
     mock_client = AsyncMock()
 
-    async def _get(url: str, **kwargs: object) -> MagicMock:
-        if url in get_map:
-            return get_map[url]
-        return _make_resp(404)
+    def _stream(method: str, url: str, **kwargs: object) -> _AsyncStreamContext:
+        return _AsyncStreamContext(get_map.get(url, _make_resp(404)))
 
     async def _post(url: str, **kwargs: object) -> MagicMock:
         if post_map and url in post_map:
             return post_map[url]
         return _make_resp(404)
 
-    mock_client.get = _get
+    mock_client.stream = _stream
     mock_client.post = _post
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     return mock_client
 
 
@@ -216,7 +242,7 @@ class TestJwksFetching:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
 
             claims1 = await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
             assert claims1["sub"] == "user123"
@@ -229,7 +255,7 @@ class TestJwksFetching:
         mock_client = _make_httpx_mock({_DISCOVERY_URL: resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="No jwks_uri"):
                 await verify_id_token_with_discovery("token", _DISCOVERY_URL, "cid")
 
@@ -238,7 +264,7 @@ class TestJwksFetching:
         mock_client = _make_httpx_mock({_DISCOVERY_URL: resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="No issuer"):
                 await verify_id_token_with_discovery("token", _DISCOVERY_URL, "cid")
 
@@ -255,7 +281,7 @@ class TestJwksFetching:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="No keys"):
                 await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
 
@@ -279,7 +305,7 @@ class TestVerifyValidToken:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
             assert claims["sub"] == "user123"
             assert claims["email"] == "user123@example.com"
@@ -298,7 +324,7 @@ class TestVerifyValidToken:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER)
             assert claims["sub"] == "user123"
 
@@ -309,7 +335,7 @@ class TestVerifyValidToken:
         mock_client = _make_httpx_mock({_JWKS_URI: jwks_resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
         assert claims["sub"] == "ec-user"
@@ -332,7 +358,7 @@ class TestVerifyInvalidSignature:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="ID token verification failed"):
                 await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
 
@@ -352,7 +378,7 @@ class TestVerifyInvalidSignature:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="ID token verification failed"):
                 await verify_id_token_with_discovery(tampered, _DISCOVERY_URL, _CLIENT_ID)
 
@@ -376,7 +402,7 @@ class TestClaimValidation:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="verification failed"):
                 await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
 
@@ -393,7 +419,7 @@ class TestClaimValidation:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="verification failed"):
                 await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
 
@@ -410,7 +436,7 @@ class TestClaimValidation:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="verification failed"):
                 await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
 
@@ -439,7 +465,7 @@ class TestVerifyNonce:
         mock_client = self._verifier_client(jwks_resp)
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER, expected_nonce="request-nonce")
 
         assert claims["nonce"] == "request-nonce"
@@ -456,7 +482,7 @@ class TestVerifyNonce:
         mock_client = self._verifier_client(jwks_resp)
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="nonce does not match"):
                 await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER, expected_nonce="victim-nonce")
 
@@ -471,7 +497,7 @@ class TestVerifyNonce:
         mock_client = self._verifier_client(jwks_resp)
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="nonce does not match"):
                 await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER, expected_nonce="request-nonce")
 
@@ -491,7 +517,7 @@ class TestVerifyNonce:
         mock_client = self._verifier_client(jwks_resp)
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="nonce does not match"):
                 await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER, expected_nonce="request-nonce")
 
@@ -506,7 +532,7 @@ class TestVerifyNonce:
         mock_client = self._verifier_client(jwks_resp)
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
         assert claims["sub"] == "user123"
@@ -531,7 +557,7 @@ class TestJwksRotation:
 
         call_count = 0
 
-        async def _get(url: str, **kwargs: object) -> MagicMock:
+        def _resolve(url: str) -> MagicMock:
             nonlocal call_count
             if url == _DISCOVERY_URL:
                 return discovery_resp
@@ -541,11 +567,10 @@ class TestJwksRotation:
             return _make_resp(json_data={"keys": [new_jwk]})
 
         mock_client = AsyncMock()
-        mock_client.get = _get
-        mock_client.post = AsyncMock()  # not used in verify_id_token_with_discovery
+        mock_client.stream = lambda method, url, **kwargs: _AsyncStreamContext(_resolve(url))
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
             assert claims["sub"] == "user123"
             assert call_count == 2
@@ -563,7 +588,7 @@ class TestJwksRotation:
 
         call_count = 0
 
-        async def _get(url: str, **kwargs: object) -> MagicMock:
+        def _resolve(url: str) -> MagicMock:
             nonlocal call_count
             if url == _DISCOVERY_URL:
                 return discovery_resp
@@ -573,10 +598,10 @@ class TestJwksRotation:
             return _make_resp(json_data={"keys": [correct_jwk]})
 
         mock_client = AsyncMock()
-        mock_client.get = _get
+        mock_client.stream = lambda method, url, **kwargs: _AsyncStreamContext(_resolve(url))
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
             assert claims["sub"] == "user123"
             assert call_count == 2
@@ -618,7 +643,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_DISCOVERY_URL: _make_resp(500)})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="Failed to fetch discovery document"):
                 await verify_id_token_with_discovery("token", _DISCOVERY_URL, "cid")
 
@@ -627,7 +652,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_DISCOVERY_URL: resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="not a JSON object"):
                 await verify_id_token_with_discovery("token", _DISCOVERY_URL, "cid")
 
@@ -635,7 +660,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_JWKS_URI: _make_resp(500)})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="Failed to fetch JWKS"):
                 await verify_id_token(_ID_TOKEN, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
@@ -644,7 +669,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_JWKS_URI: resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="not a JSON object"):
                 await verify_id_token(_ID_TOKEN, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
@@ -662,7 +687,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_JWKS_URI: _make_resp(json_data={"keys": []})})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="Unsupported JWT algorithm"):
                 await verify_id_token(token, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
@@ -686,7 +711,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_JWKS_URI: resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError, match="Failed to construct key from JWK"):
                 await verify_id_token(id_token, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
@@ -710,7 +735,7 @@ class TestEdgeCases:
         mock_client = _make_httpx_mock({_JWKS_URI: jwks_resp})
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token(token, _JWKS_URI, _CLIENT_ID, _ISSUER)
 
         assert claims["sub"] == "kidless"
@@ -782,7 +807,7 @@ class TestOidcCallbackIntegration:
             patch("farna.auth.sso.issue_sso_tokens", new_callable=AsyncMock) as mock_tok,
             patch("httpx.AsyncClient") as cls,
         ):
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             mock_jit.return_value = (MagicMock(), uuid.uuid4(), "runner")
             mock_tok.return_value = {"access_token": "at", "refresh_token": "rt", "token_type": "bearer"}
 
@@ -844,7 +869,7 @@ class TestOidcCallbackIntegration:
             patch("farna.auth.sso.issue_sso_tokens", new_callable=AsyncMock),
             patch("httpx.AsyncClient") as cls,
         ):
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
 
             with pytest.raises(ValueError, match="ID token verification failed"):
                 await oidc_process_callback(
@@ -882,13 +907,13 @@ class TestOidcCallbackIntegration:
         signed = sign_state("testprovider:test-state", settings.secret_key)
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client.stream = MagicMock(side_effect=httpx.ConnectError("Connection refused"))
         mock_client.post = AsyncMock()
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
 
-            with pytest.raises(ValueError, match="Failed to fetch discovery document"):
+            with pytest.raises(ValueError, match="Failed to fetch oidc discovery document"):
                 await oidc_process_callback(
                     "auth-code",
                     signed,
@@ -931,7 +956,7 @@ class TestOidcCallbackIntegration:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
 
             with pytest.raises(ValueError, match="Failed to exchange authorization code"):
                 await oidc_process_callback(
@@ -982,7 +1007,7 @@ class TestOidcCallbackIntegration:
             patch("farna.auth.sso.issue_sso_tokens", new_callable=AsyncMock),
             patch("httpx.AsyncClient") as cls,
         ):
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             mock_verify.return_value = {
                 "email": "user@example.com",
                 "name": "Test User",
@@ -1028,17 +1053,17 @@ class TestDerivedJwksHostAllowlist:
         mock_client = AsyncMock()
         calls: list[str] = []
 
-        async def _get(url: str, **kwargs: object) -> MagicMock:
+        def _stream(method: str, url: str, **kwargs: object) -> _AsyncStreamContext:
             calls.append(url)
             if url == _DISCOVERY_URL:
-                return disc_resp
-            return _make_resp(404)
+                return _AsyncStreamContext(disc_resp)
+            return _AsyncStreamContext(_make_resp(404))
 
-        mock_client.get = _get
+        mock_client.stream = _stream
         mock_client.post = AsyncMock()
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             with pytest.raises(OidcVerifyError):
                 await verify_id_token_with_discovery("token", _DISCOVERY_URL, _CLIENT_ID)
 
@@ -1056,13 +1081,13 @@ class TestDerivedJwksHostAllowlist:
         mock_client = AsyncMock()
         fetched: list[str] = []
 
-        async def _get(url: str, **kwargs: object) -> MagicMock:
+        def _stream(method: str, url: str, **kwargs: object) -> _AsyncStreamContext:
             if url == _DISCOVERY_URL:
-                return disc_resp
+                return _AsyncStreamContext(disc_resp)
             fetched.append(url)
-            return _make_resp(json_data={"keys": []})  # reaches the JWKS fetch
+            return _AsyncStreamContext(_make_resp(json_data={"keys": []}))
 
-        mock_client.get = _get
+        mock_client.stream = _stream
         mock_client.post = AsyncMock()
 
         # A well-formed JWT with a valid header so signature verification reaches
@@ -1072,7 +1097,7 @@ class TestDerivedJwksHostAllowlist:
         token = f"{header}.{payload}.c2ln"
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             # No OIDC-provider-host-allowlist error. The flow proceeds; here the
             # returned (empty) JWKS produces a DIFFERENT, post-fetch error.
             with pytest.raises(OidcVerifyError, match="No keys"):
@@ -1094,7 +1119,7 @@ class TestDerivedJwksHostAllowlist:
         )
 
         with patch("httpx.AsyncClient") as cls:
-            cls.return_value.__aenter__.return_value = mock_client
+            cls.return_value = mock_client
             claims = await verify_id_token_with_discovery(id_token, _DISCOVERY_URL, _CLIENT_ID)
 
         assert claims["sub"] == "user123"

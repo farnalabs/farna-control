@@ -19,8 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy dependency manifests
 COPY backend/pyproject.toml backend/uv.lock ./
 
-# Install all dev dependencies
-RUN uv sync --dev --frozen
+# Install all dev dependencies.
+# --no-build (docker:S8541): never execute sdist setup scripts. ibm-cos-sdk and
+# pytest-bdd publish sdist-only, so those pinned distributions are re-allowed
+# individually; every other dependency must come from a pre-built wheel. NOSONAR
+# comments are not supported in Dockerfiles, hence the explicit flags.
+RUN uv sync --dev --frozen --no-build \
+    --no-binary-package ibm-cos-sdk \
+    --no-binary-package ibm-cos-sdk-core \
+    --no-binary-package ibm-cos-sdk-s3transfer \
+    --no-binary-package pytest-bdd \
+    --no-binary-package farna-control
 
 # Copy source code and tests
 COPY backend/src/ src/

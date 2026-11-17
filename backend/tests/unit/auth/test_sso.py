@@ -87,6 +87,24 @@ def _reset_license_state() -> Generator[None, None, None]:
     set_public_key(_LICENSE_PUBLIC_KEY_HEX)
 
 
+def _pinned_client(client: MagicMock) -> AsyncMock:
+    return AsyncMock(return_value=client)
+
+
+@asynccontextmanager
+async def _client_context(client: MagicMock):
+    yield client
+
+
+@asynccontextmanager
+async def _response_stream(response: MagicMock):
+    yield response
+
+
+async def _json_chunks(payload: object):
+    yield json.dumps(payload).encode()
+
+
 @pytest.fixture(autouse=True)
 def _stub_audit_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-1516: stub the fresh ``audit_session`` the fail-closed
@@ -725,26 +743,29 @@ class TestOidcJsonResponseShapes:
         from farna.auth.sso import _fetch_discovery
 
         response = MagicMock()
-        response.json.return_value = payload
-        client = AsyncMock()
-        client.get.return_value = response
+        response.headers = {}
+        response.raise_for_status.return_value = None
+        response.aiter_bytes = lambda: _json_chunks(payload)
+        client = MagicMock()
+        client.aclose = AsyncMock()
+        client.stream.return_value = _response_stream(response)
 
-        with patch("farna.auth.sso.httpx.AsyncClient") as client_type:
-            client_type.return_value.__aenter__.return_value = client
-            with pytest.raises(ValueError, match="OIDC discovery document must be a JSON object"):
-                await _fetch_discovery("https://issuer.example/.well-known/openid-configuration")
+        with patch("farna.auth.sso.pinned_async_client", _pinned_client(client)), pytest.raises(ValueError, match="OIDC discovery document must be a JSON object"):
+            await _fetch_discovery("https://issuer.example/.well-known/openid-configuration")
 
     async def test_discovery_accepts_object_json(self) -> None:
         from farna.auth.sso import _fetch_discovery
 
         payload = {"authorization_endpoint": "https://issuer.example/authorize"}
         response = MagicMock()
-        response.json.return_value = payload
-        client = AsyncMock()
-        client.get.return_value = response
+        response.headers = {}
+        response.raise_for_status.return_value = None
+        response.aiter_bytes = lambda: _json_chunks(payload)
+        client = MagicMock()
+        client.aclose = AsyncMock()
+        client.stream.return_value = _response_stream(response)
 
-        with patch("farna.auth.sso.httpx.AsyncClient") as client_type:
-            client_type.return_value.__aenter__.return_value = client
+        with patch("farna.auth.sso.pinned_async_client", _pinned_client(client)):
             assert await _fetch_discovery("https://issuer.example/discovery") == payload
 
     @pytest.mark.parametrize("payload", [[], "token", None])
@@ -1473,18 +1494,25 @@ class TestSamlFetchIdpMetadata:
         settings = _override(
             modulo_saml_idp_metadata_url="https://idp.example.com/metadata",
         )
-        with patch("httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
+        with patch("farna.auth.sso.pinned_async_client") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.aclose = AsyncMock()
+            mock_client_cls.return_value = mock_client
             mock_resp = MagicMock()
-            mock_resp.text = "<md>remote</md>"
-            mock_client.get.return_value = mock_resp
+            mock_resp.headers = {}
+            mock_resp.raise_for_status.return_value = None
+
+            async def _metadata_chunks():
+                yield b"<md>remote</md>"
+
+            mock_resp.aiter_bytes = _metadata_chunks
+            mock_client.stream.return_value = _response_stream(mock_resp)
 
             result = await _saml_fetch_idp_metadata(settings)
             assert result == "<md>remote</md>"
-            mock_client.get.assert_awaited_once()
-            call_args, call_kwargs = mock_client.get.await_args
-            assert call_args[0] == "https://idp.example.com/metadata"
+            mock_client.stream.assert_called_once()
+            call_args, call_kwargs = mock_client.stream.call_args
+            assert call_args[1] == "https://idp.example.com/metadata"
             assert call_kwargs["timeout"].connect == 5.0
 
     async def test_raises_when_not_configured(self) -> None:
@@ -1795,7 +1823,7 @@ class TestOidcGetAuthorizeUrlDb:
             scopes=json.dumps(["openid", "email"]),
         )
         session = _mock_session(scalar=provider)
-        with patch("farna.auth.sso._fetch_discovery_pinned", new_callable=AsyncMock) as mock_disc:
+        with patch("farna.auth.sso._fetch_discovery", new_callable=AsyncMock) as mock_disc:
             mock_disc.return_value = {
                 "authorization_endpoint": "https://example.auth0.com/authorize",
             }
@@ -1825,7 +1853,7 @@ class TestOidcProcessCallbackDb:
         id_token = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode() + "." + base64.urlsafe_b64encode(b'{"email":"user@example.com","name":"Test User","sub":"abc"}').rstrip(b"=").decode() + "." + "sig"
 
         with (
-            patch("farna.auth.sso._fetch_discovery_pinned", new_callable=AsyncMock) as mock_disc,
+            patch("farna.auth.sso._fetch_discovery", new_callable=AsyncMock) as mock_disc,
             patch("farna.auth.sso._exchange_code", new_callable=AsyncMock) as mock_ex,
             patch("farna.auth.sso.verify_id_token", new_callable=AsyncMock) as mock_verify,
             patch("farna.auth.sso.jit_provision_user", new_callable=AsyncMock) as mock_jit,
@@ -1987,7 +2015,7 @@ class TestSystemSessionProviderResolution:
         id_token = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode() + "." + base64.urlsafe_b64encode(b'{"email":"user@example.com","name":"Test User","sub":"abc"}').rstrip(b"=").decode() + "." + "sig"
 
         with (
-            patch("farna.auth.sso._fetch_discovery_pinned", new_callable=AsyncMock) as mock_disc,
+            patch("farna.auth.sso._fetch_discovery", new_callable=AsyncMock) as mock_disc,
             patch("farna.auth.sso._exchange_code", new_callable=AsyncMock) as mock_ex,
             patch("farna.auth.sso.verify_id_token", new_callable=AsyncMock) as mock_verify,
             patch("farna.auth.sso.jit_provision_user", new_callable=AsyncMock) as mock_jit,

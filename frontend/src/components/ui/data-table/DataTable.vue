@@ -104,6 +104,8 @@ const sortedRows = computed(() => {
   })
 })
 
+const showEmpty = computed(() => !props.loading && props.rows.length === 0)
+
 function onRowClick(row: DataTableRow) {
   if (props.rowClickable) emit('row-click', row)
 }
@@ -118,8 +120,10 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
 </script>
 
 <template>
-  <div class="relative">
+  <div class="relative min-w-0 max-w-full" data-table-part="root">
     <div
+      v-if="!showEmpty"
+      data-table-part="scroll-fade"
       class="pointer-events-none absolute right-0 top-0 z-10 h-full w-8 bg-gradient-to-l from-background to-transparent sm:hidden"
       aria-hidden="true"
     />
@@ -138,7 +142,7 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
      it a focus stop so users can scroll with arrow keys when no cell is focusable.
      Both are required by accessibility tests. -->
     <div
-      class="overflow-x-auto overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      class="max-w-full overflow-x-auto overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       role="region"
       tabindex="0"
       :aria-label="t('components.DataTable.scroll_region_label')"
@@ -192,15 +196,7 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
           </td>
         </tr>
       </tbody>
-      <tbody v-else-if="rows.length === 0" class="divide-y divide-border">
-        <tr>
-          <td :colspan="columns.length" class="px-4 py-8 text-center text-sm text-muted-foreground">
-            <slot name="empty">
-              No data available.
-            </slot>
-          </td>
-        </tr>
-      </tbody>
+      <tbody v-else-if="rows.length === 0" />
       <tbody v-else class="divide-y divide-border">
         <tr
           v-for="(row, index) in sortedRows"
@@ -228,6 +224,18 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
         </tr>
       </tbody>
     </table>
+    </div>
+    <!-- FAR-2539: the empty state lives OUTSIDE the horizontally scrolling
+         region. Inside the table it took the table's min-w-max scroll width
+         (wider than a phone) and sat under the scroll-edge fade mask. -->
+    <div
+      v-if="showEmpty"
+      data-table-part="empty"
+      class="w-full min-w-0 px-4 py-8 text-center text-sm text-muted-foreground"
+    >
+      <slot name="empty">
+        No data available.
+      </slot>
     </div>
   </div>
 </template>

@@ -310,56 +310,6 @@ class TestSubmitForReview:
         assert resp.status_code == 409
 
 
-class TestPublish:
-    def test_publish_contribution_returns_200(self, client: TestClient):
-        prim = _make_mock_primitive(contribution_status="published", visibility="community")
-
-        with (
-            patch(
-                "farna.api.routes.contributions.publish_contribution",
-                new_callable=AsyncMock,
-                return_value=prim,
-            ),
-            patch("farna.api.routes.contributions.set_rls_org", new_callable=AsyncMock),
-        ):
-            resp = client.post(f"/api/v1/library/contribute/{_PRIMITIVE_ID}/publish")
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["contribution_status"] == "published"
-        assert body["visibility"] == "community"
-
-    def test_publish_contribution_forbidden_for_viewer(self, viewer_client: TestClient):
-        resp = viewer_client.post(f"/api/v1/library/contribute/{_PRIMITIVE_ID}/publish")
-        assert resp.status_code == 403
-
-    def test_publish_contribution_404(self, client: TestClient):
-        with (
-            patch(
-                "farna.api.routes.contributions.publish_contribution",
-                new_callable=AsyncMock,
-                side_effect=ContributionNotFoundError("not found"),
-            ),
-            patch("farna.api.routes.contributions.set_rls_org", new_callable=AsyncMock),
-        ):
-            resp = client.post(f"/api/v1/library/contribute/{uuid.uuid4()}/publish")
-
-        assert resp.status_code == 404
-
-    def test_publish_contribution_409(self, client: TestClient):
-        with (
-            patch(
-                "farna.api.routes.contributions.publish_contribution",
-                new_callable=AsyncMock,
-                side_effect=ContributionInvalidTransitionError("not in review_queue"),
-            ),
-            patch("farna.api.routes.contributions.set_rls_org", new_callable=AsyncMock),
-        ):
-            resp = client.post(f"/api/v1/library/contribute/{_PRIMITIVE_ID}/publish")
-
-        assert resp.status_code == 409
-
-
 class TestListContributions:
     def test_list_contributions_returns_200(self, client: TestClient):
         prim = _make_mock_primitive()

@@ -225,7 +225,6 @@ INVENTORY: dict[str, PathRecord] = {
     # surfaced by the /healthz/ready advisory — mutates no row.
     "legacy_agent_return_sweep": _exempt("read_only_detection"),
     "check_missed_fire_alerts_cron": _exempt("notification_only"),
-    "library_sync": _exempt("derived_state"),
     "metrics_dump": _exempt("telemetry_watermark"),
     "connector_health_checks": _exempt("derived_cache"),
     "health_readiness_alert": _exempt("notification_only"),

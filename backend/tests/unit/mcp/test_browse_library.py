@@ -181,7 +181,6 @@ class TestSearchLibrary:
             search="test",
             page=1,
             page_size=10,
-            include_community=True,
             cursor="abc123",
         )
 

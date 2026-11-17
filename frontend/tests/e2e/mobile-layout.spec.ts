@@ -1069,7 +1069,7 @@ test.describe('Mobile layout audit — narrow viewport bounding sweep', { tag: '
   ]
 
   for (const vp of narrowViewports) {
-    test.describe(`viewport ${vp.name}`, () => {
+    test.describe(`viewport ${vp.name}`, { tag: '@mobile' }, () => {
       test.use(vp)
       for (const route of NARROW_ROUTES) {
         test(`${route} — no horizontal overflow / clipped controls`, { tag: '@mobile' }, async ({ page, env }) => {
@@ -1078,4 +1078,62 @@ test.describe('Mobile layout audit — narrow viewport bounding sweep', { tag: '
       }
     })
   }
+})
+
+// FAR-2537: central mobile primitives (CardHeader / PageHeader / app shell).
+// Strategy and acceptance pattern: docs/frontend-mobile-layout.md.
+test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@regression', '@mobile'] }, () => {
+  const HEADER_ROUTES = ['/', '/pipelines', '/admin/connectors']
+
+  async function openLocal(page: Page, env: TestEnv, route: string) {
+    if (env.name === 'local') await setupLocalMockApi(page)
+    await loginAsAdmin(page, env)
+    await page.goto(route)
+    await page.waitForLoadState('domcontentloaded')
+    await expect(page.locator('h1').first()).toBeVisible()
+  }
+
+  test.describe('390x844', { tag: ['@regression', '@mobile'] }, () => {
+    test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+    for (const route of HEADER_ROUTES) {
+      test(`${route} — no horizontal overflow and single-line action buttons`, { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+        await openLocal(page, env, route)
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+        expect(overflow).toBeLessThanOrEqual(0)
+        const wrapped = await page.evaluate(() => {
+          const out: string[] = []
+          for (const btn of Array.from(document.querySelectorAll('main .actions-nowrap button, main .actions-nowrap a[role="button"]'))) {
+            const el = btn as HTMLElement
+            const rect = el.getBoundingClientRect()
+            if (rect.width === 0 || !el.textContent?.trim()) continue
+            const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20
+            const padding = parseFloat(getComputedStyle(el).paddingTop) + parseFloat(getComputedStyle(el).paddingBottom)
+            // More than ~1.5 lines of text means the label wrapped.
+            if (rect.height - padding > lineHeight * 1.5) out.push(el.textContent.trim().slice(0, 40))
+          }
+          return out
+        })
+        expect(wrapped).toHaveLength(0)
+      })
+    }
+
+    test('app shell uses dynamic viewport height', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+      await openLocal(page, env, '/')
+      const shell = page.locator('div.h-screen-dvh').first()
+      await expect(shell).toBeVisible()
+      const box = await shell.boundingBox()
+      expect(box?.height).toBeLessThanOrEqual(844)
+    })
+  })
+
+  test.describe('1280x800', { tag: '@regression' }, () => {
+    test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false })
+    test('CardHeader renders as a row on desktop', { tag: '@regression' }, async ({ page, env }) => {
+      await openLocal(page, env, '/admin/connectors')
+      const headers = page.locator('.card-header')
+      if ((await headers.count()) === 0) test.skip(true, 'no CardHeader on this route')
+      const dir = await headers.first().evaluate((el) => getComputedStyle(el).flexDirection)
+      expect(dir).toBe('row')
+    })
+  })
 })

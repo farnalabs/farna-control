@@ -19,5 +19,5 @@ data:
   # deny_all DECLARED posture (and the provider's acceptance of an egress
   # 'none' workspace) on this signal, so a posture can never be declared when
   # its enforcing manifest does not exist.
-  MODULO_WORKSPACE_NETWORK_POLICY: "enabled"
+  FARNA_CONTROL_WORKSPACE_NETWORK_POLICY: "enabled"
   {{- end }}

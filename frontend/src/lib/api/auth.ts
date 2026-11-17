@@ -43,7 +43,7 @@ function storeToken(key: string, token: string): void {
     console.warn(`[auth] refusing to store invalid token for ${key}`)
     return
   }
-  localStorage.setItem(key, token)
+  localStorage.setItem(key, token) // NOSONAR S8475 — token is validated by isValidToken above
 }
 
 // One-time migration: sessions that pre-date FAR-1197 may still have a

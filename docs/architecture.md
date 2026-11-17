@@ -386,7 +386,7 @@ Versioned JSON Schema definitions (Draft 2020-12). Schemas are org-scoped, versi
 
 ### Library Service (`farna/core/library_service/`)
 
-Manages the local and community library of reusable primitives (agents, schemas, workflows, integrations). Community primitives are Ed25519-signed. Copy-to-adapt via `CopyToAdaptWizard` UI component (ownership picker + optional binding step).
+Manages the local library of reusable primitives (agents, schemas, workflows, integrations). Copy-to-adapt via `CopyToAdaptWizard` UI component (ownership picker + optional binding step).
 
 ### Declarative Configuration CLI (`farna/cli/apply/`) – FAR-681
 
@@ -418,7 +418,7 @@ Feature flags are declared once in `_KNOWN_FLAGS` (`core/feature_flags.py`). The
 
 **Policy:** A feature flag is permitted only if BOTH the enabled state AND the disabled state are safe AND CI-tested in both states. If the "off" state breaks behavior (the feature cannot function without the flag), delete the flag and hardcode the behavior. Flags that fail-closed silently are worse than no flag at all.
 
-**Two-level settability (FAR-2302).** Each flag carries `org_admin_settable: bool = False` and the default is fail-closed. Only a flag that explicitly opts in may be set by an organization admin for their own organization, through `GET/PUT/DELETE /api/v1/admin/org/feature-flags[/{flag_name}]` (`org.feature_flags.manage`, `admin`, non-delegable). `FeatureFlagRegistry` keeps the classification when it loads the DB catalog, so a catalog-only flag is system-administrator-only by default. Every other flag – the instance-wide feature-flags page (`system.config.manage`) is the only surface – is a system administrator's to set. The org surface also refuses team-tier flags regardless of the classification (a team flag needs a license), and excludes `mcp_human_linked_hitl_authority`, which has its own dedicated org control at `/api/v1/admin/org/mcp-human-linked-hitl-authority`, so there is exactly one UI per flag. The curated community-tier opt-ins are the low-sensitivity usage flags (`user_scoped_mcp_keys`, `api_key_grants`, `webhook_notification_log`, `dashboard_charts`, `library_collection`, `autonomy_gating`, `analytics_page`). A future sensitive org-scoped flag – community-library access, telemetry/metrics export, or anything that widens an auth or data-egress boundary – must default to system-administrator-only (`org_admin_settable=False`) and be opened only by a deliberate, reviewed change.
+**Two-level settability (FAR-2302).** Each flag carries `org_admin_settable: bool = False` and the default is fail-closed. Only a flag that explicitly opts in may be set by an organization admin for their own organization, through `GET/PUT/DELETE /api/v1/admin/org/feature-flags[/{flag_name}]` (`org.feature_flags.manage`, `admin`, non-delegable). `FeatureFlagRegistry` keeps the classification when it loads the DB catalog, so a catalog-only flag is system-administrator-only by default. Every other flag – the instance-wide feature-flags page (`system.config.manage`) is the only surface – is a system administrator's to set. The org surface also refuses team-tier flags regardless of the classification (a team flag needs a license), and excludes `mcp_human_linked_hitl_authority`, which has its own dedicated org control at `/api/v1/admin/org/mcp-human-linked-hitl-authority`, so there is exactly one UI per flag. The curated community-tier opt-ins are the low-sensitivity usage flags (`user_scoped_mcp_keys`, `api_key_grants`, `webhook_notification_log`, `dashboard_charts`, `library_collection`, `autonomy_gating`, `analytics_page`). A future sensitive org-scoped flag – telemetry/metrics export, or anything that widens an auth or data-egress boundary – must default to system-administrator-only (`org_admin_settable=False`) and be opened only by a deliberate, reviewed change.
 
 The reference-integrity guard test (`tests/architecture/test_feature_flag_reference_integrity.py`) enforces this: every flag name referenced by a gate must exist in `_KNOWN_FLAGS` (no phantoms), and every flag in `_KNOWN_FLAGS` must have at least one external reference (no orphans).
 
@@ -1124,19 +1124,43 @@ Note: duplicate ADR numbers were resolved by FAR-1157 (devtools commit `b65b5de`
 
 ## Import Contracts (enforced by import-linter)
 
-The eight contracts in `backend/.importlinter`, all `forbidden` type. Each has explicit
-`ignore_imports` seams where a deliberate exception exists.
+`backend/.importlinter` is the sole source of truth for Python module boundaries. The
+CI and pre-commit `lint-imports` command reads that file directly; there is no parallel
+module manifest or graph scanner. The contracts are an incremental ratchet over the
+current modular monolith, not a claim that the package has already been fully split.
 
-| Contract name | Source | Forbidden |
+The nine current contracts are deliberately small and green against the existing tree:
+
+| Contract name | Source | Forbidden or protected surface |
 |---|---|---|
 | API layer uses pipeline_engine, not LangGraph directly | `farna.api` | `langgraph` |
 | Connectors layer is independent of API | `farna.connectors` | `farna.api`, `farna.auth` |
 | Core is zero-coupled to modulo-cloud | `farna.core`, `farna.api`, `farna.connectors` | `modulo_cloud` |
-| OTel bridge does not import core business logic | `farna.otel_bridge` | `farna.core.pipeline_engine`, `farna.core.hitl_manager`, `farna.core.eval_engine` |
+| OTel bridge does not import core business logic | `farna.otel_bridge` | selected `farna.core` packages |
 | Core layer never sees FastAPI | `farna.core` | `farna.api` |
 | DB layer has no business logic imports | `farna.db` | `farna.core`, `farna.api` |
 | Connectors don't reach into core | `farna.connectors` | `farna.core` |
-| Concrete runtime providers are only imported inside `core/runtime_provider` (FAR-587) | `modulo` | `farna.core.runtime_provider.{docker,e2b,k8s,local,local_docker}` |
+| Concrete runtime providers are only imported inside `core/runtime_provider` | `farna` | concrete runtime-provider modules |
+| Shared utility package has an explicit consumer boundary | selected top-level packages | `farna.util`, imported only by listed consumers |
+
+### Boundary exceptions
+
+An `ignore_imports` entry is a deliberate transitional seam, not a general escape hatch.
+Every exception must remain in `backend/.importlinter`, include a nearby explanation, and
+keep the contract green. Add an exception only when the import is present in the current
+tree and the narrow seam is understood. Removing an exception is preferred when the
+production dependency disappears. The architecture tests in
+`backend/tests/architecture/test_import_linter_policy.py` ratchet this policy shape;
+they do not reimplement import-linter's dependency graph.
+
+Import-linter cannot express every semantic rule. The narrowly scoped
+`test_runtime_provider_contract.py` backstop therefore protects the concrete
+runtime-provider implementation modules from direct consumers, while the
+import-linter `protected` contract protects the shared utility package's allowed
+consumer set. New boundary rules should first be added as import-linter
+contracts. Add a focused architecture test only when the rule is genuinely
+outside import-linter's contract vocabulary, and document the reason beside the
+test.
 
 ## Testing Strategy
 

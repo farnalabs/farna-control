@@ -33,7 +33,7 @@ const markWidth = computed(
     xmlns="http://www.w3.org/2000/svg"
     role="img"
     :aria-label="t('components.LogoMark.logo')"
-    :class="transparent ? undefined : 'text-white'"
+    :class="transparent ? 'text-foreground' : 'text-white'"
   >
     <rect
       v-if="!transparent"

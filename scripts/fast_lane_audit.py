@@ -4,14 +4,14 @@
 Pure, testable decision logic — no GitHub API calls, no subprocess.
 Given a list of fast-lane merges and a list of candidate review comments,
 determine which merges are *unaudited*: a merge is audited when a comment
-by the reviewer identity (``modulo-reviewbot``) exists on that PR
+by the reviewer identity (``farna-reviewbot``) exists on that PR
 **created after the merge time** — comments before the merge are the
 pre-merge review and do NOT count.
 
 Usage (CI):
     python scripts/fast_lane_audit.py \\
         --window-hours 24 \\
-        --reviewer modulo-reviewbot
+        --reviewer farna-reviewbot
 
 The workflow (``fast-lane-post-merge-audit.yml``) feeds this with data
 fetched from the GitHub API.  This script never calls GitHub itself.
@@ -63,7 +63,7 @@ def find_unaudited_merges(
     merges: Sequence[Merge],
     comments: Sequence[Comment],
     *,
-    reviewer: str = "modulo-reviewbot",
+    reviewer: str = "farna-reviewbot",
     window_hours: int = 24,
 ) -> list[Merge]:
     """Return the subset of *merges* that lack a qualifying post-merge review.
@@ -121,8 +121,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--reviewer",
-        default="modulo-reviewbot",
-        help="GitHub username of the reviewer identity (default: modulo-reviewbot)",
+        default="farna-reviewbot",
+        help="GitHub username of the reviewer identity (default: farna-reviewbot)",
     )
     parser.add_argument(
         "--merges-json",

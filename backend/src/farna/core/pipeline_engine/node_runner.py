@@ -1525,7 +1525,7 @@ async def _file_io_provider_for(  # NOSONAR S7503 - async seam, see docstring
     credential, or a provider-construction failure raises
     :class:`RuntimeProviderError` — there is no legacy ``sandbox.files``
     handle to fall back to (FAR-1050 R6 deleted it). Key resolution mirrors
-    the R1/R3 helpers (runtime bridge / ``MODULO_E2B_API_KEY``, then the
+    the R1/R3 helpers (runtime bridge / ``FARNA_CONTROL_E2B_API_KEY``, then the
     legacy ``E2B_API_KEY`` env var).
 
     FAR-1051: ``provider_type`` is the run's bound profile's declared type
@@ -1559,7 +1559,7 @@ async def _file_io_provider_for(  # NOSONAR S7503 - async seam, see docstring
     api_key = get_e2b_api_key() or os.environ.get("E2B_API_KEY")
     provider = _build_file_io_provider(api_key) if api_key else None
     if provider is None:
-        raise RuntimeProviderError("sandbox file I/O could not resolve the E2B runtime provider (set MODULO_E2B_API_KEY and restart)")
+        raise RuntimeProviderError("sandbox file I/O could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_API_KEY and restart)")
     return provider, sandbox_id
 
 
@@ -1819,7 +1819,7 @@ async def _build_dispatch_provider(  # NOSONAR S7503 - async seam, see docstring
     returns the provider for the run's profile type. The legacy route
     (``provider_type`` unset / ``"e2b"`` — the profile-less default) returns
     the hub's registered ``e2b`` provider, or ``None`` when it is not
-    registered (no ``MODULO_E2B_API_KEY`` / runtime override) or the hub
+    registered (no ``FARNA_CONTROL_E2B_API_KEY`` / runtime override) or the hub
     cannot be constructed; the caller fails CLOSED with a typed error rather
     than silently falling back to ``AsyncSandbox.create``.
 
@@ -1862,7 +1862,7 @@ def _require_dispatch_provider(provider: "RuntimeProvider | None") -> "RuntimePr
     from farna.core.runtime_provider import RuntimeProviderError
 
     if provider is None:
-        raise RuntimeProviderError("FAR-1050 dispatch could not resolve the E2B runtime provider (set MODULO_E2B_API_KEY and restart) — refusing to provision without a provider")
+        raise RuntimeProviderError("FAR-1050 dispatch could not resolve the E2B runtime provider (set FARNA_CONTROL_E2B_API_KEY and restart) — refusing to provision without a provider")
     return provider
 
 
@@ -10088,7 +10088,7 @@ def _build_sandbox_envs(
 
     The ordering is DELIBERATE (AGENTS.md b0c4bde97): pipelines must be able to
     override system defaults for identity separation (e.g. the PR Reviewer
-    injects its own modulo-reviewbot PAT via ``env_vars_extra``). Script mode
+    injects its own farna-reviewbot PAT via ``env_vars_extra``). Script mode
     does NOT auto-inject the long-lived host credentials (opencode API key /
     GitHub PAT) — a script only gets what the pipeline passes explicitly.
 
@@ -10254,7 +10254,7 @@ def _resolved_e2b_key_for_enforcement() -> str | None:
     """Resolved remote E2B credential (FAR-1159, FAR-1171).
 
     Serves BOTH the script-enforcement refusal AND the E2B
-    ``AsyncSandbox.create`` credential: resolves ``MODULO_E2B_API_KEY``
+    ``AsyncSandbox.create`` credential: resolves ``FARNA_CONTROL_E2B_API_KEY``
     through the runtime-config bridge (override wins over env — the same
     bridge the provider-registration gate uses, so the paths cannot
     disagree) and layers the legacy ``E2B_API_KEY`` env fallback exactly as
@@ -11337,7 +11337,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         # provisioning await so the node fails RETRYABLY within this window.
         # The bound applies to the create await AND the rate-limit backoff sleeps
         # so a retry train cannot stack past the window.
-        # FAR-901: set MODULO_SCHEMA_DIR at sandbox creation time (not per-command).
+        # FAR-901: set FARNA_CONTROL_SCHEMA_DIR at sandbox creation time (not per-command).
         # The env var is set unconditionally — the schema files may or may not be
         # written (they're advisory), but the env var must be present for any
         # consumer that checks it.
@@ -11513,7 +11513,8 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                         _input_schema_path = f"{_sandbox_schema_dir}/{node_id}/input.active.json"
                         _output_schema_path = f"{_sandbox_schema_dir}/{node_id}/output.active.json"
                         _schema_injection = (
-                            f"\n\n---\nSchema contract files (advisory — Modulo validates independently):\n  Input schema:  {_input_schema_path}\n  Output schema: {_output_schema_path}\n  Schema dir:    {_sandbox_schema_dir}/{node_id}/\n  Environment:   MODULO_SCHEMA_DIR={_sandbox_schema_dir}\n---"
+                            f"\n\n---\nSchema contract files (advisory — Modulo validates independently):\n  Input schema:  {_input_schema_path}\n  Output schema: {_output_schema_path}\n"
+                            f"  Schema dir:    {_sandbox_schema_dir}/{node_id}/\n  Environment:   FARNA_CONTROL_SCHEMA_DIR={_sandbox_schema_dir}\n---"
                         )
                         rendered_prompt = rendered_prompt + _schema_injection
         except Exception:
@@ -11901,7 +11902,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # System env vars first — provide defaults from the host. DO NOT
             # move pipeline env before these: pipelines need to override
             # GITHUB_TOKEN for identity separation (e.g. PR Reviewer uses
-            # modulo-reviewbot PAT, not the default GITHUB_TOKEN identity).
+            # farna-reviewbot PAT, not the default GITHUB_TOKEN identity).
             # The reserved-prefix validator already prevents overriding
             # MODULO_* vars, so update() below is the sanctioned override.
             # FAR-592 (D6): ``_runner_bindings`` was resolved BEFORE the sandbox
@@ -13690,7 +13691,7 @@ def _build_sandbox_node_config(
             f"sandbox_agent node '{node_id}' mode='script' requests egress/resource/"
             "sandbox-policy enforcement (egress_policy='deny_all'/'selected', resource_limits, "
             "read_only, or git_credentials scoped/none) which requires a "
-            "remote E2B provider (set MODULO_E2B_API_KEY or E2B_API_KEY) — local "
+            "remote E2B provider (set FARNA_CONTROL_E2B_API_KEY or E2B_API_KEY) — local "
             "providers have no egress, resource-limit, or sandbox-policy enforcement point for script mode"
         )
     output_schema_json: dict[str, Any] | None = node_def.get("output_schema_json")

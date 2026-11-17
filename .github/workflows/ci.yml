@@ -975,7 +975,7 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         if: needs.changes.outputs.frontend == 'true'
         with:
-          version: 11.28.11
+          version: 11.28.12
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: needs.changes.outputs.frontend == 'true'
         with:
@@ -1218,7 +1218,7 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         if: needs.changes.outputs.frontend == 'true'
         with:
-          version: 11.28.11
+          version: 11.28.12
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: needs.changes.outputs.frontend == 'true'
         with:
@@ -1753,7 +1753,7 @@ jobs:
           enable-cache: true
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.11
+          version: 11.28.12
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
@@ -2469,6 +2469,9 @@ jobs:
       # The checkout below fetches scripts/dispatch_with_retry.sh; job-level
       # permissions replace the workflow-level `contents: read`.
       contents: read
+      # scripts/main_failure_fix_pr_open.sh lists open PRs to find an existing
+      # fix for this failure, and comments the new failing run on it.
+      pull-requests: write
     steps:
       # The dispatch policy is shared code, so this job checks out exactly that
       # one file. Same guard as the dispatch step: a main run that is cancelled
@@ -2495,13 +2498,38 @@ jobs:
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
           DISPATCH_LABEL: "Modulo Branch Fixer"
           MAIN_SHA: ${{ github.sha }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         shell: bash
         run: |
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           # headSha (FAR-1034): mirrors the notify-pr-failure payload so the
           # Branch Fixer trigger can coalesce repeated failures at the same
-          # main SHA.
-          FINGERPRINT="CI: Fast Validation|main|${MAIN_SHA}"
+          # main SHA. The fixer needs it, so it stays in the payload.
+          #
+          # The FINGERPRINT, however, is stable ACROSS main commits: it keys on
+          # the workflow + the failure identity (the sorted ids of the failed
+          # `needs` jobs), never on the SHA. When main goes red every later
+          # merge produces another red run; a SHA-keyed fingerprint made each
+          # one look new, so one SonarCloud failure on 2026-11-17 raised four
+          # Branch Fixer PRs (#3214-#3217). A per-PR dispatch keeps (PR, SHA)
+          # keying — that is correct there; only main is SHA-independent.
+          # If the job list cannot be derived, fail closed to a constant
+          # (`unknown-jobs`), never to the SHA.
+          FAILED_JOBS=$(printf '%s' "${NEEDS_JSON}" | jq -r '[to_entries[] | select(.value.result == "failure") | .key] | sort | join(",")' 2>/dev/null || true)
+          if [ -z "${FAILED_JOBS}" ]; then
+            FAILED_JOBS="unknown-jobs"
+          fi
+          FINGERPRINT="CI: Fast Validation|main|${FAILED_JOBS}"
+          # Dispatcher-side skip: an OPEN PR whose body carries this exact
+          # fingerprint (the Branch Fixer embeds
+          # `<!-- branch-fixer-fingerprint: <fp> -->`) is already fixing this
+          # failure, so do not dispatch again. The script fails OPEN: a lookup
+          # error warns and we dispatch anyway (the fixer has its own gate).
+          if FIX_FINGERPRINT="${FINGERPRINT}" RUN_URL="${RUN_URL}" bash scripts/main_failure_fix_pr_open.sh; then
+            exit 0
+          fi
           BODY=$(jq -n \
             --arg branchName "main" \
             --argjson prNumber 0 \

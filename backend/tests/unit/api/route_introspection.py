@@ -36,14 +36,16 @@ def get_all_apiroutes(app: object) -> list:
     Mount/WebSocket routes.
     """
     routes: list = []
-    for r in app.routes:
-        tn = type(r).__name__
-        if tn == "APIRoute":
-            routes.append(r)
-        elif tn == "_IncludedRouter" and hasattr(r, "original_router"):
-            sub_router = r.original_router
-            if hasattr(sub_router, "routes"):
-                routes.extend(sr for sr in sub_router.routes if type(sr).__name__ == "APIRoute")
+
+    def collect(router: object) -> None:
+        for route in getattr(router, "routes", []):
+            route_type = type(route).__name__
+            if route_type == "APIRoute":
+                routes.append(route)
+            elif route_type == "_IncludedRouter" and hasattr(route, "original_router"):
+                collect(route.original_router)
+
+    collect(app)
     return routes
 
 

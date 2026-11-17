@@ -41,8 +41,9 @@ from jwt import InvalidTokenError as JWTError
 # `mcp` builds `class JSONRPCMessage(RootModel[...])` at import time. Coverage's
 # single-module source-spec resolution imports-then-rolls-back modules
 # (coverage 7.16.2), which can delete `pydantic.root_model` while leaving a
-# dangling `RootModel` attribute, crashing that specialization. See
-# tests/unit/library_sync/test_coverage_source_import_guard.py.
+# dangling `RootModel` attribute, crashing that specialization. See the
+# "pydantic.root_model residency guard" note in backend/tests/conftest.py
+# (the dedicated regression test was removed with the community library).
 import pydantic.root_model  # noqa: F401  # isort: skip
 
 from mcp.server.fastmcp import FastMCP
@@ -8087,7 +8088,6 @@ async def search_library(
                 search=search,
                 page=1,
                 page_size=limit,
-                include_community=True,
                 cursor=cursor,
             )
         return {
@@ -14446,7 +14446,6 @@ async def resource_library() -> str:
                 primitive_types=visible_primitive_types,
                 page=1,
                 page_size=50,
-                include_community=True,
             )
         if not result.items:
             return "Library is empty."

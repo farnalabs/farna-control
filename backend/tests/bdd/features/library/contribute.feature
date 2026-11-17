@@ -1,10 +1,10 @@
-Feature: Contribute fixtures to the community library
-  Users can create draft fixture contributions, submit them for review,
-  and publish them to the community library. The contribution lifecycle is
-  served by `/api/v1/library/contribute` (`contributions.py`): a fixture
-  starts as a `draft`, is submitted to the `review_queue`, and is published
-  (admin-only) with `visibility=community`; a published contribution can be
-  versioned into a fresh draft.
+Feature: Contribute fixtures to the org library
+  Users can create draft fixture contributions and submit them for review.
+  The contribution lifecycle is served by `/api/v1/library/contribute`
+  (`contributions.py`): a fixture starts as a `draft` and is submitted to the
+  `review_queue`; a published contribution can be versioned into a fresh
+  draft. (The community-library publish step was removed with the community
+  library.)
 
   Background:
     Given the organisation exists
@@ -41,20 +41,6 @@ Feature: Contribute fixtures to the community library
     Given a published fixture contribution exists
     When the user submits the contribution for review
     Then the response status is 409
-
-  Scenario: Publish a reviewed contribution
-    Given a reviewed fixture contribution exists
-    And the user is an org admin
-    When the user publishes the contribution
-    Then the response status is 200
-    And the response has contribution_status "published"
-    And the response has visibility "community"
-
-  Scenario: Publish without admin role returns 403
-    Given a reviewed fixture contribution exists
-    And the user is a viewer
-    When the user publishes the contribution
-    Then the response status is 403
 
   Scenario: List contributions
     When the user lists the contributions

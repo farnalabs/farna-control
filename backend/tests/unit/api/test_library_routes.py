@@ -1,4 +1,4 @@
-"""Unit tests for /api/v1/libraries endpoints — CRUD, export/import, ratings, community.
+"""Unit tests for /api/v1/libraries endpoints — CRUD, export/import, ratings.
 
 Complements test_library_endpoint.py (list filtering + template→pipeline).
 Unit tier: no DB — CRUD/service functions are patched at the route-module
@@ -27,8 +27,6 @@ from farna.auth.dependencies import get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
 from farna.core.library_service import (
     CommunityPrimitiveReadOnlyError,
-    ContributionInvalidTransitionError,
-    ContributionNotFoundError,
 )
 from farna.db.crud.base import PageResult
 from farna.settings import Settings, get_settings
@@ -114,13 +112,6 @@ def client() -> Generator[TestClient, None, None]:
 @pytest.fixture
 def operator_client() -> Generator[TestClient, None, None]:
     test_client, _ = _build_client(_principal(org_role="operator", key_grants=frozenset()))
-    yield test_client
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def system_admin_client() -> Generator[TestClient, None, None]:
-    test_client, _ = _build_client(_principal(is_system_admin=True))
     yield test_client
     app.dependency_overrides.clear()
 
@@ -1306,97 +1297,6 @@ def test_create_lifecycle_map_missing_returns_404(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# community contributions
-# ---------------------------------------------------------------------------
-
-
-def test_community_contribute_lifecycle_map_returns_403_when_dev_mode_off(client: TestClient) -> None:
-    with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
-        patch("farna.api.routes.library.contribute_primitive", new_callable=AsyncMock) as contribute_mock,
-        patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
-        patch("farna.api.routes.library.set_rls_user_context", new_callable=AsyncMock),
-    ):
-        resp = client.post(
-            "/api/v1/libraries/community/contribute",
-            json=_create_payload(primitive_type="lifecycle_map", name="Map", slug="map"),
-        )
-    assert resp.status_code == 403
-    contribute_mock.assert_not_awaited()
-
-
-def test_community_contribute_returns_201(client: TestClient) -> None:
-    prim = _make_listable_primitive(source_url="https://example.com/p")
-    with (
-        patch("farna.api.routes.library.contribute_primitive", new_callable=AsyncMock, return_value=prim),
-        patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
-        patch("farna.api.routes.library.set_rls_user_context", new_callable=AsyncMock),
-    ):
-        resp = client.post(
-            "/api/v1/libraries/community/contribute",
-            json=_create_payload(name="Contribution", slug="contribution", source_url="https://example.com/p"),
-        )
-    assert resp.status_code == 201, resp.text
-
-
-def test_community_contribute_conflict_returns_409(client: TestClient) -> None:
-    err = IntegrityError("INSERT", {}, Exception("unique"))
-    with (
-        patch("farna.api.routes.library.contribute_primitive", new_callable=AsyncMock, side_effect=err),
-        patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
-        patch("farna.api.routes.library.set_rls_user_context", new_callable=AsyncMock),
-    ):
-        resp = client.post(
-            "/api/v1/libraries/community/contribute",
-            json=_create_payload(name="Contribution", slug="contribution"),
-        )
-    assert resp.status_code == 409
-
-
-def test_list_community_contributions_returns_items(client: TestClient) -> None:
-    page = PageResult(items=[_make_listable_primitive()], total=1, page=1, page_size=20)
-    with patch("farna.api.routes.library.list_org_contributions", new_callable=AsyncMock, return_value=page):
-        resp = client.get("/api/v1/libraries/community/contributions")
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["total"] == 1
-    assert len(body["items"]) == 1
-
-
-def test_admin_publish_contribution_returns_200(system_admin_client: TestClient) -> None:
-    prim = _make_listable_primitive(source="registry", verified=True)
-    with patch("farna.api.routes.library.publish_contribution", new_callable=AsyncMock, return_value=prim):
-        resp = system_admin_client.post(f"/api/v1/libraries/admin/library/community/publish/{prim.id}")
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["trust_tier"] == "green"
-
-
-def test_admin_publish_missing_contribution_returns_404(system_admin_client: TestClient) -> None:
-    with patch(
-        "farna.api.routes.library.publish_contribution",
-        new_callable=AsyncMock,
-        side_effect=ContributionNotFoundError,
-    ):
-        resp = system_admin_client.post(f"/api/v1/libraries/admin/library/community/publish/{uuid.uuid4()}")
-    assert resp.status_code == 404
-
-
-def test_admin_publish_invalid_transition_returns_400(system_admin_client: TestClient) -> None:
-    with patch(
-        "farna.api.routes.library.publish_contribution",
-        new_callable=AsyncMock,
-        side_effect=ContributionInvalidTransitionError("cannot publish"),
-    ):
-        resp = system_admin_client.post(f"/api/v1/libraries/admin/library/community/publish/{uuid.uuid4()}")
-    assert resp.status_code == 400
-
-
-def test_admin_publish_requires_system_admin(client: TestClient) -> None:
-    resp = client.post(f"/api/v1/libraries/admin/library/community/publish/{uuid.uuid4()}")
-    assert resp.status_code == 403
-
-
-# ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
 
@@ -1690,39 +1590,6 @@ def test_create_pipeline_from_template_error_mapping(client: TestClient, exc: Ex
         _rls_patches()[1],
     ):
         resp = client.post(f"/api/v1/libraries/{prim.id}/create-pipeline", json={})
-    assert resp.status_code == expected
-
-
-@pytest.mark.parametrize(("exc", "expected"), _GET_501_503, ids=["501", "503"])
-def test_community_contribute_error_mapping(client: TestClient, exc: Exception, expected: int) -> None:
-    _assert_error_mapping(
-        client,
-        "farna.api.routes.library.contribute_primitive",
-        _request("post", "/api/v1/libraries/community/contribute", json_body=_create_payload()),
-        [(exc, expected)],
-    )
-
-
-@pytest.mark.parametrize(("exc", "expected"), _GET_409_501_503, ids=["409", "501", "503"])
-def test_list_community_contributions_error_mapping(client: TestClient, exc: Exception, expected: int) -> None:
-    _assert_error_mapping(
-        client,
-        "farna.api.routes.library.list_org_contributions",
-        _request("get", "/api/v1/libraries/community/contributions"),
-        [(exc, expected)],
-    )
-
-
-def test_list_community_contributions_unexpected_error_returns_500(client: TestClient) -> None:
-    with patch("farna.api.routes.library.list_org_contributions", new_callable=AsyncMock, side_effect=RuntimeError):
-        resp = client.get("/api/v1/libraries/community/contributions")
-    assert resp.status_code == 500
-
-
-@pytest.mark.parametrize(("exc", "expected"), _GET_409_501_503, ids=["409", "501", "503"])
-def test_admin_publish_error_mapping(system_admin_client: TestClient, exc: Exception, expected: int) -> None:
-    with patch("farna.api.routes.library.publish_contribution", new_callable=AsyncMock, side_effect=exc):
-        resp = system_admin_client.post(f"/api/v1/libraries/admin/library/community/publish/{uuid.uuid4()}")
     assert resp.status_code == expected
 
 

@@ -98,37 +98,6 @@ def _build_builtin(
     return p
 
 
-def _make_community_db_item(
-    pid: str,
-    primitive_type: str,
-    name: str,
-    slug: str,
-    description: str,
-    content_json: dict[str, Any],
-    tags: list[str],
-) -> LibraryPrimitive:
-    """Build an in-memory "community database" example pipeline (ADR 010 §2).
-
-    Community-database items use ``source="community"`` (distinct from
-    ``source="modulo"`` used by the Native library) and are always
-    ``verified=False`` so the UI can render a clear "not verified by Modulo"
-    indicator.
-    """
-    return _build_builtin(
-        pid,
-        primitive_type,
-        name,
-        slug,
-        description,
-        content_json,
-        tags,
-        source="community",
-        author="community",
-        verified=False,
-        contribution_status=None,
-    )
-
-
 def _make_modulo(
     pid: str,
     primitive_type: str,
@@ -1862,86 +1831,6 @@ for _p in _MODULO_PRIMITIVES:
     if _p.primitive_type == "library_collection":
         _p.status = "published"
 
-# Indexes for O(1) community lookup
+# Indexes for O(1) registry lookup
 _MODULO_BY_ID: dict[uuid.UUID, LibraryPrimitive] = {p.id: p for p in _MODULO_PRIMITIVES}
 _MODULO_BY_SLUG: dict[tuple[str, str], LibraryPrimitive] = {(p.primitive_type, p.slug): p for p in _MODULO_PRIMITIVES}
-
-# ---------------------------------------------------------------------------
-# Community database — opinionated, narrower example pipelines contributed
-# by users (ADR 010 §2). Launch-seeded with a small curated starter set;
-# NOT marketed as "community-driven" until real external contributions
-# exist. Never mixed into the Native library — always rendered as a
-# separate, clearly-labelled UI section (source == "community").
-# ---------------------------------------------------------------------------
-
-_COMMUNITY_PRIMITIVES: list[LibraryPrimitive] = [
-    _make_community_db_item(
-        pid="00000000-0000-0000-0000-0000000000c1",
-        primitive_type="workflow",
-        name="Translate to French",
-        slug="translate-to-french",
-        description=("Translates freeform input text into French. A narrow, single-purpose example pipeline — not maintained to Native library standards. Use as a starting point and adapt as needed."),
-        content_json={
-            "nodes": [{"id": "translator", "agent": "french-translator"}],
-            "edges": [],
-            "entry": "translator",
-            "agents": [
-                {
-                    "name": "French Translator",
-                    "description": "Translates the given text into French.",
-                    "prompt_template": ("Translate the following text into French. Preserve tone and meaning; do not add commentary.\n\nText:\n{{ input }}"),
-                    "connector_type_refs": [],
-                    "required_environment_capabilities": [],
-                }
-            ],
-        },
-        tags=["community", "translation", "french", "example"],
-    ),
-    _make_community_db_item(
-        pid="00000000-0000-0000-0000-0000000000c2",
-        primitive_type="workflow",
-        name="QA Reviewer",
-        slug="qa-reviewer",
-        description=("Reviews a code diff or PR description and flags likely bugs, missing tests, and style issues. Opinionated and narrow — contributed by users, not verified by Modulo."),
-        content_json={
-            "nodes": [{"id": "reviewer", "agent": "qa-review-agent"}],
-            "edges": [],
-            "entry": "reviewer",
-            "agents": [
-                {
-                    "name": "QA Review Agent",
-                    "description": "Reviews a code diff for bugs, missing tests, and style issues.",
-                    "prompt_template": ("You are a QA reviewer. Review the following code diff and list: 1) likely bugs, 2) missing test coverage, 3) style issues.\n\nDiff:\n{{ input }}"),
-                    "connector_type_refs": [],
-                    "required_environment_capabilities": [],
-                }
-            ],
-        },
-        tags=["community", "qa", "code-review", "example"],
-    ),
-    _make_community_db_item(
-        pid="00000000-0000-0000-0000-0000000000c3",
-        primitive_type="workflow",
-        name="Commit Message Linter",
-        slug="commit-message-linter",
-        description=("Checks a commit message against Conventional Commits style and suggests a corrected version. A small, illustrative example pipeline — not held to Native maintenance standards."),
-        content_json={
-            "nodes": [{"id": "linter", "agent": "commit-lint-agent"}],
-            "edges": [],
-            "entry": "linter",
-            "agents": [
-                {
-                    "name": "Commit Lint Agent",
-                    "description": "Checks a commit message against Conventional Commits style.",
-                    "prompt_template": ("Check whether the following commit message follows the Conventional Commits style (type(scope): summary). If it does not, suggest a corrected version.\n\nCommit message:\n{{ input }}"),
-                    "connector_type_refs": [],
-                    "required_environment_capabilities": [],
-                }
-            ],
-        },
-        tags=["community", "git", "linting", "example"],
-    ),
-]
-
-_COMMUNITY_BY_ID: dict[uuid.UUID, LibraryPrimitive] = {p.id: p for p in _COMMUNITY_PRIMITIVES}
-_COMMUNITY_BY_SLUG: dict[tuple[str, str], LibraryPrimitive] = {(p.primitive_type, p.slug): p for p in _COMMUNITY_PRIMITIVES}
