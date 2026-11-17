@@ -95,8 +95,8 @@ kill_timeout = 180
 [env]
   FARNA_CONTROL_DB = "postgres"
   # Deployment environment name stamped on every operator alert email (FAR-1495).
-  MODULO_ENV = "staging"
-  # Operator-alert environment allowlist: only these MODULO_ENVs may send
+  FARNA_CONTROL_ENV = "staging"
+  # Operator-alert environment allowlist: only these deployment environments may send
   # operator alerts on any channel (email + webhook + Teams; readiness-degradation
   # + worker-liveness watchdog alerts).
   # Staging is a CI-only E2E environment with no live workload, so its
