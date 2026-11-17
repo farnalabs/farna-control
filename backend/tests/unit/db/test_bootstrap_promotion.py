@@ -76,7 +76,7 @@ def test_promoted_bootstrap_main_writes_fixed_env_files(
     # entrypoint env file and must not become the canonical application setting.
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()  # avoid the "coroutine was never awaited" RuntimeWarning
@@ -104,7 +104,7 @@ def test_promoted_main_uses_legacy_system_url_without_deriving_from_app_password
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://app:app-pw@db.internal:5432/farna_control")
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "postgres://farna_control_system:system-pw@db.internal:5432/farna_control")
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()
@@ -128,7 +128,7 @@ def test_promoted_main_warns_when_system_url_derivation_fails(
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://db.internal:5432/farna_control")
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()

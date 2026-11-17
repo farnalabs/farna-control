@@ -208,8 +208,8 @@ kill_timeout = 180
 [env]
   FARNA_CONTROL_DB = "postgres"
   # Deployment environment name stamped on every operator alert email (FAR-1495).
-  MODULO_ENV = "production"
-  # Operator-alert environment allowlist: only these MODULO_ENVs may send
+  FARNA_CONTROL_ENV = "production"
+  # Operator-alert environment allowlist: only these FARNA_CONTROL_ENVs may send
   # operator alerts on any channel (email + webhook + Teams; readiness-degradation
   # + worker-liveness watchdog alerts).
   # Set to "production" on BOTH Fly apps so staging — a CI-only E2E

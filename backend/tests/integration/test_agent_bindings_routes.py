@@ -169,7 +169,7 @@ async def test_put_bindings_reserved_target_returns_422(
             "bindings": [
                 {
                     "model_backend_id": str(payload["backend_id"]),
-                    "target_env_var": "FARNA_CONTROL_MODULO_API_KEY",
+                    "target_env_var": "FARNA_CONTROL_API_KEY",
                     "source_field": "api_key",
                 }
             ]
@@ -178,7 +178,7 @@ async def test_put_bindings_reserved_target_returns_422(
     assert resp.status_code == 422, resp.text
     detail = resp.json().get("detail", "")
     assert "reserved" in detail
-    assert "FARNA_CONTROL_MODULO_API_KEY" in detail
+    assert "FARNA_CONTROL_API_KEY" in detail
 
 
 async def test_delete_cross_agent_binding_returns_404_and_no_audit_row(

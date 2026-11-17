@@ -176,7 +176,7 @@ async def system_engine() -> AsyncGenerator[AsyncEngine, None]:
     ``MODULO_SYSTEM_DATABASE_URL`` exactly like production settings do.
     """
     engine = create_async_engine(
-        os.environ["FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL"],
+        os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"],
         echo=False,
         poolclass=NullPool,
     )

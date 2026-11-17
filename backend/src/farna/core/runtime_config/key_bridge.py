@@ -1,6 +1,6 @@
 """Store-override bridges for hot-reloadable keys (FAR-1135).
 
-FAR-1131 bridged ``MODULO_TELEMETRY_ENABLED`` with
+FAR-1131 bridged ``FARNA_CONTROL_TELEMETRY_ENABLED`` with
 ``telemetry_bridge.py``; this module provides the generic helpers the
 remaining hot-reloadable keys use so a runtime override
 (``PUT /api/v1/admin/runtime-config``) actually reaches the governed code:
@@ -10,19 +10,19 @@ remaining hot-reloadable keys use so a runtime override
   read). This is the FAR-1131 pattern generalised: consumers keep their
   existing fallback, the store wins only when an override exists.
 - :func:`override_int_or` — integer-typed variant with safe parsing.
-- :func:`get_public_url` — keyed bridge for ``MODULO_PUBLIC_URL`` (FAR-1159):
+- :func:`get_public_url` — keyed bridge for ``FARNA_CONTROL_PUBLIC_URL`` (FAR-1159):
   every URL-anchoring consumer resolves through it so a runtime override
   wins over the boot-time Settings value.
-- :func:`public_url_is_configured` — the single "is ``MODULO_PUBLIC_URL`` a
+- :func:`public_url_is_configured` — the single "is ``FARNA_CONTROL_PUBLIC_URL`` a
   real origin" test (falsy or the ``http://localhost:8000`` placeholder),
   shared by the OAuth flow and the discovery documents so they cannot
   disagree.
-- :func:`get_e2b_api_key` — keyed bridge for ``MODULO_E2B_API_KEY``
+- :func:`get_e2b_api_key` — keyed bridge for ``FARNA_CONTROL_E2B_API_KEY``
   (FAR-1159): the provider-registration gate and the node-runner
   enforcement check both resolve through it, fail-closed.
 - :func:`apply_log_level` — an *apply-on-write* hook: logging levels are
   configured once, so the runtime-config route invokes this after a
-  ``MODULO_LOG_LEVEL`` override/clear to take effect immediately (the
+  ``FARNA_CONTROL_LOG_LEVEL`` override/clear to take effect immediately (the
   pre-override root level is captured and restored on clear).
 
 Registration: every hot-reloadable key in ``store._KEY_CONFIG`` names its
@@ -95,24 +95,24 @@ def override_int_or(key: str, fallback: int) -> int:
 
 
 def get_public_url(settings: Settings) -> str:
-    """Effective ``MODULO_PUBLIC_URL``: runtime override wins over Settings.
+    """Effective ``FARNA_CONTROL_PUBLIC_URL``: runtime override wins over Settings.
 
     Consumers pass their resolved ``Settings`` (the FastAPI dependency or
     ``get_settings()``) so the boot-time value stays the fallback — tests
     that inject a Settings instance keep working, and an admin override
     (``PUT /api/v1/admin/runtime-config``) wins only when one is set.
     """
-    return override_or("FARNA_CONTROL_MODULO_PUBLIC_URL", settings.modulo_public_url)
+    return override_or("FARNA_CONTROL_PUBLIC_URL", settings.modulo_public_url)
 
 
-#: The Settings/runtime-store default for ``MODULO_PUBLIC_URL``. It is a
+#: The Settings/runtime-store default for ``FARNA_CONTROL_PUBLIC_URL``. It is a
 #: placeholder, not a configured public origin, so every consumer that needs
 #: a *real* origin must treat it as unset.
 _DEFAULT_PUBLIC_URL = "http://localhost:8000"
 
 
 def public_url_is_configured(settings: Settings) -> bool:
-    """Whether ``MODULO_PUBLIC_URL`` names a real public origin.
+    """Whether ``FARNA_CONTROL_PUBLIC_URL`` names a real public origin.
 
     ``http://localhost:8000`` is the Settings and runtime-config-store
     default — a placeholder, not a configured origin — and the OAuth flow
@@ -126,7 +126,7 @@ def public_url_is_configured(settings: Settings) -> bool:
 
 
 def get_e2b_api_key() -> str | None:
-    """Effective ``MODULO_E2B_API_KEY``: runtime override wins over the env var.
+    """Effective ``FARNA_CONTROL_E2B_API_KEY``: runtime override wins over the env var.
 
     Single source of truth for BOTH the provider-registration gate
     (``build_hub``) and the node-runner script-enforcement refusal, so the
@@ -137,7 +137,7 @@ def get_e2b_api_key() -> str | None:
     the env value. Callers that historically also accept the legacy
     ``E2B_API_KEY`` env var layer it themselves.
     """
-    return override_or("FARNA_CONTROL_MODULO_E2B_API_KEY", os.environ.get("FARNA_CONTROL_MODULO_E2B_API_KEY") or "") or None
+    return override_or("FARNA_CONTROL_E2B_API_KEY", os.environ.get("FARNA_CONTROL_E2B_API_KEY") or "") or None
 
 
 # ── apply-on-write hooks ────────────────────────────────────────────────────
@@ -150,16 +150,16 @@ _BOOT_LOG_LEVEL: int | None = None
 
 
 def apply_log_level() -> None:
-    """Apply a ``MODULO_LOG_LEVEL`` override to the root logger.
+    """Apply a ``FARNA_CONTROL_LOG_LEVEL`` override to the root logger.
 
     On first apply the pre-override root level is captured; clearing the
     override restores it. Called by the runtime-config PUT route (via
-    ``APPLY_HOOKS``) after every ``MODULO_LOG_LEVEL`` set/clear.
+    ``APPLY_HOOKS``) after every ``FARNA_CONTROL_LOG_LEVEL`` set/clear.
     """
     global _BOOT_LOG_LEVEL
 
     root = logging.getLogger()
-    override = get_override("FARNA_CONTROL_MODULO_LOG_LEVEL")
+    override = get_override("FARNA_CONTROL_LOG_LEVEL")
     if override is None:
         if _BOOT_LOG_LEVEL is not None:
             root.setLevel(_BOOT_LOG_LEVEL)
@@ -169,7 +169,7 @@ def apply_log_level() -> None:
     if level is None:
         # The API validates values before storing; this arm covers direct
         # store writes. Keep the current level rather than guessing.
-        _log.warning("Ignoring invalid MODULO_LOG_LEVEL override: %r", override)
+        _log.warning("Ignoring invalid FARNA_CONTROL_LOG_LEVEL override: %r", override)
         return
     if _BOOT_LOG_LEVEL is None:
         _BOOT_LOG_LEVEL = root.level
@@ -177,5 +177,5 @@ def apply_log_level() -> None:
 
 
 APPLY_HOOKS: dict[str, Callable[[], None]] = {
-    "FARNA_CONTROL_MODULO_LOG_LEVEL": apply_log_level,
+    "FARNA_CONTROL_LOG_LEVEL": apply_log_level,
 }

@@ -193,7 +193,7 @@ def test_require_dispatch_provider_fails_closed_with_typed_error() -> None:
 async def test_build_dispatch_provider_returns_none_without_a_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("E2B_API_KEY", raising=False)
     monkeypatch.setattr("farna.core.runtime_config.key_bridge.override_or", lambda *_a, **_k: None)
     assert await _build_dispatch_provider() is None
@@ -209,7 +209,7 @@ async def test_build_dispatch_provider_returns_none_when_hub_build_fails(
 async def test_build_dispatch_provider_returns_the_e2b_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     from farna.core.runtime_provider.e2b import E2BRuntimeProvider
 
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
     provider = await _build_dispatch_provider()
     assert isinstance(provider, E2BRuntimeProvider)
 
@@ -243,11 +243,11 @@ async def test_provider_full_dispatch_runs_the_abc_call_sequence(monkeypatch: py
     assert isinstance(dispatch.created_spec, WorkspaceSpec)
     assert dispatch.created_spec.image_ref == "opencode"
     # ...and the agent command really went through the ABC stream with the
-    # dispatch envs (MODULO_SCHEMA_DIR rides on the command env provider).
+    # dispatch envs (FARNA_CONTROL_SCHEMA_DIR rides on the command env provider).
     assert dispatch.last_command is not None
     assert dispatch.last_command[0] == "bash"
     assert dispatch.last_environment is not None
-    assert dispatch.last_environment["FARNA_CONTROL_MODULO_SCHEMA_DIR"] == "/home/user/schemas"
+    assert dispatch.last_environment["FARNA_CONTROL_SCHEMA_DIR"] == "/home/user/schemas"
 
     assert result["telemetry"]["status"] == "completed"
     assert result["telemetry"]["exit_code"] == 0
@@ -817,7 +817,7 @@ def test_s2_s3_s4_kill_sites_never_read_the_flag() -> None:
     on ``MODULO_E2B_VIA_PROVIDER`` — they stay direct by ADR 040 decision."""
     for rel in _S2_S3_S4_SOURCES:
         source = _repo_src(rel)
-        assert "FARNA_CONTROL_MODULO_E2B_VIA_PROVIDER" not in source, rel
+        assert "FARNA_CONTROL_E2B_VIA_PROVIDER" not in source, rel
         assert "via_provider" not in source, rel
         assert "_dispatch_via_provider_enabled" not in source, rel
 

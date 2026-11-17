@@ -209,10 +209,7 @@ class LauncherConfigSource:
         operator_system_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL")
         derived_system = _derive_operator_system_url(operator_database_url, operator_system_url)
         resolved: dict[str, Any] = {}
-        for env_name, field_name in {
-            **_COMPOSED_FIELDS,
-            "FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL": "farna_control_system_database_url",
-        }.items():
+        for env_name, field_name in _COMPOSED_FIELDS.items():
             value = _resolve_composed_field(
                 env_name,
                 composed,

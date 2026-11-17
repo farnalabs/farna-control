@@ -38,7 +38,7 @@ TLS_ENV_VARS = ("DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH")
 # Operator escape hatch: set to a non-empty, non-false value to allow a
 # deliberately-insecure remote TCP endpoint without TLS.  Logged prominently
 # at provider construction.
-ALLOW_INSECURE_ENDPOINT_ENV = "FARNA_CONTROL_MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT"
+ALLOW_INSECURE_ENDPOINT_ENV = "FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT"
 
 
 def is_loopback_hostname(hostname: str) -> bool:
@@ -125,7 +125,7 @@ def validate_docker_endpoint_tls(endpoint: str | None) -> None:
     endpoint is used without TLS.  Local (unix / None / loopback) and
     compose-internal endpoints are always accepted.
 
-    The ``MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT`` escape hatch (set to any
+    The ``FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT`` escape hatch (set to any
     non-empty, non-false value) bypasses the check but logs a prominent
     warning at provider construction.
     """
@@ -135,7 +135,7 @@ def validate_docker_endpoint_tls(endpoint: str | None) -> None:
         return
     if is_insecure_endpoint_allowed():
         _log.warning(
-            "INSECURE: Docker endpoint '%s' accepted without TLS (MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT is set) — credentials will be transmitted in cleartext",
+            "INSECURE: Docker endpoint '%s' accepted without TLS (FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT is set) — credentials will be transmitted in cleartext",
             endpoint,
         )
         return
@@ -146,5 +146,5 @@ def validate_docker_endpoint_tls(endpoint: str | None) -> None:
         "or use a local unix socket / the compose-internal proxy instead. "
         "See docs/security/bundled-runner-operator-guide.md §8 for details. "
         "To bypass this check for a private bridge endpoint, set "
-        "FARNA_CONTROL_MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT=1 (see §8 for caveats)."
+        "FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT=1 (see §8 for caveats)."
     )

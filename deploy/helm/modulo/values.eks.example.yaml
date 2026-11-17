@@ -110,7 +110,7 @@ backend:
   env:
     FARNA_CONTROL_PUBLIC_URL: "https://modulo.example.com"
     FARNA_CONTROL_LOG_LEVEL: info
-    MODULO_ENV: production
+    FARNA_CONTROL_ENV: production
     FARNA_CONTROL_MAX_LOCAL_CONCURRENCY: "4"
     SAQ_WORKER_CONCURRENCY: "20"
     SAQ_REDIS_POOL_SIZE: "50"

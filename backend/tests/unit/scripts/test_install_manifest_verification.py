@@ -287,10 +287,10 @@ _ENV_KEYS_TO_DROP = (
     "XDG_STATE_HOME",
     "XDG_DATA_HOME",
     "VERSION",
-    "FARNA_CONTROL_MODULO_INSTALL_ROOT",
-    "FARNA_CONTROL_MODULO_BIN_DIR",
-    "FARNA_CONTROL_MODULO_DATA_DIR",
-    "FARNA_CONTROL_MODULO_LEGACY_SHIM_PATH",
+    "FARNA_CONTROL_INSTALL_ROOT",
+    "FARNA_CONTROL_BIN_DIR",
+    "FARNA_CONTROL_DATA_DIR",
+    "FARNA_CONTROL_LEGACY_SHIM_PATH",
 )
 
 
@@ -317,9 +317,9 @@ def _run_installer_from_cwd(tmp_path: Path, tarball_arg: str) -> subprocess.Comp
     env.update(
         {
             "HOME": str(home),
-            "FARNA_CONTROL_MODULO_INSTALL_ROOT": str(tmp_path / "install-root"),
-            "FARNA_CONTROL_MODULO_BIN_DIR": str(tmp_path / "bin"),
-            "FARNA_CONTROL_MODULO_LEGACY_SHIM_PATH": str(tmp_path / "no-legacy-shim"),
+            "FARNA_CONTROL_INSTALL_ROOT": str(tmp_path / "install-root"),
+            "FARNA_CONTROL_BIN_DIR": str(tmp_path / "bin"),
+            "FARNA_CONTROL_LEGACY_SHIM_PATH": str(tmp_path / "no-legacy-shim"),
         }
     )
     return subprocess.run(  # noqa: S603 - resolved bash and test-owned paths

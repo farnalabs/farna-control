@@ -87,7 +87,7 @@ _DB_OP_TIMEOUT_SECONDS = 600
 
 
 def _resolve_admin_auth(token: str | None) -> str | None:
-    raw = token or os.environ.get("FARNA_CONTROL_ADMIN_SECRET") or os.environ.get("MODULO_ADMIN_SECRET") or os.environ.get("FARNA_CONTROL_MODULO_ADMIN_SECRET", "")
+    raw = token or os.environ.get("FARNA_CONTROL_ADMIN_SECRET") or os.environ.get("MODULO_ADMIN_SECRET") or os.environ.get("FARNA_CONTROL_ADMIN_SECRET", "")
     if not raw:
         return None
     if token:

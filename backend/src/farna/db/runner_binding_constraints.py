@@ -22,18 +22,18 @@ import re
 #    Docker endpoint.
 RESERVED_ENV_VARS: frozenset[str] = frozenset(
     {
-        "FARNA_CONTROL_MODULO_API_KEY",
-        "FARNA_CONTROL_MODULO_RUN_ID",
-        "FARNA_CONTROL_MODULO_PIPELINE_ID",
-        "FARNA_CONTROL_MODULO_ORG_ID",
-        "FARNA_CONTROL_MODULO_INPUT_PAYLOAD",
-        "FARNA_CONTROL_MODULO_ALLOWED_TOOLS",
+        "FARNA_CONTROL_API_KEY",
+        "FARNA_CONTROL_RUN_ID",
+        "FARNA_CONTROL_PIPELINE_ID",
+        "FARNA_CONTROL_ORG_ID",
+        "FARNA_CONTROL_INPUT_PAYLOAD",
+        "FARNA_CONTROL_ALLOWED_TOOLS",
         # FAR-1690 A1: the run-scoped credential's issuance provenance is
         # stamped by the platform, never by a node — reserving it keeps a
         # pipeline from spoofing ``modulo_minted`` / ``broker_issued``.
-        "FARNA_CONTROL_MODULO_CREDENTIAL_PROVENANCE",
-        "FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT",
-        "FARNA_CONTROL_MODULO_BRIDGE_CONFIG",
+        "FARNA_CONTROL_CREDENTIAL_PROVENANCE",
+        "FARNA_CONTROL_BRIDGE_ENDPOINT",
+        "FARNA_CONTROL_BRIDGE_CONFIG",
         "APP_MODULO_OPENCODE_API_KEY",
         "GITHUB_TOKEN",
         "LD_PRELOAD",
