@@ -345,7 +345,7 @@ jobs:
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.11
+          version: 11.28.12
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -411,7 +411,8 @@ jobs:
           ALL_COUNT=$(jq 'length' /tmp/all_prs.json)
           echo "Found $ALL_COUNT open PR(s)"
 
-          # Filter to only PRs approved by farnalabs or modulo-reviewbot
+          # Filter to only PRs approved by farnalabs, farna-reviewbot or
+          # modulo-reviewbot (the reviewer identity before the FAR rebrand).
           APPROVED_COUNT=0
           echo "[]" > /tmp/prs.json
           rm -f /tmp/ci_pending_prs.txt
@@ -462,7 +463,7 @@ jobs:
             APPROVERS=$(gh pr view "$NUM" --json reviews --jq '.reviews[]? | select(.state == "APPROVED") | .author.login' 2>/dev/null | sort -u)
 
             MERGEABLE=false
-            if echo "$APPROVERS" | grep -qE '^(farnalabs|modulo-reviewbot)$'; then
+            if echo "$APPROVERS" | grep -qE '^(farnalabs|farna-reviewbot|modulo-reviewbot)$'; then
               echo "approved by $APPROVERS"
               MERGEABLE=true
             fi
@@ -578,7 +579,7 @@ jobs:
         run: |
           echo "No approved PRs to process."
           echo "Total open: ${{ steps.collect.outputs.all_count }}, approved: 0"
-          echo "PRs need an APPROVED review from farnalabs or modulo-reviewbot."
+          echo "PRs need an APPROVED review from farnalabs, farna-reviewbot or modulo-reviewbot."
           # FAR-2157: an empty queue is a legitimate no-op, but a green merge
           # pass that merged NOTHING is otherwise indistinguishable from one
           # that merged twelve PRs. Say so, in the summary and with a marker

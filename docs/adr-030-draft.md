@@ -150,14 +150,14 @@ compensating controls.
 
 ```bash
 # 1. Log in (JWT -- the REST route is JWT-only)
-curl -X POST https://app.modulo.run/api/v1/auth/login \
+curl -X POST https://control.farna.dev/api/v1/auth/login \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'username=admin@modulo.run&password=***'
 # → {"access_token": "eyJ..."}
 TOKEN=eyJ...
 
 # 2. Mint a user-scoped key (flag user_scoped_mcp_keys must be ON for the org)
-curl -X POST https://app.modulo.run/api/v1/api-keys \
+curl -X POST https://control.farna.dev/api/v1/api-keys \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name": "user:duncan", "role": "operator", "scope": "user"}'
 # → {"key_value": "mk_..."}  (shown once; store immediately)

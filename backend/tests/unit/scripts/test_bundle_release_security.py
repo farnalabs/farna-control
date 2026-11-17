@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import textwrap
 import time
@@ -494,6 +497,57 @@ def test_download_verified_preserves_existing_destination_on_partial_download() 
     assert all(1 <= int(value) <= 10 for value in sleeps.splitlines())
     assert destination == "existing artifact"
     assert not part_exists
+
+
+def test_bundle_assembles_the_exact_executable_installer_and_internal_checksum() -> None:
+    text = _workflow_text()
+    assert 'cp -- scripts/install.sh "$BUNDLE/install.sh"' in text
+    assert 'chmod 0755 "$BUNDLE/install.sh"' in text
+    assert 'test -x "$BUNDLE/install.sh"' in text
+    checksum_step = text[text.index("- name: Generate SHA256SUMS over every shipped file") :]
+    assert "find . -type f ! -name SHA256SUMS" in checksum_step
+    assert "install.sh" in checksum_step
+
+
+def test_bundle_tar_fixture_preserves_installer_mode_and_checksum_entry(tmp_path: Path) -> None:
+    bundle = tmp_path / "modulo-1.2.3-linux-amd64"
+    bundle.mkdir()
+    installer = bundle / "install.sh"
+    installer.write_text("#!/usr/bin/env bash\\n", encoding="utf-8")
+    installer.chmod(0o755)
+    digest = hashlib.sha256(installer.read_bytes()).hexdigest()
+    (bundle / "SHA256SUMS").write_text(f"{digest}  install.sh\\n", encoding="utf-8")
+    archive = tmp_path / "bundle.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        tar.add(bundle, arcname=bundle.name)
+        installer_info = tarfile.TarInfo(f"{bundle.name}/install.sh")
+        installer_info.mode = 0o755
+        installer_info.size = len(installer.read_bytes())
+        installer_info.mtime = installer.stat().st_mtime
+        installer_info.type = tarfile.REGTYPE
+        installer_info_data = installer.read_bytes()
+        tar.addfile(installer_info, io.BytesIO(installer_info_data))
+    extract = tmp_path / "extract"
+    extract.mkdir()
+    with tarfile.open(archive, "r:gz") as tar:
+        member = tar.getmember(f"{bundle.name}/install.sh")
+        assert stat.S_IMODE(member.mode) == 0o755
+        for member in tar.getmembers():
+            destination = extract / member.name
+            if member.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with tar.extractfile(member) as source, destination.open("wb") as target:
+                assert source is not None
+                shutil.copyfileobj(source, target)
+            # ``open()`` creates the file with the process umask (0644), so apply
+            # the archive member's mode the way ``tar -x`` does.
+            destination.chmod(stat.S_IMODE(member.mode))
+    extracted = extract / bundle.name / "install.sh"
+    if os.name != "nt":
+        assert stat.S_IMODE(extracted.stat().st_mode) == 0o755
+    assert f"{digest}  install.sh" in (extract / bundle.name / "SHA256SUMS").read_text(encoding="utf-8")
 
 
 def test_bundle_has_only_the_guarded_global_sync() -> None:

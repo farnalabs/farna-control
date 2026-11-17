@@ -414,7 +414,9 @@ describe('DashboardView', () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
     expect(wrapper.text()).toContain('No runs yet')
-    expect(wrapper.find('[data-testid="dashboard-recent-runs"] tbody tr').exists()).toBe(true)
+    // FAR-2539: the empty state renders outside the scrolling table region.
+    expect(wrapper.find('[data-testid="dashboard-recent-runs"] [data-table-part="empty"]').text()).toContain('No runs yet')
+    expect(wrapper.find('[data-testid="dashboard-recent-runs"] .overflow-x-auto').text()).not.toContain('No runs yet')
   })
 
   it('shows eval no-data state without rendering a synthetic 100% trend', async () => {
@@ -568,9 +570,9 @@ describe('DashboardView', () => {
     expect(wrapper.findComponent({ name: 'ErrorAlert' }).exists()).toBe(false)
 
     const emptyState = runActivity.get('[aria-live="polite"]')
-    expect(emptyState.classes()).toContain('py-6')
-    expect(emptyState.classes()).not.toContain('flex-1')
-    expect(emptyState.classes()).not.toContain('min-h-[200px]')
+    expect(emptyState.classes()).toContain('border-dashed')
+    expect(emptyState.classes()).toContain('h-12')
+    expect(emptyState.attributes('aria-live')).toBe('polite')
     wrapper.unmount()
   })
 
