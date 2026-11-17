@@ -103,7 +103,7 @@ async def _read_audit_row(db_engine: object, run_id: uuid.UUID) -> RunNodeOutput
         ).first()
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_record_resolved_inputs_persists_when_rls_org_set(
     app_engine: object,
     db_engine: object,
@@ -137,7 +137,7 @@ async def test_record_resolved_inputs_persists_when_rls_org_set(
     assert names == {"src", "docs"}
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_record_resolved_inputs_dropped_without_rls_org(
     app_engine: object,
     db_engine: object,
@@ -171,7 +171,7 @@ async def test_record_resolved_inputs_dropped_without_rls_org(
     assert row is None, "audit row must NOT persist when RLS org context is missing"
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_record_drift_persists_when_rls_org_set(
     app_engine: object,
     db_engine: object,
