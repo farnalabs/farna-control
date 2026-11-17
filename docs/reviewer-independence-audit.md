@@ -11,7 +11,7 @@
 This audit examines every review stage in Farna Control to verify that reviewing agents do not share runtime, credentials, or context with authoring agents. Four review stages were identified and audited.
 
 **Overall finding:** Farna Control's review architecture **already provides strong isolation guarantees** by design:
-- PR Reviewer runs as `modulo-reviewbot` (separate GitHub identity from `farnalabs` bot)
+- PR Reviewer runs as `farna-reviewbot` (then named `modulo-reviewbot`) (separate GitHub identity from `farnalabs` bot)
 - Review nodes run in separate E2B sandboxes from authoring nodes
 - Model credentials are resolved per-run from the ModelBackendHub
 - HITL gates enforce `human_only` by default, blocking agent approval
@@ -26,14 +26,14 @@ This audit examines every review stage in Farna Control to verify that reviewing
 
 **Pipeline ID:** `d6b2c25b-ff7f-490a-9967-633b6adcc93c`
 **Trigger:** GitHub Actions `pr-review.yml` workflow (on CI completion)
-**Identity:** `modulo-reviewbot` (separate PAT from `farnalabs`)
+**Identity:** `farna-reviewbot` (separate PAT from `farnalabs`)
 
 | Property | Finding |
 |---|---|
 | **Runtime isolation** | ✅ Separate E2B sandbox per node. Three `sandbox_agent` nodes run sequentially in fresh sandboxes. Each sandbox clones `devtools` fresh and runs `opencode` independently. |
 | **Credential isolation** | ✅ Uses `GITHUB_REVIEWBOT_PAT` (vault entry `github-reviewbot-pat`) – distinct from `GITHUB_DOGFOOD_PAT` used by `farnalabs` bot for PR creation. Model backend uses org-configured `opencode` provider (`opencode-live2`, ID `292d54ef-6644-441e-8379-0a8802f15e5b`) resolved via ModelBackendHub at run-start. |
 | **Context isolation** | ✅ Author's PR diff/context passed as *evidence* via webhook payload → Jinja-rendered prompt files (`/home/user/prompt.md`). The reviewer sees the PR as input data, not as instruction. |
-| **Influence paths** | ✅ No write path from author to reviewer. Author writes to PR branch; reviewer reads via GitHub API. Reviewer posts formal GitHub review as `modulo-reviewbot` – GitHub rejects self-approval, so identities MUST be separate. |
+| **Influence paths** | ✅ No write path from author to reviewer. Author writes to PR branch; reviewer reads via GitHub API. Reviewer posts formal GitHub review as `farna-reviewbot` – GitHub rejects self-approval, so identities MUST be separate. |
 
 **Architecture notes:**
 - Three-node pipeline: (1) Review agent → (2) Policy router → (3) Post-decision (posts formal review)
@@ -108,7 +108,7 @@ This audit examines every review stage in Farna Control to verify that reviewing
 
 ## Structural Guarantees Already in Place
 
-1. **Identity separation** – `modulo-reviewbot` vs `farnalabs` bot (GitHub enforces no self-approval)
+1. **Identity separation** – `farna-reviewbot` vs `farnalabs` bot (GitHub enforces no self-approval)
 2. **Sandbox isolation** – Every `sandbox_agent` node gets a fresh E2B sandbox
 3. **Credential scoping** – ModelBackendHub decrypts once per run; credentials never enter LangGraph state/checkpoints/OTel
 4. **Human-only default** – HITL gates block agent approval unless explicitly opted out
@@ -138,7 +138,7 @@ In `backend/src/farna/core/eval_engine/__init__.py` or graph validator: add a wa
 
 The test `backend/tests/architecture/test_reviewer_independence.py` asserts:
 
-1. PR Reviewer pipeline uses `modulo-reviewbot` identity (not `farnalabs`)
+1. PR Reviewer pipeline uses `farna-reviewbot` identity (not `farnalabs`)
 2. Review-type nodes in pipeline configs use separate sandbox/credentials from authoring nodes
 3. LLM-judge evals run with isolated model credentials (or document shared backend)
 4. HITL gates enforce `human_only` by default
