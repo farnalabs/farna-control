@@ -830,6 +830,109 @@ jobs:
               return "$exit_code"
             }
 
+          # Every timestamped codesign call depends on Apple's timestamp
+          # authority (TSA). Its temporary unavailability failed the release
+          # recut run 44150528228 with
+          #   "...Contents/MacOS/modulo: A timestamp was expected but was not found."
+          # on BOTH macOS jobs with a valid "Developer ID Application" identity
+          # (nested_binary_discovery and foreign_binary_scan had already passed),
+          # which skipped final-release-manifest and blocked Create GitHub
+          # Release (FAR-2553). Retry ONLY the transient timestamp/TSA/network
+          # diagnostics below; every other codesign failure - unknown identity,
+          # missing certificate, invalid options - still fails closed on the
+          # first attempt, and the helper returns codesign's own exit status so
+          # the surrounding fail-closed gates keep failing.
+          #
+          # BEGIN codesign_with_timestamp_retry (extracted verbatim by test_macos_installer_normalize)
+          codesign_retry_log_line() {
+            local line="$1"
+            printf '%s\n' "$line" >&2
+            if [[ -n "${CODESIGN_RETRY_LOG:-}" ]]; then
+              printf '%s\n' "$line" >>"$CODESIGN_RETRY_LOG"
+            fi
+          }
+
+          codesign_failure_is_transient_timestamp() {
+            local output_file="$1"
+            [[ -s "$output_file" ]] || return 1
+            grep -Eiq \
+              -e 'a timestamp was expected but was not found' \
+              -e 'timestamp service (is )?(not available|unavailable)' \
+              -e 'timestamp (server|authority)[^.]*(unavailable|not available|unreachable|timed out|failed)' \
+              -e 'unable to (obtain|get) (a )?timestamp' \
+              -e 'nsurlerrordomain' \
+              -e 'the network connection (was lost|went away)' \
+              -e 'could not connect to the server' \
+              "$output_file"
+          }
+
+          codesign_with_timestamp_retry() {
+            local label="$1"
+            shift
+            local max_attempts="${CODESIGN_TIMESTAMP_MAX_ATTEMPTS:-5}"
+            local base_delay="${CODESIGN_TIMESTAMP_BASE_DELAY:-10}"
+            local max_delay="${CODESIGN_TIMESTAMP_MAX_DELAY:-120}"
+            local attempt=1 exit_code=0 wait_time=0 jitter=0
+            local class=success output_file
+            output_file="$(mktemp "${TMPDIR:-/tmp}/codesign-timestamp.XXXXXX")"
+
+            while [[ "$attempt" -le "$max_attempts" ]]; do
+              exit_code=0
+              codesign "$@" >"$output_file" 2>&1 || exit_code=$?
+
+              class=success
+              if [[ "$exit_code" -ne 0 ]]; then
+                if codesign_failure_is_transient_timestamp "$output_file"; then
+                  class=transient
+                else
+                  class=non-transient
+                fi
+              fi
+              codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s attempt=%d/%d exit=%d class=%s' "$label" "$attempt" "$max_attempts" "$exit_code" "$class")"
+              # Preserve the diagnostics codesign itself printed (it writes
+              # "replacing existing signature" to stderr) exactly as the
+              # unwrapped call did; secrets never reach here.
+              if [[ -s "$output_file" ]]; then
+                printf 'codesign output: label=%s\n' "$label" >&2
+                cat "$output_file" >&2
+              fi
+
+              if [[ "$exit_code" -eq 0 ]]; then
+                rm -f "$output_file"
+                return 0
+              fi
+              if [[ "$class" != transient ]]; then
+                rm -f "$output_file"
+                codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s outcome=failed (non-transient; not retried)' "$label")"
+                return "$exit_code"
+              fi
+              if [[ "$attempt" -ge "$max_attempts" ]]; then
+                break
+              fi
+              # Exponential backoff (base_delay, doubling) capped at max_delay,
+              # with +/-25% jitter so concurrent runners do not retry in lockstep.
+              # Worst case here is 10+20+40+80 = 150s, well inside the job budget.
+              wait_time=$(( base_delay * (2 ** (attempt - 1)) ))
+              if [[ "$wait_time" -gt "$max_delay" ]]; then
+                wait_time="$max_delay"
+              fi
+              jitter=$(( wait_time / 4 ))
+              if [[ "$jitter" -gt 0 ]]; then
+                wait_time=$(( wait_time + RANDOM % (2 * jitter + 1) - jitter ))
+              fi
+              codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s attempt=%d/%d retrying in %ds (transient timestamp failure)' "$label" "$attempt" "$max_attempts" "$wait_time")"
+              if [[ "$wait_time" -gt 0 ]]; then
+                sleep "$wait_time"
+              fi
+              attempt=$(( attempt + 1 ))
+            done
+
+            rm -f "$output_file"
+            codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s outcome=failed (transient timestamp failure persisted through %d attempt(s))' "$label" "$max_attempts")"
+            return "$exit_code"
+          }
+          # END codesign_with_timestamp_retry
+
             # Diagnostic capture helper for post-install smoke assertions
             run_assertion() {
               local name="$1"; shift
@@ -1113,6 +1216,16 @@ jobs:
             exit "$found"
           ' bash "$APP"
           # macOS ships bash 3.2, which has no `mapfile`/`readarray`.
+          # The nested-binary signer below runs inside a `bash -c` child, so the
+          # retry helper, its transient-diagnostic classifier and its logger are
+          # exported into that environment. All three timestamped signing calls
+          # append to the same attempt log, which is echoed to the job log once
+          # signing is finished (FAR-2553).
+          export CODESIGN_RETRY_LOG="$DATA/codesign-timestamp-retry.log"
+          rm -f "$CODESIGN_RETRY_LOG"
+          export -f codesign_with_timestamp_retry
+          export -f codesign_failure_is_transient_timestamp
+          export -f codesign_retry_log_line
           NESTED_BINARIES=()
           while IFS= read -r nested_binary_line; do
             [[ -n "$nested_binary_line" ]] && NESTED_BINARIES+=("$nested_binary_line")
@@ -1133,7 +1246,7 @@ jobs:
               kind="$(file -b "$binary")"
               case "$kind" in
                  *"Mach-O 64-bit executable $MACOS_ARCH"*|*"Mach-O 64-bit bundle $MACOS_ARCH"*|*"Mach-O 64-bit dynamically linked shared library $MACOS_ARCH"*)
-                   codesign --force --options runtime --timestamp --sign "$identity" "$binary" >/dev/null
+                   codesign_with_timestamp_retry "nested_binary_$(basename "$binary")" --force --options runtime --timestamp --sign "$identity" "$binary" >/dev/null
                    printf "signed Mach-O %s: %s\n" "$MACOS_ARCH" "$binary"
                   ;;
                 *Mach-O*)
@@ -1152,7 +1265,7 @@ jobs:
             binary_index=$((binary_index + 1))
           done
           # shellcheck disable=SC2016
-          run_pre_smoke app_codesign codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"
+          run_pre_smoke app_codesign codesign_with_timestamp_retry app_codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"
           # shellcheck disable=SC2016
           run_pre_smoke app_codesign_verify codesign --verify --deep --strict --verbose=2 "$APP"
 
@@ -1217,7 +1330,12 @@ jobs:
           rm -rf "$DMG_STAGING"
 
           # shellcheck disable=SC2016
-          run_pre_smoke dmg_codesign codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG"
+          run_pre_smoke dmg_codesign codesign_with_timestamp_retry dmg_codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG"
+          if [[ -s "${CODESIGN_RETRY_LOG:-}" ]]; then
+            echo '::group::codesign timestamp retry log'
+            cat "$CODESIGN_RETRY_LOG"
+            echo '::endgroup::'
+          fi
           # shellcheck disable=SC2016
           run_pre_smoke notary_key_decode bash -c 'printf "%s" "$1" | tr -d "[:space:]" | base64 -D > "$2"' bash "$NOTARY_KEY_B64" "$NOTARY_KEY"
           # shellcheck disable=SC2016
