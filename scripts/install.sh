@@ -11,7 +11,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/farnalabs/modulo/main/scripts/install.sh -o modulo-install.sh
 #   bash modulo-install.sh [options]
-#   ./install.sh [--force] [--from-file <tarball>] [--skip-backup]
+#   ./install.sh [--force] [--from-file <tarball>] [--from-bundle <bundle-dir>] [--skip-backup]
 #
 # NOTE: download to a file and run it (as above) rather than streaming a
 # download straight into a shell. install.sh verifies every download's sha256
@@ -28,6 +28,9 @@
 #      The `current` symlink is the primitive reused by the upgrade machinery
 #      (FAR-672): upgrades re-point it; nothing else is version-specific.
 #   4. Writes a PATH shim at ~/.local/bin/modulo pointing at current/launcher.
+#   5. Writes ~/.local/opt/modulo/env.sh with a safe PATH export and prints the
+#      exact `source <path>` command; the installer never changes the caller's
+#      current shell.
 #
 # Upgrade path (FAR-672, ADR 031 Decision 7 — the P1a upgrade = rerun this
 # installer against an existing install):
@@ -65,6 +68,7 @@
 #     └── modulo-<version>-linux-<arch>/      (single top-level directory)
 #         ├── VERSION                         (the release tag, e.g. bundle-v0.1.0)
 #         ├── SHA256SUMS                      (sha256 over every shipped file)
+#         ├── install.sh                      (this exact executable installer)
 #         ├── launcher                        (native launcher wrapper)
 #         ├── runtime/                        (python-build-standalone CPython tree)
 #         ├── pg/                             (PostgreSQL server + client binaries)
@@ -84,6 +88,7 @@ MARKER_FILE="${INSTALL_ROOT}/.modulo-native-install"
 
 FORCE=0
 FROM_FILE=""
+FROM_BUNDLE=""
 SKIP_BACKUP=0
 
 die() {
@@ -105,7 +110,12 @@ Options:
   --from-file <tarball>    Install from a locally downloaded
                            modulo-<version>-linux-<arch>.tar.gz instead of
                            downloading from GitHub Releases (offline installs;
-                           see ADR 031 for the signed-manifest roadmap).
+                           the signed manifest and adjacent .sig are required).
+  --from-bundle <dir>      Install from an extracted bundle directory that
+                            contains VERSION and a verified internal SHA256SUMS.
+                            The directory must be the bundle's own root; this
+                            mode never downloads or guesses an adjacent file.
+
   --skip-backup            Skip the upgrade's ENFORCED pre-upgrade pg_dump
                            (upgrade-only). LOUD: pass this ONLY when a previous
                            installer run already produced the snapshot and the
@@ -572,6 +582,11 @@ while [[ $# -gt 0 ]]; do
       FROM_FILE="$2"
       shift 2
       ;;
+    --from-bundle)
+      [[ $# -ge 2 ]] || die "--from-bundle requires the extracted modulo-<version>-linux-<arch> bundle directory"
+      FROM_BUNDLE="$2"
+      shift 2
+      ;;
     --skip-backup)
       SKIP_BACKUP=1
       shift
@@ -593,7 +608,21 @@ stage "resolving the release to install"
 
 # --- resolve version --------------------------------------------------------
 
-if [[ -n "${FROM_FILE}" ]]; then
+if [[ -n "${FROM_FILE}" && -n "${FROM_BUNDLE}" ]]; then
+  die "--from-file and --from-bundle are mutually exclusive"
+fi
+
+if [[ -n "${FROM_BUNDLE}" ]]; then
+  [[ -d "${FROM_BUNDLE}" && ! -L "${FROM_BUNDLE}" ]] || die "--from-bundle: no such directory: ${FROM_BUNDLE}"
+  [[ -f "${FROM_BUNDLE}/VERSION" ]] || die "--from-bundle: VERSION is missing from ${FROM_BUNDLE}"
+  [[ -f "${FROM_BUNDLE}/SHA256SUMS" && ! -L "${FROM_BUNDLE}/SHA256SUMS" ]] || die "--from-bundle: SHA256SUMS is missing from ${FROM_BUNDLE}"
+  VERSION_NUM="$(cat -- "${FROM_BUNDLE}/VERSION")"
+  [[ "${VERSION_NUM}" =~ ^bundle-v?([A-Za-z0-9][A-Za-z0-9._-]*)$ ]] || die "--from-bundle: invalid VERSION '${VERSION_NUM}'"
+  VERSION_NUM="${BASH_REMATCH[1]}"
+  RELEASE_TAG="(offline: extracted bundle)"
+  tarball_name="modulo-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
+  bundle_dir="$(CDPATH= cd -- "${FROM_BUNDLE}" && pwd)"
+elif [[ -n "${FROM_FILE}" ]]; then
   [[ -f "${FROM_FILE}" ]] || die "--from-file: no such file: ${FROM_FILE}"
   tarball_name="$(basename "${FROM_FILE}")"
   if [[ "${tarball_name}" =~ ^modulo-([A-Za-z0-9][A-Za-z0-9._-]*)-(linux|darwin)-(amd64|arm64)\.tar\.gz$ ]]; then
@@ -812,7 +841,18 @@ PYEOF
 }
 
 
-if [[ -n "${FROM_FILE}" ]]; then
+if [[ -n "${FROM_BUNDLE}" ]]; then
+  bundle_parent="$(CDPATH= cd -- "${FROM_BUNDLE}/.." && pwd)"
+  adjacent_tarball="${bundle_parent}/${tarball_name}"
+  manifest_file="${bundle_parent}/RELEASE_MANIFEST.json"
+  signature_file="${manifest_file}.sig"
+  [[ -f "${adjacent_tarball}" ]] || die "offline install REFUSED: --from-bundle requires the adjacent signed tarball ${adjacent_tarball}"
+  [[ -f "${manifest_file}" && -f "${signature_file}" ]] || die "offline install REFUSED: --from-bundle requires RELEASE_MANIFEST.json and RELEASE_MANIFEST.json.sig beside ${adjacent_tarball}"
+  info "Offline install from extracted bundle ${FROM_BUNDLE} using adjacent signed artifact"
+  stage "verify (signature and checksum)"
+  verify_shipped_manifest "${manifest_file}" "${signature_file}" "${adjacent_tarball}" "bundle-v${VERSION_NUM}"
+  cp -- "${adjacent_tarball}" "${tmp}/${tarball_name}"
+elif [[ -n "${FROM_FILE}" ]]; then
   info "Offline install from ${FROM_FILE}"
   # Resolve the manifest beside the tarball. A bare filename (no '/') - the
   # exact shape the canary leg passes - leaves `${FROM_FILE%/*}` UNCHANGED,
@@ -849,22 +889,29 @@ fi
 
 # --- extract and verify the bundle's internal checksums ---------------------
 
-stage "extract"
-expected_bundle_dir="${tarball_name%.tar.gz}"
-extract_root="${tmp}/extracted"
-mkdir -p "${extract_root}"
-tar -xzf "${tmp}/${tarball_name}" -C "${extract_root}"
-entries=()
-while IFS= read -r -d '' entry; do
-  entries+=("${entry}")
-done < <(find "${extract_root}" -mindepth 1 -maxdepth 1 -print0)
-if [[ "${#entries[@]}" -ne 1 || ! -d "${entries[0]}" || -L "${entries[0]}" ]]; then
-  die "unexpected archive layout: expected exactly one non-symlink top-level directory '${expected_bundle_dir}', in ${tarball_name}"
+if [[ -z "${FROM_BUNDLE}" ]]; then
+  stage "extract"
+  expected_bundle_dir="${tarball_name%.tar.gz}"
+  extract_root="${tmp}/extracted"
+  mkdir -p "${extract_root}"
+  tar -xzf "${tmp}/${tarball_name}" -C "${extract_root}"
+  entries=()
+  while IFS= read -r -d '' entry; do
+    entries+=("${entry}")
+  done < <(find "${extract_root}" -mindepth 1 -maxdepth 1 -print0)
+  if [[ "${#entries[@]}" -ne 1 || ! -d "${entries[0]}" || -L "${entries[0]}" ]]; then
+    die "unexpected archive layout: expected exactly one non-symlink top-level directory '${expected_bundle_dir}', in ${tarball_name}"
+  fi
+  bundle_dir="${entries[0]}"
+  bundle_dir_name="${bundle_dir##*/}"
+  [[ "${bundle_dir_name}" = "${expected_bundle_dir}" ]] || die \
+    "archive top-level directory '${bundle_dir_name}' does not match archive identity '${expected_bundle_dir}'"
+else
+  expected_bundle_dir="${tarball_name%.tar.gz}"
+  bundle_dir_name="${bundle_dir##*/}"
+  [[ "${bundle_dir_name}" = "${expected_bundle_dir}" ]] || die \
+    "extracted bundle directory '${bundle_dir_name}' does not match archive identity '${expected_bundle_dir}'"
 fi
-bundle_dir="${entries[0]}"
-bundle_dir_name="${bundle_dir##*/}"
-[[ "${bundle_dir_name}" = "${expected_bundle_dir}" ]] || die \
-  "archive top-level directory '${bundle_dir_name}' does not match archive identity '${expected_bundle_dir}'"
 [[ -f "${bundle_dir}/SHA256SUMS" && ! -L "${bundle_dir}/SHA256SUMS" ]] || \
   die "malformed bundle: SHA256SUMS missing from the archive"
 stage "verify (bundle checksums)"
@@ -1031,6 +1078,23 @@ exec "${INSTALL_ROOT}/current/launcher" "\$@"
 EOF
 chmod 755 "${shim}"
 
+activation_file="${INSTALL_ROOT}/env.sh"
+cat > "${activation_file}" <<EOF
+# Modulo shell activation — generated by install.sh. Do not edit.
+# This file contains paths only; it never contains runtime credentials.
+export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"
+export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"
+# Keep the bare MODULO_* names as compatibility aliases for older shell
+# integrations. The FARNA_CONTROL_* names are canonical for new installs.
+export MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"
+export MODULO_BIN_DIR="${FARNA_CONTROL_BIN_DIR}"
+case ":\${PATH}:" in
+  *":\${BIN_DIR}:"*) ;;
+  *) export PATH="\${BIN_DIR}:\${PATH}" ;;
+esac
+EOF
+chmod 600 "${activation_file}"
+
 path_updated=0
 for rc_file in "${HOME}/.bashrc" "${HOME}/.profile" "${HOME}/.zshrc"; do
   [[ -f "${rc_file}" ]] || continue
@@ -1052,6 +1116,8 @@ info ""
 info "Modulo bundle ${VERSION_NUM} installed."
 info "  Bundle: ${INSTALL_ROOT}/current"
 info "  Shim:   ${shim}"
+info "  Shell activation: ${activation_file}"
+info "  Activate this install in the current shell with: source ${activation_file}"
 if [[ -n "${UPGRADE_SNAPSHOT_PATH}" ]]; then
   info "  Pre-upgrade snapshot: ${UPGRADE_SNAPSHOT_PATH}"
 fi

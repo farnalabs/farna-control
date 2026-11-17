@@ -120,6 +120,33 @@ def test_promoted_main_uses_legacy_system_url_without_deriving_from_app_password
     assert written["/tmp/system_database_url.env"] == expected
 
 
+def test_promoted_main_leaves_stale_legacy_system_url_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAR-2519: the naming migration never rewrites a stale legacy alias."""
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+asyncpg://admin:pw@db.internal:5432/farna_control")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://app:app-pw@db.internal:5432/farna_control")
+    monkeypatch.setenv(
+        "FARNA_CONTROL_SYSTEM_DATABASE_URL",
+        "postgres://farna_control_system:system-pw@db.internal:5432/farna_control",
+    )
+    monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "stale-legacy-system-url")
+
+    def _skip_bootstrap(coro: Any) -> None:
+        coro.close()
+
+    monkeypatch.setattr(bootstrap_module.asyncio, "run", _skip_bootstrap)
+    written: dict[str, str] = {}
+    monkeypatch.setattr(bootstrap_module, "_write_env_file", lambda path, content: written.setdefault(path, content))
+
+    bootstrap_module.main()
+
+    expected = "postgresql+asyncpg://farna_control_system:system-pw@db.internal:5432/farna_control"
+    assert os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] == expected
+    assert os.environ["MODULO_SYSTEM_DATABASE_URL"] == "stale-legacy-system-url"
+    assert written["/tmp/system_database_url.env"] == expected
+
+
 def test_promoted_main_warns_when_system_url_derivation_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -500,7 +500,7 @@ class TestReconcilePredicateMatrix:
 
     @pytest.mark.asyncio
     async def test_reconcile_does_not_autoapprove_claimed_undecided_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """FAR-541 regression (observed live on app.modulo.run 2026-09-02
+        """FAR-541 regression (observed live on control.farna.dev 2026-09-02
         11:36-11:38 UTC): a human claimed a fired HITL gate at 11:36:21 without
         deciding; the next reconcile tick re-dispatched the run as resume_run
         with an EMPTY decision; executor.resume injected {} as _hitl_decision;

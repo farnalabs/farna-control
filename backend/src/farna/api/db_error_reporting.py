@@ -1,6 +1,6 @@
 """Structured reason reporting for fail-closed 503 responses.
 
-2026-09-04 incident: ~8/10 GitHub pr-review webhook POSTs to app.modulo.run
+2026-09-04 incident: ~8/10 GitHub pr-review webhook POSTs to control.farna.dev
 failed with HTTP 503 and no persisted cause existed anywhere — the fail-closed
 raise sites logged either a bare log code or nothing, so the reason was lost
 the moment the response left the process. The sender sees only the status

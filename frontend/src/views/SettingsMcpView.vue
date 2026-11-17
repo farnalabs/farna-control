@@ -165,6 +165,7 @@
         <div class="space-y-4">
           <div class="flex items-center gap-2">
             <label for="settingsmcpview-client" class="text-sm font-medium whitespace-nowrap">{{ $t('views.SettingsMcpView.client') }}:</label>
+            <div class="min-w-0 flex-1">
             <Select
   aria-label="Client"
   v-model="selectedMcpClient"
@@ -179,6 +180,7 @@
     <span :data-value="option.value">{{ option.label }}</span>
   </template>
 </Select>
+            </div>
           </div>
           <div class="rounded-lg bg-muted/30 p-4">
             <pre class="text-xs font-mono whitespace-pre-wrap break-all">{{ mcpConfigSnippet }}</pre>

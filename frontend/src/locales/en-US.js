@@ -2230,6 +2230,8 @@ export default {
       "total_evals": "total evals",
       "days_tracked": "days tracked",
       "team_breakdown": "Team Breakdown",
+      "team_breakdown_scroll_label": "Team Breakdown table",
+      "team_breakdown_scroll_instructions": "Swipe horizontally to view all team breakdown columns.",
       "team": "Team",
       "runs": "Runs",
       "completed": "Completed",
@@ -5704,7 +5706,8 @@ export default {
       "failed_to_load": "Couldn't load notifications",
       "retry": "Retry",
       "no_notifications": "No notifications",
-      "view_all": "View all notifications"
+      "view_all": "View all notifications",
+      "close": "Close notifications"
     },
     "PageTabs": {
       "section_navigation": "Section navigation",

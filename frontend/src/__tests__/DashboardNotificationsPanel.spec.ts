@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
 const { mockFetchNotifications, mockReviewLater, mockFetchUnreadCount, mockRegisterHandler, mockDismissNotification, mockMarkAllRead, mockFetchDashboardNotifications } = vi.hoisted(() => ({
@@ -56,8 +56,22 @@ vi.mock('../lib/api/formatError', async (importOriginal) => {
 })
 
 vi.mock('@vueuse/core', () => ({
-  useStorage: (_key: string, defaultValue: boolean) => {
-    return ref(defaultValue)
+  // Delegate to the real jsdom localStorage so a regression that reintroduces a
+  // persisted preference is observable. Returning a plain ref of the default
+  // made the "starts collapsed" test pass even when the component restored
+  // persisted state (the localStorage write was inert).
+  useStorage: <T>(key: string, defaultValue: T) => {
+    const state = ref(defaultValue)
+    const raw = localStorage.getItem(key)
+    if (raw !== null) {
+      try {
+        state.value = JSON.parse(raw) as T
+      } catch {
+        state.value = raw as unknown as T
+      }
+    }
+    watch(state, (value) => localStorage.setItem(key, JSON.stringify(value)), { deep: true })
+    return state
   },
 }))
 
@@ -117,6 +131,17 @@ describe('DashboardNotificationsPanel', () => {
     // an unconfigured mock.
     mockMarkAllRead.mockResolvedValue({ status: 'marked_read', marked: 0 })
     mockFetchDashboardNotifications.mockResolvedValue({ notifications: [], total_unread: 0 })
+  })
+
+  it('always starts collapsed without restoring a persisted expanded preference', async () => {
+    localStorage.setItem('notif-panel-collapsed', 'false')
+    const wrapper = mount(DashboardNotificationsPanel)
+    await flushPromises()
+    await nextTick()
+
+    const toggle = wrapper.find('[data-testid="notifications-panel-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('#notifications-panel-content').exists()).toBe(false)
   })
 
   it('always renders the "View all notifications" link when expanded', async () => {

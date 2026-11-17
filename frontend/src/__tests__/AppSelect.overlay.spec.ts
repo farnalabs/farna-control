@@ -61,6 +61,56 @@ describe('AppSelect', () => {
     expect(select.props('appendTo')).toBe('self')
   })
 
+  it('caps the overlay at the viewport width so it cannot render off-screen (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, { props: { modelValue: '' } })
+    const pt = wrapper.findComponent(innerSelect).props('pt') as { overlay: { class: string } }
+    expect(pt.overlay.class).toContain('max-w-[calc(100vw-1rem)]')
+  })
+
+  it('does not make the shared root label shrinkable, so other consumers keep their layout (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, { props: { modelValue: '' }, attrs: { class: 'w-36' } })
+    const rootClasses = wrapper.element.classList
+    expect(rootClasses.contains('min-w-0')).toBe(false)
+    expect(rootClasses.contains('max-w-full')).toBe(false)
+  })
+
+  it('keeps a consumer overlay class when adding the viewport cap (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, {
+      props: { modelValue: '' },
+      attrs: { pt: { overlay: { class: 'custom-overlay' } } },
+    })
+    const pt = wrapper.findComponent(innerSelect).props('pt') as { overlay: { class: string } }
+    expect(pt.overlay.class).toBe('custom-overlay max-w-[calc(100vw-1rem)]')
+  })
+
+  it('wraps a function-form consumer overlay so the viewport cap is still applied (FAR-2540)', () => {
+    const consumerOverlay = (opts: { context?: string }) => ({
+      class: 'fn-overlay',
+      'data-context': opts.context,
+    })
+    const wrapper = mount(AppSelect, {
+      props: { modelValue: '' },
+      attrs: { pt: { overlay: consumerOverlay } },
+    })
+    const pt = wrapper.findComponent(innerSelect).props('pt') as {
+      overlay: (opts: unknown) => Record<string, unknown>
+    }
+    expect(typeof pt.overlay).toBe('function')
+    const resolved = pt.overlay({ context: 'panel' })
+    expect(resolved.class).toBe('fn-overlay max-w-[calc(100vw-1rem)]')
+    expect(resolved['data-context']).toBe('panel')
+  })
+
+  it('caps a function-form overlay that returns no class (FAR-2540)', () => {
+    const wrapper = mount(AppSelect, {
+      props: { modelValue: '' },
+      attrs: { pt: { overlay: () => ({}) } },
+    })
+    const pt = wrapper.findComponent(innerSelect).props('pt') as {
+      overlay: (opts: unknown) => Record<string, unknown>
+    }
+    expect(pt.overlay({}).class).toBe('max-w-[calc(100vw-1rem)]')
+  })
   it('forwards an explicit appendTo prop to the underlying Select', () => {
     const wrapper = mount(AppSelect, {
       props: { modelValue: '', appendTo: 'body' },

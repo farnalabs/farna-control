@@ -750,3 +750,22 @@ select option {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
 }
+
+/* FAR-2537: mobile layout primitives (see docs/frontend-mobile-layout.md).
+   Unlayered on purpose: unlayered rules beat every @layer, so these win over
+   the `h-screen` utility without depending on utility ordering. */
+
+/* Buttons/links inside an actions block never wrap their own label; the whole
+   button may wrap to the next row instead. */
+.actions-nowrap button,
+.actions-nowrap a {
+  white-space: nowrap;
+}
+
+/* `h-screen` stays on the element as the 100vh fallback; browsers with dynamic
+   viewport units use 100dvh so the page bottom is not hidden by browser chrome. */
+@supports (height: 100dvh) {
+  .h-screen-dvh {
+    height: 100dvh;
+  }
+}

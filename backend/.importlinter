@@ -351,3 +351,23 @@ ignore_imports =
     # The deprecated local_docker adapter (ADR 044) delegates to the canonical
     # Docker provider; it stays inside the package and is out of D2 scope.
     farna.core.runtime_provider.local_docker -> farna.core.runtime_provider.docker
+
+[importlinter:contract:shared-utility-is-protected]
+name = Shared utility package has an explicit consumer boundary
+type = protected
+protected_modules =
+    farna.util
+allowed_importers =
+    farna.api
+    farna.auth
+    farna.cli
+    farna.connectors
+    farna.core
+    farna.db
+    farna.determination
+    farna.launcher
+    farna.utils
+    farna.model_backends
+    farna.support
+broken_contract_guidance =
+    Add a deliberate consumer package to this contract before importing farna.util from a new top-level package. Keep farna.util dependency-free so it remains a safe shared leaf.

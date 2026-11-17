@@ -192,6 +192,15 @@ describe('SettingsMcpView', () => {
     expect(wrapper.text()).toContain('MCP Configuration')
   })
 
+  it('lets the Client select shrink inside its row on narrow screens (FAR-2540)', async () => {
+    const wrapper = mountView()
+    await nextTick()
+    await nextTick()
+    const select = wrapper.get('#settingsmcpview-client')
+    const slot = select.element.closest('div.min-w-0.flex-1')
+    expect(slot).not.toBeNull()
+  })
+
   it('shows loading spinner initially', async () => {
     getMock.mockReturnValue(new Promise(() => {}))
     const wrapper = mount(SettingsMcpView, { global: { stubs } })

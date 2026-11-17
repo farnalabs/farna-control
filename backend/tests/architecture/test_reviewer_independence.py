@@ -40,9 +40,14 @@ class TestReviewerIdentitySeparation:
         assert 'if [ "$ACTOR" != "farna-reviewbot" ]' in workflow
 
     def test_merge_queue_accepts_only_author_and_reviewer_identities(self) -> None:
-        """The merge queue recognises farnalabs and farna-reviewbot as approvers."""
+        """The merge queue recognises farnalabs and farna-reviewbot as approvers.
+
+        ``farna-reviewbot`` is the reviewer identity; the pre-rebrand
+        ``modulo-reviewbot`` is not accepted (hard cutover).
+        """
         workflow = _read(".github/workflows/merge-queue.yml")
         assert "^(farnalabs|farna-reviewbot)$" in workflow
+        assert "^(farnalabs|farna-reviewbot|modulo-reviewbot)$" not in workflow
 
 
 class TestHitlHumanOnlyEnforcement:

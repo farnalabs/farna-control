@@ -22,7 +22,7 @@ This is the core Python package rename for the rebrand (Stage 2 of the rebrand p
 
 - `MODULO_*` environment variables (Stage 3)
 - `MODULO_*` CLI command names (`modulo-migrate`, `modulo-break-glass`) - Stage 4
-- `app.modulo.run` domain and SonarCloud key `farnalabs_modulo-new` - Stage 8
+- `control.farna.dev` domain and SonarCloud key `farnalabs_modulo-new` - Stage 8
 - Docker image names, Fly app names, CLI command names - later stages
 - `MODULO_*` env vars in `docker-compose.yml`, `fly.toml`, `.env` - Stage 3
 - Database names (`modulo`, `modulo_test`) - Stage 6
