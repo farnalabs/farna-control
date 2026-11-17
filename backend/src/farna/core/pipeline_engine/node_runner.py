@@ -10088,7 +10088,7 @@ def _build_sandbox_envs(
 
     The ordering is DELIBERATE (AGENTS.md b0c4bde97): pipelines must be able to
     override system defaults for identity separation (e.g. the PR Reviewer
-    injects its own modulo-reviewbot PAT via ``env_vars_extra``). Script mode
+    injects its own farna-reviewbot PAT via ``env_vars_extra``). Script mode
     does NOT auto-inject the long-lived host credentials (opencode API key /
     GitHub PAT) — a script only gets what the pipeline passes explicitly.
 
@@ -11902,7 +11902,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # System env vars first — provide defaults from the host. DO NOT
             # move pipeline env before these: pipelines need to override
             # GITHUB_TOKEN for identity separation (e.g. PR Reviewer uses
-            # modulo-reviewbot PAT, not the default GITHUB_TOKEN identity).
+            # farna-reviewbot PAT, not the default GITHUB_TOKEN identity).
             # The reserved-prefix validator already prevents overriding
             # MODULO_* vars, so update() below is the sanctioned override.
             # FAR-592 (D6): ``_runner_bindings`` was resolved BEFORE the sandbox

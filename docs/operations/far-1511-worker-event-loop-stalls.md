@@ -36,7 +36,7 @@ and the port-8082 liveness server.
 
 ### 1. The 95 s budget is spent inside one organization's reconcile pass
 
-Sampled `GET https://app.modulo.run/healthz/ready` seven times while the
+Sampled `GET https://control.farna.dev/healthz/ready` seven times while the
 `dispatcher_reconcile` check reported a timeout tick. Every sample carried the
 same shape:
 

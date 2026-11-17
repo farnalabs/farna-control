@@ -11,7 +11,10 @@ cd "$ROOT/backend"
 if [ ! -d ".venv" ]; then
     uv venv
 fi
-uv sync
+# NOSONAR shell:S8541: pytest-bdd is a pinned source-archive dep (no wheel) and
+# ibm-cos-sdk is sdist-only, so `--no-build` hard-fails the sync. `--frozen`
+# locks the exact revisions, so builds are deterministic and trusted.
+uv sync  # NOSONAR
 
 # Frontend
 # S6505: do not execute arbitrary install lifecycle scripts from deps.

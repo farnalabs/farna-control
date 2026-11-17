@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="hasHeaderContent"
-    class="card-header flex items-start justify-between gap-4 mb-4"
+    class="card-header flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-4"
     :class="[divider && 'border-b border-border pb-3', headerClass]"
     :data-testid="dataTestId"
   >
@@ -27,7 +27,7 @@
         </p>
       </div>
     </div>
-    <div v-if="$slots.actions" class="flex shrink-0 items-center gap-2">
+    <div v-if="$slots.actions" data-testid="card-header-actions" class="actions-nowrap flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
       <slot name="actions" />
     </div>
   </div>

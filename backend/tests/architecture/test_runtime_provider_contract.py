@@ -3,9 +3,10 @@
 Two scanner-based contracts complement the import-linter rules:
 
 1. **No concrete provider imports outside the package** — ``docker.py`` /
-   ``e2b.py`` / ``local.py`` (and the legacy ``local_docker.py`` adapter) may
-   only be imported from within ``core/runtime_provider/``. import-linter
-   enforces the module-level rule; this test is the architecture-suite backstop.
+   ``e2b.py`` / ``k8s.py`` / ``local.py`` (and the legacy ``local_docker.py``
+   adapter) may only be imported from within ``core/runtime_provider/``.
+   import-linter enforces the module-level rule; this test is the
+   architecture-suite backstop.
 2. **Hub consumers call only ABC-declared methods** — files that consume the
    hub or its resolved providers may only call methods declared on the ABC or
    the hub's public surface (import-linter cannot check call sites).
@@ -24,6 +25,7 @@ PACKAGE = SRC / "core" / "runtime_provider"
 _CONCRETE_MODULES = {
     "farna.core.runtime_provider.docker",
     "farna.core.runtime_provider.e2b",
+    "farna.core.runtime_provider.k8s",
     "farna.core.runtime_provider.local",
     "farna.core.runtime_provider.local_docker",
 }

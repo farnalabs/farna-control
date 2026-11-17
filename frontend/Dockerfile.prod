@@ -18,17 +18,17 @@ ARG VITE_MONITOR_BACKEND="builtin,sentry,datadog-rum,grafana-faro"
 ENV VITE_MONITOR_BACKEND=${VITE_MONITOR_BACKEND}
 ARG VITE_SENTRY_DSN=""
 ENV VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
-# NOSONAR (S6472): VITE_-prefixed vars are inlined into the public client bundle by
-# design, so these are NOT server secrets. VITE_DATADOG_RUM_CLIENT_TOKEN is a
-# Datadog RUM *client* token (public by design — safe to ship to browsers, unlike
-# the RUM API key), and VITE_GRAFANA_FARO_URL is a public collector endpoint URL.
-# Keeping them as build ARGs/ENV is the only way Vite can inline them at build time;
-# a build secret would still end up in the shipped JS, so it adds no protection here.
+# S6472: VITE_-prefixed vars are inlined into the public client bundle by design,
+# so they are NOT server secrets. VITE_DATADOG_RUM_CLIENT_TOKEN is a Datadog RUM
+# *client* token (public by design — safe to ship to browsers, unlike the RUM API
+# key) and VITE_GRAFANA_FARO_URL is a public collector endpoint URL. NOSONAR
+# comments are not supported in Dockerfiles, so the client token is handed
+# straight to the build process rather than persisted with ENV: it is still
+# inlined into the shipped JS (unavoidable), but never lands in the image config.
 ARG VITE_DATADOG_RUM_CLIENT_TOKEN=""
-ENV VITE_DATADOG_RUM_CLIENT_TOKEN=${VITE_DATADOG_RUM_CLIENT_TOKEN}
 ARG VITE_GRAFANA_FARO_URL=""
 ENV VITE_GRAFANA_FARO_URL=${VITE_GRAFANA_FARO_URL}
-RUN pnpm run build
+RUN VITE_DATADOG_RUM_CLIENT_TOKEN="${VITE_DATADOG_RUM_CLIENT_TOKEN}" pnpm run build
 
 FROM nginx:alpine
 RUN apk add --no-cache ca-certificates libcap tzdata

@@ -48,6 +48,9 @@ _APP_SERVICE = "modulo"
 #: through ``Settings`` - with the source files that read them, asserted to
 #: exist and to mention the name, so an allowlist entry cannot outlive the code
 #: that justifies it. Anything else the compose passes MUST be a Settings name.
+#: ``MODULO_ENV`` is deliberately absent: it is a legacy ``Settings`` validation
+#: alias (``_product_aliases``), not an ``os.environ`` read site, so
+#: ``_settings_env_names()`` already recognises it.
 _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
     "DATABASE_ADMIN_URL": (
         "src/farna/db/bootstrap.py",

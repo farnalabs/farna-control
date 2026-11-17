@@ -191,7 +191,9 @@ def encrypt_archive(tar_path: str, passphrase: str) -> None:
         sys.exit(1)
     _validate_arg(tar_path, "archive path")
     _validate_arg(passphrase, "passphrase")
-    result = subprocess.run(
+    # Args are _validate_arg-checked (no leading '-') and passed as an argv list,
+    # never through a shell, so no argument-injection sink exists here.
+    result = subprocess.run(  # NOSONAR S8705
         [
             "openssl",
             "enc",
@@ -221,7 +223,9 @@ def encrypt_archive(tar_path: str, passphrase: str) -> None:
 def get_org_id(db_url: str) -> str:
     try:
         _validate_arg(db_url, "database URL")
-        result = subprocess.run(
+        # Arg is _validate_arg-checked (no leading '-') and passed as an argv list,
+        # never through a shell, so no argument-injection sink exists here.
+        result = subprocess.run(  # NOSONAR S8705
             ["psql", "-d", db_url, "-t", "-A", "-c", "SELECT id FROM organisations ORDER BY created_at LIMIT 1"],
             capture_output=True,
             text=True,

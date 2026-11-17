@@ -147,7 +147,8 @@ async def test_change_password_blacklists_cross_org_token_families(
         current_user=principal,
         session=rls_session,
     )
-    assert resp["detail"] == "Password changed successfully"
+    assert resp.status_code == 200
+    assert "Password changed successfully" in resp.body.decode()
 
     assert await _is_blacklisted(db_engine, same_org_family) is True
     assert await _is_blacklisted(db_engine, other_org_family) is True
@@ -181,7 +182,8 @@ async def test_change_password_blacklists_both_families_for_single_account(
         current_user=principal,
         session=rls_session,
     )
-    assert resp["detail"] == "Password changed successfully"
+    assert resp.status_code == 200
+    assert "Password changed successfully" in resp.body.decode()
 
     assert await _is_blacklisted(db_engine, family_a) is True
     assert await _is_blacklisted(db_engine, family_b) is True

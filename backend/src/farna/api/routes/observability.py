@@ -336,7 +336,10 @@ async def test_otel_connection(
         return TestSpanResult(success=False, message=f"Rejected: {exc}")
 
     try:
-        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})
+        # ``pinned_async_client`` resolves, validates and pins the target IP via
+        # farna.core.ssrf (private/link-local/cloud-metadata ranges refused), so the
+        # URL is not an attacker-forgeable request target.
+        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})  # NOSONAR S5144
         if resp.status_code < 500:
             return TestSpanResult(
                 success=True,

@@ -37,7 +37,7 @@ class TestFindUnauditedMerges:
     def test_audited_merge(self) -> None:
         """A merge with a post-merge comment by the reviewer is audited."""
         merges = [Merge("abc123", 100, _MERGE_TIME)]
-        comments = [Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=1), 100)]
+        comments = [Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=1), 100)]
         unaudited = find_unaudited_merges(merges, comments)
         assert unaudited == []
 
@@ -54,7 +54,7 @@ class TestFindUnauditedMerges:
         merges = [Merge("abc123", 100, _MERGE_TIME)]
         comments = [
             # Before the merge — this is the pre-merge review
-            Comment("modulo-reviewbot", _MERGE_TIME - timedelta(hours=2), 100)
+            Comment("farna-reviewbot", _MERGE_TIME - timedelta(hours=2), 100)
         ]
         unaudited = find_unaudited_merges(merges, comments)
         assert len(unaudited) == 1, "Pre-merge comment must not count as audit"
@@ -64,7 +64,7 @@ class TestFindUnauditedMerges:
         merges = [Merge("abc123", 100, _MERGE_TIME)]
         comments = [
             # 25 hours after merge — outside the default 24h window
-            Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=25), 100)
+            Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=25), 100)
         ]
         unaudited = find_unaudited_merges(merges, comments)
         assert len(unaudited) == 1, "Comment outside window must not count"
@@ -74,7 +74,7 @@ class TestFindUnauditedMerges:
         merges = [Merge("abc123", 100, _MERGE_TIME)]
         comments = [
             # Exactly 24 hours after merge — at the boundary
-            Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=24), 100)
+            Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=24), 100)
         ]
         unaudited = find_unaudited_merges(merges, comments)
         assert unaudited == [], "Comment at window boundary must count"
@@ -83,7 +83,7 @@ class TestFindUnauditedMerges:
         """A merge with zero comments on its PR is unaudited."""
         merges = [Merge("abc123", 100, _MERGE_TIME)]
         # Comments on a different PR
-        comments = [Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=1), 200)]
+        comments = [Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=1), 200)]
         unaudited = find_unaudited_merges(merges, comments)
         assert len(unaudited) == 1
 
@@ -106,7 +106,7 @@ class TestFindUnauditedMerges:
         merges = [Merge("abc123", 100, _MERGE_TIME)]
         comments = [
             # 100 hours after merge — with window_hours=0, this still counts
-            Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=100), 100)
+            Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=100), 100)
         ]
         unaudited = find_unaudited_merges(merges, comments, window_hours=0)
         assert unaudited == []
@@ -120,9 +120,9 @@ class TestFindUnauditedMerges:
         ]
         comments = [
             # PR 100: audited
-            Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=1), 100),
+            Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=1), 100),
             # PR 102: audited
-            Comment("modulo-reviewbot", _MERGE_TIME + timedelta(hours=2), 102),
+            Comment("farna-reviewbot", _MERGE_TIME + timedelta(hours=2), 102),
             # PR 101: no comment — unaudited
         ]
         unaudited = find_unaudited_merges(merges, comments)
@@ -138,7 +138,7 @@ class TestFindUnauditedMerges:
         """Only comments *strictly after* the merge count — same-instant
         comments are the pre-merge review and are not an audit."""
         merges = [Merge("abc123", 100, _MERGE_TIME)]
-        comments = [Comment("modulo-reviewbot", _MERGE_TIME, 100)]
+        comments = [Comment("farna-reviewbot", _MERGE_TIME, 100)]
         unaudited = find_unaudited_merges(merges, comments)
         assert len(unaudited) == 1, "A comment at the exact merge instant must not count"
 
@@ -153,7 +153,7 @@ class TestMain:
 
     def test_all_audited_exits_zero(self) -> None:
         merges = [{"commit": "abc", "pr_number": 1, "merged_at": "2026-09-22T12:00:00Z"}]
-        comments = [{"author": "modulo-reviewbot", "created_at": "2026-09-22T13:00:00Z", "pr_number": 1}]
+        comments = [{"author": "farna-reviewbot", "created_at": "2026-09-22T13:00:00Z", "pr_number": 1}]
         rc = audit_main(
             [
                 "--merges-json",
@@ -220,7 +220,7 @@ class TestMainNaiveTimestamps:
         TypeError and is audited — proving naive values are normalised
         to UTC before comparison."""
         merges = [{"commit": "abc", "pr_number": 1, "merged_at": "2026-09-22T12:00:00"}]
-        comments = [{"author": "modulo-reviewbot", "created_at": "2026-09-22T13:00:00Z", "pr_number": 1}]
+        comments = [{"author": "farna-reviewbot", "created_at": "2026-09-22T13:00:00Z", "pr_number": 1}]
         rc = audit_main(
             [
                 "--merges-json",
@@ -234,7 +234,7 @@ class TestMainNaiveTimestamps:
     def test_aware_merge_with_naive_comment_counts(self) -> None:
         """A naive comment timestamp is normalised to UTC as well."""
         merges = [{"commit": "abc", "pr_number": 1, "merged_at": "2026-09-22T12:00:00Z"}]
-        comments = [{"author": "modulo-reviewbot", "created_at": "2026-09-22T13:00:00", "pr_number": 1}]
+        comments = [{"author": "farna-reviewbot", "created_at": "2026-09-22T13:00:00", "pr_number": 1}]
         rc = audit_main(
             [
                 "--merges-json",
@@ -248,7 +248,7 @@ class TestMainNaiveTimestamps:
     def test_two_naive_timestamps_count(self) -> None:
         """Both timestamps naive and within the window: audited."""
         merges = [{"commit": "abc", "pr_number": 1, "merged_at": "2026-09-22T12:00:00"}]
-        comments = [{"author": "modulo-reviewbot", "created_at": "2026-09-22T13:00:00", "pr_number": 1}]
+        comments = [{"author": "farna-reviewbot", "created_at": "2026-09-22T13:00:00", "pr_number": 1}]
         rc = audit_main(
             [
                 "--merges-json",
@@ -266,7 +266,7 @@ class TestMainWindowHoursFlag:
     def test_out_of_window_comment_with_default_window(self) -> None:
         """A +30h comment is outside the default 24h window → unaudited."""
         merges = [{"commit": "abc", "pr_number": 1, "merged_at": "2026-09-22T12:00:00Z"}]
-        comments = [{"author": "modulo-reviewbot", "created_at": "2026-09-23T18:00:00Z", "pr_number": 1}]
+        comments = [{"author": "farna-reviewbot", "created_at": "2026-09-23T18:00:00Z", "pr_number": 1}]
         rc = audit_main(
             [
                 "--merges-json",
@@ -280,7 +280,7 @@ class TestMainWindowHoursFlag:
     def test_out_of_window_comment_fits_extended_window(self) -> None:
         """The same +30h comment is audited once the window is widened."""
         merges = [{"commit": "abc", "pr_number": 1, "merged_at": "2026-09-22T12:00:00Z"}]
-        comments = [{"author": "modulo-reviewbot", "created_at": "2026-09-23T18:00:00Z", "pr_number": 1}]
+        comments = [{"author": "farna-reviewbot", "created_at": "2026-09-23T18:00:00Z", "pr_number": 1}]
         rc = audit_main(
             [
                 "--merges-json",
