@@ -16,8 +16,8 @@ const APP_MOUNT_TIMEOUT_MS = 30_000
 const MOBILE = { width: 390, height: 844 }
 const DESKTOP = { width: 1280, height: 800 }
 const JSON_HEADERS = { contentType: 'application/json' }
-const LONG_MCP_URL = 'https://mcp.modulo.run/very-long-single-token-server-url-without-any-break-opportunity-so-it-must-be-broken-by-css'
-const SHORT_MCP_URL = 'https://mcp.modulo.run'
+const LONG_MCP_URL = 'https://control.farna.dev/mcp/very-long-single-token-server-url-without-any-break-opportunity-so-it-must-be-broken-by-css'
+const SHORT_MCP_URL = 'https://control.farna.dev/mcp'
 
 // Desktop geometry measured on origin/main (1280x800), in CSS px.
 const DESKTOP_MCP = { urlToActionsGap: 0, actionsToRowRight: 16 }

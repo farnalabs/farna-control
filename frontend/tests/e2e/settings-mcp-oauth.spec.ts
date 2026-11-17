@@ -51,7 +51,7 @@ async function mockSettingsMcpApi(page: Page) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ mcp_url: 'https://mcp.modulo.run' }),
+        body: JSON.stringify({ mcp_url: 'https://control.farna.dev/mcp' }),
       })
     }
     return route.fulfill({

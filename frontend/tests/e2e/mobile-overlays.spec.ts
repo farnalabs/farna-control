@@ -27,7 +27,7 @@ async function boot(page: Page, env: TestEnv, path: string): Promise<void> {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(route.request().url().includes('/mcp-config') ? { mcp_url: 'https://mcp.modulo.run' } : []),
+        body: JSON.stringify(route.request().url().includes('/mcp-config') ? { mcp_url: 'https://control.farna.dev/mcp' } : []),
       }),
     )
     await page.route('**/api/v1/mcp/oauth/clients**', (route) =>

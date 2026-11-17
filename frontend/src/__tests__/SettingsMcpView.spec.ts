@@ -9,7 +9,7 @@ async function nextTick() {
 }
 
 const mockMcpConfig = {
-  mcp_url: 'https://mcp.modulo.run',
+  mcp_url: 'https://control.farna.dev/mcp',
   config_snippet: '',
 }
 
@@ -222,7 +222,7 @@ describe('SettingsMcpView', () => {
     await nextTick()
     await nextTick()
     await nextTick()
-    expect(wrapper.text()).toContain('https://mcp.modulo.run')
+    expect(wrapper.text()).toContain('https://control.farna.dev/mcp')
     expect(wrapper.text()).toContain('Active')
   })
 
@@ -534,7 +534,7 @@ describe('SettingsMcpView', () => {
     const copyBtn = wrapper.find('[data-testid="settings-mcp-copy-url"]')
     await copyBtn.trigger('click')
     await flushPromises()
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://mcp.modulo.run')
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://control.farna.dev/mcp')
     await nextTick()
     expect(copyBtn.text()).toContain('Copied')
     vi.advanceTimersByTime(2100)
@@ -585,7 +585,7 @@ describe('SettingsMcpView', () => {
     await nextTick()
     await nextTick()
     expect(wrapper.text()).toContain('mcp {')
-    expect(wrapper.text()).toContain('https://mcp.modulo.run')
+    expect(wrapper.text()).toContain('https://control.farna.dev/mcp')
   })
 
   it('switches snippet when selectedMcpClient changes', async () => {
@@ -608,7 +608,7 @@ describe('SettingsMcpView', () => {
     expect(wrapper.text()).toContain('experimental')
     vm.selectedMcpClient = 'custom'
     await nextTick()
-    expect(wrapper.text()).toContain('MCP_SERVER_URL=https://mcp.modulo.run')
+    expect(wrapper.text()).toContain('MCP_SERVER_URL=https://control.farna.dev/mcp')
   })
 
   it('uses localhost for snippet when mcpUrl is empty', async () => {
@@ -1763,7 +1763,7 @@ describe('SettingsMcpView', () => {
     expect(wrapper.find('.animate-spin').exists()).toBe(false)
     expect(wrapper.text()).toContain('Claude Key')
     expect(wrapper.text()).toContain('CLI Client')
-    expect(wrapper.text()).toContain('https://mcp.modulo.run')
+    expect(wrapper.text()).toContain('https://control.farna.dev/mcp')
     expect(wrapper.text()).toContain('Configuration Snippets')
 
     // Exactly ONE error surface - the inline, non-page-fatal one - carrying

@@ -34,7 +34,7 @@ _PREFILL_CONSTRAINTS: dict[str, object] = {
     "version": "1.0",
     "tags": [],
     "content_json": {},
-    "source_url": "https://registry.modulo.run/primitives/fk-regression-source",
+    "source_url": "https://example.com/primitives/fk-regression-source",
     "forked_from": None,
     "checksum": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "ed25519_signature": None,
