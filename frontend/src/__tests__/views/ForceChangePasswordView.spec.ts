@@ -31,6 +31,13 @@ const ChangePasswordFormStub = {
   emits: ['changed'],
 }
 
+const ChangePasswordFormNoTokenStub = {
+  name: 'ChangePasswordForm',
+  props: ['quiet'],
+  template: '<form @submit.prevent><button type="button" data-testid="cpf-changed-no-token" @click="$emit(\'changed\')">changed</button></form>',
+  emits: ['changed'],
+}
+
 import ForceChangePasswordView from '../../views/ForceChangePasswordView.vue'
 
 describe('ForceChangePasswordView', () => {
@@ -66,6 +73,23 @@ describe('ForceChangePasswordView', () => {
       expect(wrapper.find('[aria-live="polite"]').exists()).toBe(true)
       expect(setAccessToken).toHaveBeenCalledWith('fresh-token')
 
+  })
+
+  it('routes to the dashboard without installing a token when none is returned', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mount(ForceChangePasswordView, {
+        global: { stubs: { ChangePasswordForm: ChangePasswordFormNoTokenStub } },
+      })
+      await wrapper.find('[data-testid="cpf-changed-no-token"]').trigger('click')
+      vi.advanceTimersByTime(1500)
+
+      expect(setAccessToken).not.toHaveBeenCalled()
+      expect(routerReplace).toHaveBeenCalledWith('/')
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps the success announcement until the delayed session exit completes', async () => {

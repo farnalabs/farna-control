@@ -277,3 +277,29 @@ async def test_me_change_password_audit_failure_is_logged_and_programming_error_
             session,
         )
     assert raised.value.status_code == 501
+
+
+@pytest.mark.anyio
+async def test_me_change_password_raises_when_no_token_family_created() -> None:
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.begin = MagicMock(return_value=_SessionContext(session))
+    family = MagicMock(family_id=uuid.uuid4())
+    with (
+        patch.object(me, "get_account_by_id", new_callable=AsyncMock, return_value=_account()),
+        patch.object(me, "verify_password", return_value=True),
+        patch.object(me, "validate_password_strength"),
+        patch.object(me, "hash_password", return_value="new-hash"),
+        patch.object(me, "list_families_for_account", new_callable=AsyncMock, return_value=[family]),
+        patch.object(me, "blacklist_family", new_callable=AsyncMock),
+        patch.object(me, "create_family", new_callable=AsyncMock, return_value=None),
+        patch.object(me, "set_rls_org", new_callable=AsyncMock),
+        patch("farna.core.audit_logger.append_audit_event", new_callable=AsyncMock),
+        pytest.raises(HTTPException) as raised,
+    ):
+        await me.change_password(
+            me.PasswordChangeRequest(current_password="old-password", new_password="new-password"),
+            _Principal(),
+            session,
+        )
+    assert raised.value.status_code == 500
