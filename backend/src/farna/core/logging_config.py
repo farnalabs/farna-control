@@ -225,7 +225,7 @@ class ErrorTrackingLogHandler(logging.Handler):
                     "line": record.lineno,
                     "correlation_id": correlation_id_var.get(),
                 },
-                "environment": os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+                "environment": os.environ.get("FARNA_CONTROL_ENV", "development"),
                 "version": get_version(),
             }
 

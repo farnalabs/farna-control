@@ -36,13 +36,13 @@ from farna.db.models.environment_profile import PROVIDER_TYPES
 
 scenarios("provider_matrix.feature")
 
-_ENV_SIGNALS = ("FARNA_CONTROL_MODULO_E2B_API_KEY", "FARNA_CONTROL_MODULO_DOCKER_HOST", "DOCKER_HOST", "FARNA_CONTROL_MODULO_KUBERNETES_ENABLED")
+_ENV_SIGNALS = ("FARNA_CONTROL_E2B_API_KEY", "FARNA_CONTROL_DOCKER_HOST", "DOCKER_HOST", "FARNA_CONTROL_KUBERNETES_ENABLED")
 
 
 def _clean_env(monkeypatch) -> None:
     for var in _ENV_SIGNALS:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_RUNNER_TEMPLATE_ID", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_RUNNER_TEMPLATE_ID", raising=False)
 
 
 def _hub_state(request) -> dict:
@@ -98,13 +98,13 @@ def step_env_no_signals(monkeypatch) -> None:
 @given(parsers.parse('MODULO_E2B_API_KEY is set to "{value}"'))
 def step_env_e2b_key(monkeypatch, value: str) -> None:
     _clean_env(monkeypatch)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", value)
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", value)
 
 
 @given(parsers.parse('MODULO_DOCKER_HOST is set to "{value}"'))
 def step_env_modulo_docker_host(monkeypatch, value: str) -> None:
     _clean_env(monkeypatch)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", value)
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", value)
 
 
 @given(parsers.parse('DOCKER_HOST is set to "{value}"'))
@@ -116,7 +116,7 @@ def step_env_docker_host(monkeypatch, value: str) -> None:
 @given(parsers.parse('MODULO_RUNNER_TEMPLATE_ID is set to "{value}"'))
 def step_env_unrelated_runner(monkeypatch, value: str) -> None:
     _clean_env(monkeypatch)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_TEMPLATE_ID", value)
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_TEMPLATE_ID", value)
 
 
 @given("an empty runtime provider hub")

@@ -55,7 +55,7 @@ def _configured_docker_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     (CI containers, engine-less dev boxes) and fail non-deterministically.
     Skip-path tests delenv this and patch the filesystem probes explicitly.
     """
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", "tcp://docker-socket-proxy:2375")
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", "tcp://docker-socket-proxy:2375")
 
 
 def _container(run_id: str, age_s: float, cid: str = "c-1") -> _LabelledContainer:
@@ -257,7 +257,7 @@ async def test_log_only_max_lifetime_is_logged_not_destroyed(monkeypatch: pytest
 async def test_docker_source_filters_on_deployment_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """The container listing rides the modulo.machine.id label so two
     deployments sharing one engine never destroy each other's workspaces."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "deployment-a")
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
     client = MagicMock()
     client.containers.list = AsyncMock(return_value=[])
     # Shipped compose-internal endpoint (FAR-1038-exempt).  The test mocks the
@@ -304,7 +304,7 @@ def test_docker_source_rejects_remote_endpoint_without_tls(monkeypatch: pytest.M
     connected."""
     monkeypatch.delenv("DOCKER_TLS_VERIFY", raising=False)
     monkeypatch.delenv("DOCKER_CERT_PATH", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT", raising=False)
     with pytest.raises(ValueError, match="requires TLS"):
         runner_reconciler._DockerWorkspaceSource("tcp://engine:2375")
 
@@ -318,9 +318,9 @@ def test_docker_source_accepts_remote_endpoint_with_tls(monkeypatch: pytest.Monk
 
 
 def test_deployment_identity_env_then_hostname(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "machine-x")
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "machine-x")
     assert deployment_identity() == "machine-x"
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID")
+    monkeypatch.delenv("FARNA_CONTROL_RUNNER_MACHINE_ID")
     assert deployment_identity()  # hostname fallback — non-empty
 
 
@@ -336,7 +336,7 @@ def _force_no_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     the result does not depend on the test host having (or lacking) a
     Docker socket/context.
     """
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_CONTEXT", raising=False)
     monkeypatch.setattr(runner_reconciler, "_context_endpoint_configured", lambda: False)
@@ -350,7 +350,7 @@ def _isolate_from_context_and_socket(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_skip_reason_none_when_env_endpoint_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """MODULO_DOCKER_HOST alone (autouse fixture) makes the sweep applicable —
+    """FARNA_CONTROL_DOCKER_HOST alone (autouse fixture) makes the sweep applicable —
     even with every other signal neutralised. A configured-but-unreachable
     endpoint therefore NEVER skips: the predicate never probes reachability."""
     _isolate_from_context_and_socket(monkeypatch)
@@ -366,12 +366,12 @@ def test_skip_reason_present_when_no_endpoint_resolvable(monkeypatch: pytest.Mon
 
     assert reason is not None
     assert "no Docker endpoint configured" in reason
-    assert "MODULO_DOCKER_HOST" in reason  # names the remediation knob
+    assert "FARNA_CONTROL_DOCKER_HOST" in reason  # names the remediation knob
 
 
 def test_skip_reason_none_when_docker_host_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
     """DOCKER_HOST (the documented step-3 fallback) also counts as configured."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_DOCKER_HOST", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
     _isolate_from_context_and_socket(monkeypatch)
 
@@ -652,7 +652,7 @@ async def test_kubernetes_skip_reason_names_the_registration_env_var(monkeypatch
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
     monkeypatch.delenv("MODULO_KUBERNETES_ENABLED", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
 
     reason = await runner_reconciler.kubernetes_endpoint_skip_reason()
 
@@ -1033,7 +1033,7 @@ async def test_e2b_skip_reason_names_the_registration_env_var(
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
     monkeypatch.delenv("MODULO_E2B_API_KEY", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
 
     reason = await runner_reconciler.e2b_endpoint_skip_reason()
 

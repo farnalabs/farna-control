@@ -211,7 +211,7 @@ async def test_streaming_exec_chunks_and_exit_code(runner_image: str, workspace_
         process = await provider.exec_command_stream(
             ref,
             ["sh", "-c", "echo stream-hello; echo stream-err >&2"],
-            environment={"FARNA_CONTROL_MODULO_TEST": "1"},
+            environment={"FARNA_CONTROL_TEST": "1"},
         )
         chunks = []
         async for chunk in process.chunks:
@@ -360,7 +360,7 @@ async def _labelled_container(name: str, run_id: str, age_s: int) -> str:
                 "Cmd": ["sleep", "600"],
                 "Labels": {
                     "modulo.run.id": run_id,
-                    "modulo.machine.id": os.environ.get("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID") or socket.gethostname(),
+                    "modulo.machine.id": os.environ.get("FARNA_CONTROL_RUNNER_MACHINE_ID") or socket.gethostname(),
                     "modulo.created_at": str(int(time.time()) - age_s),
                     "modulo.test": "d4-reconciler",
                 },
@@ -577,7 +577,7 @@ async def test_engine_kill_mid_exec_is_retryable_never_success() -> None:
     immediately and never completes as ``exit_code == 0`` (the committed CI
     mechanism per the phase-0 spike; dind state is discarded with the
     engine)."""
-    if os.environ.get("FARNA_CONTROL_MODULO_RUNNER_DIND_TESTS") != "1":
+    if os.environ.get("FARNA_CONTROL_RUNNER_DIND_TESTS") != "1":
         pytest.skip("opt-in dind strip: set MODULO_RUNNER_DIND_TESTS=1 (pulls ~560 MB)")
     async with aiodocker.Docker() as docker:
         try:
