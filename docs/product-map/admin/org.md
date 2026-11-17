@@ -82,8 +82,8 @@ kill-switch, authorization enforcement).
       `backend/tests/unit/api/test_admin_org_feature_flags.py`,
       `frontend/src/views/AdminOrgSettingsView.vue`,
       `frontend/src/__tests__/AdminOrgSettingsView.spec.ts`)
-- [x] Frontend renders org settings at `/admin/org` with export, product-analytics,
-      community-objects and organization-feature-flag controls
+- [x] Frontend renders org settings at `/admin/org` with export, product-analytics
+      and organization-feature-flag controls
       (`frontend/src/manifest.yaml` testids). The page intentionally has no
       self-service organization-delete action: active-org deletion is refused by
       every self-service API route (403, FAR-2225)

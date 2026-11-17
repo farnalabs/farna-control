@@ -13,6 +13,7 @@ from click.testing import CliRunner
 from farna.cli.evidence import evidence as evidence_cli
 from farna.core.audit_logger import compute_event_hash
 from farna.core.audit_logger.hashing import compute_event_hash as direct_compute_event_hash
+from farna.core.crypto import generate_keypair
 from farna.core.evidence_pack import (
     AUDIT_EVENTS_FILE,
     EvidenceSigningError,
@@ -27,7 +28,6 @@ from farna.core.evidence_pack import (
     sign_manifest,
     verify_evidence_pack,
 )
-from farna.registry.crypto import generate_keypair
 
 ORG = "00000000-0000-0000-0000-0000000000aa"
 CREATED_AT = "2026-10-13T12:00:00+00:00"

@@ -47,10 +47,6 @@ Feature: Lifecycle Map as Library Primitive
     When I import a lifecycle map with invalid content
     Then the response status is 422
 
-  Scenario: Lifecycle maps can be contributed to the community library
-    When I contribute a lifecycle map primitive named "Community SDLC"
-    Then the response status is 201
-
   Scenario: Importing a lifecycle map whose pipeline is already claimed returns 409
     When I import a lifecycle map that conflicts with an existing map's pipeline
     Then the response status is 409

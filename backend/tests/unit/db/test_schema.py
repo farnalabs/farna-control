@@ -19,7 +19,6 @@ _ORG_SCOPED_EXEMPT_TABLES: frozenset[str] = frozenset(
         "system_audit_events",
         "tier_catalog",
         "feature_flag_catalog",
-        "library_sync_state",
         # collection_install_entity is the per-entity child of the org-scoped
         # collection_install table; access is always via the parent's
         # install_id, so it deliberately carries no organisation_id of its own.
@@ -45,7 +44,6 @@ def test_org_scoped_exempt_tables_is_pinned() -> None:
         "accounts",
         "collection_install_entity",
         "feature_flag_catalog",
-        "library_sync_state",
         "organisation_cost_state",
         "organisations",
         "system_audit_events",
@@ -90,7 +88,6 @@ def test_initial_schema_contains_required_tables() -> None:
         "invitations",
         "journeys",
         "library_primitives",
-        "library_sync_state",
         "lifecycle_maps",
         "lifecycle_map_stages",
         "mcp_servers",

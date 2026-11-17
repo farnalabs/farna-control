@@ -1,8 +1,7 @@
-"""Ed25519 signing utilities for the community registry — PEM/base64 API.
+"""Ed25519 signing utilities — PEM/base64 API.
 
-Provides key generation, signing, verification, and trust anchor support
-for the community library registry. Uses PEM-encoded keys and base64
-signatures.
+Provides key generation, signing, verification, and trust anchor support.
+Uses PEM-encoded keys and base64 signatures.
 """
 
 from __future__ import annotations
@@ -131,7 +130,7 @@ def verify(public_key_pem: str, data: bytes, signature: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Trust anchor — root of trust for the registry
+# Trust anchor — root of trust
 # ---------------------------------------------------------------------------
 
 _trust_anchor: Ed25519PrivateKey | None = None
@@ -174,7 +173,7 @@ def verify_trust_anchor(
     signature: str,
     trust_anchor_public_key_pem: str | None = None,
 ) -> bool:
-    """Verify that a public key is signed by the registry's trust anchor.
+    """Verify that a public key is signed by the trust anchor.
 
     Args:
         public_key_pem: The PEM-encoded public key to verify.

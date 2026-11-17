@@ -321,7 +321,7 @@ DEFAULT_OFF_FLAGS: frozenset[str] = frozenset(
 # sensitive community-tier flags (SSO unrestricted provisioning, web vitals,
 # observability, SCIM, error forwarders, runtime config, rate limits, assistant
 # UI driving) — stays system-administrator-only. A future sensitive org-scoped
-# flag (community-library access, telemetry/metrics export) must be left
+# flag (telemetry/metrics export) must be left
 # ``org_admin_settable=False`` (the default) until it is deliberately opened.
 ORG_ADMIN_SETTABLE_FLAGS: frozenset[str] = frozenset(flag.name for flag in _KNOWN_FLAGS if flag.org_admin_settable)
 

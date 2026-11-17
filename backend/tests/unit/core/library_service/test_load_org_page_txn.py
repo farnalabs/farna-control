@@ -1,9 +1,9 @@
-"""FAR-2286: the org page load must reuse a caller-owned transaction."""
+"""FAR-2286: the org page load in ``list_primitives`` must reuse a caller-owned transaction."""
 
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from farna.core.library_service import _load_org_page
+from farna.core.library_service import list_primitives
 from farna.db.crud.base import PageResult
 
 _MODULE = "farna.core.library_service"
@@ -23,22 +23,8 @@ async def _load(session: MagicMock, page_result: PageResult) -> PageResult:
     with (
         patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
         patch(f"{_MODULE}.list_library_primitives", new=AsyncMock(return_value=page_result)),
-        patch(f"{_MODULE}._fetch_published_community_from_db", new=AsyncMock(return_value=[])),
     ):
-        org_page, _ = await _load_org_page(
-            session,
-            uuid.uuid4(),
-            primitive_type=None,
-            primitive_types=None,
-            search=None,
-            page=1,
-            page_size=20,
-            include_community=True,
-            source=None,
-            cursor=None,
-            excluded_tiers=None,
-        )
-    return org_page
+        return await list_primitives(session, uuid.uuid4(), source="local")
 
 
 async def test_active_transaction_is_reused_not_nested():

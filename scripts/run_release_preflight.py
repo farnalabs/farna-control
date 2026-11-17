@@ -920,7 +920,7 @@ class ReleasePreflightChecker:
     # -------------------------------------------------------------------------
     def check_helm_chart(self) -> PreflightCheckResult:
         name = "Helm chart artefact validation"
-        chart_dir = self.repo_root / "deploy" / "helm" / "farna-control"
+        chart_dir = self.repo_root / "deploy" / "helm" / "modulo"
         if not chart_dir.is_dir():
             return PreflightCheckResult(name, False, "deploy/helm/modulo chart directory is missing")
 

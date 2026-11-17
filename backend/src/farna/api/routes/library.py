@@ -21,7 +21,7 @@ from farna.api.middleware.sensitive_mask import mask_pipeline_graph_node, resolv
 from farna.api.models.team_visibility import TeamVisibilityMixin
 from farna.api.routes.lifecycle_maps import LifecycleMapResponse
 from farna.api.team_scope import validate_owner_team_for_create
-from farna.auth.dependencies import get_current_tenant_user, require_system_admin
+from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.auth.permissions import grants_permit
 from farna.auth.team_rbac import ORG_ROLE_HIERARCHY
@@ -30,22 +30,16 @@ from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
 from farna.core.library_service import (
     CommunityPrimitiveReadOnlyError,
-    ContributionInvalidTransitionError,
-    ContributionNotFoundError,
     _bump_version,
-    contribute_primitive,
     copy_to_adapt,
     get_primitive,
     get_primitive_by_slug,
-    list_org_contributions,
     list_primitives,
     notify_importers_of_update,
-    publish_contribution,
 )
 from farna.core.library_service.grant import (
     AlreadyGrantedError,
     GrantError,
-    NotCommunitySourcedError,
     grant_collection_agents,
 )
 from farna.core.library_service.grant import (
@@ -877,7 +871,6 @@ async def _fetch_primitives(
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
-            include_community = query.source != "local"
             return await list_primitives(
                 session,
                 principal.organisation_id,
@@ -886,7 +879,6 @@ async def _fetch_primitives(
                 search=query.search,
                 page=query.page,
                 page_size=query.page_size,
-                include_community=include_community,
                 source=query.source,
                 cursor=query.cursor,
                 excluded_tiers=[] if query.include_in_dev else None,
@@ -2335,180 +2327,6 @@ async def create_lifecycle_map_from_primitive_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# Community contribution endpoints
-# ---------------------------------------------------------------------------
-
-
-class CommunityContributeRequest(BaseModel):
-    primitive_type: str = Field(
-        ...,
-        pattern=_PRIMITIVE_TYPE_PATTERN,
-    )
-    name: str = Field(..., min_length=1, max_length=255)
-    slug: str = Field(..., min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=2000)
-    tags: list[str] = Field(default_factory=list)
-    content_json: dict[str, Any]
-    source_url: str | None = None
-
-
-class CommunityContributionListResponse(BaseModel):
-    items: list[LibraryPrimitiveResponse]
-    total: int
-    page: int
-    page_size: int
-
-
-@router.post(
-    "/community/contribute",
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(audited("contribution_created", "contribution", principal_dep=get_current_tenant_user))],
-)
-@handle_db_errors("library.community_contribute_endpoint")
-async def community_contribute_endpoint(
-    req: CommunityContributeRequest,
-    session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(_CODE_LIBRARY_MANAGE),
-) -> LibraryPrimitiveResponse:
-    """Submit a community library contribution."""
-    try:
-        org_id = _require_organisation_id(principal)
-        if req.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE:
-            _require_lifecycle_map_internal_access(principal)
-        submitted_content = req.content_json
-        if req.primitive_type == "composite" and isinstance(submitted_content.get("nodes"), list):
-            # FAR-1374 parity with the library create/patch gates: a composite
-            # contribution stores a caller-submitted sub-graph; a fresh mask
-            # sentinel (no stored counterpart exists on contribute) is refused
-            # 422 rather than persisted into a draft contribution row.
-            submitted_content = dict(submitted_content)
-            submitted_content["nodes"] = resolve_and_reject_mask_sentinels(list(submitted_content["nodes"]), None)
-        result = await contribute_primitive(
-            session,
-            org_id=org_id,
-            created_by=principal.account_id,
-            primitive_type=req.primitive_type,
-            name=req.name,
-            slug=req.slug,
-            description=req.description,
-            tags=req.tags,
-            content_json=submitted_content,
-            source_url=req.source_url,
-        )
-    except IntegrityError:
-        _log.exception("library.community_contribute_endpoint")
-        raise _conflict_error() from None
-    except ProgrammingError:
-        _log.exception("library.community_contribute_endpoint")
-        raise _not_implemented_error() from None
-    except SQLAlchemyError:
-        _log.exception("community_contribute_endpoint: SQLAlchemyError")
-        raise _unavailable_error() from None
-    return LibraryPrimitiveResponse.model_validate(result)
-
-
-@router.get("/community/contributions")
-@handle_db_errors("library.list_community_contributions_endpoint")
-async def list_community_contributions_endpoint(
-    contribution_status: str | None = Query(default=None),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
-) -> CommunityContributionListResponse:
-    """List the org's own community contributions, optionally filtered by status."""
-    try:
-        org_id = _require_organisation_id(principal)
-        try:
-            result = await list_org_contributions(
-                session,
-                org_id,
-                contribution_status=contribution_status,
-                page=page,
-                page_size=page_size,
-            )
-        except IntegrityError:
-            _log.exception("library.list_community_contributions_endpoint")
-            raise _conflict_error() from None
-        except ProgrammingError:
-            _log.exception("library.list_community_contributions_endpoint")
-            _log.warning(
-                "list_community_contributions_endpoint: ProgrammingError — missing DB table or migration",
-                exc_info=True,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail=MSG_FEATURE_NOT_AVAILABLE,
-            ) from None
-        except SQLAlchemyError:
-            _log.exception("list_community_contributions_endpoint: SQLAlchemyError")
-            raise _unavailable_error() from None
-        if not _can_access_lifecycle_map_primitives(
-            principal,
-            dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
-        ):
-            result.items = [p for p in result.items if p.primitive_type != LIFECYCLE_MAP_PRIMITIVE_TYPE]
-            result.total = len(result.items)
-        items = [LibraryPrimitiveResponse.model_validate(p) for p in result.items]
-    except HTTPException:
-        raise
-    except Exception:
-        _log.exception("list_community_contributions_endpoint: unexpected error")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while listing contributions.",
-        ) from None
-    return CommunityContributionListResponse(
-        items=items,
-        total=result.total,
-        page=result.page,
-        page_size=result.page_size,
-    )
-
-
-@router.post(
-    "/admin/library/community/publish/{primitive_id}",
-    status_code=status.HTTP_200_OK,
-    dependencies=[Depends(audited("contribution_published", "contribution", principal_dep=get_current_tenant_user))],
-)
-@handle_db_errors("library.admin_publish_contribution_endpoint")
-async def admin_publish_contribution_endpoint(
-    primitive_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
-    _: None = Depends(require_system_admin),
-) -> LibraryPrimitiveResponse:
-    """Publish a community contribution to the community library (admin only)."""
-    try:
-        org_id = _require_organisation_id(principal)
-        result = await publish_contribution(
-            session,
-            org_id,
-            primitive_id,
-        )
-    except ContributionNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Contribution {primitive_id} not found",
-        ) from None
-    except ContributionInvalidTransitionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from None
-    except IntegrityError:
-        _log.exception("library.admin_publish_contribution_endpoint")
-        raise _conflict_error() from None
-    except ProgrammingError:
-        _log.exception("library.admin_publish_contribution_endpoint")
-        raise _not_implemented_error() from None
-    except SQLAlchemyError:
-        _log.exception("admin_publish_contribution_endpoint: SQLAlchemyError")
-        raise _unavailable_error() from None
-    return LibraryPrimitiveResponse.model_validate(result)
-
-
-# ---------------------------------------------------------------------------
 # Collection authoring lifecycle (FAR-760)
 # ---------------------------------------------------------------------------
 
@@ -3160,11 +2978,6 @@ async def grant_collection_agents_endpoint(
     except GrantInstallNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from None
-    except NotCommunitySourcedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from None
     except AlreadyGrantedError as exc:

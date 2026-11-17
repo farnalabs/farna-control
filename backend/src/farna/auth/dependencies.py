@@ -80,14 +80,6 @@ class OrganisationMembershipNotFound(HTTPException):
         )
 
 
-class SystemAdminRequired(HTTPException):
-    def __init__(self) -> None:
-        super().__init__(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="System admin role required",
-        )
-
-
 def bind_principal_context[PrincipalT: AuthenticatedPrincipal](
     request: Request | None,
     principal: PrincipalT,
@@ -555,12 +547,3 @@ async def _verify_identity(principal: AuthenticatedPrincipal) -> str | None:
         )
         raise OrganisationMembershipNotFound
     return live_role
-
-
-async def require_system_admin(  # NOSONAR S7503 - FastAPI dependency coroutine seam
-    current_user: AuthenticatedPrincipal = Depends(get_current_user),
-) -> AuthenticatedPrincipal:
-    """Require the current user to have system admin privileges."""
-    if not current_user.is_system_admin:
-        raise SystemAdminRequired
-    return current_user

@@ -664,39 +664,6 @@ class TestStaleRunRecoveryWrapperErrorSurfacing:
 
 
 # ---------------------------------------------------------------------------
-# FAR-909: library_sync error attribution
-# ---------------------------------------------------------------------------
-
-
-class TestLibrarySyncErrorAttribution:
-    """library_sync persists actual exception details in the error string."""
-
-    @pytest.mark.asyncio
-    async def test_library_sync_error_includes_exception(self) -> None:
-        """library_sync returns error with exception type + message when
-        sync_library raises (not returns a failure SyncResult)."""
-        from farna.core.saq_worker import library_sync
-
-        mock_settings = MagicMock()
-        mock_settings.modulo_library_endpoint = "https://library.example.com"
-        with (
-            patch("farna.core.saq_worker.get_settings", return_value=mock_settings),
-            patch("farna.core.saq_worker._make_session_factory", return_value=MagicMock()),
-            patch(
-                "farna.core.library_sync.sync_library",
-                new_callable=AsyncMock,
-                side_effect=ConnectionError("Network unreachable"),
-            ),
-        ):
-            result = await library_sync({})
-
-        assert result["status"] == "failed"
-        assert "unexpected cron failure" in result["error"]
-        assert "ConnectionError" in result["error"]
-        assert "Network unreachable" in result["error"]
-
-
-# ---------------------------------------------------------------------------
 # FAR-1425: the row budget must be RESPECTED by a single-org sweep
 # ---------------------------------------------------------------------------
 

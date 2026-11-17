@@ -114,40 +114,6 @@ def test_fails_closed_when_unset(reset_system_engine, monkeypatch: pytest.Monkey
 
 
 # ---------------------------------------------------------------------------
-# Cron-interval mapping (bug class #680: croniter parses 5-field cron, so the
-# mapping must never emit a 6-field expression or a sub-minute interval).
-# ---------------------------------------------------------------------------
-
-
-class TestSyncIntervalToCron:
-    def test_sub_minute_intervals_collapse_to_every_minute(self) -> None:
-        for seconds in (0, 1, 30, 60):
-            assert sw._sync_interval_to_cron(seconds) == "* * * * *"
-
-    def test_minute_multiples_map_to_star_minutes(self) -> None:
-        assert sw._sync_interval_to_cron(61) == "*/1 * * * *"
-        assert sw._sync_interval_to_cron(90) == "*/1 * * * *"
-        assert sw._sync_interval_to_cron(120) == "*/2 * * * *"
-        assert sw._sync_interval_to_cron(600) == "*/10 * * * *"
-        assert sw._sync_interval_to_cron(1800) == "*/30 * * * *"
-        assert sw._sync_interval_to_cron(3599) == "*/59 * * * *"
-
-    def test_hourly_multiples_map_to_hourly_expression(self) -> None:
-        assert sw._sync_interval_to_cron(3600) == "0 */1 * * *"
-        assert sw._sync_interval_to_cron(7200) == "0 */2 * * *"
-        assert sw._sync_interval_to_cron(23 * 3600) == "0 */23 * * *"
-
-    def test_daily_and_beyond_collapse_to_midnight(self) -> None:
-        assert sw._sync_interval_to_cron(86400) == "0 0 * * *"
-        assert sw._sync_interval_to_cron(48 * 3600) == "0 0 * * *"
-
-    def test_never_emits_six_field_or_sub_minute_expression(self) -> None:
-        for seconds in range(0, 20 * 3600, 61):
-            cron = sw._sync_interval_to_cron(seconds)
-            assert len(cron.split()) == 5, f"non-5-field cron for {seconds}s: {cron!r}"
-
-
-# ---------------------------------------------------------------------------
 # Pool-sizing math — the reserve guarantees that keep the worker from wedging.
 # ---------------------------------------------------------------------------
 

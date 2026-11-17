@@ -4,36 +4,27 @@ prd: N/A
 adr: []
 code:
   - backend/src/farna/api/routes/library.py
-  - backend/src/farna/api/routes/community_library.py
-  - backend/src/farna/core/library_service/community.py
-  - backend/src/farna/core/library_sync
   - frontend/src/views/CollectionCreateView.vue
   - frontend/src/views/CollectionDetailView.vue
 unit-tests:
-  - backend/tests/unit/library_service/test_library_service.py
+  - backend/tests/unit/core/library_service/test_contribute.py
   - backend/tests/unit/api/test_library_collection.py
   - backend/tests/unit/api/test_library_primitive_masking.py
-  - backend/tests/unit/library_service/test_contribution_flow.py
+  - backend/tests/unit/library_service/test_notify_importers.py
   - backend/tests/unit/library_service/test_ratings.py
   - backend/tests/unit/library_service/test_composite_library.py
-  - backend/tests/unit/library_sync/test_sync.py
-  - backend/tests/unit/library_sync/test_community_install.py
-  - backend/tests/unit/library_sync/test_library_manifest.py
-  - backend/tests/unit/library_sync/test_client.py
 bdd:
   - backend/tests/bdd/features/library/browse.feature
   - backend/tests/bdd/features/library/copy_to_adapt.feature
   - backend/tests/bdd/features/library/ratings.feature
   - backend/tests/bdd/features/library/tiering.feature
   - backend/tests/bdd/features/library/auto_update.feature
-  - backend/tests/bdd/features/library/community_registry.feature
-  - backend/tests/bdd/features/library/contribute.feature
   - backend/tests/bdd/features/library/schemas.feature
   - backend/tests/bdd/features/composites/composite_library.feature
   - backend/tests/bdd/features/workflows/import.feature
   - backend/tests/bdd/features/workflows/export.feature
   - backend/tests/bdd/steps/test_library.py
-  - backend/tests/bdd/steps/test_community_registry.py
+  - backend/tests/bdd/features/library/contribute.feature
   - backend/tests/bdd/steps/test_library_contributions.py
   - backend/tests/bdd/steps/test_schemas.py
   - backend/tests/bdd/steps/test_composites.py
@@ -50,7 +41,6 @@ The library (`/library`, `/library/:id/create-pipeline`) is the reusable-primiti
 pipeline-template surface. Primitives (agents, schemas, workflows, connectors) are listed,
 type-filtered, searched and detail-viewed; community primitives are copied into the org and
 adapted (forked) with an owner team; community sync/install, contribution, ratings and
-auto-update are served by `core/library_sync` + `core/library_service/community.py`; and
 each primitive carries an integration tier (native / preview / in_dev) per ADR 010.
 Library collections (FAR-760) are authored at `/library/collections/new` and viewed at
 `/library/collections/:id`, gated behind the `library_collection` feature flag.
@@ -68,13 +58,10 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       tier defaults to native, `in_dev` primitives are excluded from the default listing,
       `include_in_dev=true` reveals them only to authorized roles (403 for viewers)
       (`tiering.feature`)
-- [x] Community sync/install and the community registry are covered
-      (`community_registry.feature`, `core/library_sync`, `test_community_install.py`)
 - [x] Fixture contributions are exercised end to end through
       `/api/v1/library/contribute` (`contributions.py`): a `draft` is created (201),
       missing fields are rejected 422, a draft is submitted to the `review_queue`,
-      a non-draft submit is 409, publish (admin-only, 403 for viewers) sets
-      `visibility=community`, a published contribution is versioned into a fresh
+      a non-draft submit is 409, a published contribution is versioned into a fresh
       `draft` (201, 409 on a draft original), and contributions/versions are
       listed (`contribute.feature`, `test_library_contributions.py`)
 - [x] Library-schema seeding and dogfood schemas underpin create-pipeline from a template
@@ -90,13 +77,11 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 - [x] Composite library-primitive credential masking (FAR-1380): the shared
       `LibraryPrimitiveResponse._mask_composite_graph_credentials` validator masks
       credential-bearing node fields inside a **composite** primitive's `content_json`
-      on every read surface - library list/get/create/patch/delete/restore/adapt,
-      community contribute + contributions list + admin publish, community install and
+      on every read surface - library list/get/create/patch/delete/restore/adapt and
       the fixture contributions list - and the MCP `modulo://library/{type}/{slug}`
       resource masks composite nodes before rendering; non-composite primitives pass
       through byte-identical. The FAR-1374 sentinel rule applies on write:
-      `POST /api/v1/libraries`, `PATCH /api/v1/libraries/{id}` and
-      `POST /api/v1/libraries/community/contribute` resolve a submitted mask echo
+      `POST /api/v1/libraries` and `PATCH /api/v1/libraries/{id}` resolve a submitted mask echo
       against the stored sub-graph (`resolve_and_reject_mask_sentinels`) and refuse an
       unmappable sentinel with 422 `COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL`, and a
       masked-read → patch round-trip preserves the stored secret
@@ -127,8 +112,6 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 
 ## Known Gaps
 
-- **`community_registry.feature` is a separate surface from contribution** – contribution
-  authoring and registry browsing are tracked under one feature here but cited separately.
 - **Workflow import verifies no Ed25519 signature** – `/api/v1/libraries/import/confirm`
   accepts any structural `bundle_json`; bundle signatures are verified on the
   community-registry install path, not the workflow-import path (the drafted
@@ -244,5 +227,4 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 - 2026-08-27: **product-map review pass** – added this behavior-tracker
   for the registered manifest feature `feat-library`, which previously had no
   `docs/product-map/` entry. Behaviors verified against `api/routes/library.py`,
-  `core/library_sync`, `core/library_service/*` and the library BDD/unit suites.
   Status: covered.
