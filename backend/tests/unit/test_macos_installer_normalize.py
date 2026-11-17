@@ -770,3 +770,194 @@ def test_pinned_shellcheck_download_leaves_no_temporary_files_on_success(tmp_pat
     assert destination.read_bytes() == b"clean-body"
     leftovers = sorted(path.name for path in tmp_path.iterdir() if path.name.startswith("pinned.tar.gz."))
     assert not leftovers
+
+
+# ---------------------------------------------------------------------------
+# FAR-2553: every timestamped codesign call depends on Apple's timestamp
+# authority (TSA). A TSA outage failed the release recut run 44150528228 on both
+# macOS jobs with "A timestamp was expected but was not found." and a valid
+# Developer ID identity. The retry block is extracted verbatim from the workflow
+# and executed against a stubbed `codesign`, so the classification these tests
+# pin is the code the macOS job runs.
+# ---------------------------------------------------------------------------
+
+_TSA_TIMESTAMP_MISSING = "A timestamp was expected but was not found."
+
+
+def _codesign_retry_driver(tmp_path: Path) -> Path:
+    """Write a driver that runs the workflow's retry helper against a stub codesign."""
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "codesign_with_timestamp_retry")
+    driver = tmp_path / "codesign_retry_driver.sh"
+    driver.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        + block
+        + """
+fake_codesign_calls=0
+codesign() {
+  fake_codesign_calls=$((fake_codesign_calls + 1))
+  if [[ "$fake_codesign_calls" -le "${FAKE_CODESIGN_FAILURES:-0}" ]]; then
+    printf 'build/Modulo.app/Contents/MacOS/modulo: %s\\n' "${FAKE_CODESIGN_MESSAGE:-}" >&2
+    return "${FAKE_CODESIGN_STATUS:-1}"
+  fi
+  printf 'build/Modulo.app/Contents/MacOS/modulo: replacing existing signature\\n' >&2
+  return 0
+}
+
+status=0
+codesign_with_timestamp_retry fixture --force --timestamp --sign "Developer ID Application: Fixture (AAAAAAAAAA)" build/Modulo.app || status=$?
+printf 'fake_codesign_calls=%d\\n' "$fake_codesign_calls"
+exit "$status"
+""",
+        encoding="utf-8",
+    )
+    return driver
+
+
+def _codesign_retry_env(**overrides: str) -> dict[str, str]:
+    """Fast retry timing for tests; production defaults are asserted structurally."""
+    env = {
+        "CODESIGN_TIMESTAMP_MAX_ATTEMPTS": "3",
+        "CODESIGN_TIMESTAMP_BASE_DELAY": "0",
+        "CODESIGN_TIMESTAMP_MAX_DELAY": "0",
+    }
+    env.update(overrides)
+    return env
+
+
+def test_macos_every_timestamped_codesign_call_routes_through_the_retry_helper() -> None:
+    """FAR-2553: no timestamped codesign call may bypass the TSA retry."""
+    _step, build_run = _native_installer_step()
+
+    assert "# BEGIN codesign_with_timestamp_retry" in build_run
+    assert "codesign_with_timestamp_retry() {" in build_run
+    assert "codesign_failure_is_transient_timestamp() {" in build_run
+    # The nested-binary signer runs in a `bash -c` child, so the helper has to
+    # be exported or that call site cannot see it.
+    assert "export -f codesign_with_timestamp_retry" in build_run
+    assert "export -f codesign_failure_is_transient_timestamp" in build_run
+
+    # Production defaults: 5 attempts, 10s base delay, 120s cap.
+    assert "CODESIGN_TIMESTAMP_MAX_ATTEMPTS:-5" in build_run
+    assert "CODESIGN_TIMESTAMP_BASE_DELAY:-10" in build_run
+    assert "CODESIGN_TIMESTAMP_MAX_DELAY:-120" in build_run
+
+    assert ('run_pre_smoke app_codesign codesign_with_timestamp_retry app_codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"') in build_run
+    assert ('run_pre_smoke dmg_codesign codesign_with_timestamp_retry dmg_codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$DMG"') in build_run
+    assert ('codesign_with_timestamp_retry "nested_binary_$(basename "$binary")" --force --options runtime --timestamp --sign "$identity" "$binary"') in build_run
+
+    # Sweep: EVERY runnable line that requests a secure timestamp goes through
+    # the helper, so a future call site cannot quietly regress to a bare
+    # codesign, and no call site may opt out of the timestamp.
+    bypassing = [line.strip() for line in build_run.splitlines() if "--timestamp" in line and not line.strip().startswith("#") and "codesign_with_timestamp_retry" not in line]
+    assert not bypassing, bypassing
+    assert "--timestamp=none" not in build_run
+
+    # Verification, notarization and stapling semantics are untouched: only
+    # signing gained a retry.
+    assert 'run_pre_smoke app_codesign_verify codesign --verify --deep --strict --verbose=2 "$APP"' in build_run
+    assert 'run_pre_smoke mounted_app_codesign codesign --verify --deep --strict "$MOUNTED_APP"' in build_run
+    assert "run_pre_smoke dmg_notary_submit xcrun notarytool submit" in build_run
+    assert 'xcrun stapler validate "$DMG"' in build_run
+
+
+def test_macos_codesign_retry_retries_the_observed_tsa_failure_then_succeeds(tmp_path: Path) -> None:
+    """FAR-2553: the exact diagnostic from run 44150528228 is retried and signed."""
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(
+            FAKE_CODESIGN_FAILURES="1",
+            FAKE_CODESIGN_MESSAGE=_TSA_TIMESTAMP_MISSING,
+            FAKE_CODESIGN_STATUS="1",
+        ),
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "fake_codesign_calls=2" in result.stdout
+    assert "class=transient" in result.stderr
+    assert "retrying in 0s" in result.stderr
+    assert "class=success" in result.stderr
+    # Attempt logging carries metadata only - never the signing invocation.
+    assert "Developer ID Application" not in result.stdout
+    assert "Developer ID Application" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "The timestamp service is not available.",
+        "unable to get timestamp: The operation couldn't be completed. (NSURLErrorDomain error -1005.)",
+        "The network connection was lost.",
+        "codesign: The timestamp server is currently unreachable.",
+    ],
+)
+def test_macos_codesign_retry_retries_other_transient_tsa_diagnostics(tmp_path: Path, message: str) -> None:
+    """FAR-2553: TSA unavailability and its network symptoms are all retried."""
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(
+            FAKE_CODESIGN_FAILURES="1",
+            FAKE_CODESIGN_MESSAGE=message,
+            FAKE_CODESIGN_STATUS="1",
+        ),
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "fake_codesign_calls=2" in result.stdout
+    assert "class=transient" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        'unable to build chain to self-signed root for signer "Developer ID Application: Fixture (AAAAAAAAAA)"',
+        "no identity found",
+        "code object is not signed at all",
+        "unrecognized option: --deep",
+    ],
+)
+def test_macos_codesign_retry_never_retries_a_non_transient_failure(tmp_path: Path, message: str) -> None:
+    """FAR-2553: identity/certificate/option failures fail closed on attempt one."""
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(
+            FAKE_CODESIGN_FAILURES="99",
+            FAKE_CODESIGN_MESSAGE=message,
+            FAKE_CODESIGN_STATUS="42",
+        ),
+    )
+
+    assert result.returncode == 42
+    assert "fake_codesign_calls=1" in result.stdout
+    assert "class=non-transient" in result.stderr
+    assert "not retried" in result.stderr
+    assert "retrying in" not in result.stderr
+
+
+def test_macos_codesign_retry_stops_at_the_bounded_attempt_cap(tmp_path: Path) -> None:
+    """FAR-2553: a persistent TSA outage is bounded, never an unbounded loop."""
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(
+            CODESIGN_TIMESTAMP_MAX_ATTEMPTS="3",
+            FAKE_CODESIGN_FAILURES="99",
+            FAKE_CODESIGN_MESSAGE=_TSA_TIMESTAMP_MISSING,
+            FAKE_CODESIGN_STATUS="1",
+        ),
+    )
+
+    assert result.returncode == 1
+    assert "fake_codesign_calls=3" in result.stdout
+    assert "persisted through 3 attempt(s)" in result.stderr
