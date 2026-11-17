@@ -74,7 +74,7 @@ def _get_hub() -> RuntimeProviderHub:
     """Build a fresh RuntimeProviderHub via the factory.
 
     Hubs are cheap, stateless, and never cached process-globally (ADR 029):
-    the E2B provider is auto-registered when ``MODULO_E2B_API_KEY`` is set
+    the E2B provider is auto-registered when ``FARNA_CONTROL_E2B_API_KEY`` is set
     (env var or runtime override) and the Docker Runner provider when a
     Runner/Docker endpoint variable is set — adding the key post-deployment
     (or setting its runtime override) and rebuilding the hub is enough to
@@ -86,7 +86,7 @@ def _get_hub() -> RuntimeProviderHub:
     settings = get_settings()
     # FAR-1135: MODULO_MAX_LOCAL_CONCURRENCY is hot-reloadable — the runtime
     # override wins over the boot-time Settings value on each fresh hub.
-    concurrency = override_int_or("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", settings.modulo_max_local_concurrency)
+    concurrency = override_int_or("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", settings.modulo_max_local_concurrency)
     return build_hub(max_local_concurrency=concurrency)
 
 

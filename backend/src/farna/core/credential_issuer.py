@@ -69,7 +69,7 @@ PROVENANCE_KINDS: frozenset[str] = frozenset({PROVENANCE_KIND_ATTESTED, PROVENAN
 # The sandbox env var the run reads its issuance provenance from. Reserved via
 # ``db.runner_binding_constraints.RESERVED_ENV_VAR_PREFIXES`` (``MODULO_``) and
 # the exact-name denylist, so a node's ``env_vars``/binding cannot spoof it.
-RUN_CREDENTIAL_PROVENANCE_ENV = "FARNA_CONTROL_MODULO_CREDENTIAL_PROVENANCE"
+RUN_CREDENTIAL_PROVENANCE_ENV = "FARNA_CONTROL_CREDENTIAL_PROVENANCE"
 
 
 @dataclass(frozen=True)

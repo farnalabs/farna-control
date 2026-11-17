@@ -150,19 +150,19 @@ _dev_anchor_trusted: bool = False
 DEV_ANCHOR_NOT_TRUSTED_ERROR = (
     "License could not be verified against a trusted key: MODULO_LICENSE_PUBLIC_KEY is not "
     "configured, so only the built-in development public key is available and that key is not "
-    "a trust anchor outside debug. Set FARNA_CONTROL_MODULO_LICENSE_PUBLIC_KEY (or "
+    "a trust anchor outside debug. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or "
     "MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key (64 hex chars) that signed this "
     "license, then restart."
 )
 
 #: Actionable startup error for an instance that is configured to ACCEPT a
-#: licence (``MODULO_LICENSE_KEY``) while only the development anchor exists.
+#: licence (``FARNA_CONTROL_LICENSE_KEY`` or ``MODULO_LICENSE_KEY``) while only the development anchor exists.
 DEV_ANCHOR_STARTUP_ERROR = (
-    "FARNA_CONTROL_MODULO_LICENSE_KEY is configured but FARNA_CONTROL_MODULO_LICENSE_PUBLIC_KEY is not (or is the built-in "
+    "FARNA_CONTROL_LICENSE_KEY (or MODULO_LICENSE_KEY) is configured but FARNA_CONTROL_LICENSE_PUBLIC_KEY is not (or is the built-in "
     "development key), and debug is off. The built-in development public key is not a trust "
-    "anchor outside debug, so no licence can be verified. Set FARNA_CONTROL_MODULO_LICENSE_PUBLIC_KEY (or "
-    "Ed25519 public key (64 hex chars) that signed your licence, or unset FARNA_CONTROL_MODULO_LICENSE_KEY to "
-    "run on the Community tier."
+    "anchor outside debug, so no licence can be verified. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or "
+    "MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key (64 hex chars) that signed your licence, or unset "
+    "FARNA_CONTROL_LICENSE_KEY to run on the Community tier."
 )
 
 # In-memory store for the current validated license.
@@ -369,7 +369,7 @@ REASON_ANCHOR_MISMATCH = "anchor_mismatch"
 REASON_DEV_ANCHOR_NOT_TRUSTED = "dev_anchor_not_trusted"
 REASON_EXPIRED = "expired"
 
-_ANCHOR_MISMATCH_HINT = "This deployment is verifying licences with the built-in development anchor, which cannot verify a production licence. Set FARNA_CONTROL_MODULO_LICENSE_PUBLIC_KEY (or MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key Farnalabs issued with your licence (anchor mismatch)."
+_ANCHOR_MISMATCH_HINT = "This deployment is verifying licences with the built-in development anchor, which cannot verify a production licence. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key Farnalabs issued with your licence (anchor mismatch)."
 _SIGNATURE_MISMATCH_HINT = "The key was not signed by the authority this deployment trusts. If Farnalabs issued it, MODULO_LICENSE_PUBLIC_KEY does not match the signing keypair (anchor mismatch)."
 
 
