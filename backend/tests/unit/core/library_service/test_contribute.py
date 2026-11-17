@@ -10,13 +10,11 @@ from farna.core.library_service import (
     CONTRIBUTION_DRAFT,
     CONTRIBUTION_PUBLISHED,
     CONTRIBUTION_REVIEW_QUEUE,
-    MODULO_ORG_ID,
     ContributionInvalidTransitionError,
     ContributionNotFoundError,
     contribute_fixture,
     list_contribution_versions,
     list_contributions,
-    publish_contribution,
     submit_contribution_for_review,
     submit_contribution_version,
 )
@@ -367,132 +365,6 @@ class TestSubmitForReview:
             pytest.raises(ContributionNotFoundError),
         ):
             await submit_contribution_for_review(session, org_id, prim_id, _created_by=created_by)
-
-
-class TestPublish:
-    """Tests for publish_contribution()."""
-
-    async def test_publish_reviewed_contribution(self):
-        session = _mock_session()
-        org_id = uuid.uuid4()
-        prim_id = uuid.uuid4()
-        prim = _fake_primitive(pid=prim_id, contribution_status=CONTRIBUTION_REVIEW_QUEUE)
-        updated = _fake_primitive(
-            pid=prim_id,
-            contribution_status=CONTRIBUTION_PUBLISHED,
-            visibility="community",
-        )
-
-        with (
-            patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch(
-                "farna.core.library_service.get_library_primitive",
-                new_callable=AsyncMock,
-                return_value=prim,
-            ),
-            patch(
-                "farna.core.library_service.update_library_primitive",
-                new_callable=AsyncMock,
-                return_value=updated,
-            ) as mock_update,
-            patch(
-                "farna.core.library_service.notify_importers_of_update",
-                new_callable=AsyncMock,
-            ),
-        ):
-            result = await publish_contribution(session, org_id, prim_id)
-
-        assert result.contribution_status == CONTRIBUTION_PUBLISHED
-        assert result.visibility == "community"
-        mock_update.assert_awaited_once_with(
-            session,
-            prim_id,
-            {
-                "contribution_status": CONTRIBUTION_PUBLISHED,
-                "visibility": "community",
-                "organisation_id": MODULO_ORG_ID,
-            },
-        )
-
-    async def test_publish_not_found_raises(self):
-        session = _mock_session()
-        org_id = uuid.uuid4()
-        prim_id = uuid.uuid4()
-
-        with (
-            patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch(
-                "farna.core.library_service.get_library_primitive",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            pytest.raises(ContributionNotFoundError, match=str(prim_id)),
-        ):
-            await publish_contribution(session, org_id, prim_id)
-
-    async def test_publish_from_draft_succeeds(self):
-        session = _mock_session()
-        org_id = uuid.uuid4()
-        prim_id = uuid.uuid4()
-        prim = _fake_primitive(pid=prim_id, contribution_status=CONTRIBUTION_DRAFT)
-        updated = _fake_primitive(pid=prim_id, contribution_status=CONTRIBUTION_PUBLISHED, visibility="community")
-
-        with (
-            patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch(
-                "farna.core.library_service.get_library_primitive",
-                new_callable=AsyncMock,
-                return_value=prim,
-            ),
-            patch(
-                "farna.core.library_service.update_library_primitive",
-                new_callable=AsyncMock,
-                return_value=updated,
-            ),
-            patch("farna.core.library_service.notify_importers_of_update", new_callable=AsyncMock),
-        ):
-            result = await publish_contribution(session, org_id, prim_id)
-            assert result.contribution_status == CONTRIBUTION_PUBLISHED
-            assert result.visibility == "community"
-
-    async def test_publish_already_published_raises(self):
-        session = _mock_session()
-        org_id = uuid.uuid4()
-        prim_id = uuid.uuid4()
-        prim = _fake_primitive(pid=prim_id, contribution_status=CONTRIBUTION_PUBLISHED)
-
-        with (
-            patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch(
-                "farna.core.library_service.get_library_primitive",
-                new_callable=AsyncMock,
-                return_value=prim,
-            ),
-            pytest.raises(ContributionInvalidTransitionError),
-        ):
-            await publish_contribution(session, org_id, prim_id)
-
-    async def test_publish_update_returns_none_raises_not_found(self):
-        session = _mock_session()
-        org_id = uuid.uuid4()
-        prim_id = uuid.uuid4()
-        prim = _fake_primitive(pid=prim_id, contribution_status=CONTRIBUTION_REVIEW_QUEUE)
-
-        with (
-            patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch(
-                "farna.core.library_service.get_library_primitive",
-                new_callable=AsyncMock,
-                return_value=prim,
-            ),
-            patch(
-                "farna.core.library_service.update_library_primitive",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            pytest.raises(ContributionNotFoundError),
-        ):
-            await publish_contribution(session, org_id, prim_id)
 
 
 class TestListContributions:

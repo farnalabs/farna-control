@@ -89,13 +89,9 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("DELETE", "/api/v1/me/assistant/skills/{skill_id}"): "self-profile (get_current_user)",
     ("PUT", "/api/v1/me/assistant/context-sources/{source_key}"): "self-profile (get_current_user)",
     ("DELETE", "/api/v1/me/assistant/context-sources"): "self-profile (get_current_user)",
-    # Libraries: creation-only + user content + community (ADR creation-only rule).
+    # Libraries: creation-only + user content (ADR creation-only rule).
     ("POST", "/api/v1/libraries/{primitive_id}/ratings"): "user content",
     ("POST", "/api/v1/libraries/{primitive_id}/ratings/abuse"): "user content",
-    (
-        "POST",
-        "/api/v1/libraries/admin/library/community/publish/{primitive_id}",
-    ): "community publish (admin-gated in handler)",
     # OAuth protocol: handled by A1b (client create/delete gated via oauth.client.*).
     ("POST", "/api/v1/mcp/oauth/clients"): "OAuth A1b flow",
     ("DELETE", "/api/v1/mcp/oauth/clients/{client_id}"): "OAuth A1b flow",
@@ -180,7 +176,6 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("PUT", "/api/v1/admin/org/hitl-review-window"): "admin.py inline _require_org_admin",
     ("PUT", "/api/v1/admin/org/run-concurrency"): "admin.py inline _require_org_admin",
     ("PUT", "/api/v1/admin/org/work-item-agent-minting"): "admin.py inline _require_org_admin",
-    ("PUT", "/api/v1/admin/org/community-objects"): "admin.py inline _require_org_admin",
     ("POST", "/api/v1/admin/org/journeys/dismiss"): "admin.py inline _require_org_admin",
     ("POST", "/api/v1/admin/org/journeys/restore"): "admin.py inline _require_org_admin",
     ("POST", "/api/v1/admin/org/regenerate-api-key"): "admin.py inline _require_org_admin",

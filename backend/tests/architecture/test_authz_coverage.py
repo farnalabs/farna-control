@@ -156,8 +156,6 @@ def _exemption_has_live_evidence(route: APIRoute, reason: str) -> bool:
         return endpoint_name == "demo_login"
     if "creation-only" in reason:
         return bool(dependencies & PRINCIPAL_DEPENDENCIES) or "_detect_parameter_ports" in calls
-    if "community publish" in reason:
-        return "require_system_admin" in dependencies or "require_system_admin" in calls
     if "health probe" in reason or "readiness probe" in reason:
         return endpoint_name in {"liveness", "readiness"}
     if "OAuth protected-resource metadata" in reason:

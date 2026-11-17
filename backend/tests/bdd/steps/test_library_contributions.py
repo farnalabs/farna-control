@@ -2,15 +2,15 @@
 
 The contribution REST surface (``backend/src/farna/api/routes/contributions.py``)
 is exercised end-to-end through the real routes with only the DB service functions
-patched: the draft -> review_queue -> published state machine, the admin-only
-``contribution.publish`` role gate (403 for viewers), the version-bump flow
+patched: the draft -> review_queue state machine, the version-bump flow
 (201 draft) and its draft-original 409 refusal, plus the contribution list and
-version-list surfaces.
+version-list surfaces. (The community publish step was removed with the
+community library.)
 
 Closes the ``feat-library`` contribution BDD gap recorded in
 ``docs/product-map/library/library.md``: ``contribute.feature`` previously shipped
 unregistered (no ``scenarios(...)`` call), so the contribution behaviour was
-unit-tested only (``tests/unit/library_service/test_contribution_flow.py``).
+unit-tested only (now ``tests/unit/core/library_service/test_contribute.py``).
 """
 
 from __future__ import annotations
@@ -22,11 +22,13 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pytest_bdd import given, parsers, then, when
+from pytest_bdd import given, parsers, scenarios, then, when
 
 from farna.core.library_service import ContributionInvalidTransitionError
 from farna.db.crud.base import PageResult
 from tests.bdd.conftest import ORG_ID, USER_ID, _active_client, _store_response
+
+scenarios("../features/library/contribute.feature")
 
 
 @pytest.fixture
@@ -36,7 +38,7 @@ def ctx() -> dict[str, Any]:
 
 
 def _mk_contribution(*, status: str, visibility: str, name: str = "My Test Fixture", slug: str = "my-test-fixture") -> Any:
-    """Build the service-returned primitive for the create/submit/publish/version routes.
+    """Build the service-returned primitive for the create/submit/version routes.
 
     The routes read ``id`` / ``name`` / ``slug`` / ``contribution_status`` /
     ``visibility`` off the returned object before shaping the pydantic response.
@@ -102,16 +104,6 @@ def _user_authenticated(request: pytest.FixtureRequest, client: Any) -> None:
     request.node._client = client
 
 
-@given("the user is an org admin")
-def _user_org_admin(request: pytest.FixtureRequest, client: Any) -> None:
-    request.node._client = client
-
-
-@given("the user is a viewer")
-def _user_viewer(request: pytest.FixtureRequest, viewer_client: Any) -> None:
-    request.node._client = viewer_client
-
-
 def _seed_contribution(ctx: dict[str, Any], *, status: str, visibility: str) -> None:
     ctx["contrib_id"] = uuid.uuid4()
     ctx["contrib_status"] = status
@@ -123,19 +115,14 @@ def _draft_contribution_exists(ctx: dict[str, Any]) -> None:
     _seed_contribution(ctx, status="draft", visibility="org")
 
 
-@given("a reviewed fixture contribution exists")
-def _reviewed_contribution_exists(ctx: dict[str, Any]) -> None:
-    _seed_contribution(ctx, status="review_queue", visibility="org")
-
-
 @given("a published fixture contribution exists")
 def _published_contribution_exists(ctx: dict[str, Any]) -> None:
-    _seed_contribution(ctx, status="published", visibility="community")
+    _seed_contribution(ctx, status="published", visibility="org")
 
 
 @given("a published fixture contribution with versions exists")
 def _published_contribution_with_versions_exists(ctx: dict[str, Any]) -> None:
-    _seed_contribution(ctx, status="published", visibility="community")
+    _seed_contribution(ctx, status="published", visibility="org")
     ctx["contrib_versions"] = [
         _mk_version(version="1.0", status="published"),
         _mk_version(version="1.1"),
@@ -181,20 +168,6 @@ def _submit_contribution(ctx: dict[str, Any], request: pytest.FixtureRequest) ->
         patch("farna.api.routes.contributions.set_rls_user_context", new=AsyncMock()),
     ):
         resp = client.post(f"/api/v1/library/contribute/{contrib_id}/submit")
-    _store_response(request, ctx, resp)
-
-
-@when("the user publishes the contribution")
-def _publish_contribution(ctx: dict[str, Any], request: pytest.FixtureRequest) -> None:
-    client = _active_client(request)
-    contrib_id = ctx["contrib_id"]
-    prim = _mk_contribution(status="published", visibility="community")
-    with (
-        patch("farna.api.routes.contributions.publish_contribution", new=AsyncMock(return_value=prim)),
-        patch("farna.api.routes.contributions.set_rls_org", new=AsyncMock()),
-        patch("farna.api.routes.contributions.set_rls_user_context", new=AsyncMock()),
-    ):
-        resp = client.post(f"/api/v1/library/contribute/{contrib_id}/publish")
     _store_response(request, ctx, resp)
 
 
@@ -294,12 +267,6 @@ def _list_contribution_versions(
 def _response_has_contribution_status(ctx: dict[str, Any], expected: str) -> None:
     data = ctx["response"].json()
     assert data.get("contribution_status") == expected, f"Expected contribution_status '{expected}', got {data.get('contribution_status')!r}"
-
-
-@then(parsers.parse('the response has visibility "{expected}"'))
-def _response_has_visibility(ctx: dict[str, Any], expected: str) -> None:
-    data = ctx["response"].json()
-    assert data.get("visibility") == expected, f"Expected visibility '{expected}', got {data.get('visibility')!r}"
 
 
 @then(parsers.parse('the new version has contribution_status "{expected}"'))

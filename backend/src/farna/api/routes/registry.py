@@ -22,12 +22,8 @@ from farna.api.dependencies import get_db_session, require_permission
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
-from farna.core.crypto import (
-    verify as crypto_pem_verify,
-)
-from farna.core.crypto import (
-    verify_trust_anchor,
-)
+from farna.core.crypto import verify as crypto_pem_verify
+from farna.core.crypto import verify_trust_anchor
 from farna.core.registry import (
     get_publisher_status,
     get_registry_primitive,

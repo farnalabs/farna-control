@@ -103,14 +103,11 @@ class LibraryPrimitive(SoftDeleteMixin, OrgScoped):
         # called once per manifest pin on collection install/upgrade. The partial
         # unique above cannot serve it (wrong leading column).
         Index("ix_library_primitives_type_slug", "primitive_type", "slug"),
-        # Community catalogue listing: _fetch_published_community_from_db filters
-        # contribution_status + visibility in SQL and orders by created_at.
-        # LEADS with those two constrained columns on purpose: the query does
-        # NOT constrain organisation_id (it pops the tenant context to read the
-        # cross-org community view), and a B-tree cannot skip-scan an
-        # unconstrained leading column, so organisation_id would make the index
-        # unusable for its only motivating query. Org-scoped reads of this table
-        # keep their own ``ix_library_primitives_organisation_id``.
+        # visibility + contribution_status index. It was built for the cross-org
+        # community catalogue listing, which was removed with the community
+        # library; no current query depends on it. Retained so the model keeps
+        # matching the baseline schema (0350) - dropping it needs a migration.
+        # Org-scoped reads of this table use ``ix_library_primitives_organisation_id``.
         Index(
             "ix_library_primitives_visibility_contribution",
             "visibility",

@@ -7,10 +7,10 @@ code:
   - frontend/src/views/CollectionCreateView.vue
   - frontend/src/views/CollectionDetailView.vue
 unit-tests:
-  - backend/tests/unit/library_service/test_library_service.py
+  - backend/tests/unit/core/library_service/test_contribute.py
   - backend/tests/unit/api/test_library_collection.py
   - backend/tests/unit/api/test_library_primitive_masking.py
-  - backend/tests/unit/library_service/test_contribution_flow.py
+  - backend/tests/unit/library_service/test_notify_importers.py
   - backend/tests/unit/library_service/test_ratings.py
   - backend/tests/unit/library_service/test_composite_library.py
 bdd:
@@ -24,7 +24,7 @@ bdd:
   - backend/tests/bdd/features/workflows/import.feature
   - backend/tests/bdd/features/workflows/export.feature
   - backend/tests/bdd/steps/test_library.py
-  - backend/tests/bdd/steps/test_community_registry.py
+  - backend/tests/bdd/features/library/contribute.feature
   - backend/tests/bdd/steps/test_library_contributions.py
   - backend/tests/bdd/steps/test_schemas.py
   - backend/tests/bdd/steps/test_composites.py
@@ -58,12 +58,10 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       tier defaults to native, `in_dev` primitives are excluded from the default listing,
       `include_in_dev=true` reveals them only to authorized roles (403 for viewers)
       (`tiering.feature`)
-- [x] Community sync/install and the community registry are covered
 - [x] Fixture contributions are exercised end to end through
       `/api/v1/library/contribute` (`contributions.py`): a `draft` is created (201),
       missing fields are rejected 422, a draft is submitted to the `review_queue`,
-      a non-draft submit is 409, publish (admin-only, 403 for viewers) sets
-      `visibility=community`, a published contribution is versioned into a fresh
+      a non-draft submit is 409, a published contribution is versioned into a fresh
       `draft` (201, 409 on a draft original), and contributions/versions are
       listed (`contribute.feature`, `test_library_contributions.py`)
 - [x] Library-schema seeding and dogfood schemas underpin create-pipeline from a template
@@ -79,13 +77,11 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 - [x] Composite library-primitive credential masking (FAR-1380): the shared
       `LibraryPrimitiveResponse._mask_composite_graph_credentials` validator masks
       credential-bearing node fields inside a **composite** primitive's `content_json`
-      on every read surface - library list/get/create/patch/delete/restore/adapt,
-      community contribute + contributions list + admin publish, community install and
+      on every read surface - library list/get/create/patch/delete/restore/adapt and
       the fixture contributions list - and the MCP `modulo://library/{type}/{slug}`
       resource masks composite nodes before rendering; non-composite primitives pass
       through byte-identical. The FAR-1374 sentinel rule applies on write:
-      `POST /api/v1/libraries`, `PATCH /api/v1/libraries/{id}` and
-      `POST /api/v1/libraries/community/contribute` resolve a submitted mask echo
+      `POST /api/v1/libraries` and `PATCH /api/v1/libraries/{id}` resolve a submitted mask echo
       against the stored sub-graph (`resolve_and_reject_mask_sentinels`) and refuse an
       unmappable sentinel with 422 `COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL`, and a
       masked-read → patch round-trip preserves the stored secret
@@ -116,8 +112,6 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 
 ## Known Gaps
 
-- **`community_registry.feature` is a separate surface from contribution** – contribution
-  authoring and registry browsing are tracked under one feature here but cited separately.
 - **Workflow import verifies no Ed25519 signature** – `/api/v1/libraries/import/confirm`
   accepts any structural `bundle_json`; bundle signatures are verified on the
   community-registry install path, not the workflow-import path (the drafted

@@ -871,7 +871,6 @@ async def _fetch_primitives(
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
-            include_community = query.source != "local"
             return await list_primitives(
                 session,
                 principal.organisation_id,
@@ -880,7 +879,6 @@ async def _fetch_primitives(
                 search=query.search,
                 page=query.page,
                 page_size=query.page_size,
-                include_community=include_community,
                 source=query.source,
                 cursor=query.cursor,
                 excluded_tiers=[] if query.include_in_dev else None,

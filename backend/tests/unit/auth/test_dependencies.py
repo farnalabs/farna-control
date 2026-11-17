@@ -16,7 +16,6 @@ from farna.auth.dependencies import (
     _verify_identity,
     get_current_tenant_user,
     get_current_tenant_user_or_api_key,
-    require_system_admin,
 )
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.settings import Settings
@@ -240,26 +239,6 @@ async def test_verify_identity_operational_error_still_maps_to_503() -> None:
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "Role verification temporarily unavailable. Please try again."
-
-
-@pytest.mark.asyncio
-async def test_require_system_admin_rejects_non_admin() -> None:
-    principal = _principal()
-
-    with pytest.raises(HTTPException) as exc_info:
-        await require_system_admin(principal)
-
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "System admin role required"
-
-
-@pytest.mark.asyncio
-async def test_require_system_admin_passes_system_admin() -> None:
-    principal = _principal(is_system_admin=True)
-
-    result = await require_system_admin(principal)
-
-    assert result is principal
 
 
 # ---------------------------------------------------------------------------

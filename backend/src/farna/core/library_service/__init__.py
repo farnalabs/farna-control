@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,7 @@ from farna.db.crud.library_primitive import (
     list_primitives_by_version_group,
     update_library_primitive,
 )
+from farna.db.models.collection_install import CollectionInstall
 from farna.db.models.library_primitive import LibraryPrimitive
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.util import sanitise_log_value as _sanitise_log_value
@@ -49,14 +50,12 @@ __all__ = [
     "ContributionInvalidTransitionError",
     "ContributionNotFoundError",
     "contribute_fixture",
-    "contribute_primitive",
     "copy_to_adapt",
     "list_contribution_versions",
     "list_contributions",
     "list_org_contributions",
     "list_primitives",
     "notify_importers_of_update",
-    "publish_contribution",
     "submit_contribution_for_review",
     "submit_contribution_version",
 ]
@@ -78,10 +77,6 @@ class ContributionInvalidTransitionError(ValueError):
 CONTRIBUTION_DRAFT = "draft"
 CONTRIBUTION_REVIEW_QUEUE = "review_queue"
 CONTRIBUTION_PUBLISHED = "published"
-
-
-# Guards the in-memory community cache appended to by publish_contribution.
-_COMMUNITY_CACHE_LOCK: asyncio.Lock = asyncio.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -481,40 +476,6 @@ async def contribute_fixture(
     )
 
 
-# Kept for API compatibility but no longer publishes to community library
-async def contribute_primitive(
-    session: AsyncSession,
-    *,
-    org_id: uuid.UUID,
-    created_by: uuid.UUID,
-    primitive_type: str,
-    name: str,
-    slug: str,
-    description: str | None,
-    tags: list[str],
-    content_json: dict[str, Any],
-    source_url: str | None = None,
-    owner_team_id: uuid.UUID | None = None,
-) -> LibraryPrimitive:
-    """Create a contribution (kept for API compatibility).
-
-    Stores the primitive with source='local' and contribution_status='draft'.
-    """
-    return await _create_draft_contribution(
-        session,
-        org_id=org_id,
-        created_by=created_by,
-        primitive_type=primitive_type,
-        name=name,
-        slug=slug,
-        description=description,
-        tags=tags,
-        content_json=content_json,
-        source_url=source_url,
-        owner_team_id=owner_team_id,
-    )
-
-
 async def submit_contribution_for_review(
     session: AsyncSession,
     org_id: uuid.UUID,
@@ -541,39 +502,6 @@ async def submit_contribution_for_review(
             s,
             primitive_id,
             {"contribution_status": CONTRIBUTION_REVIEW_QUEUE},
-        )
-        if updated is None:
-            raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
-        return updated
-
-    return await _with_org_txn(session, org_id, _do)
-
-
-# Kept for API compatibility but no longer publishes to community library
-async def publish_contribution(
-    session: AsyncSession,
-    org_id: uuid.UUID,
-    primitive_id: uuid.UUID,
-) -> LibraryPrimitive:
-    """Publish a reviewed fixture contribution (kept for API compatibility).
-
-    Changes contribution_status to 'published' but does NOT change visibility
-    to 'community' or reassign to a sentinel org (community library removed).
-    """
-
-    async def _do(s: AsyncSession) -> LibraryPrimitive:
-        prim = await get_library_primitive(s, primitive_id)
-
-        if prim is None:
-            raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
-
-        if prim.contribution_status not in (CONTRIBUTION_DRAFT, CONTRIBUTION_REVIEW_QUEUE):
-            raise ContributionInvalidTransitionError(f"Cannot publish contribution {primitive_id}: expected status '{CONTRIBUTION_DRAFT}' or '{CONTRIBUTION_REVIEW_QUEUE}', got '{prim.contribution_status}'")
-
-        updated = await update_library_primitive(
-            s,
-            primitive_id,
-            {"contribution_status": CONTRIBUTION_PUBLISHED},
         )
         if updated is None:
             raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
@@ -757,6 +685,46 @@ async def list_contribution_versions(
     return sorted(results, key=lambda p: _parse_version_key(p.version), reverse=True)
 
 
+async def _mark_update_recipients(s: AsyncSession, prim: LibraryPrimitive) -> None:
+    """Back-propagate the new version id to every auto-update recipient.
+
+    Two recipient classes (FAR-759): fork copies (``forked_from`` pointing at
+    any version in this version group) and INSTALLED collection rows
+    (``collection_install.collection_id`` referencing a version in the group)
+    — the latter is how an installed collection surfaces "update available".
+    Both are gated on the recipient row's ``auto_update`` flag; the stamp is
+    a notification only, applying it remains an operator-initiated upgrade.
+    """
+    group_id = prim.version_group_id
+    if group_id is None:
+        return
+
+    fork_stmt = select(LibraryPrimitive).where(LibraryPrimitive.forked_from.in_(select(LibraryPrimitive.id).where(LibraryPrimitive.version_group_id == group_id)))
+    installed_stmt = select(LibraryPrimitive).where(
+        LibraryPrimitive.id.in_(select(CollectionInstall.collection_id)),
+        or_(
+            LibraryPrimitive.version_group_id == group_id,
+            LibraryPrimitive.id == group_id,
+        ),
+    )
+
+    recipients: list[LibraryPrimitive] = []
+    recipients.extend((await s.execute(fork_stmt)).scalars())
+    recipients.extend((await s.execute(installed_stmt)).scalars())
+
+    for copy in recipients:
+        if not copy.auto_update:
+            continue
+        try:
+            await update_library_primitive(
+                s,
+                copy.id,
+                {"update_available_version_id": prim.id},
+            )
+        except SQLAlchemyError:
+            logger.exception("notify_importers_of_update: failed to update copy %s", copy.id)
+
+
 async def notify_importers_of_update(
     session: AsyncSession,
     org_id: uuid.UUID,
@@ -774,7 +742,7 @@ async def notify_importers_of_update(
         prim = await get_library_primitive(s, primitive_id)
         if prim is None:
             return
-        # Community library removed - no community cache to update
+        await _mark_update_recipients(s, prim)
 
     try:
         await _scoped_execute(session, org_id, _notify)
@@ -821,14 +789,12 @@ async def list_primitives(
     search: str | None = None,
     page: int = 1,
     page_size: int = 20,
-    include_community: bool = False,  # Community library removed
     source: str | None = None,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
 ) -> PageResult[LibraryPrimitive]:
     """Return org-scoped library primitives merged with built-in modulo registry.
 
-    Community library has been removed. ``include_community`` is ignored.
     ``source`` restricts the result to exactly that source value (e.g.
     ``source="local"`` returns only the org's own saved primitives,
     ``source="modulo"`` returns only the built-in modulo registry).

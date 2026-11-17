@@ -307,9 +307,6 @@ __all__ = [
     #     call site for. The route, request model, and unit/integration tests all
     #     exercise it, so it is load-bearing, not dead.
     "approve_with_modification",
-    # --- FastAPI dependency entry point. FastAPI resolves this dependency
-    #     through Depends(), which vulture cannot see as a call site.
-    "require_system_admin",
     # --- FAR-671 slice 3: the serve_spa runtime-config route. The nested
     #     handler is registered via @app.get, which the gate's
     #     --ignore-decorators set does not cover (it whitelists @router.*

@@ -8086,7 +8086,6 @@ async def search_library(
                 search=search,
                 page=1,
                 page_size=limit,
-                include_community=True,
                 cursor=cursor,
             )
         return {
@@ -14445,7 +14444,6 @@ async def resource_library() -> str:
                 primitive_types=visible_primitive_types,
                 page=1,
                 page_size=50,
-                include_community=True,
             )
         if not result.items:
             return "Library is empty."
