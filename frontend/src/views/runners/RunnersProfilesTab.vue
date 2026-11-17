@@ -19,7 +19,7 @@
     </template>
 
     <template v-else>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div class="relative w-full sm:w-72">
           <input
             v-model="search"
@@ -30,7 +30,7 @@
             data-testid="envprofile-list-search"
           />
         </div>
-        <Button class="ml-auto border-primary/30 hover:border-primary/60" data-testid="envprofile-list-new" @click="$router.push('/admin/runners/profiles/new')">
+        <Button class="self-start border-primary/30 hover:border-primary/60 sm:ml-auto sm:self-auto" data-testid="envprofile-list-new" @click="$router.push('/admin/runners/profiles/new')">
           {{ $t('views.RunnersProfilesTab.new_profile') }}
         </Button>
       </div>
