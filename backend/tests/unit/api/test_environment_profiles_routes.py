@@ -686,7 +686,7 @@ class TestProfileTestEndpoint:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers.get("content-type", "")
         assert "failed" in resp.text
-        expected = str(ProviderNotConfiguredError("local_docker", "FARNA_CONTROL_MODULO_DOCKER_HOST"))
+        expected = str(ProviderNotConfiguredError("local_docker", "FARNA_CONTROL_DOCKER_HOST"))
         assert expected in resp.text
         assert "provisioning" in resp.text
 

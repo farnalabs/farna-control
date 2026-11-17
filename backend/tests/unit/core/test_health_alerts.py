@@ -1387,24 +1387,24 @@ def test_environment_allowlist_unset_allows_every_environment() -> None:
 
 def test_environment_allowlist_matches_case_insensitively_and_trims() -> None:
     """Entries are comma-split, trimmed and case-folded on BOTH sides."""
-    allowed = _make_settings(ALERT_ENVIRONMENTS=" Production , staging ", MODULO_ENV="staging")
+    allowed = _make_settings(ALERT_ENVIRONMENTS=" Production , staging ", FARNA_CONTROL_ENV="staging")
     assert ha.alerting_enabled_for_environment(allowed) is True
-    assert ha.alerting_enabled_for_environment(_make_settings(ALERT_ENVIRONMENTS="production,staging", MODULO_ENV="Production")) is True
-    excluded = _make_settings(ALERT_ENVIRONMENTS="production", MODULO_ENV="staging")
+    assert ha.alerting_enabled_for_environment(_make_settings(ALERT_ENVIRONMENTS="production,staging", FARNA_CONTROL_ENV="Production")) is True
+    excluded = _make_settings(ALERT_ENVIRONMENTS="production", FARNA_CONTROL_ENV="staging")
     assert ha.alerting_enabled_for_environment(excluded) is False
     # An environment that is not in a non-empty allowlist never alerts, even
     # the self-hosted default one.
-    assert ha.alerting_enabled_for_environment(_make_settings(ALERT_ENVIRONMENTS="production", MODULO_ENV="development")) is False
+    assert ha.alerting_enabled_for_environment(_make_settings(ALERT_ENVIRONMENTS="production", FARNA_CONTROL_ENV="development")) is False
 
 
 async def test_excluded_environment_never_sends_but_state_machine_advances(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """``ALERT_ENVIRONMENTS=production`` + ``MODULO_ENV=staging``: health
+    """``ALERT_ENVIRONMENTS=production`` + ``FARNA_CONTROL_ENV=staging``: health
     is still evaluated, the hysteresis/dedup state still advances (so the
     operator loses no history if the allowlist changes), but NOTHING is sent —
     exactly the disabled-channel quiet path, with its log-once notice."""
-    settings = _make_settings(MODULO_ENV="staging", ALERT_ENVIRONMENTS="production")
+    settings = _make_settings(FARNA_CONTROL_ENV="staging", ALERT_ENVIRONMENTS="production")
     observer = _FakeObserver()
     sender = _FakeSender()
     store = _FakeRedis()
@@ -1437,10 +1437,10 @@ async def test_excluded_environment_never_sends_but_state_machine_advances(
 
 
 async def test_included_environment_still_sends() -> None:
-    """``ALERT_ENVIRONMENTS=production`` + ``MODULO_ENV=production``:
+    """``ALERT_ENVIRONMENTS=production`` + ``FARNA_CONTROL_ENV=production``:
     the allowlist does not suppress the environment it names — exactly one
     alert email on the confirmed edge."""
-    settings = _make_settings(MODULO_ENV="production", ALERT_ENVIRONMENTS="production")
+    settings = _make_settings(FARNA_CONTROL_ENV="production", ALERT_ENVIRONMENTS="production")
     observer = _FakeObserver()
     sender = _FakeSender()
     store = _FakeRedis()
@@ -1463,8 +1463,8 @@ async def test_excluded_recovery_edge_clears_incident_then_reinclusion_alerts(
     stranding would mean a distinct later incident after re-inclusion is
     never alerted, and a much later recovery email would name this old
     incident's conditions/duration."""
-    excluded = _make_settings(MODULO_ENV="staging", ALERT_ENVIRONMENTS="production")
-    included = _make_settings(MODULO_ENV="production", ALERT_ENVIRONMENTS="production")
+    excluded = _make_settings(FARNA_CONTROL_ENV="staging", ALERT_ENVIRONMENTS="production")
+    included = _make_settings(FARNA_CONTROL_ENV="production", ALERT_ENVIRONMENTS="production")
     observer = _FakeObserver()
     sender = _FakeSender()
     store = _FakeRedis()
@@ -1765,8 +1765,8 @@ async def test_alert_and_recovery_bodies_carry_environment_and_context() -> None
     stamp in the text part."""
     settings = _make_settings(
         # Settings keys match the field's env alias case-insensitively (see
-        # test_alert_context.py) — hence MODULO_ENV / ALERT_CONTEXT here.
-        MODULO_ENV="staging",
+        # test_alert_context.py) — hence FARNA_CONTROL_ENV / ALERT_CONTEXT here.
+        FARNA_CONTROL_ENV="staging",
         ALERT_CONTEXT="runbook: https://example.com/runbook\npage the on-call",
     )
     observer = _FakeObserver()
@@ -1831,7 +1831,7 @@ async def test_stdout_stamp_names_environment_but_never_arbitrary_context(
 ) -> None:
     """Both edges print the environment line and never the free text."""
     settings = _make_settings(
-        MODULO_ENV="staging",
+        FARNA_CONTROL_ENV="staging",
         ALERT_CONTEXT="runbook: https://example.com/runbook\npage the on-call",
     )
     observer = _FakeObserver()
@@ -1867,7 +1867,7 @@ async def test_print_failure_never_skips_send_or_state_commit(
     committed - a print failure must be swallowed (with a log) so neither the
     send nor the commit is lost (a lost commit would re-send a DUPLICATE alert
     on the next confirmed tick)."""
-    settings = _make_settings(MODULO_ENV="staging")
+    settings = _make_settings(FARNA_CONTROL_ENV="staging")
     observer = _FakeObserver()
     sender = _FakeSender()
     store = _FakeRedis()

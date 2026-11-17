@@ -160,7 +160,7 @@ def create_secrets_backend(
             or ``"aws"``.
 
     """
-    name = (backend_name or os.environ.get("FARNA_CONTROL_MODULO_SECRETS_BACKEND") or "fernet").lower().strip()
+    name = (backend_name or os.environ.get("FARNA_CONTROL_SECRETS_BACKEND") or "fernet").lower().strip()
 
     match name:
         case "fernet":

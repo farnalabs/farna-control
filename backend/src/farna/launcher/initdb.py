@@ -46,7 +46,7 @@ GATE_INITDB_PRE_RENAME = "initdb_pre_rename"
 _TMP_DIR_PREFIX = ".initdb-tmp-"
 _PWFILE_PREFIX = ".initdb-pwfile-"
 
-_PAUSE_ENV_VAR = "FARNA_CONTROL_MODULO_TEST_PAUSE_AT"
+_PAUSE_ENV_VAR = "FARNA_CONTROL_TEST_PAUSE_AT"
 
 # Registered pause gates: MODULO_TEST_PAUSE_AT is a test-only seam; any other
 # value is a stale leak from a developer shell and must fail the boot loudly.

@@ -547,8 +547,6 @@ jobs:
             exit 1
           fi
 
-  # FAR-2515 mitigation: more, smaller shards mean less memory accumulates in each
-  # job before the integration-suite leak tips the runner over; the leak itself is tracked separately.
   integration-tests:
     name: "Pre-deploy: Integration tests shard ${{ matrix.shard }}/10"
     needs: [deploy-throttle]

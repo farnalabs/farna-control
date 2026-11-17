@@ -11,7 +11,7 @@
 #
 # What the overlay adds:
 #   1. docker-socket-proxy — the FILTERED default Docker endpoint. The backend
-#      and SAQ workers get MODULO_DOCKER_HOST=tcp://docker-socket-proxy:2375
+#      and SAQ workers get FARNA_CONTROL_DOCKER_HOST=tcp://docker-socket-proxy:2375
 #      (step 2 of the documented 4-step endpoint chain); the raw socket is a
 #      documented operator override, not the default.
 #   2. bundled-runner — the pinned first-party runner image BUILD target
@@ -94,17 +94,17 @@ services:
   backend:
     environment:
       # The proxy becomes the DEFAULT Docker endpoint — steps 1-2 of the
-      # documented 4-step env chain (MODULO_DOCKER_HOST -> DOCKER_HOST ->
+      # documented 4-step env chain (FARNA_CONTROL_DOCKER_HOST -> DOCKER_HOST ->
       # local socket). Raw socket is a documented operator override.
-      MODULO_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      FARNA_CONTROL_DOCKER_HOST: tcp://docker-socket-proxy:2375
 
   saq-runner:
     environment:
-      MODULO_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      FARNA_CONTROL_DOCKER_HOST: tcp://docker-socket-proxy:2375
 
   saq-system:
     environment:
-      MODULO_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      FARNA_CONTROL_DOCKER_HOST: tcp://docker-socket-proxy:2375
 
   bundled-runner:
     # Network-reference holder + pinned build target. The published image is

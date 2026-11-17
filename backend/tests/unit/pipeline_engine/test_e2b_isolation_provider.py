@@ -316,12 +316,12 @@ def test_build_isolation_provider_returns_none_when_hub_init_fails(
 
 
 async def test_helper_fails_closed_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("E2B_API_KEY", raising=False)
     builder = MagicMock(side_effect=AssertionError("must not build a provider without a key"))
     monkeypatch.setattr("farna.core.pipeline_engine.node_runner._build_isolation_provider", builder)
 
-    with pytest.raises(SandboxTierRefusedError, match="MODULO_E2B_API_KEY"):
+    with pytest.raises(SandboxTierRefusedError, match="FARNA_CONTROL_E2B_API_KEY"):
         await _apply_isolation_via_provider(
             "sbx-1",
             org_id=_ORG_ID,
@@ -366,7 +366,7 @@ async def test_helper_fails_closed_when_provider_unavailable(monkeypatch: pytest
     monkeypatch.setenv("E2B_API_KEY", "test-key")
     _patch_isolation_builder(monkeypatch, None)
 
-    with pytest.raises(SandboxTierRefusedError, match="MODULO_E2B_API_KEY"):
+    with pytest.raises(SandboxTierRefusedError, match="FARNA_CONTROL_E2B_API_KEY"):
         await _apply_isolation_via_provider(
             "sbx-1",
             org_id=_ORG_ID,
@@ -413,7 +413,7 @@ async def test_helper_builds_spec_and_policy_with_nil_fallbacks(monkeypatch: pyt
         git_credentials="scoped",
         egress_policy="selected",
         egress_allowlist=_FIXED_ALLOWLIST,
-        allowed_hosts={"github.com": "FARNA_CONTROL_MODULO_GIT_CRED_0"},
+        allowed_hosts={"github.com": "FARNA_CONTROL_GIT_CRED_0"},
     )
 
     assert len(fake.calls) == 1
@@ -426,7 +426,7 @@ async def test_helper_builds_spec_and_policy_with_nil_fallbacks(monkeypatch: pyt
     assert policy.read_only is True
     assert policy.git_credentials == "scoped"
     assert policy.egress_allowlist is not None
-    assert policy.allowed_hosts == {"github.com": "FARNA_CONTROL_MODULO_GIT_CRED_0"}
+    assert policy.allowed_hosts == {"github.com": "FARNA_CONTROL_GIT_CRED_0"}
 
 
 # ---------------------------------------------------------------------------
@@ -891,7 +891,7 @@ def _override_harvest_reply(dispatch: Any, reply: str) -> None:
     original = dispatch.exec_command
 
     async def _exec(ref: str, command: list[str], *, cmd_timeout: int | None = None) -> ExecResult:
-        if command and "FARNA_CONTROL_MODULO_CLAIM_RECEIPT" in command[-1]:
+        if command and "FARNA_CONTROL_CLAIM_RECEIPT" in command[-1]:
             return ExecResult(exit_code=0, stdout=reply, stderr="")
         return await original(ref, command, cmd_timeout=cmd_timeout)
 
@@ -990,7 +990,7 @@ async def test_flagged_node_spends_from_the_harvested_receipt_when_the_sentinel_
         monkeypatch,
         fake_file_io,
         chunks=[("stdout", "post-create agent noise\n" * 200)],
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_PRESENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_PRESENT",
     )
     try:
         assert acquire_run_pr_guard(run_id, "later-node") == "spent"
@@ -1015,7 +1015,7 @@ async def test_flagged_node_shim_read_transcript_never_spends_when_the_harvest_c
         monkeypatch,
         fake_file_io,
         chunks=[("stdout", shim_stdout)],
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT",
     )
     try:
         assert acquire_run_pr_guard(run_id, "later-node") == "acquired"
@@ -1067,7 +1067,7 @@ async def test_pr_url_never_outranks_a_definitive_receipt_false(
         monkeypatch,
         fake_file_io,
         chunks=[("stdout", f"attempted create, reporting {url}\n")],
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT",
         output_json=f'{{"summary":"done","pr_url":"{url}"}}',
     )
     try:
@@ -1101,7 +1101,7 @@ async def test_absent_install_leaves_the_receipt_meaningless_so_the_sentinel_sti
         monkeypatch,
         fake_file_io,
         chunks=[("stdout", shim_stdout)],
-        harvest_reply="FARNA_CONTROL_MODULO_CLAIM_RECEIPT_ABSENT",
+        harvest_reply="FARNA_CONTROL_CLAIM_RECEIPT_ABSENT",
         install_status="absent",
     )
     try:
@@ -1127,7 +1127,7 @@ class _BlockingHarvestDispatch(FakeDispatchProvider):
         *,
         cmd_timeout: int | None = None,
     ) -> ExecResult:
-        if command and "FARNA_CONTROL_MODULO_CLAIM_RECEIPT" in command[-1]:
+        if command and "FARNA_CONTROL_CLAIM_RECEIPT" in command[-1]:
             self.harvest_started.set()
             await asyncio.Event().wait()  # parks until the probe task is cancelled
         return await super().exec_command(provider_ref, command, cmd_timeout=cmd_timeout)

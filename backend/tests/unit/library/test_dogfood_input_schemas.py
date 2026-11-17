@@ -19,7 +19,7 @@ from jsonschema import Draft202012Validator
 
 from farna.core.seed_data.library_schemas import SCHEMAS
 
-_DOGFOOD_SCHEMAS_DIR_RAW = os.environ.get("FARNA_CONTROL_MODULO_DOGFOOD_SCHEMAS_DIR")
+_DOGFOOD_SCHEMAS_DIR_RAW = os.environ.get("FARNA_CONTROL_DOGFOOD_SCHEMAS_DIR")
 
 
 def _definition(name: str) -> dict[str, Any]:

@@ -1278,11 +1278,11 @@ class TestTempOwnerPid:
 
 class TestDefaultInstallRoot:
     def test_env_override(self, monkeypatch):
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_INSTALL_ROOT", "/custom/path")
+        monkeypatch.setenv("FARNA_CONTROL_INSTALL_ROOT", "/custom/path")
         assert upgrade_module.default_install_root() == Path("/custom/path")
 
     def test_env_expands_user(self, monkeypatch):
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_INSTALL_ROOT", "~/my-modulo")
+        monkeypatch.setenv("FARNA_CONTROL_INSTALL_ROOT", "~/my-modulo")
         result = upgrade_module.default_install_root()
         assert str(result).endswith("my-modulo")
 
@@ -1733,9 +1733,9 @@ def _installer_probe(
     subprocess.run(  # noqa: S603 - resolved system tar and test-owned paths
         [tar_bin, "-czf", str(archive), "-C", str(tmp_path), *archive_entries], check=True, timeout=30
     )
-    env = {**os.environ, "HOME": str(tmp_path / "home"), "FARNA_CONTROL_MODULO_INSTALL_ROOT": str(tmp_path / "install")}
+    env = {**os.environ, "HOME": str(tmp_path / "home"), "FARNA_CONTROL_INSTALL_ROOT": str(tmp_path / "install")}
     if legacy_shim is not None:
-        env["FARNA_CONTROL_MODULO_LEGACY_SHIM_PATH"] = str(legacy_shim)
+        env["FARNA_CONTROL_LEGACY_SHIM_PATH"] = str(legacy_shim)
     if bypass_manifest:
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         (tmp_path / "RELEASE_MANIFEST.json").write_text(
