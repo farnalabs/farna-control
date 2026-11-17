@@ -39,7 +39,7 @@ import base64
 import json
 import uuid
 from collections.abc import AsyncGenerator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -519,6 +519,16 @@ def _idp_stubbed(world: _World, id_token: str):
 
             async def __aexit__(self, *exc: object) -> None:
                 return None
+
+            async def aclose(self) -> None:
+                return None
+
+            @asynccontextmanager
+            async def stream(self, method: str, url: str, **kwargs: object) -> AsyncGenerator[httpx.Response, None]:
+                # FAR-2506: discovery and JWKS bodies are fetched through
+                # ``client.stream(...)`` so the response can be size-bounded,
+                # so the stub must model the streaming context manager too.
+                yield await world.stub.get(url, **kwargs)
 
         cls = stack.enter_context(patch("httpx.AsyncClient"))
         cls.side_effect = _StubClient
