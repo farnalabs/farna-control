@@ -875,7 +875,7 @@ def build_hub(max_local_concurrency: int = 2) -> RuntimeProviderHub:
       runtime override — both resolved via ``key_bridge.get_e2b_api_key``,
       the same bridge the node-runner enforcement check uses, FAR-1159).
     - ``runner_docker`` (aliases ``docker`` / ``local_docker``) — registered
-      when ``MODULO_DOCKER_HOST`` or ``DOCKER_HOST`` is set.  An unrelated
+      when ``FARNA_CONTROL_DOCKER_HOST`` or ``DOCKER_HOST`` is set.  An unrelated
       ``MODULO_RUNNER_*`` variable does NOT register Docker (FAR-996).
     - ``kubernetes`` (alias ``k8s``) — registered when
       ``MODULO_KUBERNETES_ENABLED`` is set to an enabling value (any value

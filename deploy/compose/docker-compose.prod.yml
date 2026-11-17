@@ -97,9 +97,11 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       # Settings.modulo_public_url (SSO redirects, absolute links).
       FARNA_CONTROL_PUBLIC_URL: ${FARNA_CONTROL_PUBLIC_URL:-http://localhost:80}
-      # Not a Settings field - read from os.environ by the logging and
-      # error-tracking setup to label the environment of every event.
-      MODULO_ENV: production
+      # Canonical name - read straight from os.environ by the logging and
+      # error-tracking setup to label the environment of every event, and the
+      # Settings.environment alias. The legacy MODULO_ENV spelling is only a
+      # Settings alias, so the os.environ readers would miss it.
+      FARNA_CONTROL_ENV: production
       # Settings.modulo_log_level.
       FARNA_CONTROL_LOG_LEVEL: ${FARNA_CONTROL_LOG_LEVEL:-info}
       # Settings.modulo_license_key.
