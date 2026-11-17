@@ -213,7 +213,7 @@ class TestDevAnchorIsNotATrustAnchorOutsideDebug:
 
     def test_refusal_and_startup_error_name_the_missing_configuration(self) -> None:
         assert "MODULO_LICENSE_PUBLIC_KEY" in DEV_ANCHOR_NOT_TRUSTED_ERROR
-        assert "MODULO_LICENSE_PUBLIC_KEY" in DEV_ANCHOR_STARTUP_ERROR
+        assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in DEV_ANCHOR_STARTUP_ERROR
         assert "MODULO_LICENSE_KEY" in DEV_ANCHOR_STARTUP_ERROR
 
 
@@ -240,13 +240,13 @@ class TestStartupFailsClosedOnLicenceWithoutProductionKey:
     def test_licence_key_without_public_key_fails_startup(self) -> None:
         from farna.api import main as main_module
 
-        with pytest.raises(RuntimeError, match="MODULO_LICENSE_PUBLIC_KEY"):
+        with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
             main_module._configure_license_and_otel(_startup_settings(modulo_license_key="a.b"))
 
     def test_explicitly_configured_dev_key_fails_startup(self) -> None:
         from farna.api import main as main_module
 
-        with pytest.raises(RuntimeError, match="MODULO_LICENSE_PUBLIC_KEY"):
+        with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
             main_module._configure_license_and_otel(_startup_settings(modulo_license_key="a.b", modulo_license_public_key=_ORIGINAL_KEY))
 
     def test_community_boot_without_a_licence_key_is_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:

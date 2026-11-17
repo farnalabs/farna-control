@@ -351,7 +351,7 @@ async def _ingest_error_event(
                 "source": "saq",
                 "stacktrace": error,
                 "context_json": {"function": function},
-                "environment": os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+                "environment": os.environ.get("FARNA_CONTROL_ENV", "development"),
                 "version": get_version(),
             },
         )

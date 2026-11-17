@@ -887,7 +887,7 @@ async def emit_saq_retry_storm_alert(
                 message=message,
                 source="saq",
                 context_json={"run_id": str(run_id), "claim_count": claim_count},
-                environment=os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+                environment=os.environ.get("FARNA_CONTROL_ENV", "development"),
             )
     except asyncio.CancelledError:
         raise
@@ -1051,7 +1051,7 @@ async def _emit_missed_fire_alert(
                 "trigger_type": row.trigger_type,
                 "period_seconds": period,
             },
-            environment=os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+            environment=os.environ.get("FARNA_CONTROL_ENV", "development"),
         )
 
 

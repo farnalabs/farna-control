@@ -138,7 +138,7 @@ SHIM_POLL_SECONDS = 2.0
 # as initdb's; the entry scrubs the variable so a production boot is inert).
 GATE_SUPERVISOR_PRE_TEARDOWN = "supervisor_pre_teardown"
 _REGISTERED_GATES = frozenset({GATE_SUPERVISOR_PRE_TEARDOWN})
-_PAUSE_ENV_VAR = "FARNA_CONTROL_MODULO_TEST_PAUSE_AT"
+_PAUSE_ENV_VAR = "FARNA_CONTROL_TEST_PAUSE_AT"
 
 # Shutdown priorities: lower tears down first (SAQ -> PG -> Redis).
 # Single-sourced from the shared policy module.
@@ -384,13 +384,13 @@ def knobs_from_env(env: dict[str, str] | None = None) -> SupervisorKnobs:
     defaults = SupervisorKnobs()
     overrides: dict[str, Any] = {}
     for attr, var in (
-        ("tick_seconds", "FARNA_CONTROL_MODULO_LAUNCHER_TICK_SECONDS"),
-        ("restart_backoff_initial", "FARNA_CONTROL_MODULO_LAUNCHER_RESTART_BACKOFF_INITIAL"),
-        ("restart_backoff_max", "FARNA_CONTROL_MODULO_LAUNCHER_RESTART_BACKOFF_MAX"),
-        ("crash_window_seconds", "FARNA_CONTROL_MODULO_LAUNCHER_CRASH_WINDOW_SECONDS"),
-        ("pg_fast_shutdown_timeout", "FARNA_CONTROL_MODULO_LAUNCHER_PG_FAST_SHUTDOWN_TIMEOUT"),
-        ("shutdown_grace_seconds", "FARNA_CONTROL_MODULO_LAUNCHER_SHUTDOWN_GRACE_SECONDS"),
-        ("crash_cap", "FARNA_CONTROL_MODULO_LAUNCHER_CRASH_CAP"),
+        ("tick_seconds", "FARNA_CONTROL_LAUNCHER_TICK_SECONDS"),
+        ("restart_backoff_initial", "FARNA_CONTROL_LAUNCHER_RESTART_BACKOFF_INITIAL"),
+        ("restart_backoff_max", "FARNA_CONTROL_LAUNCHER_RESTART_BACKOFF_MAX"),
+        ("crash_window_seconds", "FARNA_CONTROL_LAUNCHER_CRASH_WINDOW_SECONDS"),
+        ("pg_fast_shutdown_timeout", "FARNA_CONTROL_LAUNCHER_PG_FAST_SHUTDOWN_TIMEOUT"),
+        ("shutdown_grace_seconds", "FARNA_CONTROL_LAUNCHER_SHUTDOWN_GRACE_SECONDS"),
+        ("crash_cap", "FARNA_CONTROL_LAUNCHER_CRASH_CAP"),
     ):
         raw = source.get(var)
         if not raw:

@@ -786,7 +786,7 @@ class TestCheckInstanceSwitch:
 
     @pytest.mark.asyncio
     async def test_bool_true_returns_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
         factory = _FakeSessionFactory()
         with (
             patch(
@@ -801,7 +801,7 @@ class TestCheckInstanceSwitch:
     @pytest.mark.asyncio
     async def test_stored_false_string_returns_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Regression: a stored string ``"false"`` is OFF, never truthy (fail-open)."""
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
         factory = _FakeSessionFactory()
         with (
             patch(
@@ -816,7 +816,7 @@ class TestCheckInstanceSwitch:
     @pytest.mark.asyncio
     async def test_absent_key_env_unset_returns_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Absent setting + no licence claim + no env: OFF, so no egress path runs."""
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
         factory = _FakeSessionFactory()
         with (
             patch(
@@ -831,7 +831,7 @@ class TestCheckInstanceSwitch:
     @pytest.mark.asyncio
     async def test_absent_key_env_fallback_enables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The env fallback the consent surface honours must gate the dump too."""
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", "true")
+        monkeypatch.setenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", "true")
         factory = _FakeSessionFactory()
         with (
             patch(
@@ -846,7 +846,7 @@ class TestCheckInstanceSwitch:
     @pytest.mark.asyncio
     async def test_licence_required_default_enables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Absent setting + a licence carrying the claim: ON (licence supplies the default)."""
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
         factory = _FakeSessionFactory()
         licence = MagicMock()
         licence.raw_payload = {"product_analytics_required": True}
@@ -870,7 +870,7 @@ class TestEffectiveSwitchGatesDump:
 
     @pytest.mark.asyncio
     async def test_effective_switch_off_never_collects_or_sends(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
         factory = _FakeSessionFactory()
         with (
             patch(
@@ -899,7 +899,7 @@ class TestEffectiveSwitchGatesDump:
 
     @pytest.mark.asyncio
     async def test_licence_required_default_opens_the_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
         factory = _FakeSessionFactory()
         licence = MagicMock()
         licence.raw_payload = {"product_analytics_required": True}
