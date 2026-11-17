@@ -47,12 +47,25 @@ WORKDIR /app
 
 # Backend dependencies + source
 COPY backend/pyproject.toml backend/uv.lock ./
+# --no-build (docker:S8541): never execute sdist setup scripts during
+# installation. ibm-cos-sdk (a langchain-ibm dependency) publishes sdist-only, so
+# `--no-build` alone hard-fails; the three hash-pinned ibm-cos-sdk distributions
+# are re-allowed individually with --no-binary-package. Every other dependency
+# must install from a pre-built wheel. NOSONAR comments are not supported in
+# Dockerfiles, hence the explicit flags (mirrors backend/Dockerfile).
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra docker --extra redis --no-install-project
+    uv sync --frozen --no-dev --extra docker --extra redis --no-install-project --no-build \
+    --no-binary-package ibm-cos-sdk \
+    --no-binary-package ibm-cos-sdk-core \
+    --no-binary-package ibm-cos-sdk-s3transfer
 COPY backend/src/ src/
 COPY backend/alembic.ini .
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra docker --extra redis
+    uv sync --frozen --no-dev --extra docker --extra redis --no-build \
+    --no-binary-package ibm-cos-sdk \
+    --no-binary-package ibm-cos-sdk-core \
+    --no-binary-package ibm-cos-sdk-s3transfer \
+    --no-binary-package farna-control
 
 # Volatile release metadata follows dependency installation so a new commit
 # does not invalidate the expensive environment layers.
