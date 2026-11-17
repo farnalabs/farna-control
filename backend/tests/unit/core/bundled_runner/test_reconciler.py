@@ -651,19 +651,18 @@ async def test_sweep_wraps_a_destroy_failure_with_partial_counts(
 async def test_kubernetes_skip_reason_names_the_registration_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
-    monkeypatch.delenv("MODULO_KUBERNETES_ENABLED", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
 
     reason = await runner_reconciler.kubernetes_endpoint_skip_reason()
 
     assert reason is not None
-    assert "MODULO_KUBERNETES_ENABLED" in reason
+    assert "FARNA_CONTROL_KUBERNETES_ENABLED" in reason
 
 
 async def test_kubernetes_skip_reason_none_when_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     """The applicability check delegates to the registration matrix: with the
     opt-in flag set (and the SDK installed) the sweep's Kubernetes half runs."""
-    monkeypatch.setenv("MODULO_KUBERNETES_ENABLED", "1")
+    monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", "1")
     # Mock build_hub to return a hub with kubernetes provider
     from farna.core.runtime_provider.hub import RuntimeProviderHub
 
@@ -1032,19 +1031,18 @@ async def test_e2b_skip_reason_names_the_registration_env_var(
 ) -> None:
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
-    monkeypatch.delenv("MODULO_E2B_API_KEY", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
 
     reason = await runner_reconciler.e2b_endpoint_skip_reason()
 
     assert reason is not None
-    assert "MODULO_E2B_API_KEY" in reason
+    assert "FARNA_CONTROL_E2B_API_KEY" in reason
 
 
 async def test_e2b_skip_reason_none_when_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     """The applicability check delegates to the registration matrix: with the
     key set the sweep's E2B half runs."""
-    monkeypatch.setenv("MODULO_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
     # Mock build_hub to return a hub with e2b provider
     from farna.core.runtime_provider.hub import RuntimeProviderHub
 

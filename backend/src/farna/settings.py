@@ -1039,10 +1039,10 @@ class Settings(BaseSettings):
     # out-of-process Gatus sentinel or the error-tracking pipeline — those
     # are separate systems (see docs/configuration-reference.md). None/blank
     # (default) = alerts in EVERY environment, so a self-hosted compose
-    # deployment defaulting to MODULO_ENV=development still alerts out of
+    # deployment defaulting to FARNA_CONTROL_ENV=development still alerts out of
     # the box. When set, one of these two channels sends only when
     # ``environment`` is in the list — the staging deployment
-    # (MODULO_ENV=staging, a CI-only E2E environment with no live workload)
+    # (FARNA_CONTROL_ENV=staging, a CI-only E2E environment with no live workload)
     # sets it to "production" so its readiness blips stop paging the
     # operator while production keeps alerting. The ONE parse lives in
     # ``core.alert_context.alerting_enabled_for_environment`` so both
@@ -1149,7 +1149,7 @@ class Settings(BaseSettings):
     # populate_by_name (FAR-1500): constructor kwargs may use a field's NAME as
     # well as its alias. Without it, a name-keyed kwarg for an aliased field is
     # silently dropped by ``extra="ignore"`` — ``Settings(environment="prod")``
-    # kept the default while ``Settings(MODULO_ENV="prod")`` worked, a silent
+    # kept the default while ``Settings(FARNA_CONTROL_ENV="prod")`` worked, a silent
     # footgun for every caller that constructs Settings in Python.
     #
     # What it actually changes: the alias wins when BOTH spellings are present

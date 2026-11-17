@@ -113,7 +113,7 @@ class MockSandboxBridge:
         """Call the (test-patched) ``AsyncSandbox.create`` and keep the handle.
 
         Kwargs mirror what ``E2BRuntimeProvider.create_workspace`` hands the
-        SDK: template, provider-owned credential, metadata. ``MODULO_SCHEMA_DIR``
+        SDK: template, provider-owned credential, metadata. ``FARNA_CONTROL_SCHEMA_DIR``
         deliberately is NOT passed here - FAR-1050 R4 routes it through the
         agent command's environment instead.
 

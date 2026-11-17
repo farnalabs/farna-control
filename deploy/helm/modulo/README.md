@@ -175,7 +175,7 @@ Kubernetes runtime provider off, nothing in the stack calls the Kubernetes
 API, and an unmounted token keeps the blast radius of a compromised pod small
 (`kubernetes:S6865`).
 
-When you enable the Kubernetes runtime provider (`MODULO_KUBERNETES_ENABLED`)
+When you enable the Kubernetes runtime provider (`FARNA_CONTROL_KUBERNETES_ENABLED`)
 so agent workspaces run as pods in your cluster, the control-plane workloads
 need a namespaced credential to create, exec into and read logs from those
 pods. Declare it in values instead of patching the Deployments — a `kubectl
@@ -218,7 +218,7 @@ an observation — Modulo does not see network traffic).
 the other direction: with it off the manifest does not exist, so the chart
 injects no enforcement signal and a Kubernetes `deny_all` claim stays
 fail-closed (**refused**), never declared but unenforced. Enabling the value
-also sets `MODULO_WORKSPACE_NETWORK_POLICY=enabled` in the control-plane
+also sets `FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled` in the control-plane
 ConfigMap, which is the signal the backend gates the `declared` resolution and
 the provider's acceptance of an egress `none` workspace on. A `selected`-mode
 egress claim (with or without an allowlist) remains **refused** in every
@@ -244,7 +244,7 @@ workspaceNetworkPolicy:
 
 | Value | Default | Meaning |
 |---|---|---|
-| `workspaceNetworkPolicy.enabled` | `false` | Render the workspace egress NetworkPolicy and inject the `MODULO_WORKSPACE_NETWORK_POLICY=enabled` enforcement signal; when off, Kubernetes `deny_all` is refused |
+| `workspaceNetworkPolicy.enabled` | `false` | Render the workspace egress NetworkPolicy and inject the `FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled` enforcement signal; when off, Kubernetes `deny_all` is refused |
 | `workspaceNetworkPolicy.allowDns` | `true` | Permit UDP/TCP 53 so deny-by-default does not break DNS |
 | `workspaceNetworkPolicy.dnsNamespace` | `""` | Namespace holding cluster DNS; when set the DNS rule's `namespaceSelector` is narrowed to it, otherwise left cluster-wide (`{}`) |
 | `workspaceNetworkPolicy.egressAllowlist` | `[]` | Exact-target egress entries: `{cidr, ports: [{protocol, port}]}` |
