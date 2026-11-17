@@ -202,7 +202,7 @@ _KUBERNETES_ENV_VAR = "FARNA_CONTROL_KUBERNETES_ENABLED"
 
 # Falsy spellings that deliberately DO NOT register the provider — any other
 # non-empty value does (presence-style opt-in, consistent with the docker
-# signals; the explicit negatives keep ``MODULO_KUBERNETES_ENABLED=false``
+# signals; the explicit negatives keep ``FARNA_CONTROL_KUBERNETES_ENABLED=false``
 # from opting an operator in by accident).
 _ENV_FLAG_OFF_VALUES = frozenset({"0", "false", "no", "off"})
 
@@ -806,7 +806,7 @@ class RuntimeProvider(ABC):
 
         The listing primitive behind non-Docker orphan reclamation: the
         caller supplies the deployment identity (``modulo.machine.id`` —
-        the same value ``MODULO_RUNNER_MACHINE_ID``/hostname stamps onto
+        the same value ``FARNA_CONTROL_RUNNER_MACHINE_ID``/hostname stamps onto
         every workspace the provider creates) and every returned entry is a
         workspace this deployment provisioned. It is the enumeration
         counterpart to :meth:`destroy_workspace_by_ref`: the reconciler
@@ -871,14 +871,14 @@ def build_hub(max_local_concurrency: int = 2) -> RuntimeProviderHub:
     Registration matrix (env-gated, operator opt-in = consent):
 
     - ``local`` — always registered (host-process fallback tier).
-    - ``e2b`` — registered when ``MODULO_E2B_API_KEY`` is set (env var or
+    - ``e2b`` — registered when ``FARNA_CONTROL_E2B_API_KEY`` is set (env var or
       runtime override — both resolved via ``key_bridge.get_e2b_api_key``,
       the same bridge the node-runner enforcement check uses, FAR-1159).
     - ``runner_docker`` (aliases ``docker`` / ``local_docker``) — registered
-      when ``MODULO_DOCKER_HOST`` or ``DOCKER_HOST`` is set.  An unrelated
-      ``MODULO_RUNNER_*`` variable does NOT register Docker (FAR-996).
+      when ``FARNA_CONTROL_DOCKER_HOST`` or ``DOCKER_HOST`` is set.  An unrelated
+      ``FARNA_CONTROL_RUNNER_*`` variable does NOT register Docker (FAR-996).
     - ``kubernetes`` (alias ``k8s``) — registered when
-      ``MODULO_KUBERNETES_ENABLED`` is set to an enabling value (any value
+      ``FARNA_CONTROL_KUBERNETES_ENABLED`` is set to an enabling value (any value
       except ``0``/``false``/``no``/``off``); operator opt-in = consent
       (FAR-1051). If the ``kubernetes-asyncio`` client SDK is missing, a
       warning is logged and the provider stays unregistered — boot never
