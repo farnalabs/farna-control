@@ -15,7 +15,7 @@
         <slot />
       </div>
     </div>
-    <div v-if="$slots.right" data-testid="page-header-right" class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
+    <div v-if="$slots.right" data-testid="page-header-right" class="actions-nowrap flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
       <slot name="right" />
     </div>
   </header>
