@@ -372,12 +372,13 @@ def _check_entropy_tokens(text: str, allowed_tokens: frozenset[str], reasons: li
 def _mask_hashed_asset_names(text: str) -> str:
     """Blank out hashed build-artefact filenames before entropy tokenising.
 
-    FAR-2333: a browser error message carrying
-    ``https://staging.modulo.run/assets/index-<hash>.js`` tripped the entropy
-    heuristic on ``run/assets/index-<hash>`` (``.`` is not in the token class,
-    so the match runs from one dot to the next) and made every real support
-    bundle unbuildable. Replacing just the hashed FILENAME with a space leaves
-    the rest of the URL intact for the scan: a path with no uppercase/digit run
+    FAR-2333: a browser error message carrying a Vite asset URL of the form
+    ``https://<host>/assets/index-<hash>.js`` tripped the entropy heuristic on
+    the token running from the host's last dot through
+    ``/assets/index-<hash>`` (``.`` is not in the token class, so the match
+    runs from one dot to the next) and made every real support bundle
+    unbuildable. Replacing just the hashed FILENAME with a space leaves the
+    rest of the URL intact for the scan: a path with no uppercase/digit run
     is not secret-shaped, while a credential embedded in a URL path (a Slack
     webhook segment, ``hooks.slack.com/services/T…/B…/<token>``) has no
     ``<stem>-<hash>.<asset ext>`` filename and is still scanned.
