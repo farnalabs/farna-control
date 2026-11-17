@@ -717,6 +717,18 @@ describe('AdminAuditView — exports', () => {
 })
 
 // ---- Branch coverage: formatActor various paths ----
+describe('AdminAuditView — header action group', () => {
+  it('wraps its buttons on mobile so the last action stays on-screen', async () => {
+    const wrapper = await mountLoaded()
+    const right = wrapper.get('[data-testid="page-header-right"]')
+    const group = right.element.firstElementChild as HTMLElement
+
+    expect(group.classList).toContain('flex-wrap')
+    expect(group.classList).toContain('w-full')
+    expect(group.classList).toContain('sm:flex-nowrap')
+  })
+})
+
 describe('AdminAuditView — formatActor branches', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

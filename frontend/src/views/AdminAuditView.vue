@@ -4,7 +4,7 @@
     <div class="page-wide">
     <PageHeader :title="$t('views.AdminAuditView.audit_log')" :subtitle="$t('views.AdminAuditView.tamper_evident_event_trail')">
       <template v-if="auditSource === 'org'" #right>
-      <div class="flex items-center gap-2">
+      <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
         <button
           type="button"
           :disabled="verifying"
