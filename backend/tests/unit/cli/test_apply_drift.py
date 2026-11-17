@@ -511,8 +511,8 @@ class TestDriftGoldenSnapshot:
 class TestDiffExitCodes:
     @respx.mock
     def test_drift_exits_1(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_URL", "https://api.test")
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_API_KEY", "key")
+        monkeypatch.setenv("FARNA_CONTROL_URL", "https://api.test")
+        monkeypatch.setenv("FARNA_CONTROL_API_KEY", "key")
         monkeypatch.setenv("SK", "v")
         _mock_current([], [])
         path = tmp_path / "config.yaml"
@@ -525,8 +525,8 @@ class TestDiffExitCodes:
 
     @respx.mock
     def test_no_drift_exits_0(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_URL", "https://api.test")
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_API_KEY", "key")
+        monkeypatch.setenv("FARNA_CONTROL_URL", "https://api.test")
+        monkeypatch.setenv("FARNA_CONTROL_API_KEY", "key")
         _cli_mock([_schema_item("alpha", "Alpha schema")])
         path = tmp_path / "config.yaml"
         path.write_text(_MATCH_SCHEMA_CONFIG_TEXT, encoding="utf-8")
@@ -539,8 +539,8 @@ class TestDiffExitCodes:
 
     @respx.mock
     def test_diff_table_says_drift_summary(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_URL", "https://api.test")
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_API_KEY", "key")
+        monkeypatch.setenv("FARNA_CONTROL_URL", "https://api.test")
+        monkeypatch.setenv("FARNA_CONTROL_API_KEY", "key")
         monkeypatch.setenv("SK", "v")
         _mock_current([], [])
         path = tmp_path / "config.yaml"

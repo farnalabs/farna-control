@@ -65,8 +65,8 @@ _VALID_32 = "a" * 32
 _BACKEND_ROOT = Path(__file__).parents[2]
 _STATUS_ENDPOINT = "/api/v1/runners/status"
 
-_HARNESS_PROXY_ENV = "FARNA_CONTROL_MODULO_RUNNER_HARNESS_PROXY_HOST"
-_HARNESS_DIND_ENV = "FARNA_CONTROL_MODULO_RUNNER_HARNESS_DIND_HOST"
+_HARNESS_PROXY_ENV = "FARNA_CONTROL_RUNNER_HARNESS_PROXY_HOST"
+_HARNESS_DIND_ENV = "FARNA_CONTROL_RUNNER_HARNESS_DIND_HOST"
 _DINO_LABEL = "runner-ci-dind"
 
 
@@ -540,7 +540,7 @@ async def test_engine_down_maps_to_unreachable_and_profile_unavailable(
     aggregate ``engine_unreachable``, profile unavailable, and the resource
     preflight reads ``unknown`` (no engine info was recorded).
     """
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", f"tcp://127.0.0.1:{_DEAD_PORT}")
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", f"tcp://127.0.0.1:{_DEAD_PORT}")
 
     result = await run_runner_health_probe(probe_session_factory, machine_id=_MACHINE_ID)
     assert result["reachable"] is False
@@ -582,7 +582,7 @@ async def test_rig_up_maps_to_healthy_and_profile_offered(
     """
     proxy_host = _require_proxy()
     await _ensure_image_present(None, _IMAGE_REF)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", f"tcp://{proxy_host}")
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", f"tcp://{proxy_host}")
 
     result = await run_runner_health_probe(probe_session_factory, machine_id=_MACHINE_ID)
     assert result["reachable"] is True
@@ -632,7 +632,7 @@ async def test_engine_kill_flips_strip_and_emits_notification_and_error_event(
     rows never matter.
     """
     dind_host = _require_dind()
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", dind_host)
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", dind_host)
     # Distinguish "rig never came up" (environment-dependent: skip with a
     # clear reason) from "kill paused the engine" (the test body's real
     # assertion). A dead dind at test START must not surface as a red

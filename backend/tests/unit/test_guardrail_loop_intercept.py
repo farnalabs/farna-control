@@ -591,7 +591,7 @@ def test_wrap_command_allowed_event_passes_through(monkeypatch, capsys):
     assert proc.killed is False
     out = capsys.readouterr().out
     assert "agent says hello" in out
-    assert "FARNA_CONTROL_MODULO_BRIDGE_BLOCKED" not in out
+    assert "FARNA_CONTROL_BRIDGE_BLOCKED" not in out
 
 
 def test_wrap_command_bridge_failure_is_fail_open(monkeypatch, capsys):
@@ -612,7 +612,7 @@ def test_wrap_command_bridge_failure_is_fail_open(monkeypatch, capsys):
     assert code == 0
     assert proc.killed is False
     out = capsys.readouterr().out
-    assert "FARNA_CONTROL_MODULO_BRIDGE_BLOCKED" not in out
+    assert "FARNA_CONTROL_BRIDGE_BLOCKED" not in out
 
 
 def test_wrap_command_redact_emits_redacted_marker(monkeypatch, capsys):
@@ -762,7 +762,7 @@ def test_wrap_command_downgraded_block_does_not_kill(monkeypatch, capsys):
     assert code == 0
     assert proc.killed is False
     out = capsys.readouterr().out
-    assert "FARNA_CONTROL_MODULO_BRIDGE_BLOCKED" not in out
+    assert "FARNA_CONTROL_BRIDGE_BLOCKED" not in out
 
 
 def test_wrap_command_empty_argv_guard_runs_before_launch(monkeypatch, capsys):
@@ -864,7 +864,7 @@ def test_wrap_command_malformed_event_forwards_empty_tool(monkeypatch, capsys):
     assert proc.killed is False
     assert seen == [("", {})]
     out = capsys.readouterr().out
-    assert "FARNA_CONTROL_MODULO_BRIDGE_EVENT" not in out
+    assert "FARNA_CONTROL_BRIDGE_EVENT" not in out
 
 
 def test_wrap_command_after_event_notifies_and_continues(monkeypatch, capsys):
@@ -897,7 +897,7 @@ def test_wrap_command_after_event_notifies_and_continues(monkeypatch, capsys):
     assert decided == []
     assert notified == [("git push", {"url": "x"}, "pushed ok")]
     out = capsys.readouterr().out
-    assert "FARNA_CONTROL_MODULO_BRIDGE_EVENT" not in out
+    assert "FARNA_CONTROL_BRIDGE_EVENT" not in out
 
 
 def test_wrap_command_non_dict_event_is_ignored(monkeypatch, capsys):
@@ -923,7 +923,7 @@ def test_wrap_command_non_dict_event_is_ignored(monkeypatch, capsys):
     assert proc.killed is False
     assert decided == []
     out = capsys.readouterr().out
-    assert "FARNA_CONTROL_MODULO_BRIDGE_EVENT" not in out
+    assert "FARNA_CONTROL_BRIDGE_EVENT" not in out
 
 
 def test_load_config_resolves_patterns(tmp_path, monkeypatch):
