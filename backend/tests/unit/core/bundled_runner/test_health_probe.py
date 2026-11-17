@@ -830,7 +830,7 @@ async def test_multiple_org_infra_errors_keep_the_first_and_count_each() -> None
 
 
 def _clear_endpoint_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in ("FARNA_CONTROL_MODULO_DOCKER_HOST", "DOCKER_HOST", "DOCKER_CONTEXT"):
+    for var in ("FARNA_CONTROL_DOCKER_HOST", "DOCKER_HOST", "DOCKER_CONTEXT"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -842,7 +842,7 @@ def _isolate_non_env_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_engine_configured_when_docker_host_env_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_endpoint_env(monkeypatch)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DOCKER_HOST", "tcp://socket-proxy:2375")
+    monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", "tcp://socket-proxy:2375")
     _isolate_non_env_endpoints(monkeypatch)
     assert docker_engine_configured() is True
 

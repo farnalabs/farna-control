@@ -72,7 +72,7 @@ class ProviderNotConfiguredError(RuntimeError):
         self.provider_type = provider_type
         self.env_var = env_var
         if env_var and env_var in _DOCKER_ENV_VARS:
-            message = f"No runtime provider registered for provider_type '{provider_type}'. Set FARNA_CONTROL_MODULO_DOCKER_HOST (or DOCKER_HOST) and restart to enable it, or choose a different provider type for the profile."
+            message = f"No runtime provider registered for provider_type '{provider_type}'. Set FARNA_CONTROL_DOCKER_HOST (or DOCKER_HOST) and restart to enable it, or choose a different provider type for the profile."
         elif env_var:
             message = f"No runtime provider registered for provider_type '{provider_type}'. Set the {env_var} environment variable (and restart) to enable it, or choose a different provider type for the profile."
         else:
@@ -196,9 +196,9 @@ class BackendUnreachableError(RuntimeProviderError):
 # derive from these constants so the documented behaviour and the implemented
 # behaviour can never drift apart.
 
-_DOCKER_ENV_VARS: tuple[str, ...] = ("FARNA_CONTROL_MODULO_DOCKER_HOST", "DOCKER_HOST")
-_E2B_ENV_VAR = "FARNA_CONTROL_MODULO_E2B_API_KEY"
-_KUBERNETES_ENV_VAR = "FARNA_CONTROL_MODULO_KUBERNETES_ENABLED"
+_DOCKER_ENV_VARS: tuple[str, ...] = ("FARNA_CONTROL_DOCKER_HOST", "DOCKER_HOST")
+_E2B_ENV_VAR = "FARNA_CONTROL_E2B_API_KEY"
+_KUBERNETES_ENV_VAR = "FARNA_CONTROL_KUBERNETES_ENABLED"
 
 # Falsy spellings that deliberately DO NOT register the provider — any other
 # non-empty value does (presence-style opt-in, consistent with the docker

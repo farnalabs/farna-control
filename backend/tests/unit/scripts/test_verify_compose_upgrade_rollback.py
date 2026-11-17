@@ -172,7 +172,7 @@ def test_credential_redaction_keeps_operator_tags_and_port(tmp_path: Path) -> No
         "COMPOSE_FILE": "/bundle/docker-compose.prod.yml",
         "SECRET_KEY": "super-secret-value",
         "POSTGRES_PASSWORD": "db-password",
-        "FARNA_CONTROL_MODULO_USERS": "admin@example.com:admin-password",
+        "FARNA_CONTROL_USERS": "admin@example.com:admin-password",
     }
     secrets = module._secret_values(env)
     assert secrets == {"super-secret-value", "db-password"}

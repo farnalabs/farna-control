@@ -33,15 +33,15 @@ class TestMultiBackendCustomValidators:
         settings = Settings()
         assert settings.database_url == "sqlite+aiosqlite:///./farna.db"
 
-    def test_mariadb_mode_auto_sets_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mariadb_mode_rejects_postgres_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(monkeypatch, MODULO_DB="mariadb")
-        settings = Settings()
-        assert settings.database_url == "mysql+aiomysql://farna_control:farna_control@localhost:5435/farna_control"
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            Settings()
 
-    def test_mysql_mode_auto_sets_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mysql_mode_rejects_postgres_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(monkeypatch, MODULO_DB="mysql")
-        settings = Settings()
-        assert settings.database_url == "mysql+aiomysql://farna_control:farna_control@localhost:5435/farna_control"
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            Settings()
 
     def test_postgres_protocol_rewritten(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(monkeypatch, DATABASE_URL="postgres://modulo:modulo@localhost:5432/modulo")
@@ -59,7 +59,11 @@ class TestMultiBackendCustomValidators:
         assert settings.modulo_db == "sqlite"
 
     def test_modulo_db_mysql_uppercase(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _base_env(monkeypatch, MODULO_DB="MYSQL")
+        _base_env(
+            monkeypatch,
+            MODULO_DB="MYSQL",
+            DATABASE_URL="mysql+aiomysql://modulo:modulo@localhost:3306/modulo",
+        )
         settings = Settings()
         assert settings.modulo_db == "mysql"
 

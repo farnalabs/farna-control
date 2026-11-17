@@ -432,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
 #      a state.json-referenced dir; repair a dangling `current` symlink.
 # ---------------------------------------------------------------------------
 
-INSTALL_ROOT_ENV = "FARNA_CONTROL_MODULO_INSTALL_ROOT"
+INSTALL_ROOT_ENV = "FARNA_CONTROL_INSTALL_ROOT"
 UPGRADE_MARKER_FILENAME = "upgrade.json"
 UPGRADE_MARKER_SCHEMA_VERSION = 1
 _RETAINED_VERSIONS = 2

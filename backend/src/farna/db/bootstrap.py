@@ -8,14 +8,15 @@ contract - importable WITHOUT SQLAlchemy/models; asyncpg-level only.
 1. Fix DATABASE_ADMIN_URL for the SQLAlchemy async driver and fix the runtime
    DATABASE_URL for backwards compatibility
 2. Create the alembic_version table with VARCHAR(255) for branch migrations
-3. Derive and export MODULO_SYSTEM_DATABASE_URL - if explicitly set it is fixed
-   like the other URLs; otherwise it is derived from the fixed DATABASE_URL by
-   swapping the username to farna_control_system. The derived value is exported
-   for the entrypoint env-file contract, but is not used by bootstrap_role.py to
-   reconcile the role password without an explicit system URL. The result is
+3. Resolve the system database URL from the accepted aliases, in priority order:
+   FARNA_CONTROL_SYSTEM_DATABASE_URL, MODULO_SYSTEM_DATABASE_URL, then
+   FARNA_CONTROL_SYSTEM_DATABASE_URL. An explicitly configured value is
+   fixed and published under the canonical name. Otherwise, derive a value from
+   DATABASE_URL for the entrypoint env-file contract only; never publish that
+   derived credential into the canonical application setting. The result is
    written to /tmp/system_database_url.env.
-4. Write the fixed DATABASE_ADMIN_URL / DATABASE_URL / MODULO_SYSTEM_DATABASE_URL
-   to files for the shell script
+4. Write the fixed DATABASE_ADMIN_URL / DATABASE_URL / system database URL to
+   files for the shell script
 """
 
 import asyncio
@@ -152,9 +153,20 @@ def main() -> None:
     # env-file contract, but do not pass that derived credential into role
     # reconciliation: bootstrap_role.py must preserve an existing system-role
     # password on warm boots without an explicit system URL.
-    system_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
-    if system_url:
-        system_url = fix_database_url(system_url)
+    configured_system_url = next(
+        (
+            os.environ.get(name, "")
+            for name in (
+                "FARNA_CONTROL_SYSTEM_DATABASE_URL",
+                "MODULO_SYSTEM_DATABASE_URL",
+                "FARNA_CONTROL_SYSTEM_DATABASE_URL",
+            )
+            if os.environ.get(name, "")
+        ),
+        "",
+    )
+    if configured_system_url:
+        system_url = fix_database_url(configured_system_url)
         os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] = system_url
         # Short-lived container bootstrap env file, consistent with the
         # /tmp/database_url.env and /tmp/database_admin_url.env files written above.
@@ -162,13 +174,12 @@ def main() -> None:
     elif runtime_url:
         system_url = derive_system_database_url(runtime_url)
         if system_url:
-            # Keep the derived URL available to callers that need the canonical
-            # setting, while bootstrap_role.py deliberately reads only the
-            # legacy entrypoint alias so this derived password cannot reconcile
-            # the system role on a warm boot without an explicit URL.
-            os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] = system_url
+            # The derived URL is for the entrypoint env-file contract only.
+            # Do not publish it as the canonical application credential: its
+            # password comes from the app URL and is not a verified system-role
+            # credential. bootstrap_role.py reads only the explicit legacy alias.
             print(  # noqa: T201
-                "WARNING: FARNA_CONTROL_SYSTEM_DATABASE_URL is not configured; derived system URL is available for the container entrypoint only.",
+                "WARNING: no system database URL is configured; derived system URL is written to the entrypoint env file only and is not published as an application credential.",
                 file=sys.stderr,
             )
             _write_env_file("/tmp/system_database_url.env", system_url)  # nosec B108  # noqa: S108  # NOSONAR S5443

@@ -200,13 +200,13 @@ class TestStreakConfig:
 
     def test_window_default_and_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         assert ts._streak_config({})[1] == 24
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")  # dogfood no-window variant
+        monkeypatch.setenv("FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")  # dogfood no-window variant
         assert ts._streak_config({})[1] == 0
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS", "not-a-number")
+        monkeypatch.setenv("FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS", "not-a-number")
         assert ts._streak_config({})[1] == 24
 
     def test_per_trigger_window_overrides_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")
+        monkeypatch.setenv("FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")
         assert ts._streak_config({"no_delivery_min_window_hours": 12})[1] == 12
 
     # --- FAR-1387: cron defaults are their own, not ongoing's -------------
@@ -228,18 +228,18 @@ class TestStreakConfig:
         ``no_delivery_min_window_hours``) applies to cron, and per-trigger
         values beat both the cron defaults and the env override."""
         assert ts._streak_config({"max_no_delivery_streak": 3}, trigger_type="cron")[0] == 3
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_CRON_STREAK_MIN_WINDOW_HOURS", "0")
+        monkeypatch.setenv("FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS", "0")
         assert ts._streak_config({}, trigger_type="cron")[1] == 0
         assert ts._streak_config({"no_delivery_min_window_hours": 12}, trigger_type="cron")[1] == 12
 
     def test_cron_window_env_override_and_bad_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_CRON_STREAK_MIN_WINDOW_HOURS", "72")
+        monkeypatch.setenv("FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS", "72")
         assert ts._streak_config({}, trigger_type="cron")[1] == 72
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_CRON_STREAK_MIN_WINDOW_HOURS", "not-a-number")
+        monkeypatch.setenv("FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS", "not-a-number")
         assert ts._streak_config({}, trigger_type="cron")[1] == 48
         # The ongoing env override must NOT leak into the cron default.
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_CRON_STREAK_MIN_WINDOW_HOURS", raising=False)
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")
+        monkeypatch.delenv("FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS", raising=False)
+        monkeypatch.setenv("FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")
         assert ts._streak_config({}, trigger_type="cron")[1] == 48
 
     def test_cron_auto_deactivate_config_key(self) -> None:
@@ -260,11 +260,11 @@ class TestKillSwitch:
 
     def test_env_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for value in ("0", "false", "off", "no", "FALSE"):
-            monkeypatch.setenv("FARNA_CONTROL_MODULO_STREAK_DEACTIVATE_KILL_SWITCH", value)
+            monkeypatch.setenv("FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH", value)
             assert ts._streak_deactivate_enabled() is False
 
     def test_env_enables(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_STREAK_DEACTIVATE_KILL_SWITCH", "1")
+        monkeypatch.setenv("FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH", "1")
         assert ts._streak_deactivate_enabled() is True
 
 
@@ -679,7 +679,7 @@ class TestEnforceSweep:
         assert (now - timedelta(hours=24) - captured["cutoff"]).total_seconds() < 5
 
         captured.clear()
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")
+        monkeypatch.setenv("FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS", "0")
         with (
             patch.object(ts, "_streak_deactivate_enabled", return_value=True),
             patch.object(ts, "_select_active_streak_triggers", new_callable=AsyncMock, return_value=[_sweep_trigger()]),
@@ -1957,7 +1957,7 @@ class TestGetTriggerStreakStatus:
     async def test_kill_switch_off_reports_enabled_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The deactivate+notify kill switch gates the ``enabled`` flag (the
         streak is still computed and shown; nothing will auto-deactivate)."""
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_STREAK_DEACTIVATE_KILL_SWITCH", "0")
+        monkeypatch.setenv("FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH", "0")
         session = _StatusSession(streak=2)
         status = await ts.get_trigger_streak_status(session, _ongoing_trigger())
         assert status["enabled"] is False
