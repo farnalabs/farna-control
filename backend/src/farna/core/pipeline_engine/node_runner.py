@@ -1305,9 +1305,10 @@ async def _read_log_tail_via_provider(
 
     The only log-probe path since FAR-1050 R6 retired the legacy urllib
     helper. Resolves the key through the runtime bridge /
-    ``MODULO_E2B_API_KEY``, then the legacy ``E2B_API_KEY`` env var; empty on
-    no key. Never raises — provider build failure, provider error and fetch
-    failure all yield ``""`` (``CancelledError`` propagates).
+    ``FARNA_CONTROL_E2B_API_KEY`` (override then env var), then the legacy
+    ``E2B_API_KEY`` env var; empty on no key. Never raises — provider build
+    failure, provider error and fetch failure all yield ``""`` (
+    ``CancelledError`` propagates).
 
     FAR-1051: ``provider_type`` (the run's bound profile's declared type)
     selects a non-E2B provider through the hub, so a ``kubernetes`` dispatch
@@ -1394,10 +1395,10 @@ async def _apply_isolation_via_provider(
     FAR-1051 provider resolution: ``provider_type`` is the run's bound
     environment profile's declared type. ``None``/``"e2b"`` is the legacy
     profile-less route and resolves EXACTLY as before (key resolution
-    mirrors the enforcement gate: runtime bridge / ``MODULO_E2B_API_KEY``,
-    then the legacy ``E2B_API_KEY`` env var). Any other declared type
-    resolves through the hub, so a ``kubernetes`` profile reaches the
-    Kubernetes provider — and an unregistered one raises the typed
+    mirrors the enforcement gate: runtime bridge / ``FARNA_CONTROL_E2B_API_KEY``
+    (override then env var), then the legacy ``E2B_API_KEY`` env var). Any
+    other declared type resolves through the hub, so a ``kubernetes`` profile
+    reaches the Kubernetes provider — and an unregistered one raises the typed
     ``ProviderNotConfiguredError`` carrying its remediation env var, never
     a fallback to E2B or local.
 
