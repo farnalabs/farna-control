@@ -134,7 +134,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useStorage } from '@vueuse/core';
 import type { NotificationResponse } from "../lib/api/notifications";
 import { fetchNotifications, reviewLater, fetchUnreadCount } from "../lib/api/notifications";
 import { registerHandler } from "../stores/syncRegistry";
@@ -145,7 +144,7 @@ import { formatApiError } from "../lib/api/formatError";
 import LoadingSpinner from "./shared/LoadingSpinner.vue";
 
 const PAGE_SIZE = 10;
-const collapsed = useStorage('notif-panel-collapsed', true);
+const collapsed = ref(true);
 const store = useNotificationsStore();
 const notifications = ref<NotificationResponse[]>([]);
 const loading = ref(false);

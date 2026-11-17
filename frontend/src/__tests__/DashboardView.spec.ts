@@ -570,9 +570,9 @@ describe('DashboardView', () => {
     expect(wrapper.findComponent({ name: 'ErrorAlert' }).exists()).toBe(false)
 
     const emptyState = runActivity.get('[aria-live="polite"]')
-    expect(emptyState.classes()).toContain('py-6')
-    expect(emptyState.classes()).not.toContain('flex-1')
-    expect(emptyState.classes()).not.toContain('min-h-[200px]')
+    expect(emptyState.classes()).toContain('border-dashed')
+    expect(emptyState.classes()).toContain('h-12')
+    expect(emptyState.attributes('aria-live')).toBe('polite')
     wrapper.unmount()
   })
 
