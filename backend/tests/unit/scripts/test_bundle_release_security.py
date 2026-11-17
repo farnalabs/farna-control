@@ -541,6 +541,9 @@ def test_bundle_tar_fixture_preserves_installer_mode_and_checksum_entry(tmp_path
             with tar.extractfile(member) as source, destination.open("wb") as target:
                 assert source is not None
                 shutil.copyfileobj(source, target)
+            # ``open()`` creates the file with the process umask (0644), so apply
+            # the archive member's mode the way ``tar -x`` does.
+            destination.chmod(stat.S_IMODE(member.mode))
     extracted = extract / bundle.name / "install.sh"
     if os.name != "nt":
         assert stat.S_IMODE(extracted.stat().st_mode) == 0o755
