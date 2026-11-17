@@ -5,7 +5,8 @@ import { test, expect, setupLocalMockApi, mintMockAccessToken } from './setup/fi
 // on the MCP server-status row, the Triggers pause-all card and the Environment
 // Profiles toolbar. At 390px: content stays inside <main> and the viewport, button labels on one line,
 // actions stacked below the content. At 1280px the geometry must equal the
-// pre-change layout exactly (DESKTOP values below were measured on origin/main).
+// pre-change layout (DESKTOP spacing values below were measured on origin/main;
+// where a value is set by text max-content its font-metric drift is bounded).
 // Dashboard and Pipelines were already fixed by FAR-2537 and are not covered here.
 test.describe.configure({ retries: 0 })
 
@@ -179,11 +180,20 @@ test.describe('Desktop 1280px is unchanged (FAR-2538)', () => {
     const b = await box(pause)
     const c = await box(card)
     expect(b.y).toBeLessThan(l.y + l.height)
+    // The label div is sized to the max-content width of its description text, so
+    // its width drifts a few tenths of a px with the host's font metrics: 861.9 px
+    // was measured on origin/main, and the identical desktop layout renders 863.1 px
+    // on the CI runner. Allow 2 px of font-metric drift there; the layout-governing
+    // spacing below stays exact, and any real regression is at least the 12 px mobile
+    // gap or the 16 px pr-4 padding, both far outside the tolerance.
+    expect(Math.abs(round(l.width) - DESKTOP_TRIGGERS.labelWidth)).toBeLessThanOrEqual(2)
     expect({
-      labelWidth: round(l.width),
       labelToButtonGap: round(b.x - (l.x + l.width)),
       buttonToCardRight: round(c.x + c.width - (b.x + b.width)),
-    }).toEqual(DESKTOP_TRIGGERS)
+    }).toEqual({
+      labelToButtonGap: DESKTOP_TRIGGERS.labelToButtonGap,
+      buttonToCardRight: DESKTOP_TRIGGERS.buttonToCardRight,
+    })
   })
 
   test('Environment Profiles toolbar: New Profile stays right-aligned on the search row', { tag: ['@regression'] }, async ({ page, env }) => {
