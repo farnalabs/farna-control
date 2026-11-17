@@ -68,6 +68,8 @@ const SLICE = [
   'tests/e2e/filter-bar-overlay.spec.ts',
   'tests/e2e/select-clipping-container.spec.ts',
   'tests/e2e/pipeline-editor-select-overlay.spec.ts',
+  // FAR-2541: SSO provider card layout at 390/640/1280px, local mocks.
+  'tests/e2e/sso-mobile.spec.ts',
 ]
 
 /**
