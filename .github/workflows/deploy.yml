@@ -928,6 +928,13 @@ jobs:
     # branch from main, diagnoses the failure, fixes it, and raises the PR.
     if: always() && needs.deploy-throttle.outputs.deployed == 'true' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
     runs-on: ubicloud-standard-2
+    # Job-level permissions replace the workflow-level block: contents: read
+    # for the script checkout, pull-requests: write so
+    # scripts/main_failure_fix_pr_open.sh can list open PRs for an existing
+    # fix and comment the new failing run on it.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       # A minimal checkout provides scripts/dispatch_with_retry.sh — the
       # shared webhook-dispatch policy below. persist-credentials: false
@@ -946,6 +953,8 @@ jobs:
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           # FAR-912: detect which stage failed so the Branch Fixer gets
           # context-specific feedback. The Branch Fixer can also read the
           # workflow run logs, but explicit text in the webhook payload is
@@ -979,7 +988,13 @@ jobs:
           # Derived alongside — the FAILED_STAGES computation and its output
           # are unchanged.
           PRIMARY_STAGE="${FAILED_STAGES%% *}"
-          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|${HEAD_SHA}"
+          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|main"
+          # Dispatcher-side skip (see notify-deploy-failure): an open PR whose
+          # body carries this fingerprint is already fixing it. Fails OPEN.
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if FIX_FINGERPRINT="${FINGERPRINT}" RUN_URL="${RUN_URL}" bash scripts/main_failure_fix_pr_open.sh; then
+            exit 0
+          fi
 
           # Coalesce/dedupe keys (FAR-1034 convention): the payload mirrors
           # ci.yml's notify-pr-failure / main-fix dispatch — headSha lets the
@@ -992,9 +1007,21 @@ jobs:
           # makes the catch-all and the stage-specific dispatch of the SAME
           # failure produce the SAME value, so the agent's dedupe checks still
           # find an existing PR if the coalesce window has lapsed, while a
-          # different stage or a different commit still yields a different
-          # fingerprint. The Branch Fixer prompt consumes this value verbatim
-          # instead of composing its own.
+          # different stage still yields a different fingerprint. The Branch
+          # Fixer prompt consumes this value verbatim instead of composing its
+          # own.
+          #
+          # The fingerprint deliberately does NOT carry the SHA: it is keyed
+          # `<workflow>|<stage>|main`, so it is stable across main commits.
+          # When main stays red, every later merge redeploys and fails at the
+          # same stage; a SHA-keyed fingerprint made each run look new and
+          # raised one fix PR per commit (2026-11-17: four PRs, #3214-#3217,
+          # for one failure). headSha stays in the payload (the fixer needs it
+          # and the webhook coalesces same-run duplicates on it). Before
+          # POSTing, scripts/main_failure_fix_pr_open.sh skips the dispatch if
+          # an OPEN PR body already carries this fingerprint (the Branch Fixer
+          # embeds `<!-- branch-fixer-fingerprint: <fp> -->`); a lookup error
+          # fails OPEN and dispatches anyway.
           FEEDBACK="Deploy pipeline failed on main at ${{ github.sha }}. Failed stage(s): ${FAILED_STAGES}. The Branch Fixer should create a fix branch from main, diagnose the failure, fix it, and raise a PR."
 
           BODY=$(jq -n \
@@ -1034,6 +1061,13 @@ jobs:
     # diagnose, and raise a PR" — the same contract as notify-deploy-failure.
     if: always() && (needs.staging-e2e.result == 'failure' || needs.staging-e2e.result == 'cancelled')
     runs-on: ubicloud-standard-2
+    # Job-level permissions replace the workflow-level block: contents: read
+    # for the script checkout, pull-requests: write so
+    # scripts/main_failure_fix_pr_open.sh can list open PRs for an existing
+    # fix and comment the new failing run on it.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       # A minimal checkout provides scripts/dispatch_with_retry.sh — the
       # shared webhook-dispatch policy below. persist-credentials: false
@@ -1052,13 +1086,21 @@ jobs:
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PRIMARY_STAGE: staging-e2e
           FEEDBACK: "Staging E2E tests failed after deploy to staging. The Branch Fixer should create a fix branch from main, diagnose the Playwright @regression failure, fix it, and raise a PR."
         shell: bash
         run: |
           # headSha + fingerprint: see notify-deploy-failure (FAR-1034
           # coalesce/dedupe convention) — same failure, same fingerprint.
-          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|${HEAD_SHA}"
+          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|main"
+          # Dispatcher-side skip (see notify-deploy-failure): an open PR whose
+          # body carries this fingerprint is already fixing it. Fails OPEN.
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if FIX_FINGERPRINT="${FINGERPRINT}" RUN_URL="${RUN_URL}" bash scripts/main_failure_fix_pr_open.sh; then
+            exit 0
+          fi
           BODY=$(jq -n \
             --arg branchName "${BRANCH}" \
             --argjson prNumber "${PR_NUMBER}" \
@@ -1087,6 +1129,13 @@ jobs:
     # job-level timeout produces 'cancelled', not 'failure'.
     if: always() && (needs.prod-smoke.result == 'failure' || needs.prod-smoke.result == 'cancelled')
     runs-on: ubicloud-standard-2
+    # Job-level permissions replace the workflow-level block: contents: read
+    # for the script checkout, pull-requests: write so
+    # scripts/main_failure_fix_pr_open.sh can list open PRs for an existing
+    # fix and comment the new failing run on it.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       # A minimal checkout provides scripts/dispatch_with_retry.sh — the
       # shared webhook-dispatch policy below. persist-credentials: false
@@ -1105,13 +1154,21 @@ jobs:
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PRIMARY_STAGE: prod-smoke
           FEEDBACK: "Production smoke tests failed after deploy to control.farna.dev. The Branch Fixer should create a fix branch from main, diagnose the Playwright @smoke failure, fix it, and raise a PR."
         shell: bash
         run: |
           # headSha + fingerprint: see notify-deploy-failure (FAR-1034
           # coalesce/dedupe convention) — same failure, same fingerprint.
-          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|${HEAD_SHA}"
+          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|main"
+          # Dispatcher-side skip (see notify-deploy-failure): an open PR whose
+          # body carries this fingerprint is already fixing it. Fails OPEN.
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if FIX_FINGERPRINT="${FINGERPRINT}" RUN_URL="${RUN_URL}" bash scripts/main_failure_fix_pr_open.sh; then
+            exit 0
+          fi
           BODY=$(jq -n \
             --arg branchName "${BRANCH}" \
             --argjson prNumber "${PR_NUMBER}" \
@@ -1148,6 +1205,13 @@ jobs:
     # timeout is reported as 'cancelled', not 'failure'.
     if: always() && (needs.deploy-staging.result == 'failure' || needs.deploy-staging.result == 'cancelled')
     runs-on: ubicloud-standard-2
+    # Job-level permissions replace the workflow-level block: contents: read
+    # for the script checkout, pull-requests: write so
+    # scripts/main_failure_fix_pr_open.sh can list open PRs for an existing
+    # fix and comment the new failing run on it.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       # A minimal checkout provides scripts/dispatch_with_retry.sh — the
       # shared webhook-dispatch policy below. persist-credentials: false
@@ -1166,13 +1230,21 @@ jobs:
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PRIMARY_STAGE: deploy-staging
           FEEDBACK: "INFRASTRUCTURE FAILURE: Deploy to staging failed (Fly API, image build, or migration). The Branch Fixer should triage this — it may not be fixable in code, but the run creates visibility. Check deploy-staleness-check and deploy-watchdog for re-dispatch."
         shell: bash
         run: |
           # headSha + fingerprint: see notify-deploy-failure (FAR-1034
           # coalesce/dedupe convention) — same failure, same fingerprint.
-          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|${HEAD_SHA}"
+          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|main"
+          # Dispatcher-side skip (see notify-deploy-failure): an open PR whose
+          # body carries this fingerprint is already fixing it. Fails OPEN.
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if FIX_FINGERPRINT="${FINGERPRINT}" RUN_URL="${RUN_URL}" bash scripts/main_failure_fix_pr_open.sh; then
+            exit 0
+          fi
           BODY=$(jq -n \
             --arg branchName "${BRANCH}" \
             --argjson prNumber "${PR_NUMBER}" \
@@ -3807,6 +3879,13 @@ jobs:
     # timeout is reported as 'cancelled', not 'failure'.
     if: always() && (needs.deploy-production.result == 'failure' || needs.deploy-production.result == 'cancelled')
     runs-on: ubicloud-standard-2
+    # Job-level permissions replace the workflow-level block: contents: read
+    # for the script checkout, pull-requests: write so
+    # scripts/main_failure_fix_pr_open.sh can list open PRs for an existing
+    # fix and comment the new failing run on it.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       # A minimal checkout provides scripts/dispatch_with_retry.sh — the
       # shared webhook-dispatch policy below. persist-credentials: false
@@ -3825,13 +3904,21 @@ jobs:
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PRIMARY_STAGE: deploy-production
           FEEDBACK: "INFRASTRUCTURE FAILURE: Deploy to production failed (Fly API, image build, or migration). The Branch Fixer should triage this — it may not be fixable in code, but the run creates visibility. Check deploy-staleness-check and deploy-watchdog for re-dispatch."
         shell: bash
         run: |
           # headSha + fingerprint: see notify-deploy-failure (FAR-1034
           # coalesce/dedupe convention) — same failure, same fingerprint.
-          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|${HEAD_SHA}"
+          FINGERPRINT="Deploy: Staging + Prod|${PRIMARY_STAGE}|main"
+          # Dispatcher-side skip (see notify-deploy-failure): an open PR whose
+          # body carries this fingerprint is already fixing it. Fails OPEN.
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if FIX_FINGERPRINT="${FINGERPRINT}" RUN_URL="${RUN_URL}" bash scripts/main_failure_fix_pr_open.sh; then
+            exit 0
+          fi
           BODY=$(jq -n \
             --arg branchName "${BRANCH}" \
             --argjson prNumber "${PR_NUMBER}" \
