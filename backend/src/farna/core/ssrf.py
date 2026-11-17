@@ -1478,7 +1478,7 @@ async def fetch_sso_metadata(url: str, *, kind: str, client_factory: Callable[..
     except httpx.TimeoutException as exc:
         raise SsoMetadataFetchError(f"{kind} metadata request timed out") from exc
     except httpx.RequestError as exc:
-        raise SsoMetadataFetchError("Failed to fetch discovery document" if kind == "OIDC discovery" else f"Failed to fetch {kind.lower()} document") from exc
+        raise SsoMetadataFetchError(f"Failed to fetch {kind.lower()} document") from exc
     finally:
         await client.aclose()
     try:

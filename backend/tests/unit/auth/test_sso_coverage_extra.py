@@ -22,7 +22,6 @@ from farna.auth.sso import (
     _decode_saml_response,
     _exchange_code,
     _fetch_discovery,
-    _fetch_discovery_pinned,
     _parse_oidc_providers,
     _read_system_oidc_provider,
     _read_system_saml_provider,
@@ -149,7 +148,7 @@ async def test_fetch_discovery_json_decode_error() -> None:
         await _fetch_discovery("https://issuer.example/discovery")
 
 
-async def test_fetch_discovery_pinned_json_decode_error() -> None:
+async def test_fetch_discovery_uses_pinned_client_factory() -> None:
     response = MagicMock()
     response.headers = {}
     response.raise_for_status.return_value = None
@@ -164,7 +163,8 @@ async def test_fetch_discovery_pinned_json_decode_error() -> None:
         patch("farna.auth.sso.pinned_async_client", pacer),
         pytest.raises(ValueError, match="Invalid JSON in discovery document"),
     ):
-        await _fetch_discovery_pinned("https://issuer.example/discovery")
+        await _fetch_discovery("https://issuer.example/discovery")
+    pacer.assert_awaited_once_with("https://issuer.example/discovery")
 
 
 async def test_exchange_code_json_decode_error() -> None:

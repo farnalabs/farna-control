@@ -913,7 +913,7 @@ class TestOidcCallbackIntegration:
         with patch("httpx.AsyncClient") as cls:
             cls.return_value = mock_client
 
-            with pytest.raises(ValueError, match="Failed to fetch discovery document"):
+            with pytest.raises(ValueError, match="Failed to fetch oidc discovery document"):
                 await oidc_process_callback(
                     "auth-code",
                     signed,

@@ -841,10 +841,7 @@ async def oidc_get_authorize_url(
         raise ValueError(f"OIDC provider '{provider_id}' is missing client_id or discovery_url")
 
     try:
-        if _db_provider is not None:
-            disc = await _fetch_discovery_pinned(discovery_url)
-        else:
-            disc = await _fetch_discovery(discovery_url)
+        disc = await _fetch_discovery(discovery_url)
     except httpx.HTTPError as exc:
         raise ValueError(f"Failed to fetch discovery document: {exc}") from None
     auth_endpoint = disc.get("authorization_endpoint")
@@ -907,14 +904,9 @@ async def _resolve_oidc_client_config(
     return client_id, client_secret, discovery_url, db_provider
 
 
-async def _fetch_oidc_discovery_document(
-    discovery_url: str,
-    db_provider: SsoProvider | None,
-) -> dict[str, object]:
-    """Fetch the discovery document (pinned for a DB provider), mapping HTTP errors."""
+async def _fetch_oidc_discovery_document(discovery_url: str) -> dict[str, object]:
+    """Fetch the discovery document, mapping HTTP errors to a ValueError."""
     try:
-        if db_provider is not None:
-            return await _fetch_discovery_pinned(discovery_url)
         return await _fetch_discovery(discovery_url)
     except httpx.HTTPError as exc:
         raise ValueError(f"Failed to fetch discovery document: {exc}") from None
@@ -1060,7 +1052,7 @@ async def oidc_process_callback(
     """
     provider_id = _oidc_provider_id_from_state(state, settings)
     client_id, client_secret, discovery_url, db_provider = await _resolve_oidc_client_config(provider_id, system_session, app_session, settings)
-    disc = await _fetch_oidc_discovery_document(discovery_url, db_provider)
+    disc = await _fetch_oidc_discovery_document(discovery_url)
     token_endpoint = _oidc_token_endpoint(disc, discovery_url)
     token_data = await _exchange_oidc_code(
         token_endpoint,
@@ -1131,10 +1123,6 @@ async def _fetch_discovery(discovery_url: str) -> dict[str, object]:
             raise ValueError(f"Invalid JSON in discovery document: {exc}") from None
         raise
     return _require_json_object(decoded, "OIDC discovery document")
-
-
-async def _fetch_discovery_pinned(discovery_url: str) -> dict[str, object]:
-    return await _fetch_discovery(discovery_url)
 
 
 def _enforce_oidc_endpoint_host(url: str, discovery_url: str, issuer: str | None, purpose: str) -> None:

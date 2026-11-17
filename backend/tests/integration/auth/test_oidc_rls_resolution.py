@@ -373,7 +373,7 @@ async def test_per_provider_oidc_login_resolves_cross_org_and_redirects_to_idp(
         "issuer": "https://idp.example.com",
     }
     with (
-        patch("farna.auth.sso._fetch_discovery_pinned", discovery),
+        patch("farna.auth.sso._fetch_discovery", discovery),
         patch("farna.auth.sso.validate_outbound_url_async", AsyncMock()),
     ):
         resp = await multi_org_client.get(f"/api/v1/auth/oidc/{two_orgs['oidc_b']}/login", follow_redirects=False)

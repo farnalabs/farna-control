@@ -8,7 +8,7 @@ The suite proves what the httpx-stub coverage in
 ``test_oidc_callback_http_flow`` cannot:
 
 - the discovery document on the wire is Keycloak's own and is fetched by the
-  real ``_fetch_discovery_pinned`` code path (not a hand-written stub);
+  real ``_fetch_discovery`` code path (not a hand-written stub);
 - the code exchange, JWT RS256 signature check and JWKS fetch run against
   REAL Keycloak-produced tokens — no synthesized JWT fixture;
 - the authorize round-trip goes through the REAL Keycloak authorize endpoint
