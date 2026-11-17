@@ -1069,7 +1069,7 @@ test.describe('Mobile layout audit — narrow viewport bounding sweep', { tag: '
   ]
 
   for (const vp of narrowViewports) {
-    test.describe(`viewport ${vp.name}`, () => {
+    test.describe(`viewport ${vp.name}`, { tag: '@mobile' }, () => {
       test.use(vp)
       for (const route of NARROW_ROUTES) {
         test(`${route} — no horizontal overflow / clipped controls`, { tag: '@mobile' }, async ({ page, env }) => {
@@ -1093,10 +1093,10 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
     await expect(page.locator('h1').first()).toBeVisible()
   }
 
-  test.describe('390x844', () => {
+  test.describe('390x844', { tag: ['@regression', '@mobile'] }, () => {
     test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
     for (const route of HEADER_ROUTES) {
-      test(`${route} — no horizontal overflow and single-line action buttons`, async ({ page, env }) => {
+      test(`${route} — no horizontal overflow and single-line action buttons`, { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
         await openLocal(page, env, route)
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
         expect(overflow).toBeLessThanOrEqual(0)
@@ -1117,7 +1117,7 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
       })
     }
 
-    test('app shell uses dynamic viewport height', async ({ page, env }) => {
+    test('app shell uses dynamic viewport height', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
       await openLocal(page, env, '/')
       const shell = page.locator('div.h-screen-dvh').first()
       await expect(shell).toBeVisible()
@@ -1126,9 +1126,9 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
     })
   })
 
-  test.describe('1280x800', () => {
+  test.describe('1280x800', { tag: '@regression' }, () => {
     test.use({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false })
-    test('CardHeader renders as a row on desktop', async ({ page, env }) => {
+    test('CardHeader renders as a row on desktop', { tag: '@regression' }, async ({ page, env }) => {
       await openLocal(page, env, '/admin/connectors')
       const headers = page.locator('.card-header')
       if ((await headers.count()) === 0) test.skip(true, 'no CardHeader on this route')
