@@ -3,13 +3,17 @@
 Removing the community library must not remove the in-code modulo registry:
 ``get_primitive`` / ``get_primitive_by_slug`` / ``_re_read_primitive`` still
 fall back to it on a DB miss, and ``list_primitives`` still serves it on the
-``source="modulo"`` and default (merged) paths.
+``source="modulo"`` and default (merged) paths, while every other ``source``
+value (local / registry / community) reaches the SQL filter with an exact
+COUNT.
 """
 
+import asyncio
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import ProgrammingError
 
 from farna.core.library_service import (
     _MODULO_PRIMITIVES,
@@ -184,59 +188,86 @@ class TestFilterModulo:
 # ---------------------------------------------------------------------------
 
 
-class TestListPrimitivesModuloSource:
-    async def test_paginates_registry_with_has_more(self) -> None:
-        native = [p for p in _MODULO_PRIMITIVES if p.tier != "in_dev"]
-        result = await list_primitives(_session(), uuid.uuid4(), source="modulo", page=1, page_size=1)
-        assert len(result.items) == 1
-        assert result.total == len(native)
-        assert result.has_more is (len(native) > 1)
-        assert result.next_cursor is None
+def _org_page(items: list[object], total: int, next_cursor: str | None = None) -> PageResult:
+    return PageResult(items=items, total=total, page=1, page_size=20, next_cursor=next_cursor)
 
-    async def test_last_page_has_no_more(self) -> None:
-        result = await list_primitives(_session(), uuid.uuid4(), source="modulo", page=1, page_size=10_000)
+
+async def _list(lister: AsyncMock, registry: list[object] | None = None, **kwargs: object) -> PageResult:
+    with (
+        patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
+        patch(f"{_MODULE}.list_library_primitives", new=lister),
+        patch(f"{_MODULE}._MODULO_PRIMITIVES", registry if registry is not None else [_BUILTIN]),
+    ):
+        return await list_primitives(_session(), uuid.uuid4(), **kwargs)
+
+
+class TestListPrimitivesSourceFilter:
+    @pytest.mark.parametrize("source", ["community", "registry"])
+    async def test_db_only_source_reaches_sql_filter_with_exact_total(self, source: str) -> None:
+        row = _prim()
+        lister = AsyncMock(return_value=_org_page([row], total=7))
+        result = await _list(lister, source=source)
+        assert lister.await_args.kwargs["source"] == source
+        assert result.items == [row]
+        assert result.total == 7
+        assert result.has_more is True
+
+    async def test_local_source_excludes_builtins(self) -> None:
+        row = _prim()
+        lister = AsyncMock(return_value=_org_page([row], total=1))
+        result = await _list(lister, source="local")
+        assert lister.await_args.kwargs["source"] == "local"
+        assert result.items == [row]
+        assert result.total == 1
         assert result.has_more is False
 
-    async def test_default_excludes_in_dev_tier(self) -> None:
+    async def test_modulo_source_appends_whole_registry(self) -> None:
         in_dev = _prim(tier="in_dev")
-        with patch(f"{_MODULE}._MODULO_PRIMITIVES", [_BUILTIN, in_dev]):
-            result = await list_primitives(_session(), uuid.uuid4(), source="modulo")
-        assert in_dev not in result.items
-        assert _BUILTIN in result.items
+        lister = AsyncMock(return_value=_org_page([], total=0))
+        result = await _list(lister, registry=[_BUILTIN, in_dev], source="modulo")
+        assert lister.await_args.kwargs["source"] == "modulo"
+        assert result.items == [_BUILTIN]
+        assert result.total == 1
 
     async def test_empty_excluded_tiers_keeps_in_dev(self) -> None:
         in_dev = _prim(tier="in_dev")
-        with patch(f"{_MODULE}._MODULO_PRIMITIVES", [_BUILTIN, in_dev]):
-            result = await list_primitives(_session(), uuid.uuid4(), source="modulo", excluded_tiers=[])
-        assert in_dev in result.items
+        lister = AsyncMock(return_value=_org_page([], total=0))
+        result = await _list(lister, registry=[_BUILTIN, in_dev], source="modulo", excluded_tiers=[])
+        assert result.items == [_BUILTIN, in_dev]
 
 
 class TestListPrimitivesDefaultMerge:
     async def test_org_page_merged_with_registry(self) -> None:
         org_row = _prim()
+        org_in_dev = _prim(tier="in_dev")
         in_dev = _prim(tier="in_dev")
-        org_page = PageResult(items=[org_row], total=3, page=1, page_size=20, next_cursor="c2")
-        lister = AsyncMock(return_value=org_page)
-        with (
-            patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
-            patch(f"{_MODULE}.list_library_primitives", new=lister),
-            patch(f"{_MODULE}._MODULO_PRIMITIVES", [_BUILTIN, in_dev]),
-        ):
-            result = await list_primitives(_session(), uuid.uuid4())
+        lister = AsyncMock(return_value=_org_page([org_row, org_in_dev], total=3, next_cursor="c2"))
+        result = await _list(lister, registry=[_BUILTIN, in_dev])
+        assert lister.await_args.kwargs["source"] is None
+        assert lister.await_args.kwargs["excluded_tiers"] == ["in_dev"]
         assert result.items == [org_row, _BUILTIN]
         assert result.total == 4
         assert result.has_more is True
         assert result.next_cursor == "c2"
-        assert lister.await_args.kwargs["source"] is None
 
-    async def test_empty_excluded_tiers_keeps_in_dev_builtins(self) -> None:
-        in_dev = _prim(tier="in_dev")
-        org_page = PageResult(items=[], total=0, page=1, page_size=20)
-        with (
-            patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
-            patch(f"{_MODULE}.list_library_primitives", new=AsyncMock(return_value=org_page)),
-            patch(f"{_MODULE}._MODULO_PRIMITIVES", [in_dev]),
-        ):
-            result = await list_primitives(_session(), uuid.uuid4(), excluded_tiers=[])
-        assert result.items == [in_dev]
-        assert result.has_more is False
+
+class TestListPrimitivesDegradesOnDbFailure:
+    async def test_programming_error_serves_builtins(self, caplog: pytest.LogCaptureFixture) -> None:
+        lister = AsyncMock(side_effect=ProgrammingError("stmt", {}, Exception("no table")))
+        with caplog.at_level("WARNING", logger=_MODULE):
+            result = await _list(lister)
+        assert result.items == [_BUILTIN]
+        assert result.total == 1
+        assert any("DB not migrated" in rec.message for rec in caplog.records)
+
+    async def test_unexpected_error_is_logged_and_builtins_served(self, caplog: pytest.LogCaptureFixture) -> None:
+        lister = AsyncMock(side_effect=RuntimeError("boom"))
+        with caplog.at_level("ERROR", logger=_MODULE):
+            result = await _list(lister)
+        assert result.items == [_BUILTIN]
+        assert any("DB query failed" in rec.message for rec in caplog.records)
+
+    async def test_cancellation_propagates(self) -> None:
+        lister = AsyncMock(side_effect=asyncio.CancelledError())
+        with pytest.raises(asyncio.CancelledError):
+            await _list(lister)

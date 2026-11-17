@@ -41,7 +41,9 @@ from jwt import InvalidTokenError as JWTError
 # `mcp` builds `class JSONRPCMessage(RootModel[...])` at import time. Coverage's
 # single-module source-spec resolution imports-then-rolls-back modules
 # (coverage 7.16.2), which can delete `pydantic.root_model` while leaving a
-# dangling `RootModel` attribute, crashing that specialization. See
+# dangling `RootModel` attribute, crashing that specialization. See the
+# "pydantic.root_model residency guard" note in backend/tests/conftest.py
+# (the dedicated regression test was removed with the community library).
 import pydantic.root_model  # noqa: F401  # isort: skip
 
 from mcp.server.fastmcp import FastMCP

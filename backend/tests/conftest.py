@@ -30,13 +30,13 @@ os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 #
 # pytest-cov starts coverage during ``pytest_load_initial_conftests``, BEFORE
 # this conftest is imported. When coverage is started with a single-module
-# source spec (e.g. ``--cov=farna.core.library_service.community``),
+# source spec (e.g. ``--cov=farna.core.library_service``),
 # coverage.py's ``InOrOut.set_matchers_depending_on_syspath()`` resolves the
 # module via ``find_spec`` — which executes the target's parent packages —
 # inside ``sys_modules_saved()``, and ``SysModuleSaver.restore()`` then
 # deletes every module imported during that block from ``sys.modules``.
-# That block's import chain (``library_service`` -> ``community`` ->
-# settings -> pydantic_settings.sources.utils)
+# That block's import chain (e.g. ``library_service`` -> ``settings`` ->
+# ``pydantic_settings.sources.utils``)
 # triggers pydantic's lazy ``pydantic.root_model`` load; the rollback removes
 # the submodule from ``sys.modules`` but leaves the ``RootModel`` attribute
 # bound on the already-imported ``pydantic`` package. Every later
@@ -50,8 +50,9 @@ os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 # (explicit submodule imports bypass the dangling parent attribute) and every
 # later RootModel generic specialization can resolve its module. A pre-import
 # inside product code would NOT work: product modules first execute inside the
-# rollback block, so their import is deleted again. Guarded by
-# coverage import guard test.
+# rollback block, so their import is deleted again. (The dedicated regression
+# test, ``tests/unit/library_sync/test_coverage_source_import_guard.py``, was
+# removed with the community library; this import is kept as the defence.)
 import sys
 from pathlib import Path
 

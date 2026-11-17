@@ -783,6 +783,50 @@ def _filter_modulo(
     return modulo
 
 
+async def _load_org_page(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    *,
+    primitive_type: str | None,
+    primitive_types: list[str] | None,
+    search: str | None,
+    page: int,
+    page_size: int,
+    source: str | None,
+    cursor: str | None,
+    excluded_tiers: list[str] | None,
+) -> PageResult[LibraryPrimitive]:
+    """Fetch the org page, degrading gracefully to an empty page on DB failure."""
+    org_page: PageResult[LibraryPrimitive] = PageResult(items=[], total=0, page=page, page_size=page_size)
+
+    async def _query(s: AsyncSession) -> None:
+        nonlocal org_page
+        org_page = await list_library_primitives(
+            s,
+            org_id=org_id,
+            page=page,
+            page_size=page_size,
+            primitive_type=primitive_type,
+            primitive_types=primitive_types,
+            search=search,
+            source=source,
+            cursor=cursor,
+            excluded_tiers=excluded_tiers,
+        )
+
+    try:
+        # Reuse the caller's transaction (routes open one before calling in);
+        # nesting session.begin() raised InvalidRequestError (FAR-2286).
+        await _scoped_execute(session, org_id, _query)
+    except ProgrammingError:
+        logger.warning("list_primitives — DB not migrated for org %s", org_id)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("list_primitives — DB query failed for org %s", org_id)
+    return org_page
+
+
 async def list_primitives(
     session: AsyncSession,
     org_id: uuid.UUID,
@@ -796,90 +840,68 @@ async def list_primitives(
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
 ) -> PageResult[LibraryPrimitive]:
-    """Return org-scoped library primitives merged with built-in modulo registry.
+    """Return org-scoped and Native library primitives merged into a single page.
 
-    ``source`` restricts the result to exactly that source value (e.g.
-    ``source="local"`` returns only the org's own saved primitives,
-    ``source="modulo"`` returns only the built-in modulo registry).
+    ``source`` (when given) restricts the result to exactly that source
+    value — e.g. ``source="modulo"`` returns only Native library built-ins,
+    ``source="local"`` returns only the org's own saved primitives, and
+    ``source="registry"`` / ``source="community"`` return only the org's DB
+    rows carrying that source. When omitted, all sources are merged. The
+    filter is applied in SQL alongside the COUNT, so ``total`` and
+    ``has_more`` stay exact on the ``?source=`` path.
+
+    ``primitive_types`` (when given) restricts the result to any of the
+    listed primitive types, e.g. ``["workflow", "agent"]``. It takes
+    precedence over the single-value ``primitive_type`` filter.
+
+    A failing org query degrades to an empty org page (logged) rather than
+    failing the whole listing, so the Native built-ins are still served.
     """
     if excluded_tiers is None:
         excluded_tiers = ["in_dev"]
+    org_page = await _load_org_page(
+        session,
+        org_id,
+        primitive_type=primitive_type,
+        primitive_types=primitive_types,
+        search=search,
+        page=page,
+        page_size=page_size,
+        source=source,
+        cursor=cursor,
+        excluded_tiers=excluded_tiers,
+    )
 
-    # Handle source filter
-    if source == "modulo":
+    # ``source`` and ``excluded_tiers`` are applied inside
+    # ``list_library_primitives`` (they share the COUNT and row-page
+    # ``conditions``), so ``org_page.total`` is already the exact filtered
+    # universe count and is passed through unchanged.
+    org_items = list(org_page.items)
+    modulo: list[LibraryPrimitive] = []
+    if source is None or source == "modulo":
         modulo = _filter_modulo(
             primitive_type=primitive_type,
             primitive_types=primitive_types,
             search=search,
         )
-        if excluded_tiers:
-            modulo = [p for p in modulo if p.tier not in excluded_tiers]
-        total = len(modulo)
-        start = (page - 1) * page_size
-        end = start + page_size
-        items = modulo[start:end]
-        has_more = end < total
-        return PageResult(
-            items=items,
-            total=total,
-            page=page,
-            page_size=page_size,
-            next_cursor=None,
-            has_more=has_more,
-        )
-    if source == "local":
-        return await _with_org_txn(
-            session,
-            org_id,
-            lambda s: list_library_primitives(
-                s,
-                org_id=org_id,
-                page=page,
-                page_size=page_size,
-                primitive_type=primitive_type,
-                primitive_types=primitive_types,
-                search=search,
-                source=source,
-                cursor=cursor,
-                excluded_tiers=excluded_tiers,
-            ),
-        )
-
-    # Default: merge org page with modulo registry
-    org_page = await _with_org_txn(
-        session,
-        org_id,
-        lambda s: list_library_primitives(
-            s,
-            org_id=org_id,
-            page=page,
-            page_size=page_size,
-            primitive_type=primitive_type,
-            primitive_types=primitive_types,
-            search=search,
-            source=None,  # Don't filter by source in DB query
-            cursor=cursor,
-            excluded_tiers=excluded_tiers,
-        ),
-    )
-
-    modulo = _filter_modulo(
-        primitive_type=primitive_type,
-        primitive_types=primitive_types,
-        search=search,
-    )
     if excluded_tiers:
+        org_items = [p for p in org_items if p.tier not in excluded_tiers]
         modulo = [p for p in modulo if p.tier not in excluded_tiers]
 
-    all_items: list[LibraryPrimitive] = list(org_page.items) + modulo
+    all_items: list[LibraryPrimitive] = org_items + modulo
     total = org_page.total + len(modulo)
+    # ``has_more`` is derived here rather than forwarded from ``org_page`` so
+    # the envelope can never contradict its own items.
     has_more = (page - 1) * page_size + len(all_items) < total
-
     return PageResult(
         items=all_items,
         total=total,
         page=page,
         page_size=page_size,
+        # ``next_cursor`` continues the org slice only. The in-memory modulo
+        # built-ins are bounded and are re-merged in full on every page; they
+        # share no ordering key with the org rows, so the asymmetry is
+        # deliberate. ``has_more`` is the authoritative "another page" signal.
         next_cursor=org_page.next_cursor,
         has_more=has_more,
     )

@@ -3745,19 +3745,37 @@ class PipelineExecutor:
         org_id: uuid.UUID,
         agent_ids: list[uuid.UUID],
     ) -> tuple[dict[str, set[str]], set[str]]:
-        """Load connector grants for referenced agents."""
+        """Load connector grants and apply the FAR-764 execution gate.
+
+        Agents from a ``community_sourced`` collection install (registry-sourced
+        installs still set it) that the operator has not yet granted are
+        returned in the gated set and lose their connector grants
+        (default-deny until ``grant_collection_agents`` flips the install).
+        """
         from sqlalchemy import select
 
         from farna.core.capability_scope import agent_granted_connector_types
         from farna.db.models.agent import Agent
+        from farna.db.models.collection_install import CollectionInstall
 
         grants: dict[str, set[str]] = {}
+        gated: set[str] = set()
         if not agent_ids:
-            return grants, set()
+            return grants, gated
         agent_rows = (await session.execute(select(Agent).where(Agent.id.in_(agent_ids), Agent.organisation_id == org_id))).scalars().all()
+        install_ids = {cid for agent in agent_rows if (cid := getattr(agent, "collection_install_id", None)) is not None}
+        install_rows = []
+        if install_ids:
+            install_rows = (await session.execute(select(CollectionInstall).where(CollectionInstall.install_id.in_(install_ids)))).scalars().all()
+        gated_installs = {str(ci.install_id) for ci in install_rows if ci.community_sourced and not ci.agents_granted}
         for agent in agent_rows:
-            grants[str(agent.id)] = agent_granted_connector_types(agent.connector_type_refs)
-        return grants, set()
+            agent_key = str(agent.id)
+            grants[agent_key] = agent_granted_connector_types(agent.connector_type_refs)
+            collection_install_id = getattr(agent, "collection_install_id", None)
+            if collection_install_id is not None and str(collection_install_id) in gated_installs:
+                gated.add(agent_key)
+                grants.pop(agent_key, None)
+        return grants, gated
 
     async def _resolve_run_connector_scope(
         self,
@@ -3775,6 +3793,11 @@ class PipelineExecutor:
 
         The connector scope is deny-by-default: only connector types granted by
         referenced agents are returned.
+
+        Also enforces the execution gate (FAR-764 / ADR 032 D2): agents whose
+        ``collection_install_id`` references a community-sourced,
+        not-yet-granted install get NO connector scope (default-deny) and are
+        recorded in ``_community_gated_agents`` for the node-level gate.
         """
         if graph_json is None:
             return self._run_connector_scope
