@@ -98,6 +98,16 @@ REDIS_SRC="${BUILD_ROOT}/src/redis-${REDIS_VERSION}"
   cd "${REDIS_SRC}"
   make -j"$(sysctl -n hw.ncpu)" BUILD_TLS=no
 )
+# BEGIN bundled_bin_layout
+# The launcher exports this directory (Contents/Resources/bundle/bin) as
+# FARNA_CONTROL_BUNDLED_BIN_DIR and the supervisor resolves every bundled
+# binary out of it, so this is the one authoritative location: real binaries
+# stay in pg/ and redis/, and bin/ holds only in-bundle relative symlinks. A
+# copy in a second directory would drift; do not add one. The build-time gate
+# below resolves the directory the compiled launcher actually exports and
+# verifies every name in farna.launcher.entry.REQUIRED_BUNDLED_BINARIES there.
+# BEGIN markers are executed verbatim by
+# backend/tests/unit/test_macos_installer_normalize.py.
 mkdir -p "${BUNDLE_ROOT}/redis" "${BUNDLE_ROOT}/bin"
 cp "${REDIS_SRC}/src/redis-server" "${BUNDLE_ROOT}/redis/redis-server"
 cp "${REDIS_SRC}/src/redis-cli" "${BUNDLE_ROOT}/redis/redis-cli"
@@ -107,6 +117,7 @@ done
 for binary in redis-server redis-cli; do
   ln -s "../redis/${binary}" "${BUNDLE_ROOT}/bin/${binary}"
 done
+# END bundled_bin_layout
 
 # Build and copy the real Vue/Vite distribution. The macOS workflow pins Node
 # 22 and pnpm 11 before invoking this script; never ship an API-only bundle.
@@ -229,7 +240,9 @@ int main(int argc, char **argv) {
     setenv("PATH", path_env, 1);
     char bin_dir[4096];
     snprintf(bin_dir, sizeof(bin_dir), "%s/bin", bundle);
-    setenv("MODULO_BUNDLED_BIN_DIR", bin_dir, 1);
+    /* The resolver reads exactly this variable name; the build gate below
+       compares it with farna.launcher.entry.BUNDLED_BIN_DIR_ENV. */
+    setenv("FARNA_CONTROL_BUNDLED_BIN_DIR", bin_dir, 1);
     char frontend_dist[4096];
     snprintf(frontend_dist, sizeof(frontend_dist), "%s/frontend-dist", bundle);
     setenv("MODULO_SERVE_SPA", "1", 1);
@@ -251,6 +264,50 @@ int main(int argc, char **argv) {
 EOF
 clang -Wall -Wextra -Werror -o "${APP_ROOT}/Contents/MacOS/modulo" "${BUILD_ROOT}/launcher.c"
 chmod 755 "${APP_ROOT}/Contents/MacOS/modulo"
+
+# Producer/consumer contract gate (FAR-2554). The launcher exports an env name
+# and a bin-dir expression; the packaged resolver reads that name and resolves
+# that directory. Both are read back out of the compiled launcher's source and
+# fed to the resolver, so a rename on either side, or a layout move, fails THIS
+# BUILD instead of the installed app's first boot ("bundled binaries not found
+# at .../runtime/bundled/bin", an env value the resolver never read).
+# BEGIN bundled_bin_dir_contract_gate
+LAUNCHER_BIN_DIR_ENV="$(sed -n 's/.*setenv("\([A-Za-z_][A-Za-z0-9_]*\)", bin_dir, 1).*/\1/p' "${BUILD_ROOT}/launcher.c")"
+LAUNCHER_BIN_DIR_FORMAT="$(sed -n 's/.*snprintf(bin_dir, sizeof(bin_dir), "\([^"]*\)", bundle).*/\1/p' "${BUILD_ROOT}/launcher.c")"
+if [[ -z "${LAUNCHER_BIN_DIR_ENV}" || -z "${LAUNCHER_BIN_DIR_FORMAT}" ]]; then
+  echo "::error::could not read the bundled bin dir contract from ${BUILD_ROOT}/launcher.c (env name or bin dir expression is missing)" >&2
+  exit 1
+fi
+LAUNCHER_BIN_DIR="$(printf "${LAUNCHER_BIN_DIR_FORMAT}" "${BUNDLE_ROOT}")"
+PYTHONPATH="${BUNDLE_ROOT}/backend/src:${BUNDLE_ROOT}/backend/.venv/lib/python3.12/site-packages" \
+  env "${LAUNCHER_BIN_DIR_ENV}=${LAUNCHER_BIN_DIR}" \
+  "${BUNDLE_ROOT}/backend/.venv/bin/python" - "${BUNDLE_ROOT}" "${LAUNCHER_BIN_DIR_ENV}" "${LAUNCHER_BIN_DIR}" <<'PY'
+import sys
+from pathlib import Path
+
+from farna.launcher.entry import BUNDLED_BIN_DIR_ENV, REQUIRED_BUNDLED_BINARIES, resolve_bin_dir
+
+bundle = Path(sys.argv[1])
+exported_env_name = sys.argv[2]
+exported_bin_dir = Path(sys.argv[3])
+errors = []
+if exported_env_name != BUNDLED_BIN_DIR_ENV:
+    errors.append(f"launcher exports {exported_env_name!r} but the resolver reads {BUNDLED_BIN_DIR_ENV!r}")
+resolved = resolve_bin_dir()
+if resolved != exported_bin_dir:
+    errors.append(f"launcher exports {exported_bin_dir} but the resolver returns {resolved}")
+if resolved != bundle / "bin":
+    errors.append(f"the bundle installs binaries into {bundle / 'bin'} but the launcher resolves {resolved}")
+missing = [name for name in REQUIRED_BUNDLED_BINARIES if not (resolved / name).exists()]
+if missing:
+    errors.append(f"missing from the launcher-resolved bin dir {resolved}: {', '.join(missing)}")
+if errors:
+    for error in errors:
+        print(f"::error::{error}", file=sys.stderr)
+    raise SystemExit(1)
+print(f"bundled bin dir contract: env={BUNDLED_BIN_DIR_ENV} dir={resolved} binaries={len(REQUIRED_BUNDLED_BINARIES)}")
+PY
+# END bundled_bin_dir_contract_gate
 
 # Single source of truth for the app-bundle metadata: the shared helper in
 # scripts/ owns the Info.plist contents (the gate0 filter watches it too).

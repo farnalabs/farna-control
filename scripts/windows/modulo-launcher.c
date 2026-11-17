@@ -119,7 +119,9 @@ static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *b
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"PATH", path_value) ||
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"PYTHONPATH", python_path) ||
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"PYTHONHOME", python_home) ||
-        !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"MODULO_BUNDLED_BIN_DIR", bundle_bin_dir)) {
+        /* Must equal farna.launcher.entry.BUNDLED_BIN_DIR_ENV; the resolver
+         * reads this exact name and the staged layout is <bundle>\bin. */
+        !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_BUNDLED_BIN_DIR", bundle_bin_dir)) {
         free(block);
         return FALSE;
     }

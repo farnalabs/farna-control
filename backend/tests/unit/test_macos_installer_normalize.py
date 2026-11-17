@@ -8,12 +8,15 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import threading
 from pathlib import Path
 
 import pytest
 import yaml
+
+from farna.launcher import entry as entry_module
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -961,3 +964,261 @@ def test_macos_codesign_retry_stops_at_the_bounded_attempt_cap(tmp_path: Path) -
     assert result.returncode == 1
     assert "fake_codesign_calls=3" in result.stdout
     assert "persisted through 3 attempt(s)" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# FAR-2554: signing and notarization succeeded, then the post-install smoke
+# test failed because the installed app could not start its bundled services:
+#
+#   bundled binaries not found at
+#   .../Modulo-0.3.328.app/Contents/Resources/bundle/runtime/bundled/bin
+#   (missing: initdb, postgres, pg_isready, redis-server, redis-cli)
+#
+# The build installed the binaries in <bundle>/bin (in-bundle relative
+# symlinks) and the compiled launcher exported that directory, but the resolver
+# read a DIFFERENT env name, so the export was ignored and the boot fell
+# through to the <sys.prefix>/bundled/bin default that no bundle populates.
+# These tests pin one env-var name across every producer and consumer, pin the
+# exported directory to the layout the build populates, and execute the build
+# gate against the shipped layout plus three mutations.
+# ---------------------------------------------------------------------------
+
+_PRODUCER_CONSUMER_CONTRACT = [
+    # producer: the macOS bundle's compiled launcher.
+    ("scripts/macos/build-native-bundle.sh", r'setenv\("([A-Za-z_][A-Za-z0-9_]*)", bin_dir, 1\)'),
+    # producer: the Windows bundle's compiled launcher.
+    ("scripts/windows/modulo-launcher.c", r'L"([A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)"'),
+    # producer: the Linux tarball installer's pre-upgrade dump invocation.
+    ("scripts/install.sh", r'^\s+([A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)="'),
+    # producer: the Linux tarball bundle's launcher wrapper.
+    (".github/workflows/bundle-release.yml", r"export ([A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)="),
+    # consumer: the launcher entry point's resolver.
+    ("backend/src/farna/launcher/entry.py", r'BUNDLED_BIN_DIR_ENV = "([A-Z_][A-Z0-9_]*)"'),
+    # consumer: the upgrade helper's resolver (same contract, own literal).
+    ("backend/src/farna/launcher/upgrade.py", r'os\.environ\.get\("([A-Z_][A-Z0-9_]*BUNDLED_BIN_DIR)"\)'),
+]
+
+
+def _bundle_build_script() -> str:
+    script_path = REPO_ROOT / "scripts" / "macos" / "build-native-bundle.sh"
+    assert script_path.is_file()
+    return script_path.read_text(encoding="utf-8")
+
+
+def _launcher_c_source(script: str) -> str:
+    """Return the launcher C heredoc body exactly as the build compiles it."""
+    lines = script.splitlines()
+    opener = next(line for line in lines if "launcher.c" in line and "<<'EOF'" in line)
+    start = script.index(opener) + len(opener) + 1
+    end = script.index("\nEOF\n", start)
+    return script[start:end] + "\n"
+
+
+def _launcher_bin_dir_env_name(c_source: str) -> str:
+    match = re.search(r'setenv\("([A-Za-z_][A-Za-z0-9_]*)", bin_dir, 1\)', c_source)
+    assert match is not None, c_source
+    return match.group(1)
+
+
+def _launcher_bin_dir_format(c_source: str) -> str:
+    match = re.search(r'snprintf\(bin_dir, sizeof\(bin_dir\), "([^"]*)", bundle\)', c_source)
+    assert match is not None, c_source
+    return match.group(1)
+
+
+def _launcher_exported_bin_dir(c_source: str, bundle_root: Path) -> Path:
+    """Apply the launcher's own format string to a bundle root (as C would)."""
+    return Path(_launcher_bin_dir_format(c_source) % str(bundle_root))
+
+
+@pytest.mark.parametrize(("relative_path", "pattern"), _PRODUCER_CONSUMER_CONTRACT)
+def test_bundled_bin_dir_env_name_agrees_across_producers_and_consumers(relative_path: str, pattern: str) -> None:
+    """FAR-2554: the export and the read must be the SAME name on every platform.
+
+    The name was renamed on the consumer side only, so every native launcher
+    exported a variable nothing read and the boot resolved
+    ``<sys.prefix>/bundled/bin`` instead of the directory the bundle populates.
+    """
+    text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+    names = set(re.findall(pattern, text, re.MULTILINE))
+
+    assert names, f"no bundled-bin-dir env name found in {relative_path}"
+    assert names == {entry_module.BUNDLED_BIN_DIR_ENV}, relative_path
+
+
+def test_macos_launcher_bin_dir_expression_is_the_directory_the_bundle_populates() -> None:
+    """FAR-2554: the exported directory is the one the layout block creates."""
+    script = _bundle_build_script()
+    c_source = _launcher_c_source(script)
+    bundle_root = Path("/tmp/modulo-bundle")
+
+    assert _launcher_bin_dir_format(c_source) == "%s/bin"
+    assert _launcher_exported_bin_dir(c_source, bundle_root) == bundle_root / "bin"
+
+    layout = _extract_marked_bash(script, "bundled_bin_layout")
+    assert 'mkdir -p "${BUNDLE_ROOT}/redis" "${BUNDLE_ROOT}/bin"' in layout
+    assert 'ln -s "../pg/bin/${binary}" "${BUNDLE_ROOT}/bin/${binary}"' in layout
+    assert 'ln -s "../redis/${binary}" "${BUNDLE_ROOT}/bin/${binary}"' in layout
+
+
+def _write_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _seed_bundle_binaries(tmp_path: Path) -> tuple[Path, Path]:
+    """Create the pg/ and redis/ payload trees the real build produces."""
+    bundle_root = tmp_path / "bundle"
+    for name in ("initdb", "postgres", "pg_isready", "pg_dump", "psql"):
+        _write_executable(bundle_root / "pg" / "bin" / name)
+    redis_src = tmp_path / "redis-src"
+    for name in ("redis-server", "redis-cli"):
+        _write_executable(redis_src / "src" / name)
+    return bundle_root, redis_src
+
+
+def _stub_bundle_python(bundle_root: Path) -> None:
+    """Stand in for the bundle venv interpreter the build gate invokes.
+
+    The gate sets PYTHONPATH to the *bundle's* backend source copy; the stub
+    points the import path at this checkout so the gate's real resolver runs.
+    """
+    repo_src = (REPO_ROOT / "backend" / "src").as_posix()
+    interpreter = Path(sys.executable).as_posix()
+    _write_executable(
+        bundle_root / "backend" / ".venv" / "bin" / "python",
+        "#!/usr/bin/env bash\n" + f'export PYTHONPATH="{repo_src}"\n' + f'exec "{interpreter}" "$@"\n',
+    )
+
+
+def _bundle_contract_driver(tmp_path: Path, c_source: str, layout: str) -> Path:
+    """A driver that runs the extracted layout block, then the build gate."""
+    gate = _extract_marked_bash(_bundle_build_script(), "bundled_bin_dir_contract_gate")
+    build_root = tmp_path / "build"
+    build_root.mkdir(parents=True, exist_ok=True)
+    (build_root / "launcher.c").write_text(c_source, encoding="utf-8")
+    driver = tmp_path / "bundle_contract_driver.sh"
+    driver.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n" + 'BUNDLE_ROOT="$1"\nREDIS_SRC="$2"\nBUILD_ROOT="$3"\n' + layout + "\n" + gate + "\n",
+        encoding="utf-8",
+    )
+    return driver
+
+
+def _run_bundle_contract(tmp_path: Path, c_source: str, layout: str) -> subprocess.CompletedProcess[str]:
+    bundle_root, redis_src = _seed_bundle_binaries(tmp_path)
+    _stub_bundle_python(bundle_root)
+    driver = _bundle_contract_driver(tmp_path, c_source, layout)
+    return _run_bash_file(
+        driver,
+        [bundle_root.as_posix(), redis_src.as_posix(), (tmp_path / "build").as_posix()],
+        cwd=tmp_path,
+    )
+
+
+def test_macos_bundle_layout_binaries_resolve_at_the_launcher_exported_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAR-2554: the produced layout and the resolver agree, binary for binary."""
+    script = _bundle_build_script()
+    layout = _extract_marked_bash(script, "bundled_bin_layout")
+    bundle_root, redis_src = _seed_bundle_binaries(tmp_path)
+    driver = tmp_path / "layout_only_driver.sh"
+    driver.write_text(
+        '#!/usr/bin/env bash\nset -euo pipefail\nBUNDLE_ROOT="$1"\nREDIS_SRC="$2"\n' + layout + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run_bash_file(driver, [bundle_root.as_posix(), redis_src.as_posix()], cwd=tmp_path)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+
+    c_source = _launcher_c_source(script)
+    env_name = _launcher_bin_dir_env_name(c_source)
+    exported = _launcher_exported_bin_dir(c_source, bundle_root)
+
+    # The launcher exports this value into the child environment; the resolver
+    # must return exactly that directory. The incident was a value the resolver
+    # never read, so it fell through to <sys.prefix>/bundled/bin.
+    monkeypatch.setenv(env_name, str(exported))
+    assert entry_module.resolve_bin_dir() == exported
+    assert exported == bundle_root / "bin"
+
+    # The launcher's own boot gate must accept the produced layout. It appends
+    # ".exe" on Windows, so the macOS layout's extensionless names are only
+    # that gate's contract on POSIX (CI runs this test on Linux).
+    if os.name != "nt":
+        entry_module._verify_bundled_binaries(exported)
+
+    symlinked = 0
+    for name in entry_module.REQUIRED_BUNDLED_BINARIES:
+        binary = exported / name
+        assert binary.exists(), name
+        if not binary.is_symlink():
+            continue
+        symlinked += 1
+        target = binary.readlink()
+        assert not Path(target).is_absolute(), (name, target)
+        assert binary.resolve().is_relative_to(bundle_root.resolve()), (name, target)
+
+    # POSIX creates the real relative symlinks the bundle ships; Windows may
+    # materialise the same layout as copies, so only assert the shape there.
+    if os.name != "nt":
+        assert symlinked == len(entry_module.REQUIRED_BUNDLED_BINARIES)
+
+
+def test_macos_bundle_build_gate_passes_for_the_shipped_producer_contract(tmp_path: Path) -> None:
+    """FAR-2554: the shipped launcher + shipped layout satisfy the build gate."""
+    script = _bundle_build_script()
+    result = _run_bundle_contract(tmp_path, _launcher_c_source(script), _extract_marked_bash(script, "bundled_bin_layout"))
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert f"bundled bin dir contract: env={entry_module.BUNDLED_BIN_DIR_ENV}" in result.stdout
+    assert "dir=" in result.stdout
+
+
+def test_macos_bundle_build_gate_fails_on_an_env_name_drift(tmp_path: Path) -> None:
+    """FAR-2554 mutation: the pre-rebrand export name must fail the build."""
+    script = _bundle_build_script()
+    shipped = _launcher_c_source(script)
+    drifted = shipped.replace(
+        f'setenv("{entry_module.BUNDLED_BIN_DIR_ENV}"',
+        'setenv("MODULO_BUNDLED_BIN_DIR"',
+        1,
+    )
+    assert drifted != shipped
+
+    result = _run_bundle_contract(tmp_path, drifted, _extract_marked_bash(script, "bundled_bin_layout"))
+
+    assert result.returncode != 0
+    assert "but the resolver reads" in result.stderr
+
+
+def test_macos_bundle_build_gate_fails_when_the_launcher_resolves_another_directory(tmp_path: Path) -> None:
+    """FAR-2554 mutation: the observed ``runtime/bundled/bin`` path must fail the build."""
+    script = _bundle_build_script()
+    shipped = _launcher_c_source(script)
+    drifted = shipped.replace('"%s/bin", bundle', '"%s/runtime/bundled/bin", bundle', 1)
+    assert drifted != shipped
+
+    result = _run_bundle_contract(tmp_path, drifted, _extract_marked_bash(script, "bundled_bin_layout"))
+
+    assert result.returncode != 0
+    assert "but the launcher resolves" in result.stderr
+    assert "missing from the launcher-resolved bin dir" in result.stderr
+
+
+def test_macos_bundle_build_gate_fails_when_a_required_binary_is_missing(tmp_path: Path) -> None:
+    """FAR-2554 mutation: a dropped binary reproduces the incident's missing list."""
+    script = _bundle_build_script()
+    layout = _extract_marked_bash(script, "bundled_bin_layout")
+    shipped_loop = "for binary in initdb postgres pg_isready pg_dump psql; do"
+    dropped = layout.replace(shipped_loop, "for binary in initdb postgres pg_dump psql; do")
+    assert dropped != layout
+
+    result = _run_bundle_contract(tmp_path, _launcher_c_source(script), dropped)
+
+    assert result.returncode != 0
+    assert "missing from the launcher-resolved bin dir" in result.stderr
+    assert "pg_isready" in result.stderr

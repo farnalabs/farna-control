@@ -518,7 +518,7 @@ run_pre_upgrade_dump() {
   [[ -x "${py}" ]] || die "cannot run the pre-upgrade pg_dump: no bundled runtime at ${py} (no prior native install to upgrade — remove the populated data dir or ignore)"
   info "Pre-upgrade pg_dump (enforced by FAR-672) — the bundled stack must be running..."
   if snapshot_path="$(PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
-      MODULO_BUNDLED_BIN_DIR="${old_root}/pg" \
+      FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
       "${py}" -m "${module}" --data-dir "${DATA_DIR}")"; then
     :
   else

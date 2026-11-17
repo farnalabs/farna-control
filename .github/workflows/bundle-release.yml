@@ -471,7 +471,7 @@ jobs:
           SITE_PACKAGES="$BUNDLE_ROOT/backend/.venv/lib/python3.12/site-packages"
           export PATH="$BUNDLE_ROOT/runtime/bin:$BUNDLE_ROOT/pg/bin:$BUNDLE_ROOT/redis${PATH:+:$PATH}"
           export PYTHONPATH="$BUNDLE_ROOT/backend/src:$SITE_PACKAGES"
-          export MODULO_BUNDLED_BIN_DIR="$BUNDLE_ROOT/pg/bin"
+          export FARNA_CONTROL_BUNDLED_BIN_DIR="$BUNDLE_ROOT/pg/bin"
 
           exec "$BUNDLE_ROOT/runtime/bin/python3" -c \
             'from farna.cli.main import cli; cli()' "$@"
