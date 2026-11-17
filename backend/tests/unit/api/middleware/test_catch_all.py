@@ -210,7 +210,7 @@ class TestIngestUnhandledError:
         assert event["context_json"]["path"] == "/x"
         assert event["context_json"]["correlation_id"] == "corr-1"
         assert event["context_json"]["user_id"] == "user-1"
-        assert event["environment"] == os.environ.get("FARNA_CONTROL_MODULO_ENV", "development")
+        assert event["environment"] == os.environ.get("FARNA_CONTROL_ENV", "development")
 
     async def test_ingest_skips_ingestion_when_no_org(self) -> None:
         from farna.api.middleware.catch_all import _ingest_unhandled_error

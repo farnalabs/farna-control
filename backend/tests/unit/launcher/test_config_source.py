@@ -218,6 +218,8 @@ def test_source_derives_system_url_from_the_operators_database_url(clean_launche
     assert system.startswith(expected_prefixes)
     assert "127.0.0.1" not in system
     assert "pg-pw" not in system
+    assert "modulo_system_database_url" in resolved
+    assert "farna_control_system_database_url" not in resolved
 
 
 def test_source_includes_everything_without_environment(clean_launcher_env, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -10,7 +10,7 @@ contract - importable WITHOUT SQLAlchemy/models; asyncpg-level only.
 2. Create the alembic_version table with VARCHAR(255) for branch migrations
 3. Resolve the system database URL from the accepted aliases, in priority order:
    FARNA_CONTROL_SYSTEM_DATABASE_URL, MODULO_SYSTEM_DATABASE_URL, then
-   FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL. An explicitly configured value is
+   FARNA_CONTROL_SYSTEM_DATABASE_URL. An explicitly configured value is
    fixed and published under the canonical name. Otherwise, derive a value from
    DATABASE_URL for the entrypoint env-file contract only; never publish that
    derived credential into the canonical application setting. The result is
@@ -159,7 +159,7 @@ def main() -> None:
             for name in (
                 "FARNA_CONTROL_SYSTEM_DATABASE_URL",
                 "MODULO_SYSTEM_DATABASE_URL",
-                "FARNA_CONTROL_MODULO_SYSTEM_DATABASE_URL",
+                "FARNA_CONTROL_SYSTEM_DATABASE_URL",
             )
             if os.environ.get(name, "")
         ),

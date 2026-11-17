@@ -246,9 +246,9 @@ jobs:
         if: steps.changed.outputs.changed == 'true'
         shell: bash
         env:
-          MODULO_RUNNER_HARNESS_PROXY_HOST: "127.0.0.1:${{ env.PROXY_PORT }}"
-          MODULO_RUNNER_HARNESS_DIND_HOST: "tcp://127.0.0.1:${{ env.DIND_PORT }}"
-          MODULO_RUNNER_HARNESS_NETWORK: "runner-ci-workspace"
+          FARNA_CONTROL_RUNNER_HARNESS_PROXY_HOST: "127.0.0.1:${{ env.PROXY_PORT }}"
+          FARNA_CONTROL_RUNNER_HARNESS_DIND_HOST: "tcp://127.0.0.1:${{ env.DIND_PORT }}"
+          FARNA_CONTROL_RUNNER_HARNESS_NETWORK: "runner-ci-workspace"
         run: |
           uv run --no-build --no-sync pytest tests/docker/test_bundled_runner_harness.py tests/docker/test_runners_strip_e2e.py tests/docker/test_runner_bundled.py tests/docker/test_watchdog_container.py -m docker --tb=short -q --timeout=600 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
       - name: Proxy log completeness dump (always)

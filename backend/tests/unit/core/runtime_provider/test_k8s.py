@@ -222,7 +222,7 @@ async def _drain(process: Any) -> list[Any]:
 
 class TestRegistration:
     def test_not_registered_without_env_signal(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
 
         hub = build_hub()
 
@@ -231,7 +231,7 @@ class TestRegistration:
 
     @pytest.mark.parametrize("signal", ["1", "true", "yes", "on", "registration-signal"])
     def test_registered_when_env_signal_set(self, monkeypatch: pytest.MonkeyPatch, signal: str) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", signal)
+        monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", signal)
 
         hub = build_hub()
         provider = hub.get("kubernetes")
@@ -242,7 +242,7 @@ class TestRegistration:
 
     @pytest.mark.parametrize("signal", ["0", "false", "no", "off", ""])
     def test_not_registered_when_env_signal_is_falsy(self, monkeypatch: pytest.MonkeyPatch, signal: str) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", signal)
+        monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", signal)
 
         hub = build_hub()
 
@@ -250,7 +250,7 @@ class TestRegistration:
 
     def test_not_registered_when_sdk_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A missing client SDK logs a warning and stays unregistered — boot never crashes."""
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_KUBERNETES_ENABLED", "1")
+        monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", "1")
         real_import = cast(Any, __import__)
 
         def _fake_import(name: str, *args: object, **kwargs: object) -> object:
@@ -274,8 +274,8 @@ class TestRegistration:
         """env_var_for_provider_type('kubernetes') returns the registration var."""
         from farna.core.runtime_provider import env_var_for_provider_type
 
-        assert env_var_for_provider_type("kubernetes") == "FARNA_CONTROL_MODULO_KUBERNETES_ENABLED"
-        assert env_var_for_provider_type("KUBERNETES") == "FARNA_CONTROL_MODULO_KUBERNETES_ENABLED"
+        assert env_var_for_provider_type("kubernetes") == "FARNA_CONTROL_KUBERNETES_ENABLED"
+        assert env_var_for_provider_type("KUBERNETES") == "FARNA_CONTROL_KUBERNETES_ENABLED"
 
     def test_resolve_unregistered_kubernetes_is_known_type_not_unknown(self) -> None:
         """A vocabulary member resolves to ProviderNotConfiguredError with its env var —
@@ -283,7 +283,7 @@ class TestRegistration:
         hub = RuntimeProviderHub()
         hub.register("local", LocalRuntimeProvider())
 
-        with pytest.raises(ProviderNotConfiguredError, match="FARNA_CONTROL_MODULO_KUBERNETES_ENABLED") as exc_info:
+        with pytest.raises(ProviderNotConfiguredError, match="FARNA_CONTROL_KUBERNETES_ENABLED") as exc_info:
             hub.resolve(SimpleNamespace(provider_type="kubernetes", provider_hint=None))
 
         assert exc_info.value.provider_type == "kubernetes"
@@ -305,12 +305,12 @@ class TestCreateWorkspace:
 
     async def test_egress_none_accepted_when_chart_network_policy_is_deployed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-2068: deny_all is accepted once the chart's workspace NetworkPolicy
-        exists (the chart injects MODULO_WORKSPACE_NETWORK_POLICY=enabled).
+        exists (the chart injects FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled).
 
         Pins the newly-accepted positive path at the provider level — the
         egress-resolution table alone does not prove create_workspace provisions.
         """
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY", "enabled")
+        monkeypatch.setenv("FARNA_CONTROL_WORKSPACE_NETWORK_POLICY", "enabled")
         core = AsyncMock()
         core.read_namespaced_pod.return_value = _pod("Running")
         provider = _provider(core=core)
@@ -323,7 +323,7 @@ class TestCreateWorkspace:
     async def test_egress_none_refused_without_chart_network_policy(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-2068 fail-closed guard: without the chart signal (manifest absent),
         a deny_all claim is refused instead of being certified as declared."""
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_WORKSPACE_NETWORK_POLICY", raising=False)
         provider = _provider(core=AsyncMock())
 
         with pytest.raises(ProviderCapabilityUnsupportedError, match="workspaceNetworkPolicy"):
@@ -876,11 +876,11 @@ class TestDeploymentIdentity:
         deployments sharing one namespace onto ONE identity, so each
         reconciler would sweep the other's pods as same-machine.
         """
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_RUNNER_MACHINE_ID", raising=False)
 
         assert KubernetesRuntimeProvider._deployment_identity() == socket.gethostname()
 
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID", "explicit-machine")
+        monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "explicit-machine")
 
         assert KubernetesRuntimeProvider._deployment_identity() == "explicit-machine"
 
@@ -1024,7 +1024,7 @@ class TestApplyIsolation:
     async def test_egress_none_accepted_when_chart_network_policy_is_deployed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-2068: a deny_all isolation claim is accepted (no in-pod step) once
         the chart's workspace NetworkPolicy is deployed."""
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY", "enabled")
+        monkeypatch.setenv("FARNA_CONTROL_WORKSPACE_NETWORK_POLICY", "enabled")
         provider = _provider(core=AsyncMock())
 
         result = await provider.apply_isolation("modulo-ws-abc", _spec(), IsolationPolicy(egress_policy="none"))
@@ -1034,7 +1034,7 @@ class TestApplyIsolation:
     async def test_egress_none_refused_without_chart_network_policy(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-2068 fail-closed guard: without the chart signal a deny_all
         isolation claim is refused, never silently accepted."""
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_WORKSPACE_NETWORK_POLICY", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_WORKSPACE_NETWORK_POLICY", raising=False)
         provider = _provider(core=AsyncMock())
 
         with pytest.raises(ProviderCapabilityUnsupportedError, match="workspaceNetworkPolicy"):
