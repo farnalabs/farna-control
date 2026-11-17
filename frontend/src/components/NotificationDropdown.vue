@@ -20,6 +20,7 @@
         <h2 class="text-sm font-semibold text-foreground">
           {{ $t("components.NotificationDropdown.title") }}
         </h2>
+        <div class="flex items-center gap-1">
         <button
           type="button"
           data-testid="notification-mark-all-read"
@@ -28,7 +29,20 @@
           @click="onDismissAll"
         >
           {{ dismissingAll ? $t("components.NotificationDropdown.dismissing_all") : $t("components.NotificationDropdown.dismiss_all") }}
+        </button>        <!-- FAR-2540: visible close control. The panel used to be dismissable
+             only by tapping outside it (not discoverable on a phone). Native
+             <button>: focusable and Enter/Space activated. 44px tap target
+             below sm, compact on desktop. -->
+        <button
+          type="button"
+          data-testid="notification-dropdown-close"
+          :aria-label="$t('components.NotificationDropdown.close')"
+          class="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground sm:h-7 sm:w-7"
+          @click="$emit('close')"
+        >
+          <X class="h-4 w-4" aria-hidden="true" />
         </button>
+        </div>
       </div>
 
       <!-- Failure, success and no-op are MUTUALLY EXCLUSIVE outcomes of THIS
@@ -135,6 +149,7 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { useNotificationsStore } from "../stores/notifications";
 import { formatRelativeTime } from "../lib/formatDate";
+import { X } from "@lucide/vue";
 import LoadingSpinner from "./shared/LoadingSpinner.vue";
 
 const props = defineProps<{
