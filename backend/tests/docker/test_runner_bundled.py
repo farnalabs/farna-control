@@ -1,7 +1,7 @@
 """Docker-marked Bundled Runner provider tests (FAR-590 D4, plan acceptance).
 
 Run explicitly: ``uv run pytest tests/docker -m docker`` from ``backend/``
-(with Docker Desktop / any engine up; ``MODULO_RUNNER_DIND_TESTS=1`` opts in
+(with Docker Desktop / any engine up; ``FARNA_CONTROL_RUNNER_DIND_TESTS=1`` opts in
 to the dind engine-kill strip which pulls ~560 MB).
 
 Covers the D4 acceptance surface against a real engine:
@@ -568,7 +568,7 @@ async def test_reconciler_label_filter_works_through_socket_proxy() -> None:
 
 
 # ---------------------------------------------------------------------------
-# dind engine-kill strip (opt-in: MODULO_RUNNER_DIND_TESTS=1)
+# dind engine-kill strip (opt-in: FARNA_CONTROL_RUNNER_DIND_TESTS=1)
 # ---------------------------------------------------------------------------
 
 
@@ -578,7 +578,7 @@ async def test_engine_kill_mid_exec_is_retryable_never_success() -> None:
     mechanism per the phase-0 spike; dind state is discarded with the
     engine)."""
     if os.environ.get("FARNA_CONTROL_RUNNER_DIND_TESTS") != "1":
-        pytest.skip("opt-in dind strip: set MODULO_RUNNER_DIND_TESTS=1 (pulls ~560 MB)")
+        pytest.skip("opt-in dind strip: set FARNA_CONTROL_RUNNER_DIND_TESTS=1 (pulls ~560 MB)")
     async with aiodocker.Docker() as docker:
         try:
             await docker.images.inspect("docker:28-dind")

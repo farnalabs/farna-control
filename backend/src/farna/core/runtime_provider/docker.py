@@ -155,7 +155,7 @@ class DockerRuntimeProvider(RuntimeProvider):
 
     The Docker daemon URL is resolved in this order:
     1. ``docker_host`` constructor argument
-    2. ``MODULO_DOCKER_HOST`` environment variable
+    2. ``FARNA_CONTROL_DOCKER_HOST`` environment variable
     3. ``DOCKER_HOST`` environment variable
     4. ``None`` (local socket — default)
 

@@ -2,9 +2,9 @@
 
 Wires ``provider_matrix.feature`` to the REAL ``farna.core.runtime_provider``
 seams network-free and DB-free — the ``build_hub`` env-gated factory
-registration matrix (local always; e2b only when ``MODULO_E2B_API_KEY`` is set;
-the docker family only when ``MODULO_DOCKER_HOST`` or ``DOCKER_HOST`` is set,
-and never on an unrelated ``MODULO_RUNNER_*`` var, FAR-996), the real
+registration matrix (local always; e2b only when ``FARNA_CONTROL_E2B_API_KEY`` is set;
+the docker family only when ``FARNA_CONTROL_DOCKER_HOST`` or ``DOCKER_HOST`` is set,
+and never on an unrelated ``FARNA_CONTROL_RUNNER_*`` var, FAR-996), the real
 ``RuntimeProviderHub.resolve`` matrix (hint-wins, direct/alias match through
 the real ``matches_provider_type`` identity, known-but-unregistered →
 ``ProviderNotConfiguredError`` naming the remediation env var, unknown type →
@@ -95,13 +95,13 @@ def step_env_no_signals(monkeypatch) -> None:
     _clean_env(monkeypatch)
 
 
-@given(parsers.parse('MODULO_E2B_API_KEY is set to "{value}"'))
+@given(parsers.parse('FARNA_CONTROL_E2B_API_KEY is set to "{value}"'))
 def step_env_e2b_key(monkeypatch, value: str) -> None:
     _clean_env(monkeypatch)
     monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", value)
 
 
-@given(parsers.parse('MODULO_DOCKER_HOST is set to "{value}"'))
+@given(parsers.parse('FARNA_CONTROL_DOCKER_HOST is set to "{value}"'))
 def step_env_modulo_docker_host(monkeypatch, value: str) -> None:
     _clean_env(monkeypatch)
     monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", value)
@@ -113,7 +113,7 @@ def step_env_docker_host(monkeypatch, value: str) -> None:
     monkeypatch.setenv("DOCKER_HOST", value)
 
 
-@given(parsers.parse('MODULO_RUNNER_TEMPLATE_ID is set to "{value}"'))
+@given(parsers.parse('FARNA_CONTROL_RUNNER_TEMPLATE_ID is set to "{value}"'))
 def step_env_unrelated_runner(monkeypatch, value: str) -> None:
     _clean_env(monkeypatch)
     monkeypatch.setenv("FARNA_CONTROL_RUNNER_TEMPLATE_ID", value)
