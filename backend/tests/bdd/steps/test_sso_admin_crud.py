@@ -552,5 +552,6 @@ def _make_pinned_discovery(discovery: dict[str, Any]) -> MagicMock:
     stream.__aenter__ = AsyncMock(return_value=resp)
     stream.__aexit__ = AsyncMock(return_value=False)
     http_client = MagicMock()
+    http_client.aclose = AsyncMock()
     http_client.stream = MagicMock(return_value=stream)
     return http_client

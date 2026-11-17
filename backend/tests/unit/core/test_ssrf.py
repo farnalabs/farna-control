@@ -55,6 +55,7 @@ async def _response_stream(response: _StreamingResponse):
 async def test_fetch_sso_metadata_rejects_oversized_content_length() -> None:
     response = _StreamingResponse([], {"content-length": str(ssrf.SSO_METADATA_MAX_BYTES + 1)})
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.return_value = _response_stream(response)
 
     with pytest.raises(ssrf.SsoMetadataFetchError, match="exceeds size limit"):
@@ -64,6 +65,7 @@ async def test_fetch_sso_metadata_rejects_oversized_content_length() -> None:
 async def test_fetch_sso_metadata_rejects_oversized_chunked_body() -> None:
     response = _StreamingResponse([b"x" * ssrf.SSO_METADATA_MAX_BYTES, b"y"])
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.return_value = _response_stream(response)
 
     with pytest.raises(ssrf.SsoMetadataFetchError, match="exceeds size limit"):
@@ -73,6 +75,7 @@ async def test_fetch_sso_metadata_rejects_oversized_chunked_body() -> None:
 async def test_fetch_sso_metadata_accepts_normal_body() -> None:
     response = _StreamingResponse([b'{"issuer":"https://idp.example"}'])
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.return_value = _response_stream(response)
 
     result = await ssrf.fetch_sso_metadata("https://idp.example/metadata", kind="OIDC discovery", client_factory=AsyncMock(return_value=client))

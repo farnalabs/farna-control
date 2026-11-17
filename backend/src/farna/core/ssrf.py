@@ -1457,16 +1457,16 @@ async def fetch_sso_metadata(url: str, *, kind: str, client_factory: Callable[..
     response bodies. The transport validates and pins the URL before connect;
     redirects remain disabled and the response is bounded before parsing.
     """
+    factory = client_factory or pinned_async_client
+    client = await factory(url)
+    body = bytearray()
     try:
-        factory = client_factory or pinned_async_client
-        client = await factory(url)
         async with client.stream("GET", url, timeout=SSO_METADATA_TIMEOUT) as response:
             response.raise_for_status()
             headers = getattr(response, "headers", {})
             content_length = headers.get("content-length") if isinstance(headers, Mapping) else None
             if isinstance(content_length, str) and content_length.isdigit() and int(content_length) > SSO_METADATA_MAX_BYTES:
                 raise SsoMetadataFetchError(f"{kind} metadata response exceeds size limit")
-            body = bytearray()
             async for chunk in _iter_response_bytes(response):
                 if len(body) + len(chunk) > SSO_METADATA_MAX_BYTES:
                     raise SsoMetadataFetchError(f"{kind} metadata response exceeds size limit")
@@ -1479,6 +1479,8 @@ async def fetch_sso_metadata(url: str, *, kind: str, client_factory: Callable[..
         raise SsoMetadataFetchError(f"{kind} metadata request timed out") from exc
     except httpx.RequestError as exc:
         raise SsoMetadataFetchError("Failed to fetch discovery document" if kind == "OIDC discovery" else f"Failed to fetch {kind.lower()} document") from exc
+    finally:
+        await client.aclose()
     try:
         return bytes(body).decode("utf-8")
     except UnicodeDecodeError as exc:

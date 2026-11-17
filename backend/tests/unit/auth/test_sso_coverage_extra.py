@@ -140,6 +140,7 @@ async def test_fetch_discovery_json_decode_error() -> None:
     response.raise_for_status.return_value = None
     response.aiter_bytes = lambda: _invalid_json_chunks()
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.return_value = _response_stream(response)
 
     pacer = AsyncMock(return_value=client)
@@ -154,6 +155,7 @@ async def test_fetch_discovery_pinned_json_decode_error() -> None:
     response.raise_for_status.return_value = None
     response.aiter_bytes = lambda: _invalid_json_chunks()
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.return_value = _response_stream(response)
 
     pacer = AsyncMock(return_value=client)
@@ -557,6 +559,7 @@ async def test_resolve_saml_config_metadata_url_fetch_error() -> None:
         enabled=True,
     )
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.side_effect = httpx.ConnectError("x")
 
     pacer = AsyncMock(return_value=client)
@@ -588,6 +591,7 @@ async def test_resolve_saml_config_metadata_url_fetch_success() -> None:
 
     response.aiter_bytes = _metadata_chunks
     client = MagicMock()
+    client.aclose = AsyncMock()
     client.stream.return_value = _response_stream(response)
 
     pacer = AsyncMock(return_value=client)

@@ -747,6 +747,7 @@ class TestOidcJsonResponseShapes:
         response.raise_for_status.return_value = None
         response.aiter_bytes = lambda: _json_chunks(payload)
         client = MagicMock()
+        client.aclose = AsyncMock()
         client.stream.return_value = _response_stream(response)
 
         with patch("farna.auth.sso.pinned_async_client", _pinned_client(client)), pytest.raises(ValueError, match="OIDC discovery document must be a JSON object"):
@@ -761,6 +762,7 @@ class TestOidcJsonResponseShapes:
         response.raise_for_status.return_value = None
         response.aiter_bytes = lambda: _json_chunks(payload)
         client = MagicMock()
+        client.aclose = AsyncMock()
         client.stream.return_value = _response_stream(response)
 
         with patch("farna.auth.sso.pinned_async_client", _pinned_client(client)):
@@ -1494,6 +1496,7 @@ class TestSamlFetchIdpMetadata:
         )
         with patch("farna.auth.sso.pinned_async_client") as mock_client_cls:
             mock_client = MagicMock()
+            mock_client.aclose = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_resp = MagicMock()
             mock_resp.headers = {}
