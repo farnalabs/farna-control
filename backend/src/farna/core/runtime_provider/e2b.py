@@ -228,7 +228,7 @@ class E2BRuntimeProvider(RuntimeProvider):
 
     The E2B API key is resolved in this order:
     1. ``api_key`` argument passed to the constructor
-    2. runtime override / ``MODULO_E2B_API_KEY`` env var
+    2. runtime override / ``FARNA_CONTROL_E2B_API_KEY`` env var
        (``key_bridge.get_e2b_api_key`` — the same bridge the provider-
        registration gate and node-runner enforcement check use, FAR-1159)
 
@@ -248,7 +248,7 @@ class E2BRuntimeProvider(RuntimeProvider):
     def __init__(self, api_key: str | None = None) -> None:
         self._api_key = api_key or get_e2b_api_key()
         if not self._api_key:
-            raise ValueError("E2B API key is required. Pass api_key= or set MODULO_E2B_API_KEY.")
+            raise ValueError("E2B API key is required. Pass api_key= or set FARNA_CONTROL_E2B_API_KEY.")
         self._sandboxes: dict[str, Any] = {}
         # Strong references to in-flight stream waiter tasks (asyncio holds
         # only weak refs to tasks; RUF006). Discarded as each resolves.
@@ -533,7 +533,7 @@ class E2BRuntimeProvider(RuntimeProvider):
         failure and parse failure all yield ``b""`` (or the raw fallback for
         parse-level failures), so callers keep the legacy "never raises /
         empty on no key" behaviour. Key resolution keeps the legacy fallback
-        chain: runtime override / ``MODULO_E2B_API_KEY`` bridge, then the
+        chain: runtime override / ``FARNA_CONTROL_E2B_API_KEY`` bridge, then the
         legacy ``E2B_API_KEY`` env var, then the constructor-held key.
         """
         if not isinstance(provider_ref, str) or not provider_ref:
@@ -771,7 +771,7 @@ class E2BRuntimeProvider(RuntimeProvider):
     def _deployment_identity() -> str:
         """Machine deployment identity stamped into sandbox metadata (FAR-1275).
 
-        ``MODULO_RUNNER_MACHINE_ID`` first, hostname fallback — the exact
+        ``FARNA_CONTROL_RUNNER_MACHINE_ID`` first, hostname fallback — the exact
         chain ``DockerRuntimeProvider._deployment_identity`` /
         ``KubernetesRuntimeProvider._deployment_identity`` and the
         reconciler's own ``deployment_identity()`` use, so the value this
