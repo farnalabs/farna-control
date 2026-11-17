@@ -1315,12 +1315,12 @@ async def _saml_config_from_db(
     if not idp_metadata and db_saml.metadata_url:
         try:
             await validate_outbound_url_async(db_saml.metadata_url)
+        except ValueError as exc:
+            raise ValueError(f"Rejected SAML metadata_url for provider: {exc}") from None
+        try:
             idp_metadata = await fetch_sso_metadata(db_saml.metadata_url, kind="SAML IdP", client_factory=pinned_async_client)
         except ValueError as exc:
-            message = str(exc)
-            if message.startswith("blocked"):
-                raise ValueError(f"Rejected SAML metadata_url for provider: {message}") from None
-            raise ValueError(f"Failed to fetch SAML IdP metadata from provider metadata_url: {message}") from exc
+            raise ValueError(f"Failed to fetch SAML IdP metadata from provider metadata_url: {exc}") from exc
     if not idp_metadata:
         raise ValueError("SAML provider is missing IdP metadata (set metadata_xml or metadata_url)")
     # Per-provider entity_id default (FAR-1001): when the DB provider

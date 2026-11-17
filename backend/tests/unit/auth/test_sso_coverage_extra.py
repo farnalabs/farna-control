@@ -207,14 +207,18 @@ async def test_resolve_oidc_provider_ssrf_rejects_discovery_url() -> None:
         client_secret="s",
         scopes=None,
     )
+    ssrf_rejection = "URL targets a private/internal network address: 169.254.169.254."
     with (
         patch("farna.auth.sso.get_provider_by_provider_id", new_callable=AsyncMock, return_value=db_provider),
         patch(
             "farna.auth.sso.validate_outbound_url_async",
             new_callable=AsyncMock,
-            side_effect=ValueError("blocked"),
+            side_effect=ValueError(ssrf_rejection),
         ),
-        pytest.raises(ValueError, match="Rejected OIDC discovery_url"),
+        pytest.raises(
+            ValueError,
+            match="Rejected OIDC discovery_url for provider 'pid': URL targets a private/internal network address",
+        ),
     ):
         await _resolve_oidc_provider("pid", None, session, settings)
 
@@ -536,14 +540,18 @@ async def test_resolve_saml_config_metadata_url_ssrf_rejected() -> None:
         provider_type="saml",
         enabled=True,
     )
+    ssrf_rejection = "URL targets a private/internal network address: 169.254.169.254."
     with (
         patch("farna.auth.sso.get_enabled_saml_provider", new_callable=AsyncMock, return_value=db_saml),
         patch(
             "farna.auth.sso.validate_outbound_url_async",
             new_callable=AsyncMock,
-            side_effect=ValueError("blocked"),
+            side_effect=ValueError(ssrf_rejection),
         ),
-        pytest.raises(ValueError, match="Rejected SAML metadata_url"),
+        pytest.raises(
+            ValueError,
+            match="Rejected SAML metadata_url for provider: URL targets a private/internal network address",
+        ),
     ):
         await _resolve_saml_config(None, session, settings)
 
