@@ -52,6 +52,8 @@ const E2E_ROOT = join(FRONTEND_ROOT, 'tests', 'e2e')
  * and is cheap/deterministic enough for a per-PR gate.
  */
 const SLICE = [
+  // FAR-2539: mobile table overflow + empty-state width at 390px (local mocks).
+  'tests/e2e/mobile-tables.spec.ts',
   // FAR-2016 instance: design-token colours (light-mode probe) + long-value
   // geometry. The exact spec whose stale probe blocked the deploy train.
   'tests/e2e/json-viewer.spec.ts',

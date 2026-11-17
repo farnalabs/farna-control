@@ -120,7 +120,24 @@
           <h2 class="text-base font-semibold">{{ $t('views.DashboardView.team_breakdown') }}</h2>
           <span class="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">{{ $t('views.DashboardView.team') }}</span>
         </div>
-        <table class="w-full text-sm">
+        <!-- FAR-2539: clip at the card edge and scroll inside it on phones. -->
+        <!-- A11Y-3: the scroll region is a keyboard-reachable focus stop. The
+             sr-only instructions and focus ring mirror the DataTable and
+             PipelineListView scroll-region patterns so keyboard users can
+             reach the right-hand columns when the table is wider than the
+             viewport. -->
+        <p id="dashboard-team-breakdown-scroll-instructions" class="sr-only">
+          {{ $t('views.DashboardView.team_breakdown_scroll_instructions') }}
+        </p>
+        <div
+          class="max-w-full overflow-x-auto overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          role="region"
+          tabindex="0"
+          :aria-label="$t('views.DashboardView.team_breakdown_scroll_label')"
+          aria-describedby="dashboard-team-breakdown-scroll-instructions"
+          data-scroll="team-breakdown"
+        > <!-- NOSONAR: named, focusable scroll region preserves keyboard access to the wide table. -->
+        <table class="w-full min-w-max text-sm">
           <thead>
             <tr class="border-b text-left text-muted-foreground">
               <th class="pb-2 font-medium">{{ $t('views.DashboardView.team') }}</th>
@@ -171,6 +188,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <!-- Trend chart section -->
       <div v-if="planStore.featureEnabled('dashboard_charts')" class="card p-4" data-testid="dashboard-run-activity">

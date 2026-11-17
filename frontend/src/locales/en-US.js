@@ -2230,6 +2230,8 @@ export default {
       "total_evals": "total evals",
       "days_tracked": "days tracked",
       "team_breakdown": "Team Breakdown",
+      "team_breakdown_scroll_label": "Team Breakdown table",
+      "team_breakdown_scroll_instructions": "Swipe horizontally to view all team breakdown columns.",
       "team": "Team",
       "runs": "Runs",
       "completed": "Completed",
