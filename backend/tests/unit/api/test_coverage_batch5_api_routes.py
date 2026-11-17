@@ -419,7 +419,13 @@ class TestMeRouteDispatch:
     def test_password_change_audit_failure_does_not_change_success_response(self) -> None:
         session = _session()
         _install_common_overrides(session)
-        account = MagicMock(password_hash="hash", must_change_password=True, kind="human")
+        account = MagicMock(
+            id=_ACCOUNT_ID,
+            email="coverage-user@example.com",
+            password_hash="hash",
+            must_change_password=True,
+            kind="human",
+        )
         with (
             patch("farna.api.routes.me.get_account_by_id", new_callable=AsyncMock, return_value=account),
             patch("farna.api.routes.me.verify_password", return_value=True),

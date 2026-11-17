@@ -45,7 +45,10 @@ def _make_mock_session() -> AsyncMock:
 
 def _make_mock_user(password_hash: str | None = None) -> MagicMock:
     user = MagicMock()
+    user.id = _USER_ID
+    user.email = "test@example.com"
     user.password_hash = password_hash
+    user.is_system_admin = False
     return user
 
 
