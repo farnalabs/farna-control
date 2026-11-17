@@ -522,7 +522,7 @@ class TestRegisterTenantFilter:
     """Verify register_tenant_filter skips for postgres and registers for others."""
 
     def test_skips_for_postgres(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_DB", "postgres")
+        monkeypatch.setenv("FARNA_CONTROL_DB", "postgres")
         monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
         monkeypatch.setenv("SECRET_KEY", "a" * 32)
         monkeypatch.setenv("FERNET_KEY", "a" * 32)

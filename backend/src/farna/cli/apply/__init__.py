@@ -31,8 +31,8 @@ from farna.cli.apply.plan import has_blockers
 
 _log = logging.getLogger(__name__)
 
-_ENV_URL = "FARNA_CONTROL_MODULO_URL"
-_ENV_API_KEY = "FARNA_CONTROL_MODULO_API_KEY"
+_ENV_URL = "FARNA_CONTROL_URL"
+_ENV_API_KEY = "FARNA_CONTROL_API_KEY"
 
 
 def run_apply(

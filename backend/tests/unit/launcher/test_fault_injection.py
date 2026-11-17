@@ -111,7 +111,7 @@ def _spawn_kill_driver(pgdata: Path, extra_env: dict[str, str]) -> Popen[str]:
     env.pop("PYTHONPATH", None)
     # Arm the deterministic initdb pause gate so the child blocks at
     # PAUSED:initdb_pre_rename (the point the test SIGKILLs / resumes at).
-    env["FARNA_CONTROL_MODULO_TEST_PAUSE_AT"] = GATE_INITDB_PRE_RENAME
+    env["FARNA_CONTROL_TEST_PAUSE_AT"] = GATE_INITDB_PRE_RENAME
     env.update(extra_env)
     return Popen(  # noqa: S603 — fixed argv, trusted synthesized test driver
         [sys.executable, "-c", _KILL_DRIVER, str(pgdata)],
@@ -469,14 +469,14 @@ def test_entry_scrub_removes_the_poisoned_boot_env(tmp_path: Path, monkeypatch: 
     monkeypatch.setenv("PYTHONPATH", str(tmp_path))
     monkeypatch.setenv("LD_PRELOAD", "/evil/interposer.so")
     monkeypatch.setenv("DYLD_INSERT_LIBRARIES", "/evil.dylib")
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_TEST_PAUSE_AT", GATE_INITDB_PRE_RENAME)
+    monkeypatch.setenv("FARNA_CONTROL_TEST_PAUSE_AT", GATE_INITDB_PRE_RENAME)
     scrub_os_environment()
     assert "PGHOST" not in os.environ
     assert "PGPASSWORD" not in os.environ
     assert "PYTHONPATH" not in os.environ
     assert "LD_PRELOAD" not in os.environ
     assert "DYLD_INSERT_LIBRARIES" not in os.environ
-    assert "FARNA_CONTROL_MODULO_TEST_PAUSE_AT" not in os.environ
+    assert "FARNA_CONTROL_TEST_PAUSE_AT" not in os.environ
     assert os.environ.get("PATH")  # legitimate variables survive the scrub
 
 

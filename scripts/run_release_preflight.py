@@ -841,7 +841,7 @@ class ReleasePreflightChecker:
             "FARNA_CONTROL_RELEASE_PR_TOKEN": (
                 "FARNA_CONTROL_RELEASE_PR_TOKEN",
                 "MODULO_RELEASE_PR_TOKEN",
-                "FARNA_CONTROL_MODULO_RELEASE_PR_TOKEN",
+                "FARNA_CONTROL_RELEASE_PR_TOKEN",
             ),
         }
 

@@ -800,7 +800,7 @@ class TestSandboxProviderUnavailablePaths:
             )
 
     def test_reconcile_disabled_returns_empty_summary(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", "0")
+        monkeypatch.setenv("FARNA_CONTROL_HEURISTIC_ENABLED", "0")
         summary = asyncio.run(
             reconcile_noop_evidence(
                 session_factory=lambda: None,  # type: ignore[arg-type]  # never called when disabled
@@ -982,7 +982,7 @@ class TestReconcileNoopEvidence:
 
 class TestEvidenceEnabled:
     def test_default_enabled_without_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_HEURISTIC_ENABLED", raising=False)
         assert evidence_enabled() is True
 
     @pytest.mark.parametrize(
@@ -990,7 +990,7 @@ class TestEvidenceEnabled:
         ["1", "true", "TRUE", "yes", "on"],
     )
     def test_env_truthy_values(self, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", value)
+        monkeypatch.setenv("FARNA_CONTROL_HEURISTIC_ENABLED", value)
         assert evidence_enabled() is True
 
     @pytest.mark.parametrize(
@@ -998,11 +998,11 @@ class TestEvidenceEnabled:
         ["0", "false", "no", "off", "banana"],
     )
     def test_env_falsy_values(self, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", value)
+        monkeypatch.setenv("FARNA_CONTROL_HEURISTIC_ENABLED", value)
         assert evidence_enabled() is False
 
     def test_settings_fallback_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_HEURISTIC_ENABLED", raising=False)
 
         class _Settings:
             modulo_heuristic_enabled = True
@@ -1011,7 +1011,7 @@ class TestEvidenceEnabled:
         assert evidence_enabled() is True
 
     def test_settings_fallback_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_HEURISTIC_ENABLED", raising=False)
 
         class _Settings:
             modulo_heuristic_enabled = False
@@ -1020,7 +1020,7 @@ class TestEvidenceEnabled:
         assert evidence_enabled() is False
 
     def test_settings_lookup_failure_defaults_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_HEURISTIC_ENABLED", raising=False)
 
         def _boom() -> None:
             raise ImportError("no settings module")
@@ -1029,7 +1029,7 @@ class TestEvidenceEnabled:
         assert evidence_enabled() is True
 
     async def test_run_probe_disabled_is_unverifiable_without_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_HEURISTIC_ENABLED", "0")
+        monkeypatch.setenv("FARNA_CONTROL_HEURISTIC_ENABLED", "0")
         result = await run_evidence_probe(
             provider=object(),  # type: ignore[arg-type]  # never touched when disabled
             session_factory=object(),  # type: ignore[arg-type]

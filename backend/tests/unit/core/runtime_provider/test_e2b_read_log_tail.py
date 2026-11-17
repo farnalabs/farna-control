@@ -99,7 +99,7 @@ async def test_abc_default_read_log_tail_raises_typed_capability_unsupported() -
 async def test_e2b_read_log_tail_parses_and_bounds_like_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = b'{"logEntries": [{"message": "error line", "level": "error"},{"message": "plain line", "level": "debug"},{"fields": "fields-only", "level": "warn"}]}'
     monkeypatch.setenv("E2B_API_KEY", "test-key")
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen", side_effect=lambda req, timeout: _fake_urlopen(payload)) as urlopen:
         tail = await provider.read_log_tail("sbx-1", max_bytes=6000)
@@ -144,7 +144,7 @@ async def test_e2b_read_log_tail_key_falls_back_to_legacy_env(monkeypatch: pytes
     With no bridge value and no env var the constructor-held key is used;
     the legacy env var wins over it (legacy helper's order).
     """
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.setenv("E2B_API_KEY", "legacy-env-key")
     provider = E2BRuntimeProvider(api_key="ctor-key")
     captured: list[str] = []
@@ -176,7 +176,7 @@ async def test_e2b_read_log_tail_skips_non_dict_and_empty_entries(monkeypatch: p
         b"]}"
     )
     monkeypatch.setenv("E2B_API_KEY", "test-key")
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     provider = E2BRuntimeProvider(api_key="test-key")
     with patch("urllib.request.urlopen", lambda req, timeout: _fake_urlopen(payload)):
         tail = await provider.read_log_tail("sbx-1", max_bytes=6000)
@@ -190,7 +190,7 @@ async def test_e2b_read_log_tail_no_key_returns_empty(monkeypatch: pytest.Monkey
     the defensive ``if not api_key`` guard is to clear it — proving the guard
     returns empty without touching the network.
     """
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("E2B_API_KEY", raising=False)
     provider = E2BRuntimeProvider(api_key="ctor-key")
     provider._api_key = None  # type: ignore[assignment]
@@ -216,7 +216,7 @@ _PAYOUT_EXPECTATIONS: dict[bytes, bytes] = {
 @pytest.mark.parametrize("payload", _PARITY_PAYLOADS, ids=["preferred-levels", "non-list", "invalid-json", "over-bound"])
 async def test_primitive_handles_every_pinned_payload(payload: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """Each pinned payload yields the expected tail through the primitive."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.setenv("E2B_API_KEY", "parity-key")
     provider = E2BRuntimeProvider(api_key="parity-key")
     with patch("urllib.request.urlopen", lambda req, timeout: _fake_urlopen(payload)):
