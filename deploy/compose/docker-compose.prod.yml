@@ -99,7 +99,7 @@ services:
       FARNA_CONTROL_PUBLIC_URL: ${FARNA_CONTROL_PUBLIC_URL:-http://localhost:80}
       # Not a Settings field - read from os.environ by the logging and
       # error-tracking setup to label the environment of every event.
-      MODULO_ENV: production
+      FARNA_CONTROL_ENV: production
       # Settings.modulo_log_level.
       FARNA_CONTROL_LOG_LEVEL: ${FARNA_CONTROL_LOG_LEVEL:-info}
       # Settings.modulo_license_key.
