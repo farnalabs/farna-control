@@ -83,6 +83,27 @@ async def test_fetch_sso_metadata_accepts_normal_body() -> None:
     assert result == '{"issuer":"https://idp.example"}'
 
 
+async def test_fetch_sso_metadata_timeout_raises_fetch_error() -> None:
+    client = MagicMock()
+    client.aclose = AsyncMock()
+    client.stream.side_effect = httpx.ReadTimeout("timed out")
+
+    with pytest.raises(ssrf.SsoMetadataFetchError, match="timed out"):
+        await ssrf.fetch_sso_metadata("https://idp.example/metadata", kind="JWKS", client_factory=AsyncMock(return_value=client))
+    client.aclose.assert_awaited_once()
+
+
+async def test_fetch_sso_metadata_rejects_non_utf8_body() -> None:
+    response = _StreamingResponse([b"\xff\xfe"])
+    client = MagicMock()
+    client.aclose = AsyncMock()
+    client.stream.return_value = _response_stream(response)
+
+    with pytest.raises(ssrf.SsoMetadataFetchError, match="not UTF-8"):
+        await ssrf.fetch_sso_metadata("https://idp.example/metadata", kind="SAML", client_factory=AsyncMock(return_value=client))
+    client.aclose.assert_awaited_once()
+
+
 @pytest.mark.parametrize(
     "url",
     [
