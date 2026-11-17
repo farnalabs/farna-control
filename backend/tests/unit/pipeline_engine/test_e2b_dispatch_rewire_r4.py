@@ -243,7 +243,7 @@ async def test_provider_full_dispatch_runs_the_abc_call_sequence(monkeypatch: py
     assert isinstance(dispatch.created_spec, WorkspaceSpec)
     assert dispatch.created_spec.image_ref == "opencode"
     # ...and the agent command really went through the ABC stream with the
-    # dispatch envs (MODULO_SCHEMA_DIR rides on the command env provider).
+    # dispatch envs (FARNA_CONTROL_SCHEMA_DIR rides on the command env provider).
     assert dispatch.last_command is not None
     assert dispatch.last_command[0] == "bash"
     assert dispatch.last_environment is not None
