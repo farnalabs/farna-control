@@ -3,7 +3,7 @@
 Bridges the runtime config store (which supports hot-reloadable overrides
 via ``PUT /api/v1/admin/runtime-config``) with the Settings object (which
 reads from env vars via pydantic-settings) for the
-``MODULO_TELEMETRY_ENABLED`` key.
+``FARNA_CONTROL_TELEMETRY_ENABLED`` key.
 
 The function checks the store first, then falls back to the cached
 ``Settings`` value so that onboarding opt-in and admin toggles take
@@ -16,7 +16,7 @@ effect without a restart.
    OTel pipeline in-process), but the SAQ worker only sees the change on
    its next startup or if it re-reads the store.  For consistent
    cross-process behaviour, set the environment variable
-   ``MODULO_TELEMETRY_ENABLED`` in the deployment configuration rather
+   ``FARNA_CONTROL_TELEMETRY_ENABLED`` in the deployment configuration rather
    than relying on the runtime override.
 """
 
@@ -31,14 +31,14 @@ def is_telemetry_enabled() -> bool:
     """Check whether OTel telemetry is enabled, respecting runtime overrides.
 
     The runtime config store (``PUT /api/v1/admin/runtime-config``) can override
-    ``MODULO_TELEMETRY_ENABLED`` at hot-reload time.  This function checks the
+    ``FARNA_CONTROL_TELEMETRY_ENABLED`` at hot-reload time.  This function checks the
     store first, then falls back to the cached ``Settings`` value so that
     onboarding opt-in and admin toggles take effect without a restart.
     """
     try:
         from farna.core.runtime_config.store import get_runtime_config_store
 
-        store_val = get_runtime_config_store().get("FARNA_CONTROL_MODULO_TELEMETRY_ENABLED")
+        store_val = get_runtime_config_store().get("FARNA_CONTROL_TELEMETRY_ENABLED")
         if store_val is not None:
             return store_val.lower() in ("true", "1", "yes")
     except RuntimeError:
@@ -68,7 +68,7 @@ def toggle_telemetry(enabled: bool) -> None:
     from farna.core.runtime_config.store import get_runtime_config_store
 
     store = get_runtime_config_store()
-    store.set_override("FARNA_CONTROL_MODULO_TELEMETRY_ENABLED", "true" if enabled else "false")
+    store.set_override("FARNA_CONTROL_TELEMETRY_ENABLED", "true" if enabled else "false")
 
     # Reconfigure the global OTel TracerProvider so that exporters are
     # added or torn down immediately.  setup_otel is idempotent (calls

@@ -45,7 +45,7 @@ SCRIPT_MARKER = "bash scripts/dispatch_with_retry.sh"
 #: The Modulo webhook secrets. Any workflow that names one is a dispatch site
 #: and must route through the shared script.
 WEBHOOK_SECRET_MARKERS = (
-    "MODULO_BRANCH_FIXER_WEBHOOK_URL",
+    "FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL",
     "MODULO_PR_REVIEW_WEBHOOK_URL",
 )
 

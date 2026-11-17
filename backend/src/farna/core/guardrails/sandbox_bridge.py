@@ -300,8 +300,8 @@ def _load_config(config_path: str | None) -> dict[str, Any]:
 
 
 def _build_client() -> tuple[BridgeClient, dict[str, Any]]:
-    endpoint = os.environ.get("FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
-    config_path = os.environ.get("FARNA_CONTROL_MODULO_BRIDGE_CONFIG")
+    endpoint = os.environ.get("FARNA_CONTROL_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
+    config_path = os.environ.get("FARNA_CONTROL_BRIDGE_CONFIG")
     config = _load_config(config_path)
     return BridgeClient(endpoint, patterns=config.get("patterns", DEFAULT_PATTERNS)), config
 
@@ -415,8 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="modulo_bridge", description="Modulo agent-loop interception bridge client")
     parser.add_argument("--notify", help="evaluate a single event: --notify '<json>'")
     parser.add_argument("--wrap", action="store_true", help="wrap a command, forwarding tool-call events")
-    parser.add_argument("--endpoint", help="Modulo-side interception endpoint (default: $MODULO_BRIDGE_ENDPOINT)")
-    parser.add_argument("--config", help="bridge config JSON path (default: $MODULO_BRIDGE_CONFIG)")
+    parser.add_argument("--endpoint", help="Modulo-side interception endpoint (default: $FARNA_CONTROL_BRIDGE_ENDPOINT)")
+    parser.add_argument("--config", help="bridge config JSON path (default: $FARNA_CONTROL_BRIDGE_CONFIG)")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="the wrapped command (after --)")
     args = parser.parse_args(argv)
     client = _build_cli_client(args)
@@ -433,7 +433,7 @@ def _build_cli_client(args: argparse.Namespace) -> BridgeClient:
     """Build the bridge client from the CLI flags / environment."""
     if args.config:
         config = _load_config(args.config)
-        endpoint = args.endpoint or os.environ.get("FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
+        endpoint = args.endpoint or os.environ.get("FARNA_CONTROL_BRIDGE_ENDPOINT") or DEFAULT_ENDPOINT
         return BridgeClient(endpoint, patterns=config.get("patterns", DEFAULT_PATTERNS))
     if args.endpoint:
         return BridgeClient(args.endpoint)
