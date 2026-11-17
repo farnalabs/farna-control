@@ -42,12 +42,15 @@ depends-on:
 status: covered
 ---
 
-# Declarative Configuration CLI (`modulo apply`)
+# Declarative Configuration CLI (`farna-control apply`)
 
-`modulo apply -f <config.yaml>` applies an organization's schemas (+ versions),
+`farna-control apply -f <config.yaml>` applies an organization's schemas (+ versions),
 model backends, pipelines and triggers to a live deployment from one YAML file
-(`api_version: modulo.dev/v1`), driven by `MODULO_URL` + `MODULO_API_KEY` (a
-bearer `mk_` org key). The API routes the CLI writes to are `/api/v1/schemas`,
+(`api_version: modulo.dev/v1`), driven by `FARNA_CONTROL_URL` +
+`FARNA_CONTROL_API_KEY` (a bearer `mk_` org key). The installed executable is
+`farna-control` (`backend/pyproject.toml` `[project.scripts]`); `modulo` is the
+pre-rename name and is no longer installed, so any older example that spells the
+command `modulo apply` must be run as `farna-control apply`. The API routes the CLI writes to are `/api/v1/schemas`,
 `/api/v1/model-backends`, `/api/v1/pipelines`,
 `/api/v1/pipelines/{pipeline_id}/triggers` (create) and
 `/api/v1/triggers/{trigger_id}` (update); plan-time `credential_ref` validation
@@ -56,11 +59,11 @@ surfaces are `/admin/model-backends` and `/settings/triggers`; there is no
 dedicated CLI page in the nav. Built on the
 schemas, model-backends, pipelines and triggers features. For a copy-paste
 Terraform-style CI loop (plan on every pull request, apply on merge to `main`),
-see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-actions.md).
+see the [`farna-control apply` GitHub Actions example](../../modulo-apply-github-actions.md).
 
 ## Behaviors
 
-- [x] `modulo apply -f <file>` loads single- or multi-document YAML
+- [x] `farna-control apply -f <file>` loads single- or multi-document YAML
       (`api_version` `modulo.dev/v1` major-gated, minor suffixes merge
       leniently) declaring `entities.schemas` / `entities.model_backends` /
       `entities.pipelines` / `entities.triggers`; duplicate names per kind
@@ -118,7 +121,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
       (`cli/apply/models.py`, `cli/apply/plan.py`, `cli/apply/executor.py`,
       `test_apply_base_url.py`)
 - [x] Planning is name-based upsert scoped to the org (the HTTP transport is
-      the operator's `MODULO_URL` + `MODULO_API_KEY` bearer org key):
+      the operator's `FARNA_CONTROL_URL` + `FARNA_CONTROL_API_KEY` bearer org key):
       per-entity decisions `created` / `updated` / `unchanged` / `blocked`,
       hashed over canonical managed-field views (`api_key` excluded; trigger
       `config_json` compared on the desired key set with masked secrets
@@ -164,7 +167,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
 - [x] Git-sourced content (FAR-220): a sandbox_agent node's `agent_prompt` /
       `agent_commands` items / `script_command` may be a whole-field
       `git+<repo-url>[@<ref>]#<path>` ref instead of inline content;
-      `modulo apply` resolves a movable ref to its commit SHA at plan time
+      `farna-control apply` resolves a movable ref to its commit SHA at plan time
       (`git ls-remote`, bounded, identity fast-path for an already-pinned
       ref) and writes the canonical pinned form – the desired view, the PATCH
       payload, the stored graph and every run snapshot therefore carry the
@@ -182,7 +185,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
       additionally emits a `git_content` list
       (`{node, field, desired, current}` with the full old/new refs) rendered
       as `drift detail git-content ...` lines, showing the actual commit
-      transition before `modulo apply` converges the pin
+      transition before `farna-control apply` converges the pin
       (`drift._diff_git_content`, `test_apply_git_content.py`)
 - [x] At run time the agent-command rendering point replaces a whole-field
       pinned ref with the file content fetched at exactly that commit
@@ -194,13 +197,14 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
 - [x] Output: human-friendly table (`render_table`: create/update/block/fail/
       unchanged lines + summary counts, or drift-prefixed variants) or
       `--output json` / `--json` (the full report); 401 surfaces "check
-      `MODULO_API_KEY`", 404 "server does not expose endpoint ... / older
+      `MODULO_API_KEY`" (the message still uses the legacy name), 404 "server
+      does not expose endpoint ... / older
       version", network errors surface as "apply failed: ..."
       (`test_apply_cli.py`)
 - [x] The API-key transport is org-scoped and operator-role gated; an
       unauthenticated or wrong-role key is rejected before any write
       (`backend/tests/unit/api/test_apply_api_key_auth.py`)
-- [x] Pipeline runtime limits (FAR-1294): `modulo apply` manages
+- [x] Pipeline runtime limits (FAR-1294): `farna-control apply` manages
       `node_timeout_seconds` (per-node timeout, >= 1, platform default 300)
       and `max_duration_seconds` (wall-clock run-duration cap, >= 1, platform
       default 3600) on create AND update – but only when DECLARED. Omission
@@ -218,7 +222,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
       (`backend/src/farna/cli/apply/models.py`,
       `backend/src/farna/cli/apply/pipeline_apply.py`,
       `backend/tests/unit/cli/test_apply_models.py`)
-- [x] Pipeline Paused execution state (FAR-1530): `modulo apply` can PAUSE a
+- [x] Pipeline Paused execution state (FAR-1530): `farna-control apply` can PAUSE a
       pipeline declaratively with a declared `run_enabled: false` - an opt-in,
       one-way management. `run_enabled: true` and an explicit `null` are rejected
       at config load with an actionable message (a config may pause, never
@@ -251,7 +255,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
   Also registered `core/secrets_backend/references.py` and
   `test_apply_credential_ref.py` in the frontmatter surfaces.
 - 2026-10-07: **Improve Architecture product-map walk** – closed the untracked
-  `feat-apply` sub-surface for FAR-1530: `modulo apply` gained declarative
+  `feat-apply` sub-surface for FAR-1530: `farna-control apply` gained declarative
   pipeline pausing (`run_enabled: false`) in PR #1367 but neither the manifest
   `feat-apply` registry nor this tracker described it. Added the behavior line
   to both layers, citing `cli/apply/models.py` (load-time rejection of `true`
@@ -259,7 +263,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
   `cli/apply/pipeline_apply.py` (pause-after-write convergence, no
   `run_enabled` on the PATCH payload), plus `test_apply_run_enabled.py`.
 - 2026-09-30: **Improve Architecture product-map walk** – closed the
-  `feat-apply` sub-surface gap for FAR-1294: `modulo apply` gained the two
+  `feat-apply` sub-surface gap for FAR-1294: `farna-control apply` gained the two
   pipeline runtime limits (`node_timeout_seconds` / `max_duration_seconds`)
   on 2026-09-29 (PR #1105) but neither the manifest `feat-apply` registry nor
   this tracker described them, so the shipped surface was invisible to

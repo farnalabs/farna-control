@@ -1,6 +1,6 @@
-# `modulo apply` in GitHub Actions (Terraform-style CI)
+# `farna-control apply` in GitHub Actions (Terraform-style CI)
 
-A copy-paste GitHub Actions workflow that gives the [`modulo apply` CLI](./product-map/configure/apply.md)
+A copy-paste GitHub Actions workflow that gives the [`farna-control apply` CLI](./product-map/configure/apply.md)
 a Terraform-style CI loop: every pull request posts a **plan** – the upsert diff
 the CLI would write – as a comment on the PR, and merging to `main` runs the
 **apply** against each environment. Save the YAML below as
@@ -8,13 +8,13 @@ the CLI would write – as a comment on the PR, and merging to `main` runs the
 
 ## Prerequisites
 
-- **`MODULO_URL`** – the deployment the CLI talks to. Store it as a repository
-  Variable (`vars.MODULO_URL`), or set it per GitHub Environment when staging
+- **`FARNA_CONTROL_URL`** – the deployment the CLI talks to. Store it as a repository
+  Variable (`vars.FARNA_CONTROL_URL`), or set it per GitHub Environment when staging
   and production point at different deployments. The CLI hard-requires it.
-- **`MODULO_API_KEY`** – an org API key (`mk_...` with the `operator` role)
+- **`FARNA_CONTROL_API_KEY`** – an org API key (`mk_...` with the `operator` role)
   stored as a GitHub **secret**, scoped per Environment so staging and
   production hold different keys. The CLI refuses to run without both
-  `MODULO_URL` and `MODULO_API_KEY`; GitHub does not export variables or
+  `FARNA_CONTROL_URL` and `FARNA_CONTROL_API_KEY`; GitHub does not export variables or
   secrets into a job automatically, so the workflow wires them into every
   job with a job-level `env:` block (environment-scoped values win when a
   job names `environment:`).
@@ -26,23 +26,24 @@ the CLI would write – as a comment on the PR, and merging to `main` runs the
   binds one job per environment. If you add protection rules (e.g. required
   reviewers) to an environment, every job that names it – plan jobs included –
   pauses until the rules pass, so keep rules only where you want a hold.
-- **The apply config** – the YAML file `modulo apply -f` consumes, committed to
+- **The apply config** – the YAML file `farna-control apply -f` consumes, committed to
   this repo (the example uses `modulo.yaml`).
-- **CLI installation in CI** – `pip install farnalabs-modulo` (or
-  `uv tool install farnalabs-modulo`), the package name this repo declares
-  (`[project.scripts]` in `backend/pyproject.toml`). **To be confirmed**:
+- **CLI installation in CI** – `pip install farna-control` (or
+  `uv tool install farna-control`), the distribution this repo declares in
+  `backend/pyproject.toml` (`[project].name`), which installs the
+  `farna-control` command from `[project.scripts]`. **To be confirmed**:
   a published release can lag this repo, so before relying on the
   workflow's install step, check the installed release actually ships the
-  `apply` subcommand (`modulo apply --help`) and pin that version
-  (`pip install farnalabs-modulo==<version>`). Until that is confirmed,
+  `apply` subcommand (`farna-control apply --help`) and pin that version
+  (`pip install farna-control==<version>`). Until that is confirmed,
   install from a checkout of this repo (`uv sync` in `backend/`, then
-  `uv run modulo apply ...`, as the self-hosted docs do) or from your own
+  `uv run farna-control apply ...`, as the self-hosted docs do) or from your own
   package index.
 
 ## Workflow
 
 ```yaml
-name: modulo apply
+name: farna-control apply
 
 on:
   pull_request:
@@ -68,11 +69,11 @@ jobs:
     # push. Only the plan jobs are concurrency-scoped - the apply jobs are
     # deliberately left alone so a mid-run apply is never cancelled.
     concurrency:
-      group: modulo-plan-staging-${{ github.event.pull_request.number }}
+      group: farna-control-plan-staging-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
-      MODULO_URL: ${{ vars.MODULO_URL }}
-      MODULO_API_KEY: ${{ secrets.MODULO_API_KEY }}
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -81,20 +82,20 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install modulo CLI
+      - name: Install farna-control CLI
         # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
-        run: pip install farnalabs-modulo
+        run: pip install farna-control
       - name: Plan
         run: |
           set -o pipefail
-          modulo apply --plan -f modulo.yaml | tee plan-staging.txt
+          farna-control apply --plan -f modulo.yaml | tee plan-staging.txt
       - name: Comment the plan on the PR
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo "### modulo plan (staging)"
+            echo "### farna-control plan (staging)"
             echo '```'
             cat plan-staging.txt
             echo '```'
@@ -107,11 +108,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     concurrency:
-      group: modulo-plan-production-${{ github.event.pull_request.number }}
+      group: farna-control-plan-production-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
-      MODULO_URL: ${{ vars.MODULO_URL }}
-      MODULO_API_KEY: ${{ secrets.MODULO_API_KEY }}
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
     permissions:
       contents: read
       pull-requests: write
@@ -120,20 +121,20 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install modulo CLI
+      - name: Install farna-control CLI
         # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
-        run: pip install farnalabs-modulo
+        run: pip install farna-control
       - name: Plan
         run: |
           set -o pipefail
-          modulo apply --plan -f modulo.yaml | tee plan-production.txt
+          farna-control apply --plan -f modulo.yaml | tee plan-production.txt
       - name: Comment the plan on the PR
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo "### modulo plan (production)"
+            echo "### farna-control plan (production)"
             echo '```'
             cat plan-production.txt
             echo '```'
@@ -147,18 +148,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     env:
-      MODULO_URL: ${{ vars.MODULO_URL }}
-      MODULO_API_KEY: ${{ secrets.MODULO_API_KEY }}
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install modulo CLI
+      - name: Install farna-control CLI
         # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
-        run: pip install farnalabs-modulo
+        run: pip install farna-control
       - name: Apply
-        run: modulo apply -f modulo.yaml
+        run: farna-control apply -f modulo.yaml
 
   apply-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -166,18 +167,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      MODULO_URL: ${{ vars.MODULO_URL }}
-      MODULO_API_KEY: ${{ secrets.MODULO_API_KEY }}
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install modulo CLI
+      - name: Install farna-control CLI
         # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
-        run: pip install farnalabs-modulo
+        run: pip install farna-control
       - name: Apply
-        run: modulo apply -f modulo.yaml
+        run: farna-control apply -f modulo.yaml
 ```
 
 ## Approval model
@@ -188,19 +189,19 @@ step: the CLI has no confirm/approve prompt in CI, and nothing in this
 workflow asks Farna Control for permission to write. Any extra gate – required
 reviewers, protected branches, an approval queue before production deploys –
 comes from GitHub branch protection or GitHub Environments protection rules
-configured in the repo, never from a Modulo-owned approval.
+configured in the repo, never from a Farna Control-owned approval.
 
 ## Exit codes the jobs rely on
 
 | Command | Exit code |
 |---|---|
-| `modulo apply --plan -f <file>` (alias `--dry-run`) | `0` once the plan is computed – a pending change never fails the job |
-| `modulo apply -f <file>` (real apply) | `1` if any entity was blocked or failed, else `0` – the apply jobs go red instead of silently diverging |
-| `modulo apply --diff -f <file>` (read-only drift check) | `0` when the org matches the config, `1` on drift (`created` / `updated` / `blocked`) – usable as a separate CI gate |
+| `farna-control apply --plan -f <file>` (alias `--dry-run`) | `0` once the plan is computed – a pending change never fails the job |
+| `farna-control apply -f <file>` (real apply) | `1` if any entity was blocked or failed, else `0` – the apply jobs go red instead of silently diverging |
+| `farna-control apply --diff -f <file>` (read-only drift check) | `0` when the org matches the config, `1` on drift (`created` / `updated` / `blocked`) – usable as a separate CI gate |
 
 Config-load, auth and network errors exit `1` on every command (the CLI
 fails before producing a report), so a broken config or missing
-`MODULO_API_KEY` fails the job loudly rather than posting an empty plan.
+`FARNA_CONTROL_API_KEY` fails the job loudly rather than posting an empty plan.
 
 ## Vault credentials (`credential_ref`)
 
@@ -230,7 +231,7 @@ entities:
 the CLI lists the org vault keys (through the server's `list_secrets` surface)
 and **fails the plan** – never a silent pass – when the named key is absent, or
 when the listing cannot be reached to confirm it. The `list_secrets` surface
-requires the `secret.manage` scope, so the `MODULO_API_KEY` you store as a
+requires the `secret.manage` scope, so the `FARNA_CONTROL_API_KEY` you store as a
 GitHub secret must be an operator key permitted to list secrets; a key that
 cannot list secrets blocks the affected entity rather than passing it. The
 affected entity appears in the plan's `blocked` list with a reason naming the
@@ -297,8 +298,8 @@ environment: the CLI resolves it client-side into a literal key for the write.
   re-sent every run.
 - Fork PRs: `pull_request` runs from forks receive neither secrets nor a
   write-capable token, so the plan jobs fail at the CLI step (no
-  `MODULO_API_KEY`) and could not comment anyway. The plan jobs therefore
+  `FARNA_CONTROL_API_KEY`) and could not comment anyway. The plan jobs therefore
   gate on `github.event.pull_request.head.repo.full_name == github.repository`
   so fork PRs skip them instead of failing. Drop that gate if you deliberately
-  want forks to plan – they will then need their own `MODULO_URL` and
-  `MODULO_API_KEY`.
+  want forks to plan – they will then need their own `FARNA_CONTROL_URL` and
+  `FARNA_CONTROL_API_KEY`.
