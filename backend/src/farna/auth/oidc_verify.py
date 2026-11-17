@@ -21,13 +21,13 @@ import time
 import urllib.parse
 from typing import Any
 
-import httpx
 import jwt
 from jwt import InvalidTokenError as JWTError
 from jwt import PyJWK, PyJWKError
 
 from farna.core.ssrf import (
     derive_oidc_allowed_hosts,
+    fetch_sso_metadata,
     pinned_async_client,
     require_url_host_in_allowlist,
     validate_outbound_url_preflight,
@@ -89,18 +89,11 @@ def _cache_set(jwks_uri: str, keys: list[dict[str, Any]]) -> None:
 
 
 async def _fetch_discovery_document(discovery_url: str) -> dict[str, Any]:
-    """Fetch and validate the provider's OpenID discovery document.
-
-    The connect is pinned to the validated address (via :func:`pinned_async_client`),
-    so the SSRF validation and DNS-rebinding protection are applied to the base
-    discovery fetch — never a plain httpx client for a remote-supplied URL.
-    """
+    """Fetch and validate the provider's OpenID discovery document."""
     try:
-        async with await pinned_async_client(discovery_url) as client:
-            resp = await client.get(discovery_url, timeout=10)
-            resp.raise_for_status()
-            disc: dict[str, Any] = resp.json()
-    except (httpx.HTTPStatusError, httpx.RequestError, json.JSONDecodeError) as exc:
+        body = await fetch_sso_metadata(discovery_url, kind="OIDC discovery", client_factory=pinned_async_client)
+        disc: object = json.loads(body)
+    except ValueError as exc:
         raise OidcVerifyError(f"Failed to fetch discovery document: {exc}") from exc
     if not isinstance(disc, dict):
         raise OidcVerifyError("Discovery document is not a JSON object")
@@ -119,11 +112,8 @@ async def _fetch_jwks(jwks_uri: str) -> list[dict[str, Any]]:
         return cached
 
     try:
-        async with await pinned_async_client(jwks_uri) as client:
-            resp = await client.get(jwks_uri, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-    except (httpx.HTTPStatusError, httpx.RequestError, json.JSONDecodeError) as exc:
+        data: object = json.loads(await fetch_sso_metadata(jwks_uri, kind="JWKS", client_factory=pinned_async_client))
+    except ValueError as exc:
         raise OidcVerifyError(f"Failed to fetch JWKS: {exc}") from exc
 
     if not isinstance(data, dict):

@@ -42,7 +42,7 @@ from farna.core.secrets_backend import (
     resolve_credential,
 )
 from farna.core.sso_presets import list_presets, resolve_preset
-from farna.core.ssrf import pinned_async_client, validate_outbound_url_async
+from farna.core.ssrf import fetch_sso_metadata, pinned_async_client, validate_outbound_url_async
 from farna.db.crud.sso_provider import (
     create_provider,
     delete_provider,
@@ -691,10 +691,7 @@ async def _test_oidc_connection(provider: Any) -> SsoProviderTestResult:
         return SsoProviderTestResult(success=False, message=f"Rejected: {exc}")
 
     try:
-        async with await pinned_async_client(provider.discovery_url) as client:
-            resp = await client.get(provider.discovery_url, timeout=httpx.Timeout(10.0, connect=5.0))
-            resp.raise_for_status()
-            disc = resp.json()
+        disc = json.loads(await fetch_sso_metadata(provider.discovery_url, kind="OIDC discovery", client_factory=pinned_async_client))
     except (httpx.HTTPError, ValueError):
         _log.warning("admin_sso._test_oidc_connection", exc_info=True)
         return SsoProviderTestResult(
@@ -742,11 +739,8 @@ async def _fetch_saml_metadata(provider: Any) -> tuple[str, SsoProviderTestResul
         except ValueError as exc:
             return "", SsoProviderTestResult(success=False, message=f"Rejected: {exc}")
         try:
-            async with await pinned_async_client(provider.metadata_url) as client:
-                resp = await client.get(provider.metadata_url, timeout=httpx.Timeout(10.0, connect=5.0))
-                resp.raise_for_status()
-                metadata_xml = resp.text
-        except Exception:
+            metadata_xml = await fetch_sso_metadata(provider.metadata_url, kind="SAML", client_factory=pinned_async_client)
+        except ValueError:
             _log.warning("admin_sso._test_saml_connection", exc_info=True)
             return "", SsoProviderTestResult(
                 success=False,
