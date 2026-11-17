@@ -1154,12 +1154,13 @@ production dependency disappears. The architecture tests in
 they do not reimplement import-linter's dependency graph.
 
 Import-linter cannot express every semantic rule. The narrowly scoped
-`test_module_boundaries.py` test therefore protects the concrete runtime-provider
-implementation modules from direct consumers, while the import-linter `protected`
-contract protects the shared utility package's allowed consumer set. New boundary rules
-should first be added as import-linter contracts. Add a focused architecture test only
-when the rule is genuinely outside import-linter's contract vocabulary, and document the
-reason beside the test.
+`test_runtime_provider_contract.py` backstop therefore protects the concrete
+runtime-provider implementation modules from direct consumers, while the
+import-linter `protected` contract protects the shared utility package's allowed
+consumer set. New boundary rules should first be added as import-linter
+contracts. Add a focused architecture test only when the rule is genuinely
+outside import-linter's contract vocabulary, and document the reason beside the
+test.
 
 ## Testing Strategy
 
