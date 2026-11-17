@@ -18516,6 +18516,26 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** PasswordChangeResponse */
+        PasswordChangeResponse: {
+            /**
+             * Detail
+             * @default Password changed successfully
+             */
+            detail: string;
+            /** Access Token */
+            access_token: string;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+            /**
+             * Must Change Password
+             * @default false
+             */
+            must_change_password: boolean;
+        };
         /** PendingHitlReview */
         PendingHitlReview: {
             /**
@@ -40491,9 +40511,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["PasswordChangeResponse"];
                 };
             };
             /** @description Validation Error */

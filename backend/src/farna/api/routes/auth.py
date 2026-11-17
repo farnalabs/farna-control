@@ -148,6 +148,13 @@ class LoginResponse(BaseModel):
     must_change_password: bool = False
 
 
+class PasswordChangeResponse(BaseModel):
+    detail: str = "Password changed successfully"
+    access_token: str
+    token_type: str = _TOKEN_TYPE_BEARER
+    must_change_password: bool = False
+
+
 class DemoLoginResponse(BaseModel):
     access_token: str
     token_type: str = _TOKEN_TYPE_BEARER
@@ -474,6 +481,42 @@ async def _run_login_transaction(
             memberships=memberships,
             family=family,
         )
+
+
+def mint_password_change_response(
+    *,
+    account: Account,
+    current_user: TenantPrincipal,
+    family: TokenFamily,
+    settings: Settings,
+) -> JSONResponse:
+    access_token = create_access_token(
+        account.email,
+        settings.secret_key,
+        organisation_id=str(current_user.organisation_id) if current_user.organisation_id else "",
+        account_id=str(account.id),
+        org_role=current_user.org_role or "",
+        is_system_admin=current_user.is_system_admin,
+        ttl_minutes=settings.modulo_access_token_minutes,
+        client_kind=CLIENT_KIND_BROWSER,
+    )
+    refresh_token = create_refresh_token(
+        account.email,
+        settings.secret_key,
+        organisation_id=str(current_user.organisation_id) if current_user.organisation_id else "",
+        account_id=str(account.id),
+        org_role=current_user.org_role or "",
+        is_system_admin=current_user.is_system_admin,
+        token_family=str(family.family_id),
+        token_sequence=0,
+        ttl_hours=settings.modulo_refresh_token_ttl_hours,
+        client_kind=CLIENT_KIND_BROWSER,
+    )
+    response = JSONResponse(
+        content=PasswordChangeResponse(access_token=access_token).model_dump(),
+    )
+    _set_auth_cookies(response, access_token, settings, refresh_token=refresh_token)
+    return response
 
 
 def _mint_login_response(ctx: _LoginContext, settings: Settings) -> JSONResponse:

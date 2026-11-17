@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -478,6 +478,8 @@ describe('AppLayout main-window scrolling (FAR-2365)', () => {
     // The outer flex row must own the viewport height and clip, otherwise
     // <main>'s overflow container grows to content height and never scrolls.
     expect(shell.classList.contains('h-screen')).toBe(true)
+    // FAR-2537: dvh override keeps the page bottom reachable on mobile browsers.
+    expect(shell.classList.contains('h-screen-dvh')).toBe(true)
     expect(shell.classList.contains('overflow-hidden')).toBe(true)
     expect(shell.classList.contains('min-h-screen')).toBe(false)
     expect(main.classes()).toContain('min-h-0')

@@ -37,6 +37,10 @@ _PLACEHOLDERS = {
     "${manifest_file}": "manifest",
     "${sig_file}": "signature",
 }
+# Assembled from parts on purpose: `tests/architecture/test_settings_environment_aliases.py`
+# fails the build if the doubled prefix appears literally in any tracked source
+# file, including the assertion that `install.sh` does not contain it.
+_DOUBLED_ENV_PREFIX = "FARNA_CONTROL_" + "MODULO_"
 # The historical (FAR-2182) argv, kept verbatim so the suite proves that the
 # malformed shape is rejected when EXECUTED — a string assertion cannot.
 _LEGACY_INFORM_ARGV = 'openssl pkeyutl -verify -pubin -inform DER -in "${key_file}" -rawin -in "${manifest_file}" -sigfile "${sig_file}"'
@@ -238,6 +242,28 @@ def test_installer_signature_parser_accepts_current_and_next_key_ids(key_id: str
     result = _run_signature_parser(signature_text, tmp_path)
     assert result.returncode == 0
     assert result.stdout.splitlines() == [key_id, "a" * 128]
+
+
+def test_installer_help_documents_embedded_bundle_and_activation_contract() -> None:
+    source = _INSTALL_SH.read_text(encoding="utf-8")
+    assert "--from-bundle <dir>" in source
+    assert "requires the adjacent signed tarball" in source
+    assert 'activation_file="${INSTALL_ROOT}/env.sh"' in source
+    assert "source ${activation_file}" in source
+    assert 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"' in source
+    assert 'export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"' in source
+    assert 'export MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"' in source
+    assert 'export MODULO_BIN_DIR="${FARNA_CONTROL_BIN_DIR}"' in source
+    assert _DOUBLED_ENV_PREFIX not in source
+    assert "SECRET_KEY" not in source[source.index("activation_file=") : source.index("path_updated=")]
+
+
+def test_installer_embedded_bundle_mode_reuses_signed_adjacent_artifact() -> None:
+    source = _INSTALL_SH.read_text(encoding="utf-8")
+    assert 'adjacent_tarball="${bundle_parent}/${tarball_name}"' in source
+    assert 'verify_shipped_manifest "${manifest_file}" "${signature_file}" "${adjacent_tarball}"' in source
+    assert 'verify_sums_in_dir "${bundle_dir}"' in source
+    assert "--from-file and --from-bundle are mutually exclusive" in source
 
 
 def test_installer_signature_parser_preserves_explicit_rotation_slots() -> None:

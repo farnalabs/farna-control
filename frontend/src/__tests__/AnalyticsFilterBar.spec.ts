@@ -352,7 +352,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
     await wrapper.find('[data-testid="analytics-filter-status"]').setValue('complete')
 
     const emitted = wrapper.emitted('update:filters')
-    const last = emitted![emitted!.length - 1][0] as Record<string, unknown>
+    const last = emitted![emitted!.length - 1][0] as unknown as Record<string, unknown>
     expect(last.status).toBe('complete')
     expect(last.dimension).toBe('status')
     expect(last.folderId).toBe('f1')
