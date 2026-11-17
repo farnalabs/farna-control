@@ -336,7 +336,7 @@ async def test_otel_connection(
         return TestSpanResult(success=False, message=f"Rejected: {exc}")
 
     try:
-        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})
+        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})  # NOSONAR pythonsecurity:S5144 — url is checked by validate_outbound_url_async above and the request runs on the IP-pinned transport from pinned_async_client, which closes the SSRF/DNS-rebinding window.
         if resp.status_code < 500:
             return TestSpanResult(
                 success=True,
