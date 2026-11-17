@@ -111,8 +111,8 @@ jobs:
       #
       # Auth: `Authorization: Bearer ${MODULO_TOKEN}` - the admin JWT from the
       # Authenticate step above (FAR-1468). An API key can never satisfy
-      # audit.manage (admin-only), so the old MODULO_SMOKE_TEST_API_KEY path
-      # was removed.
+      # audit.manage (admin-only), so the old smoke-test API-key path was
+      # removed.
       #
       # TRUNCATION IS NOT A LAPSE (FAR-1468, live-tested): verify_chain()
       # returns valid=false whenever total_events > VERIFY_MAX_EVENTS (10000,
