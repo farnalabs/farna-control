@@ -25,12 +25,12 @@
     </div>
 
     <DataCard v-if="isOrgAdmin" variant="bordered" padding="md" card-class="mb-4">
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="min-w-0 sm:pr-4" data-mobile="pause-all-label">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
+        <div class="sm:pr-4">
           <p class="text-sm font-medium">{{ $t('views.SettingsTriggersView.pause_all_triggers') }}</p>
           <p class="mt-0.5 text-xs text-muted-foreground">{{ $t('views.SettingsTriggersView.pause_all_triggers_description') }}</p>
         </div>
-        <Button class="self-start whitespace-nowrap sm:self-auto" data-testid="settings-triggers-pause-all" :severity="orgTriggersPaused ? 'secondary' : 'primary'" :outlined="orgTriggersPaused" :disabled="pauseToggling" :aria-pressed="orgTriggersPaused" @click="togglePauseAll">
+        <Button class="self-start sm:self-auto" data-testid="settings-triggers-pause-all" :severity="orgTriggersPaused ? 'secondary' : 'primary'" :outlined="orgTriggersPaused" :disabled="pauseToggling" :aria-pressed="orgTriggersPaused" @click="togglePauseAll">
           {{ orgTriggersPaused ? $t('views.SettingsTriggersView.resume_triggers') : $t('views.SettingsTriggersView.pause_all_triggers_action') }}
         </Button>
       </div>

@@ -39,10 +39,10 @@
             </p>
           </div>
 
-          <div class="flex flex-col gap-3 rounded-lg bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-col gap-3 rounded-lg bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
             <div class="min-w-0 flex-1">
               <p class="text-sm font-medium">{{ $t('views.SettingsMcpView.server_url') }}</p>
-              <p data-mobile="mcp-server-url" class="mt-0.5 select-all cursor-text break-all font-mono text-sm text-muted-foreground">{{ mcpUrl || 'http://localhost:8000' }}</p>
+              <p class="mt-0.5 select-all cursor-text break-all sm:break-normal font-mono text-sm text-muted-foreground">{{ mcpUrl || 'http://localhost:8000' }}</p>
             </div>
             <div class="actions-nowrap flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
               <Button severity="secondary" outlined size="small" data-testid="settings-mcp-copy-url" @click="copyServerUrl">

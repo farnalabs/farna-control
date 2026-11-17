@@ -30,7 +30,7 @@
             data-testid="envprofile-list-search"
           />
         </div>
-        <Button class="self-start whitespace-nowrap border-primary/30 hover:border-primary/60 sm:ml-auto sm:self-auto" data-testid="envprofile-list-new" @click="$router.push('/admin/runners/profiles/new')">
+        <Button class="self-start border-primary/30 hover:border-primary/60 sm:ml-auto sm:self-auto" data-testid="envprofile-list-new" @click="$router.push('/admin/runners/profiles/new')">
           {{ $t('views.RunnersProfilesTab.new_profile') }}
         </Button>
       </div>

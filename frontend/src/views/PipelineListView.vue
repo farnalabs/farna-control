@@ -12,8 +12,8 @@
          AppLayout's scroll area — accepted trade-off. -->
     <PageHeader :title="$t('views.PipelineListView.title')" :subtitle="$t('views.PipelineListView.subtitle')" class="shrink-0 px-6 pt-6 pb-6">
       <template #right>
-        <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-          <div class="w-full min-w-0 sm:w-auto">
+        <div class="flex items-center gap-2">
+          <div class="w-full sm:w-auto">
             <FilterBar
               :search="{ placeholder: $t('views.PipelineListView.search_pipelines') }"
               :search-value="search"

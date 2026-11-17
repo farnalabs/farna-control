@@ -52,7 +52,7 @@ const E2E_ROOT = join(FRONTEND_ROOT, 'tests', 'e2e')
  * and is cheap/deterministic enough for a per-PR gate.
  */
 const SLICE = [
-  // FAR-2538: mobile header/actions pattern on dashboard, pipelines, MCP, triggers, profiles.
+  // FAR-2538: mobile layout of the MCP server-status row, the Triggers pause-all card and the Environment Profiles toolbar (390px stack, 1280px unchanged).
   'tests/e2e/mobile-pages.spec.ts',
   // FAR-2539: mobile table overflow + empty-state width at 390px (local mocks).
   'tests/e2e/mobile-tables.spec.ts',

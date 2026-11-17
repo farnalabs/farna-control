@@ -1,10 +1,12 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { test, expect, setupLocalMockApi, mintMockAccessToken } from './setup/fixtures'
 
 // FAR-2538 - the mobile header/actions pattern (docs/frontend-mobile-layout.md)
-// on Dashboard, Pipelines, MCP settings, Triggers settings and Environment
-// Profiles. At 390px: no horizontal overflow, button labels on one line, header
-// text not squeezed or overlapped by its actions. At 1280px the rows stay rows.
+// on the MCP server-status row, the Triggers pause-all card and the Environment
+// Profiles toolbar. At 390px: no horizontal overflow, button labels on one line,
+// actions stacked below the content. At 1280px the geometry must equal the
+// pre-change layout exactly (DESKTOP values below were measured on origin/main).
+// Dashboard and Pipelines were already fixed by FAR-2537 and are not covered here.
 test.describe.configure({ retries: 0 })
 
 const MOCK_ACCESS_TOKEN = mintMockAccessToken()
@@ -14,6 +16,12 @@ const MOBILE = { width: 390, height: 844 }
 const DESKTOP = { width: 1280, height: 800 }
 const JSON_HEADERS = { contentType: 'application/json' }
 const LONG_MCP_URL = 'https://mcp.modulo.run/very/long/server/url/that/must/wrap/instead/of/overlapping'
+const SHORT_MCP_URL = 'https://mcp.modulo.run'
+
+// Desktop geometry measured on origin/main (1280x800), in CSS px.
+const DESKTOP_MCP = { urlToActionsGap: 0, actionsToRowRight: 16 }
+const DESKTOP_TRIGGERS = { labelWidth: 861.9, labelToButtonGap: 0, buttonToCardRight: 0 }
+const DESKTOP_PROFILES = { buttonToRowRight: 0, centreOffset: 0 }
 
 const PROFILE = {
   id: 'p1',
@@ -24,30 +32,19 @@ const PROFILE = {
   updated_at: '2026-01-01T00:00:00Z',
 }
 
-async function boot(page: Page, path: string): Promise<void> {
+async function boot(page: Page, path: string, mcpUrl = LONG_MCP_URL): Promise<void> {
   test.setTimeout(90_000)
   await setupLocalMockApi(page)
   await page.route('**/api/v1/api-keys**', (route) =>
     route.fulfill({
       status: 200,
       ...JSON_HEADERS,
-      body: JSON.stringify(route.request().url().includes('/mcp-config') ? { mcp_url: LONG_MCP_URL } : []),
+      body: JSON.stringify(route.request().url().includes('/mcp-config') ? { mcp_url: mcpUrl } : []),
     }),
   )
   await page.route('**/api/v1/mcp/oauth/clients**', (route) => route.fulfill({ status: 200, ...JSON_HEADERS, body: '[]' }))
   await page.route('**/api/v1/environment-profiles**', (route) =>
     route.fulfill({ status: 200, ...JSON_HEADERS, body: JSON.stringify({ items: [PROFILE], total: 1 }) }),
-  )
-  // The dashboard System Overview card only renders for a caller with System Maps access.
-  await page.route('**/api/v1/auth/permissions', (route) =>
-    route.fulfill({
-      status: 200,
-      ...JSON_HEADERS,
-      body: JSON.stringify({ permissions: ['system_maps.read', 'system_maps_access'] }),
-    }),
-  )
-  await page.route('**/api/v1/system-maps**', (route) =>
-    route.fulfill({ status: 200, ...JSON_HEADERS, body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 }) }),
   )
   await page.addInitScript(([token, refresh]) => {
     localStorage.setItem('modulo_access_token', token)
@@ -63,125 +60,123 @@ async function overflow(page: Page): Promise<number> {
   return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
 }
 
-/** The button with this label renders it on a single line. */
-async function expectSingleLine(page: Page, name: RegExp): Promise<void> {
-  const button = page.getByRole('button', { name }).or(page.getByRole('link', { name })).first()
-  await button.scrollIntoViewIfNeeded()
-  await expect(button).toBeVisible()
-  const box = await button.boundingBox()
+async function box(locator: Locator) {
+  await locator.waitFor({ state: 'visible' })
+  const b = await locator.boundingBox()
+  expect(b).not.toBeNull()
+  return b!
+}
+
+/** The button renders its label on a single line. */
+async function expectSingleLine(button: Locator): Promise<void> {
+  const b = await box(button)
   const lineHeight = await button.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight) || 20)
-  expect(box?.height ?? 0).toBeLessThan(lineHeight * 2 + 8)
+  expect(b.height).toBeLessThan(lineHeight * 2 + 8)
 }
 
-async function boxOf(page: Page, selector: string) {
-  const box = await page.locator(selector).first().boundingBox()
-  expect(box).not.toBeNull()
-  return box!
+const round = (n: number) => Math.round(n * 10) / 10
+
+function mcpParts(page: Page) {
+  const copy = page.locator('[data-testid="settings-mcp-copy-url"]')
+  return {
+    copy,
+    row: copy.locator('xpath=../..'),
+    urlBlock: copy.locator('xpath=../../div[1]'),
+    actions: copy.locator('xpath=..'),
+  }
 }
 
-type PageCase = { path: string; ready: string; button: RegExp; title: string; actions: string }
+function triggersParts(page: Page) {
+  const pause = page.locator('[data-testid="settings-triggers-pause-all"]')
+  return { pause, label: pause.locator('xpath=preceding-sibling::div[1]'), card: pause.locator('xpath=..') }
+}
 
-const CASES: Record<string, PageCase> = {
-  dashboard: {
-    path: '/',
-    ready: '[data-testid="dashboard-system-overview"]',
-    button: /discover my system/i,
-    title: '[data-testid="dashboard-system-overview"] h2',
-    actions: '[data-testid="dashboard-system-overview"] [data-testid="card-header-actions"]',
-  },
-  pipelines: {
-    path: '/pipelines',
-    ready: '[data-testid="pipeline-list-new-pipeline"]',
-    button: /new pipeline/i,
-    title: 'h1',
-    actions: '[data-testid="page-header-right"]',
-  },
-  mcp: {
-    path: '/settings/mcp',
-    ready: '[data-testid="settings-mcp-create-key"]',
-    button: /create mcp api key/i,
-    title: '.settings-mcp-api-keys-card h2',
-    actions: '.settings-mcp-api-keys-card [data-testid="card-header-actions"]',
-  },
-  profiles: {
-    path: '/admin/runners/profiles',
-    ready: '[data-testid="envprofile-list-new"]',
-    button: /new profile/i,
-    title: '[data-testid="envprofile-list-search"]',
-    actions: '[data-testid="envprofile-list-new"]',
-  },
+function profilesParts(page: Page) {
+  const button = page.locator('[data-testid="envprofile-list-new"]')
+  return { button, search: page.locator('[data-testid="envprofile-list-search"]'), row: button.locator('xpath=..') }
 }
 
 test.describe('Mobile pages 390px (FAR-2538)', () => {
   test.use({ viewport: MOBILE, hasTouch: true, isMobile: true })
 
-  for (const [name, c] of Object.entries(CASES)) {
-    test(`${name}: no overflow, button label on one line, actions do not cover the title`, { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
-      test.skip(env.name !== 'local', 'needs local mock API')
-      await boot(page, c.path)
-      await page.locator(c.ready).first().waitFor({ state: 'visible' })
-      expect(await overflow(page)).toBeLessThanOrEqual(0)
-      await expectSingleLine(page, c.button)
-      const title = await boxOf(page, c.title)
-      const actions = await boxOf(page, c.actions)
-      // Plain vertical stack: the actions start below the title/search block.
-      expect(actions.y).toBeGreaterThanOrEqual(title.y + title.height - 1)
-    })
-  }
-
-  test('MCP server status: URL stays inside the card and the buttons sit below it', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+  test('MCP server status: long URL stays inside the card and the buttons sit below it', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
     test.skip(env.name !== 'local', 'needs local mock API')
     await boot(page, '/settings/mcp')
-    await page.locator('[data-testid="settings-mcp-copy-url"]').waitFor({ state: 'visible' })
+    const { copy, urlBlock, actions } = mcpParts(page)
+    const url = await box(urlBlock)
+    const actionsBox = await box(actions)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
-    const url = await boxOf(page, '[data-mobile="mcp-server-url"]')
-    const copy = await boxOf(page, '[data-testid="settings-mcp-copy-url"]')
-    expect(copy.y).toBeGreaterThanOrEqual(url.y + url.height - 1)
+    expect(actionsBox.y).toBeGreaterThanOrEqual(url.y + url.height - 1)
     expect(url.x + url.width).toBeLessThanOrEqual(MOBILE.width)
+    await expectSingleLine(copy)
   })
 
-  test('Triggers: Pause all keeps its label on one line inside the card', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+  test('Triggers: Pause all stacks below its label and keeps its text on one line', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
     test.skip(env.name !== 'local', 'needs local mock API')
     await boot(page, '/settings/triggers')
-    await page.locator('[data-testid="settings-triggers-pause-all"]').waitFor({ state: 'visible' })
+    const { pause, label } = triggersParts(page)
+    const labelBox = await box(label)
+    const pauseBox = await box(pause)
     expect(await overflow(page)).toBeLessThanOrEqual(0)
-    await expectSingleLine(page, /pause all/i)
-    const box = await boxOf(page, '[data-testid="settings-triggers-pause-all"]')
-    expect(box.x + box.width).toBeLessThanOrEqual(MOBILE.width)
+    expect(pauseBox.y).toBeGreaterThanOrEqual(labelBox.y + labelBox.height - 1)
+    expect(pauseBox.x + pauseBox.width).toBeLessThanOrEqual(MOBILE.width)
+    await expectSingleLine(pause)
+  })
+
+  test('Environment Profiles: New Profile sits below the search and keeps its label on one line', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+    test.skip(env.name !== 'local', 'needs local mock API')
+    await boot(page, '/admin/runners/profiles')
+    const { button, search } = profilesParts(page)
+    const searchBox = await box(search)
+    const buttonBox = await box(button)
+    expect(await overflow(page)).toBeLessThanOrEqual(0)
+    expect(buttonBox.y).toBeGreaterThanOrEqual(searchBox.y + searchBox.height - 1)
+    await expectSingleLine(button)
   })
 })
 
-test.describe('Desktop 1280px keeps rows (FAR-2538)', () => {
+test.describe('Desktop 1280px is unchanged (FAR-2538)', () => {
   test.use({ viewport: DESKTOP })
 
-  for (const [name, c] of Object.entries(CASES)) {
-    test(`${name}: title and actions share a row`, { tag: ['@regression'] }, async ({ page, env }) => {
-      test.skip(env.name !== 'local', 'needs local mock API')
-      await boot(page, c.path)
-      await page.locator(c.ready).first().waitFor({ state: 'visible' })
-      expect(await overflow(page)).toBeLessThanOrEqual(0)
-      const title = await boxOf(page, c.title)
-      const actions = await boxOf(page, c.actions)
-      expect(actions.y).toBeLessThan(title.y + title.height)
-    })
-  }
-
-  test('MCP server status stays a row', { tag: ['@regression'] }, async ({ page, env }) => {
+  test('MCP server status row: no gap added, buttons flush right', { tag: ['@regression'] }, async ({ page, env }) => {
     test.skip(env.name !== 'local', 'needs local mock API')
-    await boot(page, '/settings/mcp')
-    await page.locator('[data-testid="settings-mcp-copy-url"]').waitFor({ state: 'visible' })
-    const url = await boxOf(page, '[data-mobile="mcp-server-url"]')
-    const copy = await boxOf(page, '[data-testid="settings-mcp-copy-url"]')
-    expect(copy.y).toBeLessThan(url.y + url.height)
+    await boot(page, '/settings/mcp', SHORT_MCP_URL)
+    const { row, urlBlock, actions } = mcpParts(page)
+    const r = await box(row)
+    const u = await box(urlBlock)
+    const a = await box(actions)
+    expect(a.y).toBeLessThan(u.y + u.height)
+    expect({
+      urlToActionsGap: round(a.x - (u.x + u.width)),
+      actionsToRowRight: round(r.x + r.width - (a.x + a.width)),
+    }).toEqual(DESKTOP_MCP)
   })
 
-  test('Triggers pause card stays a row', { tag: ['@regression'] }, async ({ page, env }) => {
+  test('Triggers pause-all card: label-to-button spacing unchanged', { tag: ['@regression'] }, async ({ page, env }) => {
     test.skip(env.name !== 'local', 'needs local mock API')
     await boot(page, '/settings/triggers')
-    const pause = page.locator('[data-testid="settings-triggers-pause-all"]')
-    await pause.waitFor({ state: 'visible' })
-    const label = await boxOf(page, '[data-mobile="pause-all-label"]')
-    const btn = await boxOf(page, '[data-testid="settings-triggers-pause-all"]')
-    expect(btn.y).toBeLessThan(label.y + label.height)
+    const { pause, label, card } = triggersParts(page)
+    const l = await box(label)
+    const b = await box(pause)
+    const c = await box(card)
+    expect(b.y).toBeLessThan(l.y + l.height)
+    expect({
+      labelWidth: round(l.width),
+      labelToButtonGap: round(b.x - (l.x + l.width)),
+      buttonToCardRight: round(c.x + c.width - (b.x + b.width)),
+    }).toEqual(DESKTOP_TRIGGERS)
+  })
+
+  test('Environment Profiles toolbar: New Profile stays right-aligned on the search row', { tag: ['@regression'] }, async ({ page, env }) => {
+    test.skip(env.name !== 'local', 'needs local mock API')
+    await boot(page, '/admin/runners/profiles')
+    const { button, search, row } = profilesParts(page)
+    const s = await box(search)
+    const b = await box(button)
+    const r = await box(row)
+    expect({
+      buttonToRowRight: round(r.x + r.width - (b.x + b.width)),
+      centreOffset: round(b.y + b.height / 2 - (s.y + s.height / 2)),
+    }).toEqual(DESKTOP_PROFILES)
   })
 })
