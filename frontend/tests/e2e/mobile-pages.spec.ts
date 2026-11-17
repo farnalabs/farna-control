@@ -3,7 +3,7 @@ import { test, expect, setupLocalMockApi, mintMockAccessToken } from './setup/fi
 
 // FAR-2538 - the mobile header/actions pattern (docs/frontend-mobile-layout.md)
 // on the MCP server-status row, the Triggers pause-all card and the Environment
-// Profiles toolbar. At 390px: no horizontal overflow, button labels on one line,
+// Profiles toolbar. At 390px: content stays inside <main> and the viewport, button labels on one line,
 // actions stacked below the content. At 1280px the geometry must equal the
 // pre-change layout exactly (DESKTOP values below were measured on origin/main).
 // Dashboard and Pipelines were already fixed by FAR-2537 and are not covered here.
@@ -15,7 +15,7 @@ const APP_MOUNT_TIMEOUT_MS = 30_000
 const MOBILE = { width: 390, height: 844 }
 const DESKTOP = { width: 1280, height: 800 }
 const JSON_HEADERS = { contentType: 'application/json' }
-const LONG_MCP_URL = 'https://mcp.modulo.run/very/long/server/url/that/must/wrap/instead/of/overlapping'
+const LONG_MCP_URL = 'https://mcp.modulo.run/very-long-single-token-server-url-without-any-break-opportunity-so-it-must-be-broken-by-css'
 const SHORT_MCP_URL = 'https://mcp.modulo.run'
 
 // Desktop geometry measured on origin/main (1280x800), in CSS px.
@@ -56,8 +56,19 @@ async function boot(page: Page, path: string, mcpUrl = LONG_MCP_URL): Promise<vo
   })
 }
 
-async function overflow(page: Page): Promise<number> {
-  return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+/** The app shell clips overflow (h-screen overflow-hidden, main overflow-x-hidden), so the
+ * document width cannot overflow; the scroll container is the thing that can. */
+async function mainOverflow(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const main = document.querySelector('main') as HTMLElement
+    return main.scrollWidth - main.clientWidth
+  })
+}
+
+/** The element sits inside the viewport horizontally. */
+function expectInViewport(b: { x: number, width: number }): void {
+  expect(b.x).toBeGreaterThanOrEqual(0)
+  expect(b.x + b.width).toBeLessThanOrEqual(MOBILE.width)
 }
 
 async function box(locator: Locator) {
@@ -105,9 +116,14 @@ test.describe('Mobile pages 390px (FAR-2538)', () => {
     const { copy, urlBlock, actions } = mcpParts(page)
     const url = await box(urlBlock)
     const actionsBox = await box(actions)
-    expect(await overflow(page)).toBeLessThanOrEqual(0)
+    expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
     expect(actionsBox.y).toBeGreaterThanOrEqual(url.y + url.height - 1)
-    expect(url.x + url.width).toBeLessThanOrEqual(MOBILE.width)
+    const urlText = urlBlock.locator('p').nth(1)
+    const textBox = await box(urlText)
+    expectInViewport(textBox)
+    expect(await urlText.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+    expectInViewport(url)
+    expectInViewport(actionsBox)
     await expectSingleLine(copy)
   })
 
@@ -117,9 +133,10 @@ test.describe('Mobile pages 390px (FAR-2538)', () => {
     const { pause, label } = triggersParts(page)
     const labelBox = await box(label)
     const pauseBox = await box(pause)
-    expect(await overflow(page)).toBeLessThanOrEqual(0)
+    expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
     expect(pauseBox.y).toBeGreaterThanOrEqual(labelBox.y + labelBox.height - 1)
-    expect(pauseBox.x + pauseBox.width).toBeLessThanOrEqual(MOBILE.width)
+    expectInViewport(pauseBox)
+    expectInViewport(labelBox)
     await expectSingleLine(pause)
   })
 
@@ -129,7 +146,9 @@ test.describe('Mobile pages 390px (FAR-2538)', () => {
     const { button, search } = profilesParts(page)
     const searchBox = await box(search)
     const buttonBox = await box(button)
-    expect(await overflow(page)).toBeLessThanOrEqual(0)
+    expect(await mainOverflow(page)).toBeLessThanOrEqual(0)
+    expectInViewport(buttonBox)
+    expectInViewport(searchBox)
     expect(buttonBox.y).toBeGreaterThanOrEqual(searchBox.y + searchBox.height - 1)
     await expectSingleLine(button)
   })
