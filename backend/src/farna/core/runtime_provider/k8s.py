@@ -28,7 +28,7 @@ Security posture (the reason this tier exists)
   express a host:port allowlist without a higher-level controller).
   An ``egress_policy`` of ``none`` is ACCEPTED only when that manifest is
   actually deployed — ``workspaceNetworkPolicy.enabled=true`` makes the chart
-  inject ``MODULO_WORKSPACE_NETWORK_POLICY=enabled``; without it the claim is
+  inject ``FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled``; without it the claim is
   refused with the typed :class:`ProviderCapabilityUnsupportedError`, so a
   default install never declares a posture it cannot enforce. Selected-mode
   requests are refused the same way — never a silent downgrade.
@@ -39,9 +39,9 @@ In-cluster ServiceAccount configuration when ``KUBERNETES_SERVICE_HOST`` is
 set (the pod's own mounted token), otherwise the standard kubeconfig chain
 (``KUBECONFIG`` / default path). Client configuration is loaded lazily on
 first use, so registering the provider at boot never fails on a machine
-without a kubeconfig. Namespace: ``MODULO_KUBERNETES_NAMESPACE`` (default
+without a kubeconfig. Namespace: ``FARNA_CONTROL_KUBERNETES_NAMESPACE`` (default
 ``modulo``). Workspace-pod ServiceAccount:
-``MODULO_KUBERNETES_SERVICE_ACCOUNT`` (default ``default``).
+``FARNA_CONTROL_KUBERNETES_SERVICE_ACCOUNT`` (default ``default``).
 
 WorkspaceSpec mapping
 ---------------------
@@ -388,7 +388,7 @@ class KubernetesRuntimeProvider(RuntimeProvider):
     def _deployment_identity() -> str:
         """Machine deployment identity for pod annotations (reconciler scoping).
 
-        ``MODULO_RUNNER_MACHINE_ID`` first, hostname fallback — Docker parity
+        ``FARNA_CONTROL_RUNNER_MACHINE_ID`` first, hostname fallback — Docker parity
         (``DockerRuntimeProvider._deployment_identity``). The constant
         fallback this had (``"unspecified"``) collapsed two deployments
         sharing one namespace onto ONE identity, so each reconciler would
@@ -569,7 +569,7 @@ class KubernetesRuntimeProvider(RuntimeProvider):
                 "The Kubernetes tier cannot accept an egress 'none' (deny_all) workspace "
                 "without the chart's workspace NetworkPolicy: the deny_all posture would "
                 "be declared but unenforced. Enable workspaceNetworkPolicy.enabled=true "
-                "(which sets MODULO_WORKSPACE_NETWORK_POLICY=enabled) or use a policy this "
+                "(which sets FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled) or use a policy this "
                 "tier can enforce."
             )
 
@@ -1159,7 +1159,7 @@ class KubernetesRuntimeProvider(RuntimeProvider):
         is authored as a Helm-rendered NetworkPolicy manifest (declared posture,
         FAR-2068) — the customer's CNI enforces it; Modulo observes nothing.
         That manifest only exists when ``workspaceNetworkPolicy.enabled=true``
-        (the chart injects ``MODULO_WORKSPACE_NETWORK_POLICY=enabled``); without
+        (the chart injects ``FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled``); without
         it a deny_all claim is refused. Both refusals raise the typed
         :class:`ProviderCapabilityUnsupportedError` naming NetworkPolicy as the
         remediation. Never a silent downgrade.
@@ -1178,7 +1178,7 @@ class KubernetesRuntimeProvider(RuntimeProvider):
                 "The Kubernetes tier cannot accept an egress 'none' (deny_all) isolation "
                 "claim without the chart's workspace NetworkPolicy: the deny_all posture "
                 "would be declared but unenforced. Enable workspaceNetworkPolicy.enabled=true "
-                "(which sets MODULO_WORKSPACE_NETWORK_POLICY=enabled) or use a policy this "
+                "(which sets FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled) or use a policy this "
                 "tier can enforce."
             )
 
