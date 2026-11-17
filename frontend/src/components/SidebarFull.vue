@@ -3,9 +3,11 @@
     <div class="mb-6 flex items-start gap-2.5 pl-1">
       <router-link to="/" class="flex min-w-0 items-start gap-2.5">
         <LogoMark :size="24" transparent class="mt-0.5 shrink-0 text-foreground" />
+        <!-- The name and tier badge stack: "Farna Control" plus a badge does not
+             fit one row in the 256px sidebar, and the name must never wrap. -->
         <span class="flex min-w-0 flex-col items-start gap-1">
-          <h2 class="whitespace-nowrap text-lg font-bold tracking-tight">{{ $t('components.AppLayout.modulo') }}</h2>
-          <Badge v-if="planStore.currentTier" severity="secondary" class="border border-border text-[10px] px-1.5 py-0 leading-none">
+          <h2 data-testid="sidebar-product-name" class="whitespace-nowrap text-lg font-bold leading-tight tracking-tight">{{ $t('components.AppLayout.modulo') }}</h2>
+          <Badge v-if="planStore.currentTier" data-testid="sidebar-tier-badge" severity="secondary" class="max-w-full truncate border border-border text-[10px] px-1.5 py-0 leading-none">
             {{ planStore.getTierLabel(planStore.currentTier) }}
           </Badge>
         </span>
@@ -13,7 +15,7 @@
       <button
         type="button"
         @click="$emit('collapse')"
-        class="ml-auto rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        class="ml-auto shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         :aria-label="$t('components.AppLayout.collapse_sidebar')"
       >
         <ChevronLeft class="h-4 w-4" aria-hidden="true" />
