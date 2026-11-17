@@ -375,9 +375,12 @@ The map is stored in dedicated System Maps tables (migration
       REST refusals and database failures to branchable MCP error codes
       (`api/mcp_server.py`, `core/mcp/scope_validator.py`;
       `tests/unit/mcp/test_mcp_system_map_discovery.py`)
-- [ ] MCP authoring, publish, diff and restore remain REST-only: agents cannot
-      create or update a map, author a revision, publish / archive / diff /
-      restore a revision, or read a revision or its history through MCP
+- [x] MCP exposes the revision-aware overview in addition to discovery: agents
+      can read published-map health, loop metrics, bottlenecks, revision selection
+      and the UTC reporting window through `get_system_map_overview`, while
+      authoring, publish, archive, diff, restore, and revision-history reads
+      remain REST-only (`api/mcp_server.py`,
+      `tests/unit/mcp/test_mcp_system_map_discovery.py`)
 - [x] The revision sidebar switches between the current and a historical
       revision through the version-aware read model: "View current" calls
       `GET /revisions/current`, and a `datetime-local` picker calls
@@ -443,10 +446,12 @@ The map is stored in dedicated System Maps tables (migration
 
 ## Known Gaps
 
-- **MCP exposes discovery only.** `discover_system_map` lets an agent run the
-  inventory scan and persist an unpublished draft, but there is no MCP tool to
-  author a map, publish / archive / diff / restore a revision, read a revision
-  or its history, or read the overview; those remain REST-only.
+- **MCP exposes discovery and overview, but not authoring.** `discover_system_map`
+  lets an agent run the inventory scan and persist an unpublished draft, and
+  `get_system_map_overview` provides revision-aware published-map health, loop
+  metrics, bottlenecks, and the UTC reporting window. There is still no MCP tool
+  to author a map, publish / archive / diff / restore a revision, or read a
+  revision or its history; those actions remain REST-only.
 - **Discovery is create-only.** Each discovery persists a new map plus a draft
   revision; a repeat with a colliding name is a 409. There is no re-scan into an
   existing draft, so the "added / removed / ambiguous" reconciliation described
@@ -457,6 +462,14 @@ The map is stored in dedicated System Maps tables (migration
   concurrency are not enforced (deferred to Beta 3).
 
 ## QA History
+
+- 2026-11-17: **Improve Architecture product-map walk** - re-verified the
+  System Maps MCP surface against `api/mcp_server.py` and its registry test.
+  `get_system_map_overview` already exposes revision-aware published-map health,
+  loop metrics, bottlenecks and reporting-window selection alongside
+  `discover_system_map`; the manifest and tracker incorrectly described overview
+  as REST-only. Corrected both layers and narrowed the remaining gap to MCP
+  authoring, publish, archive, diff, restore and revision-history actions.
 
 - 2026-11-10: **Improve Architecture product-map walk** - pinned the MCP tool
   surface restriction with an explicit test (`test_no_system_maps_tools_on_mcp_beyond_discovery`
