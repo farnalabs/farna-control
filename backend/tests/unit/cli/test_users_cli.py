@@ -531,26 +531,26 @@ class TestUsersResetPassword:
 
 class TestModuloUsersGuard:
     def test_add_refuses_without_force_when_modulo_users_set(self, seeded_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_USERS", "admin@example.com:seeded-password")
+        monkeypatch.setenv("FARNA_CONTROL_USERS", "admin@example.com:seeded-password")
         get_settings.cache_clear()
         result = _invoke("add", "admin@example.com", "--password", PASSWORD)
         assert result.exit_code == 1
-        assert "FARNA_CONTROL_MODULO_USERS" in result.output
+        assert "FARNA_CONTROL_USERS" in result.output
         assert "--force" in result.output
 
     def test_reset_refuses_without_force_when_modulo_users_set(self, seeded_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_USERS", "admin@example.com:seeded-password")
+        monkeypatch.setenv("FARNA_CONTROL_USERS", "admin@example.com:seeded-password")
         get_settings.cache_clear()
         result = _invoke("reset-password", "ghost@example.com", "--password", NEW_PASSWORD)
         assert result.exit_code == 1
-        assert "FARNA_CONTROL_MODULO_USERS" in result.output
+        assert "FARNA_CONTROL_USERS" in result.output
 
     def test_force_proceeds_with_loud_warning(self, seeded_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_USERS", "other@example.com:seeded-password")
+        monkeypatch.setenv("FARNA_CONTROL_USERS", "other@example.com:seeded-password")
         get_settings.cache_clear()
         result = _invoke("add", "forced@example.com", "--password", PASSWORD, "--force")
         assert result.exit_code == 0, result.output
-        assert "MODULO_USERS is set" in result.output
+        assert "FARNA_CONTROL_USERS is set" in result.output
         assert "Created user forced@example.com" in result.output
         assert "NOT reverted" in result.output
         assert PASSWORD not in result.output

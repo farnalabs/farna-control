@@ -28,7 +28,7 @@ def _poisoned_env() -> dict[str, str]:
     return {
         "PATH": "/usr/bin",
         "HOME": "/home/operator",
-        "FARNA_CONTROL_MODULO_SECRET_KEY": "x" * 32,
+        "FARNA_CONTROL_SECRET_KEY": "x" * 32,
         # Exact-name scrub list:
         "REDISCLI_AUTH": "leaked",
         "PYTHONPATH": "/foreign/tree",
@@ -39,7 +39,7 @@ def _poisoned_env() -> dict[str, str]:
         "SSL_CERT_DIR": "/evil/certs",
         "REQUESTS_CA_BUNDLE": "/evil/bundle.pem",
         "CURL_CA_BUNDLE": "/evil/curl-bundle.pem",
-        "FARNA_CONTROL_MODULO_TEST_PAUSE_AT": "initdb_pre_rename",
+        "FARNA_CONTROL_TEST_PAUSE_AT": "initdb_pre_rename",
         # LD_* prefix coverage (the whole ELF dynamic-loader family):
         "LD_PRELOAD": "/evil.so",
         "LD_LIBRARY_PATH": "/evil",
@@ -62,7 +62,7 @@ def test_scrub_removes_every_listed_variable() -> None:
     scrubbed = scrub_environment(_poisoned_env())
     assert "PATH" in scrubbed
     assert "HOME" in scrubbed
-    assert "FARNA_CONTROL_MODULO_SECRET_KEY" in scrubbed
+    assert "FARNA_CONTROL_SECRET_KEY" in scrubbed
     for name in SCRUB_EXACT_NAMES:
         assert name not in scrubbed
     for name in ("PGDATA", "PGHOST", "PGPORT", "PGPASSWORD", "PGUSER", "PGSSLMODE"):
@@ -91,7 +91,7 @@ def test_scrub_covers_the_adr_list_exactly() -> None:
         "SSL_CERT_DIR",
         "REQUESTS_CA_BUNDLE",
         "CURL_CA_BUNDLE",
-        "FARNA_CONTROL_MODULO_TEST_PAUSE_AT",
+        "FARNA_CONTROL_TEST_PAUSE_AT",
     }
     assert expected_exact == SCRUB_EXACT_NAMES
     assert SCRUB_PREFIXES == ("PG", "DYLD_", "LD_")

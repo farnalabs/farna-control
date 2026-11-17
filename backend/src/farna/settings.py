@@ -14,9 +14,9 @@ from farna.db.url_utils import fix_database_url
 
 
 def _product_aliases(canonical: str, legacy: str) -> AliasChoices:
-    """Accept the original and doubled legacy product environment spellings."""
+    """Accept canonical Farna Control names and bare MODULO_* legacy names."""
     if legacy.startswith("MODULO_"):
-        return AliasChoices(canonical, legacy, f"FARNA_CONTROL_{legacy}")
+        return AliasChoices(canonical, legacy, f"FARNA_CONTROL_{legacy.removeprefix('MODULO_')}")
     return AliasChoices(canonical, legacy)
 
 
@@ -425,7 +425,7 @@ class Settings(BaseSettings):
     # node output self-reports agent_status=failed OR outcome=failed, the run
     # terminalizes as ``failed`` with error_code ``agent.failed`` instead of
     # landing ``complete``. Rollout flag — agent-failure-ux-proposal §15.4.
-    modulo_agent_failure_elevation_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_AGENT_FAILURE_ELEVATION_ENABLED", "FARNA_CONTROL_MODULO_AGENT_FAILURE_ELEVATION_ENABLED"))
+    modulo_agent_failure_elevation_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_AGENT_FAILURE_ELEVATION_ENABLED", "MODULO_AGENT_FAILURE_ELEVATION_ENABLED"))
     # FAR-228 kill-switch for the sandbox idempotency gate (opt-in per node via
     # PipelineGraphNode.delivery_sentinel). Consumed at BOTH sandbox guards: guard
     # A (node_runner early skip for single sandbox node) and guard B (executor
@@ -433,20 +433,20 @@ class Settings(BaseSettings):
     # failures retry exactly as before. The FAR-458 connector-write gate is a
     # separate concern with its OWN opt-in kill-switch below — this flag never
     # gates it.
-    modulo_idempotency_gate_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_IDEMPOTENCY_GATE_ENABLED", "FARNA_CONTROL_MODULO_IDEMPOTENCY_GATE_ENABLED"))
+    modulo_idempotency_gate_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_IDEMPOTENCY_GATE_ENABLED", "MODULO_IDEMPOTENCY_GATE_ENABLED"))
     # FAR-458 connector-write idempotency gate kill-switch. GENUINELY OPT-IN:
     # defaults to False so a deploy never silently suppresses byte-identical
     # re-executed connector writes (a behavioural change vs. the pre-FAR-458
     # contract where every visit fired). Operators enable it explicitly once the
     # dedup semantics are wanted. Consumed only by ``_connector_write_gate``.
-    modulo_connector_write_gate_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED", "FARNA_CONTROL_MODULO_CONNECTOR_WRITE_GATE_ENABLED"))
+    modulo_connector_write_gate_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED", "MODULO_CONNECTOR_WRITE_GATE_ENABLED"))
     # FAR-802: managed workspace inputs kill-switch.  When OFF (default),
     # sandbox_agent nodes that declare workspace_inputs short-circuit with
     # ``sandbox.workspace_inputs_disabled`` and provision nothing — existing
     # sandbox behaviour is unchanged.  Operators enable it explicitly once MWI
     # is ready for production use.  Consumed in node_runner before host-side
     # ref resolution.
-    modulo_workspace_inputs_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED", "FARNA_CONTROL_MODULO_WORKSPACE_INPUTS_ENABLED"))
+    modulo_workspace_inputs_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED", "MODULO_WORKSPACE_INPUTS_ENABLED"))
     # FAR-1743 / ADR 037 rev 2 (EXPERIMENTAL): path to the devtools-owned
     # model-management.json registry the sandbox_agent ``model_class`` seam
     # resolves through at snapshot mint. None (default) = no registry: nodes
@@ -467,10 +467,10 @@ class Settings(BaseSettings):
     # When True, every sandbox node run writes full stdout/stderr to
     # zstd-compressed side-car files on disk. Pointer dicts travel via the
     # ``_artifact_pointers`` key in the node output JSON.
-    modulo_artifacts_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_ARTIFACTS_ENABLED", "FARNA_CONTROL_MODULO_ARTIFACTS_ENABLED"))
+    modulo_artifacts_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_ARTIFACTS_ENABLED", "MODULO_ARTIFACTS_ENABLED"))
     # Base directory for artifact files.  Empty defaults to
     # ``<backend>/.data/artifacts`` resolved by the store factory.
-    modulo_artifacts_dir: str = Field(default="", validation_alias=_product_aliases("FARNA_CONTROL_ARTIFACTS_DIR", "FARNA_CONTROL_MODULO_ARTIFACTS_DIR"))
+    modulo_artifacts_dir: str = Field(default="", validation_alias=_product_aliases("FARNA_CONTROL_ARTIFACTS_DIR", "MODULO_ARTIFACTS_DIR"))
     # Web UI auth — FAIL-CLOSED (system worker refuses to boot without both).
     saq_auth_password: str | None = Field(default=None, alias="SAQ_AUTH_PASSWORD", repr=False)
     saq_auth_username: str | None = Field(default=None, alias="SAQ_AUTH_USERNAME")
@@ -619,7 +619,7 @@ class Settings(BaseSettings):
     mutation_row_lock_timeout_ms: int = Field(default=5000, alias="MUTATION_ROW_LOCK_TIMEOUT_MS", ge=100, le=30000)
     # Machine deployment identity for the runner workspace-identity label
     # (reconciler scoping; hostname fallback when unset).
-    runner_machine_id: str = Field(default="", alias="FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID")
+    runner_machine_id: str = Field(default="", alias="FARNA_CONTROL_RUNNER_MACHINE_ID")
     # FAR-604 dispatcher backpressure: a trigger fire (webhook/cron/polling) is
     # skipped when the pipeline's pending-queue OLDEST run is older than this.
     # Depth-based backpressure is derived from the pipeline's own
@@ -905,7 +905,7 @@ class Settings(BaseSettings):
     # floor.
     max_reportable_usd_min: Decimal = Field(
         default=Decimal("0.000001"),
-        alias="FARNA_CONTROL_MODULO_MAX_REPORTABLE_USD_MIN",
+        alias="FARNA_CONTROL_MAX_REPORTABLE_USD_MIN",
         ge=Decimal("0.000001"),
     )
     # The per-node clamp: an absurd single-node report is clamped here. The
@@ -915,7 +915,7 @@ class Settings(BaseSettings):
     # would disable the floor).
     max_self_reported_usd: Decimal = Field(
         default=Decimal("10000.0"),
-        alias="FARNA_CONTROL_MODULO_MAX_SELF_REPORTED_USD",
+        alias="FARNA_CONTROL_MAX_SELF_REPORTED_USD",
         ge=Decimal("0.000001"),
     )
     # The band ceiling — the TOP OF THE SANITY BAND, the trust boundary for
@@ -924,7 +924,7 @@ class Settings(BaseSettings):
     # dominates). ge-bounded like the other knobs.
     max_reportable_band_usd: Decimal = Field(
         default=Decimal("50.0"),
-        alias="FARNA_CONTROL_MODULO_MAX_REPORTABLE_BAND_USD",
+        alias="FARNA_CONTROL_MAX_REPORTABLE_BAND_USD",
         ge=Decimal("0.000001"),
     )
     # Dynamic rate_usd bound for cost_components writes: a rate above this is
@@ -933,7 +933,7 @@ class Settings(BaseSettings):
     # cap. ge-bounded at 0.
     max_rate_usd: Decimal = Field(
         default=Decimal("100000.0"),
-        alias="FARNA_CONTROL_MODULO_MAX_RATE_USD",
+        alias="FARNA_CONTROL_MAX_RATE_USD",
         ge=Decimal(0),
     )
 
@@ -943,19 +943,19 @@ class Settings(BaseSettings):
     # 0, meaning "fall back to MODULO_HEALTH_TIMEOUT_SECONDS". Overrides are
     # capped at 60s so a single hung dependency cannot stall readiness.
     # ------------------------------------------------------------------
-    modulo_health_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS", "FARNA_CONTROL_MODULO_HEALTH_TIMEOUT_SECONDS"))
-    modulo_health_db_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_TIMEOUT_SECONDS", "FARNA_CONTROL_MODULO_HEALTH_DB_TIMEOUT_SECONDS"))
-    modulo_health_redis_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_REDIS_TIMEOUT_SECONDS", "FARNA_CONTROL_MODULO_HEALTH_REDIS_TIMEOUT_SECONDS"))
-    modulo_health_checkpointer_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS", "FARNA_CONTROL_MODULO_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS"))
-    modulo_health_migrations_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_MIGRATIONS_TIMEOUT_SECONDS", "FARNA_CONTROL_MODULO_HEALTH_MIGRATIONS_TIMEOUT_SECONDS"))
+    modulo_health_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS", "MODULO_HEALTH_TIMEOUT_SECONDS"))
+    modulo_health_db_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_TIMEOUT_SECONDS", "MODULO_HEALTH_DB_TIMEOUT_SECONDS"))
+    modulo_health_redis_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_REDIS_TIMEOUT_SECONDS", "MODULO_HEALTH_REDIS_TIMEOUT_SECONDS"))
+    modulo_health_checkpointer_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS", "MODULO_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS"))
+    modulo_health_migrations_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_MIGRATIONS_TIMEOUT_SECONDS", "MODULO_HEALTH_MIGRATIONS_TIMEOUT_SECONDS"))
     # Readiness alert correlation (FAR-2156): when the migrations check reports
     # repo-vs-DB divergence, the detail links the most recent run of this deploy
     # workflow so an operator can jump straight to it. The defaults point at
     # Modulo's own dogfood repo/instance; a self-hosted deployment sets these to
     # its own fork and API base. An empty repo disables the lookup entirely.
-    modulo_deploy_run_repo: str = Field(default="farnalabs/farna-control", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_REPO", "FARNA_CONTROL_MODULO_DEPLOY_RUN_REPO"))
-    modulo_deploy_run_workflow: str = Field(default="deploy.yml", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_WORKFLOW", "FARNA_CONTROL_MODULO_DEPLOY_RUN_WORKFLOW"))
-    modulo_deploy_run_api_base: str = Field(default="https://api.github.com", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_API_BASE", "FARNA_CONTROL_MODULO_DEPLOY_RUN_API_BASE"))
+    modulo_deploy_run_repo: str = Field(default="farnalabs/farna-control", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_REPO", "MODULO_DEPLOY_RUN_REPO"))
+    modulo_deploy_run_workflow: str = Field(default="deploy.yml", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_WORKFLOW", "MODULO_DEPLOY_RUN_WORKFLOW"))
+    modulo_deploy_run_api_base: str = Field(default="https://api.github.com", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_API_BASE", "MODULO_DEPLOY_RUN_API_BASE"))
     # database-hygiene sub-check (FAR-1445). Unlike its neighbours this
     # override defaults to a NON-zero 1s: the probe is a single read of the
     # in-memory statistics views, so anything above a second means the
@@ -963,7 +963,7 @@ class Settings(BaseSettings):
     # nothing and only risks adding to the /healthz/ready tail (the endpoint
     # that 504'd on the 5s gateway budget). 0 still falls back to the global
     # MODULO_HEALTH_TIMEOUT_SECONDS like every other per-check override.
-    modulo_health_db_hygiene_timeout_seconds: float = Field(default=1.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS", "FARNA_CONTROL_MODULO_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS"))
+    modulo_health_db_hygiene_timeout_seconds: float = Field(default=1.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS", "MODULO_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS"))
     # Dead-tuple floor for the database-hygiene check: a dead-tuple RATIO is
     # only acted on once the table carries at least this many dead rows.
     # Rationale (FAR-1445): a small table that is momentarily 90% dead is
@@ -972,7 +972,7 @@ class Settings(BaseSettings):
     # autovacuum_vacuum_threshold (50) yet still 36x BELOW the 361,302 dead
     # tuples the runs table carried during the bloat incident, so the
     # incident still trips it with enormous margin.
-    modulo_health_db_hygiene_min_dead_tuples: int = Field(default=10000, ge=0, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES", "FARNA_CONTROL_MODULO_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES"))
+    modulo_health_db_hygiene_min_dead_tuples: int = Field(default=10000, ge=0, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES", "MODULO_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES"))
     # Dead-tuple ratio at/above which a table (already over the dead-tuple
     # floor) is reported degraded. Rationale (FAR-1445): autovacuum's own
     # default trigger is 20% dead (autovacuum_vacuum_scale_factor=0.2), so a
@@ -982,7 +982,7 @@ class Settings(BaseSettings):
     # several consecutive trigger crossings, a real hygiene failure. It still
     # leaves 37 points of headroom before the 97% the incident reached, so
     # the check never has to wait for catastrophe.
-    modulo_health_db_hygiene_dead_ratio: float = Field(default=0.6, ge=0.0, le=1.0, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO", "FARNA_CONTROL_MODULO_HEALTH_DB_HYGIENE_DEAD_RATIO"))
+    modulo_health_db_hygiene_dead_ratio: float = Field(default=0.6, ge=0.0, le=1.0, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO", "MODULO_HEALTH_DB_HYGIENE_DEAD_RATIO"))
 
     # ------------------------------------------------------------------
     # FAR-1771 — event-loop stall ATTRIBUTION (opt-in, off by default).
@@ -995,7 +995,7 @@ class Settings(BaseSettings):
     # synchronous call freezes the loop — the FAR-1439 class that starves
     # every async DB op at once. 0 (the default) = off: no sampler thread,
     # no loop debug flags, no per-tick work — zero cost, exactly as today.
-    modulo_slow_callback_warn_ms: int = Field(default=0, ge=0, le=60000, validation_alias=_product_aliases("FARNA_CONTROL_SLOW_CALLBACK_WARN_MS", "FARNA_CONTROL_MODULO_SLOW_CALLBACK_WARN_MS"))
+    modulo_slow_callback_warn_ms: int = Field(default=0, ge=0, le=60000, validation_alias=_product_aliases("FARNA_CONTROL_SLOW_CALLBACK_WARN_MS", "MODULO_SLOW_CALLBACK_WARN_MS"))
 
     # ------------------------------------------------------------------
     # In-process worker-liveness watchdog (postmortem 2026-08-09, FAR-121)
@@ -1024,10 +1024,10 @@ class Settings(BaseSettings):
     alert_email_to: str | None = Field(default=None, alias="ALERT_EMAIL_TO", repr=False)
     # Deployment environment name — carried on every operator alert email so a
     # recipient can tell staging from production at a glance (FAR-1495).
-    # This field MIRRORS the pre-existing scattered ``os.environ.get("FARNA_CONTROL_MODULO_ENV",
+    # This field MIRRORS the pre-existing scattered ``os.environ.get("FARNA_CONTROL_ENV",
     # "development")`` convention for the alert path; the pre-existing call
     # sites are deliberately not migrated in this change.
-    environment: str = Field("development", validation_alias=_product_aliases("FARNA_CONTROL_MODULO_ENV", "MODULO_ENV"))
+    environment: str = Field("development", validation_alias=_product_aliases("FARNA_CONTROL_ENV", "MODULO_ENV"))
     # Comma-separated allowlist of environments (case-insensitive, trimmed)
     # that may SEND operator alerts — it gates the TWO in-app operator-alert
     # channels that consult it: the readiness-degradation cron
@@ -1075,9 +1075,9 @@ class Settings(BaseSettings):
 
     # Product analytics — opt-in aggregate usage metrics (design doc section 11).
     # Endpoint URL for the vendor service. Empty = disabled.
-    product_analytics_endpoint_url: str = Field(default="", alias="FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_ENDPOINT_URL")
+    product_analytics_endpoint_url: str = Field(default="", alias="FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL")
     # Instance secret for HMAC signing. Empty = disabled.
-    product_analytics_instance_secret: str = Field(default="", alias="FARNA_CONTROL_MODULO_PRODUCT_ANALYTICS_INSTANCE_SECRET", repr=False)
+    product_analytics_instance_secret: str = Field(default="", alias="FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET", repr=False)
 
     # Telemetry — disabled by default for data residency compliance.
     # Set to "true" to enable OTel stdout + OTLP exporters.
@@ -1278,8 +1278,7 @@ class Settings(BaseSettings):
         elif self.modulo_db.lower() in ("mariadb", "mysql"):
             _log.warning("settings.mariadb_mode")
             if self.database_url.startswith(_POSTGRES_ASYNC_PREFIX):
-                self.database_url = "mysql+aiomysql://farna_control:farna_control@localhost:5435/farna_control"
-                _log.info("settings.database_url_auto_set", extra={"database_url": self.database_url})
+                raise ValueError(f"MODULO_DB is set to '{self.modulo_db}' but DATABASE_URL is still a Postgres URL; set DATABASE_URL to a mysql+aiomysql:// DSN")
         return self
 
     @model_validator(mode="after")
@@ -1485,8 +1484,8 @@ class Settings(BaseSettings):
         if secret and standby and secret == standby:
             raise ValueError("MODULO_BREAK_GLASS_SECRET and MODULO_BREAK_GLASS_STANDBY_SECRET must differ (identical secrets break the rotation path)")
         for name, value in (
-            ("FARNA_CONTROL_MODULO_BREAK_GLASS_SECRET", secret),
-            ("FARNA_CONTROL_MODULO_BREAK_GLASS_STANDBY_SECRET", standby),
+            ("FARNA_CONTROL_BREAK_GLASS_SECRET", secret),
+            ("FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET", standby),
         ):
             if value and len(value) < _MIN_BREAK_GLASS_SECRET_LEN:
                 raise ValueError(f"{name} must be at least {_MIN_BREAK_GLASS_SECRET_LEN} characters; got {len(value)}")

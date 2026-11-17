@@ -23,7 +23,7 @@ from farna.auth.api_key import _MK_PREFIX, generate_api_key
 from farna.auth.dependencies import InvalidToken, get_current_tenant_user_or_api_key
 from farna.settings import Settings
 
-os.environ.setdefault("FARNA_CONTROL_MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("REDIS_URL", "")
 
 pytestmark = pytest.mark.integration

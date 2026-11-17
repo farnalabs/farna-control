@@ -203,6 +203,11 @@ class TestNoSaqEvictionRedispatch:
             patch.object(ch, "RedisQueue", return_value=q),
             patch.object(ch, "_ingest_saq_error", AsyncMock()),
             patch.object(ch, "_re_enqueue_run", AsyncMock(return_value=("enqueued", "job-2"))) as re_enqueue,
+            # FAR-2515: the compensating sweeps (_run_reconcile_sweeps) run after
+            # the core reconcile and scan Redis for capacity alerts, decay
+            # alerts, etc. This test only exercises the core row-repair logic,
+            # so suppress the sweeps to avoid hanging on the mocked Redis.
+            patch.object(ch, "_run_reconcile_sweeps", AsyncMock()),
         ):
             summary = await ch.dispatcher_reconcile()
 

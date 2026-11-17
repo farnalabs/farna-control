@@ -1191,7 +1191,7 @@ async def test_orm_tenant_filter_select_update_delete(monkeypatch: pytest.Monkey
     from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
     # Force non-Postgres path so tenant filter activates
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_DB", "sqlite")
+    monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
 
     class _TenantTestBase(DeclarativeBase):
         pass

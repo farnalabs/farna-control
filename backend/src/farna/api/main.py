@@ -1438,8 +1438,8 @@ app.openapi = _openapi_schema  # type: ignore[method-assign]
 # (launcher.entry._serve_api); the middleware constants here stay in parity
 # with the nginx values above.
 
-_SERVE_SPA_ENV = "FARNA_CONTROL_MODULO_SERVE_SPA"
-_FRONTEND_DIST_ENV = "FARNA_CONTROL_MODULO_FRONTEND_DIST"
+_SERVE_SPA_ENV = "FARNA_CONTROL_SERVE_SPA"
+_FRONTEND_DIST_ENV = "FARNA_CONTROL_FRONTEND_DIST"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _ASSETS_PREFIX = "/assets/"
 # Matches modulo.api.routes.library._MAX_UPLOAD_SIZE (50 MB) — the native

@@ -323,7 +323,7 @@ jobs:
         if: steps.pr-details.outputs.ready == 'true' && steps.dedup.outputs.skip != 'true' && steps.author-gate.outputs.skipped != 'true'
         env:
           DISPATCH_URL: ${{ secrets.MODULO_PR_REVIEW_WEBHOOK_URL }}
-          DISPATCH_SECRET: ${{ secrets.MODULO_PR_REVIEW_WEBHOOK_SECRET }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET }}
           DISPATCH_LABEL: "Modulo PR Review"
           DISPATCH_ACCEPT_ANY_2XX: "1"
           PR_NUMBER: ${{ steps.pr-details.outputs.pr_number }}
@@ -339,7 +339,7 @@ jobs:
             --argjson prNumber "${PR_NUMBER}" \
             --arg sha "${SHA}" \
             --arg ref "${BRANCH}" \
-            '{action: "check_run", repository: {full_name: $repo}, pull_request: {number: $prNumber, head: {sha: $sha, ref: $ref}}}')
+            '{action: "pull_request", repository: {full_name: $repo}, pull_request: {number: $prNumber, head: {sha: $sha, ref: $ref}}}')
           # One shared retry policy (scripts/dispatch_with_retry.sh):
           # 429 (capacity) and 000/502/503/504 (transient) retry with
           # exponential backoff + jitter, an attempt cap and a wall-clock

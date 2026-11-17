@@ -179,7 +179,7 @@ jobs:
           # the fix for broken main).  The reviewer PAT can read variables
           # (fast-lane-suspension.yml uses it to write them), so prefer it and
           # fall back to github.token only when the secret is unavailable.
-          GH_TOKEN: ${{ secrets.MODULO_REVIEWBOT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
         run: |
           set +e
           uv run --no-build --project backend --no-sync python scripts/fast_lane_classify.py \

@@ -67,12 +67,12 @@ from farna.core.runtime_provider.docker import DockerRuntimeProvider
 pytestmark = [pytest.mark.docker]
 
 #: env vars the CI job (and local runs) set to point the harness at the rig.
-_HARNESS_PROXY_ENV = "FARNA_CONTROL_MODULO_RUNNER_HARNESS_PROXY_HOST"
-_HARNESS_DIND_ENV = "FARNA_CONTROL_MODULO_RUNNER_HARNESS_DIND_HOST"
+_HARNESS_PROXY_ENV = "FARNA_CONTROL_RUNNER_HARNESS_PROXY_HOST"
+_HARNESS_DIND_ENV = "FARNA_CONTROL_RUNNER_HARNESS_DIND_HOST"
 #: the workspace-network env var the CI job sets to the overlay's compose
 #: network name. EXPLICITLY SET in CI — so a missing network there is a
 #: loud failure, not a skip (plain local engines leave it unset).
-_HARNESS_NETWORK_ENV = "FARNA_CONTROL_MODULO_RUNNER_HARNESS_NETWORK"
+_HARNESS_NETWORK_ENV = "FARNA_CONTROL_RUNNER_HARNESS_NETWORK"
 #: the compose overlay's workspace network name (workspace-network-holder
 #: makes compose materialize it).
 _HARNESS_WORKSPACE_NETWORK = os.environ.get(_HARNESS_NETWORK_ENV, "runner-ci-workspace")
