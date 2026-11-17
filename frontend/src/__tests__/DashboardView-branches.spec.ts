@@ -1120,6 +1120,16 @@ describe('DashboardView branches — team breakdown mobile overflow', () => {
     expect(scroll.get('table').classes()).toContain('min-w-max')
     expect(scroll.find('[data-testid="dashboard-team-row-team-a"]').exists()).toBe(true)
 
+    // A11Y-3: the wide table must be reachable and scrollable by keyboard.
+    expect(scroll.attributes('role')).toBe('region')
+    expect(scroll.attributes('tabindex')).toBe('0')
+    expect(scroll.attributes('aria-label')).toBe('Team Breakdown table')
+    expect(scroll.classes()).toContain('focus-visible:ring-2')
+    expect(scroll.classes()).toContain('focus-visible:ring-ring')
+    const describedBy = scroll.attributes('aria-describedby')
+    expect(describedBy).toBe('dashboard-team-breakdown-scroll-instructions')
+    expect(wrapper.get(`#${describedBy}`).text()).toBe('Swipe horizontally to view all team breakdown columns.')
+
     wrapper.unmount()
   })
 })
