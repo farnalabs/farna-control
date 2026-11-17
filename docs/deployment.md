@@ -442,7 +442,7 @@ seeds the initial admin user (optional but recommended for first login); `MODULO
 selects the SQLite backend so no separate database server is needed.
 
 ```bash
-git clone https://github.com/farnalabs/farna-control   # or install the farnalabs-modulo package
+git clone https://github.com/farnalabs/farna-control   # or install the farna-control package
 cd backend
 uv sync
 DATABASE_URL=sqlite+aiosqlite:///./farna.db \

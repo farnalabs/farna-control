@@ -14,7 +14,7 @@ from two credential-free/0600 inputs in the data dir (state.json holds
 ports; secrets.json holds generated passwords) and pins the composed
 values as a 0600 dotenv file (`config.env`) inside the data dir.
 `compose_config` emits six keys today: `DATABASE_URL`, `DATABASE_ADMIN_URL`
-(the same URL promoted), `REDIS_URL`, `MODULO_SYSTEM_DATABASE_URL`, plus
+(the same URL promoted), `REDIS_URL`, `FARNA_CONTROL_SYSTEM_DATABASE_URL`, plus
 `SECRET_KEY` and `FERNET_KEY`, which are derived from the state HMAC key in
 `secrets.json` with domain separation. The direct `Settings(**source())` path
 (`LauncherConfigSource`) resolves only the three URL fields in
@@ -68,7 +68,7 @@ Do not conflate these; they do NOT share a code path:
   is not env-free either: its `resolve_schema_validator_mode` resolver runs a
   four-level chain (FAR-899) of
   `organisations.settings_json["schema_validator_mode"]` (per-org) →
-  `system_config` row (instance-wide) → `MODULO_SCHEMA_VALIDATOR_MODE`
+  `system_config` row (instance-wide) → `FARNA_CONTROL_SCHEMA_VALIDATOR_MODE`
   env var (first-boot seed only) → `lenient`. Note the direction: the
   database wins over the env var once a runtime value exists, which is
   the opposite of the Settings order above.

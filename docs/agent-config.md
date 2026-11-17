@@ -98,7 +98,7 @@ Caught at HTTP request deserialization – blocks the API call with a 422 respon
 | `agent_commands` / `agent_prompt` / `script_command` | Error | Sandbox agent nodes are `mode`-driven (`mode` is `"llm"` or `"script"`). In `script` mode a non-empty `script_command` is required; in the default `llm` mode both a non-empty `agent_commands` list and a non-empty `agent_prompt` are required. Setting `agent_commands` and `script_command` together is rejected as mutually exclusive. Note the graph node field is `agent_commands` (a list, joined at run time); `agent_command` is not a node field |
 | `template_id` | Error | Sandbox agent nodes require a `template_id` (e.g. `"opencode"`) |
 | `timeout_seconds` | Error | Per-node timeout must be between 60 and 604800 seconds if set |
-| `env_vars` reserved keys | Error | Sandbox agent `env_vars` keys must not start with `MODULO_` or `OPENCODE_API_KEY` |
+| `env_vars` reserved keys | Error | Sandbox agent `env_vars` keys must not start with `FARNA_CONTROL_`, `MODULO_` (the legacy alias prefix), or `OPENCODE_API_KEY` |
 | `context_files` paths | Error | Sandbox agent `context_files` source paths must be absolute (start with `/`) |
 | `connector_binding` (dispatch) | Error | Dispatch nodes (`node_type: dispatch`, FAR-1141) require a `connector_binding` (the CI-runner dispatch target) and cannot reference an `agent_id` |
 | `operation` (dispatch) | Error | A dispatch node's `connector_binding.operation` must be `dispatch` (omitting it inherits the engine fallback; an explicit `query`/`write` is rejected). The binding `type` must implement the CI-runner operations (`trigger_run` / `get_run_status` / `get_run_logs` / `list_runs`); `dispatch_action` selects one (default `trigger_run`) |

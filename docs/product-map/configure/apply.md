@@ -46,8 +46,11 @@ status: covered
 
 `modulo apply -f <config.yaml>` applies an organization's schemas (+ versions),
 model backends, pipelines and triggers to a live deployment from one YAML file
-(`api_version: modulo.dev/v1`), driven by `MODULO_URL` + `MODULO_API_KEY` (a
-bearer `mk_` org key). The API routes the CLI writes to are `/api/v1/schemas`,
+(`api_version: modulo.dev/v1`), driven by `FARNA_CONTROL_URL` +
+`FARNA_CONTROL_API_KEY` (a bearer `mk_` org key). The installed executable is
+`farna-control`, so invoke the command as `farna-control apply ...`; the
+`modulo apply` spelling used below and in older examples is the historical
+shorthand for the same command. The API routes the CLI writes to are `/api/v1/schemas`,
 `/api/v1/model-backends`, `/api/v1/pipelines`,
 `/api/v1/pipelines/{pipeline_id}/triggers` (create) and
 `/api/v1/triggers/{trigger_id}` (update); plan-time `credential_ref` validation
@@ -118,7 +121,7 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
       (`cli/apply/models.py`, `cli/apply/plan.py`, `cli/apply/executor.py`,
       `test_apply_base_url.py`)
 - [x] Planning is name-based upsert scoped to the org (the HTTP transport is
-      the operator's `MODULO_URL` + `MODULO_API_KEY` bearer org key):
+      the operator's `FARNA_CONTROL_URL` + `FARNA_CONTROL_API_KEY` bearer org key):
       per-entity decisions `created` / `updated` / `unchanged` / `blocked`,
       hashed over canonical managed-field views (`api_key` excluded; trigger
       `config_json` compared on the desired key set with masked secrets
@@ -194,7 +197,8 @@ see the [`modulo apply` GitHub Actions example](../../modulo-apply-github-action
 - [x] Output: human-friendly table (`render_table`: create/update/block/fail/
       unchanged lines + summary counts, or drift-prefixed variants) or
       `--output json` / `--json` (the full report); 401 surfaces "check
-      `MODULO_API_KEY`", 404 "server does not expose endpoint ... / older
+      `MODULO_API_KEY`" (the message still uses the legacy name), 404 "server
+      does not expose endpoint ... / older
       version", network errors surface as "apply failed: ..."
       (`test_apply_cli.py`)
 - [x] The API-key transport is org-scoped and operator-role gated; an

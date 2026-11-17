@@ -368,7 +368,7 @@ pg_restore -d "$DATABASE_URL" /tmp/pre-bypass-*.dump
 ```
 Emergency situation
   │
-  ├─ Can you use the CLI? (uv run modulo ...)
+  ├─ Can you use the CLI? (uv run farna-control ...)
   │     └─ Yes → Use the CLI command
   │     └─ No  → Continue below
   │
