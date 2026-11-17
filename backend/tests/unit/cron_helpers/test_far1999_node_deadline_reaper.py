@@ -1,6 +1,6 @@
 """FAR-1999 — bound how long a node-started run holds a concurrency slot.
 
-Ticket measurement (48h, app.modulo.run trigger-event log): 70 runs averaged
+Ticket measurement (48h, control.farna.dev trigger-event log): 70 runs averaged
 135 minutes terminalised ``run.no_progress`` by the mid-graph age gate with NO
 node envelope at all. Those runs had STARTED a node (``dispatch_phase =
 'first_node_dispatched'``) but produced no checkpoint, no output and no token

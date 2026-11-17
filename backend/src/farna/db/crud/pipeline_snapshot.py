@@ -146,7 +146,7 @@ def _snapshot_lock_engine(session: AsyncSession) -> AsyncEngine:
     rejected (SQLSTATE 25P02 / SQLAlchemy ``PendingRollbackError``). Because the
     lock is SESSION-scoped, ROLLBACK does not release it either — the pooled
     connection goes back to the pool still holding it and snapshot creation
-    fails permanently with ``snapshot_lock_busy`` (observed on app.modulo.run as
+    fails permanently with ``snapshot_lock_busy`` (observed on control.farna.dev as
     HTTP 503 "Pipeline snapshot lock unavailable after 5 attempts").
 
     Engine derivation, verified against the pinned SQLAlchemy 2.1.1:

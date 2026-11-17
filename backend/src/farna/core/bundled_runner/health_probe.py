@@ -369,7 +369,7 @@ async def _read_org_refs(session_factory: Any) -> dict[Any, list[str]]:
     session factory is built with ``autobegin=False``
     (saq_worker._make_system_session_factory), so ``session.execute()`` without
     a transaction raises ``InvalidRequestError`` and the whole tick dies in
-    Phase 1 every 60s (observed on app.modulo.run: stats error=probe_failed,
+    Phase 1 every 60s (observed on control.farna.dev: stats error=probe_failed,
     orgs_probed=0, zero probe-cache rows despite a live profile).
     """
     from farna.db.crud.runner_probe import list_org_image_refs, list_orgs_with_runner_profiles
