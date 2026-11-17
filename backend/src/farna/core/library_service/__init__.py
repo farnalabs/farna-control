@@ -196,8 +196,7 @@ async def get_primitive(
         raise
     if item is not None:
         return item
-    # No community fallback - community library removed
-    return None
+    return _MODULO_BY_ID.get(primitive_id)
 
 
 async def get_primitive_by_slug(
@@ -265,8 +264,10 @@ async def get_primitive_by_slug(
         raise
     if item is not None:
         return item
-    # No community fallback - community library removed
-    return None
+    builtin = _MODULO_BY_SLUG.get((primitive_type, slug))
+    if builtin is not None and version is not None and builtin.version != version:
+        return None
+    return builtin
 
 
 # ---------------------------------------------------------------------------
@@ -282,14 +283,16 @@ async def _re_read_primitive(
     """Re-read the source inside the copy transaction to avoid TOCTOU.
 
     Returns ``(primitive, in_db)`` — ``in_db`` is False when the source came
-    from the in-memory cache (it has no ``library_primitives`` row, so
-    ``forked_from`` cannot reference it: the FK would fail).
+    from the in-memory modulo registry (it has no ``library_primitives`` row,
+    so ``forked_from`` cannot reference it: the FK would fail).
     """
     refreshed = await get_library_primitive(session, primitive_id)
     if refreshed is not None:
         return refreshed, True
-    # No community fallback - community library removed
-    raise LookupError(f"Primitive {primitive_id} not found for org {org_id} during copy")
+    builtin = _MODULO_BY_ID.get(primitive_id)
+    if builtin is None:
+        raise LookupError(f"Primitive {primitive_id} not found for org {org_id} during copy")
+    return builtin, False
 
 
 async def _increment_registry_downloads(session: AsyncSession, refreshed: LibraryPrimitive) -> None:
