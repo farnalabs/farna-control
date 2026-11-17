@@ -54,7 +54,7 @@ test.describe('Settings SSO provider card layout', { tag: '@regression' }, () =>
     })
   })
 
-  test('390px phone: stacked card, no horizontal overflow, readable details', async ({ page }) => {
+  test('390px phone: stacked card, no horizontal overflow, readable details', { tag: '@regression' }, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/settings/sso')
     const card = page.locator('[data-sso-layout="card"]')
@@ -76,7 +76,7 @@ test.describe('Settings SSO provider card layout', { tag: '@regression' }, () =>
     expect((actionsBox?.x ?? 0) + (actionsBox?.width ?? 0)).toBeLessThanOrEqual((cardBox?.x ?? 0) + (cardBox?.width ?? 0) + 1)
   })
 
-  test('1280px desktop: card stays a horizontal row', async ({ page }) => {
+  test('1280px desktop: card stays a horizontal row', { tag: '@regression' }, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/settings/sso')
     const card = page.locator('[data-sso-layout="card"]')
@@ -88,7 +88,7 @@ test.describe('Settings SSO provider card layout', { tag: '@regression' }, () =>
     await expectCardContained(page)
   })
 
-  test('640px with a ~72-char client id: card contents stay inside the card', async ({ page }) => {
+  test('640px with a ~72-char client id: card contents stay inside the card', { tag: '@regression' }, async ({ page }) => {
     mockProvider.client_id = `${'1234567890'.repeat(5)}.apps.googleusercontent.com`
     await page.setViewportSize({ width: 640, height: 800 })
     await page.goto('/settings/sso')
