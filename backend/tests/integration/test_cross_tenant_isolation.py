@@ -23,7 +23,7 @@ from farna.core.feature_flags import LicenseData, LicenseKeyTier
 from farna.db.models.trigger_event import TriggerEvent
 from farna.db.rls import set_rls_org
 
-os.environ.setdefault("FARNA_CONTROL_MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("REDIS_URL", "")
 
 pytestmark = pytest.mark.integration

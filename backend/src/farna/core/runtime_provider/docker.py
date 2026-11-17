@@ -70,7 +70,7 @@ _DEFAULT_WORKSPACE_NETWORK = "modulo-runner-workspace"
 # Deployment-identity label (reconciler machine scoping, ADR 029): sourced
 # from this env var with a hostname fallback — two Modulo deployments sharing
 # one engine must not destroy each other's workspaces.
-_DEPLOYMENT_IDENTITY_ENV = "FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID"
+_DEPLOYMENT_IDENTITY_ENV = "FARNA_CONTROL_RUNNER_MACHINE_ID"
 _DEPLOYMENT_IDENTITY_LABEL = "modulo.machine.id"
 
 
@@ -155,7 +155,7 @@ class DockerRuntimeProvider(RuntimeProvider):
 
     The Docker daemon URL is resolved in this order:
     1. ``docker_host`` constructor argument
-    2. ``MODULO_DOCKER_HOST`` environment variable
+    2. ``FARNA_CONTROL_DOCKER_HOST`` environment variable
     3. ``DOCKER_HOST`` environment variable
     4. ``None`` (local socket — default)
 
@@ -175,7 +175,7 @@ class DockerRuntimeProvider(RuntimeProvider):
         start_timeout: int = 30,
         workspace_network: str = _DEFAULT_WORKSPACE_NETWORK,
     ) -> None:
-        self._docker_host = docker_host or os.environ.get("FARNA_CONTROL_MODULO_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
+        self._docker_host = docker_host or os.environ.get("FARNA_CONTROL_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
         if docker_host is None and self._docker_host and self._docker_host.startswith("npipe:"):
             self._docker_host = None
         _validate_docker_endpoint_tls(self._docker_host)

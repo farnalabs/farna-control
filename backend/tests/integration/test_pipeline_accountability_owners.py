@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from farna.auth.jwt import create_access_token
 from farna.db.crud.pipeline_owner import validate_accountability_owner
 
-os.environ.setdefault("FARNA_CONTROL_MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("REDIS_URL", "")
 
 pytestmark = pytest.mark.integration

@@ -37,7 +37,7 @@ def alert_environment_line(settings: Settings) -> str:
     Used as the first entry of :func:`alert_context_lines` (the email body)
     and by both alert modules' stdout stamps, so the line can never drift
     between the three renderings. Capped at ``MAX_CONTEXT_LINE_CHARS``: a
-    pathological ``MODULO_ENV`` cannot bloat an alert or a log line.
+    pathological ``FARNA_CONTROL_ENV`` cannot bloat an alert or a log line.
     """
     return f"Environment: {settings.environment or 'unknown'}"[:MAX_CONTEXT_LINE_CHARS]
 
@@ -89,13 +89,13 @@ def alerting_enabled_for_environment(settings: Settings) -> bool:
 
     * unset / blank -> ``True``: alert in every environment. A self-hosted
       install that never sets the allowlist keeps alerting out of the box,
-      whatever its ``MODULO_ENV`` (the compose default is ``development``)
+      whatever its ``FARNA_CONTROL_ENV`` (the compose default is ``development``)
       — the allowlist is opt-in noise control, not a new default-off.
     * set -> ``True`` only when ``settings.environment`` is in the list.
       Entries are comma-split, whitespace-trimmed, empties dropped and
       case-folded on both sides, so ``"production"``, ``" production "``
       and ``"Production"`` are the same entry. A staging deployment
-      (``MODULO_ENV=staging``, CI-only E2E with no live workload) setting
+      (``FARNA_CONTROL_ENV=staging``, CI-only E2E with no live workload) setting
       ``ALERT_ENVIRONMENTS=production`` therefore stops paging the
       operator while production keeps alerting.
 

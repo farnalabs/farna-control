@@ -314,7 +314,7 @@ class TestWorkItemRefsCapSetting:
         get_settings.cache_clear()
 
     def test_default_is_100(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("FARNA_CONTROL_MODULO_WORK_ITEM_REFS_CAP", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_WORK_ITEM_REFS_CAP", raising=False)
         assert work_item_refs_cap() == 100
 
     @pytest.mark.parametrize(
@@ -322,7 +322,7 @@ class TestWorkItemRefsCapSetting:
         [("25", 25), ("0", 1), ("999999", 100000), ("abc", 100), ("-5", 1)],
     )
     def test_clamps_out_of_range_and_garbage(self, monkeypatch: pytest.MonkeyPatch, raw: str, expected: int) -> None:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_WORK_ITEM_REFS_CAP", raw)
+        monkeypatch.setenv("FARNA_CONTROL_WORK_ITEM_REFS_CAP", raw)
         assert work_item_refs_cap() == expected
 
     def test_self_report_normaliser_uses_explicit_max_refs(self) -> None:

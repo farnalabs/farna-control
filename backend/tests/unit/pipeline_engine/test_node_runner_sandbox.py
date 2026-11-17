@@ -1973,7 +1973,7 @@ def test_no_output_json_message_survives_executor_terminal_fail_surface():
 
 async def test_read_log_tail_via_provider_returns_empty_without_api_key(monkeypatch):
     """No E2B key configured -> helper returns '' without attempting a fetch."""
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("E2B_API_KEY", raising=False)
     with patch("urllib.request.urlopen") as _urlopen:
         assert not await _read_log_tail_via_provider("sbx-nokey")
@@ -1991,7 +1991,7 @@ async def test_read_log_tail_via_provider_never_raises_on_network_failure(monkey
 
 async def test_read_log_tail_via_provider_returns_empty_for_invalid_id(monkeypatch):
     """A non-string/None sandbox id never triggers a network call."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
     with patch("urllib.request.urlopen") as _urlopen:
         assert not await _read_log_tail_via_provider(None)
     _urlopen.assert_not_called()
@@ -3274,7 +3274,7 @@ def _resolve_usable_bash() -> str | None:
     verifying each candidate with a trivial probe command.
     """
     candidates = [
-        os.environ.get("FARNA_CONTROL_MODULO_TEST_BASH"),
+        os.environ.get("FARNA_CONTROL_TEST_BASH"),
         r"C:\Program Files\Git\bin\bash.exe",
         shutil.which("bash"),
     ]

@@ -324,7 +324,7 @@ class TestWorkerLivenessWatchdog:
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """``ALERT_ENVIRONMENTS=production`` + ``MODULO_ENV=staging``: an
+        """``ALERT_ENVIRONMENTS=production`` + ``FARNA_CONTROL_ENV=staging``: an
         unhealthy fleet must send on NO channel (generic webhook, Teams and
         email all configured) and must log the suppression - while the
         watchdog keeps evaluating the condition."""
@@ -475,8 +475,8 @@ class TestWorkerLivenessWatchdog:
         fan-out still fires on every channel."""
         fake = _FakeWatchdogRedis()
         for overrides in (
-            {"FARNA_CONTROL_MODULO_ENV": "staging"},  # allowlist unset
-            {"FARNA_CONTROL_MODULO_ENV": "staging", "ALERT_ENVIRONMENTS": "production,staging"},  # env included
+            {"FARNA_CONTROL_ENV": "staging"},  # allowlist unset
+            {"FARNA_CONTROL_ENV": "staging", "ALERT_ENVIRONMENTS": "production,staging"},  # env included
         ):
             settings = _make_settings(
                 **overrides,
@@ -1695,7 +1695,7 @@ class TestStdoutStamp:
 # FAR-1499: the alert context rides the webhook channels too. The generic
 # Slack-compatible webhook and the Microsoft Teams MessageCard both render
 # through the SAME single text renderer as the email text part
-# (_alert_text / _recovery_text), so each carries `Environment: <MODULO_ENV>`
+# (_alert_text / _recovery_text), so each carries `Environment: <FARNA_CONTROL_ENV>`
 # and every ALERT_CONTEXT line exactly once - never twice.
 # ---------------------------------------------------------------------------
 
@@ -1706,7 +1706,7 @@ def _webhook_context_settings(*, email: bool = True) -> Settings:
     overrides: dict[str, Any] = {
         "ALERT_WEBHOOK_URL": "https://hooks.slack.com/services/T/X/B",
         "ALERT_TEAMS_WEBHOOK_URL": "https://outlook.office.com/webhook/abc",
-        "FARNA_CONTROL_MODULO_ENV": "staging",
+        "FARNA_CONTROL_ENV": "staging",
         "ALERT_CONTEXT": "runbook: https://example.com/runbook\npage the on-call",
     }
     if email:
