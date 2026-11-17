@@ -1401,7 +1401,7 @@ async def test_credential_resolves_from_secrets_backend_under_rls_context(
     raises CredentialResolutionError → ProvisioningError — this test then fails.
     """
     ci = _vault_connector()
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_SECRETS_BACKEND", "fernet")
+    monkeypatch.setenv("FARNA_CONTROL_SECRETS_BACKEND", "fernet")
     settings = MagicMock()
     settings.fernet_key = _VAULT_FERNET_KEY
 

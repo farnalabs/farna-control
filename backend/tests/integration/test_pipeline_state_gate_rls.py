@@ -44,7 +44,7 @@ from farna.db.crud.run import _enforce_pipeline_state_gate, create_run
 from farna.db.rls import set_rls_execution_context, set_rls_org, set_rls_user_context
 from farna.settings import Settings, get_settings
 
-os.environ.setdefault("FARNA_CONTROL_MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("REDIS_URL", "")
 
 pytestmark = pytest.mark.integration

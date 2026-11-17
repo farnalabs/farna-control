@@ -188,7 +188,7 @@ class TestStartupHookAppliesLicenseAnchor:
 
         with (
             patch.object(sw, "get_settings", return_value=settings),
-            pytest.raises(RuntimeError, match="FARNA_CONTROL_MODULO_LICENSE_PUBLIC_KEY"),
+            pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"),
         ):
             await sw._startup_event_bus_hook({})
 

@@ -40,7 +40,7 @@ Semantics committed by this delivery:
   - ``runner.reconciler.sweep_completed {scanned, orphans_destroyed}``
     closes every sweep.
   - **Engine-less skip (FAR-1201 follow-up)**: when the deployment has NO
-    Docker endpoint at all (no ``MODULO_DOCKER_HOST``/``DOCKER_HOST``/
+    Docker endpoint at all (no ``FARNA_CONTROL_DOCKER_HOST``/``DOCKER_HOST``/
     ``DOCKER_CONTEXT``, no Docker context, and no local socket aiodocker
     would auto-detect), the Docker half is NOT APPLICABLE — it skips with
     ``runner.reconciler.skipped`` + an explicit reason instead of
@@ -92,7 +92,7 @@ class _LabelledContainer:
 
 def deployment_identity() -> str:
     """The deployment-identity value (label rides every container filter)."""
-    return os.environ.get("FARNA_CONTROL_MODULO_RUNNER_MACHINE_ID") or socket.gethostname()
+    return os.environ.get("FARNA_CONTROL_RUNNER_MACHINE_ID") or socket.gethostname()
 
 
 class _DockerWorkspaceSource:
@@ -670,10 +670,10 @@ async def destroy_workspaces_for_run(run_id: str) -> dict[str, int]:
 
 def _resolve_docker_host() -> str | None:
     # The reconciler uses the same Docker endpoint chain as the provider:
-    # MODULO_DOCKER_HOST first, then DOCKER_HOST, else None (the engine's
+    # FARNA_CONTROL_DOCKER_HOST first, then DOCKER_HOST, else None (the engine's
     # local socket). The raw-socket operator override is documented in
     # docs/security/.
-    return os.environ.get("FARNA_CONTROL_MODULO_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
+    return os.environ.get("FARNA_CONTROL_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
 
 
 def _local_docker_socket_paths() -> tuple[Path, ...]:
@@ -759,7 +759,7 @@ def docker_endpoint_skip_reason() -> str | None:
     (explicit url → Docker context → auto-detected local socket), which is
     exactly the case where ``aiodocker.Docker(url=None)`` raises at
     construction (the permanently-degraded engine-unreachable check on
-    engine-less deployments such as EKS with no ``MODULO_DOCKER_HOST``/
+    engine-less deployments such as EKS with no ``FARNA_CONTROL_DOCKER_HOST``/
     ``DOCKER_HOST`` and no local socket). Corroborated by ``build_hub``
     (``runtime_provider``): the Docker provider only REGISTERS when an env
     endpoint is set, so an engine-less deployment creates no workspace
@@ -775,7 +775,7 @@ def docker_endpoint_skip_reason() -> str | None:
         return None
     if _default_docker_socket_present():
         return None
-    return "no Docker endpoint configured (MODULO_DOCKER_HOST, DOCKER_HOST and DOCKER_CONTEXT all unset, no Docker context selected, no local Docker socket) — set MODULO_DOCKER_HOST to enable the workspace-orphan sweep"
+    return "no Docker endpoint configured (FARNA_CONTROL_DOCKER_HOST, DOCKER_HOST and DOCKER_CONTEXT all unset, no Docker context selected, no local Docker socket) — set FARNA_CONTROL_DOCKER_HOST to enable the workspace-orphan sweep"
 
 
 async def kubernetes_endpoint_skip_reason() -> str | None:
