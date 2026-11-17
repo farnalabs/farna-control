@@ -86,7 +86,7 @@ Usage: {{ include "farna-control.image" (dict "image" .Values.backend.image "app
 Resolve the effective Postgres password.
 Precedence: postgres.password, then the "password" key of postgres.existingSecret
 (resolved via lookup). Returns "" when neither yields a value. Shared by
-DATABASE_URL, DATABASE_ADMIN_URL and MODULO_SYSTEM_DATABASE_URL so the three
+DATABASE_URL, DATABASE_ADMIN_URL and FARNA_CONTROL_SYSTEM_DATABASE_URL so the three
 roles can never diverge on credentials.
 */}}
 {{- define "farna-control.postgresPassword" -}}
@@ -149,7 +149,7 @@ When postgres.host is unset, falls back to backend.env.DATABASE_ADMIN_URL.
 {{- end }}
 
 {{/*
-Construct MODULO_SYSTEM_DATABASE_URL from Postgres config.
+Construct FARNA_CONTROL_SYSTEM_DATABASE_URL from Postgres config.
 The farna_control_system role (LOGIN, BYPASSRLS) is required by cross-org system
 crons — dispatcher_reconcile REFUSES to run without this URL, and
 dispatcher_reconcile gates /healthz/ready (a missing URL therefore means
@@ -157,8 +157,8 @@ the backend pod NEVER becomes Ready). bootstrap_role creates the role with
 the password parsed from this URL, so it shares postgres.password just like
 farna_control_app does. The chart's saq-runner/saq-system commands bypass
 entrypoint.sh, so the URL cannot be derived at runtime — it must be wired
-here. Falls back to backend.env.MODULO_SYSTEM_DATABASE_URL when postgres.host
-is unset (mirrors modulo.databaseUrl).
+here. Falls back to backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL (or the
+legacy backend.env.MODULO_SYSTEM_DATABASE_URL) when postgres.host is unset (mirrors modulo.databaseUrl).
 */}}
 {{- define "farna-control.systemDatabaseUrl" -}}
 {{- if .Values.postgres.host }}
@@ -169,7 +169,7 @@ is unset (mirrors modulo.databaseUrl).
       "port" .Values.postgres.port
       "database" .Values.postgres.database) }}
 {{- else }}
-{{- .Values.backend.env.MODULO_SYSTEM_DATABASE_URL | default "" }}
+{{- .Values.backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL | default .Values.backend.env.MODULO_SYSTEM_DATABASE_URL | default "" }}
 {{- end }}
 {{- end }}
 

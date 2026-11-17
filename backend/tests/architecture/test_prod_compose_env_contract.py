@@ -64,20 +64,6 @@ _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
         "src/farna/core/error_tracking/saq_hooks.py",
         "src/farna/core/error_tracking/__init__.py",
     ),
-    # MODULO_ENV is a legacy alias used in the compose but the code reads
-    # FARNA_CONTROL_ENV. The compose should be fixed to use the canonical
-    # name; this allowlist entry prevents the test from failing on the pre-existing
-    # compose bug. Read sites are the same as FARNA_CONTROL_ENV.
-    "MODULO_ENV": (
-        "src/farna/api/middleware/catch_all.py",
-        "src/farna/api/routes/deployment.py",
-        "src/farna/api/routes/webhooks.py",
-        "src/farna/core/cron_helpers.py",
-        "src/farna/core/logging_config.py",
-        "src/farna/core/run_outputs_dualwrite.py",
-        "src/farna/core/error_tracking/saq_hooks.py",
-        "src/farna/core/error_tracking/__init__.py",
-    ),
 }
 
 #: The values an operator supplies in ``deploy/compose/.env`` for the compose's

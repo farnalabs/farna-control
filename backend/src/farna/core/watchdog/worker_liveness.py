@@ -41,7 +41,7 @@ Design:
   channel's failure never blocks the others. Default-off — nothing is sent
   until at least one channel is configured. Additionally, when
   ``ALERT_ENVIRONMENTS`` is set and does not include this
-  deployment's ``MODULO_ENV``, NO channel fires (the shared
+  deployment's ``FARNA_CONTROL_ENV``, NO channel fires (the shared
   ``core.alert_context.alerting_enabled_for_environment`` gate, identical
   to the readiness alert's) — staging is CI-only with no live workload, so
   a worker-death page there pages the operator about nothing. The gate is
@@ -310,7 +310,7 @@ def _alert_text(settings: Settings, conditions: list[str]) -> str:
     """The ONE plain-text alert rendering (FAR-1499).
 
     Title + condition bullets + detection stamp + the alert context
-    (``Environment: <MODULO_ENV>`` and any ``ALERT_CONTEXT`` lines, rendered
+    (``Environment: <FARNA_CONTROL_ENV>`` and any ``ALERT_CONTEXT`` lines, rendered
     by the shared ``core.alert_context`` helpers). This single string feeds
     the email TEXT part, the generic webhook and the Microsoft Teams webhook
     — every text channel therefore carries the context exactly once and the

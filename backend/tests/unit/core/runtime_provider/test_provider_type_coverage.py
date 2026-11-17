@@ -77,7 +77,7 @@ def test_local_always_registered_and_gated_types_absent_without_env(
 
 
 def test_e2b_registered_when_canonical_signal_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    """E2B is registered when MODULO_E2B_API_KEY is set."""
+    """E2B is registered when FARNA_CONTROL_E2B_API_KEY is set."""
     monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
     monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
@@ -87,7 +87,7 @@ def test_e2b_registered_when_canonical_signal_present(monkeypatch: pytest.Monkey
 
 
 def test_e2b_not_registered_when_canonical_signal_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """E2B is NOT registered when MODULO_E2B_API_KEY is unset."""
+    """E2B is NOT registered when FARNA_CONTROL_E2B_API_KEY is unset."""
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)

@@ -305,7 +305,7 @@ class TestCreateWorkspace:
 
     async def test_egress_none_accepted_when_chart_network_policy_is_deployed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """FAR-2068: deny_all is accepted once the chart's workspace NetworkPolicy
-        exists (the chart injects MODULO_WORKSPACE_NETWORK_POLICY=enabled).
+        exists (the chart injects FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled).
 
         Pins the newly-accepted positive path at the provider level — the
         egress-resolution table alone does not prove create_workspace provisions.
