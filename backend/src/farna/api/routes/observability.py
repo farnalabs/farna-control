@@ -335,8 +335,10 @@ async def test_otel_connection(
     except ValueError as exc:
         return TestSpanResult(success=False, message=f"Rejected: {exc}")
 
+    # The URL is validated by validate_outbound_url_async() above and the client
+    # is IP-pinned by pinned_async_client(), so this sink cannot be used for SSRF.
     try:
-        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})
+        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})  # NOSONAR S5144 — validated + IP-pinned above
         if resp.status_code < 500:
             return TestSpanResult(
                 success=True,

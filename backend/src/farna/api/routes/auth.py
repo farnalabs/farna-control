@@ -1732,10 +1732,10 @@ def _set_refresh_cookie(response: Response, refresh_token: str, settings: Settin
 
 
 def _set_csrf_cookie(response: Response, token: str, settings: Settings, *, max_age_seconds: int | None = None) -> None:
-    response.set_cookie(
+    response.set_cookie(  # NOSONAR S3330 — JS-readable CSRF token; SameSite=strict + secure mitigate.
         key="XSRF-TOKEN",
         value=token,
-        httponly=False,  # NOSONAR S3330 — JS-readable CSRF token; SameSite=strict + secure mitigate.
+        httponly=False,  # JS-readable by design: double-submit CSRF token.
         samesite="strict",
         secure=not settings.debug,
         max_age=max_age_seconds if max_age_seconds is not None else settings.modulo_access_token_minutes * 60,
@@ -1755,10 +1755,10 @@ def _clear_auth_cookies(response: Response, settings: Settings) -> None:
             max_age=0,
             path="/",
         )
-    response.set_cookie(
+    response.set_cookie(  # NOSONAR S3330 — JS-readable CSRF token; SameSite=strict + secure mitigate.
         key="XSRF-TOKEN",
         value="",
-        httponly=False,  # NOSONAR S3330 — JS-readable CSRF token; SameSite=strict + secure mitigate.
+        httponly=False,  # JS-readable by design: double-submit CSRF token.
         samesite="strict",
         secure=secure,
         max_age=0,
