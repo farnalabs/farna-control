@@ -21,8 +21,8 @@ import logging
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from farna.core.crypto import sign as _ed25519_sign
 from farna.core.evidence_pack.canonical import canonical_json_bytes
-from farna.registry.crypto import sign as _ed25519_sign
 from farna.settings import get_settings
 
 _log = logging.getLogger(__name__)

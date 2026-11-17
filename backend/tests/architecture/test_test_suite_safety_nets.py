@@ -73,14 +73,6 @@ PINNED_AWAITING_IMPLEMENTATION: dict[str, frozenset[str]] = {
             "Elena sees whether HITL effort is decreasing over time",
         }
     ),
-    "tests/bdd/features/personas/jordan-community-contributor.feature": frozenset(
-        {
-            "Jordan contributes a new agent to the community library",
-            "Jordan's contribution carries versioned provenance",
-            "Jordan updates his contributed primitive with improvements",
-            "Jordan packages evals alongside his contributed agent",
-        }
-    ),
     "tests/bdd/features/personas/marcus-ciso.feature": frozenset(),  # data-residency journey shipped 2026-10-03
     "tests/bdd/features/personas/priya-platform-engineer.feature": frozenset(
         {

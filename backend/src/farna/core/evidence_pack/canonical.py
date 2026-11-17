@@ -6,7 +6,7 @@ exporter and the offline verifier or the digests will never agree:
 * :func:`canonical_json_bytes` — the signed manifest payload. Compact JSON
   (``separators=(',', ':')``), keys sorted, ``ensure_ascii=False`` (non-ASCII
   values stay literal UTF-8), encoded UTF-8. This mirrors the canonical form
-  already used by ``modulo.core.library_sync.manifest``.
+  already used by the former library manifest implementation.
 * :func:`encode_ndjson` / :func:`decode_ndjson` — the audit-events file: one
   canonical-JSON event per line. The chain re-derivation replays exactly the
   events decoded from these bytes.

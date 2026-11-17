@@ -205,59 +205,6 @@ def post_import_lifecycle_map_malformed_versions(request: Any, client: Any) -> N
     _store_response(request, ctx={}, resp=resp)
 
 
-@when(parsers.parse('I contribute a lifecycle map primitive named "{name}"'))
-def post_contribute_lifecycle_map(name: str, ctx: dict[str, Any], request: Any, client: Any) -> None:
-    """FAR-204: lifecycle_map is an accepted community-contribute primitive_type."""
-    payload = {
-        "primitive_type": "lifecycle_map",
-        "name": name,
-        "slug": "community-sdlc",
-        "description": "shared lifecycle map",
-        "tags": [],
-        "content_json": {"stages": [{"id": "s1", "name": "Inbox", "type": "manual"}], "edges": []},
-        "source_url": None,
-    }
-
-    def _primitive() -> MagicMock:
-        p = MagicMock()
-        p.id = uuid.uuid4()
-        p.organisation_id = ORG_ID
-        p.source = "local"
-        p.primitive_type = "lifecycle_map"
-        p.name = name
-        p.slug = "community-sdlc"
-        p.description = "shared lifecycle map"
-        p.author = USER_ID.hex
-        p.version = "1.0"
-        p.tags = []
-        p.content_json = payload["content_json"]
-        p.source_url = None
-        p.forked_from = None
-        p.checksum = None
-        p.ed25519_signature = None
-        p.verified = None
-        p.download_count = None
-        p.average_rating = None
-        p.review_count = None
-        p.owner_team_id = None
-        p.visibility = "org"
-        p.account_id = USER_ID
-        p.auto_update = True
-        p.tier = "native"
-        p.trust_tier = None
-        p.status = None
-        p.manifest_pins = None
-        p.trust_header = None
-        p.created_at = datetime.now(UTC)
-        p.updated_at = datetime.now(UTC)
-        return p
-
-    with patch("farna.api.routes.library.contribute_primitive", new=AsyncMock(return_value=_primitive())):
-        resp = client.post("/api/v1/libraries/community/contribute", json=payload)
-    _store_response(request, ctx, resp)
-    ctx["contributed"] = name
-
-
 @when(parsers.parse('I import a lifecycle map named "{name}"'))
 def post_import_lifecycle_map(name: str, ctx: dict[str, Any], request: Any, client: Any) -> None:
     envelope = {

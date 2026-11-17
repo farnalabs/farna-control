@@ -1,4 +1,4 @@
-"""Library service — CRUD and community primitives for library_primitives."""
+"""Library service — CRUD for local library primitives and fixture contributions."""
 
 from __future__ import annotations
 
@@ -14,21 +14,10 @@ from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.core.library_service._seed_data import (
-    _COMMUNITY_BY_ID,
-    _COMMUNITY_BY_SLUG,
-    _COMMUNITY_PRIMITIVES,
     _MODULO_BY_ID,
     _MODULO_BY_SLUG,
     _MODULO_PRIMITIVES,
-    CONTRIBUTION_DRAFT,
-    CONTRIBUTION_PUBLISHED,
-    CONTRIBUTION_REVIEW_QUEUE,
     MODULO_ORG_ID,
-)
-from farna.core.library_service.community import (
-    get_community_entry,
-    install_community_entry,
-    list_community_entries,
 )
 from farna.db.crud.base import PageResult
 from farna.db.crud.library_primitive import (
@@ -53,23 +42,20 @@ __all__ = [
     "CONTRIBUTION_DRAFT",
     "CONTRIBUTION_PUBLISHED",
     "CONTRIBUTION_REVIEW_QUEUE",
+    "MODULO_ORG_ID",
+    "_MODULO_BY_ID",
+    "_MODULO_BY_SLUG",
+    "_MODULO_PRIMITIVES",
     "CommunityPrimitiveReadOnlyError",
     "ContributionInvalidTransitionError",
     "ContributionNotFoundError",
     "contribute_fixture",
-    "contribute_primitive",
     "copy_to_adapt",
-    "get_community_entry",
-    "get_primitive",
-    "get_primitive_by_slug",
-    "install_community_entry",
-    "list_community_entries",
     "list_contribution_versions",
     "list_contributions",
     "list_org_contributions",
     "list_primitives",
     "notify_importers_of_update",
-    "publish_contribution",
     "submit_contribution_for_review",
     "submit_contribution_version",
 ]
@@ -87,8 +73,10 @@ class ContributionInvalidTransitionError(ValueError):
     """Raised when an invalid contribution status transition is attempted."""
 
 
-# Guards the in-memory community cache appended to by publish_contribution.
-_COMMUNITY_CACHE_LOCK: asyncio.Lock = asyncio.Lock()
+# Contribution status constants (kept for fixture contribution flow)
+CONTRIBUTION_DRAFT = "draft"
+CONTRIBUTION_REVIEW_QUEUE = "review_queue"
+CONTRIBUTION_PUBLISHED = "published"
 
 
 # ---------------------------------------------------------------------------
@@ -118,106 +106,6 @@ def _parse_version_key(version: str | None) -> tuple[int, ...]:
         return tuple(int(x) for x in version.split("."))
     except ValueError:
         return (0,)
-
-
-def _resolve_primitive_types(
-    primitive_type: str | None,
-    primitive_types: list[str] | None,
-) -> list[str] | None:
-    """Merge single and plural type filters into one set, or None when unfiltered."""
-    if primitive_types:
-        return primitive_types
-    if primitive_type is not None:
-        return [primitive_type]
-    return None
-
-
-def _filter_primitives(
-    primitives: list[LibraryPrimitive],
-    *,
-    primitive_type: str | None = None,
-    primitive_types: list[str] | None = None,
-    search: str | None = None,
-) -> list[LibraryPrimitive]:
-    if not primitives:
-        return []
-    allowed_types = _resolve_primitive_types(primitive_type, primitive_types)
-    if allowed_types is not None:
-        allowed = set(allowed_types)
-        primitives = [p for p in primitives if p.primitive_type in allowed]
-    if search:
-        term = search.strip().lower()
-        if term:
-            primitives = [p for p in primitives if term in (p.name or "").lower() or term in (p.description or "").lower()]
-    return primitives
-
-
-def _filter_modulo(
-    *,
-    primitive_type: str | None = None,
-    primitive_types: list[str] | None = None,
-    search: str | None = None,
-) -> list[LibraryPrimitive]:
-    return _filter_primitives(
-        _MODULO_PRIMITIVES,
-        primitive_type=primitive_type,
-        primitive_types=primitive_types,
-        search=search,
-    )
-
-
-def _filter_community(
-    *,
-    primitive_type: str | None = None,
-    primitive_types: list[str] | None = None,
-    search: str | None = None,
-) -> list[LibraryPrimitive]:
-    return _filter_primitives(
-        _COMMUNITY_PRIMITIVES,
-        primitive_type=primitive_type,
-        primitive_types=primitive_types,
-        search=search,
-    )
-
-
-async def _fetch_published_community_from_db(
-    session: AsyncSession,
-    _org_id: uuid.UUID,
-    *,
-    primitive_type: str | None = None,
-    primitive_types: list[str] | None = None,
-    search: str | None = None,
-) -> list[LibraryPrimitive]:
-    """Fetch published community items from the database.
-
-    Queries for items with contribution_status='published' and visibility='community'.
-    Returns an empty list on DB errors (missing tables, RLS restrictions).
-    Published items are also cached in the in-memory community list at publish time,
-    so this query is a best-effort supplement that handles warm-start scenarios.
-    """
-    try:
-        saved_tenant = session.info.pop("org_id", None)
-        try:
-            stmt = select(LibraryPrimitive).where(LibraryPrimitive.contribution_status == CONTRIBUTION_PUBLISHED).where(LibraryPrimitive.visibility == "community").order_by(LibraryPrimitive.created_at.desc())
-            allowed_types = _resolve_primitive_types(primitive_type, primitive_types)
-            if allowed_types is not None:
-                stmt = stmt.where(LibraryPrimitive.primitive_type.in_(allowed_types))
-            if search:
-                term = f"%{search.strip()}%"
-                stmt = stmt.where(LibraryPrimitive.name.ilike(term))
-            result = await session.execute(stmt)
-            return list(result.scalars())
-        finally:
-            if saved_tenant is not None:
-                session.info["org_id"] = saved_tenant
-    except ProgrammingError:
-        logger.warning("_fetch_published_community_from_db: ProgrammingError — missing DB table or migration")
-        return []
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        logger.exception("_fetch_published_community_from_db: unexpected error")
-        return []
 
 
 async def _with_org_txn[T](
@@ -269,12 +157,11 @@ async def get_primitive(
 ) -> LibraryPrimitive | None:
     """Return a primitive visible to org_id, or None.
 
-    Resolver fallback ordering (ADR 032 §4 visibility — DB → registry →
-    community cache): the org-scoped ``library_primitives`` DB row wins, then
-    the in-code modulo registry, then the published community cache. The two
-    in-code sources are visible to EVERY organisation and carry no DB row in
-    the org's RLS slice, so callers must not assume a returned primitive is
-    DB-persisted.
+    Resolver fallback ordering (ADR 032 §4 visibility — DB → registry):
+    the org-scoped ``library_primitives`` DB row wins, then the in-code
+    modulo registry. The in-code source is visible to EVERY organisation and
+    carries no DB row in the org's RLS slice, so callers must not assume a
+    returned primitive is DB-persisted.
 
     Supports being called within an existing transaction or starting its own.
 
@@ -309,7 +196,7 @@ async def get_primitive(
         raise
     if item is not None:
         return item
-    return _MODULO_BY_ID.get(primitive_id) or _COMMUNITY_BY_ID.get(primitive_id)
+    return _MODULO_BY_ID.get(primitive_id)
 
 
 async def get_primitive_by_slug(
@@ -323,12 +210,11 @@ async def get_primitive_by_slug(
 ) -> LibraryPrimitive | None:
     """Return a primitive visible to org_id by type and slug, or None.
 
-    Resolver fallback ordering (ADR 032 §4 visibility — DB → registry →
-    community cache): the org-scoped ``library_primitives`` DB row wins, then
-    the in-code modulo registry, then the published community cache. The two
-    in-code sources are visible to EVERY organisation and carry no DB row in
-    the org's RLS slice, so callers must not assume a returned primitive is
-    DB-persisted.
+    Resolver fallback ordering (ADR 032 §4 visibility — DB → registry):
+    the org-scoped ``library_primitives`` DB row wins, then the in-code
+    modulo registry. The in-code source is visible to EVERY organisation and
+    carries no DB row in the org's RLS slice, so callers must not assume a
+    returned primitive is DB-persisted.
 
     A slug may have MULTIPLE version rows in one organisation (FAR-759
     collection versioning). When ``version`` is given the lookup is exact;
@@ -378,7 +264,7 @@ async def get_primitive_by_slug(
         raise
     if item is not None:
         return item
-    builtin = _MODULO_BY_SLUG.get((primitive_type, slug)) or _COMMUNITY_BY_SLUG.get((primitive_type, slug))
+    builtin = _MODULO_BY_SLUG.get((primitive_type, slug))
     if builtin is not None and version is not None and builtin.version != version:
         return None
     return builtin
@@ -396,18 +282,17 @@ async def _re_read_primitive(
 ) -> tuple[LibraryPrimitive, bool]:
     """Re-read the source inside the copy transaction to avoid TOCTOU.
 
-    Falls back to the in-memory cache for modulo/community primitives.
     Returns ``(primitive, in_db)`` — ``in_db`` is False when the source came
-    from the in-memory builtin cache (it has no ``library_primitives`` row,
+    from the in-memory modulo registry (it has no ``library_primitives`` row,
     so ``forked_from`` cannot reference it: the FK would fail).
     """
     refreshed = await get_library_primitive(session, primitive_id)
     if refreshed is not None:
         return refreshed, True
-    refreshed = _MODULO_BY_ID.get(primitive_id) or _COMMUNITY_BY_ID.get(primitive_id)
-    if refreshed is None:
+    builtin = _MODULO_BY_ID.get(primitive_id)
+    if builtin is None:
         raise LookupError(f"Primitive {primitive_id} not found for org {org_id} during copy")
-    return refreshed, False
+    return builtin, False
 
 
 async def _increment_registry_downloads(session: AsyncSession, refreshed: LibraryPrimitive) -> None:
@@ -490,7 +375,7 @@ async def copy_to_adapt(
                 target_team_id,
                 created_by,
                 # ``forked_from`` has an FK on library_primitives — in-memory
-                # builtin sources (modulo/community caches) have no row, so the
+                # builtin sources (modulo registry) have no row, so the
                 # copy must not reference them or the insert fails with an FK
                 # violation (internal_error 500 on copy_library_primitive).
                 forked_from=refreshed.id if in_db else None,
@@ -501,7 +386,7 @@ async def copy_to_adapt(
 
 
 # ---------------------------------------------------------------------------
-# Contribution flow
+# Contribution flow (fixture contributions only - no community library)
 # ---------------------------------------------------------------------------
 
 
@@ -571,7 +456,7 @@ async def contribute_fixture(
     """Create a draft fixture contribution in the org's library.
 
     The fixture is stored as a test_fixture primitive with contribution_status='draft'.
-    It is visible only to the submitting org until published to the community library.
+    It is visible only to the submitting org.
     """
     content: dict[str, Any] = {
         "fixture_map": fixture_map,
@@ -590,40 +475,6 @@ async def contribute_fixture(
         tags=tags,
         content_json=content,
         source_url=None,
-        owner_team_id=owner_team_id,
-    )
-
-
-async def contribute_primitive(
-    session: AsyncSession,
-    *,
-    org_id: uuid.UUID,
-    created_by: uuid.UUID,
-    primitive_type: str,
-    name: str,
-    slug: str,
-    description: str | None,
-    tags: list[str],
-    content_json: dict[str, Any],
-    source_url: str | None = None,
-    owner_team_id: uuid.UUID | None = None,
-) -> LibraryPrimitive:
-    """Create a contribution for the community library.
-
-    Stores the primitive with source='local' and contribution_status='draft'.
-    An admin can review and publish it to the community library.
-    """
-    return await _create_draft_contribution(
-        session,
-        org_id=org_id,
-        created_by=created_by,
-        primitive_type=primitive_type,
-        name=name,
-        slug=slug,
-        description=description,
-        tags=tags,
-        content_json=content_json,
-        source_url=source_url,
         owner_team_id=owner_team_id,
     )
 
@@ -660,55 +511,6 @@ async def submit_contribution_for_review(
         return updated
 
     return await _with_org_txn(session, org_id, _do)
-
-
-async def publish_contribution(
-    session: AsyncSession,
-    org_id: uuid.UUID,
-    primitive_id: uuid.UUID,
-) -> LibraryPrimitive:
-    """Publish a reviewed fixture contribution to the community library.
-
-    Changes visibility to 'community' and sets contribution_status to 'published'.
-    The primitive is reassigned to the community sentinel org so it appears
-    for all users. Accepts contributions in either 'draft' or 'review_queue' status.
-    """
-
-    async def _do(s: AsyncSession) -> LibraryPrimitive:
-        prim = await get_library_primitive(s, primitive_id)
-
-        if prim is None:
-            raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
-
-        if prim.contribution_status not in (CONTRIBUTION_DRAFT, CONTRIBUTION_REVIEW_QUEUE):
-            raise ContributionInvalidTransitionError(f"Cannot publish contribution {primitive_id}: expected status '{CONTRIBUTION_DRAFT}' or '{CONTRIBUTION_REVIEW_QUEUE}', got '{prim.contribution_status}'")
-
-        updated = await update_library_primitive(
-            s,
-            primitive_id,
-            {
-                "contribution_status": CONTRIBUTION_PUBLISHED,
-                "visibility": "community",
-                "organisation_id": MODULO_ORG_ID,
-            },
-        )
-        if updated is None:
-            raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
-        return updated
-
-    updated = await _with_org_txn(session, org_id, _do)
-
-    # Add to in-memory community cache so it appears in community listings immediately.
-    async with _COMMUNITY_CACHE_LOCK:
-        if updated.id not in _COMMUNITY_BY_ID:
-            _COMMUNITY_PRIMITIVES.append(updated)
-            _COMMUNITY_BY_ID[updated.id] = updated
-            _COMMUNITY_BY_SLUG[(updated.primitive_type, updated.slug)] = updated
-
-    # Notify importers using MODULO_ORG_ID since the primitive now belongs to the sentinel org
-    await notify_importers_of_update(session, MODULO_ORG_ID, primitive_id)
-
-    return updated
 
 
 def _apply_contribution_status_filter(
@@ -960,6 +762,27 @@ async def notify_importers_of_update(
 # ---------------------------------------------------------------------------
 
 
+def _filter_modulo(
+    *,
+    primitive_type: str | None = None,
+    primitive_types: list[str] | None = None,
+    search: str | None = None,
+) -> list[LibraryPrimitive]:
+    """Filter the built-in modulo registry primitives."""
+    if primitive_types:
+        allowed = set(primitive_types)
+        modulo = [p for p in _MODULO_PRIMITIVES if p.primitive_type in allowed]
+    elif primitive_type is not None:
+        modulo = [p for p in _MODULO_PRIMITIVES if p.primitive_type == primitive_type]
+    else:
+        modulo = list(_MODULO_PRIMITIVES)
+    if search:
+        term = search.strip().lower()
+        if term:
+            modulo = [p for p in modulo if term in (p.name or "").lower() or term in (p.description or "").lower()]
+    return modulo
+
+
 async def _load_org_page(
     session: AsyncSession,
     org_id: uuid.UUID,
@@ -969,17 +792,15 @@ async def _load_org_page(
     search: str | None,
     page: int,
     page_size: int,
-    include_community: bool,
     source: str | None,
     cursor: str | None,
     excluded_tiers: list[str] | None,
-) -> tuple[PageResult[LibraryPrimitive], list[LibraryPrimitive]]:
-    """Fetch the org page and published DB community rows, degrading gracefully."""
+) -> PageResult[LibraryPrimitive]:
+    """Fetch the org page, degrading gracefully to an empty page on DB failure."""
     org_page: PageResult[LibraryPrimitive] = PageResult(items=[], total=0, page=page, page_size=page_size)
-    db_community: list[LibraryPrimitive] = []
 
     async def _query(s: AsyncSession) -> None:
-        nonlocal org_page, db_community
+        nonlocal org_page
         org_page = await list_library_primitives(
             s,
             org_id=org_id,
@@ -992,14 +813,6 @@ async def _load_org_page(
             cursor=cursor,
             excluded_tiers=excluded_tiers,
         )
-        if include_community and (source is None or source == "community"):
-            db_community = await _fetch_published_community_from_db(
-                s,
-                org_id,
-                primitive_type=primitive_type,
-                primitive_types=primitive_types,
-                search=search,
-            )
 
     try:
         # Reuse the caller's transaction (routes open one before calling in);
@@ -1011,66 +824,7 @@ async def _load_org_page(
         raise
     except Exception:
         logger.exception("list_primitives — DB query failed for org %s", org_id)
-    return org_page, db_community
-
-
-def _gather_in_memory_sources(
-    *,
-    primitive_type: str | None,
-    primitive_types: list[str] | None,
-    search: str | None,
-    source: str | None,
-    include_community: bool,
-    db_community: list[LibraryPrimitive],
-) -> tuple[list[LibraryPrimitive], list[LibraryPrimitive]]:
-    """Merge in-memory modulo/community items with DB community rows (deduped by id)."""
-    modulo: list[LibraryPrimitive] = []
-    community: list[LibraryPrimitive] = []
-    if include_community:
-        if source is None or source == "modulo":
-            modulo = _filter_modulo(
-                primitive_type=primitive_type,
-                primitive_types=primitive_types,
-                search=search,
-            )
-        if source is None or source == "community":
-            community = _filter_community(
-                primitive_type=primitive_type,
-                primitive_types=primitive_types,
-                search=search,
-            )
-            seen_ids = {p.id for p in community}
-            for p in db_community:
-                if p.id not in seen_ids:
-                    community.append(p)
-                    seen_ids.add(p.id)
-    return modulo, community
-
-
-def _exclude_tiers(
-    org_items: list[LibraryPrimitive],
-    org_total: int,
-    modulo: list[LibraryPrimitive],
-    community: list[LibraryPrimitive],
-    excluded_tiers: list[str] | None,
-) -> tuple[list[LibraryPrimitive], int, list[LibraryPrimitive], list[LibraryPrimitive]]:
-    """Drop excluded tiers from the merged items without collapsing ``org_total``.
-
-    ``db.crud.library_primitive`` pushes ``~tier.in_(excluded_tiers)`` into the
-    same ``conditions`` its COUNT and item queries share, so ``org_page.total``
-    is already the tier-filtered universe count and must be passed through
-    unchanged. Collapsing it to ``len(org_items)`` — the page slice — would make
-    ``total == len(all_items)`` and force ``has_more`` to ``False`` on every page
-    of the default path, where ``excluded_tiers`` defaults to ``["in_dev"]``.
-
-    The in-memory ``modulo``/``community`` items never went through that query,
-    so they still need this Python-side filter.
-    """
-    if excluded_tiers:
-        org_items = [p for p in org_items if p.tier not in excluded_tiers]
-        modulo = [p for p in modulo if p.tier not in excluded_tiers]
-        community = [p for p in community if p.tier not in excluded_tiers]
-    return org_items, org_total, modulo, community
+    return org_page
 
 
 async def list_primitives(
@@ -1082,29 +836,30 @@ async def list_primitives(
     search: str | None = None,
     page: int = 1,
     page_size: int = 20,
-    include_community: bool = True,
     source: str | None = None,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
 ) -> PageResult[LibraryPrimitive]:
-    """Return org-scoped, Native library, and community-database primitives merged into a single page.
+    """Return org-scoped and Native library primitives merged into a single page.
 
     ``source`` (when given) restricts the result to exactly that source
-    value — e.g. ``source="community"`` returns only community-database
-    example pipelines, ``source="modulo"`` returns only Native library
-    built-ins, ``source="local"`` returns only the org's own saved
-    primitives. When omitted, all sources are merged (existing default
-    behaviour, unchanged for backwards compatibility). The filter is applied
-    in SQL alongside the COUNT, so ``total`` and ``has_more`` stay exact on
-    the ``?source=`` path.
+    value — e.g. ``source="modulo"`` returns only Native library built-ins,
+    ``source="local"`` returns only the org's own saved primitives, and
+    ``source="registry"`` / ``source="community"`` return only the org's DB
+    rows carrying that source. When omitted, all sources are merged. The
+    filter is applied in SQL alongside the COUNT, so ``total`` and
+    ``has_more`` stay exact on the ``?source=`` path.
 
     ``primitive_types`` (when given) restricts the result to any of the
     listed primitive types, e.g. ``["workflow", "agent"]``. It takes
     precedence over the single-value ``primitive_type`` filter.
+
+    A failing org query degrades to an empty org page (logged) rather than
+    failing the whole listing, so the Native built-ins are still served.
     """
     if excluded_tiers is None:
         excluded_tiers = ["in_dev"]
-    org_page, db_community = await _load_org_page(
+    org_page = await _load_org_page(
         session,
         org_id,
         primitive_type=primitive_type,
@@ -1112,51 +867,41 @@ async def list_primitives(
         search=search,
         page=page,
         page_size=page_size,
-        include_community=include_community,
         source=source,
         cursor=cursor,
         excluded_tiers=excluded_tiers,
     )
 
-    # ``source`` is applied inside ``list_library_primitives`` (it shares the
-    # COUNT and row-page ``conditions``), so ``org_page.total`` is already the
-    # exact source-filtered universe count — no Python-side narrowing.
-    org_items, org_total = list(org_page.items), org_page.total
-    modulo, community = _gather_in_memory_sources(
-        primitive_type=primitive_type,
-        primitive_types=primitive_types,
-        search=search,
-        source=source,
-        include_community=include_community,
-        db_community=db_community,
-    )
-    org_items, org_total, modulo, community = _exclude_tiers(org_items, org_total, modulo, community, excluded_tiers)
+    # ``source`` and ``excluded_tiers`` are applied inside
+    # ``list_library_primitives`` (they share the COUNT and row-page
+    # ``conditions``), so ``org_page.total`` is already the exact filtered
+    # universe count and is passed through unchanged.
+    org_items = list(org_page.items)
+    modulo: list[LibraryPrimitive] = []
+    if source is None or source == "modulo":
+        modulo = _filter_modulo(
+            primitive_type=primitive_type,
+            primitive_types=primitive_types,
+            search=search,
+        )
+    if excluded_tiers:
+        org_items = [p for p in org_items if p.tier not in excluded_tiers]
+        modulo = [p for p in modulo if p.tier not in excluded_tiers]
 
-    all_items: list[LibraryPrimitive] = org_items + modulo + community
-    total = org_total + len(modulo) + len(community)
-    # ``has_more`` is derived here rather than forwarded from ``org_page.has_more``
-    # so the envelope can never contradict its own items.
-    #
-    # Both narrowing steps keep ``total`` exact because each is pushed into the
-    # org COUNT query alongside the row page (see ``_exclude_tiers`` for tiers
-    # and ``list_primitives``'s ``source`` argument for the source filter).
-    # ``org_page.total`` is therefore the true universe count, and
-    # ``has_more`` is ``(page - 1) * page_size + len(all_items) < total``.
+    all_items: list[LibraryPrimitive] = org_items + modulo
+    total = org_page.total + len(modulo)
+    # ``has_more`` is derived here rather than forwarded from ``org_page`` so
+    # the envelope can never contradict its own items.
     has_more = (page - 1) * page_size + len(all_items) < total
     return PageResult(
         items=all_items,
         total=total,
         page=page,
         page_size=page_size,
-        # ``next_cursor`` is forwarded from the org page on purpose, even though
-        # the in-memory ``modulo``/``community`` items are appended whole and are
-        # NOT cursor-paginated. The cursor continues the org page only; the
-        # in-memory sources (which are bounded, small, and already complete in
-        # memory) are re-merged in full on every page. Making the two coexist
-        # under one cursor would require paginating a set that has no ordering
-        # key shared with the org rows, so the asymmetry is deliberate, not an
-        # oversight. ``has_more`` above is the authoritative "is there another
-        # page" signal; ``next_cursor`` is only meaningful for the org slice.
+        # ``next_cursor`` continues the org slice only. The in-memory modulo
+        # built-ins are bounded and are re-merged in full on every page; they
+        # share no ordering key with the org rows, so the asymmetry is
+        # deliberate. ``has_more`` is the authoritative "another page" signal.
         next_cursor=org_page.next_cursor,
         has_more=has_more,
     )

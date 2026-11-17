@@ -22,8 +22,8 @@ import farna.core.evidence_pack.build as evidence_build
 import farna.core.evidence_pack.signing as evidence_signing
 from farna.api.routes import audit as route
 from farna.auth.jwt import TenantPrincipal
+from farna.core.crypto import generate_keypair
 from farna.core.evidence_pack import EvidenceSigningError, verify_evidence_pack
-from farna.registry.crypto import generate_keypair
 
 _ORG = uuid.UUID("00000000-0000-0000-0000-0000000000b1")
 _ACCOUNT = uuid.UUID("00000000-0000-0000-0000-0000000000b2")

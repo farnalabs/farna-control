@@ -205,20 +205,17 @@ async def test_contributions_all_endpoints_and_error_handlers() -> None:
         patch.object(contributions, "set_rls_user_context", AsyncMock()),
         patch.object(contributions, "contribute_fixture", AsyncMock(return_value=prim)),
         patch.object(contributions, "submit_contribution_for_review", AsyncMock(return_value=prim)),
-        patch.object(contributions, "publish_contribution", AsyncMock(return_value=prim)),
         patch.object(contributions, "submit_contribution_version", AsyncMock(return_value=prim)),
         patch.object(contributions, "list_contribution_versions", AsyncMock(return_value=[prim])),
     ):
         assert (await contributions.create_contribution(req, session, principal)).id == prim.id
         assert (await contributions.submit_for_review(prim.id, session, principal)).id == prim.id
-        assert (await contributions.publish_contribution_endpoint(prim.id, session, principal)).id == prim.id
         assert (await contributions.submit_contribution_version_endpoint(prim.id, req, session, principal)).id == prim.id
         assert (await contributions.list_contribution_versions_endpoint(prim.id, session, principal)).total == 1
 
     calls = (
         (contributions.create_contribution, (req,)),
         (contributions.submit_for_review, (prim.id,)),
-        (contributions.publish_contribution_endpoint, (prim.id,)),
         (contributions.submit_contribution_version_endpoint, (prim.id, req)),
         (contributions.list_contribution_versions_endpoint, (prim.id,)),
         (contributions.list_contributions_endpoint, (1, 20, None)),

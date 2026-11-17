@@ -22,10 +22,9 @@ byte-identical to the hand-copied blocks it replaces:
 Call-site set (FAR-1832 QA F12): the routes that write org settings through
 the atomic patch helper use this wrapper — ``admin_orgs`` (license set/clear),
 ``admin`` (sandbox concurrency, HITL review window, run concurrency, retention)
-and ``product_analytics`` (consent, level). Two org-settings writers do NOT:
-``admin.admin_update_work_item_agent_minting`` and
-``admin.admin_update_community_objects`` wrap ``set_org_flag`` (a crud call
-with its own not-found path), so they keep their own ``LookupError -> 404``
+and ``product_analytics`` (consent, level). One org-settings writer does NOT:
+``admin.admin_update_work_item_agent_minting`` wraps ``set_org_flag`` (a crud
+call with its own not-found path), so it keeps its own ``LookupError -> 404``
 mapping deliberately. This helper is therefore the shared translation for the
 patch-helper call sites, not a universal one for every org-settings writer.
 

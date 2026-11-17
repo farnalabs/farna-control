@@ -49,7 +49,6 @@ from farna.db.models.hitl_claim import HitlClaim
 from farna.db.models.invitation import Invitation
 from farna.db.models.journey import Journey
 from farna.db.models.library_primitive import LibraryPrimitive
-from farna.db.models.library_sync_state import LibrarySyncState
 from farna.db.models.lifecycle_map import LifecycleMap
 from farna.db.models.lifecycle_map_stage import LifecycleMapStage
 from farna.db.models.mcp_server import McpServer
@@ -156,7 +155,6 @@ __all__ = [
     "Journey",
     "JourneyFact",
     "LibraryPrimitive",
-    "LibrarySyncState",
     "LifecycleMap",
     "LifecycleMapStage",
     "McpServer",

@@ -40,7 +40,6 @@ unit-tests:
   - backend/tests/unit/api/test_audit_bdd.py
   - backend/tests/unit/api/test_audit_gating.py
   - backend/tests/unit/api/test_audit_coverage.py
-  - backend/tests/unit/api/test_far1464_route_arm_coverage.py
   - backend/tests/unit/api/test_webhooks_endpoint.py
   - backend/tests/unit/api/test_admin_system_audit.py
   - backend/tests/unit/core/test_background_audit_wiring.py
@@ -175,8 +174,7 @@ guarded against tampering at both the ORM and the database layer.
       (`core/audit_coverage.py` `audited_system` / `bind_audit_org` /
       `bind_audit_actor_source`, applied in `api/routes/auth.py`, `sso.py`,
       `slack.py`, `stripe_webhook.py`, `webhooks.py`, `errors.py`;
-      `test_audit_coverage.py`, `test_webhooks_endpoint.py`,
-      `test_far1464_route_arm_coverage.py`)
+      `test_audit_coverage.py`, `test_webhooks_endpoint.py`)
 - [x] Org-lifecycle audit records survive a hard delete via an org-independent
       durable ledger (FAR-1517). `audit_events.organisation_id` FKs
       `organisations.id` with `ON DELETE CASCADE`, so a hard-deleted org took

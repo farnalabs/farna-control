@@ -21,7 +21,6 @@ from farna.core.library_service import (
     contribute_fixture,
     list_contribution_versions,
     list_contributions,
-    publish_contribution,
     submit_contribution_for_review,
     submit_contribution_version,
 )
@@ -170,63 +169,6 @@ async def submit_for_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while submitting the contribution for review.",
-        ) from None
-    return ContributionStatusResponse(
-        id=prim.id,
-        contribution_status=prim.contribution_status,
-        visibility=prim.visibility,
-        name=prim.name,
-        slug=prim.slug,
-    )
-
-
-@router.post(
-    "/{primitive_id}/publish",
-    dependencies=[Depends(audited("contribution_published", "contribution", principal_dep=get_current_tenant_user))],
-)
-@handle_db_errors("contributions.publish_contribution_endpoint")
-async def publish_contribution_endpoint(
-    primitive_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission("contribution.publish"),
-) -> ContributionStatusResponse:
-    """Publish a reviewed fixture contribution to the community library.
-
-    Only org admins may publish contributions (``contribution.publish``).
-    """
-    try:
-        async with session.begin():
-            await set_rls_org(session, principal.organisation_id)
-            await set_rls_user_context(session, principal.account_id, principal.org_role)
-            prim = await publish_contribution(
-                session,
-                principal.organisation_id,
-                primitive_id,
-            )
-    except ProgrammingError:
-        _log.exception("contributions.publish_contribution_endpoint")
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=MSG_FEATURE_NOT_AVAILABLE,
-        ) from None
-    except ContributionNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_CONTRIBUTION_NOT_FOUND) from None
-    except ContributionInvalidTransitionError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
-    except SQLAlchemyError as exc:
-        raise_session_contract_error(exc, "contributions.publish_contribution_endpoint")
-        _log.exception("publish_contribution_endpoint: SQLAlchemyError")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_MSG_CONTRIBUTION_FEATURE_TEMPORARILY_UNAVAILABLE,
-        ) from None
-    except HTTPException:
-        raise
-    except Exception:
-        _log.exception("publish_contribution_endpoint: unexpected error")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while publishing the contribution.",
         ) from None
     return ContributionStatusResponse(
         id=prim.id,

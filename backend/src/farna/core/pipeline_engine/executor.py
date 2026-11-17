@@ -3744,9 +3744,14 @@ class PipelineExecutor:
         session: Any,
         org_id: uuid.UUID,
         agent_ids: list[uuid.UUID],
-        community_objects_on: bool,
     ) -> tuple[dict[str, set[str]], set[str]]:
-        """Load connector grants and apply the community execution gate."""
+        """Load connector grants and apply the FAR-764 execution gate.
+
+        Agents from a ``community_sourced`` collection install (registry-sourced
+        installs still set it) that the operator has not yet granted are
+        returned in the gated set and lose their connector grants
+        (default-deny until ``grant_collection_agents`` flips the install).
+        """
         from sqlalchemy import select
 
         from farna.core.capability_scope import agent_granted_connector_types
@@ -3754,23 +3759,23 @@ class PipelineExecutor:
         from farna.db.models.collection_install import CollectionInstall
 
         grants: dict[str, set[str]] = {}
-        community_gated: set[str] = set()
+        gated: set[str] = set()
         if not agent_ids:
-            return grants, community_gated
+            return grants, gated
         agent_rows = (await session.execute(select(Agent).where(Agent.id.in_(agent_ids), Agent.organisation_id == org_id))).scalars().all()
         install_ids = {cid for agent in agent_rows if (cid := getattr(agent, "collection_install_id", None)) is not None}
         install_rows = []
         if install_ids:
             install_rows = (await session.execute(select(CollectionInstall).where(CollectionInstall.install_id.in_(install_ids)))).scalars().all()
-        gated_installs = {str(ci.install_id) for ci in install_rows if ci.community_sourced and (not ci.agents_granted or not community_objects_on)}
+        gated_installs = {str(ci.install_id) for ci in install_rows if ci.community_sourced and not ci.agents_granted}
         for agent in agent_rows:
             agent_key = str(agent.id)
             grants[agent_key] = agent_granted_connector_types(agent.connector_type_refs)
             collection_install_id = getattr(agent, "collection_install_id", None)
             if collection_install_id is not None and str(collection_install_id) in gated_installs:
-                community_gated.add(agent_key)
+                gated.add(agent_key)
                 grants.pop(agent_key, None)
-        return grants, community_gated
+        return grants, gated
 
     async def _resolve_run_connector_scope(
         self,
@@ -3786,35 +3791,24 @@ class PipelineExecutor:
         (``_run_connector_scope``) and reused by the compensation path (which
         has no graph).
 
-        Also enforces the community execution gate (FAR-764 / ADR 032 D2):
-        agents whose ``collection_install_id`` references a community-sourced,
-        not-yet-granted install get NO connector scope (default-deny).
+        The connector scope is deny-by-default: only connector types granted by
+        referenced agents are returned.
 
-        FAR-959: when the org-level ``community_objects_enabled`` flag is OFF,
-        ALL community-sourced agents are gated regardless of grant status.
+        Also enforces the execution gate (FAR-764 / ADR 032 D2): agents whose
+        ``collection_install_id`` references a community-sourced,
+        not-yet-granted install get NO connector scope (default-deny) and are
+        recorded in ``_community_gated_agents`` for the node-level gate.
         """
         if graph_json is None:
             return self._run_connector_scope
 
         from farna.core.capability_scope import compute_run_fetch_scope
-        from farna.core.runtime_config import FLAG_COMMUNITY_OBJECTS_ENABLED, read_org_flag
-
-        # FAR-959: check the org-level community objects kill switch. This flag
-        # defaults ON, so read it fail-open: an absent flag or a DB read error
-        # must leave community objects enabled (the primary FAR-764 default-deny
-        # grant gate below still applies regardless of this switch).
-        try:
-            community_objects_on = await read_org_flag(session, org_id, FLAG_COMMUNITY_OBJECTS_ENABLED, default=True)
-        except Exception:
-            _log.exception("executor.community_objects_flag_read_failed", extra={"org_id": str(org_id)})
-            community_objects_on = True
 
         agent_ids = _connector_scope_agent_ids(graph_json)
         grants, community_gated = await self._load_connector_scope_grants(
             session,
             org_id,
             agent_ids,
-            community_objects_on,
         )
         self._community_gated_agents = community_gated
         allowed_connectors = compute_run_fetch_scope(graph_json, grants)

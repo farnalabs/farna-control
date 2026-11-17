@@ -5,13 +5,6 @@ Feature: Auto-Update Control for Library Primitives
 
   Background:
     Given the organisation has 3 local primitives
-    And 5 community primitives exist
-
-  Scenario: Adapted primitive has auto-update enabled by default
-    Given a specific primitive exists with id "00000000-0000-0000-0000-000000000010"
-    When the user sends POST /api/v1/libraries/00000000-0000-0000-0000-000000000010/adapt
-    Then the response status is 200
-    And the new primitive has auto_update set to true
 
   Scenario: Toggle auto-update off
     Given a local primitive exists with id "local-001"

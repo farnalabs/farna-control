@@ -125,5 +125,5 @@ route, so it is tracked here rather than in the manifest registry.
   verified against ``backend/src/farna/core/ssrf.py`` and the 73-test-function
   ``backend/tests/unit/core/test_ssrf.py`` suite; consumers confirmed in
   ``admin_sso.py``, ``notifications.py``, ``observability.py``,
-  ``error_forwarder_config.py``, ``library_sync/client.py`` and the ADR 025
+  ``error_forwarder_config.py`` and the ADR 025
   composition root. Status: covered.

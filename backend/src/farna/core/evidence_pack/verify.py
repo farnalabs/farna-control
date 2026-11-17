@@ -21,11 +21,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from farna.core.crypto import verify as _ed25519_verify
 from farna.core.evidence_pack.canonical import canonical_json_bytes, decode_ndjson
 from farna.core.evidence_pack.chain import recompute_chain
 from farna.core.evidence_pack.manifest import sha256_hex
 from farna.core.evidence_pack.signing import key_fingerprint
-from farna.registry.crypto import verify as _ed25519_verify
 
 __all__ = ["OfflineVerificationResult", "verify_evidence_pack"]
 

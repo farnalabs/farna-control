@@ -28,9 +28,6 @@ scenarios("../features/library/ratings.feature")
 scenarios("../features/library/tiering.feature")
 scenarios("../features/library/auto_update.feature")
 
-PRIMITIVE_10 = uuid.UUID("00000000-0000-0000-0000-000000000010")
-FAKE_TEAM_ID = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
-
 
 @pytest.fixture
 def mock_session():
@@ -39,7 +36,7 @@ def mock_session():
     The conftest mock returns team_mock for scalar_one_or_none (causing
     get_primitive to return a wrong object) and count=0 (causing total=0
     for org primitives). This override returns None for scalar_one_or_none
-    so get_primitive falls through to built-in modulo/community lists.
+    so get_primitive falls through to the built-in modulo list.
     """
     session = make_mock_session()
     session.execute.return_value.scalar_one_or_none = MagicMock(return_value=None)
@@ -82,23 +79,6 @@ def _make_rating(
     return rating
 
 
-def _patch_service_create() -> patch:
-    """Patch library_service.create_library_primitive so freshly-created ORM
-    objects carry id/created_at/updated_at — the mock session never applies
-    the DB server defaults, which would otherwise break response validation."""
-    from farna.core.library_service import create_library_primitive as real_create
-
-    async def _create(*args: Any, **kwargs: Any) -> LibraryPrimitive:
-        prim = await real_create(*args, **kwargs)
-        prim.id = uuid.uuid4()
-        now = datetime.now(UTC)
-        prim.created_at = now
-        prim.updated_at = now
-        return prim
-
-    return patch("farna.core.library_service.create_library_primitive", new=_create)
-
-
 # ---------------------------------------------------------------------------
 # Shared test state
 # ---------------------------------------------------------------------------
@@ -110,7 +90,6 @@ def ctx() -> dict[str, Any]:
     return {
         "response": None,
         "primitives": [],
-        "community_primitive_id": None,
         "ratings": [],
     }
 
@@ -204,14 +183,6 @@ def _org_has_local_primitives(ctx: dict[str, Any]) -> None:
     ]
 
 
-@given("5 community primitives exist in the built-in registry")
-def _community_primitives_exist(ctx: dict[str, Any]) -> None:
-    """Community primitives are built into the library_service module.
-    This step is a no-op — the 5 built-in community primitives are
-    (schema x2, agent x2, workflow x1) from farna.core.library_service.
-    """
-
-
 @when(parsers.parse("the user requests GET {path}"))
 def _request_get(client, path: str, ctx: dict[str, Any], request) -> None:
     ctx["response"] = client.get(path)
@@ -262,30 +233,10 @@ def _response_only_local(ctx: dict[str, Any]) -> None:
         assert p["source"] == "local", f"Expected source=local, got {p['source']}"
 
 
-@then("no community primitives are included")
-def _no_community_primitives(ctx: dict[str, Any]) -> None:
-    items = ctx["response"].json()["items"]
-    for p in items:
-        assert p["source"] != "community", f"Community primitive {p['id']} included"
-
-
-@then("the response contains only community-sourced primitives")
-def _response_only_community(ctx: dict[str, Any]) -> None:
-    items = ctx["response"].json()["items"]
-    assert items, "Expected at least one community primitive"
-    for p in items:
-        assert p["source"] == "community", f"Expected source=community, got {p['source']}"
-
-
 @then(parsers.parse('the response includes a primitive named "{name}"'))
 def _response_includes_named_primitive(ctx: dict[str, Any], name: str) -> None:
     items = ctx["response"].json()["items"]
     assert any(p["name"] == name for p in items), f"Expected a primitive named '{name}' in response, got names: {[p['name'] for p in items]}"
-
-
-@given(parsers.parse('a specific primitive exists with id "{primitive_id}"'))
-def _specific_primitive_exists(ctx: dict[str, Any], primitive_id: str) -> None:
-    ctx["community_primitive_id"] = _to_uuid(primitive_id)
 
 
 @when(parsers.parse("the user requests GET /api/v1/libraries/{primitive_id}"))
@@ -311,87 +262,9 @@ def _response_has_primitive_type(ctx: dict[str, Any], expected_type: str) -> Non
 # ============================================================================
 
 
-@given(parsers.parse('a community primitive "{name}" exists'))
-def _community_primitive_named_exists(ctx: dict[str, Any], name: str) -> None:
-    # The built-in community primitive PRD Input Schema has id PRIMITIVE_10
-    ctx["community_primitive_id"] = PRIMITIVE_10
-
-
-@when(parsers.parse("the user sends POST /api/v1/libraries/{community_primitive_id}/adapt"))
-def _request_adapt(client, community_primitive_id: str, ctx: dict[str, Any], request) -> None:
-    pid = _to_uuid(community_primitive_id)
-    with _patch_service_create():
-        ctx["response"] = client.post(f"/api/v1/libraries/{pid}/adapt", json={})
-    request.node._resp = ctx["response"]
-
-
-@then("a new library primitive is created in the org")
-def _new_primitive_created(ctx: dict[str, Any]) -> None:
-    data = ctx["response"].json()
-    assert data["id"] is not None, "No primitive id in response"
-
-
-@then('the new primitive has source "local"')
-def _new_primitive_source_local(ctx: dict[str, Any]) -> None:
-    data = ctx["response"].json()
-    assert data["source"] == "local", f"Expected source=local, got {data['source']}"
-
-
-@then("the new primitive has forked_from unset for the in-memory community primitive")
-def _new_primitive_forked_from_unset(ctx: dict[str, Any]) -> None:
-    """FAR-697 — in-memory builtins have no library_primitives row, so the
-    copy cannot set an FK on forked_from; the link would reject the insert."""
-    data = ctx["response"].json()
-    got = data["forked_from"]
-    assert got is None, f"forked_from should be None for an in-memory builtin copy, got {got}"
-
-
-@when("an MCP client sends copy_library_primitive with the community primitive id")
-def _mcp_copy_community_primitive(viewer_client, ctx: dict[str, Any], request) -> None:
-    """MCP runs with a low-privilege role — viewer lacks ``library.copy`` (runner)."""
-    ctx["response"] = viewer_client.post(
-        f"/api/v1/libraries/{PRIMITIVE_10}/adapt",
-        json={},
-    )
-    request.node._resp = ctx["response"]
-
-
-@then('the response contains error "community_primitive_read_only"')
-def _response_contains_error(ctx: dict[str, Any]) -> None:
-    data = ctx["response"].json()
-    detail = data.get("detail", "")
-    assert "browser UI" in detail or "read only" in detail.lower() or "403" in str(ctx["response"].status_code), f"Expected community_primitive_read_only error, got: {data}"
-
-
-@then("the response detail explains the browser UI must be used")
-def _response_detail_explains_browser(ctx: dict[str, Any]) -> None:
-    data = ctx["response"].json()
-    detail = data.get("detail", "")
-    assert "browser UI" in detail or "MCP" in detail, f"Expected explanation about browser UI, got: {detail}"
-
-
-@when(parsers.parse("the user sends POST /api/v1/libraries/{primitive_id}/adapt with target_team_id"))
-def _request_adapt_with_team(client, primitive_id: str, ctx: dict[str, Any], request) -> None:
-    pid = _to_uuid(primitive_id)
-    with _patch_service_create():
-        ctx["response"] = client.post(
-            f"/api/v1/libraries/{pid}/adapt",
-            json={"target_team_id": str(FAKE_TEAM_ID)},
-        )
-    request.node._resp = ctx["response"]
-
-
-@then("the new primitive has owner_team_id set to the requested team")
-def _new_primitive_has_team(ctx: dict[str, Any]) -> None:
-    data = ctx["response"].json()
-    assert data.get("owner_team_id") is not None, "owner_team_id is None"
-
-
 @when(parsers.parse("the user sends POST /api/v1/libraries/{primitive_id}/adapt"))
 def _request_adapt_by_id(client, primitive_id: str, ctx: dict[str, Any], request) -> None:
-    pid = _to_uuid(primitive_id)
-    with _patch_service_create():
-        ctx["response"] = client.post(f"/api/v1/libraries/{pid}/adapt", json={})
+    ctx["response"] = client.post(f"/api/v1/libraries/{primitive_id}/adapt", json={})
     request.node._resp = ctx["response"]
 
 
@@ -526,7 +399,7 @@ def _primitive_has_ratings(ctx: dict[str, Any], count: int, average: str) -> Non
 @when("a user submits a thumbs-up rating")
 def _submit_thumbs_up(client, ctx: dict[str, Any]) -> None:
     ctx["response"] = client.post(
-        f"/api/v1/libraries/{PRIMITIVE_10}/ratings",
+        f"/api/v1/libraries/{_rating_id('prd-input')}/ratings",
         json={"thumbs_up": True},
     )
 
@@ -534,13 +407,13 @@ def _submit_thumbs_up(client, ctx: dict[str, Any]) -> None:
 @then("the aggregate average_rating increases")
 def _aggregate_increases(client, ctx: dict[str, Any]) -> None:
     """After submitting a thumbs-up, re-fetch aggregate and check it changed."""
-    agg = client.get(f"/api/v1/libraries/{PRIMITIVE_10}/ratings/aggregate").json()
+    agg = client.get(f"/api/v1/libraries/{_rating_id('prd-input')}/ratings/aggregate").json()
     assert agg["average_rating"] is not None, "average_rating should not be None after submission"
 
 
 @then(parsers.parse("review_count becomes {count:d}"))
 def _review_count_becomes(client, count: int) -> None:
-    agg = client.get(f"/api/v1/libraries/{PRIMITIVE_10}/ratings/aggregate").json()
+    agg = client.get(f"/api/v1/libraries/{_rating_id('prd-input')}/ratings/aggregate").json()
     assert agg["review_count"] == count, f"Expected review_count={count}, got {agg['review_count']}"
 
 
@@ -750,7 +623,6 @@ def _response_has_tier(ctx: dict[str, Any], expected_tier: str) -> None:
 def _make_tiered_primitive(*, name: str, slug: str, tier: str) -> Any:
     """Build a real LibraryPrimitive with an explicit tier, mirroring _make_modulo."""
     from farna.core.library_service import MODULO_ORG_ID
-    from farna.db.models.library_primitive import LibraryPrimitive
 
     now = datetime(2025, 1, 1, tzinfo=UTC)
     return LibraryPrimitive(
@@ -793,10 +665,7 @@ def _builtin_library_has_in_dev(ctx: dict[str, Any]) -> None:
 def _list_libraries_with_primitives(client: Any, ctx: dict[str, Any], params: dict[str, str]) -> None:
     tiered = ctx.get("tier_primitives")
     assert tiered is not None, "No tiered primitives in context — use the Given step"
-    with (
-        patch("farna.core.library_service._filter_modulo", return_value=tiered),
-        patch("farna.core.library_service._filter_community", return_value=[]),
-    ):
+    with patch("farna.core.library_service._filter_modulo", return_value=tiered):
         ctx["response"] = client.get("/api/v1/libraries", params=params)
 
 
@@ -815,10 +684,7 @@ def _viewer_lists_libraries_with_include_in_dev(viewer_client: Any, ctx: dict[st
     """Viewer-role listing: the operator-gated In-Dev reveal must be denied (403)."""
     tiered = ctx.get("tier_primitives")
     assert tiered is not None, "No tiered primitives in context — use the Given step"
-    with (
-        patch("farna.core.library_service._filter_modulo", return_value=tiered),
-        patch("farna.core.library_service._filter_community", return_value=[]),
-    ):
+    with patch("farna.core.library_service._filter_modulo", return_value=tiered):
         ctx["response"] = viewer_client.get("/api/v1/libraries", params={"include_in_dev": "true"})
     request.node._resp = ctx["response"]
 
@@ -842,11 +708,6 @@ def _response_contains_in_dev(ctx: dict[str, Any]) -> None:
 # ============================================================================
 # auto_update.feature steps
 # ============================================================================
-
-
-@given("5 community primitives exist")
-def _community_primitives_exist_mock(ctx: dict[str, Any]) -> None:
-    pass
 
 
 @then(parsers.parse("the new primitive has auto_update set to {expected}"))

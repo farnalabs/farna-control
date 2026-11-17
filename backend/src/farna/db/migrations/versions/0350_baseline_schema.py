@@ -985,23 +985,6 @@ CREATE TABLE public.library_primitives (
 
 --
 
--- Name: library_sync_state; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.library_sync_state (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    last_synced_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    last_success_at timestamp with time zone,
-    last_error character varying(2000),
-    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    manifest_json jsonb NOT NULL,
-    catalog_json jsonb NOT NULL
-);
-
-
---
-
 -- Name: lifecycle_map_stages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3321,15 +3304,6 @@ ALTER TABLE ONLY public.journeys
 
 ALTER TABLE ONLY public.library_primitives
     ADD CONSTRAINT library_primitives_pkey PRIMARY KEY (id);
-
-
---
-
--- Name: library_sync_state library_sync_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.library_sync_state
-    ADD CONSTRAINT library_sync_state_pkey PRIMARY KEY (id);
 
 
 --
