@@ -350,7 +350,7 @@ def _isolate_from_context_and_socket(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_skip_reason_none_when_env_endpoint_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """MODULO_DOCKER_HOST alone (autouse fixture) makes the sweep applicable —
+    """FARNA_CONTROL_DOCKER_HOST alone (autouse fixture) makes the sweep applicable —
     even with every other signal neutralised. A configured-but-unreachable
     endpoint therefore NEVER skips: the predicate never probes reachability."""
     _isolate_from_context_and_socket(monkeypatch)
@@ -366,7 +366,7 @@ def test_skip_reason_present_when_no_endpoint_resolvable(monkeypatch: pytest.Mon
 
     assert reason is not None
     assert "no Docker endpoint configured" in reason
-    assert "MODULO_DOCKER_HOST" in reason  # names the remediation knob
+    assert "FARNA_CONTROL_DOCKER_HOST" in reason  # names the remediation knob
 
 
 def test_skip_reason_none_when_docker_host_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -651,19 +651,18 @@ async def test_sweep_wraps_a_destroy_failure_with_partial_counts(
 async def test_kubernetes_skip_reason_names_the_registration_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
-    monkeypatch.delenv("MODULO_KUBERNETES_ENABLED", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_KUBERNETES_ENABLED", raising=False)
 
     reason = await runner_reconciler.kubernetes_endpoint_skip_reason()
 
     assert reason is not None
-    assert "MODULO_KUBERNETES_ENABLED" in reason
+    assert "FARNA_CONTROL_KUBERNETES_ENABLED" in reason
 
 
 async def test_kubernetes_skip_reason_none_when_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     """The applicability check delegates to the registration matrix: with the
     opt-in flag set (and the SDK installed) the sweep's Kubernetes half runs."""
-    monkeypatch.setenv("MODULO_KUBERNETES_ENABLED", "1")
+    monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_ENABLED", "1")
     # Mock build_hub to return a hub with kubernetes provider
     from farna.core.runtime_provider.hub import RuntimeProviderHub
 
@@ -1032,19 +1031,18 @@ async def test_e2b_skip_reason_names_the_registration_env_var(
 ) -> None:
     """An unregistered provider is an EXPLICIT skip, never a silent one: the
     reason names the env var that would register it."""
-    monkeypatch.delenv("MODULO_E2B_API_KEY", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
 
     reason = await runner_reconciler.e2b_endpoint_skip_reason()
 
     assert reason is not None
-    assert "MODULO_E2B_API_KEY" in reason
+    assert "FARNA_CONTROL_E2B_API_KEY" in reason
 
 
 async def test_e2b_skip_reason_none_when_registered(monkeypatch: pytest.MonkeyPatch) -> None:
     """The applicability check delegates to the registration matrix: with the
     key set the sweep's E2B half runs."""
-    monkeypatch.setenv("MODULO_E2B_API_KEY", "test-key")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-key")
     # Mock build_hub to return a hub with e2b provider
     from farna.core.runtime_provider.hub import RuntimeProviderHub
 

@@ -4,7 +4,7 @@ Everything in ``tests/docker/`` requires a live Docker engine. The autouse
 fixture pings the engine and skips the test when unreachable.
 
 The dind engine-kill test additionally opts in via
-``MODULO_RUNNER_DIND_TESTS=1`` — it pulls ~560 MB of dind image into the
+``FARNA_CONTROL_RUNNER_DIND_TESTS=1`` — it pulls ~560 MB of dind image into the
 local store, which must never be a silent default cost.
 
 These tests are selected explicitly (``pytest -m docker``); they are NOT in

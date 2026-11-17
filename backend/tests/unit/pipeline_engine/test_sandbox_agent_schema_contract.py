@@ -2,7 +2,7 @@
 
 Covers the production behaviours added for the advisory schema contract:
 
-  - ``MODULO_SCHEMA_DIR`` is set on the E2B sandbox at creation time
+  - ``FARNA_CONTROL_SCHEMA_DIR`` is set on the E2B sandbox at creation time
   - the contract files are uploaded under ``/home/user/schemas/<node_id>/``
   - (llm mode only) the schema paths are injected into the rendered prompt
   - a contract write failure is best-effort and never fails the node
@@ -122,7 +122,7 @@ def _written_content(sandbox: MagicMock, path_suffix: str) -> str | None:
 
 
 async def test_script_mode_uploads_contract_files_and_sets_env() -> None:
-    """Script mode sets MODULO_SCHEMA_DIR and uploads all four contract files."""
+    """Script mode sets FARNA_CONTROL_SCHEMA_DIR and uploads all four contract files."""
     node_def = _script_node_def()
     node_id = node_def["id"]
     fn = make_sandbox_agent_fn(node_def)
@@ -135,7 +135,7 @@ async def test_script_mode_uploads_contract_files_and_sets_env() -> None:
         result = await fn(_run_state())
 
     assert result["telemetry"]["status"] == "completed"
-    # FAR-1050 R4/R6: MODULO_SCHEMA_DIR rides the agent command's environment
+    # FAR-1050 R4/R6: FARNA_CONTROL_SCHEMA_DIR rides the agent command's environment
     # (the ABC create has no sandbox-lifetime env carrier), never the SDK
     # create kwargs.
     assert sandbox.commands.run.call_args.kwargs["envs"]["FARNA_CONTROL_SCHEMA_DIR"] == "/home/user/schemas"
@@ -168,7 +168,7 @@ async def test_llm_mode_injects_schema_paths_into_prompt() -> None:
     assert "Schema contract files (advisory" in prompt
     assert f"{node_id}/input.active.json" in prompt
     assert f"{node_id}/output.active.json" in prompt
-    assert "MODULO_SCHEMA_DIR=/home/user/schemas" in prompt
+    assert "FARNA_CONTROL_SCHEMA_DIR=/home/user/schemas" in prompt
 
 
 async def test_contract_write_failure_is_best_effort() -> None:

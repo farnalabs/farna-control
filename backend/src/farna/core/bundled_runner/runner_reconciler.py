@@ -25,7 +25,7 @@ Semantics committed by this delivery:
   - **Fail-safe: ANY cross-reference query error aborts the sweep, destroys
     nothing, and emits** ``runner.reconciler.sweep_aborted``.
   - **Machine-scoped via the deployment-identity label**
-    (``modulo.machine.id``, sourced from ``MODULO_RUNNER_MACHINE_ID`` with a
+    (``modulo.machine.id``, sourced from ``FARNA_CONTROL_RUNNER_MACHINE_ID`` with a
     hostname fallback): two Modulo deployments sharing one engine, one
     Kubernetes namespace or one E2B account never destroy each other's
     workspaces.
@@ -40,7 +40,7 @@ Semantics committed by this delivery:
   - ``runner.reconciler.sweep_completed {scanned, orphans_destroyed}``
     closes every sweep.
   - **Engine-less skip (FAR-1201 follow-up)**: when the deployment has NO
-    Docker endpoint at all (no ``MODULO_DOCKER_HOST``/``DOCKER_HOST``/
+    Docker endpoint at all (no ``FARNA_CONTROL_DOCKER_HOST``/``DOCKER_HOST``/
     ``DOCKER_CONTEXT``, no Docker context, and no local socket aiodocker
     would auto-detect), the Docker half is NOT APPLICABLE — it skips with
     ``runner.reconciler.skipped`` + an explicit reason instead of
@@ -191,7 +191,7 @@ class _KubernetesWorkspaceSource:
 
     Reuses the provider rather than a second hand-rolled client: the
     provider owns the client configuration chain (in-cluster / kubeconfig),
-    the namespace resolution (``MODULO_KUBERNETES_NAMESPACE``) and the
+    the namespace resolution (``FARNA_CONTROL_KUBERNETES_NAMESPACE``) and the
     deployment-identity annotation, and it owns the ref-only destroy
     primitive — which refuses any pod without the
     ``modulo.provider=kubernetes`` label, so the sweep can never delete a
@@ -670,7 +670,7 @@ async def destroy_workspaces_for_run(run_id: str) -> dict[str, int]:
 
 def _resolve_docker_host() -> str | None:
     # The reconciler uses the same Docker endpoint chain as the provider:
-    # MODULO_DOCKER_HOST first, then DOCKER_HOST, else None (the engine's
+    # FARNA_CONTROL_DOCKER_HOST first, then DOCKER_HOST, else None (the engine's
     # local socket). The raw-socket operator override is documented in
     # docs/security/.
     return os.environ.get("FARNA_CONTROL_DOCKER_HOST") or os.environ.get("DOCKER_HOST")
@@ -759,7 +759,7 @@ def docker_endpoint_skip_reason() -> str | None:
     (explicit url → Docker context → auto-detected local socket), which is
     exactly the case where ``aiodocker.Docker(url=None)`` raises at
     construction (the permanently-degraded engine-unreachable check on
-    engine-less deployments such as EKS with no ``MODULO_DOCKER_HOST``/
+    engine-less deployments such as EKS with no ``FARNA_CONTROL_DOCKER_HOST``/
     ``DOCKER_HOST`` and no local socket). Corroborated by ``build_hub``
     (``runtime_provider``): the Docker provider only REGISTERS when an env
     endpoint is set, so an engine-less deployment creates no workspace
@@ -775,7 +775,7 @@ def docker_endpoint_skip_reason() -> str | None:
         return None
     if _default_docker_socket_present():
         return None
-    return "no Docker endpoint configured (MODULO_DOCKER_HOST, DOCKER_HOST and DOCKER_CONTEXT all unset, no Docker context selected, no local Docker socket) — set MODULO_DOCKER_HOST to enable the workspace-orphan sweep"
+    return "no Docker endpoint configured (FARNA_CONTROL_DOCKER_HOST, DOCKER_HOST and DOCKER_CONTEXT all unset, no Docker context selected, no local Docker socket) — set FARNA_CONTROL_DOCKER_HOST to enable the workspace-orphan sweep"
 
 
 async def kubernetes_endpoint_skip_reason() -> str | None:
@@ -784,7 +784,7 @@ async def kubernetes_endpoint_skip_reason() -> str | None:
     FAR-1051: the sweep is applicable exactly when the deployment would
     REGISTER the Kubernetes runtime provider, so the check delegates to the
     registration matrix itself (:func:`modulo.core.runtime_provider.build_hub`
-    — ``MODULO_KUBERNETES_ENABLED`` gating plus the kubernetes-asyncio SDK
+    — ``FARNA_CONTROL_KUBERNETES_ENABLED`` gating plus the kubernetes-asyncio SDK
     presence) instead of re-implementing the flag semantics here and letting
     the two drift. That is also why an unregistered provider is a SKIP and
     not a failure: no provider means no workspace pods were ever created for
@@ -809,7 +809,7 @@ async def kubernetes_endpoint_skip_reason() -> str | None:
         return "the runtime-provider hub could not be built — see logs; the workspace-pod sweep cannot run"
     try:
         if provider_hub.get("kubernetes") is None:
-            return "the Kubernetes runtime provider is not registered — set MODULO_KUBERNETES_ENABLED to an enabling value (and install the kubernetes-asyncio SDK) to enable the workspace-pod orphan sweep"
+            return "the Kubernetes runtime provider is not registered — set FARNA_CONTROL_KUBERNETES_ENABLED to an enabling value (and install the kubernetes-asyncio SDK) to enable the workspace-pod orphan sweep"
         return None
     finally:
         await provider_hub.aclose()
@@ -822,7 +822,7 @@ async def e2b_endpoint_skip_reason() -> str | None:
     when the deployment would REGISTER the E2B runtime provider, so the
     check delegates to the registration matrix itself
     (:func:`modulo.core.runtime_provider.build_hub` — the
-    ``MODULO_E2B_API_KEY`` gate via the key bridge) instead of
+    ``FARNA_CONTROL_E2B_API_KEY`` gate via the key bridge) instead of
     re-implementing the flag semantics here and letting the two drift. That
     is also why an unregistered provider is a SKIP and not a failure: no
     provider means no sandboxes were ever created for this sweep to
@@ -845,7 +845,7 @@ async def e2b_endpoint_skip_reason() -> str | None:
         return "the runtime-provider hub could not be built — see logs; the E2B sandbox sweep cannot run"
     try:
         if provider_hub.get("e2b") is None:
-            return "the E2B runtime provider is not registered — set MODULO_E2B_API_KEY to enable the E2B sandbox orphan sweep"
+            return "the E2B runtime provider is not registered — set FARNA_CONTROL_E2B_API_KEY to enable the E2B sandbox orphan sweep"
         return None
     finally:
         await provider_hub.aclose()
