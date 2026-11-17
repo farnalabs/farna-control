@@ -128,7 +128,7 @@ async def k8s_cluster() -> AsyncIterator[K8sConformanceCluster]:
     provider: KubernetesRuntimeProvider | None = None
     namespace_created = False
     try:
-        monkeypatch.setenv("FARNA_CONTROL_MODULO_KUBERNETES_SERVICE_ACCOUNT", service_account)
+        monkeypatch.setenv("FARNA_CONTROL_KUBERNETES_SERVICE_ACCOUNT", service_account)
         provider = KubernetesRuntimeProvider(namespace=namespace)
         labels = {
             _CLEANUP_LABEL: "true",

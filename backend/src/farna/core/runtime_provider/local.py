@@ -8,7 +8,7 @@ environment of the host process. Suitable for:
   - Local development where Docker isn't available
 
 Concurrency is capped by a module-level ``asyncio.Semaphore`` (default 2)
-configurable via ``MODULO_MAX_LOCAL_CONCURRENCY``.
+configurable via ``FARNA_CONTROL_MAX_LOCAL_CONCURRENCY``.
 
 **When you outgrow it:** add an E2B API key (or any other RuntimeProvider)
 and your pipelines continue to work unchanged — the RuntimeProvider ABC
@@ -214,16 +214,16 @@ class LocalRuntimeProvider(RuntimeProvider):
 def create_local_provider_from_env() -> LocalRuntimeProvider:
     """Build a LocalRuntimeProvider configured from the runtime store / environment.
 
-    Reads ``MODULO_MAX_LOCAL_CONCURRENCY`` (default 2) as the concurrency
+    Reads ``FARNA_CONTROL_MAX_LOCAL_CONCURRENCY`` (default 2) as the concurrency
     cap — via the runtime-config store first (FAR-1135 hot-reloadable
     override), then the process environment.
     """
     from farna.core.runtime_config.key_bridge import override_or
 
-    raw = override_or("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", os.environ.get("FARNA_CONTROL_MODULO_MAX_LOCAL_CONCURRENCY", "2"))
+    raw = override_or("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", os.environ.get("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", "2"))
     try:
         max_concurrency = max(1, int(raw))
     except ValueError:
-        _log.warning("Invalid MODULO_MAX_LOCAL_CONCURRENCY value '%s', falling back to 2", raw)
+        _log.warning("Invalid FARNA_CONTROL_MAX_LOCAL_CONCURRENCY value '%s', falling back to 2", raw)
         max_concurrency = 2
     return LocalRuntimeProvider(max_concurrency=max_concurrency)

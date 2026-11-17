@@ -261,13 +261,13 @@ def test_bridge_escalation_failure_detail_parses_marker():
 
 
 async def test_read_log_tail_via_provider_resolves_e2b_override(monkeypatch: pytest.MonkeyPatch):
-    """FAR-1159 prove-the-fix: the log probe resolves MODULO_E2B_API_KEY via
+    """FAR-1159 prove-the-fix: the log probe resolves FARNA_CONTROL_E2B_API_KEY via
     the runtime-config bridge and hands it to the provider builder — an
     override wins over the legacy env var (fails without the bridge: the
     builder would receive the stale env key)."""
     from farna.core.runtime_config.store import get_runtime_config_store
 
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("E2B_API_KEY", raising=False)
 
     captured: list[str] = []
@@ -284,13 +284,13 @@ async def test_read_log_tail_via_provider_resolves_e2b_override(monkeypatch: pyt
 
     monkeypatch.setattr(nr, "_build_log_tail_provider", _fake_builder)
     store = get_runtime_config_store()
-    store.set_override("FARNA_CONTROL_MODULO_E2B_API_KEY", "hot-key")
+    store.set_override("FARNA_CONTROL_E2B_API_KEY", "hot-key")
     try:
         tail = await nr._read_log_tail_via_provider("sbx-1")
         assert tail == '{"other": 1}'
         assert captured == ["hot-key"]
     finally:
-        store.clear_override("FARNA_CONTROL_MODULO_E2B_API_KEY")
+        store.clear_override("FARNA_CONTROL_E2B_API_KEY")
 
 
 # ---------------------------------------------------------------------------
@@ -2997,7 +2997,7 @@ async def test_sandbox_input_payload_truncated_beyond_10k():
         result = await fn({**_run_state(), "run_context": {"input": {"task": "x" * 20000}}})
     assert result["telemetry"]["status"] == "completed"
     envs = sandbox.commands.run.call_args.kwargs["envs"]
-    assert envs["FARNA_CONTROL_MODULO_INPUT_PAYLOAD"] == '{"_truncated": true, "_key_count": 1}'
+    assert envs["FARNA_CONTROL_INPUT_PAYLOAD"] == '{"_truncated": true, "_key_count": 1}'
 
 
 async def test_sandbox_allowed_tools_exposed_as_env():
@@ -3006,7 +3006,7 @@ async def test_sandbox_allowed_tools_exposed_as_env():
     with patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)):
         await fn(_run_state())
     envs = sandbox.commands.run.call_args.kwargs["envs"]
-    assert envs["FARNA_CONTROL_MODULO_ALLOWED_TOOLS"] == "git,pytest"
+    assert envs["FARNA_CONTROL_ALLOWED_TOOLS"] == "git,pytest"
 
 
 async def test_sandbox_e2b_create_passes_resolved_api_key(monkeypatch: pytest.MonkeyPatch):
@@ -3020,11 +3020,11 @@ async def test_sandbox_e2b_create_passes_resolved_api_key(monkeypatch: pytest.Mo
     """
     from farna.core.runtime_config.store import RuntimeConfigStore, get_runtime_config_store
 
-    monkeypatch.delenv("FARNA_CONTROL_MODULO_E2B_API_KEY", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.setenv("E2B_API_KEY", "stale-legacy-env-key")
     RuntimeConfigStore.reset()
     store = get_runtime_config_store()
-    store.set_override("FARNA_CONTROL_MODULO_E2B_API_KEY", "hot-rotated-key")
+    store.set_override("FARNA_CONTROL_E2B_API_KEY", "hot-rotated-key")
     try:
         fn = make_sandbox_agent_fn(_sandbox_node_def())
         sandbox = _make_sandbox_mock()
@@ -3033,7 +3033,7 @@ async def test_sandbox_e2b_create_passes_resolved_api_key(monkeypatch: pytest.Mo
         assert result["telemetry"]["status"] == "completed"
         assert create.call_args.kwargs["api_key"] == "hot-rotated-key"
     finally:
-        store.clear_override("FARNA_CONTROL_MODULO_E2B_API_KEY")
+        store.clear_override("FARNA_CONTROL_E2B_API_KEY")
         RuntimeConfigStore.reset()
 
 
@@ -3717,8 +3717,8 @@ async def test_sandbox_loop_intercept_bridge_wires_files_env_and_wrapped_command
     assert config["enabled"] is True
     assert config["latency_budget_ms"] == 100
     envs = sandbox.commands.run.call_args.kwargs["envs"]
-    assert envs["FARNA_CONTROL_MODULO_BRIDGE_ENDPOINT"] == "http://127.0.0.1:47591"
-    assert envs["FARNA_CONTROL_MODULO_BRIDGE_CONFIG"] == "/home/user/modulo_bridge_config.json"
+    assert envs["FARNA_CONTROL_BRIDGE_ENDPOINT"] == "http://127.0.0.1:47591"
+    assert envs["FARNA_CONTROL_BRIDGE_CONFIG"] == "/home/user/modulo_bridge_config.json"
     wrapped = sandbox.commands.run.call_args.args[0]
     assert "python3 /home/user/modulo_bridge.py --wrap --" in wrapped
     server.close.assert_awaited_once()
@@ -3800,7 +3800,7 @@ async def test_sandbox_script_capacity_gate_skips_unparseable_org(monkeypatch: p
     """An unparseable org id short-circuits the script-mode dispatch capacity
     gate BEFORE any capacity read — the trigger must not be blocked by a
     malformed org (fail-open) and no capacity query runs."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
     fn = make_sandbox_agent_fn(_script_node_def(), session_factory=lambda: _FakeSession())
     sandbox = _make_sandbox_mock()
     counts = AsyncMock()
@@ -3817,7 +3817,7 @@ async def test_sandbox_script_capacity_check_failure_fails_open(caplog, monkeypa
     """A capacity-read failure must not block dispatch: the D8 gate degrades to
     a fail-open dispatch (``runner.capacity.gate_error``) and the sandbox is
     provisioned anyway — the dispatch marker is still written best-effort."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
 
     class _FakeGateSettings:
         runner_capacity_gate_enabled = False
@@ -3842,7 +3842,7 @@ async def test_sandbox_script_capacity_check_failure_fails_open(caplog, monkeypa
 async def test_sandbox_script_capacity_check_cancellation_reraises(monkeypatch: pytest.MonkeyPatch):
     """A cancellation inside the D8 dispatch gate must propagate — the gate is
     fail-open for ERRORS only, never for a cancelled dispatch."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
 
     class _FakeGateSettings:
         runner_capacity_gate_enabled = False
@@ -3893,7 +3893,7 @@ async def test_sandbox_script_schema_violation_raises_script_invalid_output(monk
     (pre-existing enforcement contract).  No schema_validator_mode
     monkeypatch needed.
     """
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
     fn = make_sandbox_agent_fn(_script_node_def(output_schema_json={"required": ["result"]}))
     sandbox = _make_sandbox_mock(output_json='{"other": 1}')
     with (
@@ -3917,7 +3917,7 @@ async def test_sandbox_schema_enforcement_record_persisted(monkeypatch: pytest.M
     session_factory`` success arm — the record is written before the node
     returns completed.
     """
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
     fn = make_sandbox_agent_fn(
         _script_node_def(output_schema_json={"required": ["result"]}),
         session_factory=lambda: _FakeSession(),
@@ -3936,7 +3936,7 @@ async def test_sandbox_schema_enforcement_record_persisted(monkeypatch: pytest.M
 
 async def test_sandbox_schema_enforcement_persist_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch):
     """A persistence failure never fails the sandbox node (best-effort)."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
     fn = make_sandbox_agent_fn(
         _script_node_def(output_schema_json={"required": ["result"]}),
         session_factory=lambda: _FakeSession(),
@@ -3957,7 +3957,7 @@ async def test_sandbox_schema_enforcement_persist_cancellation_propagates(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """A CancelledError during persistence propagates — never swallowed."""
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
     fn = make_sandbox_agent_fn(
         _script_node_def(output_schema_json={"required": ["result"]}),
         session_factory=lambda: _FakeSession(),
@@ -3982,7 +3982,7 @@ async def test_sandbox_terminal_schema_failure_persists_enforcement_record(
     (and, in script mode, terminalizes as ``ScriptInvalidOutputError``), but
     the enforcement record must be written BEFORE the node terminalizes.
     """
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_E2B_API_KEY", "k")
+    monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "k")
     fn = make_sandbox_agent_fn(
         _script_node_def(output_schema_json={"required": ["result"]}),
         session_factory=lambda: _FakeSession(),

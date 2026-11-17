@@ -145,7 +145,7 @@ def test_ci_yml_has_no_pr_reviewer_dispatch_job() -> None:
         violations.append("  ci.yml: a job named 'Trigger PR Reviewer' present — reviewer dispatch must live in pr-review.yml")
     if "pr-review.yml" in raw:
         violations.append("  ci.yml: references pr-review.yml — ci.yml must not dispatch the reviewer workflow")
-    if "FARNA_CONTROL_MODULO_PR_REVIEW_WEBHOOK_URL" in raw:
+    if "FARNA_CONTROL_PR_REVIEW_WEBHOOK_URL" in raw:
         violations.append("  ci.yml: embeds the PR-review webhook secret — that dispatch belongs in pr-review.yml")
     assert not violations, "ci.yml has re-coupled the PR-reviewer dispatch into product CI (FAR-1843):\n" + "\n".join(violations)
 

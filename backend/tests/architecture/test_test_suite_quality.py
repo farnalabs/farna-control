@@ -1123,7 +1123,7 @@ def _is_mark_decorator(dec: ast.AST) -> bool:
     return "mark" in parts
 
 
-_MODULO_TEST_STYLE_SCOPE_VAR = "FARNA_CONTROL_MODULO_TEST_STYLE_SCOPE"
+_MODULO_TEST_STYLE_SCOPE_VAR = "FARNA_CONTROL_TEST_STYLE_SCOPE"
 
 
 @functools.cache

@@ -1407,7 +1407,7 @@ async def _ingest_saq_error(
                     "message": message,
                     "source": "saq",
                     "context_json": {"function": function, **(context or {})},
-                    "environment": os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+                    "environment": os.environ.get("FARNA_CONTROL_ENV", "development"),
                     "version": get_version(),
                 },
             )

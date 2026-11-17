@@ -164,7 +164,7 @@ async def _emit_error_event(
                 "source": "backend",
                 "stacktrace": None,
                 "context_json": context_json,
-                "environment": os.environ.get("FARNA_CONTROL_MODULO_ENV", "development"),
+                "environment": os.environ.get("FARNA_CONTROL_ENV", "development"),
                 "version": get_version(),
             },
         )

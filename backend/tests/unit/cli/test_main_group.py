@@ -185,14 +185,14 @@ def _set_credential_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FERNET_KEY", FERNET_KEY)
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@host:5432/farna_control")
     monkeypatch.setenv("REDIS_URL", "redis://:redis-secret@cache-host:16379/0")
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_USERS", f"admin@modulo.run:{_USER_PASSWORD}")
+    monkeypatch.setenv("FARNA_CONTROL_USERS", f"admin@modulo.run:{_USER_PASSWORD}")
     monkeypatch.setenv(
-        "FARNA_CONTROL_MODULO_OIDC_PROVIDERS",
+        "FARNA_CONTROL_OIDC_PROVIDERS",
         f'[{{"provider_id": "okta", "client_id": "abc", "client_secret": "{_OIDC_CLIENT_SECRET}"}}]',
     )
     monkeypatch.setenv("ALERT_WEBHOOK_URL", f"https://hooks.example.com/{_WEBHOOK_TOKEN}")
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", _AWS_KEY_ID)
-    monkeypatch.setenv("FARNA_CONTROL_MODULO_LICENSE_KEY", _LICENSE_KEY)
+    monkeypatch.setenv("FARNA_CONTROL_LICENSE_KEY", _LICENSE_KEY)
 
 
 @pytest.mark.parametrize("as_json", [False, True], ids=["table", "json"])
