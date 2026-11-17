@@ -73,7 +73,7 @@ podSecurity:
 # authors the policy; it never observes network traffic).
 #
 # Enforcement contract (FAR-2068): `enabled: true` also injects
-# MODULO_WORKSPACE_NETWORK_POLICY=enabled into the control-plane workloads.
+# FARNA_CONTROL_WORKSPACE_NETWORK_POLICY=enabled into the control-plane workloads.
 # The backend only resolves a Kubernetes egress `deny_all` profile to a
 # `declared` posture — and only accepts an egress 'none' workspace — when that
 # signal is present. With the default `false` the manifest does not exist, so
@@ -120,7 +120,7 @@ serviceAccount:
   # keeps the blast radius of a compromised pod small (kubernetes:S6865).
   #
   # Set to true ONLY when you enable the Kubernetes runtime provider
-  # (MODULO_KUBERNETES_ENABLED) — those workloads then create/exec/log
+  # (FARNA_CONTROL_KUBERNETES_ENABLED) — those workloads then create/exec/log
   # workspace pods in-cluster and need a namespaced credential to do it.
   # Trade-off: turning it on gives every backend/saq pod a bearer token
   # scoped by whatever RBAC you bind to this ServiceAccount, so keep the

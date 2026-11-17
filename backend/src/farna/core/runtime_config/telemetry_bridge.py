@@ -3,7 +3,7 @@
 Bridges the runtime config store (which supports hot-reloadable overrides
 via ``PUT /api/v1/admin/runtime-config``) with the Settings object (which
 reads from env vars via pydantic-settings) for the
-``MODULO_TELEMETRY_ENABLED`` key.
+``FARNA_CONTROL_TELEMETRY_ENABLED`` key.
 
 The function checks the store first, then falls back to the cached
 ``Settings`` value so that onboarding opt-in and admin toggles take
@@ -16,7 +16,7 @@ effect without a restart.
    OTel pipeline in-process), but the SAQ worker only sees the change on
    its next startup or if it re-reads the store.  For consistent
    cross-process behaviour, set the environment variable
-   ``MODULO_TELEMETRY_ENABLED`` in the deployment configuration rather
+   ``FARNA_CONTROL_TELEMETRY_ENABLED`` in the deployment configuration rather
    than relying on the runtime override.
 """
 
@@ -31,7 +31,7 @@ def is_telemetry_enabled() -> bool:
     """Check whether OTel telemetry is enabled, respecting runtime overrides.
 
     The runtime config store (``PUT /api/v1/admin/runtime-config``) can override
-    ``MODULO_TELEMETRY_ENABLED`` at hot-reload time.  This function checks the
+    ``FARNA_CONTROL_TELEMETRY_ENABLED`` at hot-reload time.  This function checks the
     store first, then falls back to the cached ``Settings`` value so that
     onboarding opt-in and admin toggles take effect without a restart.
     """
