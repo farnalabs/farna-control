@@ -216,4 +216,11 @@ describe('DataTable empty state placement (FAR-2539)', () => {
       expect.arrayContaining(['min-w-0', 'max-w-full']),
     )
   })
+
+  it('falls back to the default empty message when no empty slot is supplied', () => {
+    const wrapper = mount(DataTable, { props: { columns, rows: [] } })
+    const empty = wrapper.get('[data-table-part="empty"]')
+    expect(empty.text()).toBe('No data available.')
+    expect(wrapper.find('div.overflow-x-auto [data-table-part="empty"]').exists()).toBe(false)
+  })
 })
