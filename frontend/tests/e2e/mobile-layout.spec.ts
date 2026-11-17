@@ -1086,8 +1086,11 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
   const HEADER_ROUTES = ['/', '/pipelines', '/admin/connectors']
 
   async function openLocal(page: Page, env: TestEnv, route: string) {
-    if (env.name === 'local') await setupLocalMockApi(page)
-    await loginAsAdmin(page, env)
+    // Non-local targets already carry the shared global-setup session via the
+    // file-level storageState. Signing in again would open /login while
+    // authenticated, which redirects to the app root, so the credential form
+    // would never render. Only the local mock target needs an explicit login.
+    if (env.name === 'local') await loginAsAdmin(page, env)
     await page.goto(route)
     await page.waitForLoadState('domcontentloaded')
     await expect(page.locator('h1').first()).toBeVisible()

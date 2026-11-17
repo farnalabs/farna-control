@@ -58,11 +58,18 @@ async function rotateForcedPasswordAndSignIn(
   await page.getByTestId('change-password-confirm').fill(newPassword)
   await page.getByTestId('change-password-submit').click()
 
-  // The gate announces success, ends the rotated session, and routes to /login.
+  // FAR-2529: the gate announces success, installs the fresh token from the
+  // password-change response, and continues into the app (autologin) instead
+  // of ending the session at /login.
   await expect(page.getByText(/password changed/i)).toBeVisible({ timeout: 30_000 })
-  await expect(page).toHaveURL(/\/login/, { timeout: 30_000 })
+  await expect(page.getByRole('heading', { name: /set a new password/i })).toBeHidden({ timeout: 30_000 })
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 })
 
-  // Sign in with the NEW credential and wait for the authenticated app.
+  // Drop the autologin session, then sign in again through the real login UI
+  // with the NEW credential — proving the rotated password works and returning
+  // a token minted by the login endpoint.
+  await page.evaluate(() => localStorage.clear())
+  await page.context().clearCookies()
   await loginThroughUi(page, viewerEnv(env, env.credentials.admin.email, newPassword))
 
   // The SPA persists the session token before routing; read it defensively.
