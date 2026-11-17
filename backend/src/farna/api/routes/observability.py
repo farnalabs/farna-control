@@ -336,7 +336,11 @@ async def test_otel_connection(
         return TestSpanResult(success=False, message=f"Rejected: {exc}")
 
     try:
-        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})
+        # ``url`` passed validate_outbound_url_async above and the client comes
+        # from pinned_async_client (IP-pinned transport), so this request cannot
+        # reach an unvalidated host: the SSRF sink reported here is a false
+        # positive of the taint engine, which does not model custom guards.
+        resp = await client.post(url, json=test_span, headers=req.otlp_headers or {})  # NOSONAR pythonsecurity:S5144 - SSRF-guarded: validate_outbound_url_async + IP-pinned client
         if resp.status_code < 500:
             return TestSpanResult(
                 success=True,
