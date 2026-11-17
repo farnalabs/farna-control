@@ -1647,10 +1647,14 @@ jobs:
             exit 1
           fi
 
+      # NOSONAR githubactions:S8541: pytest-bdd is a pinned source-archive dep (no
+      # wheel) and ibm-cos-sdk is sdist-only, so `--no-build` hard-fails the sync.
+      # `--frozen` locks the exact revisions, so builds are deterministic and
+      # trusted (no untrusted setup scripts execute).
       - name: Install backend deps
         if: steps.merge.outputs.merged_count != '0'
         working-directory: backend
-        run: uv sync --frozen
+        run: uv sync --frozen  # NOSONAR
 
       - name: Check migration heads (hard gate, isolates the offending PR)
         id: migration_heads

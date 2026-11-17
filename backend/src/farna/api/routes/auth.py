@@ -1732,10 +1732,13 @@ def _set_refresh_cookie(response: Response, refresh_token: str, settings: Settin
 
 
 def _set_csrf_cookie(response: Response, token: str, settings: Settings, *, max_age_seconds: int | None = None) -> None:
-    response.set_cookie(
+    # The XSRF token is deliberately JS-readable (double-submit CSRF pattern) and
+    # is not an auth credential: it is useless without the httpOnly session cookie.
+    # SameSite=strict + secure mitigate; FAR-1197 keeps the refresh token httpOnly.
+    response.set_cookie(  # NOSONAR S3330
         key="XSRF-TOKEN",
         value=token,
-        httponly=False,  # NOSONAR S3330 — JS-readable CSRF token; SameSite=strict + secure mitigate.
+        httponly=False,
         samesite="strict",
         secure=not settings.debug,
         max_age=max_age_seconds if max_age_seconds is not None else settings.modulo_access_token_minutes * 60,
@@ -1755,10 +1758,11 @@ def _clear_auth_cookies(response: Response, settings: Settings) -> None:
             max_age=0,
             path="/",
         )
-    response.set_cookie(
+    # Clears the same deliberately JS-readable XSRF cookie set by _set_csrf_cookie.
+    response.set_cookie(  # NOSONAR S3330
         key="XSRF-TOKEN",
         value="",
-        httponly=False,  # NOSONAR S3330 — JS-readable CSRF token; SameSite=strict + secure mitigate.
+        httponly=False,
         samesite="strict",
         secure=secure,
         max_age=0,
