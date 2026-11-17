@@ -57,8 +57,8 @@ the runtime variables supplied per call:
                             "requests_per_second": 10.0,        #   refill rate
                             "burst": 20                         #   burst capacity
                           }
-                            #   FAR-439: when a Redis client is wired at the composition
-                            #   root (app.modulo.run multi-worker / fleet), the bucket is
+#   FAR-439: when a Redis client is wired at the composition
+#   root (control.farna.dev multi-worker / fleet), the bucket is
                             #   SHARED across workers — one budget per <tenant, host+path>
                             #   — enforced atomically in Redis. The key is derived from the
                             #   STATIC path template (not the fully-rendered URL) so a

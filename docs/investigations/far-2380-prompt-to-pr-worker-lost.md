@@ -80,7 +80,7 @@ factory (#2827)"):
 
 | Step | Started (UTC) | Completed (UTC) |
 |---|---|---|
-| Deploy to app.modulo.run (job) | 11:58:50 | 12:03:39 |
+| Deploy to control.farna.dev (job) | 11:58:50 | 12:03:39 |
 | Deploy to app-modulo (step) | **12:00:44** | 12:03:27 |
 | Pre-deploy migrations | 11:59:59 | 12:00:44 |
 | Prod smoke tests | 12:03:41 | 12:04:46 |
