@@ -350,7 +350,7 @@ def _isolate_from_context_and_socket(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_skip_reason_none_when_env_endpoint_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """MODULO_DOCKER_HOST alone (autouse fixture) makes the sweep applicable —
+    """FARNA_CONTROL_DOCKER_HOST alone (autouse fixture) makes the sweep applicable —
     even with every other signal neutralised. A configured-but-unreachable
     endpoint therefore NEVER skips: the predicate never probes reachability."""
     _isolate_from_context_and_socket(monkeypatch)
@@ -366,7 +366,7 @@ def test_skip_reason_present_when_no_endpoint_resolvable(monkeypatch: pytest.Mon
 
     assert reason is not None
     assert "no Docker endpoint configured" in reason
-    assert "MODULO_DOCKER_HOST" in reason  # names the remediation knob
+    assert "FARNA_CONTROL_DOCKER_HOST" in reason  # names the remediation knob
 
 
 def test_skip_reason_none_when_docker_host_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
