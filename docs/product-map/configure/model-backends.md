@@ -3,11 +3,13 @@ id: feat-model-backends
 prd: N/A
 adr: []
 code:
+  - backend/src/farna/api/mcp_server.py
   - backend/src/farna/api/routes/model_backends.py
   - backend/src/farna/api/routes/pipelines.py
   - backend/src/farna/cli/backfill_model_backend_base_url.py
   - backend/src/farna/core/model_backend_endpoints.py
   - backend/src/farna/core/model_backend_hub
+  - backend/src/farna/core/mcp/scope_validator.py
   - backend/src/farna/core/team_visibility.py
   - backend/src/farna/model_backends/base.py
   - backend/src/farna/model_backends/openai
@@ -21,6 +23,8 @@ unit-tests:
   - backend/tests/unit/model_backends/test_shared.py
   - backend/tests/unit/api/test_model_backends_endpoint.py
   - backend/tests/unit/api/test_model_backend_base_url_helpers.py
+  - backend/tests/unit/api/test_model_backend_fallback_validation.py
+  - backend/tests/unit/mcp/test_mcp_schema_tools.py
   - backend/tests/unit/api/test_model_backends_pipeline_refs.py
   - backend/tests/unit/cli/test_backfill_model_backend_base_url.py
   - backend/tests/unit/core/test_team_visibility.py
@@ -117,6 +121,23 @@ LangChain `BaseChatModel` internally).
       `backend/src/farna/core/team_visibility.py`,
       `backend/tests/unit/core/test_team_visibility.py`,
       `backend/tests/unit/api/test_pipeline_team_visibility.py`)
+- [x] The management surface is also exposed over MCP (FAR-2329):
+      `list_model_backends` / `get_model_backend` are metadata-only
+      `model_backend.list` reads, `create_model_backend` returns a one-time
+      browser setup handoff instead of accepting the API key, and
+      `update_model_backend` manages non-secret configuration plus the fallback
+      chain (replace or clear, mutually exclusive) through the REST
+      `ModelBackendUpdate` and `_validate_fallback_ids` contract. Unknown or
+      foreign fallback ids, self-reference and multi-hop cycles are therefore
+      rejected as `validation_error`; `default_params.base_url` is refused
+      because endpoint changes require the credential-rebinding setup flow; a
+      duplicate name maps to `conflict` and a missing/cross-org id to
+      `not_found`. Create/update append `model_backend_created` /
+      `model_backend_updated` audit events and every tool enforces its
+      `model_backend.*` scope key (`backend/src/farna/api/mcp_server.py`,
+      `backend/src/farna/core/mcp/scope_validator.py`;
+      `backend/tests/unit/mcp/test_mcp_schema_tools.py`,
+      `backend/tests/unit/api/test_model_backend_fallback_validation.py`)
 
 ## Known Gaps
 
@@ -126,6 +147,13 @@ LangChain `BaseChatModel` internally).
   registered backends is not modelled; each worker re-reads backend state via the hub.
 
 ## QA History
+- 2026-11-18: **Improve Architecture product-map walk** - closed the untracked
+  FAR-2329 MCP management surface: the four model-backend MCP tools and their
+  fallback-chain replace/clear contract shipped while neither product-map layer
+  named them. Added the checked behavior line and cited `mcp_server.py`,
+  `scope_validator.py`, `test_mcp_schema_tools.py` and
+  `test_model_backend_fallback_validation.py`; the MCP half is also tracked
+  under `feat-mcp`.
 - 2026-10-08: **Improve Architecture product-map walk** – closed the untracked
   FAR-1515 sub-surface (cross-team model-backend pin enforcement at graph save,
   merged in PR #1377): the model-backend mirror of the connector team-scope

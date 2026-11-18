@@ -20,6 +20,7 @@ unit-tests:
   - backend/tests/unit/mcp/test_api_key_mgmt_tools.py
   - backend/tests/unit/mcp/test_get_run_output.py
   - backend/tests/unit/mcp/test_mcp_connector_tools.py
+  - backend/tests/unit/mcp/test_mcp_schema_tools.py
   - backend/tests/unit/mcp/test_team_binding_enforcement.py
   - backend/tests/unit/mcp/test_mcp_tool_exception_error.py
   - backend/tests/unit/mcp/test_mcp_session_contract_errors.py
@@ -57,9 +58,9 @@ applications. Built on the auth + model-backend core.
 
 - [x] The remote MCP server mounts at `/mcp` (FastMCP over Starlette, SSE
       streaming) and exposes the registered tool stack – run, pipeline, schema,
-      library, connector, trigger, secret, runtime and viewmodel tools – as a
-      thin adapter over the ViewModel API with per-tool definitions emitted via
-      `mcp_tool_registry.build_tool_registry`
+      library, connector, trigger, model-backend, secret, runtime and viewmodel
+      tools – as a thin adapter over the ViewModel API with per-tool definitions
+      emitted via `mcp_tool_registry.build_tool_registry`
 - [x] Authentication is API-key bearer (`Authorization: Bearer mk_<key>`):
       `McpAuthMiddleware` validates the key at the HTTP layer, rejects
       unauthenticated requests, and sets org_id/role in a ContextVar for tool
@@ -365,6 +366,30 @@ applications. Built on the auth + model-backend core.
       `backend/tests/unit/auth/test_oauth.py`,
       `frontend/src/__tests__/SettingsMcpView.spec.ts`)
 
+- [x] MCP manages model backends (FAR-2329): `list_model_backends`
+      (cursor-paginated, limit clamped 1..100) and `get_model_backend` are
+      `model_backend.list` reads that return metadata only - a credential
+      surfaces as `has_credentials`, never a value - while `get_model_backend`
+      also returns the fallback chain and cost-tracking fields.
+      `create_model_backend` (`model_backend.create`) NEVER accepts the API key
+      over MCP: it returns a one-time browser setup handoff URL so the secret
+      stays out of the agent context and MCP transport logs, and refuses the
+      test-only `stub` provider and any unknown provider as `validation_error`.
+      `update_model_backend` (`model_backend.update`) changes only non-secret
+      fields and replaces (`fallback_backend_ids`) or clears
+      (`clear_fallback_chain`, mutually exclusive with the former) the fallback
+      chain, routed through the REST `ModelBackendUpdate` contract and
+      `_validate_fallback_ids` so an unknown/foreign id, self-reference or
+      multi-hop cycle is rejected as `validation_error`, a duplicate name maps
+      to `conflict`, a missing/cross-org id maps to `not_found`, and
+      `default_params.base_url` is refused because endpoint changes require the
+      explicit credential-rebinding setup flow. Create and update append
+      `model_backend_created` / `model_backend_updated` audit events (fail-open),
+      and every tool runs the `_check_agent_tool_scope` chokepoint against its
+      `model_backend.*` registry key (`api/mcp_server.py`,
+      `core/mcp/scope_validator.py`; `tests/unit/mcp/test_mcp_schema_tools.py`,
+      `tests/unit/api/test_model_backend_fallback_validation.py`)
+
 ## Known Gaps
 
 - **OAuth protocol endpoints are `aiohttp`/session-bearing** – refresh/consent
@@ -374,6 +399,16 @@ applications. Built on the auth + model-backend core.
   published as a distinct surface here.
 
 ## QA History
+- 2026-11-18: **Improve Architecture product-map walk** - closed the untracked
+  FAR-2329 model-backend management surface. `create_model_backend`,
+  `list_model_backends`, `get_model_backend` and `update_model_backend` (with
+  fallback-chain replace/clear validation) shipped over MCP, but neither
+  product-map layer described them and the tracker's tool-stack enumeration
+  omitted model backends entirely. Added the checked behavior line, corrected
+  the enumeration, cited `mcp_server.py` / `scope_validator.py` plus
+  `test_mcp_schema_tools.py` / `test_model_backend_fallback_validation.py`, and
+  mirrored the behavior in the manifest `feat-mcp` and `feat-model-backends`
+  registries.
 - 2026-10-10: **Spec-accuracy pass** – FAR-1476 slice 3 landed the real browser
   consent screen (anonymous consent-context endpoint, per-scope deny on
   approve, the rebuilt `/oauth/authorize` view). The tracker's OAuth bullet
