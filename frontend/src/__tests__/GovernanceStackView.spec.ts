@@ -121,6 +121,14 @@ function links(wrapper: ReturnType<typeof mountView>, levelId: string) {
   return wrapper.find(`[data-testid="governance-level-${levelId}"]`).findAll('a')
 }
 
+function countText(wrapper: ReturnType<typeof mountView>, levelId: string) {
+  return wrapper.find(`[data-testid="governance-level-count-${levelId}"]`).text()
+}
+
+function stateText(wrapper: ReturnType<typeof mountView>, levelId: string) {
+  return wrapper.find(`[data-testid="governance-level-state-${levelId}"]`).text()
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockDefaults()
@@ -389,6 +397,17 @@ const FEATURE_GATED = {
 const FAILURE = { data: undefined, error: { detail: 'boom' }, response: { status: 500 } }
 const EMPTY = { data: undefined, error: undefined, response: { status: 200 } }
 
+/** OTel export configured with no endpoint, i.e. observability is off. */
+const OTEL_UNCONFIGURED = ok({
+  otlp_endpoint: '',
+  otlp_headers: {},
+  export_interval_seconds: 30,
+  langsmith_enabled: false,
+  has_langsmith_api_key: false,
+  effective_otlp_endpoint: '',
+  env_override_active: false,
+})
+
 const PRIMARY_URLS = [
   '/api/v1/model-backends',
   '/api/v1/connectors',
@@ -502,7 +521,14 @@ describe('GovernanceStackView — degraded responses', () => {
   })
 
   it('falls back to zero counts when list payloads omit their totals', async () => {
-    mockDefaults(overridesFor(ALL_URLS, EMPTY))
+    mockDefaults({
+      ...overridesFor(ALL_URLS, EMPTY),
+      // Telemetry's count aggregates three sources, so an unreadable source is
+      // UNKNOWN rather than 0 (see the dedicated telemetry specs). Give it
+      // readable empty payloads to keep this test about the total fallback.
+      '/api/v1/errors': ok({ items: [], total: 0, limit: 1, offset: 0 }),
+      '/api/v1/notifications': ok([]),
+    })
     const wrapper = mountView()
     await nextTick()
     await nextTick()
@@ -517,15 +543,7 @@ describe('GovernanceStackView — degraded responses', () => {
 
   it('counts telemetry destinations even when OTel export is unconfigured', async () => {
     mockDefaults({
-      '/api/v1/settings/observability': ok({
-        otlp_endpoint: '',
-        otlp_headers: {},
-        export_interval_seconds: 30,
-        langsmith_enabled: false,
-        has_langsmith_api_key: false,
-        effective_otlp_endpoint: '',
-        env_override_active: false,
-      }),
+      '/api/v1/settings/observability': OTEL_UNCONFIGURED,
       '/api/v1/errors': ok({ items: [], total: 3, limit: 1, offset: 0 }),
     })
     const wrapper = mountView()
@@ -536,6 +554,7 @@ describe('GovernanceStackView — degraded responses', () => {
     expect(detail).toContain('not configured')
     expect(detail).toContain('3')
     expect(detail).toContain('2')
+    expect(countText(wrapper, 'telemetry')).toBe('5 telemetry destinations')
   })
 
   it('degrades telemetry enrichment to unavailable without failing the level', async () => {
@@ -566,6 +585,60 @@ describe('GovernanceStackView — degraded responses', () => {
     expect(wrapper.find('[data-testid="governance-level-detail-telemetry"]').text()).toContain(
       'unavailable',
     )
+  })
+
+  it('never publishes a partial telemetry count as the level total', async () => {
+    // One enrichment source is readable, the other is not. The readable one's
+    // 2 endpoints must not be presented as the level's destination count, and
+    // the per-source detail still names the number it does know.
+    mockDefaults({
+      '/api/v1/settings/observability': OTEL_UNCONFIGURED,
+      '/api/v1/errors': FORBIDDEN,
+      '/api/v1/notifications': ok([{ id: 'endpoint-1' }, { id: 'endpoint-2' }]),
+    })
+    const wrapper = mountView()
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="governance-level-ready-telemetry"]').exists()).toBe(true)
+    expect(countText(wrapper, 'telemetry')).toBe('count unavailable')
+    // The level IS configured (2 notification endpoints are readable), so the
+    // badge still tells the truth about configuration.
+    expect(stateText(wrapper, 'telemetry')).toBe('Configured')
+    const detail = wrapper.find('[data-testid="governance-level-detail-telemetry"]').text()
+    expect(detail).toContain('Error groups: unavailable')
+    expect(detail).toContain('Notification endpoints: 2')
+  })
+
+  it('reports an unknown telemetry state instead of a fabricated empty one', async () => {
+    // Nothing is configured and nothing is readable: the read established
+    // NEITHER "configured" nor "empty", so the level must claim neither, and
+    // its count must not collapse the unreadable sources to 0.
+    mockDefaults({
+      '/api/v1/settings/observability': OTEL_UNCONFIGURED,
+      '/api/v1/errors': FORBIDDEN,
+      '/api/v1/notifications': FAILURE,
+    })
+    const wrapper = mountView()
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="governance-level-ready-telemetry"]').exists()).toBe(true)
+    expect(stateText(wrapper, 'telemetry')).toBe('Unknown')
+    expect(countText(wrapper, 'telemetry')).toBe('count unavailable')
+  })
+
+  it('keeps reporting a configured telemetry state when both enrichment sources are unreadable', async () => {
+    mockDefaults({
+      '/api/v1/errors': FORBIDDEN,
+      '/api/v1/notifications': FAILURE,
+    })
+    const wrapper = mountView()
+    await nextTick()
+    await nextTick()
+
+    expect(stateText(wrapper, 'telemetry')).toBe('Configured')
+    expect(countText(wrapper, 'telemetry')).toBe('count unavailable')
   })
 
   it('reads the autonomy rung from the pinned default when the earned level is null', async () => {

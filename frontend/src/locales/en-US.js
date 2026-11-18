@@ -4984,6 +4984,8 @@ export default {
       "loading": "Loading...",
       "state_configured": "Configured",
       "state_empty": "Empty",
+      "state_unknown": "Unknown",
+      "count_unavailable": "count unavailable",
       "restricted_title": "Restricted",
       "restricted_body": "This level needs {gate}.",
       "error_title": "Could not load this level",

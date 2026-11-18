@@ -49,6 +49,15 @@ change**, so `pnpm run generate:api` is not required.
       configured/empty state, or its own `restricted` (402 feature-gated / 403
       permission) state, or a retry-able per-level error state. One level's
       failure or restriction never blanks another level or the page.
+- [x] A level never publishes a count or a configured/empty verdict it has
+      not read. Level 7 aggregates three sources; its two enrichment reads
+      (error groups, notification endpoints) stay best-effort, but an
+      unreadable one now contributes UNKNOWN instead of `0`, so the level
+      shows neither a total it cannot compute nor an `Empty` badge it cannot
+      support: nothing readable and nothing configured renders `Unknown` with
+      a `count unavailable` label, a configured OTel export renders
+      `Configured` with the same label, and the per-source detail line still
+      names every number it did read.
 - [x] Levels deep-link to their existing management surfaces (the table above).
 - [x] Level 3 (MCP) today is what Farna Control *serves* to agents (OAuth clients,
       API keys); Level 4 (Agents) is agents Farna Control dispatches; Level 5
@@ -92,10 +101,30 @@ change**, so `pnpm run generate:api` is not required.
   `GET /api/v1/errors` is called unfiltered, so historical resolved error
   groups count toward it. The per-source breakdown in the detail line is the
   accurate reading; splitting the count per source needs a decision on what a
-  "telemetry destination" is.
+  "telemetry destination" is. An unreadable source no longer fabricates a
+  value (2026-11-17): its contribution is unknown, so the count is withheld
+  and the level says so.
 
 ## QA History
 
+- 2026-11-17 (improve-architecture). Fixed MAJOR (fabricated state): the
+  telemetry level's two best-effort reads were folded in with
+  `(errorGroups ?? 0) + (endpoints ?? 0)`, so a 402/403/transport failure on
+  either source was published as a ZERO contribution — a partial read was
+  rendered as the level's whole destination count (`2 notification endpoints`
+  with the error dashboard unreadable printed "2 telemetry destinations"),
+  and with the OTel export unconfigured the collapsed zero also published an
+  `Empty` badge for a state nothing had read. The loader now distinguishes
+  KNOWN from UNKNOWN: an unreadable source contributes `null`, the aggregate
+  count is published only when both sources were read, and the level gains an
+  explicit `Unknown` badge state (with the i18n key `state_unknown`) plus a
+  `count_unavailable` label for the aggregate it cannot compute; a configured
+  OTel export keeps the `Configured` badge and still withholds the count, and
+  the detail line keeps reporting each source's own value or `unavailable`.
+  Proved by three new Vitest specs that fail on the previous component
+  (`2 telemetry destinations` / `Empty` / `0 telemetry destinations`) and pass
+  now, with the existing enrichment-degradation specs unchanged. 28 Vitest
+  specs pass, `eslint` and `vue-tsc --noEmit` are clean.
 - 2026-11-02 (improve-architecture). Fixed MINOR (product-map completeness and
   structural blind spot): `/governance` shipped with NO `elements:` inventory in
   the manifest and was absent from `OWNED_PAGES` in

@@ -93,13 +93,13 @@
                 :aria-label="$t(level.titleKey)"
               >
                 <Badge
-                  :severity="level.state.configured ? 'success' : 'secondary'"
+                  :severity="badgeSeverity(level.state)"
                   :data-testid="`governance-level-state-${level.id}`"
                 >
-                  {{ level.state.configured ? $t('views.GovernanceStackView.state_configured') : $t('views.GovernanceStackView.state_empty') }}
+                  {{ badgeLabel(level.state) }}
                 </Badge>
                 <span class="text-sm font-medium" :data-testid="`governance-level-count-${level.id}`">
-                  {{ $t(level.countLabelKey, { count: level.state.count }) }}
+                  {{ level.state.countKnown ? $t(level.countLabelKey, { count: level.state.count }) : $t('views.GovernanceStackView.count_unavailable') }}
                 </span>
               </output>
               <p
@@ -145,6 +145,10 @@ interface LevelState {
   status: LevelStatus
   count: number
   configured: boolean
+  /** False when a contributing source was unreadable, so ``count`` is NOT the level's total. */
+  countKnown: boolean
+  /** True when neither configured nor empty can be claimed (unreadable source, nothing readable configured). */
+  indeterminate: boolean
   detail: string | null
   errorMessage: string | null
 }
@@ -264,9 +268,35 @@ const LEVEL_DEFS: LevelDef[] = [
 const levels = reactive<LevelView[]>(
   LEVEL_DEFS.map((def) => ({
     ...def,
-    state: { status: 'loading', count: 0, configured: false, detail: null, errorMessage: null },
+    state: {
+      status: 'loading',
+      count: 0,
+      configured: false,
+      countKnown: true,
+      indeterminate: false,
+      detail: null,
+      errorMessage: null,
+    },
   })),
 )
+
+/**
+ * A level whose state could not be established (a contributing source was
+ * unreadable and nothing readable is configured) is INDETERMINATE: it renders
+ * neither "Configured" nor "Empty", because the read never established either.
+ * Its count is hidden the same way - an unknown contribution is not a zero.
+ */
+function badgeSeverity(state: LevelState): 'warn' | 'success' | 'secondary' {
+  if (state.indeterminate) return 'warn'
+  return state.configured ? 'success' : 'secondary'
+}
+
+function badgeLabel(state: LevelState): string {
+  if (state.indeterminate) return t('views.GovernanceStackView.state_unknown')
+  return state.configured
+    ? t('views.GovernanceStackView.state_configured')
+    : t('views.GovernanceStackView.state_empty')
+}
 
 /** A request that REJECTS (network failure, abort) never reaches the typed `{ data, error }` shape. */
 function rejected(e: unknown): { data?: undefined; error?: { detail?: unknown }; response?: undefined } {
@@ -296,7 +326,14 @@ function isRestricted(resp: ApiResultLike | null | undefined): boolean {
 }
 
 type Outcome =
-  | { kind: 'ready'; count: number; configured: boolean; detail: string | null }
+  | {
+      kind: 'ready'
+      count: number
+      configured: boolean
+      detail: string | null
+      countKnown?: boolean
+      indeterminate?: boolean
+    }
   | { kind: 'restricted' }
   | { kind: 'error'; message: string }
 
@@ -467,7 +504,10 @@ async function loadTelemetry(): Promise<Outcome> {
   // OTel export config owns the level's restricted/error state; the error
   // dashboard and notification endpoints are best-effort enrichment, so a
   // 402/403/transport failure on either degrades to "unavailable" rather than
-  // taking the whole telemetry level down.
+  // taking the whole telemetry level down. An unreadable source contributes
+  // UNKNOWN, never zero: summing a missing source as 0 published a destination
+  // count the read had not established, and with OTel unconfigured it also
+  // published an "Empty" level for a state nobody had read.
   const [otelResp, errorsResp, endpointsResp] = await Promise.all([
     api.GET('/api/v1/settings/observability').catch(rejected),
     api.GET('/api/v1/errors', { params: { query: { limit: 1 } } }).catch(rejected),
@@ -477,17 +517,23 @@ async function loadTelemetry(): Promise<Outcome> {
   if (otelResp.error) return { kind: 'error', message: formatApiError(otelResp.error) }
   const otelConfigured = Boolean(otelResp.data?.effective_otlp_endpoint)
   const errorGroups =
-    !errorsResp.error && !isRestricted(errorsResp) ? (errorsResp.data?.total ?? 0) : null
+    !errorsResp.error && !isRestricted(errorsResp) && typeof errorsResp.data?.total === 'number'
+      ? errorsResp.data.total
+      : null
   const endpoints =
     !endpointsResp.error && !isRestricted(endpointsResp) && Array.isArray(endpointsResp.data)
       ? endpointsResp.data.length
       : null
-  const count = (errorGroups ?? 0) + (endpoints ?? 0)
+  const countKnown = errorGroups !== null && endpoints !== null
+  const knownCount = (errorGroups ?? 0) + (endpoints ?? 0)
+  const configured = otelConfigured || knownCount > 0
   const unavailable = t('views.GovernanceStackView.telemetry_unavailable')
   return {
     kind: 'ready',
-    count,
-    configured: otelConfigured || count > 0,
+    count: knownCount,
+    configured,
+    countKnown,
+    indeterminate: !countKnown && !configured,
     detail: t('views.GovernanceStackView.telemetry_detail', {
       otel: otelConfigured
         ? t('views.GovernanceStackView.telemetry_otel_configured')
@@ -513,12 +559,18 @@ function applyOutcome(level: LevelView, outcome: Outcome): void {
     level.state.status = 'ready'
     level.state.count = outcome.count
     level.state.configured = outcome.configured
+    level.state.countKnown = outcome.countKnown ?? true
+    level.state.indeterminate = outcome.indeterminate ?? false
     level.state.detail = outcome.detail
   } else if (outcome.kind === 'restricted') {
     level.state.status = 'restricted'
+    level.state.countKnown = true
+    level.state.indeterminate = false
     level.state.detail = null
   } else {
     level.state.status = 'error'
+    level.state.countKnown = true
+    level.state.indeterminate = false
     level.state.errorMessage = outcome.message
   }
 }
