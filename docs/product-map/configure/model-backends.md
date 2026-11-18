@@ -130,11 +130,11 @@ LangChain `BaseChatModel` internally).
       `ModelBackendUpdate` and `_validate_fallback_ids` contract. Unknown or
       foreign fallback ids, self-reference and multi-hop cycles are therefore
       rejected as `validation_error`; `default_params.base_url` is refused
-      because endpoint changes require the credential-rebinding setup flow; a
-      duplicate name maps to `conflict` and a missing/cross-org id to
-      `not_found`. Create/update append `model_backend_created` /
-      `model_backend_updated` audit events and every tool enforces its
-      `model_backend.*` scope key (`backend/src/farna/api/mcp_server.py`,
+      because endpoint changes require the credential-rebinding setup flow, and
+      a missing/cross-org id maps to `not_found`. Create/update append
+      `model_backend_created` / `model_backend_updated` audit events and every
+      tool enforces its `model_backend.*` scope key
+      (`backend/src/farna/api/mcp_server.py`,
       `backend/src/farna/core/mcp/scope_validator.py`;
       `backend/tests/unit/mcp/test_mcp_schema_tools.py`,
       `backend/tests/unit/api/test_model_backend_fallback_validation.py`)
@@ -145,6 +145,11 @@ LangChain `BaseChatModel` internally).
   owned by `feat-costs`; this entry tracks provider configuration and selection only.
 - **Hub failover is per-process healthy-state** - a shared cross-worker health view of
   registered backends is not modelled; each worker re-reads backend state via the hub.
+- **MCP `create_model_backend` skips the REST create route's unique-name pre-check** -
+  REST runs a `SELECT ... FOR UPDATE` on `(organisation_id, name)` and returns 409 on a
+  duplicate, but the MCP tool writes through `db_create_model_backend` without that
+  guard and `model_backends` has no unique constraint on `(organisation_id, name)`, so
+  MCP can create duplicate names where REST returns 409.
 
 ## QA History
 - 2026-11-18: **Improve Architecture product-map walk** - closed the untracked

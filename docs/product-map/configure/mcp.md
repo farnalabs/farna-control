@@ -380,11 +380,11 @@ applications. Built on the auth + model-backend core.
       (`clear_fallback_chain`, mutually exclusive with the former) the fallback
       chain, routed through the REST `ModelBackendUpdate` contract and
       `_validate_fallback_ids` so an unknown/foreign id, self-reference or
-      multi-hop cycle is rejected as `validation_error`, a duplicate name maps
-      to `conflict`, a missing/cross-org id maps to `not_found`, and
-      `default_params.base_url` is refused because endpoint changes require the
-      explicit credential-rebinding setup flow. Create and update append
-      `model_backend_created` / `model_backend_updated` audit events (fail-open),
+      multi-hop cycle is rejected as `validation_error`, a missing/cross-org id
+      maps to `not_found`, and `default_params.base_url` is refused because
+      endpoint changes require the explicit credential-rebinding setup flow.
+      Create and update append `model_backend_created` / `model_backend_updated`
+      audit events (fail-open),
       and every tool runs the `_check_agent_tool_scope` chokepoint against its
       `model_backend.*` registry key (`api/mcp_server.py`,
       `core/mcp/scope_validator.py`; `tests/unit/mcp/test_mcp_schema_tools.py`,
@@ -397,6 +397,11 @@ applications. Built on the auth + model-backend core.
   in-flight browser consent sessions.
 - **SSE is the only transport exposed** – the streamable-HTTP transport is not
   published as a distinct surface here.
+- **`create_model_backend` does not enforce the REST unique-name guard** – the
+  REST create route takes a `SELECT ... FOR UPDATE` on `(organisation_id, name)`
+  and returns 409 on a duplicate, but the MCP tool writes through
+  `db_create_model_backend` without that pre-check and no unique constraint backs
+  it, so MCP can create duplicate names where REST would refuse.
 
 ## QA History
 - 2026-11-18: **Improve Architecture product-map walk** - closed the untracked
