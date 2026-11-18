@@ -37,7 +37,7 @@ def _remote_e2b_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     """Script mode requires a remote E2B provider (same seam as the bindings tests)."""
     monkeypatch.setenv("FARNA_CONTROL_E2B_API_KEY", "test-e2b-key")
     # FAR-802: these tests exercise the managed-workspace-inputs path, which is
-    # gated behind the MODULO_WORKSPACE_INPUTS_ENABLED kill-switch (OFF by
+    # gated behind the FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED kill-switch (OFF by
     # default). Enable it so the happy/failure paths actually run.
     monkeypatch.setenv("FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED", "true")
     from farna.settings import get_settings
@@ -281,7 +281,7 @@ async def test_workspace_drift_detected_sets_run_flag() -> None:
 async def test_killswitch_disabled_blocks_workspace_inputs_before_sandbox(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FAR-802 killswitch (prove-the-fix): with MODULO_WORKSPACE_INPUTS_ENABLED
+    """FAR-802 killswitch (prove-the-fix): with FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED
     false (the default) and a node declaring ``workspace_inputs``,
     ``_sandbox_agent_impl`` must refuse provisioning and report the disabled
     failure — without EVER creating a sandbox or resolving inputs first.

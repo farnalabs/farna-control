@@ -180,7 +180,7 @@ without a format-version change, so the list below is the contract.
 | `version.txt` | Farna Control version, build commit, Python version, OS, architecture, UTC offset and clock drift. | All |
 | `doctor.txt` | Output of the launcher doctor checks. | Native (recorded as missing in a container) |
 | `health.json` | Health check names, statuses and error codes only. No check detail strings. | All |
-| `settings.txt` | Full settings **key inventory**. Values only for a reviewed safe-list (`MODULO_DB`, the public and frontend URLs, ports, worker pool and concurrency counts), plus the plan tier and feature flags. Every other key is shown as `set` or `unset`. | All |
+| `settings.txt` | Full settings **key inventory**. Values only for a reviewed safe-list (`FARNA_CONTROL_DB`, the public and frontend URLs, ports, worker pool and concurrency counts), plus the plan tier and feature flags. Every other key is shown as `set` or `unset`. | All |
 | `deployment.txt` | Install shape, service names, image tags and digests, restart counts, proxy variable names, CA bundle path. | All |
 | `db.txt` | Database migration head, expected head, Postgres version, and row counts for a fixed table list. No rows. | All |
 | `errors.json` | Top error groups: id, fingerprint, level, source, count, first and last seen, environment, version, sanitized message. | All |

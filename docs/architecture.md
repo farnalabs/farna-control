@@ -740,7 +740,7 @@ Provenance is ENGINE-ASSIGNED per supply channel; the wire `source` value is nev
 
 Minting is owned by provenance: `caller`/`derived` refs mint journey rows at run creation and again at terminal finalize via a rank-guarded upsert (`agent(0) < derived(1) < caller(2)`: provenance only ever upgrades, never downgrades; `first_seen_source` is immutable after mint; `latest_*`/`run_count` stay owned by the finalize evidence CAS). `agent`-sourced refs are collected and stored on the run. With the org setting `work_item_agent_minting_enabled` off (the default), they are only confirmed against EXISTING journey rows (advisory, match-only) and never mint. With it on, a missing journey row mints an `agent`-provenance row subject to the per-org rolling budget (`MODULO_AGENT_MINT_BUDGET_LIMIT`, default 500 per `MODULO_AGENT_MINT_BUDGET_WINDOW_MINUTES`, default 60); a dismissed tombstone still suppresses the mint, and an existing row only receives a rank-0 no-op write, so agent provenance can never upgrade or downgrade it. Suppressed agent mints are counted. Coalesced deliveries merge refs into the surviving run with the same rank-guarded union and re-mint newly-seen entries.
 
-Completeness over precision: the unified cap (`modulo_work_item_refs_cap`, env `MODULO_WORK_ITEM_REFS_CAP`, default 100, clamped to [1, 100000]) bounds self-report normalization, the finalize merge, and node-input injection with one value; cap drops drain lowest-provenance first (agent → derived → caller, then array position) and are counted. Pipelines declaring `work_item_refs_required: true` in `run_context_defaults` refuse a delivery that supplied no refs: HTTP 422 with a `work_item_refs_required` error on the MCP and webhook paths, and a 422 whose detail is prose on the REST path (reject-and-retry for webhooks, not acked-as-accepted).
+Completeness over precision: the unified cap (`modulo_work_item_refs_cap`, env `FARNA_CONTROL_WORK_ITEM_REFS_CAP`, default 100, clamped to [1, 100000]) bounds self-report normalization, the finalize merge, and node-input injection with one value; cap drops drain lowest-provenance first (agent → derived → caller, then array position) and are counted. Pipelines declaring `work_item_refs_required: true` in `run_context_defaults` refuse a delivery that supplied no refs: HTTP 422 with a `work_item_refs_required` error on the MCP and webhook paths, and a 422 whose detail is prose on the REST path (reject-and-retry for webhooks, not acked-as-accepted).
 
 Nodes opt in to reading the run's refs by declaring a `work_item_refs` input property in the node's `input_schema_json`: the create-time refs are injected read-only as a `{{ work_item_refs }}` template variable at node start (a read failure degrades to fewer refs, never a failed node). Journeys carry `provenance` + `first_seen_source` columns (migration 0220; `runs.work_item_refs` containment is served by the existing partial GIN index) and the refs pipeline emits OTel counters (`modulo_work_item_refs_by_source_total`, `..._unknown_source_total`, `..._shadow_strip_hits_total`, `..._malformed_total`, `..._cap_dropped_total`).
 
@@ -814,16 +814,16 @@ The posture for injected values (distinguish from the FAR-296 per-run minted key
 
 | Method | Status | Use case |
 |--------|--------|----------|
-| JWT (access + refresh) | Alpha | Browser UI sessions – 15-min access, sliding 24-h refresh (idle-logout window; configurable 1–168h via `MODULO_REFRESH_TOKEN_TTL_HOURS`) |
+| JWT (access + refresh) | Alpha | Browser UI sessions – 15-min access, sliding 24-h refresh (idle-logout window; configurable 1–168h via `FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS`) |
 | API key (bearer token) | Alpha | CI/CD, MCP clients – scope-aware role ceiling (`org` keys: operator/runner; `user` keys: the owner's live role, including admin) + caller-scoped (`org`/`user` scope axis, ADR 030) |
-| Basic Auth | Alpha | Multi-user alpha (`MODULO_USERS` env var) |
+| Basic Auth | Alpha | Multi-user alpha (`FARNA_CONTROL_USERS` env var) |
 | OAuth 2.0 (authlib) | V1 | MCP clients (PKCE, exact redirect_uri) |
 | OIDC / SAML 2.0 | V1 (team) | SSO with JIT provisioning |
 
 ### JWT Security
 
 - Access tokens: 15-min expiry
-- Refresh tokens: sliding 24-h expiry by default (configurable 1–168h via `MODULO_REFRESH_TOKEN_TTL_HOURS`), rotated on use (each rotation mints a fresh token with the full lifetime, so this IS the idle-logout window: a session abandoned longer than the TTL cannot refresh and is logged out)
+- Refresh tokens: sliding 24-h expiry by default (configurable 1–168h via `FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS`), rotated on use (each rotation mints a fresh token with the full lifetime, so this IS the idle-logout window: a session abandoned longer than the TTL cannot refresh and is logged out)
 - Algorithm pinning: `HS256` only – `none` and other algs rejected
 - SECRET_KEY: minimum 32 bytes (256 bits) – refused at startup if insufficient
 - Token family invalidation on revocation
@@ -1008,11 +1008,11 @@ Hardcoded sliding-window rules enforced by `RateLimitMiddleware` (see `backend/s
 | `/api/v1/errors/ingest` | 10 | 60s |
 | HITL review actions (`/api/v1/runs/{run_id}/hitl/{review_id}/{action}` and `/api/v1/runs/{run_id}/manual/{review_id}/submit`, POST) | 20 per user (aggregate) | 60s |
 | `/mcp` | 200 | 60s |
-| Auth endpoints (`/api/v1/auth/`) | 10 attempts | 60s (configurable via `MODULO_AUTH_MAX_ATTEMPTS` and `MODULO_AUTH_WINDOW_SECONDS`) |
+| Auth endpoints (`/api/v1/auth/`) | 10 attempts | 60s (configurable via `FARNA_CONTROL_AUTH_MAX_ATTEMPTS` and `FARNA_CONTROL_AUTH_WINDOW_SECONDS`) |
 
 Pre-auth anonymous GETs have their own enumeration-defence rules (FAR-856 / FAR-1978 / FAR-2059), all 60/min per IP: `/api/v1/auth/login-context`, `/api/v1/auth/org-login/`, `/api/v1/auth/sso/providers`, `/api/v1/auth/oidc/` and `/api/v1/auth/saml/`. The demo auto-login rule is declared first so no later prefix can shadow it.
 
-Redis-backed sliding window (ZADD + ZREMRANGEBYSCORE). When Redis is unavailable the registry is a no-op limiter that allows every request, except the demo rule, which falls back to a process-local token-bucket floor (10/hour) that survives both a missing Redis and a runtime registry failure. Auth rate limiting requires Redis and is disabled without it (`MODULO_AUTH_RATE_LIMIT_ENABLED`). Separate application-level limits use a per-process `TokenBucketRegistry` (the MCP `trigger_pipeline` 60/min and HITL-decision limits, and the guardrail-override limit).
+Redis-backed sliding window (ZADD + ZREMRANGEBYSCORE). When Redis is unavailable the registry is a no-op limiter that allows every request, except the demo rule, which falls back to a process-local token-bucket floor (10/hour) that survives both a missing Redis and a runtime registry failure. Auth rate limiting requires Redis and is disabled without it (`FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED`). Separate application-level limits use a per-process `TokenBucketRegistry` (the MCP `trigger_pipeline` 60/min and HITL-decision limits, and the guardrail-override limit).
 
 The HITL budget is AGGREGATE per identity (JWT user, API-key prefix, or IP) across runs, gates, review actions, AND both surfaces; the bucket key normalizes the whole variable tail (FAR-611), so rotating gates, runs, or actions cannot dodge the 20/min cap (the 2026-09-05 bulk-approve sweep spread 22 decisions across per-gate buckets and was never throttled). The manual-output submit route (`/runs/{run_id}/manual/{review_id}/submit`, an approve-capability HITL surface whose path has no `/hitl/` segment, shares the SAME aggregate bucket, so a sweep alternating `/hitl/` review actions and `/manual/` submits exhausts one budget. MCP review actions sit behind the general `/mcp` 200/min rule rather than the HITL rule; they are machine-surface, human_only gates are already denied there, and tightening the MCP budget is follow-up work if MCP-side sweeps ever warrant it.
 

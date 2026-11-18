@@ -19,7 +19,7 @@ tests/unit/db/test_seed.py — through the real command resolution path
   could never log in),
 * break-glass accounts are refused for reset-password (admin-route
   parity — overwriting the hash breaks the break-glass CAS),
-* MODULO_USERS guard: loud refusal without ``--force``, warning + proceed
+* FARNA_CONTROL_USERS guard: loud refusal without ``--force``, warning + proceed
   with it,
 * reset-password signs out active sessions via the token-family helpers,
 * launcher precedence: a state.json in the launcher data dir beats

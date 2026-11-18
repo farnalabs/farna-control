@@ -182,7 +182,7 @@ def given_exceeded_limit(ctx: dict[str, Any], path: str) -> None:
     ctx["exceeded"] = True
 
 
-@given("a valid MODULO_RATELIMIT_BYPASS_TOKEN is configured")
+@given("a valid FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN is configured")
 def given_bypass_token(ctx: dict[str, Any]) -> None:
     ctx["bypass_token"] = "test-bypass-token"
 

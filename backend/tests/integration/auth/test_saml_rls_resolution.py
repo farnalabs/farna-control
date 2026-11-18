@@ -173,7 +173,7 @@ async def system_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Engine on the real ``farna_control_system`` role (BYPASSRLS).
 
     The integration conftest provisions the role and exports
-    ``MODULO_SYSTEM_DATABASE_URL`` exactly like production settings do.
+    ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` exactly like production settings do.
     """
     engine = create_async_engine(
         os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"],

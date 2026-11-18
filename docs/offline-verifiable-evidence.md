@@ -93,10 +93,10 @@ returns an `OfflineVerificationResult` broken out by check.
 Signing is disabled by default and **fails closed**: an instance that has not
 opted in cannot emit signed evidence.
 
-- `MODULO_EVIDENCE_SIGNING_KEY` - a PEM-encoded Ed25519 private key. Set it to
+- `FARNA_CONTROL_EVIDENCE_SIGNING_KEY` - a PEM-encoded Ed25519 private key. Set it to
   enable signing; the matching public key is derived and published
   automatically.
-- `MODULO_EVIDENCE_EXPORTER_IDENTITY` - an optional human-readable identity
+- `FARNA_CONTROL_EVIDENCE_EXPORTER_IDENTITY` - an optional human-readable identity
   stamped into the signed manifest (defaults to `modulo`).
 
 Key rotation is out of scope for this capability.

@@ -212,9 +212,9 @@ class TestRuntimeConfigStore:
         self._purge_singleton()
         with patch.dict(os.environ, {}, clear=True):
             store = get_runtime_config_store()
-            store.set_override(" MODULO_LOG_LEVEL", "DEBUG")
+            store.set_override(" FARNA_CONTROL_LOG_LEVEL", "DEBUG")
             assert store.get("FARNA_CONTROL_LOG_LEVEL") == DEFAULT_VALUES["FARNA_CONTROL_LOG_LEVEL"]
-            store.set_override("MODULO_LOG_LEVEL ", "DEBUG")
+            store.set_override("FARNA_CONTROL_LOG_LEVEL ", "DEBUG")
             assert store.get("FARNA_CONTROL_LOG_LEVEL") == DEFAULT_VALUES["FARNA_CONTROL_LOG_LEVEL"]
 
     def test_clear_override_rejects_empty_key(self) -> None:
@@ -230,7 +230,7 @@ class TestRuntimeConfigStore:
         with patch.dict(os.environ, {}, clear=True):
             store = get_runtime_config_store()
             store.set_override("FARNA_CONTROL_LOG_LEVEL", "DEBUG")
-            store.clear_override("MODULO_LOG_LEVEL ")
+            store.clear_override("FARNA_CONTROL_LOG_LEVEL ")
             assert store.get("FARNA_CONTROL_LOG_LEVEL") == "DEBUG"
 
     def test_set_override_unknown_key_is_stored_but_hidden_from_get_all(self) -> None:
@@ -257,7 +257,7 @@ class TestRuntimeConfigStore:
             store = get_runtime_config_store()
             caplog.set_level(logging.WARNING, logger="farna.core.runtime_config.store")
             store.set_override("", "DEBUG")
-            store.set_override(" MODULO_LOG_LEVEL", "DEBUG")
+            store.set_override(" FARNA_CONTROL_LOG_LEVEL", "DEBUG")
         assert store.get("FARNA_CONTROL_LOG_LEVEL") == DEFAULT_VALUES["FARNA_CONTROL_LOG_LEVEL"]
         assert sum(r.levelno == logging.WARNING and "override rejected: invalid key" in r.getMessage() for r in caplog.records) == 2
 
@@ -267,9 +267,9 @@ class TestRuntimeConfigStore:
             store = get_runtime_config_store()
             store.set_override("FARNA_CONTROL_LOG_LEVEL", "DEBUG")
             caplog.set_level(logging.WARNING, logger="farna.core.runtime_config.store")
-            store.clear_override("MODULO_LOG_LEVEL ")
+            store.clear_override("FARNA_CONTROL_LOG_LEVEL ")
         assert store.get("FARNA_CONTROL_LOG_LEVEL") == "DEBUG"
-        assert any(r.levelno == logging.WARNING and r.getMessage() == "Runtime config override clear rejected: invalid key 'MODULO_LOG_LEVEL '" for r in caplog.records)
+        assert any(r.levelno == logging.WARNING and r.getMessage() == "Runtime config override clear rejected: invalid key 'FARNA_CONTROL_LOG_LEVEL '" for r in caplog.records)
 
     def test_clear_override_missing_key_logs_debug_noop(self, caplog: pytest.LogCaptureFixture) -> None:
         self._purge_singleton()

@@ -2,7 +2,7 @@
 
 Upgrade-in-place drift, reproduced against a real Postgres:
 
-1. A boot with no ``MODULO_SYSTEM_DATABASE_URL`` creates (or leaves) the
+1. A boot with no ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` creates (or leaves) the
    ``farna_control_system`` role with a placeholder password nobody can use.
 2. The operator later adds the URL and restarts. Before the fix,
    ``_run_migrations`` returned early on the ``migrations_already_at_head``
@@ -111,7 +111,7 @@ async def test_warm_boot_reconciles_system_role_password_without_manual_step(
         hash_after_boot1 = await _system_role_hash(admin)
         assert hash_after_boot1 == stale_hash, "a warm boot with no system URL must not reset the role password"
 
-        # Boot 2 — operator supplies MODULO_SYSTEM_DATABASE_URL and restarts.
+        # Boot 2 — operator supplies FARNA_CONTROL_SYSTEM_DATABASE_URL and restarts.
         monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", sys_url)
         await api_main._run_migrations(settings)
         hash_after_boot2 = await _system_role_hash(admin)

@@ -154,16 +154,16 @@ grows with run history.
 |----------|---------|--------|-----------------|-------|
 | **PostgreSQL** | 16+ | **Supported** | **Yes** | Primary production database |
 | **SQLite** | 3.x | Compatible | **No** | Dev-only: no RLS, no advisory locks |
-| **MySQL** | 8+ | Partial | **No** | `MODULO_DB=mysql` is accepted (`aiomysql` driver) but the per-node output store is postgres/sqlite-only - see below |
-| **MariaDB** | 11+ | Deprecated | **No** | `MODULO_DB=mariadb` accepted; deprecated since 2026-07-11, and blocked on the same write path as MySQL |
+| **MySQL** | 8+ | Partial | **No** | `FARNA_CONTROL_DB=mysql` is accepted (`aiomysql` driver) but the per-node output store is postgres/sqlite-only - see below |
+| **MariaDB** | 11+ | Deprecated | **No** | `FARNA_CONTROL_DB=mariadb` accepted; deprecated since 2026-07-11, and blocked on the same write path as MySQL |
 
-MySQL and MariaDB are configured through `MODULO_DB` (`settings.py` accepts
+MySQL and MariaDB are configured through `FARNA_CONTROL_DB` (`settings.py` accepts
 `postgres`, `sqlite`, `mariadb`, `mysql`) and `aiomysql` is a declared
 dependency, but they are **not** production-conformant:
 
 * `db/crud/run_node_outputs.py::dialect_insert` raises
   `NotImplementedError` for any SQLAlchemy dialect other than `postgresql` /
-  `sqlite` (note the dialect name is `postgresql`, not the `MODULO_DB` value
+  `sqlite` (note the dialect name is `postgresql`, not the `FARNA_CONTROL_DB` value
   `postgres`). That
   module is the chokepoint for every `run_node_outputs` read and write (FAR-583),
   so a run cannot store its node outputs, telemetry, markers, or artifacts on

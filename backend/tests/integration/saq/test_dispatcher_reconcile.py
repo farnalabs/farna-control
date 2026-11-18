@@ -346,7 +346,7 @@ async def test_two_connections_no_double_redispatch(saq_settings_env: str, db_en
     #
     # PR #1637 routed dispatcher_reconcile through _open_system_factory (the
     # farna_control_system engine path). _get_system_engine caches its engine globally
-    # (and falls back to _get_engine when MODULO_SYSTEM_DATABASE_URL is unset),
+    # (and falls back to _get_engine when FARNA_CONTROL_SYSTEM_DATABASE_URL is unset),
     # so patching _get_engine alone no longer guarantees each reconcile pass uses
     # the RLS role engine. Patch _open_system_factory directly to bind the
     # reconcile sessions to the NOBYPASSRLS role engine.

@@ -497,7 +497,7 @@ class TestServiceProviderConfig:
 
     def test_capability_document_declares_unsupported_features(self, scim_client: Callable[..., TestClient]) -> None:
         # SCIM clients probe this document before discovery, so it must publish
-        # the full capability set even when MODULO_PUBLIC_URL is unset (that is
+        # the full capability set even when FARNA_CONTROL_PUBLIC_URL is unset (that is
         # only needed by the resource routes' entity locations).
         client = scim_client(settings=lambda: make_settings(modulo_public_url=""))
         resp = client.get("/scim/v2/ServiceProviderConfig", headers=AUTH_HEADERS)

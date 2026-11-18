@@ -10,9 +10,9 @@
 
 ## 1. Telemetry & Observability
 
-- [ ] **`MODULO_TELEMETRY_ENABLED` is not set** (defaults to `false`)
+- [ ] **`FARNA_CONTROL_TELEMETRY_ENABLED` is not set** (defaults to `false`)
   - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep MODULO_TELEMETRY`
-  - expected: no output or `MODULO_TELEMETRY_ENABLED=false`
+  - expected: no output or `FARNA_CONTROL_TELEMETRY_ENABLED=false`
   - **the env var alone is not sufficient.** A deployment-wide, process-global
     runtime override can flip it on without a restart: `GET /api/v1/admin/telemetry`
     reports the effective value (`is_telemetry_enabled()` reads the runtime-config store
@@ -109,9 +109,9 @@
 
 | Variable | Required Value | Reason |
 |---|---|---|
-| `MODULO_TELEMETRY_ENABLED` | `false` (default) | Prevents OTel egress; see §1 for the runtime override |
+| `FARNA_CONTROL_TELEMETRY_ENABLED` | `false` (default) | Prevents OTel egress; see §1 for the runtime override |
 | `CORS_ORIGINS` | VPC-internal domain, comma-separated, no trailing slash | No external-origin CORS needed; a trailing `/` is rejected at boot |
-| `MODULO_PUBLIC_URL` | VPC-internal URL | Browser-facing base for post-login redirects, SSO and the MCP OAuth authorize link |
+| `FARNA_CONTROL_PUBLIC_URL` | VPC-internal URL | Browser-facing base for post-login redirects, SSO and the MCP OAuth authorize link |
 | `SECRET_KEY` | Random 32+ byte value | Below 32 bytes, or one of the blocked placeholders (`changeme`, `secret`, `your-secret-key`, `development`, `test`, `insecure`), is rejected at boot |
 | `FERNET_KEY` | Valid Fernet key | Same 32-byte minimum; the value is loaded by `cryptography.fernet.Fernet`, so it must be a real Fernet key, not an arbitrary 32-byte string |
 

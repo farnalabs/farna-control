@@ -194,7 +194,7 @@ class TestResolvePlanContext:
         assert plan.feature_enabled("eval_system") is True
 
     async def test_team_plan_id_with_env_var_license_resolves_to_team(self) -> None:
-        """plan_id='team' + a valid MODULO_LICENSE_KEY env license -> team tier."""
+        """plan_id='team' + a valid FARNA_CONTROL_LICENSE_KEY env license -> team tier."""
         session = AsyncMock()
         org = MagicMock()
         org.settings_json = {}

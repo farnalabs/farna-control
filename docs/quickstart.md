@@ -76,13 +76,13 @@ DATABASE_URL=postgresql+asyncpg://farna_control:farna_control@localhost:5434/far
 # the dedicated farna_control_system role; the API boot creates that role with this
 # password. Without it the system worker refuses those crons and readiness
 # never reaches "ok".
-MODULO_SYSTEM_DATABASE_URL=postgresql+asyncpg://farna_control_system:modulo@localhost:5434/farna_control
-MODULO_DB=postgres
+FARNA_CONTROL_SYSTEM_DATABASE_URL=postgresql+asyncpg://farna_control_system:modulo@localhost:5434/farna_control
+FARNA_CONTROL_DB=postgres
 SECRET_KEY=local-dev-secret-key-not-for-production
 FERNET_KEY=$FERNET_KEY
 REDIS_URL=redis://localhost:6380/0
-MODULO_PUBLIC_URL=http://localhost:8000
-MODULO_USERS=admin:admin
+FARNA_CONTROL_PUBLIC_URL=http://localhost:8000
+FARNA_CONTROL_USERS=admin:admin
 CORS_ORIGINS=http://localhost:5173
 EOF
 
@@ -124,7 +124,7 @@ SAQ_AUTH_USERNAME=admin SAQ_AUTH_PASSWORD=admin uv run python -m farna.core.saq_
 Notes:
 - `python -m saq` takes the **settings module** as its only positional arg; there is no `worker` subcommand in the pinned SAQ version (`saq==0.26.5` in `backend/pyproject.toml`).
 - A local Redis is required (`REDIS_URL`, e.g. `redis://localhost:6380/0` from the compose `redis-local` service). The compose mapping is loopback-only; do not publish Redis on `0.0.0.0` or expose port 6379 beyond the local machine.
-- `MODULO_SYSTEM_DATABASE_URL` (set in the step-2 `.env`) is what lets the system worker run its cross-org crons. Without it, `dispatcher_reconcile` never runs and `/healthz/ready` stays `503`.
+- `FARNA_CONTROL_SYSTEM_DATABASE_URL` (set in the step-2 `.env`) is what lets the system worker run its cross-org crons. Without it, `dispatcher_reconcile` never runs and `/healthz/ready` stays `503`.
 - The compose stack (`docker-compose.local.yml`) ships `saq-runner` + `saq-system` services that launch both workers; `saq-system` is **required** for local cron/triggers to fire.
 
 ### Check readiness
@@ -204,7 +204,7 @@ Everything above gets you a running stack. Now you'll build and run your first r
 2. Click **Add Model Backend** and fill in the form: a name, a display name, a **Provider** (e.g. `openai` or `anthropic`), a **Model ID**, and the provider's **API key**.
 3. Click **Create**. The new backend runs a best-effort health check on save and shows a **Configured** badge once its credentials are stored.
 
-No API key handy? The codebase ships a deterministic test double, `StubModelBackend` (`backend/src/farna/model_backends/stub/backend.py`), that returns responses keyed by its input. It is not exposed in the UI's provider dropdown; it is reachable only through the API as the `custom` provider, with a `fixture_map` in `default_params`. The API authenticates with Bearer tokens, so log in first (the seeded `admin` account from `MODULO_USERS` in your `.env`):
+No API key handy? The codebase ships a deterministic test double, `StubModelBackend` (`backend/src/farna/model_backends/stub/backend.py`), that returns responses keyed by its input. It is not exposed in the UI's provider dropdown; it is reachable only through the API as the `custom` provider, with a `fixture_map` in `default_params`. The API authenticates with Bearer tokens, so log in first (the seeded `admin` account from `FARNA_CONTROL_USERS` in your `.env`):
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \

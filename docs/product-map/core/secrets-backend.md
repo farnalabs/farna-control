@@ -50,7 +50,7 @@ rather than in the manifest registry.
 - [x] Secret keys are validated / normalized (non-empty string, stripped) -
       invalid keys raise ``ValueError``, never touch the store
 - [x] Factory ``create_secrets_backend`` selects the backend from
-      ``backend_name`` / ``MODULO_SECRETS_BACKEND`` (``fernet`` default,
+      ``backend_name`` / ``FARNA_CONTROL_SECRETS_BACKEND`` (``fernet`` default,
       ``vault``, ``aws``); unknown name → ``ValueError`` listing the choices
 - [x] External backends (``vault`` / ``aws``) are available on ALL tiers with
       no entitlement or license gate (FAR-2100): a configured backend is

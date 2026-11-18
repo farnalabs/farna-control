@@ -71,16 +71,16 @@ endpoint is not in this list is blocked by CSP until its domain is added.
 |---|---|
 | `sentry` | `*.ingest.sentry.io` |
 | `datadog-rum` | `*.datadoghq.com`, `*.dd.dg`, `*.rum.browserevents.com` |
-| `grafana-faro` | None by default – add the collector URL via `MODULO_MONITOR_DOMAINS` |
+| `grafana-faro` | None by default – add the collector URL via `FARNA_CONTROL_MONITOR_DOMAINS` |
 
 ### Custom domains
 
 For self-hosted Sentry, custom Grafana Faro collectors, or other custom
-endpoints, set `MODULO_MONITOR_DOMAINS`:
+endpoints, set `FARNA_CONTROL_MONITOR_DOMAINS`:
 
 ```yaml
 environment:
-  MODULO_MONITOR_DOMAINS: "sentry.example.com,faro-collector.example.com"
+  FARNA_CONTROL_MONITOR_DOMAINS: "sentry.example.com,faro-collector.example.com"
 ```
 
 These are appended to the `connect-src` directive. Note: semicolons are

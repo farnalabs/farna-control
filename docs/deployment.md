@@ -224,7 +224,7 @@ modulo.example.com {
 }
 ```
 
-Set `MODULO_PUBLIC_URL=https://modulo.example.com` so OAuth redirect URIs and
+Set `FARNA_CONTROL_PUBLIC_URL=https://modulo.example.com` so OAuth redirect URIs and
 WebSocket connections use the correct origin.
 
 ---
@@ -396,14 +396,14 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `DATABASE_URL` | **Yes** | – | `postgresql+asyncpg://user:pass@host:port/db` |
 | `SECRET_KEY` | **Yes** | – | 32+ byte random string for JWT signing |
 | `FERNET_KEY` | **Yes** | – | 44-char base64 Fernet key for credential encryption |
-| `MODULO_USERS` | No (but needed for a first login) | – | Comma-separated `email:password` pairs for initial user seed (plaintext is bcrypt-hashed at seed time; `admin` gets the admin role). Without it - and without `farna-control users add` - no account exists and login returns `401`; see *Docker Compose* step 1 |
-| `MODULO_DB` | No | `postgres` | Database backend (`postgres`, `sqlite`, `mariadb`, or `mysql`) |
+| `FARNA_CONTROL_USERS` | No (but needed for a first login) | – | Comma-separated `email:password` pairs for initial user seed (plaintext is bcrypt-hashed at seed time; `admin` gets the admin role). Without it - and without `farna-control users add` - no account exists and login returns `401`; see *Docker Compose* step 1 |
+| `FARNA_CONTROL_DB` | No | `postgres` | Database backend (`postgres`, `sqlite`, `mariadb`, or `mysql`) |
 | `REDIS_URL` | **Yes** | `redis://localhost:6379/0` | Redis URL for the SAQ broker, scheduling, event coordination, and rate limiting. The API refuses to boot when this is explicitly empty. |
-| `MODULO_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects |
+| `FARNA_CONTROL_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed CORS origins |
 | `CORS_MAX_AGE` | No | `600` | Preflight cache max-age in seconds |
-| `MODULO_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
-| `MODULO_OIDC_PROVIDERS` | No | `[]` | JSON array of OIDC provider configs. **Deprecated**; use the admin SSO providers UI. |
+| `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
+| `FARNA_CONTROL_OIDC_PROVIDERS` | No | `[]` | JSON array of OIDC provider configs. **Deprecated**; use the admin SSO providers UI. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | – | OTel gRPC/HTTP exporter endpoint |
 | `MODULO_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider |
 | `MODULO_ADMIN_SECRET` | No | – | Shared secret for `farna-control migrate` CLI auth |
@@ -426,7 +426,7 @@ app refuses to start without them:
 | `SECRET_KEY` | 32+ byte random string used to sign JWTs | `$(openssl rand -base64 48)` |
 | `FERNET_KEY` | 44-char base64 Fernet key used to encrypt stored connector credentials | `$(uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")` (URL-safe base64 of exactly 32 bytes) |
 
-The SAQ **system** worker needs one more variable: `MODULO_SYSTEM_DATABASE_URL`.
+The SAQ **system** worker needs one more variable: `FARNA_CONTROL_SYSTEM_DATABASE_URL`.
 Its system-engine crons (the jobs that run on the `farna_control_system` role,
 including `dispatcher_reconcile`) refuse to run without it, and
 `dispatcher_reconcile` gates `/healthz/ready`, so leaving it unset gives an API
@@ -437,8 +437,8 @@ in every other mode use the dedicated `farna_control_system` role (see
 [Docker Compose](#docker-compose-single-server-multi-user)).
 
 The command below sets the required variables inline, so it is runnable as
-written. `MODULO_USERS`
-seeds the initial admin user (optional but recommended for first login); `MODULO_DB=sqlite`
+written. `FARNA_CONTROL_USERS`
+seeds the initial admin user (optional but recommended for first login); `FARNA_CONTROL_DB=sqlite`
 selects the SQLite backend so no separate database server is needed.
 
 ```bash
@@ -446,11 +446,11 @@ git clone https://github.com/farnalabs/farna-control   # or install the farna-co
 cd backend
 uv sync
 DATABASE_URL=sqlite+aiosqlite:///./farna.db \
-  MODULO_SYSTEM_DATABASE_URL=sqlite+aiosqlite:///./farna.db \
+  FARNA_CONTROL_SYSTEM_DATABASE_URL=sqlite+aiosqlite:///./farna.db \
   SECRET_KEY=$(openssl rand -base64 48) \
   FERNET_KEY=$(uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
-  MODULO_USERS=admin:changeme \
-  MODULO_DB=sqlite \
+  FARNA_CONTROL_USERS=admin:changeme \
+  FARNA_CONTROL_DB=sqlite \
   uv run uvicorn farna.api.main:app --port 8000
 ```
 
@@ -507,7 +507,7 @@ Those five start the stack, but **none of them creates a login**: with no user
 in the database, `POST /api/v1/auth/login` answers **401** and a perfectly
 healthy deployment looks broken. Create the first account with one of:
 
-- **Seed it at boot (simplest).** Add `MODULO_USERS=admin:<password>`
+- **Seed it at boot (simplest).** Add `FARNA_CONTROL_USERS=admin:<password>`
   to the compose env file you created in step 1, **before** step 2. The boot
   seeder creates the account; only an email of exactly `admin` or
   `admin@modulo.run` gets the admin role, so any other address (for example

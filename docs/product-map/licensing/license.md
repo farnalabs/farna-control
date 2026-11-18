@@ -68,7 +68,7 @@ redeploy and both processes resolve the same tier.
 ## Trust anchor
 
 License keys are Ed25519-signed, and verification uses exactly ONE anchor: the
-built-in public key in `core/license.py` unless `MODULO_LICENSE_PUBLIC_KEY`
+built-in public key in `core/license.py` unless `FARNA_CONTROL_LICENSE_PUBLIC_KEY`
 overrides it. The built-in key is the real public half of the DEVELOPMENT
 keypair – it is **not** the anchor production licenses are signed with, so a
 Farnalabs-issued production license CANNOT verify against it.
@@ -76,11 +76,11 @@ Farnalabs-issued production license CANNOT verify against it.
 | Deployment | Anchor | What happens |
 |---|---|---|
 | Development / test | built-in development key, no configuration | licenses signed by the development keypair verify; production keys do not |
-| Self-hosted production | `MODULO_LICENSE_PUBLIC_KEY` set to the public key issued with the license | production licenses verify |
-| Self-hosted production, license configured without an anchor | built-in development key | **startup fails closed** with an actionable error telling the operator to set `MODULO_LICENSE_PUBLIC_KEY` |
+| Self-hosted production | `FARNA_CONTROL_LICENSE_PUBLIC_KEY` set to the public key issued with the license | production licenses verify |
+| Self-hosted production, license configured without an anchor | built-in development key | **startup fails closed** with an actionable error telling the operator to set `FARNA_CONTROL_LICENSE_PUBLIC_KEY` |
 | Community install, no license | built-in development key | the instance boots; a license uploaded later is rejected with a structured error naming the anchor mismatch until the anchor is set |
 
-`MODULO_LICENSE_PRIVATE_KEY` is only used to ISSUE keys (admin
+`FARNA_CONTROL_LICENSE_PRIVATE_KEY` is only used to ISSUE keys (admin
 `POST /api/v1/admin/license/issue` and Stripe fulfilment). It must be the
 private half of the same keypair as the configured anchor; a mismatch makes
 issuance fail closed with an anchor-mismatch error rather than emailing a key
@@ -89,7 +89,7 @@ the deployment would reject.
 The anchor is operator-chosen, so a deployment can trust a keypair its operator
 generated rather than one Farnalabs issued. That is what makes the Team tier
 recoverable without Farnalabs: generate a keypair, configure its public half as
-`MODULO_LICENSE_PUBLIC_KEY`, and sign licenses with the private half. The
+`FARNA_CONTROL_LICENSE_PUBLIC_KEY`, and sign licenses with the private half. The
 procedure and the continuity position (what a successor keeps, and the
 trust-anchor caveat) are documented in
 [Continuity and Escrow](../../continuity-and-escrow.md).
@@ -99,7 +99,7 @@ trust-anchor caveat) are documented in
 - [x] The license trust anchor is explicit and fails closed (FAR-2091). The
       built-in public key in `core/license.py` is the DEVELOPMENT anchor, not
       the production one. Outside debug, an API configured with
-      `MODULO_LICENSE_KEY` but no `MODULO_LICENSE_PUBLIC_KEY` refuses to boot
+      `FARNA_CONTROL_LICENSE_KEY` but no `FARNA_CONTROL_LICENSE_PUBLIC_KEY` refuses to boot
       with an actionable error, and a license upload that cannot verify
       returns HTTP 422 with a structured body – `detail` prose plus a
       machine-readable `reason` (`anchor_mismatch` / `signature_mismatch` /
@@ -108,7 +108,7 @@ trust-anchor caveat) are documented in
       development-anchor refusal, so a production key presented to an
       anchor-less deployment is classified `anchor_mismatch` (not a generic
       refusal, and never `malformed`), and both mismatch reasons carry an
-      operator `hint` naming `MODULO_LICENSE_PUBLIC_KEY`.
+      operator `hint` naming `FARNA_CONTROL_LICENSE_PUBLIC_KEY`.
       `dev_anchor_not_trusted` is the distinct case of a key that genuinely
       verifies against the built-in development anchor outside debug.
       `POST /api/v1/admin/license/issue`
@@ -246,8 +246,8 @@ trust-anchor caveat) are documented in
       made in one process is visible to the API and to the SAQ worker without a
       restart, and a rolling deploy no longer discards it. Resolution is
       first-valid-rung-wins: org key → persisted system install →
-      `MODULO_LICENSE_KEY` → Community, so an explicit operator install
-      overrides the deployment's env key and `MODULO_LICENSE_KEY` remains a
+      `FARNA_CONTROL_LICENSE_KEY` → Community, so an explicit operator install
+      overrides the deployment's env key and `FARNA_CONTROL_LICENSE_KEY` remains a
       deployment-wide floor/alternative, not a requirement. `DELETE
       /api/v1/admin/license` deletes the persisted row FIRST (a failed write
       fails the request rather than returning a removal a restart would undo),
@@ -273,7 +273,7 @@ trust-anchor caveat) are documented in
 
 ## QA History
 
-- 2026-10-26: **FAR-2158** - synced this entry to the FAR-2153 persistence change. Both license scopes are now durable (org key in `org.settings_json`, instance-wide key in the `system_config` row `system_license_key`), restored at startup and refreshed into the API and the SAQ worker within `SYSTEM_LICENSE_REFRESH_TTL_SECONDS` (15s). Corrected the stale statements that described the system license as in-memory only, recorded the precedence order (org → persisted system install → `MODULO_LICENSE_KEY` → Community) and the durable `DELETE /api/v1/admin/license` behavior. Status stays `partial` (the universal-gating deferral is unchanged).
+- 2026-10-26: **FAR-2158** - synced this entry to the FAR-2153 persistence change. Both license scopes are now durable (org key in `org.settings_json`, instance-wide key in the `system_config` row `system_license_key`), restored at startup and refreshed into the API and the SAQ worker within `SYSTEM_LICENSE_REFRESH_TTL_SECONDS` (15s). Corrected the stale statements that described the system license as in-memory only, recorded the precedence order (org → persisted system install → `FARNA_CONTROL_LICENSE_KEY` → Community) and the durable `DELETE /api/v1/admin/license` behavior. Status stays `partial` (the universal-gating deferral is unchanged).
 
 - 2026-10-25: **Improve Architecture product-map walk** - fixed the admin feature-flag registry's org-level license rung to verify the signed key (including expiry) before setting `has_license_key`, matching the canonical license ladder. Added regression coverage for valid, malformed and expired org keys; malformed and expired keys now report `has_license_key: false` instead of being trusted on presence. Status stays `partial` (the manifest's universal-gating deferral is unchanged).
 
@@ -284,13 +284,13 @@ trust-anchor caveat) are documented in
   built-in key's derived public half matches `license-signing-private-key-dev`,
   while production licenses are signed by the separate
   `license-signing-private-key` whose public half is published as
-  `MODULO_LICENSE_PUBLIC_KEY`. The failure mode was therefore real but
+  `FARNA_CONTROL_LICENSE_PUBLIC_KEY`. The failure mode was therefore real but
   mis-scoped: an instance that installs a correctly-signed license without
   setting the anchor fails verification, and the only signal was a log line.
   Fixed by (1) renaming the constant to `_BUILTIN_DEV_PUBLIC_KEY_HEX` (old name
   kept as an alias) and documenting the two keypairs, (2) failing startup
-  closed when `MODULO_LICENSE_KEY` is configured without
-  `MODULO_LICENSE_PUBLIC_KEY` outside debug, (3) returning a structured 422
+  closed when `FARNA_CONTROL_LICENSE_KEY` is configured without
+  `FARNA_CONTROL_LICENSE_PUBLIC_KEY` outside debug, (3) returning a structured 422
   from the upload path (`detail` prose + machine-readable `reason` +
   operator `hint`), and (4) the same treatment for the issue path when the
   signing key and anchor are not one keypair. A Community instance with no

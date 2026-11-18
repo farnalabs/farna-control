@@ -125,8 +125,8 @@ guarded against tampering at both the ORM and the database layer.
       falsified chain claim or swapped key fails as `valid=false`. The event
       hash lives in `core/audit_logger/hashing.py` so the offline verifier
       re-derives it without the DB layer (byte-identical, format unchanged);
-      signing key / exporter identity come from `MODULO_EVIDENCE_SIGNING_KEY`
-      / `MODULO_EVIDENCE_EXPORTER_IDENTITY`
+      signing key / exporter identity come from `FARNA_CONTROL_EVIDENCE_SIGNING_KEY`
+      / `FARNA_CONTROL_EVIDENCE_EXPORTER_IDENTITY`
       (`core/evidence_pack/`, `api/routes/audit.py` `evidence_pack_endpoint`
       + `verification_key_endpoint`, `cli/evidence.py`,
       `docs/offline-verifiable-evidence.md`,

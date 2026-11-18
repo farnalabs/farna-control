@@ -418,7 +418,7 @@ class TestParkedSuccessor:
 class TestLadderHonoursStartsAt:
     """A configured key is not "installed" through the park slot.
 
-    A successor can arrive as the ``MODULO_LICENSE_KEY`` env var or an org-level
+    A successor can arrive as the ``FARNA_CONTROL_LICENSE_KEY`` env var or an org-level
     key. The ladder must refuse to APPLY such a key before its start — otherwise
     writing configuration would grant Team capability for days before the paid
     window begins — and must apply it automatically once the start arrives.

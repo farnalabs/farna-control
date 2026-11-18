@@ -212,7 +212,7 @@ class TestAuthRateLimitMiddlewareEnabled:
         auth_redis.pipeline.assert_not_called()
 
     def test_valid_bypass_token_skips_rate_limit(self, auth_redis):
-        """A valid MODULO_RATELIMIT_BYPASS_TOKEN should skip the auth rate limit."""
+        """A valid FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN should skip the auth rate limit."""
         auth_redis.ttl = AsyncMock(return_value=30)
         limiter = make_auth_limiter(auth_redis, max_attempts=0)
         settings = make_settings(modulo_auth_rate_limit_enabled=True)

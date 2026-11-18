@@ -16,7 +16,7 @@ This closes the gap the unit tests and FAR-1043 left open:
 Proven here at the HTTP boundary: code exchange → ID-token verification →
 FAR-855 join-gate enforcement → JIT provisioning (real Postgres, RLS,
 invitation CAS) → the browser redirect with the FAR-837 frontend base
-resolution (``MODULO_FRONTEND_URL``, falling back to ``MODULO_PUBLIC_URL`` —
+resolution (``FARNA_CONTROL_FRONTEND_URL``, falling back to ``FARNA_CONTROL_PUBLIC_URL`` —
 never CORS ordering).
 
 Honest scope — what a real IdP would exercise that these tests DO NOT:
@@ -575,7 +575,7 @@ async def test_oidc_callback_success_provisions_and_redirects_to_frontend_url(
     # 1. Success is a browser redirect (never a JSON payload / never a 500).
     assert resp.status_code == 307, resp.text
     location = resp.headers["location"]
-    # 2. Redirect base = MODULO_FRONTEND_URL. With CORS ordered as
+    # 2. Redirect base = FARNA_CONTROL_FRONTEND_URL. With CORS ordered as
     #    "marketing,api", picking cors_origins[0] (the FAR-837 bug) would
     #    produce https://marketing.example.com — assert it did NOT.
     assert location.startswith(f"{_FRONTEND_BASE}/auth/callback#"), location
@@ -621,7 +621,7 @@ async def test_oidc_callback_redirect_base_falls_back_to_public_url_when_fronten
     app_engine: AsyncEngine,
     oidc_app,
 ) -> None:
-    """MODULO_FRONTEND_URL empty → redirects to MODULO_PUBLIC_URL (same-origin)."""
+    """FARNA_CONTROL_FRONTEND_URL empty → redirects to FARNA_CONTROL_PUBLIC_URL (same-origin)."""
     world = await _seed_provider(db_engine, allowed_domains=[_ALLOWLISTED_DOMAIN])
     email = f"fallback-{world.org_id.hex[:8]}@{_ALLOWLISTED_DOMAIN}"
     id_token = _make_id_token(sub=world.client_id, email=email, issuer=world.issuer, audience=world.client_id, nonce=_FLOW_NONCE)

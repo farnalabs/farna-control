@@ -268,7 +268,7 @@ class TestConsumerWiring:
         return Settings(**values)
 
     def test_public_url_override_wins_in_frontend_url_resolver(self) -> None:
-        """FAR-1159 prove-the-fix: a runtime MODULO_PUBLIC_URL override reaches
+        """FAR-1159 prove-the-fix: a runtime FARNA_CONTROL_PUBLIC_URL override reaches
         the frontend-URL resolver; clearing it reverts to the boot Settings."""
         from farna.api.frontend_url import resolve_frontend_url
         from farna.core.runtime_config.store import get_runtime_config_store

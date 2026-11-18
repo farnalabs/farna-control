@@ -63,7 +63,7 @@ DATABASE_URL=... farna-control users reset-password admin@example.com
 The command prompts for the new password (or accepts `--password`), refuses
 break-glass accounts, and invalidates the account's refresh-token families.
 Access JWTs already issued remain valid until they expire. Add `--force` when
-`MODULO_USERS` is set, and `--data-dir <dir>` when the launcher data dir is not
+`FARNA_CONTROL_USERS` is set, and `--data-dir <dir>` when the launcher data dir is not
 the default.
 
 If the CLI is unavailable, reset the hash directly in the database. Identity
@@ -403,7 +403,7 @@ To activate a Team license, configure the production public key that signed it:
 
 ```bash
 # Ed25519 public key, 64 hex characters (the PUBLIC half, not the private key)
-MODULO_LICENSE_PUBLIC_KEY=<public-key-hex>
+FARNA_CONTROL_LICENSE_PUBLIC_KEY=<public-key-hex>
 ```
 
 Set it wherever your other secrets live (for example `/etc/modulo/modulo.env`,
@@ -415,10 +415,10 @@ Behavior:
 | Condition | What happens |
 |---|---|
 | No license key configured (ordinary Community self-hosting) | Boots normally on the Community tier. |
-| `MODULO_LICENSE_KEY` configured, no `MODULO_LICENSE_PUBLIC_KEY`, debug off | **Startup fails** with an error naming `MODULO_LICENSE_PUBLIC_KEY`. No license can be verified, so the instance refuses to boot rather than run silently unlicensed. |
-| License uploaded through the admin API while only the development key is available | The upload is rejected and the message names `MODULO_LICENSE_PUBLIC_KEY`; the instance keeps running on its current tier. |
-| `MODULO_LICENSE_PUBLIC_KEY` set to the real production key | Licenses signed by the matching private key verify normally. |
-| `MODULO_LICENSE_PUBLIC_KEY` set to the built-in development key, debug off | Treated exactly like leaving it unset: the development key is not trusted. |
+| `FARNA_CONTROL_LICENSE_KEY` configured, no `FARNA_CONTROL_LICENSE_PUBLIC_KEY`, debug off | **Startup fails** with an error naming `FARNA_CONTROL_LICENSE_PUBLIC_KEY`. No license can be verified, so the instance refuses to boot rather than run silently unlicensed. |
+| License uploaded through the admin API while only the development key is available | The upload is rejected and the message names `FARNA_CONTROL_LICENSE_PUBLIC_KEY`; the instance keeps running on its current tier. |
+| `FARNA_CONTROL_LICENSE_PUBLIC_KEY` set to the real production key | Licenses signed by the matching private key verify normally. |
+| `FARNA_CONTROL_LICENSE_PUBLIC_KEY` set to the built-in development key, debug off | Treated exactly like leaving it unset: the development key is not trusted. |
 | `debug` is on | The development key remains usable, for local development only. Never enable debug on a production deployment. |
 
 Every process (API and workers) reads the same environment. Restart all of them
@@ -426,14 +426,14 @@ after changing the key.
 
 ### Retain the anchor with the license
 
-`MODULO_LICENSE_PUBLIC_KEY` is the public half of the keypair that signed your
+`FARNA_CONTROL_LICENSE_PUBLIC_KEY` is the public half of the keypair that signed your
 license. It is not secret, so keep a copy wherever you keep the license key. If
 you hold a Farnalabs-issued license and lose the anchor, that license can no
 longer be verified, and only Farnalabs holds the matching private key to issue
 a replacement against the anchor you still have.
 
 A successor can also issue Team licenses without Farnalabs: generate your own
-Ed25519 keypair, set its public half as `MODULO_LICENSE_PUBLIC_KEY`, and sign
+Ed25519 keypair, set its public half as `FARNA_CONTROL_LICENSE_PUBLIC_KEY`, and sign
 licenses with the private half. The full procedure is in
 [Continuity and Escrow](../continuity-and-escrow.md#issue-your-own-team-license).
 

@@ -21,7 +21,7 @@ os.environ.setdefault("FARNA_CONTROL_CSRF_ENABLED", "false")
 # building the DB engine at import) may have cached Settings with CSRF enabled
 # before the env var above took effect; the app's CSRF middleware reads that
 # cached value at construction. Clear the cache so the middleware honours
-# MODULO_CSRF_ENABLED=false regardless of test collection order.
+# FARNA_CONTROL_CSRF_ENABLED=false regardless of test collection order.
 from farna.settings import get_settings
 
 get_settings.cache_clear()

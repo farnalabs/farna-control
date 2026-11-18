@@ -318,7 +318,7 @@ class TestWorkspaceInputsKillswitchDispatch:
         from farna.settings import get_settings
 
         # Ensure a clean settings cache: another sandbox-agent test file may have
-        # set MODULO_WORKSPACE_INPUTS_ENABLED=true and left a cached True in the
+        # set FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED=true and left a cached True in the
         # lru_cache. Pin the env var and clear the cache so the precondition is
         # always read fresh.
         monkeypatch.setenv("FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED", "false")

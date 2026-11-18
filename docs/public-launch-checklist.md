@@ -47,11 +47,11 @@ Production deployment readiness checklist for the Farna Control Alpha public lau
 - [ ] `FERNET_KEY` is a valid 44-char base64 Fernet key
 - [ ] `DATABASE_URL` points to the production database
 - [ ] `REDIS_URL` is set (required even for a single replica)
-- [ ] `MODULO_PUBLIC_URL` matches the production domain
+- [ ] `FARNA_CONTROL_PUBLIC_URL` matches the production domain
 - [ ] `CORS_ORIGINS` lists exact production origins, with no wildcards and no trailing slashes
-- [ ] `MODULO_LOG_LEVEL` is set to `INFO` (not `DEBUG`)
-- [ ] `MODULO_TELEMETRY_ENABLED` is set appropriately for data residency requirements
-- [ ] `MODULO_USERS` contains strong plaintext seed passwords and is **not** committed to git; Farna Control hashes them during seeding
+- [ ] `FARNA_CONTROL_LOG_LEVEL` is set to `INFO` (not `DEBUG`)
+- [ ] `FARNA_CONTROL_TELEMETRY_ENABLED` is set appropriately for data residency requirements
+- [ ] `FARNA_CONTROL_USERS` contains strong plaintext seed passwords and is **not** committed to git; Farna Control hashes them during seeding
 
 ---
 
@@ -81,7 +81,7 @@ See [`docs/deployment-security.md`](./deployment-security.md) for the full secur
 ## 4. Observability
 
 - [ ] **Health endpoint** (`/healthz` or `/healthz/ready`) is reachable and returns 200
-- [ ] **OpenTelemetry** is configured (if desired) with `MODULO_TELEMETRY_ENABLED=true`
+- [ ] **OpenTelemetry** is configured (if desired) with `FARNA_CONTROL_TELEMETRY_ENABLED=true`
 - [ ] **Grafana** dashboards are loaded (optional):
   - Pipeline performance
   - HITL review activity

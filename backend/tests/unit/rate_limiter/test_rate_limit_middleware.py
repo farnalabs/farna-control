@@ -226,7 +226,7 @@ class TestShouldRateLimit:
         assert mw._should_rate_limit(req) is False
 
     def test_does_not_skip_when_bypass_token_not_configured(self):
-        """A bypass header without a configured MODULO_RATELIMIT_BYPASS_TOKEN must not skip."""
+        """A bypass header without a configured FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN must not skip."""
         mw = RateLimitMiddleware(app=FastAPI(), settings=make_settings(), registry=_registry())
         req = make_mock_request(headers={RATELIMIT_BYPASS_HEADER: "tok"})
         assert mw._should_rate_limit(req) is True

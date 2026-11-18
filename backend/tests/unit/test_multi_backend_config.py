@@ -18,28 +18,28 @@ class TestMultiBackendCustomValidators:
         _base_env(
             monkeypatch,
             DATABASE_URL="mysql+asyncmy://modulo:modulo@localhost:3306/modulo",
-            MODULO_DB="mariadb",
+            FARNA_CONTROL_DB="mariadb",
         )
         settings = Settings()
         assert settings.database_url == "mysql+aiomysql://modulo:modulo@localhost:3306/modulo"
 
     def test_invalid_backend_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _base_env(monkeypatch, MODULO_DB="oracle")
+        _base_env(monkeypatch, FARNA_CONTROL_DB="oracle")
         with pytest.raises(ValueError, match="MODULO_DB must be"):
             Settings()
 
     def test_sqlite_mode_auto_sets_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _base_env(monkeypatch, MODULO_DB="sqlite")
+        _base_env(monkeypatch, FARNA_CONTROL_DB="sqlite")
         settings = Settings()
         assert settings.database_url == "sqlite+aiosqlite:///./farna.db"
 
     def test_mariadb_mode_rejects_postgres_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _base_env(monkeypatch, MODULO_DB="mariadb")
+        _base_env(monkeypatch, FARNA_CONTROL_DB="mariadb")
         with pytest.raises(ValueError, match="DATABASE_URL"):
             Settings()
 
     def test_mysql_mode_rejects_postgres_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _base_env(monkeypatch, MODULO_DB="mysql")
+        _base_env(monkeypatch, FARNA_CONTROL_DB="mysql")
         with pytest.raises(ValueError, match="DATABASE_URL"):
             Settings()
 
@@ -54,14 +54,14 @@ class TestMultiBackendCustomValidators:
         assert "sslmode=disable" in settings.database_url
 
     def test_modulo_db_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _base_env(monkeypatch, MODULO_DB="SQLite")
+        _base_env(monkeypatch, FARNA_CONTROL_DB="SQLite")
         settings = Settings()
         assert settings.modulo_db == "sqlite"
 
     def test_modulo_db_mysql_uppercase(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(
             monkeypatch,
-            MODULO_DB="MYSQL",
+            FARNA_CONTROL_DB="MYSQL",
             DATABASE_URL="mysql+aiomysql://modulo:modulo@localhost:3306/modulo",
         )
         settings = Settings()
@@ -71,7 +71,7 @@ class TestMultiBackendCustomValidators:
         _base_env(
             monkeypatch,
             DATABASE_URL="postgresql+asyncpg://custom:pass@remote-host:5432/mydb",
-            MODULO_DB="postgres",
+            FARNA_CONTROL_DB="postgres",
         )
         settings = Settings()
         assert "custom" in settings.database_url

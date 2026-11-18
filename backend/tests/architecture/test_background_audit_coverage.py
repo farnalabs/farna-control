@@ -98,7 +98,7 @@ EXEMPT_REASONS: dict[str, str] = {
     "internal_bookkeeping": "instance-internal scheduler/registration state, not org-owned data",
     "boot_default_config": ("idempotent creation of instance-default configuration at boot; re-runs every cold boot, has no actor and grants no privilege"),
     "boot_env_config": ("idempotent boot seeding from an operator env var; every subsequent mutation of the seeded rows is audited through its admin route"),
-    "demo_fixture": "demo/sample data, gated off by default (MODULO_SEED_DEMO_ORGS)",
+    "demo_fixture": "demo/sample data, gated off by default (FARNA_CONTROL_SEED_DEMO_ORGS)",
     "infra_container_gc": (
         "destroys orphaned sandbox containers rather than org rows; gated by "
         "RUNNER_RECONCILER_DESTROY_ENABLED (default off), logged per destroy "

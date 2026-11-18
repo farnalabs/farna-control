@@ -86,7 +86,7 @@ def client() -> Generator[TestClient, None, None]:
     """Main app, unauthenticated, with a pinned public URL.
 
     The runtime-config store is process-global and another test may leave a
-    ``MODULO_PUBLIC_URL`` override behind, which would win over the pinned
+    ``FARNA_CONTROL_PUBLIC_URL`` override behind, which would win over the pinned
     Settings value and make the assertions below non-deterministic — so the
     override is cleared for the duration and restored afterwards.
     """
@@ -210,7 +210,7 @@ def test_discovery_needs_no_credentials(client: TestClient) -> None:
 
 @pytest.mark.parametrize("path", [_AUTHORIZATION_SERVER_PATH, _PROTECTED_RESOURCE_PATH, _PROTECTED_RESOURCE_MCP_PATH])
 def test_discovery_fails_visible_when_public_url_is_unset(client: TestClient, path: str) -> None:
-    """An EMPTY ``MODULO_PUBLIC_URL`` → ``500``, matching the OAuth flow.
+    """An EMPTY ``FARNA_CONTROL_PUBLIC_URL`` → ``500``, matching the OAuth flow.
 
     Discovery must not advertise an issuer the flow would refuse
     (``register_oauth_client`` answers ``500`` for an unconfigured public
@@ -228,7 +228,7 @@ def test_discovery_fails_visible_when_public_url_is_the_localhost_default(client
     """The ``http://localhost:8000`` Settings default counts as unconfigured → ``500``.
 
     The flow refuses that exact value, so discovery must too: a prod
-    deployment that never sets ``MODULO_PUBLIC_URL`` must not advertise
+    deployment that never sets ``FARNA_CONTROL_PUBLIC_URL`` must not advertise
     ``http://localhost:8000`` issuer/endpoint URLs.
     """
     app.dependency_overrides[get_settings] = _make_settings_localhost_default
@@ -242,7 +242,7 @@ def test_challenge_falls_back_to_request_origin_when_public_url_unset(client: Te
 
     The discovery routes fail visible (above); the challenge still points the
     client at the metadata URL on the origin it actually used. ``client`` is
-    taken only so the process-global ``MODULO_PUBLIC_URL`` override is cleared
+    taken only so the process-global ``FARNA_CONTROL_PUBLIC_URL`` override is cleared
     for the duration (see its fixture docstring).
     """
     from farna.api.mcp_server import _resource_metadata_challenge

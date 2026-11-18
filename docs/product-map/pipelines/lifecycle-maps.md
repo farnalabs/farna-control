@@ -36,7 +36,7 @@ and future product work. They are not an Alpha-facing feature: the routes are
 registered with `visibility: in_dev` and an empty sidebar group, so ordinary
 navigation, the library catalog, the pipeline editor, global/audit search and
 the ordinary feature-flag surfaces do not expose them, and the API router
-additionally requires `MODULO_DEV_MODE` plus the `library.search.in_dev`
+additionally requires `FARNA_CONTROL_DEV_MODE` plus the `library.search.in_dev`
 operator grant. Maps define the lifecycle stages a pipeline's work items flow
 through, with edges representing transitions between stages.
 
@@ -126,7 +126,7 @@ journey-detail BDD gap tracked here since the 2026-09-12 walk is closed.
   real two-part gate, moved both layers to `covered`, and recorded the
   internal-only scope as a deliberate product decision rather than a gap.
   Lens 9 found the dev-mode refusal branch was implemented but unreachable in
-  the route tests (every existing test runs with `MODULO_DEV_MODE=True`):
+  the route tests (every existing test runs with `FARNA_CONTROL_DEV_MODE=True`):
   added `test_operator_is_denied_when_developer_mode_is_off`, which drives the
   real router dependency for a read and a mutation with developer mode OFF and
   asserts both 403 ("This internal feature requires developer mode") with the

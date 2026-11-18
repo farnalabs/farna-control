@@ -1,7 +1,7 @@
 """FAR-1519 item 1: the root docker-compose.yml must wire the system DB URL.
 
 ``dispatcher_reconcile`` builds its session factory from
-``MODULO_SYSTEM_DATABASE_URL`` and FAILS CLOSED without it
+``FARNA_CONTROL_SYSTEM_DATABASE_URL`` and FAILS CLOSED without it
 (``core/cron_helpers.py::_get_system_engine`` raises BEFORE the try block that
 persists the heartbeat) — so no stats are ever written, ``/healthz/ready``
 reports ``dispatcher_reconcile has never run`` as ``unavailable``, and that

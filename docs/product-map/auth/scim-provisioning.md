@@ -29,16 +29,16 @@ team membership syncs automatically from the IdP. There is deliberately **no
 UI**: SCIM is a machine-to-machine protocol driven by the IdP, so it is a
 backend-only plan feature (`scim`, `tier: team`) and the frontend
 `teamFeatureGateParity` suite lists it as a backend-only exception. Auth is a
-shared-secret bearer token (`MODULO_SCIM_TOKEN`) rather than a user JWT; the
-target org is `MODULO_SCIM_DEFAULT_ORG_ID` when set, else the first-created
+shared-secret bearer token (`FARNA_CONTROL_SCIM_TOKEN`) rather than a user JWT; the
+target org is `FARNA_CONTROL_SCIM_DEFAULT_ORG_ID` when set, else the first-created
 org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
 
 ## Behaviors
 
 - [x] Auth + gating: a missing bearer token is 401 `Missing SCIM token`, an
       invalid token is 401 `Invalid SCIM token`, an unconfigured instance
-      (`MODULO_SCIM_TOKEN` unset) is 501 `SCIM is not configured`, a malformed
-      `MODULO_SCIM_DEFAULT_ORG_ID` is 500, and the whole surface is gated behind
+      (`FARNA_CONTROL_SCIM_TOKEN` unset) is 501 `SCIM is not configured`, a malformed
+      `FARNA_CONTROL_SCIM_DEFAULT_ORG_ID` is 500, and the whole surface is gated behind
       the `scim` plan feature - a plan without it gets 402
       `scim is not available on your plan`
       (`backend/src/farna/auth/scim_auth.py`; `test_scim_auth.py`,
@@ -111,7 +111,7 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
 - 2026-10-08: **Improve Architecture product-map walk** – tracked the untracked
   SCIM 2.0 provisioning surface as its own `feat-scim` behavior tracker. The
   full API-only surface (`/scim/v2/ServiceProviderConfig`, Users and Groups
-  CRUD, the shared-secret `MODULO_SCIM_TOKEN` auth, the `scim` plan gate, the
+  CRUD, the shared-secret `FARNA_CONTROL_SCIM_TOKEN` auth, the `scim` plan gate, the
   last-admin-safe deprovisioning and the fail-closed mutation audits) shipped
   with executing BDD (`scim_provisioning.feature`) and unit coverage but had NO
   home in either product-map layer - it was invisible to the feature graph and

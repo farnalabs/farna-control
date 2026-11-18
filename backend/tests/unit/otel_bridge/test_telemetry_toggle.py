@@ -1,6 +1,6 @@
 """Unit tests for telemetry enable/disable toggle.
 
-Verifies that MODULO_TELEMETRY_ENABLED controls whether OTel
+Verifies that FARNA_CONTROL_TELEMETRY_ENABLED controls whether OTel
 exporters are registered, enabling data residency compliance.
 """
 
@@ -129,7 +129,7 @@ class TestSettingsIntegration:
 
     def test_settings_defaults_to_disabled(self, monkeypatch: pytest.MonkeyPatch):
         """Settings.modulo_telemetry_enabled should default to False."""
-        # Isolate from any ambient MODULO_TELEMETRY_ENABLED in the runner env.
+        # Isolate from any ambient FARNA_CONTROL_TELEMETRY_ENABLED in the runner env.
         monkeypatch.delenv("FARNA_CONTROL_TELEMETRY_ENABLED", raising=False)
         assert _settings().modulo_telemetry_enabled is False
 
@@ -139,7 +139,7 @@ class TestSettingsIntegration:
         assert _settings(modulo_telemetry_enabled=True).modulo_telemetry_enabled is True
 
     def test_env_var_overrides_default(self, monkeypatch: pytest.MonkeyPatch):
-        """MODULO_TELEMETRY_ENABLED env var should override the default."""
+        """FARNA_CONTROL_TELEMETRY_ENABLED env var should override the default."""
         monkeypatch.setenv("FARNA_CONTROL_TELEMETRY_ENABLED", "true")
         assert _settings().modulo_telemetry_enabled is True
 
@@ -213,7 +213,7 @@ class TestIsTelemetryEnabled:
     ):
         """When the store returns None for the key, fall back to Settings.
 
-        The MODULO_TELEMETRY_ENABLED default is "false" rather than None, so
+        The FARNA_CONTROL_TELEMETRY_ENABLED default is "false" rather than None, so
         this defends the None arm of the store-first check for stores that
         were reset/torn down for test isolation.
         """

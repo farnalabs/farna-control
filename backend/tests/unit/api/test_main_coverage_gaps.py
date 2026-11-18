@@ -28,7 +28,7 @@ from tests.unit.api.mock_session import configure_rls_preamble
 
 @pytest.fixture(autouse=True)
 def _audit_append_spy(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
-    """Spy the MODULO_USERS seeder's audit append (FAR-1561).
+    """Spy the FARNA_CONTROL_USERS seeder's audit append (FAR-1561).
 
     The real append would run against the mocked sessions here (and their
     ``session.add`` accounting, which the seed tests assert on), so it is
@@ -888,7 +888,7 @@ async def test_run_migrations_bootstraps_even_when_already_at_head(monkeypatch: 
 
     The head fast-path skips the alembic run and the migration lock — but the
     bootstrap sits BEFORE it so a warm boot that later adds
-    MODULO_SYSTEM_DATABASE_URL reconciles the farna_control_system password without a
+    FARNA_CONTROL_SYSTEM_DATABASE_URL reconciles the farna_control_system password without a
     manual ``python -m farna.db.bootstrap_role`` step.
     """
     monkeypatch.setattr(main, "_db_is_at_migration_head", AsyncMock(return_value=True))

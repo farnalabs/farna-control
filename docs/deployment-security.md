@@ -127,11 +127,11 @@ Secret rotation procedure is documented in `docs/security/secret-management.md`
 
 ### 2.4 Admin User Setup
 
-The `MODULO_USERS` environment variable seeds initial credentials at boot as
+The `FARNA_CONTROL_USERS` environment variable seeds initial credentials at boot as
 comma-separated `email:password` entries (see `docs/deployment.md`):
 
 ```env
-MODULO_USERS=admin:<bcrypt-hashed-password>
+FARNA_CONTROL_USERS=admin:<bcrypt-hashed-password>
 ```
 
 Entries accept a bcrypt hash (`user1:$2b$12$<hash>`) or plaintext
@@ -140,9 +140,9 @@ with a bcrypt-stored hash are left untouched; a legacy account whose stored hash
 is missing or not bcrypt (does not start with `$2`) is re-hashed from this entry.
 
 **Security considerations:**
-- `MODULO_USERS` takes effect when the seeded account does not exist yet (or
+- `FARNA_CONTROL_USERS` takes effect when the seeded account does not exist yet (or
   has a legacy non-bcrypt hash). Removing it after seeding does not delete the user.
-- Do not commit `MODULO_USERS` to any configuration file – inject it via the
+- Do not commit `FARNA_CONTROL_USERS` to any configuration file – inject it via the
   runtime environment (Docker secret, or vault).
 - Prefer bcrypt-hashed passwords in production. The format is `$2b$12$<hash>` (generate with any
   bcrypt tool, e.g. `htpasswd -bnBC 12 "" <password> | tr -d ':\n'`).
@@ -294,14 +294,14 @@ variables:
 
 ```env
 # Auth rate limiting
-MODULO_AUTH_RATE_LIMIT_ENABLED=true
-MODULO_AUTH_MAX_ATTEMPTS=10     # Failed attempts before lockout
-MODULO_AUTH_WINDOW_SECONDS=60   # Sliding window in seconds
+FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED=true
+FARNA_CONTROL_AUTH_MAX_ATTEMPTS=10     # Failed attempts before lockout
+FARNA_CONTROL_AUTH_WINDOW_SECONDS=60   # Sliding window in seconds
 
 # Global bypass token (for trusted internal callers). The server reads the
-# token from the MODULO_RATELIMIT_BYPASS_TOKEN setting; trusted callers send it
-# as the MODULO_RATELIMIT_BYPASS_TOKEN HTTP header.
-MODULO_RATELIMIT_BYPASS_TOKEN=<random-token>
+# token from the FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN setting; trusted callers send it
+# as the FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN HTTP header.
+FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN=<random-token>
 ```
 
 Route-level limits are defined in code. **Key derivation** is auth-aware:
@@ -374,7 +374,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 
 `Strict-Transport-Security` is omitted when `debug=True`; the rest are sent on
 every response. In debug mode the CSP `connect-src` also adds `ws: wss:`, and
-`MODULO_MONITOR_DOMAINS` appends any extra monitoring origins.
+`FARNA_CONTROL_MONITOR_DOMAINS` appends any extra monitoring origins.
 
 **Verify:**
 ```bash
@@ -552,12 +552,12 @@ but the product gives no admin route to verify them.
 
 ### 6.2 OTel Exporter Setup
 
-OpenTelemetry is disabled by default (`MODULO_TELEMETRY_ENABLED=false`). When
+OpenTelemetry is disabled by default (`FARNA_CONTROL_TELEMETRY_ENABLED=false`). When
 enabled, configure the exporter:
 
 ```env
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-MODULO_TELEMETRY_ENABLED=true
+FARNA_CONTROL_TELEMETRY_ENABLED=true
 ```
 
 **Security considerations:**
@@ -700,7 +700,7 @@ before marking a production deployment as complete.
 - [ ] `SECRET_KEY` is 32+ random bytes – not a default or placeholder
 - [ ] `FERNET_KEY` is a valid 44-char base64 Fernet key
 - [ ] `DATABASE_URL` uses a least-privilege role, not the Postgres superuser
-- [ ] `MODULO_USERS` uses bcrypt-hashed passwords (or SSO is the primary auth)
+- [ ] `FARNA_CONTROL_USERS` uses bcrypt-hashed passwords (or SSO is the primary auth)
 - [ ] No secrets committed to git (gitleaks CI pass)
 - [ ] Secrets are injected via environment, not hardcoded in any file
 - [ ] `MODULO_ADMIN_SECRET` (for migration CLI) is rotated separately from `SECRET_KEY`
@@ -737,7 +737,7 @@ before marking a production deployment as complete.
 - [ ] Security alerts configured (rate limit threshold, failed login spike, audit chain failure)
 - [ ] Log retention set to at least 30 days for application logs; audit log is append-only (no automated purge)
 - [ ] OTel exporter (if enabled) is correctly scoped – no secrets in spans
-- [ ] OTel telemetry is disabled if data residency prohibits egress (default: off; enable via `MODULO_TELEMETRY_ENABLED=true` in Settings > Runtime Configuration)
+- [ ] OTel telemetry is disabled if data residency prohibits egress (default: off; enable via `FARNA_CONTROL_TELEMETRY_ENABLED=true` in Settings > Runtime Configuration)
 
 ### Upgrade
 

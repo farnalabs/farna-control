@@ -3,7 +3,7 @@
 There are TWO licence keypairs: the DEVELOPMENT keypair whose public half is
 built into ``core/license.py``, and the PRODUCTION keypair Farnalabs signs
 customer licences with (its public half is published to customers as
-``MODULO_LICENSE_PUBLIC_KEY``). These tests pin the boundary between them:
+``FARNA_CONTROL_LICENSE_PUBLIC_KEY``). These tests pin the boundary between them:
 
 - a production-signed key under the built-in development anchor is reported as
   an ANCHOR mismatch, not a generic signature failure;
@@ -88,7 +88,7 @@ class TestVerificationReasons:
     def test_production_key_under_builtin_anchor_reports_anchor_mismatch(self) -> None:
         # A key signed by a keypair the deployment does not trust: with the
         # built-in DEVELOPMENT anchor this is an anchor problem, not a corrupt
-        # key, and the operator must be told to set MODULO_LICENSE_PUBLIC_KEY.
+        # key, and the operator must be told to set FARNA_CONTROL_LICENSE_PUBLIC_KEY.
         kp = generate_keypair()
         result = parse_and_verify(encode_license_key(_payload(), kp["private_key"]))
 

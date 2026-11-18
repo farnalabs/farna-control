@@ -39,15 +39,15 @@ and never a substitute for proper provisioning.
 
 Before an incident, confirm all of the following hold:
 
-1. **Secrets configured** – `MODULO_BREAK_GLASS_ENABLED` is on (or defaults
-   from primary/standby secret presence), `MODULO_BREAK_GLASS_SECRET` and
-   `MODULO_BREAK_GLASS_STANDBY_SECRET` are set and differ, and
-   `MODULO_BREAK_GLASS_DATABASE_URL` is populated. `MODULO_BREAK_GLASS_ENABLED=true`
+1. **Secrets configured** – `FARNA_CONTROL_BREAK_GLASS_ENABLED` is on (or defaults
+   from primary/standby secret presence), `FARNA_CONTROL_BREAK_GLASS_SECRET` and
+   `FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET` are set and differ, and
+   `FARNA_CONTROL_BREAK_GLASS_DATABASE_URL` is populated. `FARNA_CONTROL_BREAK_GLASS_ENABLED=true`
    with both secrets empty is a startup error; `TTL < 1` or `MAX_TTL < MIN_TTL`
    is a startup error regardless of `ENABLED`.
 2. **`farna_control_breakglass` role provisioned** – created idempotently by
    `bootstrap_role.py` on every boot (LOGIN, BYPASSRLS, dedicated credential
-   from `MODULO_BREAK_GLASS_DATABASE_URL`). Bootstrap failure is FATAL when
+   from `FARNA_CONTROL_BREAK_GLASS_DATABASE_URL`). Bootstrap failure is FATAL when
    `ENABLED=true`. The role requires a superuser to grant BYPASSRLS – a
    managed-Postgres platform without superuser is a hard platform constraint
    (see ADR-047/018).
@@ -55,7 +55,7 @@ Before an incident, confirm all of the following hold:
    `farna-control migrate`'s `asyncio.run` wrapper). Connects as `farna_control_breakglass`
    via a dedicated lazy engine – never the app `database_url`.
 4. **Operator holds the secret** – the operator running the CLI must possess
-   `MODULO_BREAK_GLASS_SECRET` / `_STANDBY_SECRET` (actor derived from which
+   `FARNA_CONTROL_BREAK_GLASS_SECRET` / `_STANDBY_SECRET` (actor derived from which
    secret matched) and the DB URL. Secrets live in the KeePassXC vault.
 
 Verify preconditions non-destructively:
@@ -227,7 +227,7 @@ hands and the live row count is zero after deactivation.
 | `4` | Activation-transaction failure (e.g. email-collision retries exhausted) | Retry; if persistent, escalate |
 | `5` | Preconditions (force refusals, TTL out of range, the status-sweep live-row exit, operator-auth failure) | Read the message and resolve the specific condition |
 | `6` | Deactivate refused (live activation without `--force`, `M2010`/`M2020`) | Add `--force` only if deliberate; confirm scope/account with `--account-id` |
-| `7` | Smoke failure (connectivity or posture) | Check `MODULO_BREAK_GLASS_DATABASE_URL` reachability and role provisioning |
+| `7` | Smoke failure (connectivity or posture) | Check `FARNA_CONTROL_BREAK_GLASS_DATABASE_URL` reachability and role provisioning |
 | `8` | Deactivate atomicity failure | Investigate; the transaction aborts atomically so no partial state remains |
 | `9` | Credential-print failure after commit | Treat credential as unknown → deactivate `--force` then activate again (§5) |
 
@@ -247,7 +247,7 @@ the daily-sweep signal wired to alerting (§8).
   delivered credential keeps logging in and `deactivate`/`status` remain
   operable across a secret rotation. Only NEW `activate` invocations require
   the rotated secret.
-- **`MODULO_BREAK_GLASS_DATABASE_URL` also needs rotation** + fresh-DB sync:
+- **`FARNA_CONTROL_BREAK_GLASS_DATABASE_URL` also needs rotation** + fresh-DB sync:
   `ALTER ROLE farna_control_breakglass ... PASSWORD` (or equivalent), update the vault,
   and run the URL-in-vault-matches-`.env` check.
 - **Both-lost recovery:** if primary AND standby secrets are lost, set fresh
@@ -362,7 +362,7 @@ daily sweep (§8) is the ongoing monitoring surface.
 
 | Symptom | Meaning | Action |
 |---|---|---|
-| `smoke` exits `7` | Connectivity or posture failure | Check `MODULO_BREAK_GLASS_DATABASE_URL`, role provisioning (`bootstrap_role.py`), BYPASSRLS grant |
+| `smoke` exits `7` | Connectivity or posture failure | Check `FARNA_CONTROL_BREAK_GLASS_DATABASE_URL`, role provisioning (`bootstrap_role.py`), BYPASSRLS grant |
 | REST returns `403` | `M2010` – caller not authorized (e.g. `force` param via `farna_control_app`) | Use the operator CLI (`farna_control_breakglass` session) for operator-only operations |
 | REST returns `422` | `M2020` – deactivation would orphan the org (last-admin invariant) | Provision a replacement admin first, or use `force-last-admin` deliberately |
 | REST returns `404` | `M2040` – target account does not exist | Verify the `--account-id` / target |

@@ -91,7 +91,7 @@ with the following defaults:
 `DATABASE_URL`, so keep the password and the URL in step with each other.
 
 No maintained Docker override ships for MariaDB. To run against MariaDB, point
-`DATABASE_URL` at your own MariaDB instance and set `MODULO_DB=mariadb` (e.g.
+`DATABASE_URL` at your own MariaDB instance and set `FARNA_CONTROL_DB=mariadb` (e.g.
 `DATABASE_URL=mysql+aiomysql://modulo:modulo@localhost:3306/modulo`). PostgreSQL
 is the supported primary database; MariaDB is a conformance-tier backend only.
 
@@ -131,7 +131,7 @@ $env:SECRET_KEY = "dev-secret-key-32-bytes-at-least-here!"
 $env:FERNET_KEY = "<generate-your-own-fernet-key>"
 $env:DATABASE_URL = "postgresql+asyncpg://farna_control:changeme@localhost:5434/farna_control"
 $env:REDIS_URL = "redis://localhost:6380/0"
-$env:MODULO_USERS = "admin:admin"
+$env:FARNA_CONTROL_USERS = "admin:admin"
 ```
 
 **Terminal 1 — backend**
@@ -179,7 +179,7 @@ docker compose up -d
 
 This starts the database, Redis, backend, and frontend together. It needs the
 `.env` from "Required services" above (`FERNET_KEY`) — compose fails loudly
-without it. The backend auto-seeds an admin user based on the `MODULO_USERS`
+without it. The backend auto-seeds an admin user based on the `FARNA_CONTROL_USERS`
 environment variable.
 
 ### Environment variables
@@ -188,11 +188,11 @@ environment variable.
 |---|---|---|---|
 | `SECRET_KEY` | Yes | — | JWT signing key (min 32 bytes) |
 | `FERNET_KEY` | Yes | — | Fernet encryption key for credentials (valid urlsafe-base64 key, min 32 bytes) |
-| `DATABASE_URL` | Yes | — | Database connection string (required, no static default); the SQLite URL applies only when `MODULO_DB=sqlite` |
-| `MODULO_DB` | No | `postgres` | Database dialect (`postgres`, `sqlite`, `mariadb`) |
+| `DATABASE_URL` | Yes | — | Database connection string (required, no static default); the SQLite URL applies only when `FARNA_CONTROL_DB=sqlite` |
+| `FARNA_CONTROL_DB` | No | `postgres` | Database dialect (`postgres`, `sqlite`, `mariadb`) |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis connection for the SAQ broker (required in production) |
-| `MODULO_PUBLIC_URL` | No | `http://localhost:8000` | Public-facing URL for OIDC/SAML callbacks |
-| `MODULO_USERS` | No | — | Seed admin users (`username:password`) |
+| `FARNA_CONTROL_PUBLIC_URL` | No | `http://localhost:8000` | Public-facing URL for OIDC/SAML callbacks |
+| `FARNA_CONTROL_USERS` | No | — | Seed admin users (`username:password`) |
 
 ---
 
@@ -448,12 +448,12 @@ merged report, so a local `coverage report` after a manual run needs a
 ### Running tests on multiple databases
 
 The backend nominally supports PostgreSQL, SQLite, and MariaDB/MySQL (see
-`docs/architecture.md`). Use the `MODULO_DB` environment variable to switch
+`docs/architecture.md`). Use the `FARNA_CONTROL_DB` environment variable to switch
 locally:
 
 ```powershell
 $env:DATABASE_URL = "sqlite+aiosqlite:///./test.db"
-$env:MODULO_DB = "sqlite"
+$env:FARNA_CONTROL_DB = "sqlite"
 uv run pytest tests/unit/ -m 'not integration' -q
 ```
 

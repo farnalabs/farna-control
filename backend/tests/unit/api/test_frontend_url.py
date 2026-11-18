@@ -83,7 +83,7 @@ class TestSsoFrontendUrlDelegate:
     """Verify ``sso._frontend_url`` and ``_redirect_to_frontend`` delegate correctly."""
 
     def test_sso_uses_frontend_url_not_cors(self) -> None:
-        """FAR-837 regression: redirect must use MODULO_PUBLIC_URL, not CORS[0]."""
+        """FAR-837 regression: redirect must use FARNA_CONTROL_PUBLIC_URL, not CORS[0]."""
         settings = _base_settings(
             modulo_frontend_url="",
             modulo_public_url="https://control.farna.dev",
