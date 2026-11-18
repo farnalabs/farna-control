@@ -52,7 +52,7 @@ def test_quickstart_documents_the_readiness_ok_check() -> None:
 
 def test_production_docs_document_a_first_run_user() -> None:
     text = _read(_DEPLOYMENT_DOC)
-    assert "modulo users add" in text
+    assert "farna-control users add" in text
     # Only the exact email ``admin`` (or ``admin@modulo.run``) is seeded with
     # the admin role (farna.db.seed); any other address lands as ``runner``.
     assert "MODULO_USERS=admin:<password>" in text

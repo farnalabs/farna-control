@@ -37,7 +37,7 @@ _TEST_SECRET = "whsec_test_123"
 _FULFIL_MODULE = "farna.api.routes.stripe_webhook.fulfil_team_purchase"
 
 _KP = generate_keypair()
-_LICENSE_KEY_PATTERN = re.compile(r"MODULO_LICENSE_KEY=(\S+)")
+_LICENSE_KEY_PATTERN = re.compile(r"FARNA_CONTROL_LICENSE_KEY=(\S+)")
 
 
 @pytest.fixture(autouse=True)
@@ -165,7 +165,7 @@ def _minted_key(mock_send: MagicMock) -> str:
     """The licence key carried by the email the fulfilment sent."""
     body_text = mock_send.call_args.args[4]
     match = _LICENSE_KEY_PATTERN.search(body_text)
-    assert match is not None, "the fulfilment email carried no MODULO_LICENSE_KEY"
+    assert match is not None, "the fulfilment email carried no FARNA_CONTROL_LICENSE_KEY"
     return match.group(1)
 
 
