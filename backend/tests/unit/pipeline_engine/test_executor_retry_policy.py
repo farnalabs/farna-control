@@ -878,6 +878,33 @@ async def test_execute_retry_policy_exhausted_boundary_terminal_no_redispatch():
     assert result is not None
 
 
+async def test_execute_retry_policy_refuses_past_a_class_attempt_cap():
+    """FAR-2562: the registry's per-class execution cap binds on THIS path too.
+
+    A policy with ``max_retries: 5`` is a SECOND budget: a deterministic
+    no-output run could be re-dispatched here even after the in-execute
+    transient gate had spent the class's two permitted executions. With two
+    consumed the run must terminalise, and the detail must report the cap — not
+    the (false) claim that the retries were exhausted.
+    """
+    from farna.core.pipeline_engine.node_runner import SandboxNodeFailedError
+
+    compiled = _mock_compiled_raising(SandboxNodeFailedError("agent produced no output for 600s", node_id="node-a"))
+    kind, result, statements, mock_finalize = await _run_single_retry_attempt(
+        node_attempt_count=2,
+        retry_policy={"on": ["failure"], "max_retries": 5},
+        compiled=compiled,
+    )
+    assert kind == "terminal"
+    assert not any("status='pending'" in s for s in statements)
+    mock_finalize.assert_awaited_once()
+    assert mock_finalize.await_args.kwargs["error_code"] == "sandbox.no_output_json"
+    detail = mock_finalize.await_args.kwargs["error_detail"]
+    assert "capped at 2 attempt(s)" in detail
+    assert "retries exhausted" not in detail
+    assert result is not None
+
+
 # ---------------------------------------------------------------------------
 # FAR-503 — eval_failed re-dispatch, budget exhaustion, deadline alias,
 # and the delivery-sentinel composition (guard A)

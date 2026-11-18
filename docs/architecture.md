@@ -116,6 +116,7 @@ The `PipelineExecutor` (`backend/src/farna/core/pipeline_engine/executor.py`) or
 - Retry re-executes the WHOLE run (fenced pending-reset + backoff + SAQ job re-dispatch)
 - Over-budget guard refuses retry when the attempt already consumed the graph's node-budget allowance
 - Never-retryable codes: script-mode terminal codes (side-effect safety), provider billing faults (401/402)
+- Per-class execution cap: an error-code registry entry may carry `max_attempts`, the most executions of the run's graph that class may consume (first attempt included). It binds every retry path — the in-execute transient requeue and the run-level `retry_policy` re-dispatch — so a deterministic class cannot be retried to the full budget twice over. Currently only `sandbox.no_output_json` is capped (2 attempts, i.e. one retry): a no-output death is usually deterministic (5 x 600s idle timeouts ≈ 137 minutes before the terminal failure), while one retry keeps recovery for a genuine provider hiccup
 
 **Terminalization & Error Codes**
 - Canonical dotted error codes (`agent.failed`, `node.timeout`, `node.deadline_exceeded`, `eval.blocked`, `harness.idempotency_gate`, `sandbox.tier_refused`)

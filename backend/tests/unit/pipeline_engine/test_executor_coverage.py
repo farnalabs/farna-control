@@ -31,6 +31,8 @@ from farna.core.pipeline_engine.executor import (
     _accumulate_node_token_usage,
     _all_capacities_ok,
     _apply_work_intact,
+    _attempt_cap_reached,
+    _attempt_capped_failure_detail,
     _can_fenced_requeue,
     _can_retry_after_policy,
     _connector_failure_views,
@@ -39,6 +41,7 @@ from farna.core.pipeline_engine.executor import (
     _extract_chat_model_token_usage,
     _extract_llm_token_usage,
     _failure_build_sha,
+    _failure_class_attempt_cap,
     _failure_column,
     _graph_has_script_mode,
     _graph_is_idempotent,
@@ -1458,6 +1461,84 @@ def test_can_fenced_requeue_true_for_unregistered_code():
     registry verdict, never by an absent entry. (The six-argument contract with
     no code at all is pinned by ``test_can_fenced_requeue_true``.)"""
     assert _can_fenced_requeue(0, 3, False, False, True, True, error_code="not_a_registered_code") is True
+
+
+# ---------------------------------------------------------------------------
+# FAR-2562 — per-class retry attempt cap (deterministic sandbox no-output)
+# ---------------------------------------------------------------------------
+
+
+def test_failure_class_attempt_cap_is_registry_data():
+    """The cap lives on the error-code registry entry, so it cannot drift from
+    the code's own classification; legacy spellings resolve first. The class
+    stays RETRYABLE — the cap is a limited budget, not a zero-retry verdict."""
+    from farna.core.pipeline_engine.error_codes import is_retryable
+
+    assert _failure_class_attempt_cap("sandbox.no_output_json") == 2
+    assert _failure_class_attempt_cap("SandboxNodeFailedError") == 2
+    assert _failure_class_attempt_cap(None) is None
+    assert _failure_class_attempt_cap("not_a_registered_code") is None
+    assert is_retryable("sandbox.no_output_json") is True
+
+
+def test_failure_class_attempt_cap_absent_for_other_sandbox_classes():
+    """The cap is NARROW: the other sandbox failure classes keep their budgets."""
+    assert _failure_class_attempt_cap("sandbox.queue_timeout") is None
+    assert _failure_class_attempt_cap("sandbox.rate_limited") is None
+    assert _failure_class_attempt_cap("sandbox.spawn") is None
+
+
+def test_attempt_cap_reached_semantics():
+    """``execution_attempt_count`` counts executions STARTED, so ``>= cap``
+    means the class has spent its allowance."""
+    assert _attempt_cap_reached(None, 99) is False
+    assert _attempt_cap_reached(2, 1) is False
+    assert _attempt_cap_reached(2, 2) is True
+    assert _attempt_cap_reached(2, 3) is True
+
+
+def test_can_fenced_requeue_grants_exactly_one_retry_for_no_output():
+    """FAR-2562: a deterministic no-output death may consume TWO executions.
+
+    Asserted as the actual GRANT SEQUENCE — which already-consumed attempt
+    counts may requeue again — not merely as a terminal status: attempt 1 is
+    allowed one retry, and attempt 2 is refused with the whole transport budget
+    (5) still unspent.
+    """
+    granted = [count for count in range(1, 7) if _can_fenced_requeue(count, 5, False, False, True, True, failure_class_code="sandbox.no_output_json")]
+    assert granted == [1]
+
+
+def test_can_fenced_requeue_cap_does_not_read_the_provider_code():
+    """The cap is keyed on the failure's OWN class code, never on the
+    provider-classified ``error_code`` slot — a no-output death carries no
+    provider classification, so keying it there would have been a no-op."""
+    assert _can_fenced_requeue(1, 5, False, False, True, True, error_code=None) is True
+    assert _can_fenced_requeue(2, 5, False, False, True, True, error_code=None) is True
+
+
+def test_can_fenced_requeue_uncapped_class_still_reaches_its_budget():
+    """CONTROL (FAR-2562 constraint): a transient class with no registry cap
+    still retries to its existing transport budget — the cap must not leak."""
+    assert _can_fenced_requeue(4, 5, False, False, True, True, failure_class_code="sandbox.queue_timeout") is True
+    assert _can_fenced_requeue(5, 5, False, False, True, True, failure_class_code="sandbox.queue_timeout") is False
+
+
+def test_can_fenced_requeue_non_retryable_provider_code_unchanged():
+    """FAR-1800 is untouched: a non-retryable provider code still refuses on the
+    FIRST attempt, whatever class code rides alongside it."""
+    assert _can_fenced_requeue(0, 5, False, False, True, True, error_code="model.insufficient_funds", failure_class_code="sandbox.no_output_json") is False
+
+
+def test_attempt_capped_failure_detail_never_claims_retries_exhausted():
+    """FAR-2562: the cap detail names the cap and the attempts consumed, and
+    never claims the retries ran out while the transport budget had room."""
+    detail = _attempt_capped_failure_detail("sandbox.no_output_json", RuntimeError("agent produced no output for 600s"), 2, 2)
+    assert "retries exhausted" not in detail
+    assert "after 2 attempt(s)" in detail
+    assert "capped at 2 attempt(s)" in detail
+    assert "sandbox.no_output_json" in detail
+    assert "agent produced no output for 600s" in detail
 
 
 # ---------------------------------------------------------------------------

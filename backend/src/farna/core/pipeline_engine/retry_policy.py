@@ -561,6 +561,14 @@ async def maybe_retry_after_policy(
                 "node_budget_seconds": sum(t for t in node_timeouts if isinstance(t, int) and t > 0),
             },
         )
+    # FAR-2562: a class with a registry execution cap must not be re-dispatched
+    # past it, however much policy budget remains. Without this the SAME
+    # deterministic failure could be retried twice over — once by the in-execute
+    # transient gate and again by this run-level policy path (a second budget).
+    # The cap is keyed on the run's terminal code, which for a no-output death
+    # IS the class code (``sandbox.no_output_json``); every other class carries
+    # no cap, so this cannot change their behaviour.
+    attempt_cap = _failure_class_attempt_cap(error_code)
     # FAR-2076: ``execution_attempt_count`` counts EXECUTIONS of the graph
     # (one per admitted ``execute_run``), so ``<= retry_budget`` means the
     # budget counts actual RETRIES: budget=1 permits execution 1
@@ -574,13 +582,29 @@ async def maybe_retry_after_policy(
     script_retry_probe_ok = True
     if graph_has_script_mode_fn(graph_json):
         script_retry_probe_ok = await probe_script_lease_fn(run_id=run_id, org_id=org_id)
-    if can_retry_after_policy(
+    budget_permits = can_retry_after_policy(
         execution_attempt_count,
         retry_budget,
         superseded,
         script_retry_probe_ok,
         attempt_consumed_budget=attempt_consumed_budget,
-    ):
+    )
+    attempt_cap_reached = _attempt_cap_reached(attempt_cap, execution_attempt_count)
+    if budget_permits and attempt_cap_reached:
+        # Log ONLY when the cap is the BINDING reason — a run whose budget is
+        # also spent is already covered by the budget-exhausted path above, and
+        # a run with no budget never reaches here.
+        _log.warning(
+            "pipeline.retry_policy_attempt_cap_reached",
+            extra={
+                "run_id": str(run_id),
+                "error_code": error_code,
+                "attempt": execution_attempt_count,
+                "attempt_cap": attempt_cap,
+                "budget": retry_budget,
+            },
+        )
+    if budget_permits and not attempt_cap_reached:
         await _redispatch_after_policy(
             run_id=run_id,
             org_id=org_id,
@@ -879,6 +903,36 @@ def _is_non_retryable_error_code(code: str | None) -> bool:
     return not spec.retryable
 
 
+def _failure_class_attempt_cap(code: str | None) -> int | None:
+    """The registry's per-class EXECUTION cap for *code*, or None (FAR-2562).
+
+    A code with NO registry entry (or an entry carrying no ``max_attempts``) has
+    no class cap, so the caller's budgets alone bound the attempts — the
+    pre-FAR-2562 behaviour, preserved for every class except the few the
+    registry names. Legacy spellings resolve through ``LEGACY_ALIASES`` first,
+    exactly like ``_is_non_retryable_error_code``, so an exception-class name
+    (``SandboxNodeFailedError``) is judged as its canonical code
+    (``sandbox.no_output_json``).
+    """
+    if not code:
+        return None
+    spec = ERROR_CODE_REGISTRY.get(LEGACY_ALIASES.get(code, code))
+    if spec is None:
+        return None
+    return spec.max_attempts
+
+
+def _attempt_cap_reached(attempt_cap: int | None, execution_attempt_count: int) -> bool:
+    """True when a class-level attempt cap refuses any further execution.
+
+    ``execution_attempt_count`` counts executions already STARTED (the attempt
+    that just failed is included — see ``retry_executions_consumed``), so
+    ``>= cap`` means this failure class has spent its whole allowance. A ``None``
+    cap never refuses, which is every class the registry does not cap.
+    """
+    return attempt_cap is not None and execution_attempt_count >= attempt_cap
+
+
 def _can_fenced_requeue(
     execution_attempt_count: int,
     retries: int,
@@ -887,22 +941,39 @@ def _can_fenced_requeue(
     script_lease_ok: bool,
     graph_idempotent: bool,
     error_code: str | None = None,
+    *,
+    failure_class_code: str | None = None,
 ) -> bool:
     """Can a transient node failure be fenced back to ``pending`` for a retry?
 
     False when the retry budget is exhausted, the run is owned by a successor
     (superseded), the zombie watchdog stalled it, a script lease is still live,
-    the graph contains a non-idempotent node (FAR-295), or — FAR-1800 — the
-    failure class is REGISTERED NON-RETRYABLE. A billing/credential fault (HTTP
-    402 -> ``model.insufficient_funds``) re-hits the same wall on every attempt,
-    so re-dispatching it only burns sandbox dispatches until the SAQ retry
-    budget is spent; the run must terminal-fail on the FIRST attempt instead.
-    ``error_code`` is the failure's already-classified code (``None`` when no
-    signature matched, which leaves the outcome unchanged). This NARROWS when
-    the fence fires — it never weakens it: every existing invariant (claim
-    token, fencing, script lease, idempotency) still applies.
+    the graph contains a non-idempotent node (FAR-295), the failure class is
+    REGISTERED NON-RETRYABLE (FAR-1800), or the class has spent its registry
+    EXECUTION cap (FAR-2562).
+
+    ``error_code`` is the failure's PROVIDER-classified code (``None`` when no
+    provider signature matched), which is what the FAR-1800 non-retryable check
+    has always judged — a billing/credential fault (HTTP 402 ->
+    ``model.insufficient_funds``) re-hits the same wall on every attempt, so
+    re-dispatching it only burns sandbox dispatches until the SAQ retry budget
+    is spent. It deliberately does NOT carry the failure's own class code, so
+    adding sandbox codes to the registry can never silently change that check.
+
+    ``failure_class_code`` is the failure's OWN canonical code (the one the
+    terminal write publishes, e.g. ``sandbox.no_output_json``) and is used ONLY
+    for the FAR-2562 attempt cap: a deterministic class may consume at most its
+    registry ``max_attempts`` executions, so a small number of retries cannot be
+    multiplied by the transport budget. ``None`` (no cap) leaves the decision
+    exactly as it was.
+
+    Both additions NARROW when the fence fires — they never weaken it: every
+    existing invariant (claim token, fencing, script lease, idempotency) still
+    applies.
     """
     if _is_non_retryable_error_code(error_code):
+        return False
+    if _attempt_cap_reached(_failure_class_attempt_cap(failure_class_code), execution_attempt_count):
         return False
     return execution_attempt_count < retries and not superseded and not stalled and script_lease_ok and graph_idempotent
 
@@ -928,6 +999,27 @@ def _non_retryable_failure_detail(
         )
     return _sanitize_detail(
         f"Sandbox node failed after retries exhausted; the last failure is non-retryable ({non_retryable_code}) and a further retry would re-hit the same fault: " + str(exc),
+        limit=5000,
+    )
+
+
+def _attempt_capped_failure_detail(
+    capped_code: str,
+    exc: Exception,
+    execution_attempt_count: int,
+    attempt_cap: int,
+) -> str:
+    """Terminal detail for a failure its class attempt cap refused (FAR-2562).
+
+    The retries-exhausted wording would be a LIE whenever the transport budget
+    still had room (the observed shape: attempt 2 of a permitted 5), so this
+    names the cap, the attempts actually consumed, and why a further attempt
+    cannot recover. Callers use it ONLY when the cap is the binding reason —
+    a run whose transport budget is also spent keeps the (accurate)
+    retries-exhausted wording.
+    """
+    return _sanitize_detail(
+        (f"Sandbox node failed; not retried after {execution_attempt_count} attempt(s): the failure class {capped_code} is capped at {attempt_cap} attempt(s) because a further attempt re-hits the same deterministic fault: " + str(exc)),
         limit=5000,
     )
 
@@ -967,11 +1059,14 @@ __all__ = [
     "_RETRY_BACKOFF_JITTER_FRACTION",
     "_RETRY_POLICY_EVENTS",
     "RunRetryPolicyError",
+    "_attempt_cap_reached",
+    "_attempt_capped_failure_detail",
     "_attempt_consumed_node_budget",
     "_attempt_elapsed_seconds",
     "_attempt_started_at",
     "_can_fenced_requeue",
     "_eval_failed_event_matches",
+    "_failure_class_attempt_cap",
     "_failure_event_matches",
     "_graph_has_script_mode",
     "_non_retryable_failure_detail",
