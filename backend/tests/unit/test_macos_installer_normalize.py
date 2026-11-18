@@ -17,6 +17,8 @@ import pytest
 import yaml
 
 from farna.launcher import entry as entry_module
+from farna.launcher import upgrade as upgrade_module
+from farna.launcher.platform import binary_name
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -979,15 +981,21 @@ def test_macos_codesign_retry_stops_at_the_bounded_attempt_cap(tmp_path: Path) -
 # read a DIFFERENT env name, so the export was ignored and the boot fell
 # through to the <sys.prefix>/bundled/bin default that no bundle populates.
 # These tests pin one env-var name across every producer and consumer, pin the
-# exported directory to the layout the build populates, and execute the build
-# gate against the shipped layout plus three mutations.
+# macOS launcher's exported directory to the layout the build populates, pin
+# the Linux installer's exported directory to the layout that bundle
+# populates, and execute the build gate against the shipped layout plus three
+# mutations.
+#
+# Windows is NAME-ONLY on purpose: scripts/windows/build-launcher.ps1 stages
+# only bin\modulo.exe and no PostgreSQL/Redis payload, so the Windows boot gate
+# cannot pass whatever the variable is called. Its payload layout is a separate
+# follow-up, so nothing here asserts Windows is functionally aligned - only
+# that its launcher uses the shared variable name.
 # ---------------------------------------------------------------------------
 
 _PRODUCER_CONSUMER_CONTRACT = [
     # producer: the macOS bundle's compiled launcher.
     ("scripts/macos/build-native-bundle.sh", r'setenv\("([A-Za-z_][A-Za-z0-9_]*)", bin_dir, 1\)'),
-    # producer: the Windows bundle's compiled launcher.
-    ("scripts/windows/modulo-launcher.c", r'L"([A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)"'),
     # producer: the Linux tarball installer's pre-upgrade dump invocation.
     ("scripts/install.sh", r'^\s+([A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)="'),
     # producer: the Linux tarball bundle's launcher wrapper.
@@ -997,6 +1005,10 @@ _PRODUCER_CONSUMER_CONTRACT = [
     # consumer: the upgrade helper's resolver (same contract, own literal).
     ("backend/src/farna/launcher/upgrade.py", r'os\.environ\.get\("([A-Z_][A-Z0-9_]*BUNDLED_BIN_DIR)"\)'),
 ]
+
+#: The Windows launcher's env-name literal. It is asserted separately (name
+#: only) because its bundle stages no PostgreSQL/Redis payload yet.
+_WINDOWS_LAUNCHER_ENV_NAME = r'L"([A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)"'
 
 
 def _bundle_build_script() -> str:
@@ -1046,6 +1058,21 @@ def test_bundled_bin_dir_env_name_agrees_across_producers_and_consumers(relative
     assert names == {entry_module.BUNDLED_BIN_DIR_ENV}, relative_path
 
 
+def test_windows_launcher_uses_the_shared_bundled_bin_dir_name_only() -> None:
+    """FAR-2554: the Windows launcher's env NAME matches; nothing more.
+
+    Deliberately name-only. ``scripts/windows/build-launcher.ps1`` stages
+    ``bin\\modulo.exe`` and no PostgreSQL/Redis payload, so the Windows boot
+    gate cannot pass whatever the variable is called; its bundled payload
+    layout is a separate follow-up. Asserting functional alignment here would
+    pin behaviour the Windows bundle does not have.
+    """
+    text = (REPO_ROOT / "scripts" / "windows" / "modulo-launcher.c").read_text(encoding="utf-8")
+    names = set(re.findall(_WINDOWS_LAUNCHER_ENV_NAME, text))
+
+    assert names == {entry_module.BUNDLED_BIN_DIR_ENV}
+
+
 def test_macos_launcher_bin_dir_expression_is_the_directory_the_bundle_populates() -> None:
     """FAR-2554: the exported directory is the one the layout block creates."""
     script = _bundle_build_script()
@@ -1059,6 +1086,57 @@ def test_macos_launcher_bin_dir_expression_is_the_directory_the_bundle_populates
     assert 'mkdir -p "${BUNDLE_ROOT}/redis" "${BUNDLE_ROOT}/bin"' in layout
     assert 'ln -s "../pg/bin/${binary}" "${BUNDLE_ROOT}/bin/${binary}"' in layout
     assert 'ln -s "../redis/${binary}" "${BUNDLE_ROOT}/bin/${binary}"' in layout
+
+
+def _install_sh_exported_bin_dir(tmp_path: Path, old_root: Path) -> Path:
+    """Resolve install.sh's pre-upgrade export exactly as the shell would.
+
+    The assignment is lifted verbatim from ``run_pre_upgrade_dump`` and expanded
+    by bash against a seeded install root, so the test pins the VALUE the
+    installer hands the upgrade helper - not just the variable's name.
+    """
+    script = (REPO_ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+    matches = re.findall(
+        r'^\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*BUNDLED_BIN_DIR)="(?P<value>[^"]*)"',
+        script,
+        re.MULTILINE,
+    )
+    assert len(matches) == 1, matches
+    name, value = matches[0]
+    driver = tmp_path / "resolve_export.sh"
+    driver.write_text(
+        f'#!/usr/bin/env bash\nset -euo pipefail\nold_root="$1"\n{name}="{value}"\nprintf "%s\\n" "${{{name}}}"\n',
+        encoding="utf-8",
+    )
+    result = _run_bash_file(driver, [old_root.as_posix()], cwd=tmp_path)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    return Path(result.stdout.strip())
+
+
+def test_linux_pre_upgrade_export_names_the_directory_that_holds_pg_dump(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2554: the install.sh value must be ``<bundle>/pg/bin``, not ``<bundle>/pg``.
+
+    The parametrised name test captures only the identifier, so reverting the
+    value to the pre-fix ``${old_root}/pg`` - where pg_dump is one level deeper
+    and therefore not found - would leave the suite green. Seed the layout the
+    Linux tarball actually builds, expand the shipped value with bash, then let
+    the upgrade helper's own resolver look for the dump tools in it.
+    """
+    old_root = tmp_path / "current"
+    pg_bin = old_root / "pg" / "bin"
+    # bundle-release.yml builds PostgreSQL into <bundle>/pg/bin and copies the
+    # redis binaries in beside them.
+    for name in ("initdb", "postgres", "pg_isready", "pg_dump", "psql", "pg_config", "redis-server", "redis-cli"):
+        _write_executable(pg_bin / binary_name(name))
+
+    exported = _install_sh_exported_bin_dir(tmp_path, old_root)
+
+    assert exported == pg_bin
+    monkeypatch.setenv(entry_module.BUNDLED_BIN_DIR_ENV, str(exported))
+    resolved = upgrade_module._resolve_pg_bin_dir(None)
+    assert resolved == pg_bin
+    for name in ("pg_dump", "pg_isready"):
+        assert (resolved / binary_name(name)).exists(), name
 
 
 def _write_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> None:

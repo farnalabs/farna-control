@@ -119,8 +119,13 @@ static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *b
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"PATH", path_value) ||
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"PYTHONPATH", python_path) ||
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"PYTHONHOME", python_home) ||
-        /* Must equal farna.launcher.entry.BUNDLED_BIN_DIR_ENV; the resolver
-         * reads this exact name and the staged layout is <bundle>\bin. */
+        /* The NAME must equal farna.launcher.entry.BUNDLED_BIN_DIR_ENV - the
+         * resolver reads exactly this variable and ignores any other spelling.
+         * The VALUE here is <bundle>\bin, which today holds only modulo.exe:
+         * scripts/windows/build-launcher.ps1 stages no PostgreSQL/Redis payload
+         * at all, so the Windows boot gate cannot pass regardless of this name.
+         * FAR-2554 aligns the NAME only; the Windows bundled payload layout is
+         * a separate follow-up. Do not read this as functional alignment. */
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_BUNDLED_BIN_DIR", bundle_bin_dir)) {
         free(block);
         return FALSE;

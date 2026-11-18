@@ -500,20 +500,17 @@ refuse_when_locked() {
 run_pre_upgrade_dump() {
   local old_root="${INSTALL_ROOT}/current"
   local py="${old_root}/runtime/bin/python3"
-  local helper module
+  local module
   local rc snapshot_path
-  # Resolve BOTH bundle layouts: pre-rebrand installs ship the helper under
-  # backend/src/modulo, post-rebrand installs under backend/src/farna. Without
-  # the modulo fallback every upgrade FROM a pre-rebrand install dies with the
-  # misleading "predates the launcher upgrade helper" message.
+  # Only the current package name exists: the pre-rebrand backend/src/modulo
+  # tree was renamed to backend/src/farna, so a bundle with the old module
+  # cannot be run by a helper that reads the renamed BUNDLED_BIN_DIR variable.
+  # Fail with the actionable message instead of invoking a helper whose env
+  # contract no longer exists.
   if [[ -f "${old_root}/backend/src/farna/launcher/upgrade.py" ]]; then
-    helper="${old_root}/backend/src/farna/launcher/upgrade.py"
     module="farna.launcher.upgrade"
-  elif [[ -f "${old_root}/backend/src/modulo/launcher/upgrade.py" ]]; then
-    helper="${old_root}/backend/src/modulo/launcher/upgrade.py"
-    module="modulo.launcher.upgrade"
   else
-    die "cannot run the pre-upgrade pg_dump: the installed bundle predates the launcher upgrade helper (looked for backend/src/{farna,modulo}/launcher/upgrade.py)"
+    die "cannot run the pre-upgrade pg_dump: the installed bundle predates the launcher upgrade helper (looked for backend/src/farna/launcher/upgrade.py)"
   fi
   [[ -x "${py}" ]] || die "cannot run the pre-upgrade pg_dump: no bundled runtime at ${py} (no prior native install to upgrade — remove the populated data dir or ignore)"
   info "Pre-upgrade pg_dump (enforced by FAR-672) — the bundled stack must be running..."
