@@ -49,6 +49,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from farna.launcher import manifest as manifest_module
+from farna.launcher.entry import APP_DB_NAME
 from farna.launcher.env_safety import scrub_os_environment
 from farna.launcher.initdb import _binary
 from farna.launcher.manifest import ManifestSecurityError, ReleaseManifest
@@ -67,7 +68,10 @@ _DUMP_NAME = "database.sql"
 _PGDATA_DIRNAME = "pgdata"
 _PG_VERSION_FILE = "PG_VERSION"
 _POSTGRES_HOST = "127.0.0.1"
-_APP_DB_NAME = "farna_control"
+# APP_DB_NAME (the app database name) is imported from farna.launcher.entry — the
+# single definition (FAR-2561). The pre-upgrade dump must target the SAME
+# database the launcher creates; a local copy here was one of three independent
+# literals that could drift.
 _SECRETS_FILENAME = "secrets.json"
 _STATE_FILENAME = "state.json"
 _DUMP_TIMEOUT_SECONDS = 1800
@@ -221,7 +225,7 @@ def pre_upgrade_dump(
     except Exception as exc:
         raise UpgradeError(f"state.json at {state_path} cannot be verified: {exc}") from exc
 
-    url_with_password = f"postgresql://modulo:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{_APP_DB_NAME}"
+    url_with_password = f"postgresql://modulo:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
     dump_url, postgres_password = _decredential_url(url_with_password)
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")

@@ -90,6 +90,22 @@ BUNDLED_BIN_DIR_ENV = "FARNA_CONTROL_BUNDLED_BIN_DIR"
 # layout, the verification and the diagnostics cannot drift apart.
 REQUIRED_BUNDLED_BINARIES: tuple[str, ...] = ("initdb", "postgres", "pg_isready", "redis-server", "redis-cli")
 POSTGRES_HOST = "127.0.0.1"
+# THE single definition of the app database name (FAR-2561). This module CREATES
+# the database (``_ensure_app_database``), so it owns the name; every composer of
+# a database URL imports it from here — ``launcher.config_source`` (DATABASE_URL,
+# DATABASE_ADMIN_URL and the derived system URL) and ``launcher.upgrade`` (the
+# pre-upgrade dump). Never re-declare the literal in another module.
+#
+# It lives HERE rather than in the leaf ``launcher.config_source`` because entry's
+# import-order contract (ADR 031 Decision 2, locked by tests) forbids any
+# top-level project import beyond ``env_safety`` — and ``config_source`` imports
+# ``farna.db.url_utils``, so importing it here would pull ``farna.db`` into the
+# pre-scrub import path. The dependency therefore points config_source -> entry.
+#
+# The drift this closes: config_source carried its own ``APP_DB_NAME = "modulo"``
+# while this module created ``farna_control``, so the API connected to a database
+# first boot never created — ``database "modulo" does not exist`` — and never
+# became healthy.
 APP_DB_NAME = "farna_control"
 
 # Strict grammar for any SQL identifier the launcher interpolates into DDL

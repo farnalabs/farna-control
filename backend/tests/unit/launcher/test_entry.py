@@ -1896,6 +1896,52 @@ class TestEnsureAppDatabaseSafety:
         assert "sslmode" not in str(args[0])
 
 
+def test_ensure_app_database_creates_the_name_the_composed_url_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2561: the database first boot CREATES is the one the API connects to.
+
+    The launcher created ``farna_control`` while the composed/pinned
+    ``DATABASE_URL`` named ``modulo``, so the API failed with
+    ``database "modulo" does not exist`` and never became healthy — this is the
+    cross-module pair the single constant must keep in lockstep.
+    """
+    import asyncpg
+
+    from farna.launcher.config_source import compose_config
+    from farna.launcher.secrets_file import LauncherSecrets
+    from farna.launcher.state import LauncherState
+
+    queried: list[object] = []
+    executed: list[str] = []
+
+    class _Conn:
+        async def fetchval(self, _sql: str, *args: object) -> int:
+            queried.extend(args)
+            return 0  # database absent — the CREATE path runs
+
+        async def execute(self, sql: str, *args: object) -> str:
+            executed.append(sql)
+            return "CREATE DATABASE"
+
+        async def close(self) -> None:
+            return None
+
+    async def _connect(*args: object, **kwargs: object) -> object:
+        return _Conn()
+
+    monkeypatch.setattr(asyncpg, "connect", _connect)
+    entry_module._ensure_app_database(SimpleNamespace(postgres_port=5432), SimpleNamespace(postgres_password="pw"))
+
+    assert queried == ["farna_control"]
+    assert executed == ['CREATE DATABASE "farna_control"']
+
+    composed = compose_config(
+        LauncherState(postgres_port=5432, redis_port=6379, api_port=8000),
+        LauncherSecrets(postgres_password="pw", redis_password="pw", state_hmac_key=bytes(range(32))),
+    )
+    assert composed["DATABASE_URL"].rsplit("/", 1)[-1] == "farna_control"
+    assert composed["DATABASE_ADMIN_URL"].rsplit("/", 1)[-1] == "farna_control"
+
+
 # ---------------------------------------------------------------------------
 # Serve-phase helpers moved by the S3776 refactor
 # ---------------------------------------------------------------------------
