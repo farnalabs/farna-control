@@ -161,8 +161,41 @@ def _has_consuming_reference(identifier: str, corpus: str) -> bool:
         rf"\.setdefault\(\s*{ident}\b",
         rf"os\.getenv\(\s*{ident}\b",
         rf"environ\[\s*{ident}\s*\]",
+        # The shared registry's reader (FAR-2563): ``read_env(source, IDENT)``
+        # takes the canonical name then each registered legacy alias, so a name
+        # consumed this way is read exactly like an ``os.environ`` lookup.
+        rf"read_env\(\s*[^,()]+,\s*{ident}\b",
     )
     return any(re.search(pattern, corpus) for pattern in patterns)
+
+
+def _registry_bindings() -> dict[str, str]:
+    """The registry's own constants, as ``identifier -> env name``."""
+    from farna.launcher import env_contract
+
+    return {name: value for name, value in vars(env_contract).items() if isinstance(value, str) and re.fullmatch(_NAMESPACED, value)}
+
+
+def _registry_aliases(text: str, bindings: Mapping[str, str]) -> dict[str, str]:
+    """Identifiers in ``text`` bound to a registry constant (directly or one hop).
+
+    A reader may take the name from the registry (``from ...env_contract import
+    SERVE_SPA_ENV``) and alias it locally (``_SERVE_SPA_ENV = SERVE_SPA_ENV``),
+    which is how ``farna.api.main`` reads the SPA pair. Only a module that
+    imports the registry is resolved, so an unrelated same-named identifier in
+    another file cannot be mistaken for it.
+    """
+    if "env_contract" not in text:
+        return {}
+    resolved = {name: value for name, value in bindings.items() if re.search(rf"\b{re.escape(name)}\b", text)}
+    for identifier, source in re.findall(
+        r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?::[^=\n]+)?=\s*([A-Za-z_][A-Za-z0-9_]*)\s*$",
+        text,
+        re.MULTILINE,
+    ):
+        if source in resolved:
+            resolved[identifier] = resolved[source]
+    return resolved
 
 
 def shim_set_names() -> dict[str, set[str]]:
@@ -175,11 +208,15 @@ def python_read_names() -> set[str]:
     sources = [path.read_text(encoding="utf-8") for path in sorted((REPO_ROOT / PYTHON_SOURCE_DIR).rglob("*.py"))]
     assert sources, f"no Python sources found under {PYTHON_SOURCE_DIR}"
     corpus = "\n".join(sources)
+    registry = _registry_bindings()
     reads: set[str] = set()
     for text in sources:
         for pattern in _LITERAL_READ_PATTERNS:
             reads |= set(re.findall(pattern, text))
         for identifier, name in re.findall(_ENV_CONSTANT_PATTERN, text, re.MULTILINE):
+            if _has_consuming_reference(identifier, corpus):
+                reads.add(name)
+        for identifier, name in _registry_aliases(text, registry).items():
             if _has_consuming_reference(identifier, corpus):
                 reads.add(name)
     return reads
@@ -236,7 +273,13 @@ def test_shim_extractors_find_the_shipped_names() -> None:
         "FARNA_CONTROL_FRONTEND_DIST",
         "FARNA_CONTROL_SERVE_SPA",
     }
-    assert sets[_WINDOWS_LAUNCHER] == {"FARNA_CONTROL_BUNDLED_BIN_DIR"}
+    # FAR-2563: the Windows launcher sets the SPA pair too (a new capability -
+    # before it, Windows exported no SPA name at all and never mounted the SPA).
+    assert sets[_WINDOWS_LAUNCHER] == {
+        "FARNA_CONTROL_BUNDLED_BIN_DIR",
+        "FARNA_CONTROL_FRONTEND_DIST",
+        "FARNA_CONTROL_SERVE_SPA",
+    }
     assert sets[_LINUX_BUNDLE] == {
         "FARNA_CONTROL_BUNDLED_BIN_DIR",
         "FARNA_CONTROL_FRONTEND_DIST",
@@ -284,11 +327,14 @@ def test_linux_launcher_serves_the_bundled_spa() -> None:
 
 
 def test_python_read_extractor_sees_the_spa_seam() -> None:
-    """The SPA seam is a consumed ``*_ENV`` constant, so pin that read shape.
+    """The SPA seam is a consumed constant, so pin that read shape.
 
-    ``main.py`` reads its two env names through module constants rather than
-    inline ``os.environ`` literals; an extractor that only understood literals
-    would report the seam as unread.
+    ``main.py`` takes its two env names from the shared registry
+    (``farna.launcher.env_contract``) and consumes them through ``read_env``
+    rather than an inline ``os.environ`` literal; an extractor that understood
+    only literals (or only a ``.get`` on a local literal constant) would report
+    the seam as unread. FAR-2563 moved the names into the registry precisely so
+    the legacy spelling is read too.
     """
     reads = python_read_names()
 

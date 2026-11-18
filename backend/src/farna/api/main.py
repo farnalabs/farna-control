@@ -154,6 +154,7 @@ from farna.db.capacity import StorageExhaustedError
 from farna.db.health_checks import db_is_at_migration_head, resolve_migration_script_location
 from farna.db.seed import rehash_existing_user, seed_modulo_user, seed_modulo_users
 from farna.db.session import engine as db_engine
+from farna.launcher.env_contract import FRONTEND_DIST_ENV, SERVE_SPA_ENV, read_env
 from farna.otel_bridge import setup_otel, shutdown_otel
 from farna.settings import Settings, get_settings
 
@@ -1438,8 +1439,17 @@ app.openapi = _openapi_schema  # type: ignore[method-assign]
 # (launcher.entry._serve_api); the middleware constants here stay in parity
 # with the nginx values above.
 
-_SERVE_SPA_ENV = "FARNA_CONTROL_SERVE_SPA"
-_FRONTEND_DIST_ENV = "FARNA_CONTROL_FRONTEND_DIST"
+# The names live in ONE registry shared with the launchers and the gates
+# (FAR-2563). The macOS bundle launcher exported the pre-rebrand
+# ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST`` and the Windows launcher
+# exported neither, while this module read the ``FARNA_CONTROL_`` spelling: on
+# macOS the built SPA was never mounted (``/`` answered 404), and on Windows
+# single-port SPA serving did not exist at all. Readers go through ``read_env``
+# so an already-installed bundle that still exports the legacy name keeps
+# working, and so the ``MODULO_LAN_ORIGINS`` spelling the configuration
+# reference publishes is actually honoured.
+_SERVE_SPA_ENV = SERVE_SPA_ENV
+_FRONTEND_DIST_ENV = FRONTEND_DIST_ENV
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _ASSETS_PREFIX = "/assets/"
 # Matches modulo.api.routes.library._MAX_UPLOAD_SIZE (50 MB) — the native
@@ -1493,15 +1503,23 @@ def _init_once_mount_spa(app: FastAPI, env: Mapping[str, str] | None = None) -> 
 
     The mount is registered LAST — after every /api router and the /mcp
     sub-app — so it can never shadow them (locked by the route-collision
-    test). Disabling conditions are loud warnings, never import failures.
+    test). The flag being OFF is a normal configuration (Docker/Fly serve the
+    SPA from nginx) and is logged at DEBUG; a requested mount that cannot be
+    served (no dist directory) is logged at ERROR and never falls back
+    silently. Neither is an import failure.
     """
     source = dict(os.environ if env is None else env)
-    if source.get(_SERVE_SPA_ENV, "").strip().lower() not in _TRUTHY:
+    if read_env(source, _SERVE_SPA_ENV).strip().lower() not in _TRUTHY:
+        # SPA off is a legitimate configuration (Docker/Fly serve it from
+        # nginx), so this is debug-level, not a warning.
+        logger.debug("launcher.serve_spa_disabled env=%s", _SERVE_SPA_ENV)
         return False
-    dist_text = source.get(_FRONTEND_DIST_ENV, "")
+    dist_text = read_env(source, _FRONTEND_DIST_ENV)
     dist = Path(dist_text) if dist_text else None
     if dist is None or not dist.is_dir():
-        logger.warning(
+        # The flag was requested but the bundle has no dist directory: that is
+        # an operator-visible misconfiguration, never a silent fallback.
+        logger.error(
             "launcher.serve_spa_refused reason=dist_missing env=%s value=%s (flag set but no frontend dist directory)",
             _FRONTEND_DIST_ENV,
             dist_text or "<unset>",
@@ -1529,14 +1547,16 @@ def _init_once_mount_spa(app: FastAPI, env: Mapping[str, str] | None = None) -> 
     app.mount("/", _SpaFallbackStaticFiles(directory=dist, html=True), name="spa")
     app.add_middleware(_UploadLimitMiddleware, limit_bytes=_UPLOAD_LIMIT_BYTES)
     app.add_middleware(_SpaCacheHeadersMiddleware)
-    app.add_middleware(HostOriginMiddleware, lan_origins=split_lan_origins(source.get(LAN_ORIGINS_ENV)))
+    app.add_middleware(HostOriginMiddleware, lan_origins=split_lan_origins(read_env(source, LAN_ORIGINS_ENV)))
     logger.info("launcher.serve_spa_enabled dist=%s host_origin=loopback_allowlist", dist)
     return True
 
 
-# Flag-gated (default OFF — Docker/Fly unchanged). Native `modulo start`
-# sets MODULO_SERVE_SPA=1 + MODULO_FRONTEND_DIST=... to serve the SPA from
-# the API port behind the loopback Host/Origin allowlist.
+# Flag-gated (default OFF — Docker/Fly unchanged). Native `farna-control start`
+# (and its bundle launchers) set FARNA_CONTROL_SERVE_SPA=1 +
+# FARNA_CONTROL_FRONTEND_DIST=... to serve the SPA from the API port behind the
+# loopback Host/Origin allowlist. The legacy MODULO_* spellings are still read
+# for bundles installed before the rename (see farna.launcher.env_contract).
 # Prefixed `_init_once_` so the architecture side-effect test permits this
 # single run-once module-level call (see tests/architecture/test_module_side_effects.py).
 _init_once_mount_spa(app, os.environ)

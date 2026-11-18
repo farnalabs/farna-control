@@ -7,11 +7,16 @@ attempt, not a browser the operator controls — reject with 403. A present
 ``Origin`` header must also match the allowlist (cross-origin attacker
 frames/pages never gain access).
 
-LAN mode: ``MODULO_LAN_ORIGINS`` (comma-separated hostnames) widens the
+LAN mode: ``FARNA_CONTROL_LAN_ORIGINS`` (comma-separated hostnames) widens the
 allowlist with the explicitly configured LAN hostnames ONLY — an open allow
-everything behaviour would re-open the rebinding class.
+everything behaviour would re-open the rebinding class. ``MODULO_LAN_ORIGINS``
+is the spelling the configuration reference publishes and is accepted as the
+registered legacy alias (FAR-2563: the middleware used to read the canonical
+name only, so a self-hoster who followed the docs was rejected with a silent
+403). The name comes from :mod:`farna.launcher.env_contract` and the caller
+reads it through ``read_env``.
 
-Only mounted when ``serve_spa`` is ON (``modulo.api.main._init_once_mount_spa``);
+Only mounted when ``serve_spa`` is ON (``farna.api.main._init_once_mount_spa``);
 Docker/Fly are unaffected — nginx terminates the public Host there.
 
 TODO(P3): the middleware is platform-independent; the launcher's Windows
@@ -26,16 +31,19 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from farna.launcher import env_contract
+
 _log = logging.getLogger(__name__)
 
 LOOPBACK_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
-LAN_ORIGINS_ENV = "FARNA_CONTROL_LAN_ORIGINS"
+#: Re-exported from the registry (FAR-2563) so this module never holds its own copy.
+LAN_ORIGINS_ENV = env_contract.LAN_ORIGINS_ENV
 
 __all__ = ["LAN_ORIGINS_ENV", "LOOPBACK_HOSTS", "HostOriginMiddleware", "split_lan_origins"]
 
 
 def split_lan_origins(value: str | None) -> tuple[str, ...]:
-    """Parse the comma-separated ``MODULO_LAN_ORIGINS`` value."""
+    """Parse the comma-separated LAN-origins value (either spelling)."""
     if not value:
         return ()
     return tuple(sorted({item.strip().lower() for item in value.split(",") if item.strip()}))
