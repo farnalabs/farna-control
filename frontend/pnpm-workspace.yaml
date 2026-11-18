@@ -392,3 +392,5 @@ minimumReleaseAgeExclude:
   - '@datadog/browser-rum@7.18.0'
   - '@datadog/js-core@0.0.22'
   - '@lucide/vue@1.74.0'
+  - '@tanstack/query-core@5.108.0'
+  - '@tanstack/vue-query@5.108.0'
