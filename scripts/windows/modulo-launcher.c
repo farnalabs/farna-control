@@ -131,11 +131,16 @@ static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *b
          * NEW capability on Windows, not a rename: before FAR-2563 this launcher
          * exported no SPA name at all, so a Windows install never served the
          * built SPA (build-launcher.ps1 does stage <bundle>\frontend-dist). The
-         * names must be the canonical FARNA_CONTROL_* spelling the API reads;
-         * the anchored C sweep in backend/tests/unit/launcher/test_env_contract.py
-         * is this file's only gate, because windows-installer is skipped on the
-         * default Alpha path - Windows compile coverage is CI-only (and only on
-         * a release run with include_windows=true). */
+         * names must be the canonical FARNA_CONTROL_* spelling the API reads.
+         * .github/workflows/windows-artifacts.yml compiles this file on every
+         * push to main that touches it, on a weekly schedule and on dispatch,
+         * so it does get compiled in CI; but the default Alpha release path
+         * skips windows-native-artifacts/windows-installer unless
+         * include_windows=true, so nothing packages or boots the Windows
+         * bundle there. A compile also cannot compare these names with the
+         * Python readers, so the anchored C sweep in
+         * backend/tests/unit/launcher/test_env_contract.py is the contract
+         * gate. */
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_SERVE_SPA", L"1") ||
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_FRONTEND_DIST", frontend_dist_dir)) {
         free(block);

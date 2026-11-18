@@ -24,6 +24,20 @@ an export that still used the legacy spelling, and an unanchored ``L"NAME"``
 pattern let a canonical name inside a ``/* comment */`` mask a C producer that
 still wrote the legacy name).
 
+Comment stripping is language-aware (:func:`strip_comments`): C block comments
+are removed from C sources only, because in shell ``/*`` is glob and
+parameter-expansion syntax (``${FROM_FILE%/*}``, ``[[ "$target" = /* ]]``) and
+stripping to the next ``*/`` deleted tens of live shell lines - hard gates
+included - so an export inside that span passed the gate unseen (FAR-2563
+review). Everywhere else only full-line ``#`` comments are dropped, so a name
+in a ``#`` comment still cannot count as a write. A shell file that EMBEDS C is
+scanned as shell text: ``scripts/macos/build-native-bundle.sh`` compiles its
+launcher heredoc, and that build has its own gate over the compiled source
+(``spa_env_contract_gate``), so the names are still held to the registry there.
+A stripper that eats live code fails loudly:
+``test_stripping_keeps_live_code`` pins the known load-bearing lines of each
+guarded file against the stripped text.
+
 The gate has three halves, all structural:
 
 * producers - the service scripts (shell / C / Kubernetes) that supply process
@@ -46,10 +60,14 @@ aliases (``MODULO_DB``, ``MODULO_USERS``, ...) are a different mechanism -
 ``farna.settings._product_aliases`` owns those pairs, so a compose file setting
 one is not drift; the documentation half above accepts that mechanism.
 
-Windows note: ``windows-installer`` is skipped on the default Alpha path
-(``.github/workflows/release-unified.yml``), so ``scripts/windows/modulo-launcher.c``
-has no compile coverage on the default path. The anchored C pattern below is
-its compile-free gate.
+Windows note: ``.github/workflows/windows-artifacts.yml`` DOES compile
+``scripts/windows/modulo-launcher.c`` - on every push to ``main`` that touches
+it, on a weekly schedule and on dispatch - so the C is compiled in CI. What the
+default Alpha release path does not do is package or boot the Windows bundle:
+``.github/workflows/release-unified.yml`` runs ``windows-native-artifacts`` and
+``windows-installer`` only when ``include_windows=true``. A compile also cannot
+compare the launcher's names with the names Python reads, so the anchored C
+pattern below is the contract gate either way.
 """
 
 import ast
@@ -174,34 +192,67 @@ def _legacy_to_canonical() -> dict[str, str]:
     return {legacy: canonical for canonical, aliases in env_contract.LEGACY_ALIASES.items() for legacy in aliases}
 
 
-def _strip_c_block_comments(text: str) -> str:
-    """Drop ``/* ... */`` bodies: a name inside one is documentation, not a write.
+#: C-family block comments (``/* ... */``) and full-line ``//`` comments.
+_C_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+_C_LINE_COMMENT_RE = re.compile(r"^[ \t]*//.*$", re.MULTILINE)
+#: A FULL-LINE ``#`` comment (shell, YAML). Never an inline one: mid-line ``#``
+#: is normal shell parameter syntax (``${VAR#prefix}``, ``${#array[@]}``).
+_HASH_LINE_COMMENT_RE = re.compile(r"^[ \t]*#.*$", re.MULTILINE)
+#: Extensions whose ``/* ... */`` really is a comment.
+_C_SUFFIXES = frozenset({".c", ".h"})
 
-    Both directions of the gate match on this stripped text, so a canonical name
-    in a comment can satisfy neither the drift check nor the positive
-    "must be produced" check - the false pass the unanchored ``L"NAME"`` pattern
+
+def strip_comments(text: str, relative_path: str) -> str:
+    """Remove only the comment syntax the file's OWN language has.
+
+    Both directions of the gate match on the stripped text, so a name inside a
+    comment can satisfy neither the drift check nor the positive
+    "must be produced" check - the false pass an unanchored ``L"NAME"`` pattern
     allowed (FAR-2563 review).
+
+    Stripping ``/* ... */`` from a SHELL script is data loss, not cleanup: in
+    shell ``/*`` is glob and parameter-expansion syntax (``${FROM_FILE%/*}``,
+    ``[[ "$target" = /* ]]``), so the block-comment regex deleted every live
+    line up to the next ``*/`` - hard gates included - and an export inside the
+    span passed the gate unseen (FAR-2563 review). C block comments are
+    therefore stripped for C sources only; everywhere else only full-line ``#``
+    comments are dropped, so a name in a shebang or a ``#`` comment cannot count
+    as a write. (A shell file that embeds C is scanned as shell text; the macOS
+    bundle's launcher heredoc is additionally gated at build time over the
+    compiled source, so its names do not rely on this sweep alone.)
     """
-    return re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    if Path(relative_path).suffix.lower() in _C_SUFFIXES:
+        return _C_LINE_COMMENT_RE.sub("", _C_BLOCK_COMMENT_RE.sub("", text))
+    return _HASH_LINE_COMMENT_RE.sub("", text)
 
 
-def _matched_names(text: str, pattern: str) -> set[str]:
-    return set(re.findall(pattern, _strip_c_block_comments(text), re.MULTILINE))
+def _matched_names(text: str, pattern: str, *, relative_path: str) -> set[str]:
+    return set(re.findall(pattern, strip_comments(text, relative_path), re.MULTILINE))
 
 
-def contract_problems(text: str, *, writes: tuple[str, ...] = (), reads: tuple[str, ...] = ()) -> list[str]:
+def contract_problems(
+    text: str,
+    *,
+    writes: tuple[str, ...] = (),
+    reads: tuple[str, ...] = (),
+    relative_path: str,
+) -> list[str]:
     """Return every one-sided ``MODULO_*`` production/consumption in ``text``.
 
     A ``MODULO_*`` name passes only when it is a registered legacy alias AND its
     canonical name is produced in the SAME context (same match set for that
     pattern kind), or when it is a documented exemption. Everything else is a
     drift report.
+
+    ``relative_path`` selects the comment syntax stripped before matching (see
+    :func:`strip_comments`); synthetic C text must say so, or its comments are
+    treated as live code.
     """
     mapping = _legacy_to_canonical()
     problems: list[str] = []
     for verb, participle, patterns in (("writes", "written", writes), ("reads", "read", reads)):
         for pattern in patterns:
-            names = _matched_names(text, pattern)
+            names = _matched_names(text, pattern, relative_path=relative_path)
             for legacy in sorted(name for name in names if name.startswith(env_contract.LEGACY_PREFIX)):
                 canonical = mapping.get(legacy)
                 if canonical is not None:
@@ -287,7 +338,7 @@ def test_read_env_leaves_an_unregistered_name_alone() -> None:
 @pytest.mark.parametrize("script", _SERVICE_SCRIPTS, ids=[script.relative_path for script in _SERVICE_SCRIPTS])
 def test_service_script_has_no_one_sided_rebrand_drift(script: ServiceScript) -> None:
     text = script.path().read_text(encoding="utf-8")
-    assert not contract_problems(text, writes=script.writes, reads=script.reads)
+    assert not contract_problems(text, writes=script.writes, reads=script.reads, relative_path=script.relative_path)
 
 
 @pytest.mark.parametrize(
@@ -298,7 +349,7 @@ def test_service_script_has_no_one_sided_rebrand_drift(script: ServiceScript) ->
 def test_producers_emit_the_canonical_names(relative_path: str, pattern: str, required: tuple[str, ...]) -> None:
     """Positive half: the canonical name is actually produced, not merely unopposed."""
     text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
-    produced = _matched_names(text, pattern)
+    produced = _matched_names(text, pattern, relative_path=relative_path)
     for canonical in required:
         assert canonical in produced, f"{relative_path} must produce {canonical}; produced={sorted(produced)}"
 
@@ -310,25 +361,29 @@ def test_the_sweep_sees_the_real_modulo_names_it_claims_to_check() -> None:
     stop matching them the gate would pass vacuously.
     """
     install = (REPO_ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
-    produced = _matched_names(install, _pattern(SHELL_EXPORT_WRITE))
+    produced = _matched_names(install, _pattern(SHELL_EXPORT_WRITE), relative_path="scripts/install.sh")
     assert {"MODULO_INSTALL_ROOT", "MODULO_BIN_DIR"} <= produced
 
     macos_install = (REPO_ROOT / "scripts" / "macos" / "install.sh").read_text(encoding="utf-8")
-    consumed = _matched_names(macos_install, _pattern(SHELL_READ))
+    consumed = _matched_names(macos_install, _pattern(SHELL_READ), relative_path="scripts/macos/install.sh")
     assert {"MODULO_INSTALL_ROOT", "MODULO_DATA_DIR"} <= consumed
 
 
 def test_the_sweep_covers_the_windows_producer() -> None:
-    """Windows has no build gate on the Alpha path, so this sweep IS its gate.
+    """This sweep is the name-level contract gate for the Windows producer.
 
-    ``windows-installer`` is skipped unless a release run sets
-    ``include_windows=true``, so nothing compiles ``modulo-launcher.c`` by
-    default. The anchored pattern must therefore see exactly the two SPA names
+    ``.github/workflows/windows-artifacts.yml`` does compile
+    ``modulo-launcher.c`` - on push to ``main`` that touches it, on a weekly
+    schedule and on dispatch - but a compile cannot compare the names here with
+    the names Python reads, and the default Alpha release path skips
+    ``windows-native-artifacts`` / ``windows-installer`` unless
+    ``include_windows=true``, so nothing packages or boots the Windows bundle
+    there. The anchored pattern must therefore see exactly the two SPA names
     the launcher appends AND must not count the inherited-env allowlist
     (``L"SYSTEMROOT"`` and friends are names, but they are not writes).
     """
     launcher = (REPO_ROOT / "scripts" / "windows" / "modulo-launcher.c").read_text(encoding="utf-8")
-    written = _matched_names(launcher, _pattern(C_APPEND_ENV_WRITE))
+    written = _matched_names(launcher, _pattern(C_APPEND_ENV_WRITE), relative_path="scripts/windows/modulo-launcher.c")
 
     # Exactly the three service-contract appends: the inherited-env allowlist
     # (L"SYSTEMROOT" and friends) is not a write, and the name class excludes
@@ -348,7 +403,7 @@ def test_the_sweep_covers_the_windows_producer() -> None:
 def test_gate_flags_the_far_2563_launcher_drift() -> None:
     """Mutation: the exact pre-fix launcher body must be reported, not passed."""
     pre_fix = 'setenv("PYTHONPATH", src, 1);\nsetenv("MODULO_SERVE_SPA", "1", 1);\nsetenv("MODULO_FRONTEND_DIST", frontend_dist, 1);\n'
-    problems = contract_problems(pre_fix, writes=(_pattern(C_SETENV_WRITE),))
+    problems = contract_problems(pre_fix, writes=(_pattern(C_SETENV_WRITE),), relative_path="scripts/macos/build-native-bundle.sh")
 
     assert len(problems) == 2, problems
     assert any(env_contract.SERVE_SPA_ENV in problem for problem in problems)
@@ -358,7 +413,7 @@ def test_gate_flags_the_far_2563_launcher_drift() -> None:
 def test_gate_flags_a_windows_write_that_uses_the_legacy_names() -> None:
     """Mutation: the Windows shape, with the pre-rebrand names, is drift."""
     drifted = 'if (!append_environment_entry(block, LEN, &used, L"MODULO_SERVE_SPA", L"1") ||\n    !append_environment_entry(block, LEN, &used, L"MODULO_FRONTEND_DIST", dist)) {\n'
-    problems = contract_problems(drifted, writes=(_pattern(C_APPEND_ENV_WRITE),))
+    problems = contract_problems(drifted, writes=(_pattern(C_APPEND_ENV_WRITE),), relative_path="synthetic.c")
 
     assert len(problems) == 2, problems
 
@@ -374,19 +429,111 @@ def test_gate_is_not_satisfied_by_canonical_names_inside_a_c_comment() -> None:
     masked = '/* FARNA_CONTROL_SERVE_SPA FARNA_CONTROL_FRONTEND_DIST */\n/* setenv("FARNA_CONTROL_SERVE_SPA", "1", 1); */\nif (!append_environment_entry(block, LEN, &used, L"MODULO_SERVE_SPA", L"1") ||\n    !append_environment_entry(block, LEN, &used, L"MODULO_FRONTEND_DIST", dist)) {\n'
     writes = (_pattern(C_APPEND_ENV_WRITE),)
 
-    problems = contract_problems(masked, writes=writes)
+    problems = contract_problems(masked, writes=writes, relative_path="synthetic.c")
     assert len(problems) == 2, problems
-    produced = _matched_names(masked, writes[0])
+    produced = _matched_names(masked, writes[0], relative_path="synthetic.c")
     assert env_contract.SERVE_SPA_ENV not in produced
     assert env_contract.FRONTEND_DIST_ENV not in produced
     # ...nor does a commented-out setenv() call count for the macOS shape.
-    assert env_contract.SERVE_SPA_ENV not in _matched_names(masked, _pattern(C_SETENV_WRITE))
+    assert env_contract.SERVE_SPA_ENV not in _matched_names(masked, _pattern(C_SETENV_WRITE), relative_path="synthetic.c")
+
+
+def test_a_shell_glob_span_is_not_treated_as_a_c_block_comment() -> None:
+    """Mutation: the FAR-2563 review's false pass, reproduced exactly.
+
+    In shell ``${FROM_FILE%/*}`` opens nothing and ``${bundle_dir##*/}`` closes
+    nothing - both are parameter expansions. A block-comment stripper deleted
+    every line between them, hard gates included, so an export in that span was
+    invisible to the gate. This is the real install.sh shape, reduced.
+    """
+    shell = 'from_file_dir="${FROM_FILE%/*}"\nexport MODULO_BRAND_NEW_KNOB="1"\nbundle_dir_name="${bundle_dir##*/}"\n'
+    stripped = strip_comments(shell, "scripts/install.sh")
+    assert 'export MODULO_BRAND_NEW_KNOB="1"' in stripped
+
+    problems = contract_problems(shell, writes=(_pattern(SHELL_EXPORT_WRITE),), relative_path="scripts/install.sh")
+    assert len(problems) == 1, problems
+    assert "MODULO_BRAND_NEW_KNOB" in problems[0]
+
+
+def test_a_shell_test_operator_is_not_treated_as_a_c_comment_opener() -> None:
+    """The build-native-bundle.sh shape: ``[[ "$target" = /* ]]`` opened a span.
+
+    The closing ``*/`` there is a real C comment terminator inside the launcher
+    heredoc, so the old stripper swallowed everything between the two - the
+    symlink-escape guard and the ``setenv`` lines with it.
+    """
+    shell = 'if [[ "$target" = /* ]]; then\n  setenv("MODULO_BRAND_NEW_KNOB", "1", 1);\nfi\n/* launcher comment */\n'
+    problems = contract_problems(shell, writes=(_pattern(C_SETENV_WRITE),), relative_path="scripts/macos/build-native-bundle.sh")
+
+    assert len(problems) == 1, problems
+    assert "MODULO_BRAND_NEW_KNOB" in problems[0]
+
+
+#: Load-bearing lines a comment stripper must leave INTACT, per guarded file.
+#: If a future stripper starts eating live code again (the FAR-2563 review's
+#: ``/*``-in-shell defect), these disappear from the stripped text and this
+#: table fails loudly instead of silently re-opening the false pass.
+_STRIPPED_TEXT_MUST_KEEP: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "scripts/install.sh",
+        (
+            'from_file_dir="${FROM_FILE%/*}"',
+            "the SIGNED release manifest must sit beside the tarball",
+            'verify_shipped_manifest "${manifest_file}" "${signature_file}" "${FROM_FILE}" "bundle-v${VERSION_NUM}"',
+            'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"',
+            'export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"',
+        ),
+    ),
+    (
+        "scripts/macos/build-native-bundle.sh",
+        (
+            '[[ "$target" = /* ]]',
+            "symlink escapes app bundle",
+            'setenv("FARNA_CONTROL_BUNDLED_BIN_DIR", bin_dir, 1);',
+            'setenv("FARNA_CONTROL_SERVE_SPA", "1", 1);',
+            'setenv("FARNA_CONTROL_FRONTEND_DIST", frontend_dist, 1);',
+        ),
+    ),
+    (
+        "scripts/windows/modulo-launcher.c",
+        (
+            'L"FARNA_CONTROL_BUNDLED_BIN_DIR"',
+            'L"FARNA_CONTROL_SERVE_SPA"',
+            'L"FARNA_CONTROL_FRONTEND_DIST"',
+        ),
+    ),
+    (
+        "deploy/fly/entrypoint.sh",
+        ('export FARNA_CONTROL_SYSTEM_DATABASE_URL="$SYSTEM_URL"',),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "kept_lines"),
+    _STRIPPED_TEXT_MUST_KEEP,
+    ids=[relative_path for relative_path, _kept in _STRIPPED_TEXT_MUST_KEEP],
+)
+def test_stripping_keeps_live_code(relative_path: str, kept_lines: tuple[str, ...]) -> None:
+    """Anti-regression: stripping may delete comments, never live code."""
+    stripped = strip_comments((REPO_ROOT / relative_path).read_text(encoding="utf-8"), relative_path)
+    missing = [line for line in kept_lines if line not in stripped]
+
+    assert not missing, f"{relative_path}: comment stripping deleted live code: {missing}"
+
+
+def test_a_commented_out_shell_export_is_not_a_production() -> None:
+    """Full-line ``#`` comments are still stripped, so a commented export cannot pass."""
+    text = '# export FARNA_CONTROL_INSTALL_ROOT="/opt"\n# export MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"\n'
+    produced = _matched_names(text, _pattern(SHELL_EXPORT_WRITE), relative_path="scripts/install.sh")
+
+    assert not produced
 
 
 def test_gate_flags_a_legacy_read_with_no_canonical_read() -> None:
     """Mutation: a reader that only accepts the pre-rebrand spelling is drift."""
     drifted = 'INSTALL_ROOT="${MODULO_INSTALL_ROOT:-/opt}"\n'
-    problems = contract_problems(drifted, reads=(_pattern(SHELL_READ),))
+    problems = contract_problems(drifted, reads=(_pattern(SHELL_READ),), relative_path="scripts/install.sh")
 
     assert len(problems) == 1, problems
     assert env_contract.INSTALL_ROOT_ENV in problems[0]
@@ -399,7 +546,7 @@ def test_gate_flags_an_echoed_canonical_name_that_is_not_exported() -> None:
     name while still exporting only the legacy one, and a file-text check passed.
     """
     drifted = 'export MODULO_SYSTEM_DATABASE_URL="$SYSTEM_URL"\necho "FARNA_CONTROL_SYSTEM_DATABASE_URL fixed"\n'
-    problems = contract_problems(drifted, writes=(_pattern(SHELL_EXPORT_WRITE),))
+    problems = contract_problems(drifted, writes=(_pattern(SHELL_EXPORT_WRITE),), relative_path="deploy/fly/entrypoint.sh")
 
     assert len(problems) == 1, problems
     assert env_contract.SYSTEM_DATABASE_URL_ENV in problems[0]
@@ -408,7 +555,7 @@ def test_gate_flags_an_echoed_canonical_name_that_is_not_exported() -> None:
 def test_gate_flags_an_unregistered_legacy_name() -> None:
     """Mutation: a brand-new MODULO_-only variable must be registered or renamed."""
     invented = 'export MODULO_BRAND_NEW_KNOB="1"\n'
-    problems = contract_problems(invented, writes=(_pattern(SHELL_EXPORT_WRITE),))
+    problems = contract_problems(invented, writes=(_pattern(SHELL_EXPORT_WRITE),), relative_path="scripts/install.sh")
 
     assert len(problems) == 1, problems
     assert "MODULO_BRAND_NEW_KNOB" in problems[0]
@@ -417,17 +564,17 @@ def test_gate_flags_an_unregistered_legacy_name() -> None:
 def test_gate_passes_a_correctly_paired_export() -> None:
     """The shipped installer pattern: canonical export plus a compatibility alias."""
     paired = 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"\nexport MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"\n'
-    assert not contract_problems(paired, writes=(_pattern(SHELL_EXPORT_WRITE),))
+    assert not contract_problems(paired, writes=(_pattern(SHELL_EXPORT_WRITE),), relative_path="scripts/install.sh")
 
 
 def test_gate_passes_a_paired_read() -> None:
     paired = 'INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-/opt}}"\n'
-    assert not contract_problems(paired, reads=(_pattern(SHELL_READ),))
+    assert not contract_problems(paired, reads=(_pattern(SHELL_READ),), relative_path="scripts/install.sh")
 
 
 def test_gate_passes_an_exempt_knob() -> None:
     exempt = 'X="${MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET:-}"\n'
-    assert not contract_problems(exempt, reads=(_pattern(SHELL_READ),))
+    assert not contract_problems(exempt, reads=(_pattern(SHELL_READ),), relative_path="scripts/macos/install.sh")
 
 
 # ---------------------------------------------------------------------------

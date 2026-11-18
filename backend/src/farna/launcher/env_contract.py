@@ -16,9 +16,13 @@ the value was silently written and never read.
   name, while :mod:`farna.api.main` read ``FARNA_CONTROL_SERVE_SPA`` /
   ``FARNA_CONTROL_FRONTEND_DIST``. On macOS the built SPA was therefore never
   mounted and ``/`` answered 404; on Windows single-port SPA serving did not
-  exist at all (this module's Windows producer adds it, and only a release run
-  with ``include_windows=true`` compiles it - ``windows-installer`` is skipped
-  on the default Alpha path, so Windows compile coverage is CI-only).
+  exist at all, and this module's Windows producer adds it.
+  ``.github/workflows/windows-artifacts.yml`` compiles that launcher on every
+  push to ``main`` that touches it, on a weekly schedule and on dispatch, so the
+  C does get compiled in CI. What the default Alpha release path does NOT do is
+  package or boot the Windows bundle: ``release-unified.yml`` runs
+  ``windows-native-artifacts`` / ``windows-installer`` only when
+  ``include_windows=true``.
 * FAR-2563 (second half) - ``MODULO_LAN_ORIGINS`` was documented as the
   operator knob that widens the loopback allowlist, but the middleware read
   ``FARNA_CONTROL_LAN_ORIGINS`` directly, so a self-hoster who followed the
@@ -34,8 +38,10 @@ script writes or reads a ``MODULO_`` name without its canonical counterpart in
 the same file, or when a Python reader takes a registered name any way other
 than through :func:`read_env`. The macOS bundle additionally enforces the SPA
 pair at BUILD time (``scripts/macos/build-native-bundle.sh``), mirroring the
-FAR-2554 gate; the Windows launcher has no build gate, so the anchored C sweep
-in that test module is its only compile-free gate.
+FAR-2554 gate; the Windows launcher has no build-time CONTRACT gate, so the
+anchored C sweep in that test module is what pins its names - the CI compile in
+``windows-artifacts.yml`` proves the C compiles, not that its names agree with
+the Python readers.
 
 Deliberately a leaf module: no project imports and no environment reads at
 import time, so it is cheap and side-effect free for any caller.
