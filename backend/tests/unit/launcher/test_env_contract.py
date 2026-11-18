@@ -850,6 +850,14 @@ def test_gate_flags_a_redeclared_registered_name() -> None:
 #: an operator who sets the documented spelling is silently ignored - and the
 #: fix is to make it live and DELETE its line here (the companion test fails on
 #: a stale entry).
+#:
+#: ``MODULO_ENV`` is the one deliberate exception, not a latent gap: it was the
+#: only legacy spelling that was not ``MODULO_<FIELD-NAME>``, so removing the
+#: alias set dropped it, and ``docs/configuration-reference.md`` now tells
+#: operators to set ``FARNA_CONTROL_ENV`` instead
+#: (``tests/architecture/test_settings_environment_aliases.py`` pins the drop).
+#: It stays listed so the documented-but-unaccepted gate records that decision
+#: rather than silently losing the spelling; do NOT revive the alias.
 DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
     {
         "MODULO_ADMIN_TOKEN",
@@ -860,6 +868,8 @@ DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
         "MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT",
         "MODULO_DOCKER_HOST",
         "MODULO_E2B_API_KEY",
+        # Deliberately dropped and documented as not read; see the note above.
+        "MODULO_ENV",
         "MODULO_KUBERNETES_ENABLED",
         "MODULO_KUBERNETES_NAMESPACE",
         "MODULO_KUBERNETES_SERVICE_ACCOUNT",
