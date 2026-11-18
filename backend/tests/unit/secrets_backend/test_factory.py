@@ -2,6 +2,7 @@
 
 import contextlib
 import importlib
+import logging
 from collections.abc import Iterator
 from unittest.mock import patch
 
@@ -99,17 +100,43 @@ def test_external_backend_constructed_regardless_of_fernet_key(external_backend:
     assert isinstance(backend, expected_cls)
 
 
-def test_unconfigured_vault_backend_fails_hard_not_silently(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A genuinely unconfigured external backend fails in its constructor.
+def test_unconfigured_vault_backend_fails_hard_not_silently(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A genuinely unconfigured external backend warns, then fails in its constructor.
 
-    The factory warns about the missing configuration but never substitutes a
+    The factory names the missing configuration but never substitutes a
     different backend: a silent switch is exactly the failure this ticket
     removes.
     """
     with _stub_external_backend(monkeypatch, "vault"):
         monkeypatch.delenv("VAULT_ADDR", raising=False)
-        with pytest.raises(ValueError, match="VAULT_ADDR is not set"):
+        with caplog.at_level(logging.WARNING, logger="farna.core.secrets_backend"), pytest.raises(ValueError, match="VAULT_ADDR is not set"):
             create_secrets_backend(fernet_key=_KEY, backend_name="vault")
+
+    warnings = [record for record in caplog.records if "VAULT_ADDR" in record.getMessage()]
+    assert warnings, "expected the factory to warn that VAULT_ADDR is unset"
+
+
+def test_aws_backend_without_static_credentials_is_not_warned_about(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AWS resolves credentials through its ambient chain, so no static key is not a misconfiguration.
+
+    Warning on every factory call for a legitimately configured AWS deployment
+    is log noise, which is why only Vault has an "unconfigured" signal.
+    """
+    with _stub_external_backend(monkeypatch, "aws") as expected_cls:
+        monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+        monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+        with caplog.at_level(logging.WARNING, logger="farna.core.secrets_backend"):
+            backend = create_secrets_backend(fernet_key=None, backend_name="aws")
+
+    assert isinstance(backend, expected_cls)
+    factory_warnings = [record for record in caplog.records if record.name == "farna.core.secrets_backend"]
+    assert not factory_warnings, f"factory warned about a correctly configured AWS backend: {factory_warnings}"
 
 
 def test_external_secrets_flag_is_not_registered() -> None:
@@ -146,9 +173,27 @@ def test_external_secrets_licence_helper_is_removed() -> None:
     assert not hasattr(secrets_module, "_check_external_secrets_licensed")
 
 
-def test_env_var_used_when_no_backend_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FARNA_CONTROL_SECRETS_BACKEND", "fernet")
-    backend = create_secrets_backend(fernet_key=_KEY)
+def test_env_var_selects_backend_when_no_backend_name(monkeypatch: pytest.MonkeyPatch, external_backend: tuple[str, type]) -> None:
+    """``FARNA_CONTROL_SECRETS_BACKEND`` is read when no explicit name is passed.
+
+    The env var is set to an EXTERNAL backend, because setting it to ``fernet``
+    would assert nothing: fernet is also the fallback when the variable is
+    unset, so the test would pass even if the env var were never read.
+    """
+    backend_name, expected_cls = external_backend
+    monkeypatch.setenv("FARNA_CONTROL_SECRETS_BACKEND", backend_name.upper())
+
+    backend = create_secrets_backend(fernet_key=None)
+
+    assert isinstance(backend, expected_cls)
+
+
+def test_explicit_backend_name_beats_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller-supplied ``backend_name`` wins over the env var."""
+    monkeypatch.setenv("FARNA_CONTROL_SECRETS_BACKEND", "vault")
+
+    backend = create_secrets_backend(fernet_key=_KEY, backend_name="fernet")
+
     assert isinstance(backend, FernetSecretsBackend)
 
 
@@ -162,7 +207,7 @@ def test_env_var_used_when_no_backend_name(monkeypatch: pytest.MonkeyPatch) -> N
     ],
 )
 def test_backend_name_normalized(monkeypatch: pytest.MonkeyPatch, name: str, source: str) -> None:
-    """Both ``backend_name`` and ``MODULO_SECRETS_BACKEND`` are lowercased/stripped before matching."""
+    """Both ``backend_name`` and ``FARNA_CONTROL_SECRETS_BACKEND`` are lowercased/stripped before matching."""
     with _stub_external_backend(monkeypatch, "vault") as expected_cls:
         if source == "env":
             monkeypatch.setenv("FARNA_CONTROL_SECRETS_BACKEND", name)
