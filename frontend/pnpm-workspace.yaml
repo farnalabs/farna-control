@@ -394,3 +394,4 @@ minimumReleaseAgeExclude:
   - '@lucide/vue@1.74.0'
   - '@tanstack/query-core@5.108.0'
   - '@tanstack/vue-query@5.108.0'
+  - '@lucide/vue@1.75.0'
