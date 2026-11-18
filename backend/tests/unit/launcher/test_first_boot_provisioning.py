@@ -251,9 +251,12 @@ def test_provisioning_fails_loudly_without_a_composed_url(monkeypatch: pytest.Mo
 def test_the_database_name_has_exactly_one_owner() -> None:
     """No second literal may reintroduce the FAR-2560 drift."""
     assert APP_DB_NAME == "farna_control"
-    assert not hasattr(entry_module, "APP_DB_NAME")
-    assert upgrade._APP_DB_NAME == APP_DB_NAME
-    assert upgrade._POSTGRES_HOST == POSTGRES_HOST
+    # The single definition lives in the module that CREATES the database (the
+    # FAR-2561 arrangement); the composers import that one object.
+    assert entry_module.APP_DB_NAME is APP_DB_NAME
+    assert config_source.APP_DB_NAME is APP_DB_NAME
+    assert upgrade.APP_DB_NAME is APP_DB_NAME
+    assert upgrade._POSTGRES_HOST is POSTGRES_HOST
 
 
 def test_composed_urls_name_that_one_database() -> None:

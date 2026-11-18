@@ -403,7 +403,7 @@ Farna Control's CI does **not** currently scan the built container images. Trivy
 required CI check (`ci.yml`), scanning the repository filesystem for dependency CVEs
 and misconfigurations - it does not scan the built images. The `publish-images.yml`
 workflow builds each backend/frontend image once and gates the GHCR push on image
-smoke checks (`import modulo`, `nginx -t`) only, with no critical-vulnerability gate
+smoke checks (`import farna`, `nginx -t`) only, with no critical-vulnerability gate
 on the push. The automated trivy/grype image gates, digest-drift guard and
 cosign/SBOM attestation are the D4 GA/CI follow-up item (see `docs/architecture.md`
 §CI/CD Pipeline).

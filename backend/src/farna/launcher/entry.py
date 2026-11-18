@@ -90,26 +90,41 @@ BUNDLED_BIN_DIR_ENV = "FARNA_CONTROL_BUNDLED_BIN_DIR"
 # layout, the verification and the diagnostics cannot drift apart.
 REQUIRED_BUNDLED_BINARIES: tuple[str, ...] = ("initdb", "postgres", "pg_isready", "redis-server", "redis-cli")
 POSTGRES_HOST = "127.0.0.1"
-# NOTE: there is deliberately NO application-database constant here. The
-# database the launcher provisions is DERIVED from the composed DATABASE_URL
-# (``config_source.compose_config`` owns the name) so "created" and
-# "connected" can never disagree — see FAR-2560 and
-# ``_ensure_app_database``. The module top-level farna import is pinned to
-# env_safety alone, so the name cannot be imported at module scope here.
+# THE single definition of the app database name (FAR-2561). This module CREATES
+# the database (``_ensure_app_database``), so it owns the name; every composer of
+# a database URL imports it from here — ``launcher.config_source`` (DATABASE_URL,
+# DATABASE_ADMIN_URL and the derived system URL) and ``launcher.upgrade`` (the
+# pre-upgrade dump). Never re-declare the literal in another module.
+#
+# It lives HERE rather than in the leaf ``launcher.config_source`` because entry's
+# import-order contract (ADR 031 Decision 2, locked by tests) forbids any
+# top-level project import beyond ``env_safety`` — and ``config_source`` imports
+# ``farna.db.url_utils``, so importing it here would pull ``farna.db`` into the
+# pre-scrub import path. The dependency therefore points config_source -> entry.
+#
+# The drift this closes: config_source carried its own ``APP_DB_NAME = "modulo"``
+# while this module created ``farna_control``, so the API connected to a database
+# first boot never created — ``database "modulo" does not exist`` — and never
+# became healthy.
+#
+# ``_ensure_app_database`` targets the database the composed DATABASE_URL names
+# (that URL embeds THIS constant), so "created" and "connected" stay in lockstep
+# even when an operator retargets the URL (FAR-2560).
+APP_DB_NAME = "farna_control"
+
+# Database names a PRE-RENAME data dir may hold its data in. Before the rebrand
+# (commit 77950d01a^) the app database was ``modulo``, so an operator who
+# installed then has every table there; the composed name is now
+# ``farna_control``. Without adoption the provisioner would create an empty
+# ``farna_control``, leave the real data untouched in ``modulo`` and boot
+# successfully against a blank database — silent, and indistinguishable from a
+# fresh install. Adopted by RENAME at boot, when no client is connected.
+LEGACY_APP_DB_NAMES: tuple[str, ...] = ("modulo",)
 
 # Strict grammar for any SQL identifier the launcher interpolates into DDL
 # (CREATE DATABASE cannot take a bound parameter). re.ASCII pins \w to
 # [A-Za-z0-9_] so the accepted set stays byte-identical to the old class.
 _SQL_IDENTIFIER_RE = re.compile(r"[A-Za-z_]\w*", re.ASCII)
-
-# Database names a PRE-RENAME data dir may hold its data in. Before the
-# rebrand (commit 77950d01a^) ``config_source.APP_DB_NAME`` was ``modulo``, so
-# an operator who installed then has every table in ``modulo``; the composed
-# name is now ``farna_control``. Without adoption the provisioner would create
-# an empty ``farna_control``, leave the real data untouched in ``modulo`` and
-# boot successfully against a blank database — silent, and indistinguishable
-# from a fresh install. Adopted by RENAME at boot, when no client is connected.
-LEGACY_APP_DB_NAMES: tuple[str, ...] = ("modulo",)
 
 
 def _validate_sql_identifier(name: str, what: str) -> str:
@@ -131,6 +146,7 @@ _DETACH_HANDSHAKE_TIMEOUT_SECONDS = 300.0
 # The launcher-owned public surface (consumed by the CLI group; vulture's
 # dead-code gate special-cases __all__).
 __all__ = [
+    "APP_DB_NAME",
     "BUNDLED_BIN_DIR_ENV",
     "REQUIRED_BUNDLED_BINARIES",
     "BootError",

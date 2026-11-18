@@ -75,7 +75,7 @@ their own.
 | OpenAI | `OpenAIBackend` | `farna.model_backends.openai` |
 | Azure OpenAI | `AzureOpenAIBackend` | `farna.model_backends.azure_openai` |
 | Ollama | `OllamaBackend` | `farna.model_backends.ollama` |
-| Custom plugin | `YourBackend` | plugin group `farna.model_backends.your_backend` |
+| Custom plugin | `YourBackend` | plugin group `farna.model_backends` (entry point name `your_backend`) |
 
 > The per-provider classes in this table are the authoring surface, but most are
 > not the objects the hub instantiates: `ModelBackendHub._build_backend`

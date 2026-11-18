@@ -43,7 +43,7 @@ uv sync
 Set environment variables in `.env`:
 
 ```env
-DATABASE_URL=postgresql+asyncpg://modulo:modulo@localhost:5434/farna_control
+DATABASE_URL=postgresql+asyncpg://farna_control:farna_control@localhost:5434/farna_control
 SECRET_KEY=<random-64-char-string>
 FERNET_KEY=<random-44-char-base64>
 ```
@@ -491,13 +491,13 @@ watchdog service is removed), so you do not need a checkout to run it. The
 asset is listed in the release `SHA256SUMS` and `RELEASE_MANIFEST.json`.
 
 **1. Create the environment file.** The stack will not start without it: compose
-refuses to run (naming the variable) until `MODULO_DB_PASSWORD`, `SECRET_KEY`,
+refuses to run (naming the variable) until `FARNA_CONTROL_DB_PASSWORD`, `SECRET_KEY`,
 `FERNET_KEY`, `SAQ_AUTH_USERNAME` and `SAQ_AUTH_PASSWORD` are set.
 
 ```bash
 cp .env.prod.example deploy/compose/.env
 # then edit deploy/compose/.env and generate the REQUIRED values:
-#   MODULO_DB_PASSWORD=$(openssl rand -hex 24)
+#   FARNA_CONTROL_DB_PASSWORD=$(openssl rand -hex 24)
 #   SECRET_KEY=$(openssl rand -base64 48)
 #   FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 #   SAQ_AUTH_PASSWORD=$(openssl rand -hex 24)
@@ -623,12 +623,12 @@ supervisord programs inside the `modulo` container
 They run the same commands the root `docker-compose.yml` uses for its
 separate `saq-runner` / `saq-system` services. On an existing deployment
 whose `.env` predates this, add the now-required variables before upgrading
-(`MODULO_DB_PASSWORD`, `SAQ_AUTH_USERNAME`, `SAQ_AUTH_PASSWORD`) - a database
+(`FARNA_CONTROL_DB_PASSWORD`, `SAQ_AUTH_USERNAME`, `SAQ_AUTH_PASSWORD`) - a database
 already initialized on the old `changeme` default keeps that value until you
 rotate it.
 
 The compose also constructs one URL the system worker needs:
-`MODULO_SYSTEM_DATABASE_URL` (`farna_control_system` + `MODULO_DB_PASSWORD` @ the
+`FARNA_CONTROL_SYSTEM_DATABASE_URL` (`farna_control_system` + `FARNA_CONTROL_DB_PASSWORD` @ the
 bundled Postgres). `dispatcher_reconcile` and the other cross-org system
 crons fail closed without it, and `dispatcher_reconcile` gates
 `/healthz/ready` - so leaving it out gives an API that answers while
