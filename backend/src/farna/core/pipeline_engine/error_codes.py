@@ -30,12 +30,25 @@ _log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ErrorCodeSpec:
-    """One registry entry: classification tag, retry default, alert severity, guidance."""
+    """One registry entry: classification tag, retry default, alert severity, guidance.
+
+    ``max_attempts`` (FAR-2562) is the class-level EXECUTION cap: the most
+    executions of a run's graph this failure class may consume, the attempt that
+    just failed included (so ``2`` means exactly one retry). ``None`` — the
+    default for every entry — means no class-specific cap: the run's retry
+    budgets alone bound the attempts, which is the pre-FAR-2562 behaviour.
+
+    It is a NARROWING on top of ``retryable``, never a widening: an entry marked
+    non-retryable is never re-enabled by also carrying a cap. Only the run-level
+    retry decision reads it (``pipeline_engine.retry_policy``); presentation,
+    notification and analytics code continue to read ``retryable`` alone.
+    """
 
     error_class: str
     retryable: bool
     alert_severity: str | None
     guidance: str
+    max_attempts: int | None = None
 
 
 # Canonical dotted codes referenced from multiple places in this module
@@ -449,6 +462,13 @@ ERROR_CODE_REGISTRY: dict[str, ErrorCodeSpec] = {
         retryable=True,
         alert_severity="warning",
         guidance="Sandbox produced no parseable output.",
+        # FAR-2562: still retryable (a provider hiccup or a stream drop can be
+        # genuinely transient), but capped at TWO executions — exactly one
+        # retry. A no-output death is usually deterministic: the retrying run
+        # re-hits the same wall, and the measured cost was 5 x 600s idle
+        # timeouts (~137 minutes) before the terminal failure. One retry keeps
+        # the recovery path for a real blip and removes ~4 of those attempts.
+        max_attempts=2,
     ),
     "sandbox.spawn": ErrorCodeSpec(
         error_class="sandbox",

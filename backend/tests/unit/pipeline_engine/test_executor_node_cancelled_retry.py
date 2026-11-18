@@ -766,6 +766,146 @@ async def test_execute_refuses_requeue_for_non_retryable_provider_402():
     assert run_failed[0][1]["error"] == "model.insufficient_funds"
 
 
+async def test_execute_grants_one_retry_for_deterministic_no_output():
+    """FAR-2562: the FIRST no-output death is still retried — the class is
+    capped at two executions, not zeroed, because a provider hiccup can be
+    genuinely transient. Attempt 1 must therefore fence the run back to
+    ``pending`` and re-raise for the one permitted retry."""
+    from farna.core.pipeline_engine.node_runner import SandboxNodeFailedError
+
+    diagnostic = "agent produced no output for 600s"
+    # One execution consumed, whole transport budget (5) still available.
+    run = _make_run(claim_count=1, node_attempt_count=1, claim_token="tok-claim-abc")
+    snapshot = _make_snapshot()
+    statements: list[str] = []
+    session = _make_session(snapshot, statements=statements)
+    factory = _make_session_factory(session)
+    compiled = _mock_compiled_raising(SandboxNodeFailedError(diagnostic, node_id="node-a"))
+    registry = _mock_registry()
+    settings = MagicMock(saq_run_retries=5)
+
+    with (
+        patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
+        patch("farna.core.pipeline_engine.executor.get_run", return_value=run),
+        patch("farna.core.pipeline_engine.executor.update_run_status", new=AsyncMock()),
+        patch("farna.core.pipeline_engine.executor.finalize_cost", new=AsyncMock()) as mock_finalize,
+        patch("farna.core.pipeline_engine.executor.set_rls_org"),
+        patch("farna.core.pipeline_engine.executor.set_rls_execution_context"),
+        patch("farna.core.pipeline_engine.executor.get_or_compile", return_value=compiled),
+        patch("farna.core.pipeline_engine.executor.get_registry", return_value=registry),
+        patch("farna.core.pipeline_engine.executor.GraphValidator", new=_mock_graph_validator()),
+        patch.object(PipelineExecutor, "_check_capacity", _bypass_capacity),
+        patch("farna.settings.get_settings", return_value=settings),
+    ):
+        executor = PipelineExecutor(MagicMock())
+        with pytest.raises(SandboxNodeFailedError):
+            await executor.execute(run_id=run.id, org_id=uuid.uuid4(), input_payload={}, claim_token="tok-claim-abc")
+
+    # Attempt 2 was granted: fenced pending-reset, no terminal finalize.
+    reset_stmt = next(s for s in statements if "status='pending'" in s)
+    assert "claim_token=:tok" in reset_stmt
+    assert "status='running'" in reset_stmt
+    mock_finalize.assert_not_awaited()
+    registry.close.assert_called_once_with(run.id)
+
+
+async def test_execute_caps_deterministic_no_output_at_two_attempts():
+    """FAR-2562: once TWO executions have been consumed the no-output class is
+    out of allowance, so the run terminalises with ~3 of the transport's 5
+    attempts unspent — and the detail says the class is capped instead of
+    claiming the retries ran out."""
+    from farna.core.pipeline_engine.node_runner import SandboxNodeFailedError
+
+    diagnostic = "agent produced no output for 600s"
+    run = _make_run(claim_count=2, node_attempt_count=2, claim_token="tok-claim-abc")
+    final_run = _make_run(
+        run_id=run.id,
+        status="failed",
+        claim_count=2,
+        node_attempt_count=2,
+        claim_token="tok-claim-abc",
+    )
+    snapshot = _make_snapshot()
+    statements: list[str] = []
+    session = _make_session(snapshot, statements=statements)
+    factory = _make_session_factory(session)
+    compiled = _mock_compiled_raising(SandboxNodeFailedError(diagnostic, node_id="node-a"))
+    registry = _mock_registry()
+    broker = registry.get_or_create.return_value
+    settings = MagicMock(saq_run_retries=5)
+
+    with (
+        patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
+        patch("farna.core.pipeline_engine.executor.get_run", return_value=final_run),
+        patch("farna.core.pipeline_engine.executor.update_run_status", new=AsyncMock()),
+        patch("farna.core.pipeline_engine.executor.finalize_cost", new=AsyncMock()) as mock_finalize,
+        patch("farna.core.pipeline_engine.executor.set_rls_org"),
+        patch("farna.core.pipeline_engine.executor.set_rls_execution_context"),
+        patch("farna.core.pipeline_engine.executor.get_or_compile", return_value=compiled),
+        patch("farna.core.pipeline_engine.executor.get_registry", return_value=registry),
+        patch("farna.core.pipeline_engine.executor.GraphValidator", new=_mock_graph_validator()),
+        patch.object(PipelineExecutor, "_check_capacity", _bypass_capacity),
+        patch("farna.settings.get_settings", return_value=settings),
+    ):
+        executor = PipelineExecutor(MagicMock())
+        result = await executor.execute(run_id=run.id, org_id=uuid.uuid4(), input_payload={}, claim_token="tok-claim-abc")
+
+    # Terminal (execute returned normally) — NOT re-raised for a third attempt.
+    assert result is final_run
+    assert not any("status='pending'" in s for s in statements)
+    call = mock_finalize.await_args
+    assert call is not None
+    assert call.kwargs["status"] == "failed"
+    assert call.kwargs.get("error_code") == "sandbox.no_output_json"
+    detail = call.kwargs["error_detail"]
+    # Accurate reason: the class cap bound the decision, the budget did not.
+    assert "retries exhausted" not in detail
+    assert "capped at 2 attempt(s)" in detail
+    assert "after 2 attempt(s)" in detail
+    assert diagnostic in detail
+    run_failed = [c.args for c in broker.publish.call_args_list if c.args and c.args[0] == "run_failed"]
+    assert run_failed
+    assert run_failed[0][1]["error"] == "sandbox.no_output_json"
+
+
+async def test_execute_uncapped_sandbox_class_keeps_its_full_budget():
+    """CONTROL (FAR-2562 constraint): a transient sandbox class with no registry
+    cap still retries to its existing budget — here attempt 5 of 5 is granted,
+    proving the cap is narrow to the no-output class."""
+    from farna.core.pipeline_engine.node_runner import SandboxQueueTimeoutError
+
+    run = _make_run(claim_count=4, node_attempt_count=4, claim_token="tok-claim-abc")
+    snapshot = _make_snapshot()
+    statements: list[str] = []
+    session = _make_session(snapshot, statements=statements)
+    factory = _make_session_factory(session)
+    compiled = _mock_compiled_raising(SandboxQueueTimeoutError("E2B sandbox creation rate limited"))
+    registry = _mock_registry()
+    settings = MagicMock(saq_run_retries=5)
+
+    with (
+        patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
+        patch("farna.core.pipeline_engine.executor.get_run", return_value=run),
+        patch("farna.core.pipeline_engine.executor.update_run_status", new=AsyncMock()),
+        patch("farna.core.pipeline_engine.executor.finalize_cost", new=AsyncMock()) as mock_finalize,
+        patch("farna.core.pipeline_engine.executor.set_rls_org"),
+        patch("farna.core.pipeline_engine.executor.set_rls_execution_context"),
+        patch("farna.core.pipeline_engine.executor.get_or_compile", return_value=compiled),
+        patch("farna.core.pipeline_engine.executor.get_registry", return_value=registry),
+        patch("farna.core.pipeline_engine.executor.GraphValidator", new=_mock_graph_validator()),
+        patch.object(PipelineExecutor, "_check_capacity", _bypass_capacity),
+        patch("farna.settings.get_settings", return_value=settings),
+    ):
+        executor = PipelineExecutor(MagicMock())
+        with pytest.raises(SandboxQueueTimeoutError):
+            await executor.execute(run_id=run.id, org_id=uuid.uuid4(), input_payload={}, claim_token="tok-claim-abc")
+
+    # Four executions consumed, budget is five: still one more attempt (5).
+    reset_stmt = next(s for s in statements if "status='pending'" in s)
+    assert "claim_token=:tok" in reset_stmt
+    mock_finalize.assert_not_awaited()
+
+
 async def test_execute_terminal_fail_roundtrips_sandbox_diagnostics():
     """FAR-197 review fix (PR #1317 CHANGES_REQUESTED): the retry-exhausted
     terminal-fail write surface used to truncate the error_detail at 500 chars,

@@ -148,8 +148,11 @@ from farna.core.pipeline_engine.retry_policy import (
     _ERROR_CODE_NODE_TIMEOUT,
     _ERROR_CODE_SANDBOX_TIER_REFUSED,
     _ERROR_CODE_SCRIPT_SIDE_EFFECT_UNKNOWN,
+    _attempt_cap_reached,
+    _attempt_capped_failure_detail,
     _attempt_started_at,
     _can_fenced_requeue,
+    _failure_class_attempt_cap,
     _non_retryable_failure_detail,
     _transient_retry_allowance,
     maybe_retry_after_policy,
@@ -6336,6 +6339,20 @@ class PipelineExecutor:
         # provider refusal (HTTP 402 "Insufficient account funds") appears.
         # Fail open: an unrecognised failure yields None and keeps today's path.
         failure_code = classify_provider_error(str(exc))
+        # FAR-2562: the failure's OWN canonical class code — the same code the
+        # terminal write below publishes (``sandbox.no_output_json`` for a base
+        # SandboxNodeFailedError, its own code for a mapped subclass). The
+        # registry's per-class attempt cap is keyed on it, so a deterministic
+        # no-output death may consume at most that many executions. Kept
+        # SEPARATE from ``failure_code`` (the provider classification) so the
+        # FAR-1800 non-retryable gate keeps judging exactly what it judged
+        # before. Deliberately None for:
+        #   * ``NodeCancelledError`` — not a SandboxNodeFailedError, so a plain
+        #     cancellation carries no class code and its behaviour is unchanged;
+        #   * the FAR-136 hang death ("likely hung"), whose terminal code stays
+        #     the generic ``node_cancelled`` — capping it under the no-output
+        #     class would silently change that code.
+        failure_class_code = sandbox_failure_error_code(exc) if isinstance(exc, SandboxNodeFailedError) and "likely hung" not in str(exc) else None
         if _can_fenced_requeue(
             execution_attempt_count,
             retries,
@@ -6344,6 +6361,7 @@ class PipelineExecutor:
             script_lease_ok,
             graph_idempotent,
             error_code=failure_code,
+            failure_class_code=failure_class_code,
         ):
             # Fenced pending-reset: a conditional UPDATE guarded by OUR
             # captured claim token + status='running' so a superseded
@@ -6387,8 +6405,9 @@ class PipelineExecutor:
             # broker and no stale contextvars (the caller re-raises).
             await self._cleanup_run_resources(model_backend_hub=model_backend_hub, connector_hub=connector_hub, run_id=run_id)
             return {"decision": "superseded"}
-        # Retries exhausted — or (FAR-1800) requeue was REFUSED because the
-        # failure class is non-retryable, so no retry was attempted at all.
+        # Retries exhausted — or requeue was REFUSED because the failure class is
+        # non-retryable (FAR-1800) or has spent its registry execution cap
+        # (FAR-2562) — so no (further) retry was attempted at all.
         # Terminal failure with a MEANINGFUL code (not the raw langgraph class
         # name). Publish the run_failed event so WS subscribers get a live
         # failure notification, consistent with every other terminal-failure
@@ -6410,6 +6429,8 @@ class PipelineExecutor:
             execution_attempt_count=execution_attempt_count,
             retries=retries,
             non_retryable_code=failure_code if _is_non_retryable_error_code(failure_code) else None,
+            failure_class_code=failure_class_code,
+            attempt_cap=_failure_class_attempt_cap(failure_class_code),
         )
         broker.publish("run_failed", {"error": error_code, "detail": error_detail})
         return {
@@ -7081,6 +7102,8 @@ class PipelineExecutor:
         execution_attempt_count: int,
         retries: int,
         non_retryable_code: str | None = None,
+        failure_class_code: str | None = None,
+        attempt_cap: int | None = None,
     ) -> tuple[str, str]:
         """Terminal failure code/detail for a retries-exhausted transient node failure.
 
@@ -7089,6 +7112,12 @@ class PipelineExecutor:
         non-retryable. The retries-exhausted wording would then be a lie (no
         retry was attempted) and would hide the real cause, so it is replaced by
         the registry code plus an explicit non-retryable explanation.
+
+        ``failure_class_code`` / ``attempt_cap`` (FAR-2562) are the failure's own
+        canonical code and its registry execution cap. Once the cap is spent the
+        run terminalises with the class code and a cap explanation — again never
+        the retries-exhausted wording, because the transport budget usually
+        still had room (the observed shape was attempt 2 of a permitted 5).
         """
         if not script_lease_ok:
             # FAR-296 Phase 2: a stale script_executing lease blocked the
@@ -7108,6 +7137,15 @@ class PipelineExecutor:
             # retried" would be false — the retries DID run, and the last
             # failure happens to be non-retryable.
             return non_retryable_code, _non_retryable_failure_detail(non_retryable_code, exc, execution_attempt_count, retries)
+        if failure_class_code is not None and attempt_cap is not None and execution_attempt_count < retries and _attempt_cap_reached(attempt_cap, execution_attempt_count):
+            # FAR-2562: the class has spent its registry execution cap while the
+            # transport budget still had room. Report the class's own code (the
+            # one the run would carry anyway) and an accurate reason — the
+            # generic branch below would claim "retries exhausted", which is
+            # false here and would hide why the run stopped early. When the
+            # budget is ALSO spent the generic wording is already accurate, so
+            # that case keeps it unchanged.
+            return failure_class_code, _attempt_capped_failure_detail(failure_class_code, exc, execution_attempt_count, attempt_cap)
         error_code = "node_cancelled"
         if not graph_idempotent and execution_attempt_count < retries:
             # FAR-295: the run was NOT retried because a node in the
