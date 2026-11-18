@@ -8,7 +8,7 @@ Complete reference for all environment variables supported by Farna Control. Var
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DATABASE_URL` | Async PostgreSQL connection string | `postgresql+asyncpg://modulo:pass@localhost:5434/farna_control` |
+| `DATABASE_URL` | Async PostgreSQL connection string | `postgresql+asyncpg://farna_control:pass@localhost:5434/farna_control` |
 | `SECRET_KEY` | JWT signing key, minimum 32 bytes | `openssl rand -base64 32` |
 | `FERNET_KEY` | Fernet encryption key, 44-char base64 | `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 
@@ -879,7 +879,7 @@ Operational procedure: `docs/operations/break-glass-admin-recovery-runbook.md`.
 
 ```env
 # Required
-DATABASE_URL=postgresql+asyncpg://modulo:modulo@localhost:5434/farna_control
+DATABASE_URL=postgresql+asyncpg://farna_control:farna_control@localhost:5434/farna_control
 SECRET_KEY=<random-64-char-string>
 FERNET_KEY=<random-44-char-base64>
 

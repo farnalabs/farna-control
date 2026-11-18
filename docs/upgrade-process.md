@@ -194,7 +194,7 @@ For the operator upgrade itself:
 TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml pull modulo
 
 # 2. Restart with that immutable image (runs migrations on startup).
-TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d farna_control
+TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo
 
 # 3. Verify migration completed and readiness is healthy.
 TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml logs modulo | grep -i alembic

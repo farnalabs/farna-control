@@ -26,8 +26,9 @@ Farna Control is a self-hosted Delivery Governance Platform. Govern the software
 # (Windows PowerShell: uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 export FERNET_KEY=$(uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
-# The backend .env below logs in with password `modulo`, so start Postgres with
-# the same password (the compose default is `changeme`).
+# The backend .env below logs in as the `farna_control` superuser with password
+# `farna_control`, so start Postgres with the same password (the compose
+# default is `changeme`).
 POSTGRES_PASSWORD=farna_control docker compose -f docker-compose.local.yml up -d
 ```
 
@@ -70,7 +71,7 @@ uv sync
 # FERNET_KEY is the value exported in step 1 – a different key here cannot
 # decrypt the credentials the workers stored.
 cat > .env <<EOF
-DATABASE_URL=postgresql+asyncpg://modulo:modulo@localhost:5434/farna_control
+DATABASE_URL=postgresql+asyncpg://farna_control:farna_control@localhost:5434/farna_control
 # Cross-org system crons (dispatcher_reconcile gates /healthz/ready) connect as
 # the dedicated farna_control_system role; the API boot creates that role with this
 # password. Without it the system worker refuses those crons and readiness
