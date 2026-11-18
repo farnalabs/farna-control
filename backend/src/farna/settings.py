@@ -1019,6 +1019,14 @@ class Settings(BaseSettings):
     # This field MIRRORS the pre-existing scattered ``os.environ.get("FARNA_CONTROL_ENV",
     # "development")`` convention for the alert path; the pre-existing call
     # sites are deliberately not migrated in this change.
+    #
+    # ``MODULO_ENV`` is deliberately NOT read. It was the one legacy alias whose
+    # spelling was not ``MODULO_<FIELD-NAME>`` (the field name would be
+    # ``ENVIRONMENT``), so the alias-set removal dropped it rather than leaving
+    # it resolvable through ``populate_by_name``. Only the canonical
+    # ``FARNA_CONTROL_ENV`` and the bare field-name spelling ``ENVIRONMENT`` are
+    # read; ``tests/architecture/test_settings_environment_aliases.py`` pins the
+    # drop so it cannot return by accident.
     environment: str = Field("development", validation_alias="FARNA_CONTROL_ENV")
     # Comma-separated allowlist of environments (case-insensitive, trimmed)
     # that may SEND operator alerts — it gates the TWO in-app operator-alert
