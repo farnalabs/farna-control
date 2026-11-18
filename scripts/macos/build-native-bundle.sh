@@ -245,8 +245,15 @@ int main(int argc, char **argv) {
     setenv("FARNA_CONTROL_BUNDLED_BIN_DIR", bin_dir, 1);
     char frontend_dist[4096];
     snprintf(frontend_dist, sizeof(frontend_dist), "%s/frontend-dist", bundle);
-    setenv("MODULO_SERVE_SPA", "1", 1);
-    setenv("MODULO_FRONTEND_DIST", frontend_dist, 1);
+    /* The single-port SPA seam reads exactly these two names
+       (farna.api.main._SERVE_SPA_ENV / _FRONTEND_DIST_ENV). FAR-2564: the
+       pre-rebrand MODULO_ spelling exported here was read by nothing, so the
+       installed app kept the API mount and "/" returned the API JSON instead
+       of the SPA entry document. backend/tests/unit/launcher/
+       test_native_shim_env_contract.py derives both sides from the real files
+       and fails when a launcher sets a name Python never reads. */
+    setenv("FARNA_CONTROL_SERVE_SPA", "1", 1);
+    setenv("FARNA_CONTROL_FRONTEND_DIST", frontend_dist, 1);
     char final_pythonpath[12288];
     snprintf(final_pythonpath, sizeof(final_pythonpath), "%s:%s", src, site);
     setenv("PYTHONPATH", final_pythonpath, 1);
