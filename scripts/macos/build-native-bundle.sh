@@ -278,7 +278,7 @@ if [[ -z "${LAUNCHER_BIN_DIR_ENV}" || -z "${LAUNCHER_BIN_DIR_FORMAT}" ]]; then
   echo "::error::could not read the bundled bin dir contract from ${BUILD_ROOT}/launcher.c (env name or bin dir expression is missing)" >&2
   exit 1
 fi
-LAUNCHER_BIN_DIR="$(printf "${LAUNCHER_BIN_DIR_FORMAT}" "${BUNDLE_ROOT}")"
+LAUNCHER_BIN_DIR="${LAUNCHER_BIN_DIR_FORMAT/\%s/${BUNDLE_ROOT}}"
 PYTHONPATH="${BUNDLE_ROOT}/backend/src:${BUNDLE_ROOT}/backend/.venv/lib/python3.12/site-packages" \
   env "${LAUNCHER_BIN_DIR_ENV}=${LAUNCHER_BIN_DIR}" \
   "${BUNDLE_ROOT}/backend/.venv/bin/python" - "${BUNDLE_ROOT}" "${LAUNCHER_BIN_DIR_ENV}" "${LAUNCHER_BIN_DIR}" <<'PY'

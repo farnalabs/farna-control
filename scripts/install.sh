@@ -509,6 +509,8 @@ run_pre_upgrade_dump() {
   # contract no longer exists.
   if [[ -f "${old_root}/backend/src/farna/launcher/upgrade.py" ]]; then
     module="farna.launcher.upgrade"
+  elif [[ -f "${old_root}/backend/src/modulo/launcher/upgrade.py" ]]; then
+    die "cannot run the pre-upgrade pg_dump: the installed bundle ships the upgrade helper under the pre-rebrand 'modulo' package, which reads MODULO_BUNDLED_BIN_DIR; this installer only sets FARNA_CONTROL_BUNDLED_BIN_DIR, so the helper cannot resolve the bundled pg_dump. Upgrade from a bundle that ships backend/src/farna/launcher/upgrade.py"
   else
     die "cannot run the pre-upgrade pg_dump: the installed bundle predates the launcher upgrade helper (looked for backend/src/farna/launcher/upgrade.py)"
   fi

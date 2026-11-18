@@ -75,10 +75,12 @@ from farna.launcher import env_safety
 _log = logging.getLogger(__name__)
 
 # The ONE name every native bundle launcher must export, and the ONE name the
-# resolver reads. The producer (scripts/macos/build-native-bundle.sh, the
-# Windows launcher, the Linux bundle wrapper) asserts its exported name against
-# this constant at build time, so a rename on either side fails the bundle build
-# instead of the installed app's first boot. FAR-2554: the launchers kept
+# resolver reads. The macOS bundle build (scripts/macos/build-native-bundle.sh)
+# reads the compiled launcher's exported name back and asserts it against this
+# constant at build time, so a rename on either side fails that bundle build
+# instead of the installed app's first boot; the Windows launcher and the Linux
+# bundle wrapper are held to the same name by unit tests, not by their builds.
+# FAR-2554: the launchers kept
 # exporting the pre-rebrand ``MODULO_BUNDLED_BIN_DIR`` after the resolver was
 # renamed, so the env value was ignored and the boot fell through to the
 # ``<sys.prefix>/bundled/bin`` default that no bundle produces.
