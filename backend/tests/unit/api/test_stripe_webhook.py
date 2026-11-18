@@ -5,6 +5,7 @@ Signature tests use the REAL Stripe signature scheme (HMAC-SHA256 over
 through the actual endpoint — no mock bypasses signature verification.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -740,6 +741,32 @@ class TestOperatorAlerts:
         assert "Refunded: 49.00 GBP (4,900 minor units)" in text
         assert "Metadata starts_at: 2027-03-12" in text
 
+    def test_zero_decimal_currency_amounts_are_not_divided_by_100(self, alert_client: TestClient) -> None:
+        """A JPY amount is already major units: 4900 is ¥4,900, not ¥49.00."""
+        event = _payment_intent_event("evt_jpy", "payment_intent.requires_action", amount=4900, currency="jpy")
+        body = json.dumps(event).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert "4,900 JPY (4,900 minor units)" in text
+        assert "4,900 JPY" in subject
+        assert "49.00 JPY" not in text
+
+    def test_three_decimal_currency_amounts_use_three_decimals(self, alert_client: TestClient) -> None:
+        """A KWD amount has three decimal places: 4900 is 4.900 KWD."""
+        event = _payment_intent_event("evt_kwd", "payment_intent.requires_action", amount=4900, currency="kwd")
+        body = json.dumps(event).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, _subject, _html, text = _sent(mock_send)
+        assert "4.900 KWD (4,900 minor units)" in text
+
     def test_fraud_warning_alert_links_the_payment_it_concerns(self, alert_client: TestClient) -> None:
         body = json.dumps(_fraud_warning_event()).encode()
 
@@ -914,3 +941,27 @@ class TestOperatorAlerts:
         _recipients, subject, _html, text = _sent(mock_send)
         assert subject.startswith("[Modulo Billing] ACTION REQUIRED New sale")
         assert "Note: The licence was NOT issued" in text
+
+    def test_a_refused_starts_at_does_not_wait_for_a_hung_smtp_server(self, alert_client: TestClient) -> None:
+        """The inline error-path alert is bounded, so the 422 always returns.
+
+        A slow/retrying SMTP server must not hold the response open: the bound
+        abandons the send and logs it, leaving the refusal visible in Stripe.
+        """
+        past = (datetime.now(UTC) - timedelta(days=1)).date().isoformat()
+        body = json.dumps(_live(_invoice_event_with_starts_at("evt_refused_hang", past))).encode()
+
+        async def _hang(*_args: object, **_kwargs: object) -> None:
+            await asyncio.sleep(10)
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch("farna.api.routes.stripe_webhook._send_event_alert", new=AsyncMock(side_effect=_hang)),
+            patch("farna.api.routes.stripe_webhook._INLINE_ALERT_TIMEOUT_SECONDS", new=0.01),
+        ):
+            started = time.monotonic()
+            resp = _post(alert_client, body, _sign(body))
+            elapsed = time.monotonic() - started
+
+        assert resp.status_code == 422, resp.text
+        assert elapsed < 2

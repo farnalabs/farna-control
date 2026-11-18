@@ -80,6 +80,24 @@ def alert_context_html(settings: Settings) -> str:
     return f"<ul>{items}</ul>"
 
 
+def parse_alert_recipients(alert_email_to: str | None) -> list[str]:
+    """Split a comma-separated ``ALERT_EMAIL_TO`` — trim, drop empties.
+
+    The ONE interpretation of ``ALERT_EMAIL_TO``, shared by every operator
+    alert channel (readiness, worker-liveness and Stripe billing alerts), so
+    the setting means one thing across all of them.
+    """
+    if not alert_email_to:
+        return []
+    return [address.strip() for address in alert_email_to.split(",") if address.strip()]
+
+
+def alert_recipients(settings: Settings) -> list[str]:
+    """The configured ``ALERT_EMAIL_TO`` recipients (see
+    :func:`parse_alert_recipients`)."""
+    return parse_alert_recipients(settings.alert_email_to)
+
+
 def alerting_enabled_for_environment(settings: Settings) -> bool:
     """May THIS deployment environment send operator alerts at all?
 

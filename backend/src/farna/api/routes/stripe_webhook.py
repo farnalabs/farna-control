@@ -42,7 +42,7 @@ Three rules keep the alerts safe:
     were a sale (see :func:`_is_live_event`).
   * **Stripe retries, so alerts are deduped by event id** on the same Redis
     substrate ``stripe_fulfilment`` uses for idempotency, under its own key
-    namespace — no new table (see :func:`_already_alerted`).
+    namespace — no new table (``core.event_dedup`` is the shared helper).
 
 Chosen licence start (FAR-2146)
 -------------------------------
@@ -59,7 +59,6 @@ rather than becoming a licence that begins on the wrong day.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import hmac
 import html
@@ -69,17 +68,18 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from redis.asyncio import Redis
 
 from farna.api.constants import MSG_NOT_FOUND
 from farna.core.alert_context import (
     alert_context_html,
     alert_context_text,
+    alert_recipients,
     alerting_enabled_for_environment,
     stamp_stdout,
 )
 from farna.core.audit_coverage import audited_system, bind_audit_org
 from farna.core.email_service import EmailSendingError, send_email
+from farna.core.event_dedup import claim_event_id, is_event_claimed
 from farna.core.license import DEFAULT_RENEWAL_MODE, RENEWAL_MODE_AUTO
 from farna.core.stripe_fulfilment import (
     StartsAtRejectedError,
@@ -150,9 +150,21 @@ _SENSITIVE_METADATA_MARKERS = ("key", "secret", "token", "password", "card", "cv
 #: past Stripe's retry window, so a redelivered event never re-emails.
 _ALERT_CLAIM_TTL_SECONDS = 90 * 24 * 3600
 
+#: Redis key namespace for alert dedup, distinct from fulfilment's, plus the
+#: log namespace the shared dedup helper reports failures under.
+_ALERT_KEY_PREFIX = "stripe:alerted:"
+_ALERT_DEDUP_LOG_NAMESPACE = "stripe.alert"
+
 #: Process-local fallback when Redis is unavailable (single process only, the
 #: same limitation ``stripe_fulfilment`` documents for its own fallback).
 _alerted_event_ids: set[str] = set()
+
+#: The inline error-path alert is bounded so a slow/retrying SMTP server cannot
+#: hold the 422 open. The normal alert runs as a background task instead; this
+#: bound is only for the refused-``starts_at`` path, which drops its queued
+#: task and must still alert. A timed-out send is logged and abandoned —
+#: Stripe's retry re-runs the whole path.
+_INLINE_ALERT_TIMEOUT_SECONDS = 5.0
 
 _DASHBOARD_BASE = "https://dashboard.stripe.com"
 
@@ -309,17 +321,6 @@ def _extract_customer(event: dict[str, Any]) -> tuple[str | None, str]:
 # ---------------------------------------------------------------------------
 
 
-def _alert_recipients(settings: Settings) -> list[str]:
-    """``ALERT_EMAIL_TO`` split into recipients (comma-separated, trimmed).
-
-    The same interpretation the readiness alert and the worker-liveness
-    watchdog use, so ``ALERT_EMAIL_TO`` means one thing across every channel.
-    """
-    if not settings.alert_email_to:
-        return []
-    return [address.strip() for address in settings.alert_email_to.split(",") if address.strip()]
-
-
 def _is_live_event(event: dict[str, Any], settings: Settings) -> bool:
     """Is this event about REAL money?
 
@@ -340,71 +341,6 @@ def _is_live_event(event: dict[str, Any], settings: Settings) -> bool:
     return settings.stripe_secret_key.startswith("sk_live_")
 
 
-async def _already_alerted(settings: Settings, event_id: str) -> bool:
-    """True when *event_id* has already produced a DELIVERED operator alert.
-
-    Reuses the codebase's webhook-dedup substrate — the Redis-backed,
-    per-event-id keying ``stripe_fulfilment`` already uses for fulfilment
-    idempotency — under its own ``stripe:alerted:`` namespace so the two never
-    collide. ``webhook_dedup_hashes`` cannot serve here (it is trigger-scoped
-    and a Stripe event has no trigger), so Redis is the existing mechanism, not
-    a new table.
-
-    Fails toward ALERTING: a Redis failure reports "not seen", so a retried
-    event may produce a duplicate email rather than being silently dropped —
-    the harmless direction for an operator alert.
-    """
-    if settings.redis_url:
-        redis: Redis | None = None
-        try:
-            redis = Redis.from_url(
-                settings.redis_url,
-                decode_responses=True,
-                socket_connect_timeout=2.0,
-                socket_timeout=2.0,
-            )
-            return bool(await redis.exists(f"stripe:alerted:{event_id}"))
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning("stripe.alert.dedup_read_failed event_id=%s", event_id, exc_info=True)
-        finally:
-            if redis is not None:
-                with contextlib.suppress(Exception):
-                    await redis.aclose()
-    return event_id in _alerted_event_ids
-
-
-async def _mark_alerted(settings: Settings, event_id: str) -> None:
-    """Record that *event_id*'s alert was DELIVERED.
-
-    Called only AFTER a successful send, so a failed send leaves the event
-    unmarked and Stripe's retry can alert again — the same ordering
-    ``stripe_fulfilment`` uses for fulfilment (never lose the alert to a
-    transient SMTP failure).
-    """
-    if settings.redis_url:
-        redis: Redis | None = None
-        try:
-            redis = Redis.from_url(
-                settings.redis_url,
-                decode_responses=True,
-                socket_connect_timeout=2.0,
-                socket_timeout=2.0,
-            )
-            await redis.set(f"stripe:alerted:{event_id}", "1", nx=True, ex=_ALERT_CLAIM_TTL_SECONDS)
-            return
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning("stripe.alert.dedup_write_failed event_id=%s", event_id, exc_info=True)
-        finally:
-            if redis is not None:
-                with contextlib.suppress(Exception):
-                    await redis.aclose()
-    _alerted_event_ids.add(event_id)
-
-
 def _alert_customer_email(obj: dict[str, Any]) -> str | None:
     """The buyer's email, from wherever this event's object carries it.
 
@@ -423,15 +359,54 @@ def _alert_customer_email(obj: dict[str, Any]) -> str | None:
     return None
 
 
+#: Stripe's currencies whose minor unit is NOT 1/100. Everything else uses the
+#: default exponent of 2. Sourced from Stripe's currency documentation; a
+#: currency added there later falls back to 2, which is the only safe default.
+_ZERO_DECIMAL_CURRENCIES = frozenset(
+    {
+        "bif",
+        "clp",
+        "djf",
+        "gnf",
+        "jpy",
+        "kmf",
+        "krw",
+        "mga",
+        "pyg",
+        "rwf",
+        "ugx",
+        "vnd",
+        "vuv",
+        "xaf",
+        "xof",
+        "xpf",
+    }
+)
+_THREE_DECIMAL_CURRENCIES = frozenset({"bhd", "iqd", "jod", "kwd", "lyd", "omr", "tnd"})
+
+
+def _currency_exponent(code: str) -> int:
+    """How many decimal places *code*'s minor unit has (JPY 0, KWD 3, else 2)."""
+    if code in _ZERO_DECIMAL_CURRENCIES:
+        return 0
+    if code in _THREE_DECIMAL_CURRENCIES:
+        return 3
+    return 2
+
+
 def _format_money(amount: int, currency: str | None) -> str:
     """``4900``/``gbp`` -> ``"49.00 GBP (4,900 minor units)"``.
 
     Both numbers are shown on purpose: the major-unit figure is what an
-    operator reads, and the minor-unit figure is exactly what Stripe sent, so a
-    zero-decimal currency (JPY) can never be quietly misreported.
+    operator reads, and the minor-unit figure is exactly what Stripe sent. The
+    major figure honours the currency's exponent — dividing everything by 100
+    would report 4900 JPY as ``49.00 JPY`` and 4900 KWD as ``49.00 KWD`` — so a
+    zero- or three-decimal currency is never misreported.
     """
     code = (currency or "").strip().upper() or "unknown currency"
-    return f"{amount / 100:,.2f} {code} ({amount:,} minor units)"
+    exponent = _currency_exponent(code.casefold())
+    major = amount / (10**exponent)
+    return f"{major:,.{exponent}f} {code} ({amount:,} minor units)"
 
 
 def _int_field(obj: dict[str, Any], field: str) -> int | None:
@@ -634,14 +609,20 @@ async def _deliver_event_alert(settings: Settings, event: dict[str, Any], note: 
             settings.environment,
         )
         return
-    recipients = _alert_recipients(settings)
+    recipients = alert_recipients(settings)
     if not (settings.smtp_host and recipients):
         _log.info("stripe.alert.skipped_unconfigured event_id=%s event=%s", event_id, event_type)
         return
     if not _is_live_event(event, settings):
         _log.info("stripe.alert.skipped_test_mode event_id=%s event=%s livemode=%r", event_id, event_type, event.get("livemode"))
         return
-    if await _already_alerted(settings, event_id):
+    if await is_event_claimed(
+        settings,
+        event_id,
+        key_prefix=_ALERT_KEY_PREFIX,
+        fallback=_alerted_event_ids,
+        log_namespace=_ALERT_DEDUP_LOG_NAMESPACE,
+    ):
         _log.info("stripe.alert.duplicate event_id=%s event=%s", event_id, event_type)
         return
 
@@ -660,7 +641,14 @@ async def _deliver_event_alert(settings: Settings, event: dict[str, Any], note: 
         _log.error("stripe.alert.send_failed event_id=%s event=%s — email service declined the send", event_id, event_type)
         return
 
-    await _mark_alerted(settings, event_id)
+    await claim_event_id(
+        settings,
+        event_id,
+        key_prefix=_ALERT_KEY_PREFIX,
+        ttl_seconds=_ALERT_CLAIM_TTL_SECONDS,
+        fallback=_alerted_event_ids,
+        log_namespace=_ALERT_DEDUP_LOG_NAMESPACE,
+    )
     # fly logs renders JSON logs unreliably, so an alert also gets a plain
     # stdout stamp — best effort, and it never carries ALERT_CONTEXT.
     stamp_stdout(
@@ -686,6 +674,28 @@ async def _send_event_alert(settings: Settings, event: dict[str, Any], note: str
         raise
     except Exception:
         _log.exception("stripe.alert.failed event_id=%s event=%s", event_id, event_type)
+
+
+async def _send_event_alert_bounded(settings: Settings, event: dict[str, Any], note: str | None = None) -> None:
+    """Deliver the error-path alert without holding the response open.
+
+    The refused-``starts_at`` path raises a 422, which drops the queued
+    background task, so this alert has to run inline. It is BOUNDED rather than
+    fully detached: the response waits at most ``_INLINE_ALERT_TIMEOUT_SECONDS``
+    for the send, and a slow or retrying SMTP server is logged and abandoned
+    (Stripe's retry re-runs the whole path and can alert again).
+    """
+    event_id = str(event.get("id") or "")
+    event_type = str(event.get("type") or "")
+    try:
+        await asyncio.wait_for(_send_event_alert(settings, event, note), timeout=_INLINE_ALERT_TIMEOUT_SECONDS)
+    except TimeoutError:
+        _log.error(
+            "stripe.alert.inline_timeout event_id=%s event=%s timeout=%ss",
+            event_id,
+            event_type,
+            _INLINE_ALERT_TIMEOUT_SECONDS,
+        )
 
 
 # FAR-1516: signature-verified ingress with no tenant at the request boundary
@@ -774,10 +784,10 @@ async def stripe_webhook(
                 # The 422 response drops the queued background task, yet this
                 # is exactly the case an operator must hear about: the invoice
                 # was PAID and no licence was issued. Deliver the alert here
-                # instead — `_send_event_alert` never raises, so it cannot
-                # change the response, and the event-id dedupe means Stripe's
-                # retries cannot duplicate it.
-                await _send_event_alert(
+                # instead, bounded so a slow SMTP server cannot hold the 422
+                # open — the alert never raises, and the event-id dedupe means
+                # Stripe's retries cannot duplicate it.
+                await _send_event_alert_bounded(
                     settings,
                     event,
                     note=f"The licence was NOT issued: the invoice was paid but the chosen licence start was rejected ({exc.reason}). The customer must be fulfilled manually.",

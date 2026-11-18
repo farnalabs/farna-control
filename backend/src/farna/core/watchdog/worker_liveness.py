@@ -81,6 +81,7 @@ from farna.core.alert_context import (
     alert_context_text,
     alert_environment_line,
     alerting_enabled_for_environment,
+    parse_alert_recipients,
     stamp_stdout,
 )
 from farna.core.email_service import EmailSendingError, send_email
@@ -389,10 +390,8 @@ async def _post_teams_webhook(settings: Settings, text: str) -> None:
 
 
 def _parse_alert_email_to(alert_email_to: str | None) -> list[str]:
-    """Split a comma-separated recipient list — trim whitespace, drop empties."""
-    if not alert_email_to:
-        return []
-    return [address.strip() for address in alert_email_to.split(",") if address.strip()]
+    """Split a comma-separated recipient list (see ``alert_context``)."""
+    return parse_alert_recipients(alert_email_to)
 
 
 def _alert_context_suffix(settings: Settings) -> str:
