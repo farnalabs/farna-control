@@ -245,6 +245,12 @@ def test_installer_signature_parser_accepts_current_and_next_key_ids(key_id: str
 
 
 def test_installer_help_documents_embedded_bundle_and_activation_contract() -> None:
+    # FAR-2569: this is only the SHAPE check on the installer source. The body
+    # of the activation heredoc is expanded at INSTALL time, so source text
+    # cannot prove the generated file is correct - the executing contract lives
+    # in test_install_activation_file.py, which runs the finalise stage. This
+    # test pins that every line names a variable SET before the heredoc, never
+    # the historical (unbound) FARNA_CONTROL_* self-reference.
     source = _INSTALL_SH.read_text(encoding="utf-8")
     assert "--from-bundle <dir>" in source
     assert "requires the adjacent signed tarball" in source
@@ -252,8 +258,8 @@ def test_installer_help_documents_embedded_bundle_and_activation_contract() -> N
     assert "source ${activation_file}" in source
     assert 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"' in source
     assert 'export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"' in source
-    assert 'export MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"' in source
-    assert 'export MODULO_BIN_DIR="${FARNA_CONTROL_BIN_DIR}"' in source
+    assert 'export MODULO_INSTALL_ROOT="${INSTALL_ROOT}"' in source
+    assert 'export MODULO_BIN_DIR="${BIN_DIR}"' in source
     assert _DOUBLED_ENV_PREFIX not in source
     assert "SECRET_KEY" not in source[source.index("activation_file=") : source.index("path_updated=")]
 
