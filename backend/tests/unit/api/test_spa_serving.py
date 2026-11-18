@@ -4,8 +4,13 @@ Locks: OFF (default) mounts NOTHING (Docker parity); ON serves the SPA with
 the index fallback registered LAST (never shadowing /api or the explicitly
 registered API routes), no-cache HTML, immutable hashed assets, the
 runtime-config.js route, and the upload-limit / host-origin guardrails.
+
+FAR-2563 adds the producer/consumer contract half: the installed bundles export
+the names this module reads, and an already-installed bundle that still exports
+the pre-rebrand ``MODULO_*`` spelling must keep working.
 """
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +18,9 @@ from fastapi import FastAPI
 from starlette.routing import Mount
 from starlette.testclient import TestClient
 
+from farna.api import main as main_module
 from farna.api.main import _init_once_mount_spa
+from farna.launcher import env_contract
 
 ASSET_NAME = "app-a1b2c3d4.js"
 
@@ -152,3 +159,85 @@ def test_lan_origin_via_the_mount_helper(tmp_path: Path) -> None:
     _, client = _spa_app(dist, {"FARNA_CONTROL_LAN_ORIGINS": "192.168.1.10"})
     assert client.get("/", headers={"Host": "192.168.1.10"}).status_code == 200
     assert client.get("/", headers={"Host": "evil.example"}).status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# FAR-2563: the producer/consumer env contract
+# ---------------------------------------------------------------------------
+
+
+def test_mount_reads_the_registry_not_a_private_literal() -> None:
+    """The mount must read the shared names, never its own copies of them."""
+    assert main_module._SERVE_SPA_ENV == env_contract.SERVE_SPA_ENV
+    assert main_module._FRONTEND_DIST_ENV == env_contract.FRONTEND_DIST_ENV
+
+
+def test_legacy_producer_names_still_mount_the_spa(tmp_path: Path) -> None:
+    """FAR-2563 regression: the pre-rebrand export names must still serve the SPA.
+
+    The shipped bundle launchers exported ``MODULO_SERVE_SPA`` /
+    ``MODULO_FRONTEND_DIST`` while this module read the ``FARNA_CONTROL_``
+    spelling, so the built SPA was never mounted and ``/`` 404'd on every
+    installed app. A bundle installed before the rename keeps the legacy export,
+    so the reader must accept it.
+    """
+    dist = _dist(tmp_path)
+    app = _plain_api_app()
+    mounted = _init_once_mount_spa(app, {"MODULO_SERVE_SPA": "1", "MODULO_FRONTEND_DIST": str(dist)})
+
+    assert mounted is True
+    client = TestClient(app, base_url="http://127.0.0.1:18000")
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "SPA-SHELLO" in response.text
+
+
+def test_canonical_dist_wins_over_a_stale_legacy_dist(tmp_path: Path) -> None:
+    """A stale legacy value may never shadow the canonical one."""
+    canonical = _dist(tmp_path / "canonical")
+    stale = tmp_path / "stale"
+    stale.mkdir()
+    (stale / "index.html").write_text("<html><body>STALE-SHELL</body></html>", encoding="utf-8")
+
+    app = _plain_api_app()
+    mounted = _init_once_mount_spa(
+        app,
+        {
+            "FARNA_CONTROL_SERVE_SPA": "1",
+            "FARNA_CONTROL_FRONTEND_DIST": str(canonical),
+            "MODULO_FRONTEND_DIST": str(stale),
+        },
+    )
+
+    assert mounted is True
+    body = TestClient(app, base_url="http://127.0.0.1:18000").get("/").text
+    assert "SPA-SHELLO" in body
+    assert "STALE-SHELL" not in body
+
+
+def test_requested_spa_without_a_dist_directory_is_refused_loudly(tmp_path: Path, caplog: Any) -> None:
+    """Flag set + no dist must be an explicit ERROR, never a silent fallback.
+
+    Serving the API only is correct here (the operator can still reach /healthz
+    and diagnose), but it must leave an operator-visible record saying the SPA
+    was refused, and ``/`` must not pretend to be the app shell.
+    """
+    app = _plain_api_app()
+    caplog.set_level(logging.ERROR, logger="farna.api.main")
+
+    mounted = _init_once_mount_spa(app, {"FARNA_CONTROL_SERVE_SPA": "1", "FARNA_CONTROL_FRONTEND_DIST": str(tmp_path / "missing")})
+
+    assert mounted is False
+    assert [record.getMessage() for record in caplog.records if "launcher.serve_spa_refused" in record.getMessage()]
+    static_mounts = [r for r in app.router.routes if isinstance(r, Mount) and r.name in ("spa", "spa-assets")]
+    assert not static_mounts
+    assert TestClient(app, base_url="http://127.0.0.1:18000").get("/").status_code == 404
+
+
+def test_requested_spa_with_no_dist_name_at_all_is_refused_loudly(caplog: Any) -> None:
+    """The flag alone is a misconfiguration: no dist variable means nothing to serve."""
+    caplog.set_level(logging.ERROR, logger="farna.api.main")
+    app = _plain_api_app()
+
+    assert _init_once_mount_spa(app, {"FARNA_CONTROL_SERVE_SPA": "1"}) is False
+    assert [record.getMessage() for record in caplog.records if "launcher.serve_spa_refused" in record.getMessage()]

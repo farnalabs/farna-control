@@ -168,8 +168,13 @@ fi
 
 if [[ -f /tmp/system_database_url.env ]]; then
   SYSTEM_URL=$(cat /tmp/system_database_url.env)
+  # Export the canonical name (farna.launcher.env_contract / settings) AND keep
+  # the pre-rebrand alias: farna.db.bootstrap_role reads ONLY the canonical name,
+  # so exporting just MODULO_SYSTEM_DATABASE_URL left it with no system URL and
+  # it created the system role with a random placeholder password (FAR-2563).
+  export FARNA_CONTROL_SYSTEM_DATABASE_URL="$SYSTEM_URL"
   export MODULO_SYSTEM_DATABASE_URL="$SYSTEM_URL"
-  echo "MODULO_SYSTEM_DATABASE_URL fixed: $(printf '%s' "$SYSTEM_URL" | redact_url_credentials | cut -c1-80)..."
+  echo "FARNA_CONTROL_SYSTEM_DATABASE_URL fixed: $(printf '%s' "$SYSTEM_URL" | redact_url_credentials | cut -c1-80)..."
 fi
 
 echo "=== Bootstrapping farna_control_app role ==="

@@ -95,7 +95,7 @@ static BOOL append_inherited_env(wchar_t *block, size_t block_len, size_t *used,
  * certificate store; the bundled runtime owns every executable search path.
  * Identity and Windows service plumbing remain available to the child.
  */
-static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *bundle_bin_dir, const wchar_t *python_path, const wchar_t *path_value, wchar_t **environment) {
+static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *bundle_bin_dir, const wchar_t *frontend_dist_dir, const wchar_t *python_path, const wchar_t *path_value, wchar_t **environment) {
     static const wchar_t *const inherited_allowlist[] = {
         L"SYSTEMROOT", L"WINDIR", L"TEMP", L"TMP", L"USERPROFILE", L"APPDATA", L"LOCALAPPDATA",
         L"PROGRAMDATA", L"ALLUSERSPROFILE", L"HOMEDRIVE", L"HOMEPATH", L"USERNAME", L"USERDOMAIN",
@@ -126,7 +126,14 @@ static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *b
          * at all, so the Windows boot gate cannot pass regardless of this name.
          * FAR-2554 aligns the NAME only; the Windows bundled payload layout is
          * a separate follow-up. Do not read this as functional alignment. */
-        !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_BUNDLED_BIN_DIR", bundle_bin_dir)) {
+        !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_BUNDLED_BIN_DIR", bundle_bin_dir) ||
+        /* The single-port SPA contract (farna.launcher.env_contract). The names
+         * must be the canonical FARNA_CONTROL_* spelling the API reads: FAR-2563
+         * was the same drift class as FAR-2554 - a launcher exporting the
+         * pre-rebrand MODULO_* name the consumer never read, so the built SPA
+         * was not mounted. build-launcher.ps1 stages <bundle>\frontend-dist. */
+        !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_SERVE_SPA", L"1") ||
+        !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_FRONTEND_DIST", frontend_dist_dir)) {
         free(block);
         return FALSE;
     }
@@ -265,6 +272,7 @@ int wmain(int argc, wchar_t *argv[]) {
     static wchar_t exe_dir[MAX_PATH_LEN];
     static wchar_t bundle_root[MAX_PATH_LEN];
     static wchar_t bundle_bin_dir[MAX_PATH_LEN];
+    static wchar_t frontend_dist[MAX_PATH_LEN];
     static wchar_t runtime_bin[MAX_PATH_LEN];
     static wchar_t pg_bin[MAX_PATH_LEN];
     static wchar_t redis_dir[MAX_PATH_LEN];
@@ -290,6 +298,7 @@ int wmain(int argc, wchar_t *argv[]) {
     }
     *last_slash = L'\0';
     if (!build_path(bundle_bin_dir, MAX_PATH_LEN, bundle_root, L"bin", NULL) ||
+        !build_path(frontend_dist, MAX_PATH_LEN, bundle_root, L"frontend-dist", NULL) ||
         !build_path(runtime_bin, MAX_PATH_LEN, bundle_root, L"runtime", L"bin") ||
         !build_path(pg_bin, MAX_PATH_LEN, bundle_root, L"pg", L"bin") ||
         !build_path(redis_dir, MAX_PATH_LEN, bundle_root, L"redis", NULL) ||
@@ -307,7 +316,7 @@ int wmain(int argc, wchar_t *argv[]) {
         fwprintf(stderr, L"Python executable not found at runtime\\bin\\python3.exe (runtime/python must contain the complete PBS tree)\n");
         return 1;
     }
-    if (!build_clean_environment(bundle_root, bundle_bin_dir, pythonpath, path_value, &environment)) {
+    if (!build_clean_environment(bundle_root, bundle_bin_dir, frontend_dist, pythonpath, path_value, &environment)) {
         fwprintf(stderr, L"Failed to construct the clean bundled runtime environment\n");
         return 1;
     }

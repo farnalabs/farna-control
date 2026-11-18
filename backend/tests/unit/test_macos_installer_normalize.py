@@ -17,6 +17,7 @@ import pytest
 import yaml
 
 from farna.launcher import entry as entry_module
+from farna.launcher import env_contract
 from farna.launcher import upgrade as upgrade_module
 from farna.launcher.platform import binary_name
 
@@ -1300,3 +1301,121 @@ def test_macos_bundle_build_gate_fails_when_a_required_binary_is_missing(tmp_pat
     assert result.returncode != 0
     assert "missing from the launcher-resolved bin dir" in result.stderr
     assert "pg_isready" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# FAR-2563: the SPA env contract (the third rebrand drift of the same class)
+# ---------------------------------------------------------------------------
+#
+# The launcher exported MODULO_SERVE_SPA / MODULO_FRONTEND_DIST while
+# farna.api.main read FARNA_CONTROL_SERVE_SPA / FARNA_CONTROL_FRONTEND_DIST, so
+# the built SPA was never mounted and every installed app answered "/" with the
+# API's 404. The macOS build now reads the exported names back out of the
+# compiled source and holds them against the shared registry, exactly as the
+# FAR-2554 gate does for the bundled bin dir.
+
+_LAUNCHER_SERVE_SPA_ENV = r'setenv\("([A-Za-z_][A-Za-z0-9_]*)", "1", 1\)'
+_LAUNCHER_FRONTEND_DIST_ENV = r'setenv\("([A-Za-z_][A-Za-z0-9_]*)", frontend_dist, 1\)'
+_LAUNCHER_FRONTEND_DIST_FORMAT = r'snprintf\(frontend_dist, sizeof\(frontend_dist\), "([^"]*)", bundle\)'
+
+_SPA_PRODUCER_CONSUMER_CONTRACT = [
+    # producer: the macOS bundle's compiled launcher.
+    ("scripts/macos/build-native-bundle.sh", _LAUNCHER_SERVE_SPA_ENV, env_contract.SERVE_SPA_ENV),
+    ("scripts/macos/build-native-bundle.sh", _LAUNCHER_FRONTEND_DIST_ENV, env_contract.FRONTEND_DIST_ENV),
+]
+
+
+def _run_spa_env_contract(tmp_path: Path, c_source: str) -> subprocess.CompletedProcess[str]:
+    """Run the shipped SPA env gate against ``c_source`` (the compiled launcher)."""
+    gate = _extract_marked_bash(_bundle_build_script(), "spa_env_contract_gate")
+    bundle_root = tmp_path / "bundle"
+    build_root = tmp_path / "build"
+    build_root.mkdir(parents=True, exist_ok=True)
+    (build_root / "launcher.c").write_text(c_source, encoding="utf-8")
+    _stub_bundle_python(bundle_root)
+    driver = tmp_path / "spa_env_driver.sh"
+    driver.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n" + 'BUNDLE_ROOT="$1"\nBUILD_ROOT="$2"\n' + gate + "\n",
+        encoding="utf-8",
+    )
+    return _run_bash_file(driver, [bundle_root.as_posix(), build_root.as_posix()], cwd=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "pattern", "expected"),
+    _SPA_PRODUCER_CONSUMER_CONTRACT,
+    ids=[f"{relative_path}::{expected}" for relative_path, _pattern, expected in _SPA_PRODUCER_CONSUMER_CONTRACT],
+)
+def test_spa_env_name_agrees_across_producers_and_consumers(relative_path: str, pattern: str, expected: str) -> None:
+    """FAR-2563: the export and the read must be the SAME name."""
+    text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+    names = set(re.findall(pattern, text, re.MULTILINE))
+
+    assert names, f"no SPA env name found in {relative_path}"
+    assert names == {expected}, relative_path
+
+
+def test_the_spa_consumer_reads_the_shared_registry_not_its_own_literals() -> None:
+    """FAR-2563 consumer half: ``main`` resolves the SPA names from the registry.
+
+    Together with the producer assertions above (producer == registry) and the
+    runtime identity check in ``test_spa_serving`` (consumer == registry), this
+    closes the chain producer == registry == consumer without restating values.
+    """
+    text = (REPO_ROOT / "backend" / "src" / "farna" / "api" / "main.py").read_text(encoding="utf-8")
+
+    assert "from farna.launcher.env_contract import FRONTEND_DIST_ENV, SERVE_SPA_ENV, read_env" in text
+    assert "_SERVE_SPA_ENV = SERVE_SPA_ENV" in text
+    assert "_FRONTEND_DIST_ENV = FRONTEND_DIST_ENV" in text
+    # A private literal is what drifted in the first place.
+    assert '_SERVE_SPA_ENV = "FARNA' not in text
+    assert '_FRONTEND_DIST_ENV = "FARNA' not in text
+
+
+def test_macos_launcher_exports_the_spa_dist_directory_the_bundle_populates() -> None:
+    """FAR-2563: the exported dist path is the directory the layout block fills."""
+    script = _bundle_build_script()
+    c_source = _launcher_c_source(script)
+    match = re.search(_LAUNCHER_FRONTEND_DIST_FORMAT, c_source)
+    assert match is not None, c_source
+    assert match.group(1) == "%s/frontend-dist"
+    assert 'mkdir -p "${BUNDLE_ROOT}/frontend-dist"' in script
+    assert 'cp -a "${ROOT_DIR}/frontend/dist/." "${BUNDLE_ROOT}/frontend-dist/"' in script
+
+
+def test_macos_bundle_spa_env_gate_passes_for_the_shipped_producer_contract(tmp_path: Path) -> None:
+    """FAR-2563: the shipped launcher satisfies the shipped build gate."""
+    result = _run_spa_env_contract(tmp_path, _launcher_c_source(_bundle_build_script()))
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert f"spa env contract: serve={env_contract.SERVE_SPA_ENV}" in result.stdout
+    assert f"dist={env_contract.FRONTEND_DIST_ENV}" in result.stdout
+
+
+def test_macos_bundle_spa_env_gate_fails_on_a_pre_rebrand_export_name(tmp_path: Path) -> None:
+    """FAR-2563 mutation: reverting the export to MODULO_* must fail the build."""
+    shipped = _launcher_c_source(_bundle_build_script())
+    drifted = shipped.replace(
+        f'setenv("{env_contract.SERVE_SPA_ENV}", "1", 1)',
+        'setenv("MODULO_SERVE_SPA", "1", 1)',
+        1,
+    )
+    assert drifted != shipped
+
+    result = _run_spa_env_contract(tmp_path, drifted)
+
+    assert result.returncode != 0
+    assert "but the API reads" in result.stderr
+    assert env_contract.SERVE_SPA_ENV in result.stderr
+
+
+def test_macos_bundle_spa_env_gate_fails_when_the_dist_directory_moves(tmp_path: Path) -> None:
+    """FAR-2563 mutation: exporting a dist dir the layout never fills must fail."""
+    shipped = _launcher_c_source(_bundle_build_script())
+    drifted = shipped.replace('"%s/frontend-dist", bundle', '"%s/dist", bundle', 1)
+    assert drifted != shipped
+
+    result = _run_spa_env_contract(tmp_path, drifted)
+
+    assert result.returncode != 0
+    assert "but the layout populates" in result.stderr

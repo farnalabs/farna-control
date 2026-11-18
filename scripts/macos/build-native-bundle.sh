@@ -245,8 +245,13 @@ int main(int argc, char **argv) {
     setenv("FARNA_CONTROL_BUNDLED_BIN_DIR", bin_dir, 1);
     char frontend_dist[4096];
     snprintf(frontend_dist, sizeof(frontend_dist), "%s/frontend-dist", bundle);
-    setenv("MODULO_SERVE_SPA", "1", 1);
-    setenv("MODULO_FRONTEND_DIST", frontend_dist, 1);
+    /* The names are the shared service contract in
+       farna.launcher.env_contract; the spa_env_contract_gate below reads them
+       back out of this source and fails the build on any drift. FAR-2563: they
+       were exported under the pre-rebrand MODULO_* spelling while the API read
+       FARNA_CONTROL_*, so the built SPA was never mounted and "/" 404'd. */
+    setenv("FARNA_CONTROL_SERVE_SPA", "1", 1);
+    setenv("FARNA_CONTROL_FRONTEND_DIST", frontend_dist, 1);
     char final_pythonpath[12288];
     snprintf(final_pythonpath, sizeof(final_pythonpath), "%s:%s", src, site);
     setenv("PYTHONPATH", final_pythonpath, 1);
@@ -308,6 +313,61 @@ if errors:
 print(f"bundled bin dir contract: env={BUNDLED_BIN_DIR_ENV} dir={resolved} binaries={len(REQUIRED_BUNDLED_BINARIES)}")
 PY
 # END bundled_bin_dir_contract_gate
+
+# SPA env contract gate (FAR-2563). The launcher exports the single-port SPA
+# flag and the dist directory; farna.api.main reads those names. FAR-2563 was
+# the third rebrand drift: this launcher exported the pre-rebrand MODULO_*
+# spelling while the API read FARNA_CONTROL_*, so the built SPA was never
+# mounted and every installed app answered "/" with 404. Read the exported
+# names back out of the compiled source and hold them against the registry, and
+# hold the dist value against the directory the layout block populates.
+# BEGIN spa_env_contract_gate
+LAUNCHER_SERVE_SPA_ENV="$(sed -n 's/.*setenv("\([A-Za-z_][A-Za-z0-9_]*\)", "1", 1).*/\1/p' "${BUILD_ROOT}/launcher.c")"
+LAUNCHER_FRONTEND_DIST_ENV="$(sed -n 's/.*setenv("\([A-Za-z_][A-Za-z0-9_]*\)", frontend_dist, 1).*/\1/p' "${BUILD_ROOT}/launcher.c")"
+LAUNCHER_FRONTEND_DIST_FORMAT="$(sed -n 's/.*snprintf(frontend_dist, sizeof(frontend_dist), "\([^"]*\)", bundle).*/\1/p' "${BUILD_ROOT}/launcher.c")"
+if [[ -z "${LAUNCHER_SERVE_SPA_ENV}" || -z "${LAUNCHER_FRONTEND_DIST_ENV}" || -z "${LAUNCHER_FRONTEND_DIST_FORMAT}" ]]; then
+  echo "::error::could not read the SPA env contract from ${BUILD_ROOT}/launcher.c (serve flag, dist dir name or dist expression is missing)" >&2
+  exit 1
+fi
+LAUNCHER_FRONTEND_DIST="${LAUNCHER_FRONTEND_DIST_FORMAT/\%s/${BUNDLE_ROOT}}"
+PYTHONPATH="${BUNDLE_ROOT}/backend/src:${BUNDLE_ROOT}/backend/.venv/lib/python3.12/site-packages" \
+  "${BUNDLE_ROOT}/backend/.venv/bin/python" - "${BUNDLE_ROOT}" "${LAUNCHER_SERVE_SPA_ENV}" "${LAUNCHER_FRONTEND_DIST_ENV}" "${LAUNCHER_FRONTEND_DIST}" <<'PY'
+import sys
+from pathlib import Path
+
+from farna.launcher.env_contract import (
+    FRONTEND_DIST_ENV,
+    LEGACY_ALIASES,
+    SERVE_SPA_ENV,
+    read_env,
+)
+
+bundle = Path(sys.argv[1])
+exported_serve = sys.argv[2]
+exported_dist = sys.argv[3]
+exported_dist_dir = Path(sys.argv[4])
+errors = []
+if exported_serve != SERVE_SPA_ENV:
+    errors.append(f"launcher exports {exported_serve!r} but the API reads {SERVE_SPA_ENV!r}")
+if exported_dist != FRONTEND_DIST_ENV:
+    errors.append(f"launcher exports {exported_dist!r} but the API reads {FRONTEND_DIST_ENV!r}")
+if exported_dist_dir != bundle / "frontend-dist":
+    errors.append(f"launcher exports the SPA dist {exported_dist_dir} but the layout populates {bundle / 'frontend-dist'}")
+if errors:
+    for error in errors:
+        print(f"::error::{error}", file=sys.stderr)
+    raise SystemExit(1)
+# The reader must resolve what this launcher exports, so a legacy-only export
+# (an installed bundle from before the rename) cannot silently strand the SPA.
+source = {exported_serve: "1", exported_dist: str(exported_dist_dir)}
+resolved_dist = Path(read_env(source, FRONTEND_DIST_ENV))
+if resolved_dist != exported_dist_dir:
+    print(f"::error::read_env({FRONTEND_DIST_ENV!r}) returned {resolved_dist}, not the exported {exported_dist_dir}", file=sys.stderr)
+    raise SystemExit(1)
+legacy = LEGACY_ALIASES.get(FRONTEND_DIST_ENV, ())
+print(f"spa env contract: serve={SERVE_SPA_ENV} dist={FRONTEND_DIST_ENV} dir={resolved_dist} legacy={','.join(legacy) or 'none'}")
+PY
+# END spa_env_contract_gate
 
 # Single source of truth for the app-bundle metadata: the shared helper in
 # scripts/ owns the Info.plist contents (the gate0 filter watches it too).
