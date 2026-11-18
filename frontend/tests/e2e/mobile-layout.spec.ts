@@ -1140,3 +1140,247 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
     })
   })
 })
+
+// FAR-2547: dynamic viewport height (dvh) companions for the remaining vh-sized
+// views. Playwright's device emulation has NO dynamic browser chrome, so 100vh,
+// 100dvh and window.innerHeight all agree here — an "element is not taller than
+// the viewport" assertion cannot fail on this branch and could not fail on main
+// either, so it would be an assertion-that-cannot-fail rather than coverage.
+// These four checks target what CAN regress instead:
+//   (a) browser support for dvh (without it every companion is inert),
+//   (b) the unlayered @supports rule that outranks the Tailwind vh utility,
+//   (c) the computed height of the real authenticated full-height roots,
+//   (d) the min-height of a standalone auth page.
+// Utility table and conventions: docs/frontend-mobile-layout.md.
+test.describe('Mobile dynamic viewport height (FAR-2547)', { tag: ['@regression', '@mobile'] }, () => {
+  // Same contract as the FAR-2537 openLocal above: a non-local target already
+  // carries the shared global-setup session, so only the local mock target needs
+  // an explicit sign-in. preparePage() is used instead of loginAsAdmin because it
+  // also installs the local mock API and re-navigates so the router guard sees
+  // the seeded session.
+  async function openRoute(page: Page, env: TestEnv, route: string) {
+    const readiness = await preparePage(page, route, env)
+    expect(
+      readiness,
+      `${route} was deactivated on ${env.name} (redirected away), so the FAR-2547 dvh check could not run. If that redirect is expected, add the app gate that causes it to DEACTIVATED_ROUTES as a per-route reason.`,
+    ).toBe('rendered')
+  }
+
+  test('the browser supports 100dvh — otherwise every dvh companion is inert', { tag: ['@regression', '@mobile'] }, async ({ page }) => {
+    // The whole sweep is progressive enhancement: `.h-screen-dvh` and friends
+    // live inside `@supports (height: 100dvh)`. Where dvh is unsupported they
+    // never apply, every view silently renders at its vh fallback, and the page
+    // bottom is hidden behind browser chrome again — with no failing assertion
+    // anywhere to say so. Pin the precondition.
+    const dvhSupported = await page.evaluate(() => CSS.supports('height', '100dvh'))
+    expect(
+      dvhSupported,
+      'This browser reports no support for height: 100dvh. Every dvh companion (.h-screen-dvh, .min-h-screen-dvh, .h-chrome-dvh, .max-h-viewport-dvh) is inert here because each sits inside @supports (height: 100dvh): the bare vh fallback is what the user gets, and mobile browser chrome hides the bottom of the page again.',
+    ).toBe(true)
+  })
+
+  test('the dvh utilities are live unlayered @supports rules that outrank the vh fallback', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+    await openRoute(page, env, '/pipelines')
+
+    // Structural CSSOM probe. Three things can silently disable the sweep:
+    //   1. the rule disappears (a compiler / tree-shake change),
+    //   2. the @supports guard stops naming dvh (a typo makes it never match),
+    //   3. the rule moves into an @layer — unlayered rules beat layered ones, so
+    //      the Tailwind `h-[calc(100vh-3.5rem)]` utility would win again.
+    // All three leave the page looking correct on this emulation (vh == dvh
+    // here), so only the cascade shape can catch them.
+    const rules = await page.evaluate(() => {
+      type FoundRule = {
+        sheet: string
+        inSupports: boolean
+        supportsCondition: string | null
+        inLayer: string | null
+        value: string
+      }
+      const expected: Record<string, string> = {
+        'h-screen-dvh': 'height',
+        'h-chrome-dvh': 'height',
+        'min-h-screen-dvh': 'min-height',
+        'max-h-viewport-dvh': 'max-height',
+      }
+      const found: Record<string, FoundRule> = {}
+
+      const inspect = (rule: CSSRule, sheetLabel: string, supports: string | null, layer: string | null) => {
+        const style = (rule as CSSStyleRule).style
+        if (!style) return
+        const selector = (rule as CSSStyleRule).selectorText ?? ''
+        for (const [cls, prop] of Object.entries(expected)) {
+          if (found[cls]) continue
+          if (!selector.split(',').some(part => part.trim() === `.${cls}`)) continue
+          const value = style.getPropertyValue(prop).trim()
+          if (!value) continue
+          found[cls] = { sheet: sheetLabel, inSupports: supports !== null, supportsCondition: supports, inLayer: layer, value }
+        }
+      }
+
+      const walk = (list: CSSRuleList, sheetLabel: string, supports: string | null, layer: string | null) => {
+        for (const rule of Array.from(list)) {
+          // Constructor-name checks rather than `instanceof`: the @layer types are
+          // not guaranteed to be in every TypeScript DOM lib this file compiles
+          // against, and `JS`'s own globals are what the browser actually exposes.
+          const ctor = rule.constructor.name
+          if (ctor === 'CSSSupportsRule') {
+            walk((rule as CSSSupportsRule).cssRules, sheetLabel, (rule as CSSSupportsRule).conditionText, layer)
+            continue
+          }
+          if (ctor === 'CSSLayerBlockRule') {
+            const named = (rule as CSSGroupingRule & { name?: string }).name
+            walk((rule as CSSGroupingRule).cssRules, sheetLabel, supports, layer ?? (named || '(anonymous)'))
+            continue
+          }
+          // A style rule is a LEAF for this probe even though modern Chromium
+          // exposes CSS Nesting through `CSSStyleRule.cssRules` (an always
+          // present, usually empty, rule list). Recurse only into genuine
+          // grouping rules, never into a style rule's nested children.
+          if ('selectorText' in rule) {
+            inspect(rule, sheetLabel, supports, layer)
+            continue
+          }
+          const nested = (rule as CSSGroupingRule).cssRules as CSSRuleList | undefined
+          if (nested) {
+            walk(nested, sheetLabel, supports, layer)
+            continue
+          }
+          inspect(rule, sheetLabel, supports, layer)
+        }
+      }
+
+      const unreadable: string[] = []
+      Array.from(document.styleSheets).forEach((sheet, index) => {
+        const sheetLabel = sheet.href ? sheet.href.split('/').pop() ?? sheet.href : `inline#${index}`
+        let sheetRules: CSSRuleList
+        try {
+          sheetRules = sheet.cssRules
+        } catch (err) {
+          // A cross-origin stylesheet throws on cssRules; name the sheet instead
+          // of letting a bare TypeError escape the page function.
+          unreadable.push(`${sheetLabel} (${err instanceof Error ? err.message : String(err)})`)
+          return
+        }
+        walk(sheetRules, sheetLabel, null, null)
+      })
+
+      return { found, unreadable, scannedSheets: document.styleSheets.length }
+    })
+
+    expect(
+      rules.unreadable,
+      `Could not read cssRules from these stylesheets, so the dvh cascade shape is unverified: ${rules.unreadable.join('; ')}`,
+    ).toHaveLength(0)
+
+    for (const cls of ['h-screen-dvh', 'h-chrome-dvh', 'min-h-screen-dvh', 'max-h-viewport-dvh']) {
+      const rule = rules.found[cls]
+      expect(
+        rule,
+        `No .${cls} rule found in any of the ${rules.scannedSheets} stylesheet(s). The dvh utility is missing or was renamed, so the view silently falls back to its vh class.`,
+      ).toBeTruthy()
+      if (!rule) continue
+      expect(
+        rule.value.includes('100dvh'),
+        `.${cls} (${rule.sheet}) declares ${rule.value}; expected a value containing 100dvh. Without dvh the companion cannot correct the browser-chrome clipping it exists for.`,
+      ).toBe(true)
+      expect(
+        rule.inSupports,
+        `.${cls} (${rule.sheet}) is not inside @supports. It must be guarded by @supports (height: 100dvh) so the vh fallback stays authoritative where dvh is unsupported.`,
+      ).toBe(true)
+      expect(
+        rule.supportsCondition?.includes('100dvh') ?? false,
+        `.${cls} (${rule.sheet}) sits inside @supports "${rule.supportsCondition}", which does not name 100dvh — a malformed guard never matches and the rule is dead.`,
+      ).toBe(true)
+      expect(
+        rule.inLayer,
+        `.${cls} (${rule.sheet}) is nested inside @layer "${rule.inLayer}". The dvh companions must stay UNLAYERED: unlayered rules outrank every @layer, and a layered rule loses to the Tailwind vh utility it is meant to override, so the sweep silently stops working.`,
+      ).toBeNull()
+    }
+  })
+
+  // The authenticated chrome-offset views: their single outermost root carries
+  // `h-chrome-dvh`, which is `calc(100dvh - 3.5rem)`.
+  for (const route of ['/pipelines', '/schemas']) {
+    test(`${route} — full-height root is the viewport minus the chrome offset and nothing hangs below the fold`, { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+      await openRoute(page, env, route)
+
+      const metrics = await page.evaluate(() => {
+        const app = document.getElementById('app')
+        const carriers = app ? Array.from(app.querySelectorAll<HTMLElement>('.h-chrome-dvh')) : []
+        // The view root is the OUTERMOST carrier (no other carrier contains it).
+        const outermost = carriers.filter(el => !carriers.some(other => other !== el && other.contains(el)))
+        const root = outermost[0] ?? carriers[0] ?? null
+        const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
+        return {
+          appFound: app !== null,
+          carriers: carriers.length,
+          outermostRoots: outermost.length,
+          computedHeight: root ? parseFloat(getComputedStyle(root).height) : Number.NaN,
+          innerHeight: window.innerHeight,
+          chromeOffset: rootFontSize * 3.5,
+          scrollHeight: document.documentElement.scrollHeight,
+        }
+      })
+
+      expect(metrics.appFound, '#app is missing, so the app never mounted and the dvh root cannot be measured.').toBe(true)
+      expect(
+        metrics.carriers,
+        `No element under #app carries .h-chrome-dvh on ${route}. The view root lost its dvh companion and now sizes itself with the bare calc(100vh-3.5rem) fallback.`,
+      ).toBeGreaterThan(0)
+      if (metrics.outermostRoots > 1) {
+        process.stdout.write(
+          `  [mobile-layout] ${route}: ${metrics.outermostRoots} outermost .h-chrome-dvh carriers; asserting on the first in document order\n`,
+        )
+      }
+
+      // The offset is DERIVED, never hardcoded: 3.5rem in px from the root font
+      // size, so a Tailwind scale change moves the expectation with it. Device
+      // emulation has no dynamic chrome, so 100dvh resolves to innerHeight here
+      // — the point is that the root uses the dvh utility (and that the derived
+      // subtraction is right), not that dvh and vh differ.
+      const expectedHeight = metrics.innerHeight - metrics.chromeOffset
+      const delta = metrics.computedHeight - expectedHeight
+      expect(
+        Math.abs(delta) <= 2,
+        `${route}: the .h-chrome-dvh root computes to ${metrics.computedHeight}px, but viewport ${metrics.innerHeight}px minus the derived ${metrics.chromeOffset}px chrome offset is ${expectedHeight}px (delta ${delta}px). Either the view root lost h-chrome-dvh or the 3.5rem chrome convention moved.`,
+      ).toBe(true)
+
+      // The user-facing invariant: nothing hangs below the fold.
+      expect(
+        metrics.scrollHeight <= metrics.innerHeight + 2,
+        `${route}: the document is ${metrics.scrollHeight}px tall against a ${metrics.innerHeight}px viewport — content hangs below the fold. That is the invariant the dvh sweep exists to protect.`,
+      ).toBe(true)
+    })
+  }
+
+  test('/login — standalone auth page root gets the dvh min-height', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+    // On staging/app the shared storageState is already signed in, so visiting
+    // /login redirects to the app root and the unauthenticated standalone page
+    // never renders. Explicit skip with the reason, never a silent one.
+    test.skip(
+      env.name !== 'local',
+      `the shared storageState on ${env.name} is already signed in, so /login redirects and the unauthenticated standalone page never renders`,
+    )
+    await preparePage(page, '/login', env)
+
+    const metrics = await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('.min-h-screen-dvh')
+      return {
+        found: root !== null,
+        height: root ? root.getBoundingClientRect().height : Number.NaN,
+        minHeight: root ? getComputedStyle(root).minHeight : '',
+        innerHeight: window.innerHeight,
+      }
+    })
+
+    expect(
+      metrics.found,
+      'No .min-h-screen-dvh element on /login. The standalone auth page fell back to the min-h-screen (vh) class, so its bottom is hidden behind browser chrome where dvh is available.',
+    ).toBe(true)
+    expect(
+      metrics.height >= metrics.innerHeight - 2,
+      `/login: the .min-h-screen-dvh root is ${metrics.height}px tall against a ${metrics.innerHeight}px viewport (computed min-height ${metrics.minHeight}). It no longer fills at least the visible viewport.`,
+    ).toBe(true)
+  })
+})
