@@ -878,9 +878,20 @@ DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
 )
 
 
-def _documented_modulo_knobs() -> set[str]:
+#: Both prefixes a documented service-contract knob may carry. The rebrand made
+#: the canonical ``FARNA_CONTROL_`` spelling the bulk of the published page, so a
+#: scrape floor counted over the legacy ``MODULO_`` names alone would measure the
+#: upgrade section, not the contract.
+_DOCUMENTED_ENV_NAME_RE = re.compile(r"\b(?:MODULO_|FARNA_CONTROL_)[A-Z0-9_]+\b")
+
+
+def _documented_env_knobs() -> set[str]:
     text = CONFIGURATION_REFERENCE.read_text(encoding="utf-8")
-    return {match.group(0) for match in re.finditer(r"\bMODULO_[A-Z0-9_]+\b", text) if not match.group(0).endswith("_")}
+    return {match.group(0) for match in _DOCUMENTED_ENV_NAME_RE.finditer(text) if not match.group(0).endswith("_")}
+
+
+def _documented_modulo_knobs() -> set[str]:
+    return {name for name in _documented_env_knobs() if name.startswith(env_contract.LEGACY_PREFIX)}
 
 
 def _settings_legacy_aliases() -> set[str]:
@@ -906,7 +917,10 @@ def _accepted_legacy_knobs() -> set[str]:
 def test_every_documented_legacy_knob_is_accepted_somewhere() -> None:
     """A documented spelling no reader accepts is the FAR-2563 403, not docs."""
     documented = _documented_modulo_knobs()
-    assert len(documented) > 90, len(documented)
+    # Floor over BOTH prefixes: it guards against the scrape silently losing the
+    # page, and after the rebrand only the canonical FARNA_CONTROL_ half is large.
+    all_documented = _documented_env_knobs()
+    assert len(all_documented) > 90, len(all_documented)
 
     missing = sorted(documented - _accepted_legacy_knobs() - DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS)
     assert not missing, f"documented MODULO_* knobs no mechanism accepts (register an alias, add a Settings alias, or list a real gap): {missing}"
