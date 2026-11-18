@@ -68,7 +68,7 @@ jobs:
           pg_dump --version
           psql --version
       - name: Install backend dependencies
-        run: uv sync --frozen --project backend --no-build
+        run: uv sync --frozen --project backend
       - name: Run the backup / restore / upgrade gate
         timeout-minutes: 20
         env:
