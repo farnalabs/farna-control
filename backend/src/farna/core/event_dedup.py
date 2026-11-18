@@ -55,7 +55,14 @@ async def is_event_claimed(
     Does NOT claim. A Redis failure reports "not seen" so a retried event may
     be handled again rather than dropped silently.
     """
-    redis = _client(settings)
+    # Client construction is part of the fail-open path: Redis.from_url raises
+    # ValueError on a malformed REDIS_URL, and that must fall back to the local
+    # set rather than abort the caller's fulfilment/alert work.
+    try:
+        redis = _client(settings)
+    except Exception:
+        _log.warning("%s.redis_client_failed event_id=%s", log_namespace, event_id, exc_info=True)
+        redis = None
     if redis is not None:
         try:
             return bool(await redis.exists(f"{key_prefix}{event_id}"))
@@ -83,7 +90,12 @@ async def claim_event_id(
     Called only AFTER a successful send so a transient failure leaves the
     event unclaimed and Stripe's retry can re-attempt.
     """
-    redis = _client(settings)
+    # See is_event_claimed: construction failure must fall back, never raise.
+    try:
+        redis = _client(settings)
+    except Exception:
+        _log.warning("%s.redis_client_failed event_id=%s", log_namespace, event_id, exc_info=True)
+        redis = None
     if redis is not None:
         try:
             claimed = await redis.set(

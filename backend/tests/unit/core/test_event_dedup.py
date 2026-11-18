@@ -148,6 +148,39 @@ class TestRedis:
         assert claimed is True
         assert "evt_6" in fallback
 
+    async def test_check_client_construction_failure_falls_back_to_the_local_set(self, fallback: set[str]) -> None:
+        fallback.add("evt_10")
+        with patch(
+            "farna.core.event_dedup.Redis.from_url",
+            new=MagicMock(side_effect=ValueError("Redis URL must specify one of the following schemes")),
+        ):
+            claimed = await is_event_claimed(
+                _make_settings("not-a-redis-url"),
+                "evt_10",
+                key_prefix=_PREFIX,
+                fallback=fallback,
+                log_namespace="stripe.test",
+            )
+
+        assert claimed is True
+
+    async def test_claim_client_construction_failure_falls_back_to_the_local_set(self, fallback: set[str]) -> None:
+        with patch(
+            "farna.core.event_dedup.Redis.from_url",
+            new=MagicMock(side_effect=ValueError("Redis URL must specify one of the following schemes")),
+        ):
+            claimed = await claim_event_id(
+                _make_settings("not-a-redis-url"),
+                "evt_11",
+                key_prefix=_PREFIX,
+                ttl_seconds=_TTL,
+                fallback=fallback,
+                log_namespace="stripe.test",
+            )
+
+        assert claimed is True
+        assert "evt_11" in fallback
+
     async def test_a_close_failure_is_suppressed(self, fallback: set[str]) -> None:
         client = _redis_client()
         client.exists.return_value = 0
