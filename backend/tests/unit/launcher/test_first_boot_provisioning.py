@@ -44,9 +44,13 @@ class _FakeCluster:
         self.connects: list[str] = []
         self.existence_queries: list[tuple[str, tuple[Any, ...]]] = []
         self.statements: list[str] = []
+        self.fail_rename: bool = False
 
     def creates(self) -> list[str]:
         return [statement for statement in self.statements if statement.startswith("CREATE DATABASE")]
+
+    def renames(self) -> list[str]:
+        return [statement for statement in self.statements if statement.startswith("ALTER DATABASE")]
 
 
 class _FakeConnection:
@@ -60,6 +64,14 @@ class _FakeConnection:
     async def execute(self, statement: str) -> str:
         self._cluster.statements.append(statement)
         quoted = statement.split('"')
+        if statement.startswith("ALTER DATABASE"):
+            import asyncpg
+
+            if self._cluster.fail_rename:
+                raise asyncpg.PostgresError("database is being accessed by other users")
+            self._cluster.databases.discard(quoted[1])
+            self._cluster.databases.add(quoted[3])
+            return "ALTER DATABASE"
         self._cluster.databases.add(quoted[1])
         return "CREATE DATABASE"
 
@@ -139,6 +151,68 @@ def test_preexisting_database_is_adopted_without_ddl(monkeypatch: pytest.MonkeyP
     assert cluster.databases == {"operator_created"}
 
 
+def test_pre_rename_database_is_renamed_rather_than_shadowed_by_an_empty_target(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """A pre-rename data dir's data is adopted, never left behind.
+
+    Before the rebrand the application database was ``modulo``; a data dir from
+    then has every table there. Adding the composed ``farna_control`` target
+    (before the fix) produced an empty database the app booted against happily,
+    with the operator's real data untouched and unreferenced.
+    """
+    assert entry_module.LEGACY_APP_DB_NAMES == ("modulo",)
+    cluster = _FakeCluster(existing={"modulo"})
+    _install_fake_cluster(monkeypatch, cluster)
+
+    with caplog.at_level("INFO", logger="farna.launcher.entry"):
+        entry_module._ensure_app_database(_composed(), _launcher_state(), _secrets())
+
+    assert cluster.renames() == [f'ALTER DATABASE "modulo" RENAME TO "{APP_DB_NAME}"']
+    assert not cluster.creates()
+    # Exactly one database survives, and it is the composed target: the data
+    # that lived in ``modulo`` is now reachable under ``farna_control``.
+    assert cluster.databases == {APP_DB_NAME}
+    assert any("app_database_adopted" in record.getMessage() and "modulo" in record.getMessage() for record in caplog.records)
+
+
+def test_no_legacy_database_means_a_normal_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    cluster = _FakeCluster()
+    _install_fake_cluster(monkeypatch, cluster)
+
+    entry_module._ensure_app_database(_composed(), _launcher_state(), _secrets())
+
+    assert not cluster.renames()
+    assert cluster.creates() == [f'CREATE DATABASE "{APP_DB_NAME}"']
+    assert cluster.databases == {APP_DB_NAME}
+
+
+def test_target_and_legacy_both_present_warns_and_destroys_neither(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """Ambiguity is surfaced, never resolved by a rename or a drop."""
+    cluster = _FakeCluster(existing={APP_DB_NAME, "modulo"})
+    _install_fake_cluster(monkeypatch, cluster)
+
+    with caplog.at_level("WARNING", logger="farna.launcher.entry"):
+        entry_module._ensure_app_database(_composed(), _launcher_state(), _secrets())
+
+    assert not cluster.renames()
+    assert not cluster.creates()
+    assert cluster.databases == {APP_DB_NAME, "modulo"}
+    assert any("app_database_ambiguous" in record.getMessage() for record in caplog.records)
+
+
+def test_a_failed_rename_fails_the_boot_closed_with_the_recovery_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rename that cannot happen must never fall through to a fresh create."""
+    cluster = _FakeCluster(existing={"modulo"})
+    cluster.fail_rename = True
+    _install_fake_cluster(monkeypatch, cluster)
+    composed = _composed()
+
+    with pytest.raises(entry_module.BootError, match=r'ALTER DATABASE "modulo" RENAME TO "farna_control"'):
+        entry_module._ensure_app_database(composed, _launcher_state(), _secrets())
+
+    assert not cluster.creates()
+    assert cluster.databases == {"modulo"}
+
+
 def test_existence_check_binds_the_name_as_a_parameter(monkeypatch: pytest.MonkeyPatch) -> None:
     """Injection safety on the half of the statement that CAN be parameterised."""
     cluster = _FakeCluster()
@@ -146,10 +220,12 @@ def test_existence_check_binds_the_name_as_a_parameter(monkeypatch: pytest.Monke
 
     entry_module._ensure_app_database(_composed(), _launcher_state(), _secrets())
 
-    assert len(cluster.existence_queries) == 1
+    assert cluster.existence_queries
     query, params = cluster.existence_queries[0]
     assert "datname = $1" in query
     assert params == (APP_DB_NAME,)
+    # Every catalog lookup — the target and each legacy candidate — is bound.
+    assert all("datname = $1" in probe for probe, _ in cluster.existence_queries)
 
 
 def test_provisioning_fails_loudly_without_a_database_in_the_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -253,6 +329,47 @@ def test_default_spawner_writes_child_output_to_its_log_file(tmp_path: Any) -> N
     tail = proc.stderr_tail()
     assert tail is not None
     assert "pg-stderr-marker" in tail
+
+
+def test_default_spawner_rotates_an_oversized_child_log_at_spawn_time(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A per-service log is bounded at spawn, so it cannot grow forever.
+
+    ``modulo logs --rotate`` deliberately refuses a non-app component that a
+    LIVE child holds open (a post-rename write would go to the rotated-away
+    inode). Spawn is the safe equivalent: the previous instance has exited, so
+    the oversized file is rotated before the append handle is opened and the
+    new output starts in a fresh file.
+
+    No POSIX skip: ``_default_spawner`` needs no child shim for this (with no
+    process-identity backend the argv passes through unwrapped), and rotation
+    is a plain file operation on every platform.
+    """
+    from farna.launcher import supervisor
+
+    # Shipped policy: 10 MB per file x 5 generations (asserted, not assumed).
+    assert (supervisor.ROTATE_DEFAULT_MAX_BYTES, supervisor.ROTATE_DEFAULT_KEEP) == (10 * 1024 * 1024, 5)
+    # Shrink the cap so the test exercises the threshold cheaply.
+    monkeypatch.setattr(supervisor, "ROTATE_DEFAULT_MAX_BYTES", 64)
+
+    log_path = log_paths(tmp_path)["redis"]
+    log_path.parent.mkdir(parents=True)
+    oversized = "OLD-LINE-" + "x" * 256 + "\n"
+    log_path.write_text(oversized * 4, encoding="utf-8")
+
+    argv = [sys.executable, "-c", "import sys; print('fresh-marker')"]
+    proc = supervisor._default_spawner(argv, None, log_path)
+    try:
+        proc.wait(timeout=30)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+    rotated = log_path.with_name(log_path.name + ".1")
+    assert rotated.is_file()
+    assert "OLD-LINE-" in rotated.read_text(encoding="utf-8")
+    fresh = log_path.read_text(encoding="utf-8")
+    assert "fresh-marker" in fresh
+    assert "OLD-LINE-" not in fresh
 
 
 def test_compose_config_is_the_single_source_the_entry_derives_from() -> None:

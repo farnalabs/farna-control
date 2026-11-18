@@ -1837,11 +1837,22 @@ def _default_spawner(argv: list[str], env: dict[str, str] | None, log_path: Path
     stream, so ``log_paths()`` advertised ``logs/postgres.log`` and
     ``logs/redis.log`` that no code ever created — diagnostics reported
     "absent" for a service that was demonstrably running (FAR-2560).
+
+    The file is bounded AT SPAWN TIME: :func:`rotate_log` runs before the
+    append handle is opened. Spawn is the one point where that is safe (a
+    previous instance of this child has already exited, so no writer holds the
+    file open and a post-rename write cannot be redirected into the
+    rotated-away inode — the condition ``modulo logs --rotate`` refuses to
+    assume for a live holder). The cap is the module's shift-size policy:
+    :data:`ROTATE_DEFAULT_MAX_BYTES` (10 MB) per file with
+    :data:`ROTATE_DEFAULT_KEEP` (5) retained generations, so one service log
+    tops out at ~60 MB on disk instead of growing without bound.
     """
     shim_argv = child_shim_argv(argv)
     stream: IO[bytes] | None = None
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        rotate_log(log_path)
         stream = log_path.open("ab", buffering=0)
     try:
         proc = subprocess.Popen(  # noqa: S603 — argv fully constructed by the supervisor

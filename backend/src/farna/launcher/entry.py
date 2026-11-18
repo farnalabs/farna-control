@@ -102,6 +102,15 @@ POSTGRES_HOST = "127.0.0.1"
 # [A-Za-z0-9_] so the accepted set stays byte-identical to the old class.
 _SQL_IDENTIFIER_RE = re.compile(r"[A-Za-z_]\w*", re.ASCII)
 
+# Database names a PRE-RENAME data dir may hold its data in. Before the
+# rebrand (commit 77950d01a^) ``config_source.APP_DB_NAME`` was ``modulo``, so
+# an operator who installed then has every table in ``modulo``; the composed
+# name is now ``farna_control``. Without adoption the provisioner would create
+# an empty ``farna_control``, leave the real data untouched in ``modulo`` and
+# boot successfully against a blank database — silent, and indistinguishable
+# from a fresh install. Adopted by RENAME at boot, when no client is connected.
+LEGACY_APP_DB_NAMES: tuple[str, ...] = ("modulo",)
+
 
 def _validate_sql_identifier(name: str, what: str) -> str:
     """Return ``name`` if it is a safe SQL identifier, else raise BootError."""
@@ -892,6 +901,16 @@ def _ensure_app_database(composed: dict[str, str], launcher_state: Any, secrets:
     (or a database an operator pre-created) is adopted without touching it.
     ``CREATE DATABASE`` cannot take a bound parameter, so the name is validated
     against the strict identifier grammar and double-quoted.
+
+    A data dir created BEFORE the rebrand holds its data in a
+    :data:`LEGACY_APP_DB_NAMES` database (``modulo``). When the target is
+    missing and a legacy database exists, the legacy one is ADOPTED by
+    ``ALTER DATABASE ... RENAME TO`` — the cluster is launcher-owned and no
+    client is connected yet, so the rename is safe — with a log line naming
+    both. Creating a fresh empty target beside it instead would boot the app
+    against a blank database while the operator's real data sat untouched in
+    the old one. Adoption is never possible silently-wrong: if the rename
+    fails the boot fails closed with the manual recovery command.
     """
     import asyncio
 
@@ -907,6 +926,42 @@ def _ensure_app_database(composed: dict[str, str], launcher_state: Any, secrets:
         raise BootError("cannot provision the application database: the composed DATABASE_URL names no database (check the launcher config)")
     app_db_name = _validate_sql_identifier(raw_name, "the composed DATABASE_URL database")
 
+    async def _provision(conn: Any) -> None:
+        exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", app_db_name)
+        # Legacy candidates are probed even when the target exists: adopting the
+        # target while a pre-rename database still holds data is a state the
+        # operator must be told about (never silently ignored, never destroyed).
+        legacy_names = [name for name in LEGACY_APP_DB_NAMES if name != app_db_name]
+        present = [name for name in legacy_names if await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", name)]
+        if exists:
+            if present:
+                _log.warning(
+                    "launcher.app_database_ambiguous target=%s legacy=%s — the target database already exists and is used as-is; the pre-rename database was NOT renamed or removed. Verify it is no longer the live data set before deleting it.",
+                    app_db_name,
+                    present,
+                )
+            return
+        if present:
+            legacy = _validate_sql_identifier(present[0], "the legacy launcher database name")
+            # Both identifiers are grammar-validated above and double-quoted, so
+            # neither can escape its identifier position (ALTER DATABASE takes no
+            # bound parameter for a name).
+            try:
+                await conn.execute(f'ALTER DATABASE "{legacy}" RENAME TO "{app_db_name}"')  # nosemgrep: raw-sql-fstring
+            except (asyncpg.PostgresError, OSError) as exc:
+                raise BootError(
+                    f"cannot adopt the pre-rename application database: renaming {legacy!r} to {app_db_name!r} failed ({exc}). "
+                    f'Recover it manually with `ALTER DATABASE "{legacy}" RENAME TO "{app_db_name}"` while no client is connected '
+                    "(or point DATABASE_URL at the existing database), then restart — the launcher refuses to boot against a new, empty database."
+                ) from exc
+            _log.info(
+                "launcher.app_database_adopted legacy=%s target=%s — renamed the pre-rename database instead of creating an empty one, so the existing data is preserved",
+                legacy,
+                app_db_name,
+            )
+            return
+        await conn.execute(f'CREATE DATABASE "{app_db_name}"')  # nosemgrep: raw-sql-fstring
+
     async def _create() -> None:
         root_url = f"postgresql://modulo:{secrets.postgres_password}@{POSTGRES_HOST}:{launcher_state.postgres_port}/postgres"
         # FAR-1441: never rely on asyncpg's fail-open ``prefer`` driver default
@@ -919,14 +974,7 @@ def _ensure_app_database(composed: dict[str, str], launcher_state: Any, secrets:
         root_url, root_ssl = split_postgres_sslmode(root_url)
         conn = await asyncpg.connect(root_url, ssl=root_ssl)
         try:
-            exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", app_db_name)
-            if not exists:
-                # app_db_name is derived from the composed DATABASE_URL and
-                # validated against the strict identifier grammar above, and is
-                # double-quoted here, so it cannot escape the identifier
-                # position of the CREATE DATABASE statement (which cannot take
-                # a bound parameter).
-                await conn.execute(f'CREATE DATABASE "{app_db_name}"')  # nosemgrep: raw-sql-fstring
+            await _provision(conn)
         finally:
             await conn.close()
 
