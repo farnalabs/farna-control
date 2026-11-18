@@ -188,7 +188,7 @@ def _install_boot_mocks(monkeypatch: pytest.MonkeyPatch, order: list[str], *, mo
 
     monkeypatch.setattr(supervisor_mod, "DataDirLock", FakeLock)
     monkeypatch.setattr(supervisor_mod, "knobs_from_env", lambda: supervisor_mod.SupervisorKnobs(tick_seconds=1000.0))
-    monkeypatch.setattr(supervisor_mod, "_default_spawner", lambda argv, env: FakeProc())
+    monkeypatch.setattr(supervisor_mod, "_default_spawner", lambda argv, env, log_path=None: FakeProc())
 
     def recorded_secrets(path: Path) -> secrets_file_module.LauncherSecrets:
         order.append("secrets")
@@ -254,7 +254,7 @@ def _install_boot_mocks(monkeypatch: pytest.MonkeyPatch, order: list[str], *, mo
 
     monkeypatch.setattr(entry_module, "_pg_isready_probe", lambda bin_dir, port: lambda: True)
     monkeypatch.setattr(entry_module, "_redis_ping_probe", lambda bin_dir, port, pw: lambda: True)
-    monkeypatch.setattr(entry_module, "_ensure_app_database", lambda state, secrets: order.append("ensure-db"))
+    monkeypatch.setattr(entry_module, "_ensure_app_database", lambda composed, state, secrets: order.append("ensure-db"))
     monkeypatch.setattr(entry_module, "_prepare_database_env", lambda composed: order.append("db-env"))
     monkeypatch.setattr(
         entry_module,
@@ -466,7 +466,7 @@ def _install_degrade_mocks(monkeypatch: pytest.MonkeyPatch) -> None:
         def wait(self, timeout: float | None = None) -> int:
             return 7
 
-    monkeypatch.setattr(supervisor_mod, "_default_spawner", lambda argv, env: DyingProc())
+    monkeypatch.setattr(supervisor_mod, "_default_spawner", lambda argv, env, log_path=None: DyingProc())
 
     def fake_initdb(pgdata: Path, *, password: str, bin_dir: Path | None = None, **kwargs: object) -> Path:
         pgdata.mkdir(parents=True, exist_ok=True)
@@ -488,7 +488,7 @@ def _install_degrade_mocks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings_module, "set_first_boot_guard", lambda guard: None)
     monkeypatch.setattr(entry_module, "_pg_isready_probe", lambda bin_dir, port: lambda: True)
     monkeypatch.setattr(entry_module, "_redis_ping_probe", lambda bin_dir, port, pw: lambda: True)
-    monkeypatch.setattr(entry_module, "_ensure_app_database", lambda state, secrets: None)
+    monkeypatch.setattr(entry_module, "_ensure_app_database", lambda composed, state, secrets: None)
     monkeypatch.setattr(entry_module, "_prepare_database_env", lambda composed: None)
     monkeypatch.setattr(
         entry_module,
@@ -1823,21 +1823,22 @@ def test_run_foreground_shutdown_failure_during_error(monkeypatch: pytest.Monkey
 
 
 class TestEnsureAppDatabaseSafety:
-    """FAR-922: CREATE DATABASE cannot bind the DB name, so the launcher must
-    validate APP_DB_NAME as a SQL identifier before interpolating it."""
+    """FAR-922/FAR-2560: CREATE DATABASE cannot bind the DB name, so the
+    launcher must validate the name it derives from the composed DATABASE_URL
+    as a SQL identifier before interpolating it."""
 
     def test_validate_sql_identifier_accepts_grammar_valid_names(self) -> None:
         from farna.launcher.entry import _validate_sql_identifier
 
-        assert _validate_sql_identifier("modulo", "APP_DB_NAME") == "modulo"
-        assert _validate_sql_identifier("_priv_db9", "APP_DB_NAME") == "_priv_db9"
+        assert _validate_sql_identifier("modulo", "DATABASE_URL database") == "modulo"
+        assert _validate_sql_identifier("_priv_db9", "DATABASE_URL database") == "_priv_db9"
 
     def test_validate_sql_identifier_rejects_hostile_names(self) -> None:
         from farna.launcher.entry import _validate_sql_identifier
 
         for hostile in ("dup; DROP SCHEMA public", 'dup"; DELETE', "dup-name", "dup d"):
             with pytest.raises(BootError, match="not a safe SQL identifier"):
-                _validate_sql_identifier(hostile, "APP_DB_NAME")
+                _validate_sql_identifier(hostile, "DATABASE_URL database")
 
     def test_ensure_app_database_refuses_unsafe_name_before_connect(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from types import SimpleNamespace
@@ -1851,12 +1852,14 @@ class TestEnsureAppDatabaseSafety:
             return object()
 
         monkeypatch.setattr(asyncpg, "connect", _record_connect)
-        monkeypatch.setattr(entry_module, "APP_DB_NAME", 'modulo"; DROP SCHEMA public;')
+        # A hostile database name can only reach the provisioner through the
+        # composed URL now — that is the single input it honours.
+        composed = {"DATABASE_URL": "postgresql+asyncpg://modulo:pw@127.0.0.1:5432/modulo%22%3B%20DROP%20SCHEMA%20public"}
         secrets = SimpleNamespace(postgres_password="pw")
         launcher_state = SimpleNamespace(postgres_port=5432)
 
         with pytest.raises(BootError, match="not a safe SQL identifier"):
-            entry_module._ensure_app_database(launcher_state, secrets)
+            entry_module._ensure_app_database(composed, launcher_state, secrets)
 
         assert connects == []
 
@@ -1885,10 +1888,11 @@ class TestEnsureAppDatabaseSafety:
             return _Conn()
 
         monkeypatch.setattr(asyncpg, "connect", _record_connect)
+        composed = {"DATABASE_URL": "postgresql+asyncpg://modulo:pw@127.0.0.1:5432/farna_control"}
         secrets = SimpleNamespace(postgres_password="pw")
         launcher_state = SimpleNamespace(postgres_port=5432)
 
-        entry_module._ensure_app_database(launcher_state, secrets)
+        entry_module._ensure_app_database(composed, launcher_state, secrets)
 
         assert len(captured) == 1
         args, kwargs = captured[0]

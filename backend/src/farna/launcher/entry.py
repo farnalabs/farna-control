@@ -90,7 +90,12 @@ BUNDLED_BIN_DIR_ENV = "FARNA_CONTROL_BUNDLED_BIN_DIR"
 # layout, the verification and the diagnostics cannot drift apart.
 REQUIRED_BUNDLED_BINARIES: tuple[str, ...] = ("initdb", "postgres", "pg_isready", "redis-server", "redis-cli")
 POSTGRES_HOST = "127.0.0.1"
-APP_DB_NAME = "farna_control"
+# NOTE: there is deliberately NO application-database constant here. The
+# database the launcher provisions is DERIVED from the composed DATABASE_URL
+# (``config_source.compose_config`` owns the name) so "created" and
+# "connected" can never disagree — see FAR-2560 and
+# ``_ensure_app_database``. The module top-level farna import is pinned to
+# env_safety alone, so the name cannot be imported at module scope here.
 
 # Strict grammar for any SQL identifier the launcher interpolates into DDL
 # (CREATE DATABASE cannot take a bound parameter). re.ASCII pins \w to
@@ -117,7 +122,6 @@ _DETACH_HANDSHAKE_TIMEOUT_SECONDS = 300.0
 # The launcher-owned public surface (consumed by the CLI group; vulture's
 # dead-code gate special-cases __all__).
 __all__ = [
-    "APP_DB_NAME",
     "BUNDLED_BIN_DIR_ENV",
     "REQUIRED_BUNDLED_BINARIES",
     "BootError",
@@ -448,7 +452,7 @@ def _run_foreground(
                 interval=knobs.health_check_interval,
                 stop=run_state.shutdown_requested,
             )
-            _ensure_app_database(launcher_state, secrets)
+            _ensure_app_database(composed, launcher_state, secrets)
             _prepare_database_env(composed)
             settings = _build_settings()
             _add_saq_children(supervisor, settings, composed)
@@ -709,13 +713,17 @@ def _bundled_service_env(base: dict[str, str]) -> dict[str, str]:
 
 def _postgres_child(launcher_state: Any, pgdata: Path, bin_dir: Path, knobs: Any) -> Any:
     from farna.launcher.initdb import postgres_server_argv
-    from farna.launcher.supervisor import ChildSpec
+    from farna.launcher.supervisor import ChildSpec, log_paths
 
     return ChildSpec(
         name="postgres",
         argv_builder=lambda: postgres_server_argv(pgdata, POSTGRES_HOST, launcher_state.postgres_port, bin_dir),
         probe=_pg_isready_probe(bin_dir, launcher_state.postgres_port),
         env_builder=_bundled_service_env,
+        # The postmaster logs to stderr; route it to the documented per-service
+        # log so ``modulo logs postgres`` / a support bundle / the smoke
+        # diagnostics never report the file as "absent" for a running service.
+        log_path=log_paths(pgdata.parent)["postgres"],
         shutdown_priority=1,
         teardown_signal=int(signal.SIGINT),
         shutdown_escalation_timeout=knobs.pg_fast_shutdown_timeout,
@@ -723,7 +731,7 @@ def _postgres_child(launcher_state: Any, pgdata: Path, bin_dir: Path, knobs: Any
 
 
 def _redis_child(launcher_state: Any, secrets: Any, bin_dir: Path, data_dir: Path) -> Any:
-    from farna.launcher.supervisor import ChildSpec
+    from farna.launcher.supervisor import ChildSpec, log_paths
 
     return ChildSpec(
         name="redis",
@@ -732,6 +740,7 @@ def _redis_child(launcher_state: Any, secrets: Any, bin_dir: Path, data_dir: Pat
         argv_builder=lambda: _redis_server_argv(bin_dir, launcher_state.redis_port, secrets.redis_password, data_dir),
         probe=_redis_ping_probe(bin_dir, launcher_state.redis_port, secrets.redis_password),
         env_builder=_bundled_service_env,
+        log_path=log_paths(data_dir)["redis"],
         shutdown_priority=2,
     )
 
@@ -868,16 +877,35 @@ def _await_health(
         sleep(interval)
 
 
-def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
-    """Create the app database inside the bundled cluster (idempotent)."""
+def _ensure_app_database(composed: dict[str, str], launcher_state: Any, secrets: Any) -> None:
+    """Create the app database the composed config names (idempotent).
+
+    The target database is DERIVED from ``composed["DATABASE_URL"]`` — the
+    exact URL the caller pins for Settings (and therefore the URL the API, its
+    migrations and the SAQ children connect with). A second hardcoded name is
+    what FAR-2560 was: the provisioner created ``farna_control`` while the
+    composed URL named ``modulo``, so a fresh install migrated against a
+    database that did not exist (``InvalidCatalogNameError``) and the API never
+    served.
+
+    Idempotent by construction: the existence check runs first, so a restart
+    (or a database an operator pre-created) is adopted without touching it.
+    ``CREATE DATABASE`` cannot take a bound parameter, so the name is validated
+    against the strict identifier grammar and double-quoted.
+    """
     import asyncio
 
     import asyncpg
+    from sqlalchemy.engine import make_url
 
-    # CREATE DATABASE cannot take a bound parameter, so the database name must
-    # be interpolated. Validate it against the strict identifier grammar
-    # before the execute below.
-    app_db_name = _validate_sql_identifier(APP_DB_NAME, "APP_DB_NAME")
+    database_url = composed.get("DATABASE_URL", "")
+    if not database_url:
+        raise BootError("cannot provision the application database: the composed config has no DATABASE_URL")
+    # Never echo the URL itself in an error: it carries the generated password.
+    raw_name = make_url(database_url).database
+    if not raw_name:
+        raise BootError("cannot provision the application database: the composed DATABASE_URL names no database (check the launcher config)")
+    app_db_name = _validate_sql_identifier(raw_name, "the composed DATABASE_URL database")
 
     async def _create() -> None:
         root_url = f"postgresql://modulo:{secrets.postgres_password}@{POSTGRES_HOST}:{launcher_state.postgres_port}/postgres"
@@ -891,13 +919,13 @@ def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
         root_url, root_ssl = split_postgres_sslmode(root_url)
         conn = await asyncpg.connect(root_url, ssl=root_ssl)
         try:
-            exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", APP_DB_NAME)
+            exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", app_db_name)
             if not exists:
-                # app_db_name is the module constant APP_DB_NAME, validated
-                # against the strict identifier grammar in
-                # _validate_sql_identifier and double-quoted here, so it cannot
-                # escape the identifier position of the CREATE DATABASE
-                # statement (CREATE DATABASE cannot take a bound parameter).
+                # app_db_name is derived from the composed DATABASE_URL and
+                # validated against the strict identifier grammar above, and is
+                # double-quoted here, so it cannot escape the identifier
+                # position of the CREATE DATABASE statement (which cannot take
+                # a bound parameter).
                 await conn.execute(f'CREATE DATABASE "{app_db_name}"')  # nosemgrep: raw-sql-fstring
         finally:
             await conn.close()

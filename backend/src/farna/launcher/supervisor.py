@@ -236,7 +236,11 @@ class ChildProcess(Protocol):
     def wait(self, timeout: float | None = None) -> int: ...
 
 
-ChildSpawner = Callable[[list[str], dict[str, str] | None], ChildProcess]
+# A spawner receives ``(argv, env)``, plus the child's ``log_path`` as a third
+# positional argument when the spec declares one (the default spawner
+# redirects the child's stdout+stderr there). Test doubles only need the
+# extended arity for specs that declare a log_path.
+ChildSpawner = Callable[..., ChildProcess]
 
 
 @dataclass(frozen=True)
@@ -308,10 +312,13 @@ class _StderrTail:
 class _TailProcess:
     """Popen plus a captured stderr tail (duck-compatible with ChildProcess)."""
 
-    def __init__(self, proc: subprocess.Popen[bytes]) -> None:
+    def __init__(self, proc: subprocess.Popen[bytes], *, log_path: Path | None = None) -> None:
         self._proc = proc
         self.pid = proc.pid
         self._tail: _StderrTail | None = _StderrTail(proc.stderr) if proc.stderr is not None else None
+        # When the child's output was redirected to a log file there is no
+        # stderr pipe to drain; the file IS the tail source (FAR-2560).
+        self._log_path = log_path
 
     def poll(self) -> int | None:
         return self._proc.poll()
@@ -326,7 +333,11 @@ class _TailProcess:
         return self._proc.wait(timeout=timeout)
 
     def stderr_tail(self) -> str | None:
-        return self._tail.text() if self._tail is not None else None
+        if self._tail is not None:
+            return self._tail.text()
+        if self._log_path is not None:
+            return read_log_tail(self._log_path, max_bytes=STDERR_TAIL_BYTES) or None
+        return None
 
 
 @dataclass(frozen=True)
@@ -1239,6 +1250,13 @@ class ChildSpec:
     # Optional longer first-phase wait (Postgres fast shutdown needs more
     # than the generic grace before escalating to smart/SIGTERM).
     shutdown_escalation_timeout: float | None = None
+    # Where the child's stdout+stderr are appended. None = inherited (the
+    # launcher's own log/terminal), which is right for children whose output
+    # is launcher output (the SAQ workers). The bundled services declare the
+    # per-service files ``log_paths()`` documents, so those paths are real
+    # whenever the service is running (FAR-2560) and a crash's tail can still
+    # be recovered from them.
+    log_path: Path | None = None
 
 
 @dataclass
@@ -1516,7 +1534,12 @@ class Supervisor:
     def _spawn_locked(self, child: _Child) -> None:
         argv = child.spec.argv_builder()
         env = child.spec.env_builder(dict(os.environ)) if child.spec.env_builder else None
-        child.process = self._spawner(argv, env)
+        # Two-argument call preserved for specs with no log destination, so the
+        # injectable spawner seam keeps its long-standing shape.
+        if child.spec.log_path is None:
+            child.process = self._spawner(argv, env)
+        else:
+            child.process = self._spawner(argv, env, child.spec.log_path)
         child.next_spawn_at = None
         child.healthy = False
         child.spawned_at = self._clock()
@@ -1709,7 +1732,10 @@ def log_paths(data_dir: Path) -> dict[str, Path]:
     """Map log component name -> path inside the data dir (no files created).
 
     ``app`` is the launcher/supervisor log (launcher.log); ``postgres`` and
-    ``redis`` are the bundled children's logs under ``logs/``.
+    ``redis`` are the bundled children's OWN logs under ``logs/`` — the
+    supervisor redirects each child's stdout+stderr there when it spawns it
+    (``ChildSpec.log_path``), so those paths hold real output whenever the
+    service is running and are simply absent before its first spawn.
     """
     return {
         APP_LOG_NAME: data_dir / LAUNCHER_LOG_FILENAME,
@@ -1797,22 +1823,40 @@ def _resolve_bundled_postgres_version() -> str | None:
     return None
 
 
-def _default_spawner(argv: list[str], env: dict[str, str] | None) -> ChildProcess:
+def _default_spawner(argv: list[str], env: dict[str, str] | None, log_path: Path | None = None) -> ChildProcess:
     """Spawn a shim-wrapped child in its own process group (POSIX).
 
-    stderr is captured through a bounded, drain-threaded pipe
+    Without *log_path* the child's stdout is inherited (launcher output) and
+    its stderr is captured through a bounded, drain-threaded pipe
     (:class:`_TailProcess`) so a crash's real traceback survives into the
-    degraded record; stdout stays inherited (service output belongs in the
-    launcher log, unbuffered by us).
+    degraded record.
+
+    With *log_path* the child's stdout AND stderr are appended to that file
+    instead (the documented per-service log), and the same file supplies the
+    crash tail. Without this the bundled services inherited the launcher's
+    stream, so ``log_paths()`` advertised ``logs/postgres.log`` and
+    ``logs/redis.log`` that no code ever created — diagnostics reported
+    "absent" for a service that was demonstrably running (FAR-2560).
     """
     shim_argv = child_shim_argv(argv)
-    proc = subprocess.Popen(  # noqa: S603 — argv fully constructed by the supervisor
-        shim_argv,
-        env=_child_shim_env(env),
-        stderr=subprocess.PIPE,
-        start_new_session=sys.platform != "win32",
-    )
-    return _TailProcess(proc)
+    stream: IO[bytes] | None = None
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        stream = log_path.open("ab", buffering=0)
+    try:
+        proc = subprocess.Popen(  # noqa: S603 — argv fully constructed by the supervisor
+            shim_argv,
+            env=_child_shim_env(env),
+            stdout=stream,
+            stderr=stream if stream is not None else subprocess.PIPE,
+            start_new_session=sys.platform != "win32",
+        )
+    finally:
+        # Popen duplicated the descriptor into the child; our copy is not
+        # needed (and must not leak an open append handle per respawn).
+        if stream is not None:
+            stream.close()
+    return _TailProcess(proc, log_path=log_path)
 
 
 def _child_stderr_tail(process: ChildProcess | None) -> str | None:

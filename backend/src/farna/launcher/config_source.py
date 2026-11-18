@@ -42,7 +42,15 @@ _log = logging.getLogger(__name__)
 
 CONFIG_ENV_FILENAME = "config.env"
 POSTGRES_HOST = "127.0.0.1"
-APP_DB_NAME = "modulo"
+# The application database name has ONE owner: here, next to the DATABASE_URL
+# this module composes and the launcher pins for Settings. The first-boot
+# provisioner derives the database it creates from that SAME composed URL, so
+# the created database and the connected database cannot drift apart.
+# FAR-2560: after the rebrand this literal stayed ``modulo`` while the entry's
+# provisioner used ``farna_control``, so a fresh install created
+# ``farna_control``, the app connected to ``modulo``, and every migration
+# failed with ``InvalidCatalogNameError: database "modulo" does not exist``.
+APP_DB_NAME = "farna_control"
 _REDIS_DB = "0"
 
 # Composed env-name -> Settings field name (only real Settings fields).
@@ -55,7 +63,9 @@ _COMPOSED_FIELDS: dict[str, str] = {
 # The launcher-owned public surface (consumed by the entry; vulture's
 # dead-code gate special-cases __all__).
 __all__ = [
+    "APP_DB_NAME",
     "CONFIG_ENV_FILENAME",
+    "POSTGRES_HOST",
     "LauncherConfigError",
     "LauncherConfigSource",
     "compose_config",

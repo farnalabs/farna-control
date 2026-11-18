@@ -49,6 +49,8 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from farna.launcher import manifest as manifest_module
+from farna.launcher.config_source import APP_DB_NAME as _APP_DB_NAME
+from farna.launcher.config_source import POSTGRES_HOST as _POSTGRES_HOST
 from farna.launcher.env_safety import scrub_os_environment
 from farna.launcher.initdb import _binary
 from farna.launcher.manifest import ManifestSecurityError, ReleaseManifest
@@ -66,8 +68,9 @@ _RESTORE_MANIFEST_NAME = "backup-info.json"
 _DUMP_NAME = "database.sql"
 _PGDATA_DIRNAME = "pgdata"
 _PG_VERSION_FILE = "PG_VERSION"
-_POSTGRES_HOST = "127.0.0.1"
-_APP_DB_NAME = "farna_control"
+# The launch endpoints/name come from their single owner (config_source), so a
+# rename cannot leave the pre-upgrade dump pointed at a database the rest of
+# the launcher no longer uses (the FAR-2560 drift class).
 _SECRETS_FILENAME = "secrets.json"
 _STATE_FILENAME = "state.json"
 _DUMP_TIMEOUT_SECONDS = 1800
