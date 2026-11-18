@@ -64,6 +64,7 @@ import hmac
 import html
 import json
 import logging
+from collections.abc import Iterator
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -94,12 +95,24 @@ _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["stripe-webhook"])
 
+#: Stripe event type names, defined once: each is read by the subject map, the
+#: amount/string maps and the dispatch branches, and a typo in one copy would
+#: silently stop that event alerting (sonar S1192).
+_EVENT_INVOICE_PAID = "invoice.paid"
+_EVENT_CHECKOUT_COMPLETED = "checkout.session.completed"
+_EVENT_CHECKOUT_EXPIRED = "checkout.session.expired"
+_EVENT_PAYMENT_REQUIRES_ACTION = "payment_intent.requires_action"
+_EVENT_PAYMENT_FAILED = "payment_intent.payment_failed"
+_EVENT_DISPUTE_CREATED = "charge.dispute.created"
+_EVENT_CHARGE_REFUNDED = "charge.refunded"
+_EVENT_EARLY_FRAUD_WARNING = "radar.early_fraud_warning.created"
+
 # The ONLY event that triggers fulfilment. Stripe sends BOTH
 # ``checkout.session.completed`` and ``invoice.paid`` for a single card-paid
 # subscription checkout (distinct event ids), so fulfilling on both would
 # double-issue licences. ``invoice.paid`` is the authoritative "money received"
 # signal; ``checkout.session.completed`` is ack-only (see the route handler).
-_FULFILMENT_EVENTS = frozenset({"invoice.paid"})
+_FULFILMENT_EVENTS = frozenset({_EVENT_INVOICE_PAID})
 
 #: Every event type that additionally emails the operator, mapped to the human
 #: framing used as the subject line's tail. ``invoice.paid`` reads as a SALE,
@@ -107,14 +120,14 @@ _FULFILMENT_EVENTS = frozenset({"invoice.paid"})
 #: silently missed card-testing probe or dispute is. NOT a fulfilment list: only
 #: ``invoice.paid`` mints a licence, so every alert here is additive.
 _ALERT_SUBJECT_KIND = {
-    "invoice.paid": "New sale",
-    "checkout.session.completed": "Checkout completed",
-    "checkout.session.expired": "Checkout expired",
-    "payment_intent.requires_action": "Payment requires action",
-    "payment_intent.payment_failed": "Payment failed",
-    "charge.dispute.created": "Dispute opened",
-    "charge.refunded": "Refund issued",
-    "radar.early_fraud_warning.created": "Early fraud warning",
+    _EVENT_INVOICE_PAID: "New sale",
+    _EVENT_CHECKOUT_COMPLETED: "Checkout completed",
+    _EVENT_CHECKOUT_EXPIRED: "Checkout expired",
+    _EVENT_PAYMENT_REQUIRES_ACTION: "Payment requires action",
+    _EVENT_PAYMENT_FAILED: "Payment failed",
+    _EVENT_DISPUTE_CREATED: "Dispute opened",
+    _EVENT_CHARGE_REFUNDED: "Refund issued",
+    _EVENT_EARLY_FRAUD_WARNING: "Early fraud warning",
 }
 
 #: The alertable types. Derived from the subject map so the two can never drift
@@ -126,25 +139,30 @@ _ALERT_EVENTS = frozenset(_ALERT_SUBJECT_KIND)
 #: Checkout Session, ``amount`` elsewhere); anything unlisted uses ``amount``.
 #: A ``radar.early_fraud_warning.created`` object carries no amount of its own.
 _AMOUNT_FIELD_BY_TYPE = {
-    "invoice.paid": "amount_paid",
-    "checkout.session.completed": "amount_total",
-    "checkout.session.expired": "amount_total",
+    _EVENT_INVOICE_PAID: "amount_paid",
+    _EVENT_CHECKOUT_COMPLETED: "amount_total",
+    _EVENT_CHECKOUT_EXPIRED: "amount_total",
 }
 
 #: Plain string fields worth quoting per type, in display order.
 _STRING_DETAIL_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
-    "checkout.session.completed": (("Payment status", "payment_status"), ("Checkout mode", "mode")),
-    "checkout.session.expired": (("Payment status", "payment_status"), ("Checkout mode", "mode")),
-    "payment_intent.requires_action": (("Status", "status"),),
-    "payment_intent.payment_failed": (("Status", "status"),),
-    "charge.dispute.created": (("Dispute reason", "reason"), ("Dispute status", "status")),
-    "radar.early_fraud_warning.created": (("Fraud type", "fraud_type"),),
+    _EVENT_CHECKOUT_COMPLETED: (("Payment status", "payment_status"), ("Checkout mode", "mode")),
+    _EVENT_CHECKOUT_EXPIRED: (("Payment status", "payment_status"), ("Checkout mode", "mode")),
+    _EVENT_PAYMENT_REQUIRES_ACTION: (("Status", "status"),),
+    _EVENT_PAYMENT_FAILED: (("Status", "status"),),
+    _EVENT_DISPUTE_CREATED: (("Dispute reason", "reason"), ("Dispute status", "status")),
+    _EVENT_EARLY_FRAUD_WARNING: (("Fraud type", "fraud_type"),),
 }
 
 #: Metadata keys whose NAME looks credential-shaped are never rendered: the
 #: alert body is an email, and one careless ``api_key`` metadata entry must not
 #: ride along into an inbox.
 _SENSITIVE_METADATA_MARKERS = ("key", "secret", "token", "password", "card", "cvc")
+
+#: Most metadata pairs the alert body will carry, and the longest value kept.
+#: Bounded so a pathological metadata blob cannot bloat the email.
+_METADATA_PAIR_LIMIT = 10
+_METADATA_VALUE_LIMIT = 200
 
 #: Alert dedup window. Mirrors ``stripe_fulfilment``'s idempotency TTL — far
 #: past Stripe's retry window, so a redelivered event never re-emails.
@@ -426,29 +444,38 @@ def _primary_amount(event_type: str, obj: dict[str, Any]) -> tuple[int, str | No
     return amount, currency if isinstance(currency, str) else None
 
 
+def _metadata_entries(metadata: dict[str, Any], seen: set[str]) -> Iterator[tuple[str, str]]:
+    """Renderable ``(label, value)`` entries from one metadata dict.
+
+    Marks every key it inspects in *seen*, so a key repeated on a later object
+    is skipped (the first location wins, matching ``_extract_starts_at``'s
+    precedence). Non-string/blank entries and credential-shaped KEYS are
+    dropped: the alert body leaves the process as mail, so one careless
+    ``api_key`` entry must not ride along.
+    """
+    for key, value in metadata.items():
+        if not isinstance(key, str) or not isinstance(value, str) or not value:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        if any(marker in key.lower() for marker in _SENSITIVE_METADATA_MARKERS):
+            continue
+        yield f"Metadata {key}", value[:_METADATA_VALUE_LIMIT]
+
+
 def _metadata_pairs(obj: dict[str, Any]) -> list[tuple[str, str]]:
     """The metadata we set on the purchase (``starts_at`` and friends).
 
-    Bounded (10 keys, 200 chars each) so a pathological metadata blob cannot
-    bloat the email, and credential-shaped KEY NAMES are skipped outright: the
-    alert body leaves the process as mail, so one careless ``api_key`` entry
-    must not ride along.
+    Bounded (``_METADATA_PAIR_LIMIT`` keys) so a pathological metadata blob
+    cannot bloat the email. See :func:`_metadata_entries` for the per-key rules.
     """
     pairs: list[tuple[str, str]] = []
     seen: set[str] = set()
     for metadata in _metadata_sources(obj):
-        for key, value in metadata.items():
-            if not isinstance(key, str) or not isinstance(value, str) or not value:
-                continue
-            if key in seen:
-                # The same key can appear on several objects; the first
-                # location wins, matching _extract_starts_at's precedence.
-                continue
-            seen.add(key)
-            if any(marker in key.lower() for marker in _SENSITIVE_METADATA_MARKERS):
-                continue
-            pairs.append((f"Metadata {key}", value[:200]))
-            if len(pairs) >= 10:
+        for entry in _metadata_entries(metadata, seen):
+            pairs.append(entry)
+            if len(pairs) >= _METADATA_PAIR_LIMIT:
                 return pairs
     return pairs
 
@@ -499,17 +526,17 @@ def _dashboard_url(event_type: str, obj: dict[str, Any]) -> str | None:
     object_id = obj.get("id")
     if not isinstance(object_id, str) or not object_id:
         return None
-    if event_type == "invoice.paid":
+    if event_type == _EVENT_INVOICE_PAID:
         return f"{_DASHBOARD_BASE}/invoices/{object_id}"
     if event_type.startswith("checkout.session."):
         payment_intent = _related_id(obj, "payment_intent")
         return f"{_DASHBOARD_BASE}/payments/{payment_intent}" if payment_intent else None
-    if event_type == "charge.dispute.created":
+    if event_type == _EVENT_DISPUTE_CREATED:
         return f"{_DASHBOARD_BASE}/disputes/{object_id}"
-    if event_type == "radar.early_fraud_warning.created":
+    if event_type == _EVENT_EARLY_FRAUD_WARNING:
         related = _related_id(obj, "payment_intent") or _related_id(obj, "charge")
         return f"{_DASHBOARD_BASE}/payments/{related}" if related else None
-    if event_type == "charge.refunded":
+    if event_type == _EVENT_CHARGE_REFUNDED:
         # A charge id resolves on the payments page, but the PaymentIntent is
         # the unambiguous link when the event carries one.
         related = _related_id(obj, "payment_intent") or object_id
@@ -517,25 +544,26 @@ def _dashboard_url(event_type: str, obj: dict[str, Any]) -> str | None:
     return f"{_DASHBOARD_BASE}/payments/{object_id}"
 
 
-def _alert_detail_lines(event: dict[str, Any]) -> list[tuple[str, str]]:
-    """The commercially useful facts of *event*, as (label, value) pairs."""
-    event_type = event["type"]
-    obj = _event_object(event)
-    details: list[tuple[str, str]] = [("Event", f"{event.get('id')} ({event_type})")]
-
+def _amount_detail_lines(event_type: str, obj: dict[str, Any]) -> list[tuple[str, str]]:
+    """The money an event is about: the primary amount plus, on a refund, the refunded amount."""
+    details: list[tuple[str, str]] = []
     amount = _primary_amount(event_type, obj)
     if amount is not None:
         details.append(("Amount", _format_money(*amount)))
-    if event_type == "charge.refunded":
+    if event_type == _EVENT_CHARGE_REFUNDED:
         refunded = _int_field(obj, "amount_refunded")
         if refunded is not None:
             currency = obj.get("currency")
             details.append(("Refunded", _format_money(refunded, currency if isinstance(currency, str) else None)))
+    return details
 
+
+def _identity_detail_lines(obj: dict[str, Any]) -> list[tuple[str, str]]:
+    """Who paid and which objects the event names (buyer email plus every id)."""
+    details: list[tuple[str, str]] = []
     email = _alert_customer_email(obj)
     if email:
         details.append(("Customer", email))
-
     object_id = obj.get("id")
     if isinstance(object_id, str) and object_id:
         details.append(("Object", object_id))
@@ -543,7 +571,12 @@ def _alert_detail_lines(event: dict[str, Any]) -> list[tuple[str, str]]:
         related = _related_id(obj, field)
         if related:
             details.append((label, related))
+    return details
 
+
+def _status_detail_lines(event_type: str, obj: dict[str, Any]) -> list[tuple[str, str]]:
+    """The per-type status fields, decline reason and payer next action."""
+    details: list[tuple[str, str]] = []
     for label, field in _STRING_DETAIL_FIELDS.get(event_type, ()):
         value = obj.get(field)
         if isinstance(value, str) and value:
@@ -554,7 +587,17 @@ def _alert_detail_lines(event: dict[str, Any]) -> list[tuple[str, str]]:
     next_action = _next_action_summary(obj)
     if next_action:
         details.append(("Next action", next_action))
+    return details
 
+
+def _alert_detail_lines(event: dict[str, Any]) -> list[tuple[str, str]]:
+    """The commercially useful facts of *event*, as (label, value) pairs."""
+    event_type = event["type"]
+    obj = _event_object(event)
+    details: list[tuple[str, str]] = [("Event", f"{event.get('id')} ({event_type})")]
+    details.extend(_amount_detail_lines(event_type, obj))
+    details.extend(_identity_detail_lines(obj))
+    details.extend(_status_detail_lines(event_type, obj))
     details.extend(_metadata_pairs(obj))
     return details
 
@@ -698,6 +741,67 @@ async def _send_event_alert_bounded(settings: Settings, event: dict[str, Any], n
         )
 
 
+async def _dispatch_fulfilment(background_tasks: BackgroundTasks, settings: Settings, event: dict[str, Any]) -> None:
+    """Queue fulfilment for a paid ``invoice.paid`` event, or refuse a bad start."""
+    event_type = event["type"]
+    customer_email, org_name = _extract_customer(event)
+    if not customer_email:
+        _log.warning(
+            "stripe.webhook.no_customer_email event=%s event_id=%s — no fulfilment attempted",
+            event_type,
+            event["id"],
+        )
+        return
+    renewal_mode = _renewal_mode_for(event)
+    starts_at = _extract_starts_at(event)
+    # Validate the customer-chosen start AT THE BOUNDARY (FAR-2146), so a bad
+    # date is reported synchronously to the caller instead of disappearing into
+    # a background task. Nothing is minted and the event is not claimed: the
+    # rejection is explicit rather than a silent clamp to "now" or to the
+    # 90-day horizon.
+    try:
+        resolve_starts_at(starts_at)
+    except StartsAtRejectedError as exc:
+        _log.exception(
+            "stripe.webhook.starts_at_rejected event=%s event_id=%s reason=%s value=%r detail=%s",
+            event_type,
+            event["id"],
+            exc.reason,
+            exc.value,
+            exc.detail,
+        )
+        # The 422 response drops the queued background task, yet this is
+        # exactly the case an operator must hear about: the invoice was PAID
+        # and no licence was issued. Deliver the alert here instead, bounded so
+        # a slow SMTP server cannot hold the 422 open — the alert never raises,
+        # and the event-id dedupe means Stripe's retries cannot duplicate it.
+        await _send_event_alert_bounded(
+            settings,
+            event,
+            note=f"The licence was NOT issued: the invoice was paid but the chosen licence start was rejected ({exc.reason}). The customer must be fulfilled manually.",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": exc.reason, "detail": exc.detail},
+        ) from exc
+    _log.info(
+        "stripe.webhook.fulfilling event=%s event_id=%s renewal_mode=%s starts_at=%s",
+        event_type,
+        event["id"],
+        renewal_mode,
+        starts_at,
+    )
+    background_tasks.add_task(
+        fulfil_team_purchase,
+        settings,
+        event_id=event["id"],
+        customer_email=customer_email,
+        org_name=org_name,
+        renewal_mode=renewal_mode,
+        starts_at=starts_at,
+    )
+
+
 # FAR-1516: signature-verified ingress with no tenant at the request boundary
 # (the org is resolved later, inside the fulfilment background task), so the
 # receipt is recorded with a SYSTEM actor under the system sentinel org. The org
@@ -751,7 +855,7 @@ async def stripe_webhook(
         # unsubscribed) types get no alert and keep the log-and-200 behaviour.
         background_tasks.add_task(_send_event_alert, settings, event)
 
-    if event_type == "checkout.session.completed":
+    if event_type == _EVENT_CHECKOUT_COMPLETED:
         # Deliberate no-op: checkout completion is NOT a fulfilment event —
         # invoice.paid is the authoritative "money received" signal. Stripe
         # sends both for a card-paid subscription; fulfilling on both would
@@ -761,63 +865,7 @@ async def stripe_webhook(
         return StripeWebhookResponse(received=True, event_id=event["id"])
 
     if event_type in _FULFILMENT_EVENTS:
-        customer_email, org_name = _extract_customer(event)
-        if customer_email:
-            renewal_mode = _renewal_mode_for(event)
-            starts_at = _extract_starts_at(event)
-            # Validate the customer-chosen start AT THE BOUNDARY (FAR-2146), so
-            # a bad date is reported synchronously to the caller instead of
-            # disappearing into a background task. Nothing is minted and the
-            # event is not claimed: the rejection is explicit rather than a
-            # silent clamp to "now" or to the 90-day horizon.
-            try:
-                resolve_starts_at(starts_at)
-            except StartsAtRejectedError as exc:
-                _log.exception(
-                    "stripe.webhook.starts_at_rejected event=%s event_id=%s reason=%s value=%r detail=%s",
-                    event_type,
-                    event["id"],
-                    exc.reason,
-                    exc.value,
-                    exc.detail,
-                )
-                # The 422 response drops the queued background task, yet this
-                # is exactly the case an operator must hear about: the invoice
-                # was PAID and no licence was issued. Deliver the alert here
-                # instead, bounded so a slow SMTP server cannot hold the 422
-                # open — the alert never raises, and the event-id dedupe means
-                # Stripe's retries cannot duplicate it.
-                await _send_event_alert_bounded(
-                    settings,
-                    event,
-                    note=f"The licence was NOT issued: the invoice was paid but the chosen licence start was rejected ({exc.reason}). The customer must be fulfilled manually.",
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail={"error": exc.reason, "detail": exc.detail},
-                ) from exc
-            _log.info(
-                "stripe.webhook.fulfilling event=%s event_id=%s renewal_mode=%s starts_at=%s",
-                event_type,
-                event["id"],
-                renewal_mode,
-                starts_at,
-            )
-            background_tasks.add_task(
-                fulfil_team_purchase,
-                settings,
-                event_id=event["id"],
-                customer_email=customer_email,
-                org_name=org_name,
-                renewal_mode=renewal_mode,
-                starts_at=starts_at,
-            )
-        else:
-            _log.warning(
-                "stripe.webhook.no_customer_email event=%s event_id=%s — no fulfilment attempted",
-                event_type,
-                event["id"],
-            )
+        await _dispatch_fulfilment(background_tasks, settings, event)
     else:
         _log.info("stripe.webhook.unhandled_event event=%s event_id=%s", event_type, event["id"])
 

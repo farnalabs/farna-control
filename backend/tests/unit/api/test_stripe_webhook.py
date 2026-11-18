@@ -965,3 +965,78 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 422, resp.text
         assert elapsed < 2
+
+
+class TestAlertRenderingEdges:
+    """Branches of the alert renderers that a well-formed event never reaches."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_alert_dedupe(self) -> Generator[None, None, None]:
+        stripe_webhook._alerted_event_ids.clear()
+        yield
+        stripe_webhook._alerted_event_ids.clear()
+
+    def test_metadata_pairs_skip_non_strings_duplicates_and_secrets(self) -> None:
+        """Only renderable metadata is mailed: strings only, first location wins."""
+        obj = {
+            "metadata": {"count": 3, "blank": "", "api_key": "sk_live_leaked", "starts_at": "2027-03-12"},
+            "subscription_details": {"metadata": {"starts_at": "2026-01-01"}},
+        }
+        assert stripe_webhook._metadata_pairs(obj) == [("Metadata starts_at", "2027-03-12")]
+
+    def test_metadata_pairs_are_capped_at_ten_entries(self) -> None:
+        obj = {"metadata": {f"field_{index}": f"value_{index}" for index in range(12)}}
+        pairs = stripe_webhook._metadata_pairs(obj)
+        assert len(pairs) == 10
+        assert pairs[0] == ("Metadata field_0", "value_0")
+
+    def test_related_id_reads_an_expanded_object_and_ignores_an_idless_one(self) -> None:
+        assert stripe_webhook._related_id({"payment_intent": {"id": "pi_expanded"}}, "payment_intent") == "pi_expanded"
+        assert stripe_webhook._related_id({"payment_intent": {"id": 7}}, "payment_intent") is None
+        assert stripe_webhook._related_id({"payment_intent": ""}, "payment_intent") is None
+
+    def test_dashboard_url_is_absent_without_an_object_id(self) -> None:
+        assert stripe_webhook._dashboard_url("invoice.paid", {}) is None
+
+    def test_alert_details_omit_absent_optional_facts(self) -> None:
+        refund = {
+            "id": "evt_refund_plain",
+            "type": "charge.refunded",
+            "data": {"object": {"amount": 4900, "currency": "gbp"}},
+        }
+        refund_labels = [label for label, _ in stripe_webhook._alert_detail_lines(refund)]
+        assert "Object" not in refund_labels
+        assert "Refunded" not in refund_labels
+
+        failed = {
+            "id": "evt_failed_plain",
+            "type": "payment_intent.payment_failed",
+            "data": {"object": {"id": "pi_plain", "amount": 100}},
+        }
+        failed_labels = [label for label, _ in stripe_webhook._alert_detail_lines(failed)]
+        assert "Status" not in failed_labels
+        assert "Failure detail" not in failed_labels
+
+    async def test_a_declined_send_is_logged_and_leaves_the_event_unclaimed(self) -> None:
+        """A 2xx-but-not-delivered email service is not a claimable success."""
+        event = _live(_invoice_event("evt_declined"))
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=False)) as mock_send:
+            await stripe_webhook._send_event_alert(_alert_settings(), event)
+
+        mock_send.assert_called_once()
+        assert "evt_declined" not in stripe_webhook._alerted_event_ids
+
+    async def test_send_event_alert_reraises_cancellation_and_swallows_unexpected_errors(self) -> None:
+        """Cancellation must propagate; any other failure is logged and absorbed."""
+        event = _live(_invoice_event("evt_cancel"))
+        settings = _alert_settings()
+
+        with patch(_ALERT_SEND, new=MagicMock(side_effect=asyncio.CancelledError)), pytest.raises(asyncio.CancelledError):
+            await stripe_webhook._send_event_alert(settings, event)
+
+        with patch(_ALERT_SEND, new=MagicMock(side_effect=RuntimeError("smtp exploded"))):
+            await stripe_webhook._send_event_alert(settings, event)
+
+        with patch.object(stripe_webhook, "_deliver_event_alert", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            await stripe_webhook._send_event_alert(settings, event)
