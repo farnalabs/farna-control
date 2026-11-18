@@ -60,14 +60,18 @@ def _reset_key_and_events() -> Generator[None, None, None]:
 class TestEmailContent:
     def test_html_contains_key_and_instructions(self) -> None:
         html = _licence_email_html("abc.def", "2999-01-01T00:00:00+00:00")
-        assert "MODULO_LICENSE_KEY=abc.def" in html
+        assert "FARNA_CONTROL_LICENSE_KEY=abc.def" in html
+        assert "Farna Control instance" in html
+        assert "Modulo instance" not in html
         assert "2999-01-01T00:00:00+00:00" in html
         assert "renews annually" in html
         assert "https://farna.dev/control/docs" in html
 
     def test_text_contains_key_and_instructions(self) -> None:
         text = _licence_email_text("abc.def", "2999-01-01T00:00:00+00:00")
-        assert "MODULO_LICENSE_KEY=abc.def" in text
+        assert "FARNA_CONTROL_LICENSE_KEY=abc.def" in text
+        assert "Farna Control instance" in text
+        assert "Modulo instance" not in text
         assert "2999-01-01T00:00:00+00:00" in text
         assert "renews annually" in text
 
@@ -81,7 +85,7 @@ class TestEmailTeamLicense:
         args = mock_send.call_args.args
         assert args[1] == ["bob@acme.com"]
         assert args[2] == "Your Modulo Team License"
-        assert "MODULO_LICENSE_KEY=abc.def" in args[3]
+        assert "FARNA_CONTROL_LICENSE_KEY=abc.def" in args[3]
 
     async def test_email_failure_is_logged_not_raised(self, caplog: pytest.LogCaptureFixture) -> None:
         settings = _make_settings()
