@@ -12,7 +12,12 @@ the value is dropped and the app falls back to its default.
 * FAR-2564 — ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST``: ``main.py`` read
   ``FARNA_CONTROL_*``, kept the API mount at ``/``, and the installed app
   answered the SPA's root URL with API JSON (release recut 44261486386,
-  ``spa_root_html=FAILED``).
+  ``spa_root_html=FAILED``). The macOS shim exported the pre-rebrand spelling;
+  the Linux bundle launcher exported NEITHER name, so the shipped
+  ``linux-amd64`` bundle had the same symptom with no drift to blame — a
+  missing half of the contract is invisible to a "sets a name nobody reads"
+  guard alone. That is why the Linux launcher's SPA exports are now asserted
+  by name AND value below.
 
 Each fix closed one pair. This guard closes the class: it derives the set of
 names the real shims SET and the set the real Python code READS, then fails on
@@ -76,6 +81,23 @@ def _macos_launcher_source(bundle_script: str) -> str:
     start = bundle_script.index(opener) + len(opener) + 1
     end = bundle_script.index("\nEOF\n", start)
     return bundle_script[start:end] + "\n"
+
+
+def _linux_launcher_source(workflow: str) -> str:
+    """The ``launcher`` heredoc body exactly as the Linux bundle ships it.
+
+    The heredoc lives inside a YAML block scalar, so every body line carries
+    that scalar's indentation (and the terminator is indented too). Strip the
+    common prefix the YAML block indicator removes before the shell runs, so
+    the result is the file written to ``$BUNDLE/launcher``.
+    """
+    match = re.search(r"<<'LAUNCHER'\n(?P<body>.*?)\n[ \t]*LAUNCHER[ \t]*\n", workflow, re.DOTALL)
+    assert match is not None, "launcher heredoc not found"
+    lines = match.group("body").splitlines()
+    indents = [len(line) - len(line.lstrip(" ")) for line in lines if line.strip()]
+    assert indents, "launcher heredoc body is empty"
+    strip = min(indents)
+    return "\n".join(line[strip:] for line in lines) + "\n"
 
 
 def _names_set_by_macos_launcher(text: str) -> set[str]:
@@ -215,7 +237,11 @@ def test_shim_extractors_find_the_shipped_names() -> None:
         "FARNA_CONTROL_SERVE_SPA",
     }
     assert sets[_WINDOWS_LAUNCHER] == {"FARNA_CONTROL_BUNDLED_BIN_DIR"}
-    assert sets[_LINUX_BUNDLE] == {"FARNA_CONTROL_BUNDLED_BIN_DIR"}
+    assert sets[_LINUX_BUNDLE] == {
+        "FARNA_CONTROL_BUNDLED_BIN_DIR",
+        "FARNA_CONTROL_FRONTEND_DIST",
+        "FARNA_CONTROL_SERVE_SPA",
+    }
     assert sets[_LINUX_INSTALLER] == {
         "FARNA_CONTROL_BIN_DIR",
         "FARNA_CONTROL_BUNDLED_BIN_DIR",
@@ -223,6 +249,38 @@ def test_shim_extractors_find_the_shipped_names() -> None:
         "MODULO_BIN_DIR",
         "MODULO_INSTALL_ROOT",
     }
+
+
+def test_linux_launcher_serves_the_bundled_spa() -> None:
+    """The Linux bundle launcher must export the SPA contract, by name and value.
+
+    FAR-2564 gap: the shipped ``linux-amd64`` launcher exported ``PATH`` /
+    ``PYTHONPATH`` / ``FARNA_CONTROL_BUNDLED_BIN_DIR`` and NO SPA variables,
+    even though the bundle ships ``frontend-dist``. ``farna.api.main`` then kept
+    the API mount at ``/`` and the web UI never loaded. A set-membership check
+    alone would still pass if the VALUE pointed at a directory nothing stages,
+    so pin the exact export lines and prove they agree with the staging step.
+    """
+    workflow = _text(_LINUX_BUNDLE)
+    launcher = _linux_launcher_source(workflow)
+
+    assert "export FARNA_CONTROL_SERVE_SPA=1\n" in launcher
+    assert 'export FARNA_CONTROL_FRONTEND_DIST="$BUNDLE_ROOT/frontend-dist"\n' in launcher
+
+    # The comment must keep naming the Python reader and the symptom, so the
+    # next reader can find the consumer without re-deriving it.
+    assert "farna.api.main" in launcher
+    assert "_SERVE_SPA_ENV" in launcher
+    assert "_FRONTEND_DIST_ENV" in launcher
+
+    # The exported path must be the directory the assembly step actually
+    # stages, not merely a relative name that looks right.
+    staged = re.search(r'mkdir -p "\$BUNDLE/(?P<dir>[^"]+)"\n\s*cp -a dist/\. "\$BUNDLE/(?P=dir)/"', workflow)
+    assert staged is not None, "frontend dist staging step not found"
+    exported = re.search(r'export FARNA_CONTROL_FRONTEND_DIST="\$BUNDLE_ROOT/(?P<dir>[^"]+)"', launcher)
+    assert exported is not None, launcher
+
+    assert exported.group("dir") == staged.group("dir")
 
 
 def test_python_read_extractor_sees_the_spa_seam() -> None:
