@@ -849,7 +849,9 @@ def test_gate_flags_a_redeclared_registered_name() -> None:
 #: a literal anywhere in ``farna/``. Each is a real gap of the FAR-2563 class -
 #: an operator who sets the documented spelling is silently ignored - and the
 #: fix is to make it live and DELETE its line here (the companion test fails on
-#: a stale entry).
+#: a stale entry). ``MODULO_ENV`` is the one deliberate exception: it was dropped
+#: on purpose (only ``FARNA_CONTROL_ENV`` is read) and the docs say so, so it
+#: stays here rather than being made live.
 DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
     {
         "MODULO_ADMIN_TOKEN",
@@ -860,6 +862,7 @@ DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
         "MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT",
         "MODULO_DOCKER_HOST",
         "MODULO_E2B_API_KEY",
+        "MODULO_ENV",
         "MODULO_KUBERNETES_ENABLED",
         "MODULO_KUBERNETES_NAMESPACE",
         "MODULO_KUBERNETES_SERVICE_ACCOUNT",
