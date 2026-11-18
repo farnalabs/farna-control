@@ -157,8 +157,8 @@ the backend pod NEVER becomes Ready). bootstrap_role creates the role with
 the password parsed from this URL, so it shares postgres.password just like
 farna_control_app does. The chart's saq-runner/saq-system commands bypass
 entrypoint.sh, so the URL cannot be derived at runtime — it must be wired
-here. Falls back to backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL (or the
-legacy backend.env.MODULO_SYSTEM_DATABASE_URL) when postgres.host is unset (mirrors modulo.databaseUrl).
+here. Falls back to backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL when
+postgres.host is unset (mirrors modulo.databaseUrl).
 */}}
 {{- define "farna-control.systemDatabaseUrl" -}}
 {{- if .Values.postgres.host }}
@@ -169,7 +169,7 @@ legacy backend.env.MODULO_SYSTEM_DATABASE_URL) when postgres.host is unset (mirr
       "port" .Values.postgres.port
       "database" .Values.postgres.database) }}
 {{- else }}
-{{- .Values.backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL | default .Values.backend.env.MODULO_SYSTEM_DATABASE_URL | default "" }}
+{{- .Values.backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL | default "" }}
 {{- end }}
 {{- end }}
 

@@ -48,9 +48,7 @@ status: covered
 model backends, pipelines and triggers to a live deployment from one YAML file
 (`api_version: modulo.dev/v1`), driven by `FARNA_CONTROL_URL` +
 `FARNA_CONTROL_API_KEY` (a bearer `mk_` org key). The installed executable is
-`farna-control` (`backend/pyproject.toml` `[project.scripts]`); `modulo` is the
-pre-rename name and is no longer installed, so any older example that spells the
-command `modulo apply` must be run as `farna-control apply`. The API routes the CLI writes to are `/api/v1/schemas`,
+`farna-control` (`backend/pyproject.toml` `[project.scripts]`). The API routes the CLI writes to are `/api/v1/schemas`,
 `/api/v1/model-backends`, `/api/v1/pipelines`,
 `/api/v1/pipelines/{pipeline_id}/triggers` (create) and
 `/api/v1/triggers/{trigger_id}` (update); plan-time `credential_ref` validation

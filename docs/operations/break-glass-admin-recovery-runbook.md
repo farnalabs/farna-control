@@ -51,8 +51,8 @@ Before an incident, confirm all of the following hold:
    `ENABLED=true`. The role requires a superuser to grant BYPASSRLS – a
    managed-Postgres platform without superuser is a hard platform constraint
    (see ADR-047/018).
-3. **CLI installed** – `modulo-break-glass` (registered console script, mirrors
-   `modulo-migrate`'s `asyncio.run` wrapper). Connects as `farna_control_breakglass`
+3. **CLI installed** – `farna-control break-glass` (registered console script, mirrors
+   `farna-control migrate`'s `asyncio.run` wrapper). Connects as `farna_control_breakglass`
    via a dedicated lazy engine – never the app `database_url`.
 4. **Operator holds the secret** – the operator running the CLI must possess
    `MODULO_BREAK_GLASS_SECRET` / `_STANDBY_SECRET` (actor derived from which
@@ -61,7 +61,7 @@ Before an incident, confirm all of the following hold:
 Verify preconditions non-destructively:
 
 ```bash
-modulo-break-glass smoke
+farna-control break-glass smoke
 ```
 
 Exit 0 = connectivity (`SELECT 1`) + posture assertions (`session_user =
@@ -82,7 +82,7 @@ secrets + URL are present.
 2. **Check existing live rows first:**
 
    ```bash
-   modulo-break-glass status --all
+   farna-control break-glass status --all
    ```
 
    If live rows already exist for the org, decide deliberately whether to
@@ -92,7 +92,7 @@ secrets + URL are present.
 3. **Activate:**
 
    ```bash
-   modulo-break-glass activate <org-id|org-slug> \
+   farna-control break-glass activate <org-id|org-slug> \
      --reason "<ticket-ref>" --ttl-minutes 1440
    ```
 
@@ -124,7 +124,7 @@ secrets + URL are present.
 6. **After the org admin regains access, tombstone:**
 
    ```bash
-   modulo-break-glass deactivate <org> --reason "<ticket-ref>"
+   farna-control break-glass deactivate <org> --reason "<ticket-ref>"
    ```
 
    This runs the atomic caller-bound `deactivate_break_glass` SECURITY
@@ -137,7 +137,7 @@ secrets + URL are present.
 7. **Confirm zero live rows:**
 
    ```bash
-   modulo-break-glass status --all
+   farna-control break-glass status --all
    ```
 
    Exit 5 while any live row exists – resolve before closing the incident.
@@ -155,7 +155,7 @@ Use `force-last-admin` when the **last non-break-glass admin must be removed**
 (e.g. a departed employee) and no replacement exists yet:
 
 ```bash
-modulo-break-glass force-last-admin <org> --reason "<ticket-ref>"
+farna-control break-glass force-last-admin <org> --reason "<ticket-ref>"
 ```
 
 - **This is the ONLY path that removes the last non-break-glass admin.** The
@@ -204,11 +204,11 @@ re-printed.
 The activation transaction committed but the credential was not displayed –
 the credential's value is unknown and must be treated as compromised:
 
-1. `modulo-break-glass deactivate <org> --force --reason "<ticket-ref>"` to
+1. `farna-control break-glass deactivate <org> --force --reason "<ticket-ref>"` to
    tombstone the live row.
-2. `modulo-break-glass activate <org> --reason "<ticket-ref>"` again to mint a
+2. `farna-control break-glass activate <org> --reason "<ticket-ref>"` again to mint a
    fresh credential.
-3. Re-verify with `modulo-break-glass status --all`.
+3. Re-verify with `farna-control break-glass status --all`.
 
 The "do you hold the credential?" step is the safety net: before reporting the
 incident resolved, confirm the delivered credential is in the org admin's
@@ -240,7 +240,7 @@ the daily-sweep signal wired to alerting (§8).
 
 - **Standby-to-primary + new standby:** rotate the standby secret into the
   primary slot and mint a new standby. On every rotation run
-  `modulo-break-glass status --all` and `deactivate --force` any row not tied
+  `farna-control break-glass status --all` and `deactivate --force` any row not tied
   to a verified ticket.
 - **Rotation never invalidates already-delivered credentials.** Credentials are
   bound to the account's `password_hash`, not to the role password – a
@@ -252,7 +252,7 @@ the daily-sweep signal wired to alerting (§8).
   and run the URL-in-vault-matches-`.env` check.
 - **Both-lost recovery:** if primary AND standby secrets are lost, set fresh
   secrets via `fly secrets set`, restart the app, then run
-  `modulo-break-glass status --all` and `deactivate --force` every live row.
+  `farna-control break-glass status --all` and `deactivate --force` every live row.
   A credential already delivered to an org admin remains valid – verify each
   live row against its ticket and deactivate the rest.
 
@@ -265,7 +265,7 @@ consumer is a scheduled follow-up task, tracked in Linear):
 
 - **Executor:** a GitHub Actions scheduled workflow (or a harness scheduled
   task), connecting as `farna_control_breakglass` with secrets from the vault.
-- **Command:** `modulo-break-glass status --all --json`.
+- **Command:** `farna-control break-glass status --all --json`.
 - **Alert:** the non-zero-exit-on-live-rows condition (`5`) is wired to an
   alert. Live rows carry an explicit `reason`, so the alert is actionable.
 - **Evidence artifact:** committed with 90-day retention.
@@ -345,7 +345,7 @@ prevention + operator role + migration, and **(B)** the CLI + login-hook
 consumption + SQL-predicate deny.
 
 - **Zero live break-glass rows before the (B) deploy.** Run
-  `modulo-break-glass status --all` as a one-time ship gate. A non-zero exit
+  `farna-control break-glass status --all` as a one-time ship gate. A non-zero exit
   means a live row exists – resolve it (`deactivate` / `deactivate --force`,
   §3/§10) before deploying (B).
 - **Expired rows are deny-covered and MUST NOT block deploys.** A row past

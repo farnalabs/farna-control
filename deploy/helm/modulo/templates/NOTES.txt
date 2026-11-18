@@ -35,10 +35,10 @@ Then open: http://localhost:8080
 
 === Admin Access ===
 
-Create an admin user by setting MODULO_USERS in the backend env:
+Create an admin user by setting FARNA_CONTROL_USERS in the backend env:
 
   helm upgrade {{ .Release.Name }} ./deploy/helm/modulo \
-    --set backend.env.MODULO_USERS="admin:$(openssl passwd -6 your-password)"
+    --set backend.env.FARNA_CONTROL_USERS="admin:$(openssl passwd -6 your-password)"
 
 Or use existingSecret to reference a pre-created Kubernetes Secret.
 

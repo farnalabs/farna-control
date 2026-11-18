@@ -64,13 +64,13 @@ limitRange:
 #
 # backend:
 #   env:
-#     MODULO_KUBERNETES_ENABLED: "1"
+#     FARNA_CONTROL_KUBERNETES_ENABLED: "1"
 # saqRunner:
 #   env:
-#     MODULO_KUBERNETES_ENABLED: "1"
+#     FARNA_CONTROL_KUBERNETES_ENABLED: "1"
 # saqSystem:
 #   env:
-#     MODULO_KUBERNETES_ENABLED: "1"
+#     FARNA_CONTROL_KUBERNETES_ENABLED: "1"
 
 # -- External Postgres (Amazon RDS) -----------------------------------------
 postgres:

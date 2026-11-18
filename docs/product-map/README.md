@@ -115,7 +115,7 @@ Fresh entries for these features are added to the graph below as behavior tracke
 - **feat-connectors** - External tool connectors - routes: `/admin/connectors`
 - **feat-environments** - Environment profiles and run environments (canonical UI is the Runners page; the `/environment-profiles*` and `/admin/environments` deep links redirect there – FAR-591 D5) - routes: `/admin/runners/profiles`, `/admin/runners/profiles/new`, `/admin/runners/profiles/:id/edit`, `/admin/runners/concurrency`
 - **feat-triggers** - Manual, webhook, and scheduled triggers - routes: `/settings/triggers`, `/admin/trigger-events`
-- **feat-apply** - `modulo apply` declarative configuration CLI (FAR-681) - routes: `/schemas`, `/admin/model-backends`, `/pipelines`, `/settings/triggers`
+- **feat-apply** - `farna-control apply` declarative configuration CLI (FAR-681) - routes: `/schemas`, `/admin/model-backends`, `/pipelines`, `/settings/triggers`
 
 ### Admin
 - **feat-teams** - Users, teams, and role-based access - routes: `/settings/teams`, `/admin/users`
@@ -870,7 +870,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 >
 > **Closed this walk (2026-09-30):** closed four stale sub-surface gaps –
 > shipped behavior that neither product-map layer described. `feat-apply`
-> (FAR-1294): `modulo apply` manages the pipeline runtime limits
+> (FAR-1294): `farna-control apply` manages the pipeline runtime limits
 > `node_timeout_seconds` / `max_duration_seconds` (declare-only, null rejected
 > at load, booleans rejected, hashed into the managed view for `--diff`);
 > added to the manifest registry + `configure/apply.md`. `feat-mcp`
@@ -1163,7 +1163,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > owner team, team-blind, BEFORE any provider is selected - a typed
 > `SandboxDispatchUnboundError` instead of a silent fallback) and the **FAR-1599
 > read / non-REST exposure** (`SnapshotResponse.environment_profile_id`, the MCP
-> `update_pipeline` tool, and the opt-in `modulo apply`
+> `update_pipeline` tool, and the opt-in `farna-control apply`
 > `environment_profile_id` key), with the matching code and test citations.
 > `_ORPHANED_BDD_FEATURES` stays empty.
 >
@@ -1212,7 +1212,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > (`audit/audit-trail.md`) with FAR-1697 (PR #1761): the offline-verifiable
 > evidence pack shipped a manifest-registry line but no tracker home – the
 > `evidence-pack` / `verification-key` endpoints, `core/evidence_pack/`, the
-> `modulo evidence verify` CLI and the `hashing.py` extraction now have one.
+> `farna-control evidence verify` CLI and the `hashing.py` extraction now have one.
 > `_ORPHANED_BDD_FEATURES` stays empty.
 
 > **Closed this walk (2026-10-31) - HISTORICAL RECORD of that date, not a

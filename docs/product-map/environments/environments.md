@@ -239,7 +239,7 @@ into the Runners page as redirects.)
   FAR-1614 post-merge polish sweep (PR #1455) added the FAR-1598 (dispatch-time
   team-scope backstop) and FAR-1599 (read / non-REST surface exposure:
   `SnapshotResponse.environment_profile_id`, the MCP `update_pipeline` tool, and
-  the `modulo apply` `environment_profile_id` key) behaviors to the manifest
+  the `farna-control apply` `environment_profile_id` key) behaviors to the manifest
   `feat-environments` registry, but this human-readable tracker still stopped at
   FAR-1558, so a reader of the feature graph got the opposite coverage answer
   from the machine layer Assistant indexes. Added the two checked behavior

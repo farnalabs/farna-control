@@ -96,7 +96,7 @@ System Maps adheres to four strict database design rules:
 3. **Draft isolation:** A draft revision can be edited, validated, and previewed without affecting active system overview dashboards or live pipeline run attributions.
 4. **Relational graph projections:** Map nodes and relationships are projected into queryable relational rows during publish. This enables SQL joins, foreign key integrity checks, and fast attribution lookups without parsing JSON blobs on every read.
 
-**Tenant integrity has two explicit enforcement boundaries.** Every System Map row carries `organisation_id`. Foreign keys between the new System Map tables use composite keys where both tables own the organization column, so a revision can reference only its map and a relationship can reference only nodes in its revision. New binding and admission rows also carry a non-null `organisation_id`; their references to existing Farna Control resources use ordinary primary-key foreign keys plus one shared database-backed validation function, `validate_system_map_resource_org(resource_kind, resource_id, expected_org_id, expected_team_id)`. Every writer, including UI, `modulo apply`, publication, admission, reconciliation, and administrative repair, calls that validation in the same transaction before inserting or publishing. The function reads the resource under the current RLS context and fails closed on a missing, deleted, cross-organization, or out-of-scope resource. This is not pure relational foreign-key tenant safety: existing tables do not currently expose the composite keys needed for that claim.
+**Tenant integrity has two explicit enforcement boundaries.** Every System Map row carries `organisation_id`. Foreign keys between the new System Map tables use composite keys where both tables own the organization column, so a revision can reference only its map and a relationship can reference only nodes in its revision. New binding and admission rows also carry a non-null `organisation_id`; their references to existing Farna Control resources use ordinary primary-key foreign keys plus one shared database-backed validation function, `validate_system_map_resource_org(resource_kind, resource_id, expected_org_id, expected_team_id)`. Every writer, including UI, `farna-control apply`, publication, admission, reconciliation, and administrative repair, calls that validation in the same transaction before inserting or publishing. The function reads the resource under the current RLS context and fails closed on a missing, deleted, cross-organization, or out-of-scope resource. This is not pure relational foreign-key tenant safety: existing tables do not currently expose the composite keys needed for that claim.
 
 `accounts` is a global table and does not gain an `organisation_id` in this design. Account ownership and audit columns therefore use the existing `account_id` foreign key only. At write time, the same transaction validates active membership through the shared membership check before accepting it as `account_id` or `updated_by`; the transaction rejects an account that lacks membership. This is an explicit database-backed membership rule, not an invented account composite key.
 
@@ -902,8 +902,8 @@ An organization can roll back to a prior published revision at any time. Rolling
 3. Points `system_maps.published_revision_id` to the newly minted revision.
 4. Leaves historical fact records and past run snapshots untouched.
 
-### 8.5 Declarative GitOps Authoring (`modulo apply`)
-System Maps is planned as a Beta 2 extension to the declarative `modulo apply` engine. The current engine accepts the `api_version: modulo.dev/v1` envelope with an `entities:` mapping, but it does not currently register a `system_maps` entity kind. The example below uses that current envelope to illustrate the planned Beta 2 payload; it is syntactically valid YAML, but it is illustrative/future only until the `system_maps` schema kind and apply handlers are added. The current engine rejects this entity set, so do not present the example as a currently applicable configuration.
+### 8.5 Declarative GitOps Authoring (`farna-control apply`)
+System Maps is planned as a Beta 2 extension to the declarative `farna-control apply` engine. The current engine accepts the `api_version: modulo.dev/v1` envelope with an `entities:` mapping, but it does not currently register a `system_maps` entity kind. The example below uses that current envelope to illustrate the planned Beta 2 payload; it is syntactically valid YAML, but it is illustrative/future only until the `system_maps` schema kind and apply handlers are added. The current engine rejects this entity set, so do not present the example as a currently applicable configuration.
 
 ```yaml
 api_version: modulo.dev/v1
@@ -964,7 +964,7 @@ entities:
 
 #### Declarative reference resolution
 
-When Beta adds `system_maps` support, `modulo apply` will resolve its authoring references before it writes or publishes relational projections. The intended mapping is:
+When Beta adds `system_maps` support, `farna-control apply` will resolve its authoring references before it writes or publishes relational projections. The intended mapping is:
 
 | YAML authoring field | Resolved relational projection | Accepted reference | Resolution rule |
 |---|---|---|---|
@@ -1025,7 +1025,7 @@ Several underlying technical components remain sound and will be retained.
   - Node configuration dialogs for all seven node types (including `improvement_loop`).
   - Graph validation engine enforcing DAG delivery flow and control constraints.
   - Draft, publish, diff, and rollback revision workflow.
-  - `modulo apply` declarative YAML support for System Maps.
+  - `farna-control apply` declarative YAML support for System Maps.
   - **"Discover my system" re-scan action** – re-run the automatic topology discovery on an existing draft to incorporate newly created pipelines, connectors, or folders.
 - **Exit Criteria:** Platform engineers can create, validate, publish, and update custom system maps via UI and CLI; automatic discovery can be re-run on drafts to stay current.
 
@@ -1083,7 +1083,7 @@ Several underlying technical components remain sound and will be retained.
 - **Recommendation:** Core principle 11 applies: "Run-level truth is free." In System Maps:
   - **Community Tier:** Authoring, publishing, and live operational inspection of 1 System Map with up to 15 nodes; live WIP and health status.
   - **Team Tier:** Multiple System Maps, unlimited nodes, team-level visibility controls, improvement loop budget/cooldown automation, and 90-day historical trend aggregation.
-  - **Enterprise Tier:** Declarative GitOps sync (`modulo apply`), compliance autonomy attestation export, and cross-organization boundaries.
+  - **Enterprise Tier:** Declarative GitOps sync (`farna-control apply`), compliance autonomy attestation export, and cross-organization boundaries.
 - **Reasoning:** This allows any self-hoster to model and observe their delivery pipeline for free, while charging for multi-team scale, long-term trend retention, and automated governance controls.
 
 #### Decision 3: Automatic Topology Discovery – RESOLVED

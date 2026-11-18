@@ -30,7 +30,7 @@ application-layer validation and audit logging**.
 | Situation | Do this |
 |-----------|---------|
 | A pipeline run is stuck and `POST /api/v1/runs/{id}/cancel` cannot recover it | Follow `docs/operations/admin-bypass.md` |
-| An admin user forgot their password | **Reset via `modulo users reset-password`** (§2) |
+| An admin user forgot their password | **Reset via `farna-control users reset-password`** (§2) |
 | `SECRET_KEY` was rotated and all sessions are invalid | Restart services – sessions re-negotiate (§3.1) |
 | `FERNET_KEY` was rotated and credentials fail to decrypt | Re-enter credentials under the new key; `farna-control restore --previous-fernet-key` does not recover a lost key (§3.2) |
 | Both `SECRET_KEY` and `FERNET_KEY` are lost | **You cannot recover encrypted data** – restore from backup (§4) |
@@ -54,10 +54,10 @@ user record), use the supported CLI path first:
 
 ```bash
 # Native single-install: resolves the bundled database from the launcher data dir.
-modulo users reset-password admin@example.com
+farna-control users reset-password admin@example.com
 
 # Docker Compose / self-hosted: resolves DATABASE_URL from the environment.
-DATABASE_URL=... modulo users reset-password admin@example.com
+DATABASE_URL=... farna-control users reset-password admin@example.com
 ```
 
 The command prompts for the new password (or accepts `--password`), refuses
@@ -236,12 +236,12 @@ locally.
 
 ### 5.1 Local Access
 
-The `modulo` CLI exposes the launcher commands (`start`, `stop`, `status`,
+The `farna-control` CLI exposes the launcher commands (`start`, `stop`, `status`,
 `logs`, `doctor`, `support`, `upgrade`, `service`, `clear-degraded`), the
 `backup` / `restore` / `apply` commands, and the `users` group. Password reset
-is `modulo users reset-password` (§2). Token creation and the other emergency
-actions below still require direct database access; there is no `modulo
-sessions` command.
+is `farna-control users reset-password` (§2). Token creation and the other
+emergency actions below still require direct database access; there is no
+`farna-control sessions` command.
 
 ### 5.2 Create a Temporary Admin API Token
 
@@ -338,7 +338,7 @@ Each entry is a single JSON line:
   "operator": "admin@example.com",
   "operation": "reset_password | create_api_token | key_rotation | db_restore",
   "reason": "Lost admin access after SSO provider decommission",
-  "sql_or_command": "modulo users reset-password admin@example.com",
+  "sql_or_command": "farna-control users reset-password admin@example.com",
   "affected_resources": ["accounts:<account-uuid>"],
   "backup_taken": true
 }

@@ -81,7 +81,7 @@ plus Apple Developer ID signing/notarization. Two entry points perform the same
 swap:
 
 - the published installer (`bash scripts/install.sh`), and
-- the launcher command (`modulo upgrade <target-version>`).
+- the launcher command (`farna-control upgrade <target-version>`).
 
 The Linux bundle also carries the exact checked-out `install.sh` as an executable
 file. After extracting a verified bundle, run `install.sh --from-bundle
@@ -96,7 +96,7 @@ also supplies the bare `MODULO_INSTALL_ROOT` and `MODULO_BIN_DIR` compatibility
 aliases. That command must be run by the caller because an installer child
 process cannot modify its parent's shell.
 
-`modulo upgrade` flow:
+`farna-control upgrade` flow:
 
 1. **Enforced pre-upgrade dump.** The bundled pg_dump writes a versioned
    snapshot dir under the data dir (`pre-upgrade-dump-<ts>/`) with a
@@ -117,7 +117,7 @@ refuses when no snapshot is present.
 
 ### Signed-manifest provisioning state (honest note)
 
-`modulo upgrade` and `scripts/install.sh` both refuse to install from an
+`farna-control upgrade` and `scripts/install.sh` both refuse to install from an
 unsigned or unverifiable release manifest (an ed25519 signature over the
 manifest's exact bytes). The current production key, `modulo-2026-a`, is
 provisioned in the shipped verifier and the release pipeline's

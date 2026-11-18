@@ -231,7 +231,7 @@ may decide.
 - [x] Configurable HITL review window (FAR-1257, org tiering FAR-1269): the
       effective window resolves pipeline override
       (`pipelines.hitl_review_window_seconds`, CHECK 60..604800, also settable
-      via `modulo apply`) over the org default (`GET/PUT
+      via `farna-control apply`) over the org default (`GET/PUT
       /api/v1/admin/org/hitl-review-window`, whole seconds 60..604800, an
       explicit null clears back to inheritance) over the instance default
       (`HITL_REVIEW_CANCEL_GRACE_SECONDS`). It is resolved ONCE at gate fire

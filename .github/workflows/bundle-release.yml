@@ -472,6 +472,13 @@ jobs:
           export PATH="$BUNDLE_ROOT/runtime/bin:$BUNDLE_ROOT/pg/bin:$BUNDLE_ROOT/redis${PATH:+:$PATH}"
           export PYTHONPATH="$BUNDLE_ROOT/backend/src:$SITE_PACKAGES"
           export FARNA_CONTROL_BUNDLED_BIN_DIR="$BUNDLE_ROOT/pg/bin"
+          # The single-port SPA seam. farna.api.main reads exactly these two
+          # names (_SERVE_SPA_ENV / _FRONTEND_DIST_ENV) and the bundle stages
+          # the built SPA at frontend-dist (see the frontend build step).
+          # FAR-2564: without them the app keeps the API mount at "/", so the
+          # SPA's root URL answers with API JSON and the web UI never loads.
+          export FARNA_CONTROL_SERVE_SPA=1
+          export FARNA_CONTROL_FRONTEND_DIST="$BUNDLE_ROOT/frontend-dist"
 
           exec "$BUNDLE_ROOT/runtime/bin/python3" -c \
             'from farna.cli.main import cli; cli()' "$@"

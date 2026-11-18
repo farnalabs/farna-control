@@ -15,7 +15,7 @@ file that you can open, read, and then send.
 ### Native install (Linux)
 
 ```bash
-modulo support
+farna-control support
 ```
 
 - Writes `./modulo-support-<ref>.zip` in the current directory, where `<ref>`
@@ -29,15 +29,15 @@ modulo support
   `withheld: <member> - member removed (<reason>)`.
 - Pass `--out <path>` to write the zip somewhere else.
 
-`modulo doctor --report report.zip` also writes a redacted diagnostic zip, to a
+`farna-control doctor --report report.zip` also writes a redacted diagnostic zip, to a
 path you choose. It exits with the doctor status, not the report status: `0`
 healthy, `1` unhealthy, `2` degraded (warnings), `3` uninitialized. A non-zero
 exit does not mean the report was not written. Look for the
 `diagnostic report written: ...` line and check that the file exists.
-`modulo doctor` also prints its checks to the terminal while it builds the
+`farna-control doctor` also prints its checks to the terminal while it builds the
 report, so you can read the summary before opening the zip.
 
-If the install itself failed, there is no `modulo` binary to run yet. The
+If the install itself failed, there is no `farna-control` binary to run yet. The
 installer prints a delimited support block as its final output on failure and
 keeps the full transcript under `~/.local/state/modulo/install-*.log`; send
 both the block and the log file. Both the transcript and the block are landing
@@ -65,7 +65,7 @@ bash scripts/support-bundle.sh
   `--app-service <name>` (default `backend`), `--tail <n>` and `--no-app`.
   `./scripts/support-bundle.sh --help` lists them all.
 
-`modulo doctor --report` is launcher-scoped and does not apply to a Compose
+`farna-control doctor --report` is launcher-scoped and does not apply to a Compose
 deployment. If you also want the raw logs as separate files, capture them
 before bringing the stack down:
 
@@ -142,11 +142,11 @@ error 7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f · fingerprint 9f8e7d6c5b4a · level 
 ----- end of Farna Control install support block -----
 ```
 
-**A bundle** (printed by `modulo support` and by the bundle module when the zip
+**A bundle** (printed by `farna-control support` and by the bundle module when the zip
 is written):
 
 ```text
-modulo support bundle 1 ref=MSB-1-20261102T101500Z-deadbeef
+farna-control support bundle 1 ref=MSB-1-20261102T101500Z-deadbeef
 bundle: /home/you/modulo-support-MSB-1-20261102T101500Z-deadbeef.zip (348201 bytes)
 Open the bundle and check it before sending it to Farnalabs support.
 ```
@@ -158,7 +158,7 @@ might carry a credential, a `withheld: <member> - <n> item(s) removed
 item.
 
 The run, error-group and installer lines are landing in this milestone.
-On an older build, `modulo doctor --report` prints
+On an older build, `farna-control doctor --report` prints
 `diagnostic report written: <path>` and does not print the reference.
 
 Send the line before you build anything. Between them the lines usually answer

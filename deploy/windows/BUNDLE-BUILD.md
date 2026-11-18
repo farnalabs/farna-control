@@ -87,7 +87,7 @@ Alpha manifest.
 
 | Bundle path | Input |
 |---|---|
-| `<BUNDLE_DIR>\bin\modulo.exe` | Native Windows Modulo launcher |
+| `<BUNDLE_DIR>\bin\modulo.exe` | Native Windows Farna Control launcher |
 | `<BUNDLE_DIR>\modulo-runtime.json` | Native runtime marker |
 
 Everything else under `BUNDLE_DIR` is copied into the install directory.

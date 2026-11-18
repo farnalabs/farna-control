@@ -1,4 +1,4 @@
-# Modulo — Caddy v2 Reverse Proxy
+# Farna Control — Caddy v2 Reverse Proxy
 
 Standalone TLS termination for self-hosted environments (bare metal, single-VM,
 staging, or any setup where you want Caddy handling HTTPS directly).

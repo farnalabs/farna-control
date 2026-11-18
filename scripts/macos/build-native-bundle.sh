@@ -247,9 +247,13 @@ int main(int argc, char **argv) {
     snprintf(frontend_dist, sizeof(frontend_dist), "%s/frontend-dist", bundle);
     /* The names are the shared service contract in
        farna.launcher.env_contract; the spa_env_contract_gate below reads them
-       back out of this source and fails the build on any drift. FAR-2563: they
-       were exported under the pre-rebrand MODULO_* spelling while the API read
-       FARNA_CONTROL_*, so the built SPA was never mounted and "/" 404'd. */
+       back out of this source and fails THIS BUILD on any drift. The consumers
+       are farna.api.main._SERVE_SPA_ENV / _FRONTEND_DIST_ENV: FAR-2563/FAR-2564
+       was the pre-rebrand MODULO_ spelling exported here while nothing read it,
+       so the installed app never mounted the SPA and "/" returned the API JSON
+       instead of the SPA entry document. backend/tests/unit/launcher/
+       test_native_shim_env_contract.py derives both sides from the real files
+       and fails when a launcher sets a name Python never reads. */
     setenv("FARNA_CONTROL_SERVE_SPA", "1", 1);
     setenv("FARNA_CONTROL_FRONTEND_DIST", frontend_dist, 1);
     char final_pythonpath[12288];

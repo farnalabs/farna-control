@@ -1,6 +1,6 @@
-# Modulo Helm Chart
+# Farna Control Helm Chart
 
-Vendor-neutral Helm chart for the Modulo stack. Deploys backend API, SAQ workers, frontend SPA, and Redis. Postgres is external/optional.
+Vendor-neutral Helm chart for the Farna Control stack. Deploys backend API, SAQ workers, frontend SPA, and Redis. Postgres is external/optional.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ helm install modulo ./deploy/helm/modulo \
   --set postgres.adminUsername=modulo \
   --set backend.env.SECRET_KEY=$(openssl rand -hex 32) \
   --set backend.env.FERNET_KEY=$(openssl rand -hex 32) \
-  --set backend.env.MODULO_USERS="admin:$(openssl passwd -6 your-admin-password)" \
+  --set backend.env.FARNA_CONTROL_USERS="admin:$(openssl passwd -6 your-admin-password)" \
   --set backend.env.SAQ_AUTH_USERNAME=admin \
   --set backend.env.SAQ_AUTH_PASSWORD=$(openssl rand -hex 16)
 ```
@@ -29,14 +29,14 @@ helm install modulo ./deploy/helm/modulo \
 
 ### External Postgres (Default)
 
-The chart does NOT deploy Postgres by default. Modulo requires **two distinct Postgres roles**:
+The chart does NOT deploy Postgres by default. Farna Control requires **two distinct Postgres roles**:
 
 | Role | Purpose | Used by |
 |------|---------|---------|
 | `farna_control_app` | Restricted runtime role — DML only, no superuser, no BYPASSRLS | `DATABASE_URL` (backend, SAQ workers) |
 | `modulo` | Admin/superuser role — migrations, role bootstrap, DDL | `DATABASE_ADMIN_URL` (entrypoint only) |
 
-The `farna_control_app` role is **created automatically** by `bootstrap_role` on startup — the operator only needs to provision the admin role with sufficient privileges (superuser or CREATEROLE + CREATEDB). A third role, `farna_control_system` (LOGIN, BYPASSRLS — see `postgres.systemUsername`), is created by the same bootstrap with the shared password; the chart wires it into `MODULO_SYSTEM_DATABASE_URL`, without which the `dispatcher_reconcile` system cron refuses to run and backend readiness stays 503 forever.
+The `farna_control_app` role is **created automatically** by `bootstrap_role` on startup — the operator only needs to provision the admin role with sufficient privileges (superuser or CREATEROLE + CREATEDB). A third role, `farna_control_system` (LOGIN, BYPASSRLS — see `postgres.systemUsername`), is created by the same bootstrap with the shared password; the chart wires it into `FARNA_CONTROL_SYSTEM_DATABASE_URL`, without which the `dispatcher_reconcile` system cron refuses to run and backend readiness stays 503 forever.
 
 Set these values:
 
@@ -105,7 +105,9 @@ The two keys in the first two rows are validated at runtime by Pydantic (`_MIN_K
 
 | Value | Purpose |
 |---|---|
-| `backend.env.MODULO_USERS` | Admin user credentials (`user:password` format). Without this, no login is possible — the app warns at boot but does not crash. |
+| `backend.env.FARNA_CONTROL_USERS` | Admin user credentials (`user:password` format). Without this, no login is possible — the app warns at boot but does not crash. |
+
+**Set every environment variable through `backend.env` using the canonical `FARNA_CONTROL_*` name.** This is the only spelling that survives: the bare `MODULO_*` aliases are legacy and are being retired, so a deployment wired with the old name will lose that setting once they are removed. In particular, set the admin user as `backend.env.FARNA_CONTROL_USERS` — with no admin account there is no way to log in — and the system database URL as `backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL`, which is the only key the chart's helper consults when `postgres.host` is unset.
 
 ### Secrets Management
 
@@ -201,7 +203,7 @@ when the provider is off; the default is deliberately the safe one.
 
 The full setup — provider env vars, the least-privilege Role/RoleBinding, and
 the workspace-pod ServiceAccount — is in the
-[Kubernetes guide](https://modulo.run/docs/kubernetes).
+[Kubernetes guide](https://farna.dev/control/docs/kubernetes).
 
 ### Workspace Egress NetworkPolicy (FAR-1690, FAR-2068)
 
@@ -211,8 +213,8 @@ to a **`declared`** egress posture when — and only when —
 `workspaceNetworkPolicy.enabled=true`: the chart then authors a `NetworkPolicy`
 selecting the workspace pods (`modulo.provider: kubernetes`) with a
 deny-by-default egress rule plus an exact-target (CIDR + port) allowlist. The
-cluster CNI enforces this policy; Modulo records the posture as declared (never
-an observation — Modulo does not see network traffic).
+cluster CNI enforces this policy; Farna Control records the posture as declared (never
+an observation — Farna Control does not see network traffic).
 
 `workspaceNetworkPolicy.enabled=false` is the default and the prerequisite in
 the other direction: with it off the manifest does not exist, so the chart
@@ -253,9 +255,9 @@ Allowlist entries are validated at render: `protocol` must be TCP/UDP/SCTP
 (case-insensitive) and `port` must be in 1-65535, so typos fail fast instead of
 being silently rejected by the API server.
 
-**Posture and prerequisites.** Modulo authors the manifest and the cluster CNI
-enforces it; Modulo records that as a **`declared`** egress posture (never an
-observation — Modulo does not see network traffic). This requires a CNI that
+**Posture and prerequisites.** Farna Control authors the manifest and the cluster CNI
+enforces it; Farna Control records that as a **`declared`** egress posture (never an
+observation — Farna Control does not see network traffic). This requires a CNI that
 enforces NetworkPolicy (e.g. Calico, Cilium); `kindnet` (kind's default) does
 not, so a policy applied there proves nothing. A NetworkPolicy cannot express a
 hostname — resolve targets to CIDRs before listing them — and some CNIs silently
@@ -293,7 +295,7 @@ helm install modulo ./deploy/helm/modulo \
   --set postgres.adminUsername=modulo \
   --set backend.env.SECRET_KEY=dev-secret-key-not-for-production-32b! \
   --set backend.env.FERNET_KEY=dev-fernet-key-not-for-production-32b!! \
-  --set backend.env.MODULO_USERS="admin:admin" \
+  --set backend.env.FARNA_CONTROL_USERS="admin:admin" \
   --set backend.env.SAQ_AUTH_USERNAME=admin \
   --set backend.env.SAQ_AUTH_PASSWORD=admin
 ```
@@ -353,8 +355,8 @@ kubectl delete namespace modulo  # If namespace.create=true
   readiness split (liveness `/healthz`, readiness `/healthz/ready`) holds on
   multi-node Kubernetes. Two gaps found and fixed during this run: SAQ system
   auth was documented as optional (it is fail-closed required — see Required
-  Values), and `MODULO_SYSTEM_DATABASE_URL` was not wired by the chart (without
-  it `dispatcher_reconcile` never runs and readiness never passes).
+  Values), and `FARNA_CONTROL_SYSTEM_DATABASE_URL` was not wired by the chart
+  (without it `dispatcher_reconcile` never runs and readiness never passes).
 - [ ] Live kind validation (FAR-1053)
 
 ## Follow-ups
