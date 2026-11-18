@@ -168,8 +168,8 @@ fi
 
 if [[ -f /tmp/system_database_url.env ]]; then
   SYSTEM_URL=$(cat /tmp/system_database_url.env)
-  export MODULO_SYSTEM_DATABASE_URL="$SYSTEM_URL"
-  echo "MODULO_SYSTEM_DATABASE_URL fixed: $(printf '%s' "$SYSTEM_URL" | redact_url_credentials | cut -c1-80)..."
+  export FARNA_CONTROL_SYSTEM_DATABASE_URL="$SYSTEM_URL"
+  echo "FARNA_CONTROL_SYSTEM_DATABASE_URL fixed: $(printf '%s' "$SYSTEM_URL" | redact_url_credentials | cut -c1-80)..."
 fi
 
 echo "=== Bootstrapping farna_control_app role ==="
