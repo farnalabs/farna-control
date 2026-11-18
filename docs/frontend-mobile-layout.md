@@ -28,6 +28,10 @@ Every new or changed screen should pass this at a 390x844 viewport:
 
 The reference test is the "Mobile foundation" block in `frontend/tests/e2e/mobile-layout.spec.ts` (`pnpm run test:e2e:mobile`).
 
+The dvh utility cascade is pinned separately by the "Mobile dynamic viewport height
+(FAR-2547)" block in the same spec:
+`pnpm exec playwright test tests/e2e/mobile-layout.spec.ts --grep "dynamic viewport height"`.
+
 ## Known follow-up
 
 FAR-2547 completed the `dvh` sweep: every `100vh`/`h-screen`/`min-h-screen` view now
