@@ -1,7 +1,7 @@
 # Farna Control
 
 <p align="center">
-  <img src="docs/assets/farna-control-lockup-light-bg.svg" width="360" alt="Farna Control logo">
+  <img src="docs/assets/farna-control-lockup-card-light.svg" width="360" alt="Farna Control logo">
 </p>
 
 <p align="center">
