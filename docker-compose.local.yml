@@ -11,7 +11,7 @@ services:
     volumes:
       - pgdata_local:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U modulo"]
+      test: ["CMD-SHELL", "pg_isready -U farna_control"]
       interval: 3s
       timeout: 5s
       retries: 10
@@ -42,7 +42,7 @@ services:
       db-local:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://modulo:${POSTGRES_PASSWORD:-changeme}@db-local:5432/farna_control
+      DATABASE_URL: postgresql+asyncpg://farna_control:${POSTGRES_PASSWORD:-changeme}@db-local:5432/farna_control
       FARNA_CONTROL_DB: postgres
       SECRET_KEY: local-dev-secret-key-not-for-production
       # FAR-2181: `local-dev-only-change-me` was 24 bytes - below `Settings`'
@@ -83,7 +83,7 @@ services:
       db-local:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://modulo:${POSTGRES_PASSWORD:-changeme}@db-local:5432/farna_control
+      DATABASE_URL: postgresql+asyncpg://farna_control:${POSTGRES_PASSWORD:-changeme}@db-local:5432/farna_control
       FARNA_CONTROL_DB: postgres
       SECRET_KEY: local-dev-secret-key-not-for-production
       # FAR-2181: same required key as saq-runner above - see that comment.

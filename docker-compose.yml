@@ -10,7 +10,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U modulo"]
+      test: ["CMD-SHELL", "pg_isready -U farna_control"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -49,7 +49,7 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       DATABASE_URL: postgresql+asyncpg://farna_control_app:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
-      DATABASE_ADMIN_URL: postgresql+asyncpg://modulo:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
+      DATABASE_ADMIN_URL: postgresql+asyncpg://farna_control:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       # farna_control_system (LOGIN, BYPASSRLS) role URL. The entrypoint's
       # bootstrap_role parses the password out of THIS URL when it creates or
       # alters the role, so the role and the URL can never disagree; the
