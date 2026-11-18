@@ -13,6 +13,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -92,13 +93,13 @@ def test_no_settings_module_loaded_after_import_by_subprocess() -> None:
 
 def test_compose_config_derives_all_bundled_endpoints() -> None:
     composed = compose_config(_state(), _secrets())
-    assert composed["DATABASE_URL"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo"
+    assert composed["DATABASE_URL"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
     assert composed["SECRET_KEY"]
     assert composed["FERNET_KEY"]
     assert composed["DATABASE_ADMIN_URL"] == composed["DATABASE_URL"]
     assert composed["REDIS_URL"] == "redis://:redis-pw@127.0.0.1:16379/0"
     system_url = composed["FARNA_CONTROL_SYSTEM_DATABASE_URL"]
-    assert system_url.startswith("postgresql+asyncpg://farna_control_system:pg-pw@127.0.0.1:15432/modulo")
+    assert system_url.startswith("postgresql+asyncpg://farna_control_system:pg-pw@127.0.0.1:15432/farna_control")
 
 
 def test_pinned_config_preserves_existing_operator_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -136,6 +137,83 @@ def test_compose_config_is_password_free_on_state_alone() -> None:
     joined = repr(payload)
     assert "pg-pw" not in joined
     assert "redis-pw" not in joined
+
+
+# ---------------------------------------------------------------------------
+# Single source of truth for the app database name (FAR-2561)
+# ---------------------------------------------------------------------------
+
+_APP_DB_NAME_IDENTIFIERS = frozenset({"APP_DB_NAME", "_APP_DB_NAME"})
+
+
+def _module_level_app_db_name_literals() -> dict[str, list[str]]:
+    """Every module-level ``APP_DB_NAME`` / ``_APP_DB_NAME`` string literal in the package."""
+    from farna.launcher import config_source as config_source_module
+
+    package_dir = Path(config_source_module.__file__).resolve().parent
+    defined: dict[str, list[str]] = {}
+    for path in sorted(package_dir.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                targets, value = list(node.targets), node.value
+            elif isinstance(node, ast.AnnAssign):
+                targets, value = [node.target], node.value
+            else:
+                continue
+            if not isinstance(value, ast.Constant):
+                continue
+            if not isinstance(value.value, str):
+                continue
+            named = [t for t in targets if isinstance(t, ast.Name) and t.id in _APP_DB_NAME_IDENTIFIERS]
+            if named:
+                defined.setdefault(path.name, []).append(value.value)
+    return defined
+
+
+def test_app_database_name_has_exactly_one_definition() -> None:
+    """FAR-2561: exactly ONE module-level literal may define the app database name.
+
+    Three independent literals existed (``config_source`` said ``modulo`` while
+    ``entry`` created ``farna_control``), so the composed URL and the database
+    first boot actually created could — and did — disagree. A re-declared
+    literal anywhere in the package must fail this test, not drift silently.
+    """
+    defined = _module_level_app_db_name_literals()
+
+    assert defined == {"entry.py": ["farna_control"]}
+
+
+def test_app_database_name_consumers_resolve_to_the_same_object() -> None:
+    """FAR-2561: composers IMPORT the one constant.
+
+    An equal-but-separately-declared literal would pass an equality check while
+    still being free to drift on the next edit, so this pins object identity.
+    """
+    import farna.launcher.config_source as config_source_module
+    import farna.launcher.entry as entry_module
+    import farna.launcher.upgrade as upgrade_module
+
+    assert entry_module.APP_DB_NAME == "farna_control"
+    assert config_source_module.APP_DB_NAME is entry_module.APP_DB_NAME
+    assert upgrade_module.APP_DB_NAME is entry_module.APP_DB_NAME
+
+
+def test_composed_database_urls_carry_the_single_app_database_name() -> None:
+    """FAR-2561: every composed URL names the database the launcher creates.
+
+    This is the release-blocking defect: first boot created ``farna_control``,
+    the pinned ``DATABASE_URL`` said ``modulo``, and the API never became
+    healthy (``database "modulo" does not exist``).
+    """
+    composed = compose_config(_state(), _secrets())
+
+    assert urlsplit(composed["DATABASE_URL"]).path == "/farna_control"
+    assert urlsplit(composed["DATABASE_ADMIN_URL"]).path == "/farna_control"
+    # The system URL is DERIVED from DATABASE_URL (only the role is swapped), so
+    # it shares the app database name — pinned here so "the system role gets its
+    # own database" can only ever be a deliberate, tested decision.
+    assert urlsplit(composed["FARNA_CONTROL_SYSTEM_DATABASE_URL"]).path == "/farna_control"
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +255,7 @@ def test_source_redis_url_environment_wins_over_composed(monkeypatch: pytest.Mon
     monkeypatch.setenv("REDIS_URL", "redis://operator:secret@cache.example.com:6379/7")
     resolved = LauncherConfigSource(data_dir)()
     assert "redis_url" not in resolved  # the operator's env wins
-    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo"
+    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
 
 
 def test_source_system_database_url_environment_wins_over_composed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -193,7 +271,7 @@ def test_source_system_database_url_environment_wins_over_composed(monkeypatch: 
     monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "postgresql://user:pass@host:5432/modulo")
     resolved = LauncherConfigSource(data_dir)()
     assert "modulo_system_database_url" not in resolved  # the operator's env wins
-    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo"
+    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
     assert resolved["redis_url"] == "redis://:redis-pw@127.0.0.1:16379/0"
 
 
@@ -230,7 +308,7 @@ def test_source_includes_everything_without_environment(clean_launcher_env, monk
 
     monkeypatch.setattr(sf, "load_or_create", lambda _path: _secrets())
     resolved = LauncherConfigSource(data_dir)()
-    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo"
+    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
     assert resolved["redis_url"] == "redis://:redis-pw@127.0.0.1:16379/0"
 
 
@@ -275,7 +353,7 @@ def test_source_settings_roundtrip_honours_priority(clean_launcher_env, monkeypa
         _env_file=None,
         **resolved,  # type: ignore[arg-type]
     )
-    assert settings.database_url == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo"
+    assert settings.database_url == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
     assert settings.redis_url == "redis://:redis-pw@127.0.0.1:16379/0"
 
 
@@ -308,7 +386,7 @@ def test_write_pinned_env_file_content_and_mode(tmp_path: Path) -> None:
     path = write_pinned_env_file(data_dir, _state(), _secrets())
     assert path.name == CONFIG_ENV_FILENAME
     content = path.read_text(encoding="utf-8")
-    assert "DATABASE_URL=postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo" in content
+    assert "DATABASE_URL=postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control" in content
     assert "REDIS_URL=redis://:redis-pw@127.0.0.1:16379/0" in content
     if os.name == "posix":
         mode = path.stat().st_mode & 0o777
@@ -365,7 +443,7 @@ def test_pinned_env_file_feeds_get_settings(clean_launcher_env, monkeypatch: pyt
     monkeypatch.setenv("FERNET_KEY", FERNET_KEY)
     pin_env_file(str(path))
     settings = get_settings()
-    assert settings.database_url == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/modulo"
+    assert settings.database_url == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
     assert settings.redis_url == "redis://:redis-pw@127.0.0.1:16379/0"
 
 

@@ -35,6 +35,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 from farna.db.url_utils import derive_system_database_url
+from farna.launcher.entry import APP_DB_NAME
 from farna.launcher.secrets_file import LauncherSecrets
 from farna.launcher.state import STATE_FILENAME, LauncherState, load_state
 
@@ -42,7 +43,13 @@ _log = logging.getLogger(__name__)
 
 CONFIG_ENV_FILENAME = "config.env"
 POSTGRES_HOST = "127.0.0.1"
-APP_DB_NAME = "modulo"
+# APP_DB_NAME is imported from farna.launcher.entry — THE single definition of the
+# app database name (FAR-2561). Per the import-order contract entry imports only
+# ``env_safety`` at module level, so this direction is the only cycle-free one:
+# the alternative (defining it here) meant this module's copy could drift from
+# the name ``_ensure_app_database`` creates, which it did ("modulo" vs
+# "farna_control") and the API then connected to a database first boot never
+# created. Never re-declare the literal here.
 _REDIS_DB = "0"
 
 # Composed env-name -> Settings field name (only real Settings fields).
