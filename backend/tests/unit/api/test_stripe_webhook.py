@@ -19,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from farna.api.main import app
+from farna.api.routes import stripe_webhook
 from farna.core.license import (
     _LICENSE_PUBLIC_KEY_HEX,
     RENEWAL_MODE_AUTO,
@@ -482,3 +483,434 @@ class TestChosenStartsAt:
         assert data is not None
         assert data.starts_at == f"{starts_at}T00:00:00+00:00"
         assert datetime.fromisoformat(data.expires_at) > datetime.fromisoformat(data.starts_at)
+
+
+# ---------------------------------------------------------------------------
+# Operator alerts — one email per commercially meaningful event
+# ---------------------------------------------------------------------------
+
+_ALERT_SEND = "farna.api.routes.stripe_webhook.send_email"
+
+
+def _alert_settings(**overrides: object) -> Settings:
+    """Settings with the operator-alert channel live.
+
+    ``smtp_host`` + ``alert_email_to`` are what make an alert actually send, and
+    ``sk_live_`` is the account-mode signal the livemode fallback reads.
+    """
+    base: dict[str, object] = {
+        "database_url": "postgresql+asyncpg://localhost/test",
+        "secret_key": _VALID_32,
+        "fernet_key": _VALID_32,
+        "modulo_admin_password": "testpass",
+        "stripe_secret_key": "sk_live_123",
+        "stripe_webhook_secret": _TEST_SECRET,
+        "smtp_host": "smtp.example.com",
+        "alert_email_to": "ops@example.com",
+        "environment": "production",
+        "redis_url": "",
+    }
+    base.update(overrides)
+    return Settings(**base)
+
+
+def _live(event: dict) -> dict:
+    """Mark an event as a real (livemode) Stripe event."""
+    event["livemode"] = True
+    return event
+
+
+def _payment_intent_event(event_id: str, event_type: str, **obj_fields: object) -> dict:
+    obj = {
+        "id": f"pi_{event_id}",
+        "amount": 4900,
+        "currency": "gbp",
+        "receipt_email": "bob@acme.com",
+        "status": "requires_action" if event_type.endswith("requires_action") else "requires_payment_method",
+    }
+    obj.update(obj_fields)
+    return _live({"id": event_id, "type": event_type, "data": {"object": obj}})
+
+
+def _dispute_event(event_id: str = "evt_dispute") -> dict:
+    return _live(
+        {
+            "id": event_id,
+            "type": "charge.dispute.created",
+            "data": {
+                "object": {
+                    "id": "dp_123",
+                    "amount": 4900,
+                    "currency": "gbp",
+                    "reason": "fraudulent",
+                    "status": "needs_response",
+                    "charge": "ch_123",
+                    "payment_intent": "pi_123",
+                }
+            },
+        }
+    )
+
+
+def _refund_event(event_id: str = "evt_refund") -> dict:
+    return _live(
+        {
+            "id": event_id,
+            "type": "charge.refunded",
+            "data": {
+                "object": {
+                    "id": "ch_123",
+                    "amount": 4900,
+                    "amount_refunded": 4900,
+                    "currency": "gbp",
+                    "payment_intent": "pi_123",
+                    "metadata": {"starts_at": "2027-03-12"},
+                }
+            },
+        }
+    )
+
+
+def _fraud_warning_event(event_id: str = "evt_fraud") -> dict:
+    return _live(
+        {
+            "id": event_id,
+            "type": "radar.early_fraud_warning.created",
+            "data": {
+                "object": {
+                    "id": "issfr_123",
+                    "charge": "ch_123",
+                    "payment_intent": "pi_123",
+                    "fraud_type": "made_with_stolen_card",
+                }
+            },
+        }
+    )
+
+
+def _sent(mock_send: MagicMock) -> tuple[list[str], str, str, str]:
+    """``(recipients, subject, body_html, body_text)`` of the single send."""
+    assert mock_send.call_count == 1
+    args = mock_send.call_args.args
+    return args[1], args[2], args[3], args[4]
+
+
+class TestOperatorAlerts:
+    @pytest.fixture(autouse=True)
+    def _clear_alert_dedupe(self) -> Generator[None, None, None]:
+        """The process-local dedup fallback is module state; never leak it."""
+        stripe_webhook._alerted_event_ids.clear()
+        yield
+        stripe_webhook._alerted_event_ids.clear()
+
+    @pytest.fixture
+    def alert_client(self) -> Generator[TestClient, None, None]:
+        # A plain lambda, never `_alert_settings` itself: FastAPI inspects the
+        # override's signature, and its `**overrides` catch-all would become a
+        # required `overrides` query parameter (422 on every request).
+        app.dependency_overrides[get_settings] = lambda: _alert_settings()
+        try:
+            yield TestClient(app)
+        finally:
+            app.dependency_overrides.clear()
+
+    @pytest.fixture
+    def staging_client(self) -> Generator[TestClient, None, None]:
+        app.dependency_overrides[get_settings] = lambda: _alert_settings(environment="staging", alert_environments="production")
+        try:
+            yield TestClient(app)
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_invoice_paid_emails_a_sale_and_still_fulfils(self, alert_client: TestClient) -> None:
+        """A real sale alerts the operator AND keeps the existing fulfilment."""
+        event = _live(_invoice_event("evt_sale"))
+        event["data"]["object"].update({"amount_paid": 4900, "currency": "gbp"})
+        body = json.dumps(event).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")) as mock_fulfil,
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200, resp.text
+        mock_fulfil.assert_awaited_once()
+        recipients, subject, _html, text = _sent(mock_send)
+        assert recipients == ["ops@example.com"]
+        assert subject == "[Modulo Billing] New sale — 49.00 GBP — bob@acme.com"
+        assert "Event: evt_sale (invoice.paid)" in text
+        assert "Amount: 49.00 GBP (4,900 minor units)" in text
+        assert "Dashboard: https://dashboard.stripe.com/invoices/in_evt_sale" in text
+
+    def test_checkout_completed_alerts_without_fulfilling(self, alert_client: TestClient) -> None:
+        body = json.dumps(_live(_checkout_event("evt_checkout"))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock()) as mock_fulfil,
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        mock_fulfil.assert_not_awaited()
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Checkout completed")
+        assert "Payment status: paid" in text
+
+    def test_checkout_expired_alerts(self, alert_client: TestClient) -> None:
+        event = _live(_checkout_event("evt_expired", payment_status="unpaid"))
+        event["type"] = "checkout.session.expired"
+        body = json.dumps(event).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Checkout expired")
+        assert "Payment status: unpaid" in text
+
+    def test_payment_intent_requires_action_alerts_with_the_next_action(self, alert_client: TestClient) -> None:
+        event = _payment_intent_event(
+            "evt_action",
+            "payment_intent.requires_action",
+            next_action={"type": "use_stripe_sdk"},
+        )
+        body = json.dumps(event).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Payment requires action")
+        assert "Next action: use_stripe_sdk" in text
+        assert "Dashboard: https://dashboard.stripe.com/payments/pi_evt_action" in text
+
+    def test_payment_failed_alert_reports_the_decline_and_no_card_data(self, alert_client: TestClient) -> None:
+        event = _payment_intent_event(
+            "evt_failed",
+            "payment_intent.payment_failed",
+            last_payment_error={
+                "type": "card_error",
+                "code": "card_declined",
+                "decline_code": "insufficient_funds",
+                "message": "Your card has insufficient funds.",
+                # Stripe can expand the payment method onto the error; a card
+                # number must NEVER be copied into the email.
+                "payment_method": {"id": "pm_123", "card": {"number": "4242424242424242"}},
+            },
+        )
+        body = json.dumps(event).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Payment failed")
+        assert "Failure detail: type=card_error, code=card_declined, decline_code=insufficient_funds" in text
+        assert "4242424242424242" not in text
+        assert "4242424242424242" not in html
+
+    def test_dispute_alert_carries_reason_status_and_amount(self, alert_client: TestClient) -> None:
+        body = json.dumps(_dispute_event()).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Dispute opened")
+        assert "Dispute reason: fraudulent" in text
+        assert "Dispute status: needs_response" in text
+        assert "Dashboard: https://dashboard.stripe.com/disputes/dp_123" in text
+
+    def test_refund_alert_shows_both_amounts_and_the_purchase_metadata(self, alert_client: TestClient) -> None:
+        body = json.dumps(_refund_event()).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Refund issued")
+        assert "Amount: 49.00 GBP (4,900 minor units)" in text
+        assert "Refunded: 49.00 GBP (4,900 minor units)" in text
+        assert "Metadata starts_at: 2027-03-12" in text
+
+    def test_fraud_warning_alert_links_the_payment_it_concerns(self, alert_client: TestClient) -> None:
+        body = json.dumps(_fraud_warning_event()).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] Early fraud warning")
+        assert "Fraud type: made_with_stolen_card" in text
+        assert "Dashboard: https://dashboard.stripe.com/payments/pi_123" in text
+
+    def test_credential_shaped_metadata_is_never_rendered(self, alert_client: TestClient) -> None:
+        event = _live(_invoice_event("evt_meta"))
+        starts_at = _future_date(60)
+        event["data"]["object"]["metadata"] = {"starts_at": starts_at, "api_key": "sk_live_leaked"}
+        body = json.dumps(event).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        _recipients, _subject, html, text = _sent(mock_send)
+        assert f"Metadata starts_at: {starts_at}" in text
+        assert "sk_live_leaked" not in text
+        assert "sk_live_leaked" not in html
+
+    def test_alert_reads_starts_at_from_every_metadata_location(self, alert_client: TestClient) -> None:
+        """The alert and the licence-start read share one metadata precedence."""
+        starts_at = _future_date(60)
+        event = _live(_invoice_event("evt_sub_meta"))
+        event["data"]["object"]["subscription_details"] = {"metadata": {"starts_at": starts_at}}
+        body = json.dumps(event).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            assert _post(alert_client, body, _sign(body)).status_code == 200
+
+        _recipients, _subject, _html, text = _sent(mock_send)
+        assert f"Metadata starts_at: {starts_at}" in text
+
+    def test_unknown_event_sends_no_alert(self, alert_client: TestClient) -> None:
+        body = json.dumps(_live({"id": "evt_other", "type": "customer.subscription.updated", "data": {"object": {}}})).encode()
+
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        mock_send.assert_not_called()
+
+    def test_alert_failure_still_returns_200_and_still_fulfils(self, alert_client: TestClient) -> None:
+        """A broken SMTP server must not turn delivery into a Stripe failure.
+
+        The alert is queued BEFORE the fulfilment task, so this also proves a
+        raising alert task cannot skip the fulfilment behind it.
+        """
+        from farna.core.email_service import EmailSendingError
+
+        body = json.dumps(_live(_invoice_event("evt_smtp_down"))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")) as mock_fulfil,
+            patch(_ALERT_SEND, new=MagicMock(side_effect=EmailSendingError("smtp down"))),
+        ):
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        assert resp.json() == {"received": True, "event_id": "evt_smtp_down"}
+        mock_fulfil.assert_awaited_once()
+
+    def test_a_failed_send_leaves_the_event_unclaimed_so_a_retry_alerts(self, alert_client: TestClient) -> None:
+        from farna.core.email_service import EmailSendingError
+
+        body = json.dumps(_live(_invoice_event("evt_retry"))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(side_effect=EmailSendingError("smtp down"))),
+        ):
+            assert _post(alert_client, body, _sign(body)).status_code == 200
+
+        # Stripe's retry of the same event id must still alert.
+        with patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send:
+            assert _post(alert_client, body, _sign(body)).status_code == 200
+
+        _sent(mock_send)
+
+    def test_a_redelivered_event_does_not_alert_twice(self, alert_client: TestClient) -> None:
+        body = json.dumps(_live(_invoice_event("evt_dupe"))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            assert _post(alert_client, body, _sign(body)).status_code == 200
+            assert _post(alert_client, body, _sign(body)).status_code == 200
+
+        _sent(mock_send)
+
+    def test_test_mode_event_never_alerts(self, alert_client: TestClient) -> None:
+        event = _invoice_event("evt_test_mode")
+        event["livemode"] = False
+        body = json.dumps(event).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        mock_send.assert_not_called()
+
+    def test_livemode_falls_back_to_the_account_key_when_the_flag_is_absent(self) -> None:
+        """No ``livemode`` field: the configured account key decides.
+
+        A live-keyed deployment alerts (never hide a real charge); a test-keyed
+        one stays quiet (never page an operator about sandbox noise).
+        """
+        event = _invoice_event("evt_no_flag")
+        assert stripe_webhook._is_live_event(event, _alert_settings()) is True
+        assert stripe_webhook._is_live_event(event, _alert_settings(stripe_secret_key="sk_test_123")) is False
+
+    def test_no_alert_when_smtp_is_unconfigured(self, client: TestClient) -> None:
+        """The default (compose/local) configuration stays silent."""
+        body = json.dumps(_live(_invoice_event("evt_no_smtp"))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(client, body, _sign(body))
+
+        assert resp.status_code == 200
+        mock_send.assert_not_called()
+
+    def test_no_alert_outside_the_alert_environments_allowlist(self, staging_client: TestClient) -> None:
+        body = json.dumps(_live(_invoice_event("evt_staging"))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")),
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(staging_client, body, _sign(body))
+
+        assert resp.status_code == 200
+        mock_send.assert_not_called()
+
+    def test_a_refused_starts_at_still_alerts_the_operator(self, alert_client: TestClient) -> None:
+        """A paid invoice whose licence was REFUSED is the loudest case.
+
+        The 422 response drops a queued background task, so the alert is
+        delivered on the error path; the subject marks it as needing action so
+        it never reads as a completed sale.
+        """
+        past = (datetime.now(UTC) - timedelta(days=1)).date().isoformat()
+        body = json.dumps(_live(_invoice_event_with_starts_at("evt_refused", past))).encode()
+
+        with (
+            patch(_FULFIL_MODULE, new=AsyncMock(return_value="key")) as mock_fulfil,
+            patch(_ALERT_SEND, new=MagicMock(return_value=True)) as mock_send,
+        ):
+            resp = _post(alert_client, body, _sign(body))
+
+        assert resp.status_code == 422, resp.text
+        mock_fulfil.assert_not_awaited()
+        _recipients, subject, _html, text = _sent(mock_send)
+        assert subject.startswith("[Modulo Billing] ACTION REQUIRED New sale")
+        assert "Note: The licence was NOT issued" in text
