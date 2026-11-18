@@ -72,10 +72,12 @@ def _failure_exception(failure: str, mock_hvac: MagicMock) -> BaseException:
 
 
 class TestVaultSecretsBackend:
-    async def test_empty_key_raises_value_error(self, mock_hvac: MagicMock) -> None:
+    @pytest.mark.parametrize("operation", ["get_secret", "set_secret", "delete_secret"])
+    async def test_empty_key_raises_value_error(self, mock_hvac: MagicMock, operation: str) -> None:
+        """Every operation rejects an empty key before touching Vault."""
         backend = _make_backend()
         with pytest.raises(ValueError, match="non-empty"):
-            await backend.get_secret("")
+            await _invoke_operation(backend, operation, "")
 
     async def test_get_secret_reads_from_vault(self, mock_hvac: MagicMock) -> None:
         backend = _make_backend()
@@ -114,16 +116,6 @@ class TestVaultSecretsBackend:
         value = await backend.get_secret("numeric-key")
 
         assert value == "123"
-
-    async def test_set_secret_empty_key_raises_value_error(self, mock_hvac: MagicMock) -> None:
-        backend = _make_backend()
-        with pytest.raises(ValueError, match="non-empty"):
-            await backend.set_secret("", "my-value")
-
-    async def test_delete_secret_empty_key_raises_value_error(self, mock_hvac: MagicMock) -> None:
-        backend = _make_backend()
-        with pytest.raises(ValueError, match="non-empty"):
-            await backend.delete_secret("")
 
     async def test_set_secret_writes_to_vault(self, mock_hvac: MagicMock) -> None:
         backend = _make_backend()

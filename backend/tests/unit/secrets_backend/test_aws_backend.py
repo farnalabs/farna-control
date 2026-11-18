@@ -36,11 +36,21 @@ def _make_backend():
     return backend
 
 
+async def _invoke_operation(backend: AWSSecretsManagerBackend, operation: str, key: str) -> None:
+    """Invoke one backend operation by name, so contract cases stay parameterised."""
+    if operation == "set_secret":
+        await backend.set_secret(key, "my-value")
+    else:
+        await getattr(backend, operation)(key)
+
+
 class TestAWSSecretsManagerBackend:
-    async def test_empty_key_raises_value_error(self, mock_boto3):
+    @pytest.mark.parametrize("operation", ["get_secret", "set_secret", "delete_secret"])
+    async def test_empty_key_raises_value_error(self, mock_boto3, operation: str) -> None:
+        """Every operation rejects an empty key before touching AWS."""
         backend = _make_backend()
         with pytest.raises(ValueError, match="non-empty"):
-            await backend.get_secret("")
+            await _invoke_operation(backend, operation, "")
 
     async def test_get_secret_reads_from_aws(self, mock_boto3):
         backend = _make_backend()
@@ -92,18 +102,6 @@ class TestAWSSecretsManagerBackend:
 
         with pytest.raises(KeyError):
             await backend.get_secret("binary-key")
-
-    async def test_set_secret_empty_key_raises_value_error(self, mock_boto3):
-        backend = _make_backend()
-
-        with pytest.raises(ValueError, match="non-empty"):
-            await backend.set_secret("", "my-value")
-
-    async def test_delete_secret_empty_key_raises_value_error(self, mock_boto3):
-        backend = _make_backend()
-
-        with pytest.raises(ValueError, match="non-empty"):
-            await backend.delete_secret("")
 
     async def test_set_secret_creates_new(self, mock_boto3):
         backend = _make_backend()

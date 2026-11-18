@@ -317,7 +317,8 @@ class TestOrgIdResolution:
 
 
 class TestDeleteSecretErrors:
-    async def test_error_raises(self):
+    async def test_flush_failure_propagates(self):
+        """A DB failure during delete surfaces unchanged; it is not swallowed or wrapped."""
         session = _make_session()
         session.flush = AsyncMock(side_effect=RuntimeError("db down"))
         backend = FernetSecretsBackend(fernet_key=_KEY, session=session)

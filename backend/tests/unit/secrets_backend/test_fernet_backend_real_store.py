@@ -179,7 +179,7 @@ async def test_decrypted_values_never_leak_into_logs(
     """No decrypted value appears in any log record across success and failure paths.
 
     Exercises set/get/delete plus the tamper and wrong-key failure paths with
-    capture at DEBUG across the ``modulo`` tree, and asserts the secret never
+    capture at DEBUG across the ``farna`` tree, and asserts the secret never
     shows up either in the rendered log text or in any individual record.
     """
     key = Fernet.generate_key().decode()
@@ -188,7 +188,11 @@ async def test_decrypted_values_never_leak_into_logs(
         _secret_backend(sqlite_secret_engine, key) as backend,
         _secret_backend(sqlite_secret_engine, other_key) as wrong_backend,
     ):
-        with caplog.at_level(logging.DEBUG, logger="modulo"):
+        # Capture at the ROOT logger level so the DEBUG level reaches every
+        # emitting logger in the tree: pinning a named logger here previously
+        # named one that no longer existed, which silently narrowed the capture
+        # to WARNING+ and left DEBUG/INFO leaks unchecked.
+        with caplog.at_level(logging.DEBUG):
             await backend.set_secret("log-guard", _SECRET_VALUE)
             value = await backend.get_secret("log-guard")
             assert value == _SECRET_VALUE
@@ -207,6 +211,12 @@ async def test_decrypted_values_never_leak_into_logs(
             with pytest.raises(KeyError, match="log-guard"):
                 await backend.get_secret("log-guard")
 
+    # Guard against silently capturing nothing: if the DEBUG capture level stops
+    # reaching the emitting logger this test would narrow to WARNING+ and let a
+    # leaking debug/info log line pass unnoticed.
+    fernet_records = [record for record in caplog.records if record.name == "farna.core.secrets_backend.fernet"]
+    assert fernet_records, "expected FernetSecretsBackend to log during the exercised paths"
+    assert any(record.levelno == logging.DEBUG for record in fernet_records), "no DEBUG record captured from the fernet backend - the DEBUG capture level is not reaching the emitting logger"
     assert _SECRET_VALUE not in caplog.text
     assert all(_SECRET_VALUE not in record.getMessage() for record in caplog.records)
 
