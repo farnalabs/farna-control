@@ -34,7 +34,7 @@ docker compose -f deploy/compose/runner-ci.yml --profile runner-ci up -d
 docker compose -f deploy/compose/runner-ci.yml --profile runner-ci port docker-socket-proxy 2375
 # -> 127.0.0.1:<port>  (same for the dind service)
 
-# from backend/, with MODULO_DOCKER_HOST=tcp://127.0.0.1:<proxy-port>
+# from backend/, with FARNA_CONTROL_DOCKER_HOST=tcp://127.0.0.1:<proxy-port>
 uv run pytest tests/docker/test_bundled_runner_harness.py -m docker --tb=short -q --timeout=600 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
 
 docker compose -f deploy/compose/runner-ci.yml --profile runner-ci down -v --remove-orphans

@@ -20,7 +20,7 @@ helm install modulo ./deploy/helm/modulo \
   --set postgres.adminUsername=modulo \
   --set backend.env.SECRET_KEY=$(openssl rand -hex 32) \
   --set backend.env.FERNET_KEY=$(openssl rand -hex 32) \
-  --set backend.env.MODULO_USERS="admin:$(openssl passwd -6 your-admin-password)" \
+  --set backend.env.FARNA_CONTROL_USERS="admin:$(openssl passwd -6 your-admin-password)" \
   --set backend.env.SAQ_AUTH_USERNAME=admin \
   --set backend.env.SAQ_AUTH_PASSWORD=$(openssl rand -hex 16)
 ```
@@ -36,7 +36,7 @@ The chart does NOT deploy Postgres by default. Farna Control requires **two dist
 | `farna_control_app` | Restricted runtime role — DML only, no superuser, no BYPASSRLS | `DATABASE_URL` (backend, SAQ workers) |
 | `modulo` | Admin/superuser role — migrations, role bootstrap, DDL | `DATABASE_ADMIN_URL` (entrypoint only) |
 
-The `farna_control_app` role is **created automatically** by `bootstrap_role` on startup — the operator only needs to provision the admin role with sufficient privileges (superuser or CREATEROLE + CREATEDB). A third role, `farna_control_system` (LOGIN, BYPASSRLS — see `postgres.systemUsername`), is created by the same bootstrap with the shared password; the chart wires it into `MODULO_SYSTEM_DATABASE_URL`, without which the `dispatcher_reconcile` system cron refuses to run and backend readiness stays 503 forever.
+The `farna_control_app` role is **created automatically** by `bootstrap_role` on startup — the operator only needs to provision the admin role with sufficient privileges (superuser or CREATEROLE + CREATEDB). A third role, `farna_control_system` (LOGIN, BYPASSRLS — see `postgres.systemUsername`), is created by the same bootstrap with the shared password; the chart wires it into `FARNA_CONTROL_SYSTEM_DATABASE_URL`, without which the `dispatcher_reconcile` system cron refuses to run and backend readiness stays 503 forever.
 
 Set these values:
 
@@ -105,7 +105,9 @@ The two keys in the first two rows are validated at runtime by Pydantic (`_MIN_K
 
 | Value | Purpose |
 |---|---|
-| `backend.env.MODULO_USERS` | Admin user credentials (`user:password` format). Without this, no login is possible — the app warns at boot but does not crash. |
+| `backend.env.FARNA_CONTROL_USERS` | Admin user credentials (`user:password` format). Without this, no login is possible — the app warns at boot but does not crash. |
+
+**Set every environment variable through `backend.env` using the canonical `FARNA_CONTROL_*` name.** This is the only spelling that survives: the bare `MODULO_*` aliases are legacy and are being retired, so a deployment wired with the old name will lose that setting once they are removed. In particular, set the admin user as `backend.env.FARNA_CONTROL_USERS` — with no admin account there is no way to log in — and the system database URL as `backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL`, which is the only key the chart's helper consults when `postgres.host` is unset.
 
 ### Secrets Management
 
@@ -293,7 +295,7 @@ helm install modulo ./deploy/helm/modulo \
   --set postgres.adminUsername=modulo \
   --set backend.env.SECRET_KEY=dev-secret-key-not-for-production-32b! \
   --set backend.env.FERNET_KEY=dev-fernet-key-not-for-production-32b!! \
-  --set backend.env.MODULO_USERS="admin:admin" \
+  --set backend.env.FARNA_CONTROL_USERS="admin:admin" \
   --set backend.env.SAQ_AUTH_USERNAME=admin \
   --set backend.env.SAQ_AUTH_PASSWORD=admin
 ```
@@ -353,8 +355,8 @@ kubectl delete namespace modulo  # If namespace.create=true
   readiness split (liveness `/healthz`, readiness `/healthz/ready`) holds on
   multi-node Kubernetes. Two gaps found and fixed during this run: SAQ system
   auth was documented as optional (it is fail-closed required — see Required
-  Values), and `MODULO_SYSTEM_DATABASE_URL` was not wired by the chart (without
-  it `dispatcher_reconcile` never runs and readiness never passes).
+  Values), and `FARNA_CONTROL_SYSTEM_DATABASE_URL` was not wired by the chart
+  (without it `dispatcher_reconcile` never runs and readiness never passes).
 - [ ] Live kind validation (FAR-1053)
 
 ## Follow-ups

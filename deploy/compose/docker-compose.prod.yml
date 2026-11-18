@@ -63,7 +63,7 @@ services:
     # inherits the container env, reaches the SAQ workers too. Without this
     # line only the variables the block below happens to reference would reach
     # the app, and every optional setting documented in .env.prod.example
-    # (FARNA_CONTROL_USERS, STRIPE_*, MODULO_LICENSE_*, MODULO_HEALTH_*) would be
+    # (FARNA_CONTROL_USERS, STRIPE_*, FARNA_CONTROL_LICENSE_*, FARNA_CONTROL_HEALTH_*) would be
     # silently inert. `required: false` keeps the absence of the file itself
     # from being an error; the ${VAR:?...} references below
     # (SECRET_KEY, FERNET_KEY, FARNA_CONTROL_DB_PASSWORD, SAQ_AUTH_USERNAME,
