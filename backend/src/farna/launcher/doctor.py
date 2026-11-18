@@ -1445,12 +1445,11 @@ def _probe_installed_bundle_pg_version(data_dir: Path) -> str | None:
 
 
 def _probe_bundled_binaries(_data_dir: Path) -> list[Path]:
-    from farna.launcher.entry import resolve_bin_dir
+    from farna.launcher.entry import REQUIRED_BUNDLED_BINARIES, resolve_bin_dir
 
     bin_dir = resolve_bin_dir()
-    names = ("initdb", "postgres", "pg_isready", "redis-server", "redis-cli")
     suffix = ".exe" if sys.platform == "win32" else ""
-    return [bin_dir / f"{name}{suffix}" for name in names if (bin_dir / f"{name}{suffix}").is_file()]
+    return [bin_dir / f"{name}{suffix}" for name in REQUIRED_BUNDLED_BINARIES if (bin_dir / f"{name}{suffix}").is_file()]
 
 
 def _probe_cloud_sync_hit(_data_dir: Path, root: Path) -> str | None:

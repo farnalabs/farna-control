@@ -74,7 +74,21 @@ from farna.launcher import env_safety
 
 _log = logging.getLogger(__name__)
 
+# The ONE name every native bundle launcher must export, and the ONE name the
+# resolver reads. The macOS bundle build (scripts/macos/build-native-bundle.sh)
+# reads the compiled launcher's exported name back and asserts it against this
+# constant at build time, so a rename on either side fails that bundle build
+# instead of the installed app's first boot; the Windows launcher and the Linux
+# bundle wrapper are held to the same name by unit tests, not by their builds.
+# FAR-2554: the launchers kept
+# exporting the pre-rebrand ``MODULO_BUNDLED_BIN_DIR`` after the resolver was
+# renamed, so the env value was ignored and the boot fell through to the
+# ``<sys.prefix>/bundled/bin`` default that no bundle produces.
 BUNDLED_BIN_DIR_ENV = "FARNA_CONTROL_BUNDLED_BIN_DIR"
+# Every bundled binary the launcher resolves out of *bin_dir* at boot. The boot
+# gate, the macOS bundle build and the doctor probe share this tuple so the
+# layout, the verification and the diagnostics cannot drift apart.
+REQUIRED_BUNDLED_BINARIES: tuple[str, ...] = ("initdb", "postgres", "pg_isready", "redis-server", "redis-cli")
 POSTGRES_HOST = "127.0.0.1"
 APP_DB_NAME = "farna_control"
 
@@ -105,6 +119,7 @@ _DETACH_HANDSHAKE_TIMEOUT_SECONDS = 300.0
 __all__ = [
     "APP_DB_NAME",
     "BUNDLED_BIN_DIR_ENV",
+    "REQUIRED_BUNDLED_BINARIES",
     "BootError",
     "default_data_dir",
     "resolve_bin_dir",
@@ -128,7 +143,15 @@ def default_data_dir() -> Path:
 
 
 def resolve_bin_dir(bin_dir: Path | None = None) -> Path:
-    """Resolve the bundled-binaries directory (param > env > install default)."""
+    """Resolve the bundled-binaries directory (param > env > install default).
+
+    A native bundle's launcher exports ``BUNDLED_BIN_DIR_ENV`` and the bundle
+    ships the binaries (or in-bundle symlinks) there; that export is the
+    authority, because the layout differs per bundle (``<bundle>/bin`` for the
+    macOS/Windows app, ``<bundle>/pg/bin`` for the Linux tarball). The final
+    ``sys.prefix/bundled/bin`` arm is only an install default for a layout that
+    sits beside the interpreter - no shipped bundle relies on it.
+    """
     if bin_dir is not None:
         return bin_dir
     from_env = os.environ.get(BUNDLED_BIN_DIR_ENV)
@@ -472,7 +495,7 @@ def _verify_bundled_binaries(bin_dir: Path) -> None:
     """
     from farna.launcher.initdb import _binary
 
-    required = ("initdb", "postgres", "pg_isready", "redis-server", "redis-cli")
+    required = REQUIRED_BUNDLED_BINARIES
     missing = [name for name in required if not Path(_binary(bin_dir, name)).exists()]
     if missing:
         raise BootError(f"bundled binaries not found at {bin_dir} (missing: {', '.join(missing)}) - install the bundled runtime or pass --bin-dir")
