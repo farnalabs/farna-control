@@ -1,5 +1,5 @@
 <template>
-  <div class="h-[calc(100vh-3.5rem)] bg-background flex flex-col">
+  <div class="h-[calc(100vh-3.5rem)] h-chrome-dvh bg-background flex flex-col">
     <div class="page-wide">
       <PageHeader
         :title="$t('views.SystemMapsView.title')"

@@ -1,5 +1,5 @@
 <template>
-  <div class="relative mx-auto flex min-h-screen max-w-md items-center justify-center overflow-x-hidden p-6">
+  <div class="relative mx-auto flex min-h-screen min-h-screen-dvh max-w-md items-center justify-center overflow-x-hidden p-6">
     <div class="relative w-full space-y-6">
       <div class="text-center">
         <div class="mb-4 flex justify-center">

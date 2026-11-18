@@ -4,9 +4,9 @@
        viewport below the app chrome (see the script block) so nothing hangs
        below the fold behind the touch-capturing canvas on mobile (FAR-1841)
        and the editor does not overflow the fold behind the breadcrumb on
-       desktop (FAR-1851). The `h-[calc(100vh-3.5rem)]` class is only the
-       pre-measurement fallback. -->
-  <div ref="editorRootRef" data-testid="pipeline-editor-root" class="relative flex h-[calc(100vh-3.5rem)] overflow-hidden" :style="editorFitStyle">
+       desktop (FAR-1851). The `h-[calc(100vh-3.5rem)]` / `h-chrome-dvh` pair is
+       only the pre-measurement fallback (vh, then dvh where supported). -->
+  <div ref="editorRootRef" data-testid="pipeline-editor-root" class="relative flex h-[calc(100vh-3.5rem)] h-chrome-dvh overflow-hidden" :style="editorFitStyle">
     <!-- ux-conformance STATE-3: the live region announces ONLY the loading
          status text, and `aria-busy` sits on the placeholder spinner it
          actually describes - never on the live region's ancestor. A busy
@@ -151,7 +151,7 @@
                 role="menu"
                 tabindex="-1"
                 :class="[
-                  'fixed z-30 max-h-[calc(100vh-1rem)] overflow-y-auto overscroll-contain rounded-lg border bg-card py-1 shadow-lg',
+                  'fixed z-30 max-h-[calc(100vh-1rem)] max-h-viewport-dvh overflow-y-auto overscroll-contain rounded-lg border bg-card py-1 shadow-lg',
                   SAVE_AS_DROPDOWN_METRICS.className,
                 ]"
                 :style="saveAsDropdownStyle"
@@ -328,7 +328,7 @@
                 :id="autonomyPanelDialogId"
                 ref="autonomyPanelDialogRef"
                 :class="[
-                  'fixed z-50 max-h-[calc(100vh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-3 shadow-lg',
+                  'fixed z-50 max-h-[calc(100vh-1rem)] max-h-viewport-dvh max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-3 shadow-lg',
                   AUTONOMY_PANEL_METRICS.className,
                 ]"
                 :style="autonomyPanelStyle"
@@ -513,7 +513,7 @@
                 :id="retryPolicyPanelId"
                 ref="retryPolicyPanelRef"
                 :class="[
-                  'fixed z-50 max-h-[calc(100vh-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-3 shadow-lg',
+                  'fixed z-50 max-h-[calc(100vh-1rem)] max-h-viewport-dvh max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain rounded-lg border border-border bg-card p-3 shadow-lg',
                   RETRY_POLICY_PANEL_METRICS.className,
                 ]"
                 :style="retryPolicyPanelStyle"
@@ -4743,8 +4743,9 @@ function onCanvasKeydown(event: KeyboardEvent): void {
 // height. On mobile that stops the canvas hanging below the fold where VueFlow
 // captures wheel/touch (FAR-1841); on desktop the same pin stops the editor
 // overflowing the fold by the height of the breadcrumb row above it (FAR-1851
-// — the `h-[calc(100vh-3.5rem)]` fallback only ever accounted for the mobile
-// fixed header). The 240px usability floor the mobile fix introduced yields to
+// — the `h-[calc(100vh-3.5rem)]` / `h-chrome-dvh` fallback only ever accounted
+// for the mobile fixed header). The 240px usability floor the mobile fix
+// introduced yields to
 // the viewport (FAR-1861): on a viewport shorter than the chrome stack the
 // editor shrinks to whatever is left instead of spilling below the fold and
 // re-introducing a trapped page scroll.

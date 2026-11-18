@@ -247,7 +247,9 @@ describe('PipelineListView', () => {
     // PipelineEditorView/SchemaEditorView/CompositeEditorView all use
     // h-[calc(100vh-3.5rem)] because /pipelines renders below AppLayout's
     // breadcrumb/banner chrome — a bare h-screen root pushes the bottom of
-    // the folder tree and table below the fold.
+    // the folder tree and table below the fold. FAR-2547 adds h-chrome-dvh as
+    // the dynamic-viewport companion so mobile browser chrome does not hide the
+    // bottom; the vh calc stays as the fallback.
     await router.push('/pipelines')
     await router.isReady()
     const wrapper = mount(PipelineListView, {
@@ -258,6 +260,7 @@ describe('PipelineListView', () => {
     })
     const classes = (wrapper.element as HTMLElement).className.split(/\s+/)
     expect(classes).toContain('h-[calc(100vh-3.5rem)]')
+    expect(classes).toContain('h-chrome-dvh')
     expect(classes).not.toContain('h-screen')
   })
 

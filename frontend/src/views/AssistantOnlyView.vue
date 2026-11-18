@@ -1,5 +1,5 @@
 <template>
-  <div class="assistant-only-view flex h-screen flex-col overflow-hidden bg-background" data-testid="assistant-only-view">
+  <div class="assistant-only-view flex h-screen h-screen-dvh flex-col overflow-hidden bg-background" data-testid="assistant-only-view">
     <header class="flex items-center justify-between gap-3 border-b bg-card px-4 py-2">
       <div class="flex min-w-0 items-center gap-2">
         <div class="flex items-center justify-center rounded-lg bg-primary/10 p-1.5">

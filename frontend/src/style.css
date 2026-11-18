@@ -768,4 +768,20 @@ select option {
   .h-screen-dvh {
     height: 100dvh;
   }
+
+  /* FAR-2547: companions for the remaining vh-sized screens. The vh class stays
+     on the element as the fallback; these only override where dvh is supported. */
+  .min-h-screen-dvh {
+    min-height: 100dvh;
+  }
+
+  /* AppLayout chrome offset convention (viewport minus the 3.5rem shell bar). */
+  .h-chrome-dvh {
+    height: calc(100dvh - 3.5rem);
+  }
+
+  /* Fixed editor popovers sized to the viewport minus a 1rem gutter. */
+  .max-h-viewport-dvh {
+    max-height: calc(100dvh - 1rem);
+  }
 }

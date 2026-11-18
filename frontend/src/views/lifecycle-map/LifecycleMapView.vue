@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-background">
+  <div class="min-h-screen min-h-screen-dvh bg-background">
     <header class="bg-card border-b border-border px-6 py-4">
       <div class="mx-auto max-w-6xl">
         <PageHeader :title="mapData?.name || 'Lifecycle Map'" :subtitle="$t('views.LifecycleMapView.subtitle')" back-link="/lifecycle-maps">

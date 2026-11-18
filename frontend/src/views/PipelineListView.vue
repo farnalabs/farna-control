@@ -1,5 +1,5 @@
 <template>
-  <div class="h-[calc(100vh-3.5rem)] bg-background flex flex-col">
+  <div class="h-[calc(100vh-3.5rem)] h-chrome-dvh bg-background flex flex-col">
     <!-- App-shell layout: the page height is capped at the viewport minus the
          AppLayout chrome offset (h-[calc(100vh-3.5rem)] — the same convention as
          PipelineEditorView/SchemaEditorView/CompositeEditorView), so the folder

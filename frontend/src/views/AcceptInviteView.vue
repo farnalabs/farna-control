@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-background px-4 py-10">
+  <div class="min-h-screen min-h-screen-dvh flex items-center justify-center bg-background px-4 py-10">
     <div class="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
       <h1 class="text-xl font-semibold">{{ $t('views.AcceptInviteView.title') }}</h1>
       <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.AcceptInviteView.subtitle') }}</p>

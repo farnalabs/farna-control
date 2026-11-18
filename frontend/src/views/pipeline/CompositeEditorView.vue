@@ -1,6 +1,6 @@
 <template>
   <BackLink to="/library" :label="$t('views.CompositeEditorView.back_to_library')" />
-  <div class="flex h-[calc(100vh-3.5rem)]">
+  <div class="flex h-[calc(100vh-3.5rem)] h-chrome-dvh">
     <div v-if="loading" class="flex flex-1 flex-col gap-4 p-6">
       <!-- The live region carries only the loading status; the skeleton
            blocks are layout, not phrasing content, so they are siblings. -->

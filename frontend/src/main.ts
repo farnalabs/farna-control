@@ -96,7 +96,10 @@ function renderBootstrapMessage(text: string, variant: 'loading' | 'error'): voi
   if (variant === 'loading') message.setAttribute('aria-busy', 'true')
   message.style.cssText = [
     'display:flex',
+    // FAR-2547: emit both heights — an unsupported value is dropped by the
+    // browser and the supported one wins the cascade, so no feature detection.
     'min-height:100vh',
+    'min-height:100dvh',
     'align-items:center',
     'justify-content:center',
     'box-sizing:border-box',

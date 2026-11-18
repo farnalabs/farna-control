@@ -1,5 +1,5 @@
 <template>
-  <div class="relative mx-auto flex min-h-screen max-w-md items-center justify-center overflow-x-hidden p-6">
+  <div class="relative mx-auto flex min-h-screen min-h-screen-dvh max-w-md items-center justify-center overflow-x-hidden p-6">
     <div
       aria-hidden="true"
       class="pointer-events-none fixed inset-0 -z-10"
