@@ -1,11 +1,12 @@
 # Farna Control
 
-<div align="center" style="background: #0F1A1B; border-radius: 16px; padding: 40px 24px; margin-bottom: 24px;">
-  <img src="docs/assets/farna-control-logo.svg" width="360" alt="Farna Control logo" style="display: block; margin: 0 auto 16px;"/>
-  <p style="margin: 0; color: #E8ECEF; font-size: 1.1rem; line-height: 1.6;">
-    Farna Control is a self-hosted Delivery Governance Platform. Govern the software development lifecycle as AI and automation take on more of the work — recording, evaluating, controlling, and improving automated work across your SDLC.
-  </p>
-</div>
+<p align="center">
+  <img src="docs/assets/farna-control-lockup-light-bg.svg" width="360" alt="Farna Control logo">
+</p>
+
+<p align="center">
+  Farna Control is a self-hosted Delivery Governance Platform. Govern the software development lifecycle as AI and automation take on more of the work — recording, evaluating, controlling, and improving automated work across your SDLC.
+</p>
 
 
 <p align="center">
