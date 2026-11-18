@@ -80,11 +80,15 @@ with the following defaults:
 
 | Variable | Default |
 |---|---|
-| `POSTGRES_USER` | `modulo` |
-| `POSTGRES_PASSWORD` | `modulo` |
-| `POSTGRES_DB` | `modulo` |
-| `DATABASE_URL` | `postgresql+asyncpg://modulo:modulo@localhost:5434/modulo` |
+| `POSTGRES_USER` | `farna_control` |
+| `POSTGRES_PASSWORD` | `changeme` |
+| `POSTGRES_DB` | `farna_control` |
+| `DATABASE_URL` | `postgresql+asyncpg://farna_control:changeme@localhost:5434/farna_control` |
 | `REDIS_URL` | `redis://localhost:6380/0` |
+
+`POSTGRES_PASSWORD` defaults to `changeme`. `docs/quickstart.md` exports
+`POSTGRES_PASSWORD=farna_control` instead and pairs it with the matching
+`DATABASE_URL`, so keep the password and the URL in step with each other.
 
 No maintained Docker override ships for MariaDB. To run against MariaDB, point
 `DATABASE_URL` at your own MariaDB instance and set `MODULO_DB=mariadb` (e.g.
@@ -125,7 +129,7 @@ cd ..
 $env:SECRET_KEY = "dev-secret-key-32-bytes-at-least-here!"
 # Generate your own key, e.g.: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 $env:FERNET_KEY = "<generate-your-own-fernet-key>"
-$env:DATABASE_URL = "postgresql+asyncpg://modulo:modulo@localhost:5434/modulo"
+$env:DATABASE_URL = "postgresql+asyncpg://farna_control:changeme@localhost:5434/farna_control"
 $env:REDIS_URL = "redis://localhost:6380/0"
 $env:MODULO_USERS = "admin:admin"
 ```
@@ -198,12 +202,12 @@ environment variable.
 farna-control/
 ├── backend/
 │   ├── src/
-│   │   └── modulo/
+│   │   └── farna/
 │   │       ├── api/              # FastAPI routes, middleware, DI
 │   │       ├── auth/             # JWT, OIDC, SAML, API keys
 │   │       ├── cli/              # Click-based CLI tools
-│   │       │   ├── backup.py     #   modulo backup / restore
-│   │       │   └── migrate.py    #   modulo-migrate export / import / verify
+│   │       │   ├── backup.py     #   farna-control backup / restore
+│   │       │   └── migrate.py    #   farna-control migrate export / import / verify
 │   │       ├── connectors/       # External tool integrations
 │   │       ├── core/             # Pipeline engine, eval, HITL, triggers
 │   │       ├── db/               # SQLAlchemy models, CRUD, migrations, RLS
@@ -249,9 +253,9 @@ CLI tools are registered as console scripts in `pyproject.toml`:
 
 | Command | Entry point | Purpose |
 |---|---|---|
-| `modulo` | `farna.cli.main:cli` | Native launcher (start/stop/status/env) + backup/restore/apply |
-| `modulo-migrate` | `farna.cli.migrate:cli` | Export/import/verify org data |
-| `modulo-break-glass` | `farna.cli.break_glass:cli` | Emergency break-glass operations |
+| `farna-control` | `farna.cli.main:cli` | Native launcher (start/stop/status/env) + backup/restore/apply |
+| `farna-control migrate` | `farna.cli.migrate:cli` | Export/import/verify org data |
+| `farna-control break-glass` | `farna.cli.break_glass:cli` | Emergency break-glass operations |
 
 ---
 

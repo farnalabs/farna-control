@@ -223,14 +223,14 @@ def _licence_email_html(license_key: str, expires_at: str, starts_at: str | None
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
   <p>Thank you for purchasing <strong>Modulo Team License</strong>. Your license key is:</p>
-  <pre style="background:#f3f4f6;padding:12px;border-radius:6px;overflow-x:auto;">MODULO_LICENSE_KEY={key_html}</pre>
+  <pre style="background:#f3f4f6;padding:12px;border-radius:6px;overflow-x:auto;">FARNA_CONTROL_LICENSE_KEY={key_html}</pre>
   <p>This license is valid until <strong>{expiry_html}</strong>.{start_sentence}</p>
   <p>To activate it:</p>
   <ol>
-    <li>Set <code>MODULO_LICENSE_KEY</code> to the value above in your Modulo instance's environment.</li>
+    <li>Set <code>FARNA_CONTROL_LICENSE_KEY</code> to the value above in your Farna Control instance's environment.</li>
     <li>Restart the service, then confirm the <strong>Team</strong> badge in the sidebar.</li>
   </ol>
-  <p>See the installation guide at https://modulo.run/docs for configuration instructions.</p>
+  <p>See the installation guide at https://farna.dev/control/docs for configuration instructions.</p>
   <p>{html.escape(_RENEWAL_NOTE)}</p>
 </body>
 </html>
@@ -241,11 +241,11 @@ def _licence_email_text(license_key: str, expires_at: str, starts_at: str | None
     start_sentence = f" It becomes active on {starts_at}." if starts_at else ""
     return (
         "Thank you for purchasing Modulo Team License.\n\n"
-        f"Your license key is:\n\n  MODULO_LICENSE_KEY={license_key}\n\n"
+        f"Your license key is:\n\n  FARNA_CONTROL_LICENSE_KEY={license_key}\n\n"
         f"This license is valid until {expires_at or 'N/A'}.{start_sentence}\n\n"
-        "To activate it, set MODULO_LICENSE_KEY to the value above in your "
-        "Modulo instance's environment and restart the service. See "
-        "https://modulo.run/docs for full instructions.\n\n"
+        "To activate it, set FARNA_CONTROL_LICENSE_KEY to the value above in your "
+        "Farna Control instance's environment and restart the service. See "
+        "https://farna.dev/control/docs for full instructions.\n\n"
         f"{_RENEWAL_NOTE}"
     )
 

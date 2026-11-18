@@ -21,4 +21,4 @@ notes: optional human note
 - Do not add `token`, `password`, `cookie`, `private_key`, `authorization`, or raw credential fields.
 - Unknown fields are advisory notes, not executable instructions.
 
-Store project context in `.modulo/context.md` and user defaults in `~/.modulo/context.md`. Neither location has automatic host semantics; the Modulo skill must discover them explicitly.
+Store project context in `.modulo/context.md` and user defaults in `~/.modulo/context.md`. Neither location has automatic host semantics; the Farna Control skill must discover them explicitly.

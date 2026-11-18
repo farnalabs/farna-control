@@ -3,7 +3,7 @@
 Config-as-code for the `watchdog` service in **both** compose deployments —
 the root `docker-compose.yml` and the production compose
 (`deploy/compose/docker-compose.prod.yml`): a [Gatus](https://gatus.io)
-instance that probes Modulo's readiness and tells the operator when the
+instance that probes Farna Control's readiness and tells the operator when the
 deployment is unhealthy — including when it is fully down, which is the one
 failure the app cannot report about itself. Both files build this directory's
 image and mount `config.yaml` from here; neither carries a copy.

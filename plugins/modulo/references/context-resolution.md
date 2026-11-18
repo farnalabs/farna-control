@@ -1,6 +1,6 @@
 # Context resolution
 
-Modulo context is explicit, advisory metadata. It does not configure the host, authenticate Claude, select an organisation automatically, or authorize an operation.
+Farna Control context is explicit, advisory metadata. It does not configure the host, authenticate Claude, select an organisation automatically, or authorize an operation.
 
 ## Read-only discovery order
 

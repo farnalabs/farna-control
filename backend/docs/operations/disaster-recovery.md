@@ -1,6 +1,6 @@
-# Disaster Recovery — Modulo Self-Hosted
+# Disaster Recovery — Farna Control Self-Hosted
 
-This document covers backup and restore procedures for self-hosted Modulo
+This document covers backup and restore procedures for self-hosted Farna Control
 instances using the `farna-control backup` / `farna-control restore` CLI.
 
 ---
@@ -12,7 +12,7 @@ instances using the `farna-control backup` / `farna-control restore` CLI.
   - `psql` (≥ 16) — for restoring SQL dumps
 - Network access to the Postgres database from the backup host
 - A valid `DATABASE_URL` configured in the environment or `.env` file
-- `psycopg-binary` Python package (installed as a Modulo dependency)
+- `psycopg-binary` Python package (installed as a Farna Control dependency)
 
 Verify the tools are available:
 
@@ -184,7 +184,7 @@ farna-control restore ./modulo-backup-* --previous-fernet-key "<old-key>"
 1. Provision a new Postgres instance
 2. Configure `DATABASE_URL` in `.env`
 3. Run `farna-control restore <backup-dir> --yes`
-4. Start the Modulo API server
+4. Start the Farna Control API server
 5. Verify login and pipeline execution
 
 ### Point-in-time recovery

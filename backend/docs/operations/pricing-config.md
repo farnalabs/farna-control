@@ -1,6 +1,6 @@
 # Pricing Configuration
 
-Modulo tracks token usage and costs for each model backend invocation.
+Farna Control tracks token usage and costs for each model backend invocation.
 This document explains how pricing is configured and how to add new models.
 
 ## How Pricing Works

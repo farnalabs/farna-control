@@ -14,7 +14,7 @@ documented.
 
 | Component | Image | Trust role |
 |---|---|---|
-| Backend + SAQ workers | `modulo/backend` | Trusted: holds org credentials, drives the engine |
+| Backend + SAQ workers | `farna-control/backend` | Trusted: holds org credentials, drives the engine |
 | Docker socket proxy | `lscr.io/linuxserver/socket-proxy` (digest-pinned in `deploy/compose/runner.yml`) | Filtered Docker API endpoint – accident prevention, NOT containment of a compromised backend |
 | Runner workspaces | `modulo-runner:opencode` (first-party, digest-pinned per minor) | Untrusted: runs agent-authored commands/LLM sessions |
 | Workspace network | `modulo-runner-workspace` (compose-declared bridge) | The ONLY network a workspace joins – validated at CRUD, dispatch, and provider boundary (FAR-1020) |

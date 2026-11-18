@@ -1,6 +1,6 @@
-# Modulo onboarding
+# Farna Control onboarding
 
-Use this checklist after choosing a deployment shape. Public user documentation is at <https://modulo.run/docs/installation>; the Remote MCP guide is at <https://modulo.run/docs/mcp>.
+Use this checklist after choosing a deployment shape. Public user documentation is at <https://farna.dev/control/docs/installation>; the Remote MCP guide is at <https://farna.dev/control/docs/mcp>.
 
 ## 1. Choose or install
 
@@ -14,8 +14,8 @@ Use this checklist after choosing a deployment shape. Public user documentation 
 For native installs, use:
 
 ```bash
-modulo doctor --json
-modulo status
+farna-control doctor --json
+farna-control status
 ```
 
 `doctor --json` has documented exit states: 0 healthy, 1 unhealthy, 2 degraded, and 3 uninitialized. For Compose or Kubernetes, use the deployment's documented readiness/health checks and the web UI. A successful TCP connection or an unauthenticated HTTP response is not enough.
@@ -26,7 +26,7 @@ Complete first-run initialization and create the admin/users through the documen
 
 ## 4. Configure MCP
 
-The Modulo Remote MCP server is mounted at `/mcp` and uses a bearer API key or OAuth as documented at <https://modulo.run/docs/mcp>. Configure the real endpoint and credential explicitly through Claude Code's supported MCP configuration flow. The plugin placeholder is intentionally `{ "url": "" }`; it remains disconnected until configured.
+The Farna Control Remote MCP server is mounted at `/mcp` and uses a bearer API key or OAuth as documented at <https://farna.dev/control/docs/mcp>. Configure the real endpoint and credential explicitly through Claude Code's supported MCP configuration flow. The plugin placeholder is intentionally `{ "url": "" }`; it remains disconnected until configured.
 
 Do not place the key in `.modulo/context.md`, `~/.modulo/context.md`, prompts, logs, source files, or chat. Start with a read-only MCP operation and show the target before writes.
 

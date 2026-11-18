@@ -149,7 +149,7 @@ survives and is not reported as drift.
 ### Where this tier sits (execution-tier model)
 
 The execution tiers form a convenience↔control spectrum: Tiers 1–3 all run
-the agent in a Modulo-provisioned workspace, differing only in where the
+the agent in a Farna Control-provisioned workspace, differing only in where the
 compute lives; T4 swaps in the customer's agent image.
 
 | Tier | Shape | Status |

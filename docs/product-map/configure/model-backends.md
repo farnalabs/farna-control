@@ -68,7 +68,7 @@ LangChain `BaseChatModel` internally).
       non-canonical IP literals, requires an explicit `allow_insecure_http` opt-in for
       plain HTTP, and refuses a provider outside the hub capability map. The rules live
       once in `core/model_backend_endpoints.py` and are shared with the one-shot
-      `modulo backfill-model-backend-base-url` command, which migrates a legacy
+      `farna-control backfill-model-backend-base-url` command, which migrates a legacy
       `default_params.base_url` (valid https) into the credential JSON, strips plain
       http / invalid / incapable values instead of auto-blessing them, preserves the
       stored API key, stores the validator's normalized value (never the raw input),

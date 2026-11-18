@@ -1,28 +1,28 @@
 ---
 name: install
-description: Install Modulo locally or connect Claude Code to an existing self-hosted Modulo instance. Use for first-time setup, onboarding, Remote MCP configuration, or changing the selected instance.
+description: Install Farna Control locally or connect Claude Code to an existing self-hosted Farna Control instance. Use for first-time setup, onboarding, Remote MCP configuration, or changing the selected instance.
 ---
 
-# Install or connect Modulo
+# Install or connect Farna Control
 
-This skill is a decision guide, not a second installer. Use the documented Modulo installer, Docker Compose, Helm/Kubernetes, web UI, API, and CLI surfaces rather than inventing commands.
+This skill is a decision guide, not a second installer. Use the documented Farna Control installer, Docker Compose, Helm/Kubernetes, web UI, API, and CLI surfaces rather than inventing commands.
 
 ## Choose the deployment shape
 
 Ask which shape fits the user's environment:
 
 - **Native workstation evaluation on Linux:** use the published `scripts/install.sh` flow described in the public installation docs. The current repository script is Linux-only; macOS uses the separately documented signed `.dmg` path. Do not claim native installation is available on Windows.
-- **Current macOS artifacts:** the published release currently exposes an Apple Silicon (`arm64`) `.dmg`; do not promise an Intel (`x86_64`) download unless the selected release page lists one. Check the [public installation guide](https://modulo.run/docs/installation) and [releases page](https://github.com/farnalabs/farna-control/releases) for the release-specific artifact list.
+- **Current macOS artifacts:** the published release currently exposes an Apple Silicon (`arm64`) `.dmg`; do not promise an Intel (`x86_64`) download unless the selected release page lists one. Check the [public installation guide](https://farna.dev/control/docs/installation) and [releases page](https://github.com/farnalabs/farna-control/releases) for the release-specific artifact list.
 - **Docker Compose:** use for a self-hosted server or production single machine. Follow the public installation/deployment documentation and keep `.env` credentials out of chat and source control.
 - **Kubernetes:** use the maintained Helm chart for multi-replica deployments, with PostgreSQL and the documented Redis choice. Follow the public Kubernetes guide.
 - **Existing remote self-host:** connect to its canonical HTTPS base URL. Reverse proxies, SSH tunnels, cloud hosts, and multiple instances are supported connection contexts; do not assume their topology.
 
-Public docs: <https://modulo.run/docs/installation> and <https://modulo.run/docs/kubernetes>.
+Public docs: <https://farna.dev/control/docs/installation> and <https://farna.dev/control/docs/kubernetes>.
 
 ## Setup sequence
 
 1. Choose or install the instance.
-2. Verify health using the deployment's documented health/readiness path. For native installs, `modulo doctor --json` reports exit state 0 healthy, 1 unhealthy, 2 degraded, or 3 uninitialized; `modulo status` shows component state. An open port is not proof of health or authentication.
+2. Verify health using the deployment's documented health/readiness path. For native installs, `farna-control doctor --json` reports exit state 0 healthy, 1 unhealthy, 2 degraded, or 3 uninitialized; `farna-control status` shows component state. An open port is not proof of health or authentication.
 3. Initialise the instance and create the first admin/users through the documented UI or CLI path. Do not invent seed credentials and do not put passwords in prompts.
 4. Record the canonical hostname/base URL, including the externally reachable scheme and path used by the reverse proxy. Confirm it identifies the intended instance and organisation.
 5. Configure Remote MCP explicitly in Claude Code using the supported Claude configuration flow. The plugin's `.mcp.json` has an empty URL placeholder and therefore does not connect by itself.
@@ -30,7 +30,7 @@ Public docs: <https://modulo.run/docs/installation> and <https://modulo.run/docs
 
 ## Credentials
 
-Never mint or request raw credentials in chat. Create or retrieve an appropriate machine/API credential through the documented Modulo UI or API-key flow, and configure it through Claude's supported MCP configuration mechanism. Do not paste bearer tokens into context files, skill files, shell history, logs, or issue descriptions. Do not use a human-linked credential for unattended work or for human-only HITL decisions.
+Never mint or request raw credentials in chat. Create or retrieve an appropriate machine/API credential through the documented Farna Control UI or API-key flow, and configure it through Claude's supported MCP configuration mechanism. Do not paste bearer tokens into context files, skill files, shell history, logs, or issue descriptions. Do not use a human-linked credential for unattended work or for human-only HITL decisions.
 
 ## Re-connecting or changing instances
 

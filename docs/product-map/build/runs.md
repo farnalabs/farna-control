@@ -314,7 +314,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       graph contains at least one `dispatch` node - part of the work ran
       OUTSIDE Farna Control and was only witnessed/triggered by it (`db/models/run.py`
       single-sources the closed `EXECUTION_ORIGIN_DISPATCHED` vocabulary);
-      `NULL` means Modulo-executed or legacy (never backfilled). The provenance
+      `NULL` means Farna Control-executed or legacy (never backfilled). The provenance
       rides every run-rendering surface - RunResponse, the `/api/v1/viewmodel`
       runs, the dashboard and lifecycle-map rows, the runs-list detail, and the
       analytics `execution_origin` dimension whose label utility keeps the raw
