@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-background p-4">
+  <div class="flex min-h-screen min-h-screen-dvh items-center justify-center bg-background p-4">
     <div class="w-full max-w-md rounded-lg border p-6 shadow-sm">
       <PageHeader :title="$t('views.ModelBackendSetupView.complete_model_backend_setup')"
         :subtitle="$t('views.ModelBackendSetupView.page_subtitle')" />

@@ -2,7 +2,7 @@
   <!-- Desktop (>=768px): in-flow collapsible sidebar, default expanded -->
   <aside
     v-if="isDesktop"
-    class="h-screen sticky top-0 border-r bg-background flex flex-col overflow-hidden transition-[width] duration-200 motion-reduce:transition-none"
+    class="h-screen h-screen-dvh sticky top-0 border-r bg-background flex flex-col overflow-hidden transition-[width] duration-200 motion-reduce:transition-none"
     :class="collapsed ? 'w-16' : 'w-64 p-4 pr-3'"
     :aria-label="$t('components.AppLayout.main_navigation')"
     aria-labelledby="desktop-navigation-heading"
@@ -42,7 +42,7 @@
   <!-- Mobile: 64px icon rail in-flow + full sidebar as fixed overlay panel -->
   <template v-else>
     <aside
-      class="h-screen sticky top-0 border-r bg-background flex flex-col overflow-hidden w-16"
+      class="h-screen h-screen-dvh sticky top-0 border-r bg-background flex flex-col overflow-hidden w-16"
       :aria-label="$t('components.AppLayout.main_navigation')"
       aria-labelledby="mobile-rail-navigation-heading"
     >

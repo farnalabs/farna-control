@@ -1,5 +1,5 @@
 <template>
-  <div class="relative mx-auto flex min-h-screen max-w-md items-center justify-center overflow-x-hidden p-6">
+  <div class="relative mx-auto flex min-h-screen min-h-screen-dvh max-w-md items-center justify-center overflow-x-hidden p-6">
     <div class="text-center space-y-2" data-testid="demo-view">
       <h1 class="text-3xl font-bold tracking-tight">{{ $t('views.DemoView.preparing') }}</h1>
       <p class="text-muted-foreground">{{ $t('views.DemoView.signing_in') }}</p>

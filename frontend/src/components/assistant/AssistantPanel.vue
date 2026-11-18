@@ -319,6 +319,17 @@ const isRateLimitError = computed(() => {
 const DOCKED_MIN_WIDTH = 320
 const DOCKED_MAX_WIDTH = 800
 
+// FAR-2547: docked panel height. Use dynamic viewport height where supported so
+// the panel bottom is not hidden behind mobile browser chrome; 100vh is the
+// fallback for browsers without dvh.
+function dockedPanelHeight(): string {
+  return typeof CSS !== 'undefined' &&
+    typeof CSS.supports === 'function' &&
+    CSS.supports('height', '100dvh')
+    ? '100dvh'
+    : '100vh'
+}
+
 const panelClasses = computed(() => ({
   "assistant-floating": store.panelState === "floating",
   "assistant-docked": store.panelState === "docked",
@@ -329,7 +340,7 @@ const panelStyle = computed(() => {
   if (store.panelState === "maximised") return {};
   if (store.panelState === "docked") {
     const clamped = Math.min(Math.max(store.panelSize.width, DOCKED_MIN_WIDTH), DOCKED_MAX_WIDTH)
-    return { width: `${clamped}px`, height: "100vh" };
+    return { width: `${clamped}px`, height: dockedPanelHeight() };
   }
   return {
     left: `${store.panelPosition.x}px`,

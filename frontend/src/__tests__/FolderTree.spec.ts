@@ -111,6 +111,9 @@ describe('FolderTree height chain', () => {
     // The old h-screen + sticky approach left the tree shorter than the
     // column next to a long table — it must not come back.
     expect(classes).not.toContain('h-screen')
+    // FAR-2547: nor should it gain the dvh screen-height companion — the tree
+    // fills its column (h-full), it is never viewport-height itself.
+    expect(classes).not.toContain('h-screen-dvh')
     expect(classes).not.toContain('sticky')
   })
 

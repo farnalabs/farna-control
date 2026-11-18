@@ -1,5 +1,5 @@
 <template>
-  <div class="h-[calc(100vh-3.5rem)] bg-background flex flex-col">
+  <div class="h-[calc(100vh-3.5rem)] h-chrome-dvh bg-background flex flex-col">
     <BackLink to="/system-maps" :label="$t('views.SystemMapsView.title')" data-testid="system-map-detail-back" />
 
     <div class="flex-1 flex min-h-0 overflow-hidden relative">

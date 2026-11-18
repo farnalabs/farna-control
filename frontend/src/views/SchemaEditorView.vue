@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-[calc(100vh-3.5rem)] flex-col">
+  <div class="flex h-[calc(100vh-3.5rem)] h-chrome-dvh flex-col">
     <PageHeader
       :title="$t('views.SchemaEditorView.schemas')"
       :subtitle="$t('views.SchemaListView.manage_schemas_and_deprecate_outdated_definitions')"

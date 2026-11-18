@@ -153,6 +153,8 @@ describe('SchemaListView', () => {
     const content = wrapper.find('section')
     expect(content.classes()).toEqual(expect.arrayContaining(['flex-1', 'page-wide', 'min-w-0', 'overflow-y-auto']))
     expect(wrapper.find('.h-\\[calc\\(100vh-3\\.5rem\\)\\] > .flex.flex-1.min-h-0').exists()).toBe(true)
+    // FAR-2547: the dynamic-viewport companion rides alongside the vh fallback.
+    expect(wrapper.find('.h-chrome-dvh > .flex.flex-1.min-h-0').exists()).toBe(true)
   })
 
   it('shows deprecate action only for active schemas', async () => {
