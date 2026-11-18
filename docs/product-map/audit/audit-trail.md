@@ -121,7 +121,7 @@ guarded against tampering at both the ORM and the database layer.
       key + `key_id` fingerprint. A party holding ONLY the artifact + the
       pre-published key verifies authorship, re-derives every file digest and
       re-derives the embedded audit chain with no Farna Control service and no login
-      (the `modulo evidence verify` CLI); any tampered file, mutated event,
+      (the `farna-control evidence verify` CLI); any tampered file, mutated event,
       falsified chain claim or swapped key fails as `valid=false`. The event
       hash lives in `core/audit_logger/hashing.py` so the offline verifier
       re-derives it without the DB layer (byte-identical, format unchanged);
@@ -246,7 +246,7 @@ guarded against tampering at both the ORM and the database layer.
       previous role (true only on a genuine escalation to admin, false for an
       admin email whose membership was already admin) - so no enumerated path
       is classified `gap` any more. FAR-1574 added the CLI's own grant record:
-      `modulo users add --admin` escalates the membership the seeder just
+      `farna-control users add --admin` escalates the membership the seeder just
       created and appends `user_admin_escalated` (SYSTEM actor,
       `actor_source=cli_admin_escalation`, carrying `previous_role`) in the
       same transaction, recorded only when a grant actually happens - never
@@ -288,7 +288,7 @@ guarded against tampering at both the ORM and the database layer.
   shipped with a manifest-registry behavior line but no human-readable
   tracker home, so a reader of the graph (or Assistant's docs indexer) could
   not find the `evidence-pack` / `verification-key` endpoints, the
-  `core/evidence_pack/` module, the `modulo evidence verify` CLI, or the
+  `core/evidence_pack/` module, the `farna-control evidence verify` CLI, or the
   `hashing.py` extraction. Added the checked behavior line plus the
   `core/evidence_pack/`, `core/audit_logger/hashing.py`, `cli/evidence.py`
   code citations and the `test_evidence_pack.py` /

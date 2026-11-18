@@ -78,7 +78,7 @@ key, verification fails - so a pack cannot be silently re-keyed.
 Given the pack and the public key, verification needs nothing else:
 
 ```
-modulo evidence verify <pack.json> --public-key <published-key.pem>
+farna-control evidence verify <pack.json> --public-key <published-key.pem>
 ```
 
 The command exits 0 when the pack is valid and 1 otherwise. `--json` emits the

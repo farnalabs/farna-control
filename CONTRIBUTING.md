@@ -202,8 +202,8 @@ farna-control/
 │   │       ├── api/              # FastAPI routes, middleware, DI
 │   │       ├── auth/             # JWT, OIDC, SAML, API keys
 │   │       ├── cli/              # Click-based CLI tools
-│   │       │   ├── backup.py     #   modulo backup / restore
-│   │       │   └── migrate.py    #   modulo-migrate export / import / verify
+│   │       │   ├── backup.py     #   farna-control backup / restore
+│   │       │   └── migrate.py    #   farna-control migrate export / import / verify
 │   │       ├── connectors/       # External tool integrations
 │   │       ├── core/             # Pipeline engine, eval, HITL, triggers
 │   │       ├── db/               # SQLAlchemy models, CRUD, migrations, RLS
@@ -249,9 +249,9 @@ CLI tools are registered as console scripts in `pyproject.toml`:
 
 | Command | Entry point | Purpose |
 |---|---|---|
-| `modulo` | `farna.cli.main:cli` | Native launcher (start/stop/status/env) + backup/restore/apply |
-| `modulo-migrate` | `farna.cli.migrate:cli` | Export/import/verify org data |
-| `modulo-break-glass` | `farna.cli.break_glass:cli` | Emergency break-glass operations |
+| `farna-control` | `farna.cli.main:cli` | Native launcher (start/stop/status/env) + backup/restore/apply |
+| `farna-control migrate` | `farna.cli.migrate:cli` | Export/import/verify org data |
+| `farna-control break-glass` | `farna.cli.break_glass:cli` | Emergency break-glass operations |
 
 ---
 

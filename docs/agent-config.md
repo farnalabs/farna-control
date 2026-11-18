@@ -322,7 +322,7 @@ These checks cover both edge-level `hitl_review_config` and node-level `hitl_con
 
 **Git content references**
 
-Stored graphs must pin git-sourced content to a commit SHA (`git+<repo>@<40-hex-sha>#<path>`); `modulo apply` resolves and pins movable refs before saving.
+Stored graphs must pin git-sourced content to a commit SHA (`git+<repo>@<40-hex-sha>#<path>`); `farna-control apply` resolves and pins movable refs before saving.
 
 | Code | Severity | Rule |
 |---|---|---|

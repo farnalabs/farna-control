@@ -109,7 +109,7 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       `circuit_breaker_threshold` (USD, `null` = disabled, `> 0` when set) is
       settable on pipeline create / `PATCH /api/v1/pipelines/{id}` and read back on
       `GET` (with `circuit_breaker_tripped` / `circuit_breaker_tripped_at`), via the
-      MCP `create_pipeline` + `set_pipeline_circuit_breaker` tools, in `modulo
+      MCP `create_pipeline` + `set_pipeline_circuit_breaker` tools, in `farna-control
       apply` (managed only when declared), and in the pipeline editor toolbar
       ("Monthly spend circuit breaker (USD)" + a tripped badge with an admin-only
       Reset). Neither setting nor resetting it has a plan gate; the reset stays

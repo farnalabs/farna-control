@@ -2,7 +2,7 @@
 
 `deploy/compose/runner-ci.yml` is a **standalone** compose test rig for the
 Bundled Runner's real topology: app → socket-proxy → Docker engine. It is not
-merged with the root `docker-compose.yml` and defines no Modulo services.
+merged with the root `docker-compose.yml` and defines no Farna Control services.
 
 ## What it boots
 
@@ -90,5 +90,5 @@ budget after it (the local numbers come from a 4-CPU machine).
 
 Exec-start's hijacked stream inherits HAProxy's `timeout client/server 10m`
 (inactivity-based). A silent exec longer than 10 minutes through the proxy is
-cut — consistent with Modulo's stall detection, but operator-facing docs
+cut — consistent with Farna Control's stall detection, but operator-facing docs
 (`docs/security/bundled-runner-operator-guide.md`) should state it.

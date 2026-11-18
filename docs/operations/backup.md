@@ -181,8 +181,8 @@ directory on encrypted media if the archive itself must be encrypted.
 `scripts/backup-prune.py` prunes only `modulo-backup-*.tar.gz.enc` files, so it
 does NOT prune `farna-control backup` directories - delete those yourself.
 
-The `modulo` and `alembic` commands in this section run from `backend/`, where
-`alembic.ini` and the `modulo` entry point live (step 1 changes into it).
+The `farna-control` and `alembic` commands in this section run from `backend/`, where
+`alembic.ini` and the `farna-control` entry point live (step 1 changes into it).
 
 ### 1. Take the dump
 

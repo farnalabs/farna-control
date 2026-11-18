@@ -1,6 +1,6 @@
 # Sensitive Data Handling in Agent Outputs
 
-This document describes what constitutes sensitive data in Modulo agent outputs,
+This document describes what constitutes sensitive data in Farna Control agent outputs,
 how the platform protects it, and best practices for agent authors.
 
 ---
@@ -8,7 +8,7 @@ how the platform protects it, and best practices for agent authors.
 ## What Constitutes Sensitive Data
 
 Sensitive data includes any value that, if exposed, could compromise security,
-privacy, or access control. In Modulo, sensitive data falls into these categories:
+privacy, or access control. In Farna Control, sensitive data falls into these categories:
 
 | Category | Examples | Typical keys |
 |---|---|---|
@@ -20,7 +20,7 @@ privacy, or access control. In Modulo, sensitive data falls into these categorie
 
 ### Key pattern detection
 
-Modulo detects sensitive fields by matching key names against known patterns.
+Farna Control detects sensitive fields by matching key names against known patterns.
 The detection is **case-insensitive** and normalises dashes and spaces to
 underscores before matching. Any key whose lowercased, normalised name
 **contains** any of these substrings is treated as sensitive:
@@ -43,7 +43,7 @@ being listed explicitly.
 
 ---
 
-## How Modulo Handles Sensitive Data
+## How Farna Control Handles Sensitive Data
 
 ### 1. API response masking
 
@@ -96,7 +96,7 @@ composite `content_json` nodes against the stored sub-graph via
 `resolve_and_reject_mask_sentinels()` (no stored counterpart on create or
 contribute) — a submitted mask sentinel is refused 422 with the same issue
 code, never persisted.
-**CLI hashing parity (FAR-1232).** The declarative `modulo apply` CLI compares
+**CLI hashing parity (FAR-1232).** The declarative `farna-control apply` CLI compares
 its YAML declarations against the API's MASKED reads, so the CLI carries its own
 redaction (`strip_secret_shaped_graph` in `farna/cli/apply/models.py`): pipeline
 graph node env vars, context files, composite parameter values and parameter
@@ -170,7 +170,7 @@ while being aware of redacted data.
 `POST /api/v1/library/export/{pipeline_id}?format=v1` builds the **v1
 portability bundle** — a ZIP carrying the pipeline's graph nodes, agents,
 schemas and model backends so a pipeline can be reconstructed on a *fresh*
-Modulo instance. Because it is cross-instance, it uses **strip** semantics:
+Farna Control instance. Because it is cross-instance, it uses **strip** semantics:
 
 | Surface | Mechanism | Coverage |
 |---|---|---|
@@ -261,7 +261,7 @@ Every serialization path for the three graph entities, one cell per path:
 | Library import confirm `POST /library/import/confirm` | **Write (store)** — `materialize_import` persists `graph_nodes_json` (`core/workflow_import_export/__init__.py:1427-1449`); read paths mask afterwards. Starts stripped (v1 bundles carry no credentials) | N/A | N/A |
 | Library create-from-template `POST /library/{pid}/create-pipeline` | **Write (store)** — graph nodes copied from library primitive content into a fresh pipeline (`library.py:1767`); read paths mask afterwards | N/A | N/A |
 | Templates create-from-template `POST /templates/{id}/create-pipeline` | **Write (store)** — `pipeline.graph_nodes_json = resolved_nodes` (`api/routes/templates.py:270`); response carries ids/counts only (`:281`) | N/A | N/A |
-| CLI `modulo apply` plan / apply | **Hash-tier redaction + real write** — declarations hash through `strip_secret_shaped_graph`; writes carry the DECLARED values through `PATCH /pipelines` (the receiving API masks reads) (`cli/apply/pipeline_apply.py:255-256`, `:340-343`, `:367-368`); tests `test_apply_pipeline.py:426` (masked plan matches), `:897` (real write, `test_created_graph_secret_env_var_writes_declared_value`), `:484` (`--refresh-secrets`), `test_apply_models.py:782` (`strip_secret_shaped_graph`) | N/A | N/A |
+| CLI `farna-control apply` plan / apply | **Hash-tier redaction + real write** — declarations hash through `strip_secret_shaped_graph`; writes carry the DECLARED values through `PATCH /pipelines` (the receiving API masks reads) (`cli/apply/pipeline_apply.py:255-256`, `:340-343`, `:367-368`); tests `test_apply_pipeline.py:426` (masked plan matches), `:897` (real write, `test_created_graph_secret_env_var_writes_declared_value`), `:484` (`--refresh-secrets`), `test_apply_models.py:782` (`strip_secret_shaped_graph`) | N/A | N/A |
 | Collections install / library service (internal writers) | **Write (store)** — `core/library_service/install.py:419`, `:448` assemble bundle graphs from library pins; `_seed_data.py` nodes are in-repo seed content (`:378` etc.) | N/A | N/A |
 | Run-time internals (entry-node checks, node labels, prompt-reveal agent lookup, rerun payload validation) | N/A | **Not applicable (internal reads, no serialization)** — `runs.py:1020` (`_find_entry_candidates`), `:1772` (`_build_node_labels` → label strings only), `:3147` (`_lookup_agent_for_node`), `:1306` (rerun validation); the prompt reveal response masks prompt TEXT separately (`_mask_message_list`, `runs.py:2944` def, `:3273` call) | **Not applicable** — composite expansion is server-internal (`core/composite_engine/expander.py`) |
 | Feedback / HITL / eval-coverage / admin coverage / analytics | N/A | **Not applicable (derived scalars only)** — feedback node-name map (`api/routes/feedback.py:378-388`, emits display names), HITL gate-label maps (`api/routes/hitl.py:1152-1159`, `:1562`), eval coverage node ids (`api/routes/evals.py:494`), admin coverage-gap ids (`api/routes/admin.py:2806`, `:2825`), analytics node-count/timeout facts (`core/analytics/__init__.py:285-354`) | N/A |

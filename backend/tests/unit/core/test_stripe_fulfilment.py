@@ -63,7 +63,7 @@ class TestEmailContent:
         assert "MODULO_LICENSE_KEY=abc.def" in html
         assert "2999-01-01T00:00:00+00:00" in html
         assert "renews annually" in html
-        assert "https://modulo.run/docs" in html
+        assert "https://farna.dev/control/docs" in html
 
     def test_text_contains_key_and_instructions(self) -> None:
         text = _licence_email_text("abc.def", "2999-01-01T00:00:00+00:00")

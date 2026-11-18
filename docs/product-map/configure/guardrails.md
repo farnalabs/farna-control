@@ -109,7 +109,7 @@ compensation, and single-node self-correction. Built on the eval engine
       (`backend/tests/integration/test_guardrail_pipeline_creation_freshness.py`)
 - [x] Kill switch: an org-level guardrail kill switch disables enforcement and
       is surfaced as a banner in the `/settings/guardrails` view
-- [x] Agent-loop interior interception (FAR-211 T3): a Modulo-hosted bridge
+- [x] Agent-loop interior interception (FAR-211 T3): a Farna Control-hosted bridge
       inside `sandbox_agent` loops reports each tool invocation before execution
       and each tool result before it re-enters model context, REUSING the T1
       guardrail rows + engine – detection is never reimplemented
@@ -195,7 +195,7 @@ compensation, and single-node self-correction. Built on the eval engine
 - **Correction is bounded single-node only** – the whole-pipeline feedback
   correction (`spawn_correction_run`) is a separate surface; this module never
   re-runs the pipeline.
-- **Loop-interception covers Modulo-hosted sandbox agent loops only** – the
+- **Loop-interception covers Farna Control-hosted sandbox agent loops only** – the
   pre-execution/post-result bridge does not intercept tool calls issued inside
   external/unmediated runtimes.
 

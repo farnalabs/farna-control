@@ -1,31 +1,31 @@
-# Modulo operations
+# Farna Control operations
 
-Use the surface that matches the deployment and task. Public references: <https://modulo.run/docs/installation>, <https://modulo.run/docs/mcp>, and <https://github.com/farnalabs/farna-control>.
+Use the surface that matches the deployment and task. Public references: <https://farna.dev/control/docs/installation>, <https://farna.dev/control/docs/mcp>, and <https://github.com/farnalabs/farna-control>.
 
 ## Native launcher
 
 The documented native launcher commands include:
 
 ```bash
-modulo start
-modulo stop
-modulo status
-modulo version
-modulo doctor --json
-modulo support
-modulo env
-modulo logs app
-modulo clear-degraded
-modulo upgrade <target-version>
+farna-control start
+farna-control stop
+farna-control status
+farna-control version
+farna-control doctor --json
+farna-control support
+farna-control env
+farna-control logs app
+farna-control clear-degraded
+farna-control upgrade <target-version>
 ```
 
-Use `modulo doctor --json` and `modulo status` for read-only health checks. `modulo logs` is for diagnosis; avoid copying secrets or authorization headers into reports. `modulo clear-degraded` and `modulo upgrade` change state: show the target and effect first.
+Use `farna-control doctor --json` and `farna-control status` for read-only health checks. `farna-control logs` is for diagnosis; avoid copying secrets or authorization headers into reports. `farna-control clear-degraded` and `farna-control upgrade` change state: show the target and effect first.
 
 The native launcher also exposes backup/restore workflows documented in the public operations documentation. Do not invent flags; read the matching public guide before running one.
 
 ## Declarative configuration
 
-`modulo apply -f <config.yaml>` is the documented declarative configuration CLI. `--plan`/`--dry-run` and `--diff` are read-only planning/drift modes; a real apply writes schemas, model backends, pipelines, and triggers. It uses `MODULO_URL` and `MODULO_API_KEY` supplied through the machine environment, not inline secret values. Verify the target before applying.
+`farna-control apply -f <config.yaml>` is the documented declarative configuration CLI. `--plan`/`--dry-run` and `--diff` are read-only planning/drift modes; a real apply writes schemas, model backends, pipelines, and triggers. It uses `MODULO_URL` and `MODULO_API_KEY` supplied through the machine environment, not inline secret values. Verify the target before applying.
 
 ## Remote MCP
 

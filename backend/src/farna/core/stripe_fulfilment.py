@@ -230,7 +230,7 @@ def _licence_email_html(license_key: str, expires_at: str, starts_at: str | None
     <li>Set <code>MODULO_LICENSE_KEY</code> to the value above in your Modulo instance's environment.</li>
     <li>Restart the service, then confirm the <strong>Team</strong> badge in the sidebar.</li>
   </ol>
-  <p>See the installation guide at https://modulo.run/docs for configuration instructions.</p>
+  <p>See the installation guide at https://farna.dev/control/docs for configuration instructions.</p>
   <p>{html.escape(_RENEWAL_NOTE)}</p>
 </body>
 </html>
@@ -245,7 +245,7 @@ def _licence_email_text(license_key: str, expires_at: str, starts_at: str | None
         f"This license is valid until {expires_at or 'N/A'}.{start_sentence}\n\n"
         "To activate it, set MODULO_LICENSE_KEY to the value above in your "
         "Modulo instance's environment and restart the service. See "
-        "https://modulo.run/docs for full instructions.\n\n"
+        "https://farna.dev/control/docs for full instructions.\n\n"
         f"{_RENEWAL_NOTE}"
     )
 

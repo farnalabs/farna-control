@@ -1,4 +1,4 @@
-# API Versioning — Modulo
+# API Versioning — Farna Control
 
 ## Approach
 
@@ -35,12 +35,12 @@ The following changes do not require a new API version:
 
 When an API version or endpoint is deprecated:
 
-1. **Announcement:** Deprecation is announced via a notification in the Modulo admin UI
+1. **Announcement:** Deprecation is announced via a notification in the Farna Control admin UI
 2. **Deprecation headers:** All deprecated endpoints return:
    - `Deprecation: true` — signals the endpoint is deprecated
    - `Sunset: <ISO-date>` — the date after which the endpoint will be removed
    - `Link: <migration-url>; rel="deprecation"` — link to the migration guide
-3. **Minimum deprecation period:** 90 days from announcement to sunset, except for security fixes (which may be shorter at the discretion of the Modulo team)
+3. **Minimum deprecation period:** 90 days from announcement to sunset, except for security fixes (which may be shorter at the discretion of the Farna Control team)
 4. **Grace period:** After the sunset date, the endpoint returns `410 Gone` for a further 30 days before being removed entirely
 5. **Breaking security fixes** may be deployed with a shorter deprecation window
 

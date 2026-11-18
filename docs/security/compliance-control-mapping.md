@@ -72,7 +72,7 @@ response. Coverage is reported per row and per framework.
 | Value | Meaning |
 |---|---|
 | `observed` | Farna Control recorded the fact directly (for example an audit event or a run snapshot). |
-| `derived` | The evidence is computed from Modulo-observed records. |
+| `derived` | The evidence is computed from Farna Control-observed records. |
 | `customer-supplied` | The evidence must come from the customer. It is never presented as Farna Control's. |
 
 ## The shipped pack at a glance

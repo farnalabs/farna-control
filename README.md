@@ -88,13 +88,13 @@ it.
 
 ### How this works with existing agents in practice
 
-Modulo connects to existing agents without requiring any agent rewrite:
+Farna Control connects to existing agents without requiring any agent rewrite:
 
 - **No agent rewrites:** You do not import our SDK or wrap your agents in our framework classes.
 - **Two execution shapes:**
-  1. **Container or CLI execution (Docker, Kubernetes pod, E2B sandbox):** Modulo provisions the environment, passes parameters/context via CLI args or environment variables, runs the command, and monitors stdout, exit code, and output artifacts.
-  2. **CI/CD dispatch (GitHub Actions, GitLab CI, CircleCI, webhooks):** Modulo triggers the existing job, passes the payload, and waits for completion.
-- **Standard unix I/O contract:** Inputs in via CLI arguments, environment variables, or JSON payload; output out via exit code (0 = success) and structured output / artifacts (diff, PR, or JSON). If an agent can run in a terminal or a CI pipeline, Modulo can govern it.
+  1. **Container or CLI execution (Docker, Kubernetes pod, E2B sandbox):** Farna Control provisions the environment, passes parameters/context via CLI args or environment variables, runs the command, and monitors stdout, exit code, and output artifacts.
+  2. **CI/CD dispatch (GitHub Actions, GitLab CI, CircleCI, webhooks):** Farna Control triggers the existing job, passes the payload, and waits for completion.
+- **Standard unix I/O contract:** Inputs in via CLI arguments, environment variables, or JSON payload; output out via exit code (0 = success) and structured output / artifacts (diff, PR, or JSON). If an agent can run in a terminal or a CI pipeline, Farna Control can govern it.
 
 ## Key features
 

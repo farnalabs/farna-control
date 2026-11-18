@@ -1,6 +1,6 @@
 # Load Testing Framework (Locust)
 
-Performance and load testing for the Modulo API using [Locust](https://locust.io/),
+Performance and load testing for the Farna Control API using [Locust](https://locust.io/),
 an open-source, Python-based load testing tool.
 
 ## Prerequisites

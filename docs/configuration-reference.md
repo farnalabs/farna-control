@@ -166,15 +166,15 @@ detection work.
 | `FERNET_KEY_OLD` | No | – | Previous Fernet key for no-downtime rotation; decrypt falls back to this when `FERNET_KEY` is rotated |
 | `MODULO_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
 | `MODULO_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `MODULO_ADMIN_PASSWORD` or `MODULO_USERS` must be set) |
-| `MODULO_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `modulo-migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool) |
-| `MODULO_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `modulo-migrate` CLI (alternative to env; not part of the Settings class) |
+| `MODULO_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool) |
+| `MODULO_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class) |
 | `MODULO_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `GUARDRAIL_DESTROY_PEPPER` | For destroy-mode redaction | `""` | HMAC pepper used by guardrails in `destroy` redaction mode to key replacement tokens. Empty (the default) leaves it unset, and a guardrail that declares a destroy-mode redaction rule then fails closed - the rule is rejected at save time and the block is terminal at the edge. Never logged. Rotating it breaks cross-run linkage of already-destroyed tokens by design. |
 | `INVITATION_EXPIRY_HOURS` | No | `72` | How long an in-app invitation token stays consumable |
 
 See [`docs/deployment-security.md`](./deployment-security.md) for key rotation procedures and [`docs/security/secret-management.md`](./security/secret-management.md) for backend-specific configuration.
 
-Declarative `modulo apply` configs reference these vault entries by key rather
+Declarative `farna-control apply` configs reference these vault entries by key rather
 than embedding a value: `credential_ref: <key>` (or `api_key: secretref://<key>`)
 is resolved through the `MODULO_SECRETS_BACKEND` above, under the calling
 organization's context. A `credential_ref` that names no vault entry fails the
@@ -848,8 +848,8 @@ is best-effort and never gates readiness: it is skipped when no `GITHUB_TOKEN` /
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_ADMIN_SECRET` | For CLI | – | Shared secret for `modulo-migrate` CLI tool |
-| `MODULO_ADMIN_TOKEN` | For CLI | – | Admin JWT for `modulo-migrate` CLI tool |
+| `MODULO_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool |
+| `MODULO_ADMIN_TOKEN` | For CLI | – | Admin JWT for `farna-control migrate` CLI tool |
 
 ---
 

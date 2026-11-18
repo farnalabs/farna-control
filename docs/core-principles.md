@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 11 August 2026
-**Related:** `architecture.md`, ADRs (migrated out of this repo 2026-09-02, FAR-434). This is the source of truth for Farna Control's engineering principles; public blog content at modulo.run/blog derives from it.
+**Related:** `architecture.md`, ADRs (migrated out of this repo 2026-09-02, FAR-434). This is the source of truth for Farna Control's engineering principles; public blog content at farna.dev/blog derives from it.
 
 ## 1. Schema seams
 Boundaries in a pipeline **can** carry typed schema contracts, but the contract is opt-in per agent and per edge – not every boundary has one. An agent declares `input_schema_id` / `output_schema_id` only when it wants one (both are nullable); validation runs where a contract actually exists. At an edge, compatibility is checked only when **both** sides declare a schema (the source's output pin and the target's input pin) – if either side is untyped the boundary passes through unchecked. A Runner node's output is validated against its `output_schema_json` only when that schema is present. Where schemas do exist they are JSON Schema Draft 2020-12, org-scoped, versioned (semver), reusable, and composable; abstract schemas enable type-constraint matching during workflow import; schema inference generates drafts from connector data.
@@ -99,6 +99,6 @@ Everything needed to understand and trust a single run - its frozen snapshot, ev
 ## How this doc is used
 
 - New engineers and agents read it to understand why the system is shaped this way.
-- Blog content at modulo.run/blog derives from it (the "Principles of Farna Control" post links back here).
+- Blog content at farna.dev/blog derives from it (the "Principles of Farna Control" post links back here).
 - Comparison pages reference individual principles instead of re-explaining them.
 - When a principle changes, update this doc first; the blog follows.

@@ -297,7 +297,7 @@ The map is stored in dedicated System Maps tables (migration
       organization, and delete is a fail-closed audited soft delete
       (`api/routes/system_maps.py`, `db/repositories/system_map.py`;
       `test_system_maps_routes.py`)
-- [x] `modulo apply` treats a System Map as a name-keyed declarative entity
+- [x] `farna-control apply` treats a System Map as a name-keyed declarative entity
       (`KIND_SYSTEM_MAP`): it plans and applies `system_maps` entries, creates
       the map plus its declared draft revision on create, blocks an ambiguous
       name, validates graph references at load time, and keeps revision content
@@ -568,7 +568,7 @@ The map is stored in dedicated System Maps tables (migration
   now a 409. Added the shipped-but-undocumented surface: the revision lifecycle
   (create, publish, archive, delete, diff, restore-as-new), the version-aware
   reads and overview revision selection, attribution bindings, team visibility,
-  and `modulo apply` support. Replaced the stale code and test citations with
+  and `farna-control apply` support. Replaced the stale code and test citations with
   the paths that actually exist. Status stays `partial`, with the remaining gaps
   re-verified rather than copied at that date: MCP had no System Maps tool, the
   version-aware history UI was unwired, discovery was create-only, loop dispatch

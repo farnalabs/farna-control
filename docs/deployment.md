@@ -12,7 +12,7 @@ The support split is deliberate: Compose is the server/production path
 bundle is the workstation/evaluation path (self-contained, no container
 runtime, per-user install root). The native path's requirements and
 limitations are in [system-requirements.md](./system-requirements.md) and
-the launcher command surface starts at `modulo start`.
+the launcher command surface starts at `farna-control start`.
 
 ---
 
@@ -231,7 +231,7 @@ WebSocket connections use the correct origin.
 
 ## Migration
 
-The `modulo-migrate` CLI tool exports, imports, and verifies organization data
+The `farna-control migrate` CLI tool exports, imports, and verifies organization data
 between Farna Control instances. It is installed as a console script entry point.
 
 ### Authentication
@@ -239,14 +239,14 @@ between Farna Control instances. It is installed as a console script entry point
 Authentication is required for all commands. Provide an admin-level JWT:
 
 ```bash
-modulo-migrate --token <admin-jwt> export-org <org-id>
+farna-control migrate --token <admin-jwt> export-org <org-id>
 ```
 
 Or set the `MODULO_ADMIN_SECRET` environment variable (bypasses JWT validation):
 
 ```bash
 export MODULO_ADMIN_SECRET=<shared-secret>
-modulo-migrate export-org <org-id>
+farna-control migrate export-org <org-id>
 ```
 
 The token can also be passed via `MODULO_ADMIN_TOKEN` environment variable.
@@ -260,14 +260,14 @@ primitives, connector instances, model backends) as a JSONL bundle with
 per-record SHA-256 hashes.
 
 ```bash
-modulo-migrate export-org <org-id> --output ./backup.jsonl
+farna-control migrate export-org <org-id> --output ./backup.jsonl
 ```
 
 Partial export:
 
 ```bash
-modulo-migrate export-org <org-id> --output ./pipelines.jsonl --pipelines-only
-modulo-migrate export-org <org-id> --output ./users.jsonl --users-only
+farna-control migrate export-org <org-id> --output ./pipelines.jsonl --pipelines-only
+farna-control migrate export-org <org-id> --output ./users.jsonl --users-only
 ```
 
 #### import-org
@@ -281,13 +281,13 @@ Import from a previously exported JSONL bundle. Conflict resolution strategies:
 | `merge`      | Only fill null/empty fields on existing records |
 
 ```bash
-modulo-migrate import-org <org-id> --input ./backup.jsonl --on-conflict merge
+farna-control migrate import-org <org-id> --input ./backup.jsonl --on-conflict merge
 ```
 
 Partial import:
 
 ```bash
-modulo-migrate import-org <org-id> --input ./pipelines.jsonl --pipelines-only
+farna-control migrate import-org <org-id> --input ./pipelines.jsonl --pipelines-only
 ```
 
 #### verify-export
@@ -295,7 +295,7 @@ modulo-migrate import-org <org-id> --input ./pipelines.jsonl --pipelines-only
 Re-compute hashes on an export file and compare against the stored export hash.
 
 ```bash
-modulo-migrate verify-export <org-id> --input ./backup.jsonl
+farna-control migrate verify-export <org-id> --input ./backup.jsonl
 ```
 
 ### Output Format
@@ -329,7 +329,7 @@ The break-glass enforcement ships in two deliverables – **(A)** last-admin
 prevention + operator role + migration, **(B)** CLI + login-hook consumption +
 SQL-predicate deny. The (B) deploy carries a one-time precondition:
 
-1. **Zero live break-glass rows.** Run `modulo-break-glass status --all`
+1. **Zero live break-glass rows.** Run `farna-control break-glass status --all`
    before deploying (B). A non-zero exit (`5`) means a live row exists –
    resolve it (`deactivate` / `deactivate --force`) before deploying. See
    `docs/operations/break-glass-admin-recovery-runbook.md`.
@@ -396,7 +396,7 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `DATABASE_URL` | **Yes** | – | `postgresql+asyncpg://user:pass@host:port/db` |
 | `SECRET_KEY` | **Yes** | – | 32+ byte random string for JWT signing |
 | `FERNET_KEY` | **Yes** | – | 44-char base64 Fernet key for credential encryption |
-| `MODULO_USERS` | No (but needed for a first login) | – | Comma-separated `email:password` pairs for initial user seed (plaintext is bcrypt-hashed at seed time; `admin` gets the admin role). Without it - and without `modulo users add` - no account exists and login returns `401`; see *Docker Compose* step 1 |
+| `MODULO_USERS` | No (but needed for a first login) | – | Comma-separated `email:password` pairs for initial user seed (plaintext is bcrypt-hashed at seed time; `admin` gets the admin role). Without it - and without `farna-control users add` - no account exists and login returns `401`; see *Docker Compose* step 1 |
 | `MODULO_DB` | No | `postgres` | Database backend (`postgres`, `sqlite`, `mariadb`, or `mysql`) |
 | `REDIS_URL` | **Yes** | `redis://localhost:6379/0` | Redis URL for the SAQ broker, scheduling, event coordination, and rate limiting. The API refuses to boot when this is explicitly empty. |
 | `MODULO_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects |
@@ -406,7 +406,7 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `MODULO_OIDC_PROVIDERS` | No | `[]` | JSON array of OIDC provider configs. **Deprecated**; use the admin SSO providers UI. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | – | OTel gRPC/HTTP exporter endpoint |
 | `MODULO_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider |
-| `MODULO_ADMIN_SECRET` | No | – | Shared secret for `modulo-migrate` CLI auth |
+| `MODULO_ADMIN_SECRET` | No | – | Shared secret for `farna-control migrate` CLI auth |
 
 
 ---
@@ -517,7 +517,7 @@ healthy deployment looks broken. Create the first account with one of:
 
   ```bash
   docker compose -f deploy/compose/docker-compose.prod.yml exec modulo \
-    modulo users add admin@example.com --admin
+    farna-control users add admin@example.com --admin
   # prompts for the password; pass --password '<pw>' for a non-interactive run
   ```
 

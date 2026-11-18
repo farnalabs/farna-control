@@ -1,6 +1,6 @@
-# Modulo recovery
+# Farna Control recovery
 
-Stop before mutation when the target is stale, degraded, ambiguous, or unexpectedly authenticated. Public troubleshooting reference: <https://modulo.run/docs/troubleshooting>.
+Stop before mutation when the target is stale, degraded, ambiguous, or unexpectedly authenticated. Public troubleshooting reference: <https://farna.dev/control/docs/troubleshooting>.
 
 ## Stale context or wrong instance
 
@@ -15,11 +15,11 @@ Stop before mutation when the target is stale, degraded, ambiguous, or unexpecte
 Run:
 
 ```bash
-modulo doctor --json
-modulo status
+farna-control doctor --json
+farna-control status
 ```
 
-Exit state 3 means uninitialized; follow the documented first-run initialization path. Exit state 2 means degraded; inspect `modulo status` and `modulo logs app` before using `modulo clear-degraded`. Do not clear a degraded state merely to make a check green.
+Exit state 3 means uninitialized; follow the documented first-run initialization path. Exit state 2 means degraded; inspect `farna-control status` and `farna-control logs app` before using `farna-control clear-degraded`. Do not clear a degraded state merely to make a check green.
 
 ## Remote or Compose failure
 

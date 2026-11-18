@@ -1,6 +1,6 @@
-# Modulo Helm Chart
+# Farna Control Helm Chart
 
-Vendor-neutral Helm chart for the Modulo stack. Deploys backend API, SAQ workers, frontend SPA, and Redis. Postgres is external/optional.
+Vendor-neutral Helm chart for the Farna Control stack. Deploys backend API, SAQ workers, frontend SPA, and Redis. Postgres is external/optional.
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ helm install modulo ./deploy/helm/modulo \
 
 ### External Postgres (Default)
 
-The chart does NOT deploy Postgres by default. Modulo requires **two distinct Postgres roles**:
+The chart does NOT deploy Postgres by default. Farna Control requires **two distinct Postgres roles**:
 
 | Role | Purpose | Used by |
 |------|---------|---------|
@@ -201,7 +201,7 @@ when the provider is off; the default is deliberately the safe one.
 
 The full setup — provider env vars, the least-privilege Role/RoleBinding, and
 the workspace-pod ServiceAccount — is in the
-[Kubernetes guide](https://modulo.run/docs/kubernetes).
+[Kubernetes guide](https://farna.dev/control/docs/kubernetes).
 
 ### Workspace Egress NetworkPolicy (FAR-1690, FAR-2068)
 
@@ -211,8 +211,8 @@ to a **`declared`** egress posture when — and only when —
 `workspaceNetworkPolicy.enabled=true`: the chart then authors a `NetworkPolicy`
 selecting the workspace pods (`modulo.provider: kubernetes`) with a
 deny-by-default egress rule plus an exact-target (CIDR + port) allowlist. The
-cluster CNI enforces this policy; Modulo records the posture as declared (never
-an observation — Modulo does not see network traffic).
+cluster CNI enforces this policy; Farna Control records the posture as declared (never
+an observation — Farna Control does not see network traffic).
 
 `workspaceNetworkPolicy.enabled=false` is the default and the prerequisite in
 the other direction: with it off the manifest does not exist, so the chart
@@ -253,9 +253,9 @@ Allowlist entries are validated at render: `protocol` must be TCP/UDP/SCTP
 (case-insensitive) and `port` must be in 1-65535, so typos fail fast instead of
 being silently rejected by the API server.
 
-**Posture and prerequisites.** Modulo authors the manifest and the cluster CNI
-enforces it; Modulo records that as a **`declared`** egress posture (never an
-observation — Modulo does not see network traffic). This requires a CNI that
+**Posture and prerequisites.** Farna Control authors the manifest and the cluster CNI
+enforces it; Farna Control records that as a **`declared`** egress posture (never an
+observation — Farna Control does not see network traffic). This requires a CNI that
 enforces NetworkPolicy (e.g. Calico, Cilium); `kindnet` (kind's default) does
 not, so a policy applied there proves nothing. A NetworkPolicy cannot express a
 hostname — resolve targets to CIDRs before listing them — and some CNIs silently
