@@ -7,24 +7,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 from farna.db.url_utils import fix_database_url
-
-
-def _product_aliases(canonical: str, legacy: str) -> AliasChoices:
-    """Accept canonical Farna Control names and bare MODULO_* legacy names."""
-    if legacy.startswith("MODULO_"):
-        return AliasChoices(canonical, legacy, f"FARNA_CONTROL_{legacy.removeprefix('MODULO_')}")
-    return AliasChoices(canonical, legacy)
-
 
 _log = logging.getLogger(__name__)
 
 _MIN_KEY_LEN = 32
 _POSTGRES_ASYNC_PREFIX = "postgresql+asyncpg://"
-# Minimum length for each operator secret (MODULO_BREAK_GLASS_SECRET /
+# Minimum length for each operator secret (FARNA_CONTROL_BREAK_GLASS_SECRET /
 # _STANDBY_SECRET). Validated unconditionally when set (break-glass plan §3).
 _MIN_BREAK_GLASS_SECRET_LEN = 24
 # GraphValidator's save-time cap on a node's ``timeout_seconds`` (graph_validator
@@ -109,7 +101,7 @@ def resolve_instance_identity() -> str:
 
     The environment is read at CALL time — never at module scope — and no
     platform-specific variable (``FLY_*``) or deployment-identity label
-    (``MODULO_RUNNER_MACHINE_ID``, which scopes container orphan sweeps to a
+    (``FARNA_CONTROL_RUNNER_MACHINE_ID``, which scopes container orphan sweeps to a
     single deployment) is consulted: **instance** identity must be portable
     across every deployment substrate, so a deployment that declares nothing
     still resolves correctly (ADR 043 Decision 5).
@@ -160,80 +152,80 @@ class Settings(BaseSettings):
     # When set, decrypt operations try fernet_key first, then fall back to this.
     fernet_key_old: str = Field(default="")
     redis_url: str = Field("redis://localhost:6379/0")
-    modulo_ws_token_ttl_seconds: int = Field(60, validation_alias=_product_aliases("FARNA_CONTROL_WS_TOKEN_TTL_SECONDS", "MODULO_WS_TOKEN_TTL_SECONDS"))
-    modulo_access_token_minutes: int = Field(default=15, ge=5, le=1440, validation_alias=_product_aliases("FARNA_CONTROL_ACCESS_TOKEN_MINUTES", "MODULO_ACCESS_TOKEN_MINUTES"))
+    modulo_ws_token_ttl_seconds: int = Field(60, validation_alias="FARNA_CONTROL_WS_TOKEN_TTL_SECONDS")
+    modulo_access_token_minutes: int = Field(default=15, ge=5, le=1440, validation_alias="FARNA_CONTROL_ACCESS_TOKEN_MINUTES")
     # Sliding idle-logout window (FAR-1170): every refresh rotation mints a
     # FRESH refresh token with this lifetime and the frontend refreshes on
     # demand, so this value IS the de-facto idle-logout timeout — a session
     # abandoned for longer than this cannot refresh and is logged out.
-    # Env var MODULO_REFRESH_TOKEN_TTL_HOURS (pydantic-settings uppercases the
+    # Env var FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS (pydantic-settings uppercases the
     # field name). Bounds: 1h (min) .. 168h (max = the old fixed 7-day value).
-    modulo_refresh_token_ttl_hours: int = Field(default=24, ge=1, le=168, validation_alias=_product_aliases("FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS", "MODULO_REFRESH_TOKEN_TTL_HOURS"))
+    modulo_refresh_token_ttl_hours: int = Field(default=24, ge=1, le=168, validation_alias="FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS")
     debug: bool = Field(False)
 
     # Alpha auth — at least one of these must be non-empty for login to work.
-    modulo_admin_password: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_ADMIN_PASSWORD", "MODULO_ADMIN_PASSWORD"))
+    modulo_admin_password: str = Field("", validation_alias="FARNA_CONTROL_ADMIN_PASSWORD")
     # Multi-user format: "user1:$2b$12$hash,user2:$2b$12$hash"
-    modulo_users: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_USERS", "MODULO_USERS"))
+    modulo_users: str = Field("", validation_alias="FARNA_CONTROL_USERS")
     # Gated demo-org seed framework (FAR-450). When True, the FastAPI boot
     # lifespan seeds the organisations listed in
     # ``modulo.core.seed_data.demo_data.DEMO_ORGS`` with per-org signed licenses.
     # False by default — nothing seeds unless an operator opts in.
-    modulo_seed_demo_orgs: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_SEED_DEMO_ORGS", "MODULO_SEED_DEMO_ORGS"))
+    modulo_seed_demo_orgs: bool = Field(False, validation_alias="FARNA_CONTROL_SEED_DEMO_ORGS")
 
     # ADR 005: single-org invariant for self-hosted. When False (default),
     # org creation is blocked, org-slug login is rejected, and the login-context
-    # endpoint always reports single-org. Set MODULO_MULTI_ORG_ENABLED=true to
+    # endpoint always reports single-org. Set FARNA_CONTROL_MULTI_ORG_ENABLED=true to
     # enable multi-org behaviour (reserved for future multi-organisation deployments).
-    modulo_multi_org_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_MULTI_ORG_ENABLED", "MODULO_MULTI_ORG_ENABLED"))
+    modulo_multi_org_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_MULTI_ORG_ENABLED")
 
-    # Demo auto-login experience (FAR-535). All three must be set — MODULO_DEMO_ENABLED
-    # truthy plus a non-empty MODULO_DEMO_USER email and MODULO_DEMO_PASSWORD — for the
+    # Demo auto-login experience (FAR-535). All three must be set — FARNA_CONTROL_DEMO_ENABLED
+    # truthy plus a non-empty FARNA_CONTROL_DEMO_USER email and FARNA_CONTROL_DEMO_PASSWORD — for the
     # POST /api/v1/auth/demo endpoint and the demo-org seed to activate. Default off:
     # the endpoint answers 404 (it must not reveal that a demo feature exists) and the
-    # seed no-ops. MODULO_DEMO_PASSWORD is repr=False so it never leaks into
+    # seed no-ops. FARNA_CONTROL_DEMO_PASSWORD is repr=False so it never leaks into
     # logs/settings dumps.
-    modulo_demo_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_DEMO_ENABLED", "MODULO_DEMO_ENABLED"))
-    modulo_demo_user: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_DEMO_USER", "MODULO_DEMO_USER"))
-    modulo_demo_password: str = Field(default="", repr=False, validation_alias=_product_aliases("FARNA_CONTROL_DEMO_PASSWORD", "MODULO_DEMO_PASSWORD"))
+    modulo_demo_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_DEMO_ENABLED")
+    modulo_demo_user: str = Field("", validation_alias="FARNA_CONTROL_DEMO_USER")
+    modulo_demo_password: str = Field(default="", repr=False, validation_alias="FARNA_CONTROL_DEMO_PASSWORD")
     # Demo access-token TTL in minutes (2 hours by default, hard-capped at 4h).
     # The demo JWT is minted with this explicit expiry instead of
     # modulo_access_token_minutes, so a demo session dies quickly and carries no
     # refresh token to extend it. Because no refresh token exists, a session
     # minted before the kill switch is flipped still persists until its TTL
     # expires — the 4h cap bounds that residual exposure window.
-    modulo_demo_token_minutes: int = Field(120, ge=1, le=240, validation_alias=_product_aliases("FARNA_CONTROL_DEMO_TOKEN_MINUTES", "MODULO_DEMO_TOKEN_MINUTES"))
+    modulo_demo_token_minutes: int = Field(120, ge=1, le=240, validation_alias="FARNA_CONTROL_DEMO_TOKEN_MINUTES")
 
     # FAR-794 slice 2b: the ONE work-item refs cap for the whole refs pipeline —
     # self-report normalisation, finalise merge, and node input injection all
-    # read pivot on the same value (env override MODULO_WORK_ITEM_REFS_CAP).
+    # read pivot on the same value (env override FARNA_CONTROL_WORK_ITEM_REFS_CAP).
     # Consumers additionally clamp defensively via work_item_refs_cap() below,
     # so an out-of-range module default still yields a positive integer.
-    modulo_work_item_refs_cap: int = Field(100, validation_alias=_product_aliases("FARNA_CONTROL_WORK_ITEM_REFS_CAP", "MODULO_WORK_ITEM_REFS_CAP"))
+    modulo_work_item_refs_cap: int = Field(100, validation_alias="FARNA_CONTROL_WORK_ITEM_REFS_CAP")
 
-    modulo_public_url: str = Field("http://localhost:8000", validation_alias=_product_aliases("FARNA_CONTROL_PUBLIC_URL", "MODULO_PUBLIC_URL"))
+    modulo_public_url: str = Field("http://localhost:8000", validation_alias="FARNA_CONTROL_PUBLIC_URL")
     # Browser-facing frontend base URL for post-login redirects (SSO) and
     # MCP OAuth authorize links.  In the standard self-host topology nginx
     # serves the SPA and the API on one origin, so ``modulo_public_url`` is
     # the correct frontend base by default; a split-origin deployment sets
     # this.  Empty means "fall back to ``modulo_public_url``".
     # CORS origins are for CORS, not for routing the browser after login.
-    modulo_frontend_url: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_FRONTEND_URL", "MODULO_FRONTEND_URL"))
-    modulo_license_key: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_LICENSE_KEY", "MODULO_LICENSE_KEY"))
+    modulo_frontend_url: str = Field("", validation_alias="FARNA_CONTROL_FRONTEND_URL")
+    modulo_license_key: str = Field("", validation_alias="FARNA_CONTROL_LICENSE_KEY")
     # Ed25519 public key (hex) for license signature verification — the
     # PRODUCTION trust anchor, published by Farnalabs with each licence.
     #
     # Empty means "fall back to the built-in DEVELOPMENT anchor", which is a
     # real development keypair's public half and CANNOT verify a production
-    # licence. Startup therefore fails closed when MODULO_LICENSE_KEY is set
+    # licence. Startup therefore fails closed when FARNA_CONTROL_LICENSE_KEY is set
     # without this (FAR-2091); a Community instance with no licence boots, and
     # an upload is rejected with an actionable anchor-mismatch error.
-    modulo_license_public_key: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_LICENSE_PUBLIC_KEY", "MODULO_LICENSE_PUBLIC_KEY"))
+    modulo_license_public_key: str = Field("", validation_alias="FARNA_CONTROL_LICENSE_PUBLIC_KEY")
     # Ed25519 private key (hex) used to SIGN team license keys issued via
     # the admin license-issue endpoint and the Stripe purchase fulfilment
     # webhook (FAR-179). Empty (default) disables issuance — signing fails
     # closed until the operator configures it.
-    modulo_license_private_key: str = Field(default="", repr=False, validation_alias=_product_aliases("FARNA_CONTROL_LICENSE_PRIVATE_KEY", "MODULO_LICENSE_PRIVATE_KEY"))
+    modulo_license_private_key: str = Field(default="", repr=False, validation_alias="FARNA_CONTROL_LICENSE_PRIVATE_KEY")
 
     # Offline-verifiable evidence (FAR-1697). Ed25519 private key (PEM) that
     # signs the compliance export manifest, so a third party holding only the
@@ -243,10 +235,10 @@ class Settings(BaseSettings):
     # endpoint and embedded in each pack. Empty (default) disables signed
     # evidence - signing fails closed until the operator configures it.
     # repr=False so the private key never leaks into logs/settings dumps.
-    modulo_evidence_signing_key: str = Field(default="", repr=False, validation_alias=_product_aliases("FARNA_CONTROL_EVIDENCE_SIGNING_KEY", "MODULO_EVIDENCE_SIGNING_KEY"))
+    modulo_evidence_signing_key: str = Field(default="", repr=False, validation_alias="FARNA_CONTROL_EVIDENCE_SIGNING_KEY")
     # Human-readable identity stamped into the signed manifest as the exporter.
     # Empty (default) falls back to "modulo". Never a credential.
-    modulo_evidence_exporter_identity: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_EVIDENCE_EXPORTER_IDENTITY", "MODULO_EVIDENCE_EXPORTER_IDENTITY"))
+    modulo_evidence_exporter_identity: str = Field("", validation_alias="FARNA_CONTROL_EVIDENCE_EXPORTER_IDENTITY")
 
     # Stripe billing — purchase fulfilment webhook (FAR-178). Empty defaults
     # keep the app bootable without Stripe configured; when both keys are set,
@@ -257,18 +249,18 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = Field(default="", repr=False)
 
     # SSO / OIDC — JSON array of {provider_id, client_id, client_secret, discovery_url}
-    modulo_oidc_providers: str = Field("[]", validation_alias=_product_aliases("FARNA_CONTROL_OIDC_PROVIDERS", "MODULO_OIDC_PROVIDERS"))
+    modulo_oidc_providers: str = Field("[]", validation_alias="FARNA_CONTROL_OIDC_PROVIDERS")
 
     # SSO / SAML 2.0 (team tier, requires license key)
-    modulo_saml_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_SAML_ENABLED", "MODULO_SAML_ENABLED"))
-    modulo_saml_idp_metadata_url: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_SAML_IDP_METADATA_URL", "MODULO_SAML_IDP_METADATA_URL"))
-    modulo_saml_idp_metadata_xml: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_SAML_IDP_METADATA_XML", "MODULO_SAML_IDP_METADATA_XML"))
-    modulo_saml_entity_id: str = Field("modulo", validation_alias=_product_aliases("FARNA_CONTROL_SAML_ENTITY_ID", "MODULO_SAML_ENTITY_ID"))
-    modulo_saml_sp_private_key: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_SAML_SP_PRIVATE_KEY", "MODULO_SAML_SP_PRIVATE_KEY"))
-    modulo_saml_sp_x509_cert: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_SAML_SP_X509_CERT", "MODULO_SAML_SP_X509_CERT"))
+    modulo_saml_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_SAML_ENABLED")
+    modulo_saml_idp_metadata_url: str = Field("", validation_alias="FARNA_CONTROL_SAML_IDP_METADATA_URL")
+    modulo_saml_idp_metadata_xml: str = Field("", validation_alias="FARNA_CONTROL_SAML_IDP_METADATA_XML")
+    modulo_saml_entity_id: str = Field("modulo", validation_alias="FARNA_CONTROL_SAML_ENTITY_ID")
+    modulo_saml_sp_private_key: str = Field("", validation_alias="FARNA_CONTROL_SAML_SP_PRIVATE_KEY")
+    modulo_saml_sp_x509_cert: str = Field("", validation_alias="FARNA_CONTROL_SAML_SP_X509_CERT")
 
     # SSO defaults
-    modulo_sso_default_role: str = Field("runner", validation_alias=_product_aliases("FARNA_CONTROL_SSO_DEFAULT_ROLE", "MODULO_SSO_DEFAULT_ROLE"))
+    modulo_sso_default_role: str = Field("runner", validation_alias="FARNA_CONTROL_SSO_DEFAULT_ROLE")
 
     # In-app invitations (FAR-461): how long an invite token stays consumable.
     invitation_expiry_hours: int = Field(default=72, ge=1, le=8760)
@@ -277,32 +269,32 @@ class Settings(BaseSettings):
     # Break-glass admin recovery (deliverable B) — operator CLI + watchdog
     # ------------------------------------------------------------------
     # Independently settable; defaults from primary OR standby secret presence.
-    modulo_break_glass_enabled: bool | None = Field(default=None, validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_ENABLED", "MODULO_BREAK_GLASS_ENABLED"))
+    modulo_break_glass_enabled: bool | None = Field(default=None, validation_alias="FARNA_CONTROL_BREAK_GLASS_ENABLED")
     # Operator secrets (primary + rotation standby). Must never equal each
     # other and each must meet the minimum length when set.
-    modulo_break_glass_secret: str = Field(default="", repr=False, validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_SECRET", "MODULO_BREAK_GLASS_SECRET"))
-    modulo_break_glass_standby_secret: str = Field(default="", repr=False, validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET", "MODULO_BREAK_GLASS_STANDBY_SECRET"))
+    modulo_break_glass_secret: str = Field(default="", repr=False, validation_alias="FARNA_CONTROL_BREAK_GLASS_SECRET")
+    modulo_break_glass_standby_secret: str = Field(default="", repr=False, validation_alias="FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET")
     # TTL bounds — enforced at Settings construction (blocking regardless of
     # ENABLED) AND re-enforced at CLI invocation time.
-    modulo_break_glass_ttl_minutes: int = Field(default=1440, ge=1, validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES", "MODULO_BREAK_GLASS_TTL_MINUTES"))
-    modulo_break_glass_max_ttl_minutes: int = Field(default=4320, ge=1, le=4320, validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES", "MODULO_BREAK_GLASS_MAX_TTL_MINUTES"))
+    modulo_break_glass_ttl_minutes: int = Field(default=1440, ge=1, validation_alias="FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES")
+    modulo_break_glass_max_ttl_minutes: int = Field(default=4320, ge=1, le=4320, validation_alias="FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES")
     # Dedicated farna_control_breakglass LOGIN engine URL (the CLI connects as this
     # role — never the app database_url).
-    modulo_break_glass_database_url: str = Field(default="", validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL", "MODULO_BREAK_GLASS_DATABASE_URL"))
+    modulo_break_glass_database_url: str = Field(default="", validation_alias="FARNA_CONTROL_BREAK_GLASS_DATABASE_URL")
     # Dedicated farna_control_system LOGIN engine URL for cross-org system cron jobs
     # (analytics_facts_maintenance, journey_reconcile, retention_cleanup,
     # dispatcher_reconcile). When set, system crons use this URL to connect as
     # the farna_control_system role (LOGIN, BYPASSRLS) instead of farna_control_app.
-    modulo_system_database_url: str = Field(default="", validation_alias=_product_aliases("FARNA_CONTROL_SYSTEM_DATABASE_URL", "MODULO_SYSTEM_DATABASE_URL"))
+    modulo_system_database_url: str = Field(default="", validation_alias="FARNA_CONTROL_SYSTEM_DATABASE_URL")
     # warn|fail — the URL/secret-presence boot checks are warn-in-warn-mode;
     # the allow-list/role-posture assertions (bootstrap_role.py) are FATAL in
     # both modes and are enforced separately at their call site.
-    modulo_break_glass_boot_failure_mode: str = Field(default="warn", validation_alias=_product_aliases("FARNA_CONTROL_BREAK_GLASS_BOOT_FAILURE_MODE", "MODULO_BREAK_GLASS_BOOT_FAILURE_MODE"))
+    modulo_break_glass_boot_failure_mode: str = Field(default="warn", validation_alias="FARNA_CONTROL_BREAK_GLASS_BOOT_FAILURE_MODE")
 
     # "postgres" (default), "sqlite", "mariadb", or "mysql" — sqlite disables RLS,
     # advisory locks, flood protection, and other Postgres-specific security features.
     # "mariadb" / "mysql" use the aiomysql driver.
-    modulo_db: str = Field("postgres", validation_alias=_product_aliases("FARNA_CONTROL_DB", "MODULO_DB"))
+    modulo_db: str = Field("postgres", validation_alias="FARNA_CONTROL_DB")
 
     # FAR-1524: pool_recycle age for the shared async engine's pooled
     # connections (env DB_POOL_RECYCLE_SECONDS). MUST stay STRICTLY BELOW the
@@ -325,9 +317,9 @@ class Settings(BaseSettings):
     # db/session.py remains the checkout-time safety net on top of this.
     db_pool_recycle_seconds: int = Field(default=1500, alias="DB_POOL_RECYCLE_SECONDS", ge=60, lt=1800)
 
-    modulo_ratelimit_bypass_token: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN", "MODULO_RATELIMIT_BYPASS_TOKEN"))
+    modulo_ratelimit_bypass_token: str = Field("", validation_alias="FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN")
 
-    modulo_max_local_concurrency: int = Field(2, validation_alias=_product_aliases("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", "MODULO_MAX_LOCAL_CONCURRENCY"))
+    modulo_max_local_concurrency: int = Field(2, validation_alias="FARNA_CONTROL_MAX_LOCAL_CONCURRENCY")
 
     # ------------------------------------------------------------------
     # DB capacity monitor + 98% hard-stop (FAR-425/426, auto-detect FAR-1882)
@@ -425,7 +417,7 @@ class Settings(BaseSettings):
     # node output self-reports agent_status=failed OR outcome=failed, the run
     # terminalizes as ``failed`` with error_code ``agent.failed`` instead of
     # landing ``complete``. Rollout flag — agent-failure-ux-proposal §15.4.
-    modulo_agent_failure_elevation_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_AGENT_FAILURE_ELEVATION_ENABLED", "MODULO_AGENT_FAILURE_ELEVATION_ENABLED"))
+    modulo_agent_failure_elevation_enabled: bool = Field(True, validation_alias="FARNA_CONTROL_AGENT_FAILURE_ELEVATION_ENABLED")
     # FAR-228 kill-switch for the sandbox idempotency gate (opt-in per node via
     # PipelineGraphNode.delivery_sentinel). Consumed at BOTH sandbox guards: guard
     # A (node_runner early skip for single sandbox node) and guard B (executor
@@ -433,20 +425,20 @@ class Settings(BaseSettings):
     # failures retry exactly as before. The FAR-458 connector-write gate is a
     # separate concern with its OWN opt-in kill-switch below — this flag never
     # gates it.
-    modulo_idempotency_gate_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_IDEMPOTENCY_GATE_ENABLED", "MODULO_IDEMPOTENCY_GATE_ENABLED"))
+    modulo_idempotency_gate_enabled: bool = Field(True, validation_alias="FARNA_CONTROL_IDEMPOTENCY_GATE_ENABLED")
     # FAR-458 connector-write idempotency gate kill-switch. GENUINELY OPT-IN:
     # defaults to False so a deploy never silently suppresses byte-identical
     # re-executed connector writes (a behavioural change vs. the pre-FAR-458
     # contract where every visit fired). Operators enable it explicitly once the
     # dedup semantics are wanted. Consumed only by ``_connector_write_gate``.
-    modulo_connector_write_gate_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED", "MODULO_CONNECTOR_WRITE_GATE_ENABLED"))
+    modulo_connector_write_gate_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED")
     # FAR-802: managed workspace inputs kill-switch.  When OFF (default),
     # sandbox_agent nodes that declare workspace_inputs short-circuit with
     # ``sandbox.workspace_inputs_disabled`` and provision nothing — existing
     # sandbox behaviour is unchanged.  Operators enable it explicitly once MWI
     # is ready for production use.  Consumed in node_runner before host-side
     # ref resolution.
-    modulo_workspace_inputs_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED", "MODULO_WORKSPACE_INPUTS_ENABLED"))
+    modulo_workspace_inputs_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED")
     # FAR-1743 / ADR 037 rev 2 (EXPERIMENTAL): path to the devtools-owned
     # model-management.json registry the sandbox_agent ``model_class`` seam
     # resolves through at snapshot mint. None (default) = no registry: nodes
@@ -456,8 +448,8 @@ class Settings(BaseSettings):
     # readable — a configured-but-broken registry rejects sandbox runs loudly
     # instead of silently shipping them on the wrong model.
     model_class_registry_path: str | None = Field(default=None, alias="MODEL_CLASS_REGISTRY_PATH")
-    # FAR-1050 R6 (E2B provider-conformance rewire): the
-    # ``MODULO_E2B_VIA_PROVIDER`` flag is RETIRED. The legacy direct E2B path
+    # FAR-1050 R6 (E2B provider-conformance rewire): the former
+    # "E2B via provider" opt-in flag is RETIRED. The legacy direct E2B path
     # was deleted in R6 — every sandbox dispatch runs through the
     # RuntimeProvider ABC unconditionally, so there is nothing left to gate.
     # Design: docs/design/e2b-provider-conformance-rewire.md §3 (row R6).
@@ -467,10 +459,10 @@ class Settings(BaseSettings):
     # When True, every sandbox node run writes full stdout/stderr to
     # zstd-compressed side-car files on disk. Pointer dicts travel via the
     # ``_artifact_pointers`` key in the node output JSON.
-    modulo_artifacts_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_ARTIFACTS_ENABLED", "MODULO_ARTIFACTS_ENABLED"))
+    modulo_artifacts_enabled: bool = Field(True, validation_alias="FARNA_CONTROL_ARTIFACTS_ENABLED")
     # Base directory for artifact files.  Empty defaults to
     # ``<backend>/.data/artifacts`` resolved by the store factory.
-    modulo_artifacts_dir: str = Field(default="", validation_alias=_product_aliases("FARNA_CONTROL_ARTIFACTS_DIR", "MODULO_ARTIFACTS_DIR"))
+    modulo_artifacts_dir: str = Field(default="", validation_alias="FARNA_CONTROL_ARTIFACTS_DIR")
     # Web UI auth — FAIL-CLOSED (system worker refuses to boot without both).
     saq_auth_password: str | None = Field(default=None, alias="SAQ_AUTH_PASSWORD", repr=False)
     saq_auth_username: str | None = Field(default=None, alias="SAQ_AUTH_USERNAME")
@@ -940,30 +932,30 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Health check timeouts (seconds) — configurable per-check limits for
     # /healthz/ready dependency probes. Each per-check override defaults to
-    # 0, meaning "fall back to MODULO_HEALTH_TIMEOUT_SECONDS". Overrides are
+    # 0, meaning "fall back to FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS". Overrides are
     # capped at 60s so a single hung dependency cannot stall readiness.
     # ------------------------------------------------------------------
-    modulo_health_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS", "MODULO_HEALTH_TIMEOUT_SECONDS"))
-    modulo_health_db_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_TIMEOUT_SECONDS", "MODULO_HEALTH_DB_TIMEOUT_SECONDS"))
-    modulo_health_redis_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_REDIS_TIMEOUT_SECONDS", "MODULO_HEALTH_REDIS_TIMEOUT_SECONDS"))
-    modulo_health_checkpointer_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS", "MODULO_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS"))
-    modulo_health_migrations_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_MIGRATIONS_TIMEOUT_SECONDS", "MODULO_HEALTH_MIGRATIONS_TIMEOUT_SECONDS"))
+    modulo_health_timeout_seconds: float = Field(default=5.0, ge=0.5, le=60, validation_alias="FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS")
+    modulo_health_db_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias="FARNA_CONTROL_HEALTH_DB_TIMEOUT_SECONDS")
+    modulo_health_redis_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias="FARNA_CONTROL_HEALTH_REDIS_TIMEOUT_SECONDS")
+    modulo_health_checkpointer_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias="FARNA_CONTROL_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS")
+    modulo_health_migrations_timeout_seconds: float = Field(default=0.0, ge=0.0, le=60, validation_alias="FARNA_CONTROL_HEALTH_MIGRATIONS_TIMEOUT_SECONDS")
     # Readiness alert correlation (FAR-2156): when the migrations check reports
     # repo-vs-DB divergence, the detail links the most recent run of this deploy
     # workflow so an operator can jump straight to it. The defaults point at
     # Modulo's own dogfood repo/instance; a self-hosted deployment sets these to
     # its own fork and API base. An empty repo disables the lookup entirely.
-    modulo_deploy_run_repo: str = Field(default="farnalabs/farna-control", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_REPO", "MODULO_DEPLOY_RUN_REPO"))
-    modulo_deploy_run_workflow: str = Field(default="deploy.yml", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_WORKFLOW", "MODULO_DEPLOY_RUN_WORKFLOW"))
-    modulo_deploy_run_api_base: str = Field(default="https://api.github.com", validation_alias=_product_aliases("FARNA_CONTROL_DEPLOY_RUN_API_BASE", "MODULO_DEPLOY_RUN_API_BASE"))
+    modulo_deploy_run_repo: str = Field(default="farnalabs/farna-control", validation_alias="FARNA_CONTROL_DEPLOY_RUN_REPO")
+    modulo_deploy_run_workflow: str = Field(default="deploy.yml", validation_alias="FARNA_CONTROL_DEPLOY_RUN_WORKFLOW")
+    modulo_deploy_run_api_base: str = Field(default="https://api.github.com", validation_alias="FARNA_CONTROL_DEPLOY_RUN_API_BASE")
     # database-hygiene sub-check (FAR-1445). Unlike its neighbours this
     # override defaults to a NON-zero 1s: the probe is a single read of the
     # in-memory statistics views, so anything above a second means the
     # database is already failing the `database` check — a longer budget buys
     # nothing and only risks adding to the /healthz/ready tail (the endpoint
     # that 504'd on the 5s gateway budget). 0 still falls back to the global
-    # MODULO_HEALTH_TIMEOUT_SECONDS like every other per-check override.
-    modulo_health_db_hygiene_timeout_seconds: float = Field(default=1.0, ge=0.0, le=60, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS", "MODULO_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS"))
+    # FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS like every other per-check override.
+    modulo_health_db_hygiene_timeout_seconds: float = Field(default=1.0, ge=0.0, le=60, validation_alias="FARNA_CONTROL_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS")
     # Dead-tuple floor for the database-hygiene check: a dead-tuple RATIO is
     # only acted on once the table carries at least this many dead rows.
     # Rationale (FAR-1445): a small table that is momentarily 90% dead is
@@ -972,7 +964,7 @@ class Settings(BaseSettings):
     # autovacuum_vacuum_threshold (50) yet still 36x BELOW the 361,302 dead
     # tuples the runs table carried during the bloat incident, so the
     # incident still trips it with enormous margin.
-    modulo_health_db_hygiene_min_dead_tuples: int = Field(default=10000, ge=0, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES", "MODULO_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES"))
+    modulo_health_db_hygiene_min_dead_tuples: int = Field(default=10000, ge=0, validation_alias="FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES")
     # Dead-tuple ratio at/above which a table (already over the dead-tuple
     # floor) is reported degraded. Rationale (FAR-1445): autovacuum's own
     # default trigger is 20% dead (autovacuum_vacuum_scale_factor=0.2), so a
@@ -982,7 +974,7 @@ class Settings(BaseSettings):
     # several consecutive trigger crossings, a real hygiene failure. It still
     # leaves 37 points of headroom before the 97% the incident reached, so
     # the check never has to wait for catastrophe.
-    modulo_health_db_hygiene_dead_ratio: float = Field(default=0.6, ge=0.0, le=1.0, validation_alias=_product_aliases("FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO", "MODULO_HEALTH_DB_HYGIENE_DEAD_RATIO"))
+    modulo_health_db_hygiene_dead_ratio: float = Field(default=0.6, ge=0.0, le=1.0, validation_alias="FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO")
 
     # ------------------------------------------------------------------
     # FAR-1771 — event-loop stall ATTRIBUTION (opt-in, off by default).
@@ -995,7 +987,7 @@ class Settings(BaseSettings):
     # synchronous call freezes the loop — the FAR-1439 class that starves
     # every async DB op at once. 0 (the default) = off: no sampler thread,
     # no loop debug flags, no per-tick work — zero cost, exactly as today.
-    modulo_slow_callback_warn_ms: int = Field(default=0, ge=0, le=60000, validation_alias=_product_aliases("FARNA_CONTROL_SLOW_CALLBACK_WARN_MS", "MODULO_SLOW_CALLBACK_WARN_MS"))
+    modulo_slow_callback_warn_ms: int = Field(default=0, ge=0, le=60000, validation_alias="FARNA_CONTROL_SLOW_CALLBACK_WARN_MS")
 
     # ------------------------------------------------------------------
     # In-process worker-liveness watchdog (postmortem 2026-08-09, FAR-121)
@@ -1027,7 +1019,7 @@ class Settings(BaseSettings):
     # This field MIRRORS the pre-existing scattered ``os.environ.get("FARNA_CONTROL_ENV",
     # "development")`` convention for the alert path; the pre-existing call
     # sites are deliberately not migrated in this change.
-    environment: str = Field("development", validation_alias=_product_aliases("FARNA_CONTROL_ENV", "MODULO_ENV"))
+    environment: str = Field("development", validation_alias="FARNA_CONTROL_ENV")
     # Comma-separated allowlist of environments (case-insensitive, trimmed)
     # that may SEND operator alerts — it gates the TWO in-app operator-alert
     # channels that consult it: the readiness-degradation cron
@@ -1055,12 +1047,12 @@ class Settings(BaseSettings):
     alert_context: str | None = Field(default=None, alias="ALERT_CONTEXT", repr=False)
 
     # Auth-specific rate limiting
-    modulo_auth_rate_limit_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "MODULO_AUTH_RATE_LIMIT_ENABLED"))
-    modulo_auth_max_attempts: int = Field(10, ge=1, validation_alias=_product_aliases("FARNA_CONTROL_AUTH_MAX_ATTEMPTS", "MODULO_AUTH_MAX_ATTEMPTS"))
-    modulo_auth_window_seconds: int = Field(60, validation_alias=_product_aliases("FARNA_CONTROL_AUTH_WINDOW_SECONDS", "MODULO_AUTH_WINDOW_SECONDS"))
+    modulo_auth_rate_limit_enabled: bool = Field(True, validation_alias="FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED")
+    modulo_auth_max_attempts: int = Field(10, ge=1, validation_alias="FARNA_CONTROL_AUTH_MAX_ATTEMPTS")
+    modulo_auth_window_seconds: int = Field(60, validation_alias="FARNA_CONTROL_AUTH_WINDOW_SECONDS")
 
-    # Structured logging level (default: INFO). Per-module override via MODULO_LOG_LEVEL_<MODULE>.
-    modulo_log_level: str = Field("INFO", validation_alias=_product_aliases("FARNA_CONTROL_LOG_LEVEL", "MODULO_LOG_LEVEL"))
+    # Structured logging level (default: INFO). Per-module override via FARNA_CONTROL_LOG_LEVEL_<MODULE>.
+    modulo_log_level: str = Field("INFO", validation_alias="FARNA_CONTROL_LOG_LEVEL")
 
     # Comma-separated list of CORS origins. Mapped from CORS_ORIGINS env var.
     cors_origins: str = Field("http://localhost:5173")
@@ -1068,10 +1060,10 @@ class Settings(BaseSettings):
     # Preflight cache max-age in seconds (default 600 = 10 min). Mapped from CORS_MAX_AGE.
     cors_max_age: int = Field(600)
 
-    modulo_scim_token: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_SCIM_TOKEN", "MODULO_SCIM_TOKEN"))
+    modulo_scim_token: str = Field("", validation_alias="FARNA_CONTROL_SCIM_TOKEN")
 
     # Default org ID for SCIM provisioning. If empty, the first org in the DB is used.
-    modulo_scim_default_org_id: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_SCIM_DEFAULT_ORG_ID", "MODULO_SCIM_DEFAULT_ORG_ID"))
+    modulo_scim_default_org_id: str = Field("", validation_alias="FARNA_CONTROL_SCIM_DEFAULT_ORG_ID")
 
     # Product analytics — opt-in aggregate usage metrics (design doc section 11).
     # Endpoint URL for the vendor service. Empty = disabled.
@@ -1081,46 +1073,46 @@ class Settings(BaseSettings):
 
     # Telemetry — disabled by default for data residency compliance.
     # Set to "true" to enable OTel stdout + OTLP exporters.
-    modulo_telemetry_enabled: bool = Field(False, validation_alias=_product_aliases("FARNA_CONTROL_TELEMETRY_ENABLED", "MODULO_TELEMETRY_ENABLED"))
+    modulo_telemetry_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_TELEMETRY_ENABLED")
 
-    modulo_otel_service_name: str = Field("modulo", validation_alias=_product_aliases("FARNA_CONTROL_OTEL_SERVICE_NAME", "MODULO_OTEL_SERVICE_NAME"))
+    modulo_otel_service_name: str = Field("modulo", validation_alias="FARNA_CONTROL_OTEL_SERVICE_NAME")
 
     # SSE event stream limits
-    modulo_sse_max_connections_per_org: int = Field(100, validation_alias=_product_aliases("FARNA_CONTROL_SSE_MAX_CONNECTIONS_PER_ORG", "MODULO_SSE_MAX_CONNECTIONS_PER_ORG"))
-    modulo_sse_max_connections_per_user: int = Field(10, validation_alias=_product_aliases("FARNA_CONTROL_SSE_MAX_CONNECTIONS_PER_USER", "MODULO_SSE_MAX_CONNECTIONS_PER_USER"))
-    modulo_sse_zombie_timeout_seconds: float = Field(2.0, validation_alias=_product_aliases("FARNA_CONTROL_SSE_ZOMBIE_TIMEOUT_SECONDS", "MODULO_SSE_ZOMBIE_TIMEOUT_SECONDS"))
+    modulo_sse_max_connections_per_org: int = Field(100, validation_alias="FARNA_CONTROL_SSE_MAX_CONNECTIONS_PER_ORG")
+    modulo_sse_max_connections_per_user: int = Field(10, validation_alias="FARNA_CONTROL_SSE_MAX_CONNECTIONS_PER_USER")
+    modulo_sse_zombie_timeout_seconds: float = Field(2.0, validation_alias="FARNA_CONTROL_SSE_ZOMBIE_TIMEOUT_SECONDS")
 
     # CSRF protection
-    modulo_csrf_enabled: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_CSRF_ENABLED", "MODULO_CSRF_ENABLED"))
+    modulo_csrf_enabled: bool = Field(True, validation_alias="FARNA_CONTROL_CSRF_ENABLED")
     # /api/v1/webhooks is exempt because it hosts the Stripe purchase webhook,
     # which authenticates via the Stripe-Signature header (signed payload) —
     # cookie-independent, so a CSRF cookie check would 403 it for the same
     # reason the /api/v1/triggers HMAC webhooks are exempt.
-    modulo_csrf_exempt_paths: str = Field("/api/v1/health,/api/v1/triggers,/api/v1/auth,/api/v1/webhooks", validation_alias=_product_aliases("FARNA_CONTROL_CSRF_EXEMPT_PATHS", "MODULO_CSRF_EXEMPT_PATHS"))
+    modulo_csrf_exempt_paths: str = Field("/api/v1/health,/api/v1/triggers,/api/v1/auth,/api/v1/webhooks", validation_alias="FARNA_CONTROL_CSRF_EXEMPT_PATHS")
 
     # Space-separated list of additional CSP source expressions for connect-src.
     # Used for custom Grafana Faro collectors, self-hosted Sentry instances, etc.
     # Entries are validated to not contain semicolons (which would break CSP).
-    modulo_monitor_domains: str = Field("", validation_alias=_product_aliases("FARNA_CONTROL_MONITOR_DOMAINS", "MODULO_MONITOR_DOMAINS"))
+    modulo_monitor_domains: str = Field("", validation_alias="FARNA_CONTROL_MONITOR_DOMAINS")
 
-    modulo_dev_mode: bool = Field(default=False, description="Enable preview/in-development features (MODULO_DEV_MODE)", validation_alias=_product_aliases("FARNA_CONTROL_DEV_MODE", "MODULO_DEV_MODE"))
+    modulo_dev_mode: bool = Field(default=False, description="Enable preview/in-development features (FARNA_CONTROL_DEV_MODE)", validation_alias="FARNA_CONTROL_DEV_MODE")
 
     # Plugin discovery — when enabled, scans installed packages for entry points
     # registered in the ``modulo.connectors`` and ``modulo.model_backends`` groups.
     # Set to "false" to disable plugin discovery at startup.
-    modulo_plugin_discovery: bool = Field(True, validation_alias=_product_aliases("FARNA_CONTROL_PLUGIN_DISCOVERY", "MODULO_PLUGIN_DISCOVERY"))
+    modulo_plugin_discovery: bool = Field(True, validation_alias="FARNA_CONTROL_PLUGIN_DISCOVERY")
 
     # Secrets backend — determines how connector/backend credentials are stored.
-    # Options: "fernet" (default), "vault", "aws". Env var: MODULO_SECRETS_BACKEND.
-    modulo_secrets_backend: str = Field("fernet", validation_alias=_product_aliases("FARNA_CONTROL_SECRETS_BACKEND", "MODULO_SECRETS_BACKEND"))
+    # Options: "fernet" (default), "vault", "aws". Env var: FARNA_CONTROL_SECRETS_BACKEND.
+    modulo_secrets_backend: str = Field("fernet", validation_alias="FARNA_CONTROL_SECRETS_BACKEND")
 
-    # Vault configuration (used when MODULO_SECRETS_BACKEND=vault)
+    # Vault configuration (used when FARNA_CONTROL_SECRETS_BACKEND=vault)
     vault_addr: str = Field("")
     vault_token: str = Field("")
     vault_role_id: str = Field("")
     vault_secret_id: str = Field("")
 
-    # AWS Secrets Manager configuration (used when MODULO_SECRETS_BACKEND=aws)
+    # AWS Secrets Manager configuration (used when FARNA_CONTROL_SECRETS_BACKEND=aws)
     aws_access_key_id: str = Field("")
     aws_secret_access_key: str = Field("")
     aws_region: str = Field("us-east-1")
@@ -1200,14 +1192,14 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_monitor_domains(cls, v: str) -> str:
         if ";" in v:
-            raise ValueError("MODULO_MONITOR_DOMAINS must not contain semicolons (would break CSP)")
+            raise ValueError("FARNA_CONTROL_MONITOR_DOMAINS must not contain semicolons (would break CSP)")
         return v
 
     @field_validator("modulo_db")
     @classmethod
     def _validate_db(cls, v: str) -> str:
         if v.lower() not in ("postgres", "sqlite", "mariadb", "mysql"):
-            raise ValueError(f"MODULO_DB must be 'postgres', 'sqlite', 'mariadb', or 'mysql'; got '{v}'")
+            raise ValueError(f"FARNA_CONTROL_DB must be 'postgres', 'sqlite', 'mariadb', or 'mysql'; got '{v}'")
         return v.lower()
 
     @model_validator(mode="after")
@@ -1220,7 +1212,7 @@ class Settings(BaseSettings):
     def _warn_deprecated_modulo_oidc_providers(self) -> "Settings":
         if self.modulo_oidc_providers and self.modulo_oidc_providers != "[]":
             _log.warning(
-                "settings.deprecated_oidc_env_var — MODULO_OIDC_PROVIDERS is deprecated. Use the admin SSO providers UI at /admin/settings/sso instead.",
+                "settings.deprecated_oidc_env_var — FARNA_CONTROL_OIDC_PROVIDERS is deprecated. Use the admin SSO providers UI at /admin/settings/sso instead.",
             )
         return self
 
@@ -1278,7 +1270,7 @@ class Settings(BaseSettings):
         elif self.modulo_db.lower() in ("mariadb", "mysql"):
             _log.warning("settings.mariadb_mode")
             if self.database_url.startswith(_POSTGRES_ASYNC_PREFIX):
-                raise ValueError(f"MODULO_DB is set to '{self.modulo_db}' but DATABASE_URL is still a Postgres URL; set DATABASE_URL to a mysql+aiomysql:// DSN")
+                raise ValueError(f"FARNA_CONTROL_DB is set to '{self.modulo_db}' but DATABASE_URL is still a Postgres URL; set DATABASE_URL to a mysql+aiomysql:// DSN")
         return self
 
     @model_validator(mode="after")
@@ -1482,7 +1474,7 @@ class Settings(BaseSettings):
         secret = self.modulo_break_glass_secret
         standby = self.modulo_break_glass_standby_secret
         if secret and standby and secret == standby:
-            raise ValueError("MODULO_BREAK_GLASS_SECRET and MODULO_BREAK_GLASS_STANDBY_SECRET must differ (identical secrets break the rotation path)")
+            raise ValueError("FARNA_CONTROL_BREAK_GLASS_SECRET and FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET must differ (identical secrets break the rotation path)")
         for name, value in (
             ("FARNA_CONTROL_BREAK_GLASS_SECRET", secret),
             ("FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET", standby),
@@ -1491,10 +1483,10 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name} must be at least {_MIN_BREAK_GLASS_SECRET_LEN} characters; got {len(value)}")
 
         if self.modulo_break_glass_ttl_minutes > self.modulo_break_glass_max_ttl_minutes:
-            raise ValueError(f"MODULO_BREAK_GLASS_TTL_MINUTES must be <= MODULO_BREAK_GLASS_MAX_TTL_MINUTES ({self.modulo_break_glass_ttl_minutes} > {self.modulo_break_glass_max_ttl_minutes})")
+            raise ValueError(f"FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES must be <= FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES ({self.modulo_break_glass_ttl_minutes} > {self.modulo_break_glass_max_ttl_minutes})")
 
         if self.modulo_break_glass_boot_failure_mode not in ("warn", "fail"):
-            raise ValueError(f"MODULO_BREAK_GLASS_BOOT_FAILURE_MODE must be 'warn' or 'fail'; got {self.modulo_break_glass_boot_failure_mode!r}")
+            raise ValueError(f"FARNA_CONTROL_BREAK_GLASS_BOOT_FAILURE_MODE must be 'warn' or 'fail'; got {self.modulo_break_glass_boot_failure_mode!r}")
         return self
 
     @model_validator(mode="after")
@@ -1526,24 +1518,28 @@ class Settings(BaseSettings):
         band = Decimal(str(self.max_reportable_band_usd))
         if floor >= clamp:
             raise ValueError(
-                "Cost-knob ordering violation: MODULO_MAX_REPORTABLE_USD_MIN ("
-                f"{floor}) >= MODULO_MAX_SELF_REPORTED_USD ({clamp}) — a floor at "
+                "Cost-knob ordering violation: FARNA_CONTROL_MAX_REPORTABLE_USD_MIN ("
+                f"{floor}) >= FARNA_CONTROL_MAX_SELF_REPORTED_USD ({clamp}) — a floor at "
                 "or above the per-node clamp silently disables self-reporting. "
-                "Set MODULO_MAX_REPORTABLE_USD_MIN to a value strictly below "
-                f"MODULO_MAX_SELF_REPORTED_USD (valid range: 0.000001 .. {clamp})."
+                "Set FARNA_CONTROL_MAX_REPORTABLE_USD_MIN to a value strictly below "
+                f"FARNA_CONTROL_MAX_SELF_REPORTED_USD (valid range: 0.000001 .. {clamp})."
             )
         if floor >= band:
             raise ValueError(
                 "Cost-knob floor-vs-band violation (BOOT-FATAL): "
-                f"MODULO_MAX_REPORTABLE_USD_MIN ({floor}) >= "
-                f"MODULO_MAX_REPORTABLE_BAND_USD ({band}) — a floor at or above the "
+                f"FARNA_CONTROL_MAX_REPORTABLE_USD_MIN ({floor}) >= "
+                f"FARNA_CONTROL_MAX_REPORTABLE_BAND_USD ({band}) — a floor at or above the "
                 "band ceiling omits EVERY plausible self-report. Set "
-                f"MODULO_MAX_REPORTABLE_USD_MIN strictly below {band} (valid "
+                f"FARNA_CONTROL_MAX_REPORTABLE_USD_MIN strictly below {band} (valid "
                 f"range: 0.000001 .. {band})."
             )
         if band > clamp:
             raise ValueError(
-                f"Cost-knob knob-below-band violation (BOOT-FATAL): MODULO_MAX_REPORTABLE_BAND_USD ({band}) > MODULO_MAX_SELF_REPORTED_USD ({clamp}) — the out_of_band_high marker can never fire because no report can exceed the band. Set MODULO_MAX_REPORTABLE_BAND_USD <= {clamp} (default 50.0)."
+                "Cost-knob knob-below-band violation (BOOT-FATAL): "
+                f"FARNA_CONTROL_MAX_REPORTABLE_BAND_USD ({band}) > "
+                f"FARNA_CONTROL_MAX_SELF_REPORTED_USD ({clamp}) — the out_of_band_high "
+                "marker can never fire because no report can exceed the band. Set "
+                f"FARNA_CONTROL_MAX_REPORTABLE_BAND_USD <= {clamp} (default 50.0)."
             )
         return self
 
@@ -1600,7 +1596,7 @@ def work_item_refs_cap() -> int:
     """The unified work-item refs cap (FAR-794 slice 2b).
 
     Reads the ``modulo_work_item_refs_cap`` setting (env override
-    ``MODULO_WORK_ITEM_REFS_CAP``) and clamps it defensively to
+    ``FARNA_CONTROL_WORK_ITEM_REFS_CAP``) and clamps it defensively to
     ``[1, 100000]`` so a mis-excavated or edge-case setting can never produce
     a zero/negative cap anywhere in the refs pipeline. Cached like
     ``get_settings`` — tests override via ``work_item_refs_cap.cache_clear()``.
@@ -1617,7 +1613,7 @@ def break_glass_boot_findings(settings: Settings) -> list[tuple[bool, str]]:
     """Return ``(blocking, message)`` boot findings (empty list = clean).
 
     These are the URL/secret-PRESENCE checks that honour
-    ``MODULO_BREAK_GLASS_BOOT_FAILURE_MODE``: blocking findings raise in
+    ``FARNA_CONTROL_BREAK_GLASS_BOOT_FAILURE_MODE``: blocking findings raise in
     fail-mode and warn in warn-mode; non-blocking findings always warn and
     never fail boot. The TTL bounds, SECRET == STANDBY, and minimum-length
     checks raise at Settings construction time (unconditional) so they never
@@ -1625,7 +1621,7 @@ def break_glass_boot_findings(settings: Settings) -> list[tuple[bool, str]]:
 
     Blocking (ENABLED=true gated):
     * ENABLED=true with both secrets empty.
-    * ENABLED=true with empty MODULO_BREAK_GLASS_DATABASE_URL.
+    * ENABLED=true with empty FARNA_CONTROL_BREAK_GLASS_DATABASE_URL.
 
     Non-blocking:
     * either secret empty (rotation path degraded).
@@ -1641,14 +1637,14 @@ def break_glass_boot_findings(settings: Settings) -> list[tuple[bool, str]]:
         findings.append(
             (
                 True,
-                ("MODULO_BREAK_GLASS_ENABLED=true but both MODULO_BREAK_GLASS_SECRET and MODULO_BREAK_GLASS_STANDBY_SECRET are empty"),
+                ("FARNA_CONTROL_BREAK_GLASS_ENABLED=true but both FARNA_CONTROL_BREAK_GLASS_SECRET and FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET are empty"),
             )
         )
     elif not (has_primary and has_standby):
         findings.append(
             (
                 False,
-                ("one of MODULO_BREAK_GLASS_SECRET / MODULO_BREAK_GLASS_STANDBY_SECRET is empty — the operator rotation path is degraded"),
+                ("one of FARNA_CONTROL_BREAK_GLASS_SECRET / FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET is empty — the operator rotation path is degraded"),
             )
         )
 
@@ -1656,14 +1652,14 @@ def break_glass_boot_findings(settings: Settings) -> list[tuple[bool, str]]:
         findings.append(
             (
                 True,
-                "MODULO_BREAK_GLASS_ENABLED=true but MODULO_BREAK_GLASS_DATABASE_URL is empty",
+                "FARNA_CONTROL_BREAK_GLASS_ENABLED=true but FARNA_CONTROL_BREAK_GLASS_DATABASE_URL is empty",
             )
         )
     elif not has_url:
         findings.append(
             (
                 False,
-                ("MODULO_BREAK_GLASS_DATABASE_URL is empty — the break-glass CLI deactivate/force/status commands are inoperable while disabled"),
+                ("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL is empty — the break-glass CLI deactivate/force/status commands are inoperable while disabled"),
             )
         )
     return findings

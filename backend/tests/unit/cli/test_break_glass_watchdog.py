@@ -80,7 +80,7 @@ class TestConstructionErrors:
     def test_ttl_above_max_rejected(self) -> None:
         with pytest.raises(
             ValueError,
-            match=r"MODULO_BREAK_GLASS_TTL_MINUTES must be <= MODULO_BREAK_GLASS_MAX_TTL_MINUTES",
+            match=r"FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES must be <= FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES",
         ):
             _make_settings(modulo_break_glass_ttl_minutes=2000, modulo_break_glass_max_ttl_minutes=500)
 
@@ -91,7 +91,7 @@ class TestConstructionErrors:
     def test_ttl_bounds_checked_regardless_of_enabled(self) -> None:
         with pytest.raises(
             ValueError,
-            match=r"MODULO_BREAK_GLASS_TTL_MINUTES must be <= MODULO_BREAK_GLASS_MAX_TTL_MINUTES",
+            match=r"FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES must be <= FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES",
         ):
             _make_settings(
                 modulo_break_glass_enabled=False,
@@ -117,7 +117,7 @@ class TestBootFindings:
             modulo_break_glass_standby_secret="",
         )
         findings = break_glass_boot_findings(settings)
-        assert any("both MODULO_BREAK_GLASS_SECRET" in message for _blocking, message in findings)
+        assert any("both FARNA_CONTROL_BREAK_GLASS_SECRET" in message for _blocking, message in findings)
         assert any(blocking for blocking, _message in findings)
 
     def test_enabled_with_empty_url_is_finding(self) -> None:
@@ -128,7 +128,7 @@ class TestBootFindings:
             modulo_break_glass_database_url="",
         )
         findings = break_glass_boot_findings(settings)
-        assert any("MODULO_BREAK_GLASS_DATABASE_URL is empty" in message for _blocking, message in findings)
+        assert any("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL is empty" in message for _blocking, message in findings)
         assert any(blocking for blocking, _message in findings)
 
     def test_disabled_with_empty_url_is_non_blocking_warn(self) -> None:

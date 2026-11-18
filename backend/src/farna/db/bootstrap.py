@@ -159,7 +159,6 @@ def main() -> None:
             for name in (
                 "FARNA_CONTROL_SYSTEM_DATABASE_URL",
                 "MODULO_SYSTEM_DATABASE_URL",
-                "FARNA_CONTROL_SYSTEM_DATABASE_URL",
             )
             if os.environ.get(name, "")
         ),

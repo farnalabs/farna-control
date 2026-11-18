@@ -166,7 +166,7 @@ Runs on-save (via the REST API's `PUT /{pipeline_id}/graph` endpoint) and pre-ru
 | `SANDBOX_WATCH_LOG_PATH_RELATIVE` | Warning | `watch_log_path` is not an absolute path (should start with `/`) |
 | `SANDBOX_ENABLE_HEARTBEAT_INVALID` | Warning | `enable_heartbeat` is not a boolean |
 | `SANDBOX_CONTEXT_PATH_RELATIVE` | Warning | `context_files` source path is not absolute (should start with `/`) |
-| `SANDBOX_RESERVED_ENV_VAR` | Warning | `env_vars` key uses a reserved system prefix (`FARNA_CONTROL_`, `MODULO_` - the legacy alias prefix - or `OPENCODE_API_KEY`) |
+| `SANDBOX_RESERVED_ENV_VAR` | Warning | `env_vars` key uses a reserved system prefix (`FARNA_CONTROL_`, `MODULO_` or `OPENCODE_API_KEY`) |
 | `SANDBOX_SCHEMA_INCOMPLETE` | Warning | `output_schema_json` lacks `type` or `$ref` |
 | `SANDBOX_EGRESS_POLICY_INVALID` | Error | `egress_policy` is not one of `None` / `default` / `deny_all` / `selected` (FAR-296) |
 | `SANDBOX_EGRESS_ALLOWLIST_INVALID` | Error | `egress_allowlist` is malformed; `selected` requires a non-empty allowlist |
