@@ -107,7 +107,7 @@ The two keys in the first two rows are validated at runtime by Pydantic (`_MIN_K
 |---|---|
 | `backend.env.FARNA_CONTROL_USERS` | Admin user credentials (`user:password` format). Without this, no login is possible — the app warns at boot but does not crash. |
 
-**Set every environment variable through `backend.env` using the canonical `FARNA_CONTROL_*` name.** This is the only spelling that survives: the bare `MODULO_*` aliases are legacy and are being retired, so a deployment wired with the old name will lose that setting once they are removed. In particular, set the admin user as `backend.env.FARNA_CONTROL_USERS` — with no admin account there is no way to log in — and the system database URL as `backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL`, which is the only key the chart's helper consults when `postgres.host` is unset.
+**Set every environment variable through `backend.env` using the canonical `FARNA_CONTROL_*` name.** That is the only declared spelling: the bare `MODULO_*` compatibility aliases have been removed from settings, so no old name is part of the settings contract. (pydantic-settings still resolves a field-name environment variable such as `MODULO_USERS`, but that is an implementation detail, not a supported spelling — do not wire a deployment to it.) In particular, set the admin user as `backend.env.FARNA_CONTROL_USERS` — with no admin account there is no way to log in — and the system database URL as `backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL`, which is the only key the chart's helper consults when `postgres.host` is unset.
 
 ### Secrets Management
 

@@ -33,6 +33,11 @@ def test_saq_run_timeout_default() -> None:
 
 
 def test_product_setting_accepts_canonical_and_bare_legacy_with_canonical_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both spellings resolve; the canonical alias outranks the field-name match.
+
+    ``FARNA_CONTROL_DB`` is the declared ``validation_alias`` and is consulted
+    before the field name, so it wins when both are set.
+    """
     monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
     monkeypatch.setenv("MODULO_DB", "mariadb")
 
@@ -41,7 +46,13 @@ def test_product_setting_accepts_canonical_and_bare_legacy_with_canonical_preced
     assert settings.modulo_db == "sqlite"
 
 
-def test_product_setting_accepts_original_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_product_setting_still_reads_bare_modulo_name_via_field_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare ``MODULO_DB`` still resolves -- through the FIELD NAME, not an alias.
+
+    ``populate_by_name=True`` makes pydantic-settings accept the field name as an
+    environment key (``modulo_db`` -> ``MODULO_DB``). There is no declared legacy
+    alias any more; this pins the residual so it is never mistaken for one.
+    """
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
     monkeypatch.setenv("MODULO_DB", "sqlite")
 
@@ -327,7 +338,7 @@ def test_instance_identity_falls_back_to_socket_hostname(monkeypatch: pytest.Mon
 
 
 def test_instance_identity_never_reads_platform_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """FLY_MACHINE_ID / MODULO_RUNNER_MACHINE_ID are NOT identity sources:
+    """FLY_MACHINE_ID / FARNA_CONTROL_RUNNER_MACHINE_ID are NOT identity sources:
     the former is a platform variable, the latter is a DEPLOYMENT-identity
     label (docs/configuration-reference.md) — neither may leak into
     instance identity (ADR 043 Decision 5)."""
@@ -417,7 +428,7 @@ def test_alert_context_accepts_the_field_name_key() -> None:
 def test_another_divergent_alias_also_accepts_the_field_name_key() -> None:
     """The fix is model-wide, not ``environment``-specific: any field whose
     alias differs from its name (here ``runner_machine_id`` ->
-    ``MODULO_RUNNER_MACHINE_ID``) accepts a name-keyed constructor kwarg."""
+    ``FARNA_CONTROL_RUNNER_MACHINE_ID``) accepts a name-keyed constructor kwarg."""
     assert _make(runner_machine_id="machine-1").runner_machine_id == "machine-1"
 
 

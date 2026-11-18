@@ -25,7 +25,7 @@ class TestMultiBackendCustomValidators:
 
     def test_invalid_backend_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(monkeypatch, FARNA_CONTROL_DB="oracle")
-        with pytest.raises(ValueError, match="MODULO_DB must be"):
+        with pytest.raises(ValueError, match="FARNA_CONTROL_DB must be"):
             Settings()
 
     def test_sqlite_mode_auto_sets_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
