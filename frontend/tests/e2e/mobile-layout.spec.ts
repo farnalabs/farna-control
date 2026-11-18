@@ -1153,6 +1153,11 @@ test.describe('Mobile foundation — 390px acceptance (FAR-2537)', { tag: ['@reg
 //   (d) the min-height of a standalone auth page.
 // Utility table and conventions: docs/frontend-mobile-layout.md.
 test.describe('Mobile dynamic viewport height (FAR-2547)', { tag: ['@regression', '@mobile'] }, () => {
+  // Same local headroom as the FAR-2537 preparePage-based blocks above:
+  // preparePage() performs two navigations with a 30s APP_MOUNT_TIMEOUT_MS, which
+  // equals the local 30s default, so without this a cold mount reports an opaque
+  // Playwright deadline instead of the mount diagnostic.
+  if (target === 'local') test.describe.configure({ timeout: LOCAL_SWEEP_TIMEOUT_MS })
   // Same contract as the FAR-2537 openLocal above: a non-local target already
   // carries the shared global-setup session, so only the local mock target needs
   // an explicit sign-in. preparePage() is used instead of loginAsAdmin because it
@@ -1317,9 +1322,9 @@ test.describe('Mobile dynamic viewport height (FAR-2547)', { tag: ['@regression'
           carriers: carriers.length,
           outermostRoots: outermost.length,
           computedHeight: root ? parseFloat(getComputedStyle(root).height) : Number.NaN,
+          rootBottom: root ? root.getBoundingClientRect().bottom : Number.NaN,
           innerHeight: window.innerHeight,
           chromeOffset: rootFontSize * 3.5,
-          scrollHeight: document.documentElement.scrollHeight,
         }
       })
 
@@ -1346,41 +1351,50 @@ test.describe('Mobile dynamic viewport height (FAR-2547)', { tag: ['@regression'
         `${route}: the .h-chrome-dvh root computes to ${metrics.computedHeight}px, but viewport ${metrics.innerHeight}px minus the derived ${metrics.chromeOffset}px chrome offset is ${expectedHeight}px (delta ${delta}px). Either the view root lost h-chrome-dvh or the 3.5rem chrome convention moved.`,
       ).toBe(true)
 
-      // The user-facing invariant: nothing hangs below the fold.
+      // The user-facing invariant: nothing hangs below the fold. Measure the
+      // view root's own bottom, NOT document.documentElement.scrollHeight:
+      // AppLayout's shell is h-screen/overflow-hidden with <main> as the internal
+      // scroller, so the document scroll height is pinned to the viewport and
+      // cannot expose a view root that grew past it (the old assertion was
+      // vacuous). A root that lost its height class sizes to content and pushes
+      // this bottom below the viewport.
       expect(
-        metrics.scrollHeight <= metrics.innerHeight + 2,
-        `${route}: the document is ${metrics.scrollHeight}px tall against a ${metrics.innerHeight}px viewport — content hangs below the fold. That is the invariant the dvh sweep exists to protect.`,
+        metrics.rootBottom <= metrics.innerHeight + 2,
+        `${route}: the .h-chrome-dvh root's bottom is at ${metrics.rootBottom}px against a ${metrics.innerHeight}px viewport — the view hangs below the fold. That is the invariant the dvh sweep exists to protect.`,
       ).toBe(true)
     })
   }
 
-  test('/login — standalone auth page root gets the dvh min-height', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
-    // On staging/app the shared storageState is already signed in, so visiting
-    // /login redirects to the app root and the unauthenticated standalone page
-    // never renders. Explicit skip with the reason, never a silent one.
-    test.skip(
-      env.name !== 'local',
-      `the shared storageState on ${env.name} is already signed in, so /login redirects and the unauthenticated standalone page never renders`,
-    )
-    await preparePage(page, '/login', env)
+  // The standalone auth page must be measured UNAUTHENTICATED. The file-level
+  // storageState is a signed-in session on staging/app, so visiting /login there
+  // redirects to the app root and the standalone page never renders. Opt this
+  // describe OUT of the shared session with an explicit empty storageState
+  // (login.spec.ts does the same by simply not opting in), so the check runs on
+  // every target instead of being skipped on the only targets CI uses.
+  test.describe('/login — standalone auth page (unauthenticated)', () => {
+    test.use({ storageState: { cookies: [], origins: [] } })
 
-    const metrics = await page.evaluate(() => {
-      const root = document.querySelector<HTMLElement>('.min-h-screen-dvh')
-      return {
-        found: root !== null,
-        height: root ? root.getBoundingClientRect().height : Number.NaN,
-        minHeight: root ? getComputedStyle(root).minHeight : '',
-        innerHeight: window.innerHeight,
-      }
+    test('/login — standalone auth page root gets the dvh min-height', { tag: ['@regression', '@mobile'] }, async ({ page, env }) => {
+      await preparePage(page, '/login', env)
+
+      const metrics = await page.evaluate(() => {
+        const root = document.querySelector<HTMLElement>('.min-h-screen-dvh')
+        return {
+          found: root !== null,
+          height: root ? root.getBoundingClientRect().height : Number.NaN,
+          minHeight: root ? getComputedStyle(root).minHeight : '',
+          innerHeight: window.innerHeight,
+        }
+      })
+
+      expect(
+        metrics.found,
+        'No .min-h-screen-dvh element on /login. The standalone auth page fell back to the min-h-screen (vh) class, so its bottom is hidden behind browser chrome where dvh is available.',
+      ).toBe(true)
+      expect(
+        metrics.height >= metrics.innerHeight - 2,
+        `/login: the .min-h-screen-dvh root is ${metrics.height}px tall against a ${metrics.innerHeight}px viewport (computed min-height ${metrics.minHeight}). It no longer fills at least the visible viewport.`,
+      ).toBe(true)
     })
-
-    expect(
-      metrics.found,
-      'No .min-h-screen-dvh element on /login. The standalone auth page fell back to the min-h-screen (vh) class, so its bottom is hidden behind browser chrome where dvh is available.',
-    ).toBe(true)
-    expect(
-      metrics.height >= metrics.innerHeight - 2,
-      `/login: the .min-h-screen-dvh root is ${metrics.height}px tall against a ${metrics.innerHeight}px viewport (computed min-height ${metrics.minHeight}). It no longer fills at least the visible viewport.`,
-    ).toBe(true)
   })
 })
