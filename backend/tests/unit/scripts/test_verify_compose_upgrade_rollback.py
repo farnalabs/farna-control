@@ -143,7 +143,7 @@ def test_matrix_records_every_required_transition(tmp_path: Path) -> None:
 def test_evidence_redacts_secret_literals(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "MODULO_USERS=admin@example.com:admin-password\nODD_CREDENTIAL=not-obvious-secret\n",
+        "FARNA_CONTROL_USERS=admin@example.com:admin-password\nODD_CREDENTIAL=not-obvious-secret\n",
         encoding="utf-8",
     )
     secrets = module._secret_values_from_file(env_file)
@@ -154,7 +154,7 @@ def test_evidence_redacts_secret_literals(tmp_path: Path) -> None:
             "compose-config",
             ("docker", "compose", "config", "admin@example.com:admin-password"),
             0,
-            "MODULO_USERS=admin@example.com:admin-password\n",
+            "FARNA_CONTROL_USERS=admin@example.com:admin-password\n",
             "ODD_CREDENTIAL=not-obvious-secret\n",
         ),
         outcome="success",

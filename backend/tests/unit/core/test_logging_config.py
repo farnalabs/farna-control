@@ -629,7 +629,7 @@ def test_resolve_log_level_per_module_override_wins(
 
 
 def test_resolve_log_level_falls_back_to_global(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without a per-module override the global MODULO_LOG_LEVEL applies."""
+    """Without a per-module override the global FARNA_CONTROL_LOG_LEVEL applies."""
     monkeypatch.setenv("FARNA_CONTROL_LOG_LEVEL", "DEBUG")
     assert _resolve_log_level("farna.core.unrelated") == "DEBUG"
 

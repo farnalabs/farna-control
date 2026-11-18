@@ -1,7 +1,7 @@
 """FAR-1519: ``dispatcher_reconcile`` fails closed BEFORE any heartbeat write.
 
 Establishes the readiness-gating chain's first link for a deployment that does
-not wire ``MODULO_SYSTEM_DATABASE_URL`` (the shape the root docker-compose.yml
+not wire ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` (the shape the root docker-compose.yml
 had before this ticket): ``_open_system_factory()`` -> ``_get_system_engine``
 raises ``RuntimeError`` at the TOP of ``dispatcher_reconcile`` — before the
 ``try`` block that persists the failure heartbeat — so no stats blob is ever

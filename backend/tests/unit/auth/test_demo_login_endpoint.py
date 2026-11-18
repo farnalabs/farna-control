@@ -1,7 +1,7 @@
 """Demo auto-login endpoint tests (FAR-535) via FastAPI TestClient.
 
 Locks the POST /api/v1/auth/demo contract: the kill switch answers a plain 404
-when any of MODULO_DEMO_ENABLED / MODULO_DEMO_USER / MODULO_DEMO_PASSWORD is
+when any of FARNA_CONTROL_DEMO_ENABLED / FARNA_CONTROL_DEMO_USER / FARNA_CONTROL_DEMO_PASSWORD is
 unset or empty, a successful call mints an access token carrying the SHORT
 demo TTL (modulo_demo_token_minutes, NOT modulo_access_token_minutes) with NO
 refresh token and viewer-role demo-org claims, EVERY failure path — including
@@ -233,7 +233,7 @@ def test_demo_login_env_password_mismatch_answers_plain_404(app: FastAPI, client
 
     Stealth-consistent with every other demo failure (never a 401), and the
     mismatch is audit-logged with account context (no secrets) so operators
-    can diagnose a bad MODULO_DEMO_PASSWORD.
+    can diagnose a bad FARNA_CONTROL_DEMO_PASSWORD.
     """
     _override_settings(app, demo_password="rotated-env-password")
     stale_account = _demo_account(password_hash=hash_password("old-stored-password"))
@@ -323,7 +323,7 @@ def test_auth_middleware_demo_exempt_but_login_not(mock_session: AsyncMock) -> N
 def test_demo_login_account_without_demo_org_membership_answers_plain_404(app: FastAPI, client: TestClient) -> None:
     """An authenticating account with NO viewer demo-org membership 404s.
 
-    Defense against MODULO_DEMO_USER misconfiguration naming a pre-existing
+    Defense against FARNA_CONTROL_DEMO_USER misconfiguration naming a pre-existing
     privileged account: its other-org memberships must never be mintable into
     a demo token — the endpoint resolves the session ONLY through the demo
     org slug + viewer role and treats everything else as feature-absent.

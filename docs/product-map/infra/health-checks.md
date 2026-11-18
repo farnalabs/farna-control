@@ -61,7 +61,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       `age(datfrozenxid)` against the server's own `autovacuum_freeze_max_age`;
       degrades (never `unavailable`, so never 503s readiness alone) on bloat at/above
       the configured ratio or on freeze age past 50% of the ceiling; thresholds via
-      `MODULO_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES` / `MODULO_HEALTH_DB_HYGIENE_DEAD_RATIO`
+      `FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES` / `FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO`
 - [x] A database-hygiene probe that does NOT complete within its budget (timeout, or the
       probe raising) reports `degraded` – "database-hygiene probe did not complete within
       Ns (likely an event-loop stall; see event_loop_lag) - hygiene not measured" – but is
@@ -200,7 +200,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       silently unalerted until the state TTL
       (`core/watchdog/worker_liveness.py`, `test_worker_liveness.py`)
 - [x] Shared operator-alert context (FAR-1495 / FAR-1499): every operator alert
-      identifies the deployment environment (`Environment: <MODULO_ENV>`, empty ->
+      identifies the deployment environment (`Environment: <FARNA_CONTROL_ENV>`, empty ->
       `unknown`) and appends the operator's `ALERT_CONTEXT` free text (runbook links,
       escalation notes, ticket pointers – one item per line, blank lines dropped).
       The format is SINGLE-sourced in `core/alert_context.py` (environment line,

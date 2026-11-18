@@ -2,7 +2,7 @@
 in farna.core.saq_worker.
 
 Proves that _get_system_async_engine creates an engine from
-MODULO_SYSTEM_DATABASE_URL when set, and FAILS CLOSED (raises RuntimeError +
+FARNA_CONTROL_SYSTEM_DATABASE_URL when set, and FAILS CLOSED (raises RuntimeError +
 logs an error) when it is not set — refusing to fall back to the app engine
 (farna_control_app, NOBYPASSRLS) that would silently return zero RLS-scoped rows. Also
 locks the pool-sizing helpers (_max_concurrent_ops, _effective_redis_pool_size,

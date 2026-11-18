@@ -2,7 +2,7 @@
 
 ## How Secrets Are Stored
 
-Farna Control supports three backends for secret storage, configured via the `MODULO_SECRETS_BACKEND` environment variable:
+Farna Control supports three backends for secret storage, configured via the `FARNA_CONTROL_SECRETS_BACKEND` environment variable:
 
 | Backend | Env Value | Description |
 |---------|-----------|-------------|
@@ -58,7 +58,7 @@ Gitleaks runs as a pre-commit hook and in CI to catch accidental commits of thes
    call returns `202 Accepted` with a `task_id`: re-encryption runs as a
    background task, and the old key stays valid for reads until it finishes,
    so the rotation needs no downtime. The endpoint answers `409` while another
-   rotation is in progress and `503` when `MODULO_SYSTEM_DATABASE_URL` is unset
+   rotation is in progress and `503` when `FARNA_CONTROL_SYSTEM_DATABASE_URL` is unset
    (the cross-org `farna_control_system` role is required; without it the rotation
    would silently re-encrypt nothing).
 5. Poll `GET /api/v1/admin/rotation/status` until `rotation_in_progress` is

@@ -134,7 +134,7 @@ applications. Built on the auth + model-backend core.
       viewer gets 403 on list/register/delete alike and the card renders a
       restricted state instead of the table (the list call's 403 is the
       fallback for a stale/downgraded JWT) – and registration refuses with
-      500 while `MODULO_PUBLIC_URL` is unset or still the
+      500 while `FARNA_CONTROL_PUBLIC_URL` is unset or still the
       `http://localhost:8000` default, because the authorize / token / refresh
       protocol endpoints need a real public issuer
       (`SettingsMcpView.spec.ts`, `tests/unit/api/test_mcp_oauth.py`,

@@ -22,11 +22,11 @@ The application refuses to start if any required variable is absent or invalid.
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | **Yes** | – | `postgresql+asyncpg://user:pass@host:port/db` |
 | `DATABASE_ADMIN_URL` | No | – | Privileged owner-role connection string read directly by Alembic from the process environment, the launcher-pinned config, or the `.env` file in `backend/` (not a `Settings` field). When set it wins over `DATABASE_URL` for migrations, so `uv run alembic upgrade heads` runs as the table owner rather than the RLS-bound app role. It is also the privileged connection for the role bootstrap (`python -m farna.db.bootstrap_role` requires it) and the URL `farna-control restore --db-url` points at. If neither it nor `DATABASE_URL` is set, migrations refuse to run instead of defaulting to a local database (FAR-2183). |
-| `MODULO_DB` | No | `postgres` | Database backend: `postgres`, `sqlite`, `mariadb`, or `mysql` |
-| `MODULO_SYSTEM_DATABASE_URL` | No | `""` | Dedicated connection string for cross-org system cron jobs (`farna_control_system` role). The system worker's cross-org crons (including `dispatcher_reconcile`, which gates `/healthz/ready`) **require** a value and fail closed without one: there is no silent fallback to the RLS-bound `DATABASE_URL`, which would read zero rows. The shipped compose files and the native launcher supply it; a plain-process deployment must set it explicitly (in SQLite dev mode, point it at the same SQLite file). |
+| `FARNA_CONTROL_DB` | No | `postgres` | Database backend: `postgres`, `sqlite`, `mariadb`, or `mysql` |
+| `FARNA_CONTROL_SYSTEM_DATABASE_URL` | No | `""` | Dedicated connection string for cross-org system cron jobs (`farna_control_system` role). The system worker's cross-org crons (including `dispatcher_reconcile`, which gates `/healthz/ready`) **require** a value and fail closed without one: there is no silent fallback to the RLS-bound `DATABASE_URL`, which would read zero rows. The shipped compose files and the native launcher supply it; a plain-process deployment must set it explicitly (in SQLite dev mode, point it at the same SQLite file). |
 
-`MODULO_DB=sqlite` switches to SQLite for local development (no RLS, no advisory locks, no flood protection).
-`MODULO_DB=mariadb` or `mysql` uses the aiomysql driver. Both values are accepted by
+`FARNA_CONTROL_DB=sqlite` switches to SQLite for local development (no RLS, no advisory locks, no flood protection).
+`FARNA_CONTROL_DB=mariadb` or `mysql` uses the aiomysql driver. Both values are accepted by
 the settings validator but are **not** production-ready: the per-node output
 store (`db/crud/run_node_outputs.py::dialect_insert`) raises `NotImplementedError`
 on any dialect other than `postgresql` / `sqlite`, and MariaDB has been deprecated
@@ -164,11 +164,11 @@ detection work.
 | `SECRET_KEY` | **Yes** | – | JWT signing key, minimum 32 bytes (256 bits) |
 | `FERNET_KEY` | **Yes** | – | Fernet encryption key, minimum 32 bytes (typically 44 for a standard Fernet key) |
 | `FERNET_KEY_OLD` | No | – | Previous Fernet key for no-downtime rotation; decrypt falls back to this when `FERNET_KEY` is rotated |
-| `MODULO_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
-| `MODULO_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `MODULO_ADMIN_PASSWORD` or `MODULO_USERS` must be set) |
+| `FARNA_CONTROL_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
+| `FARNA_CONTROL_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `FARNA_CONTROL_ADMIN_PASSWORD` or `FARNA_CONTROL_USERS` must be set) |
 | `MODULO_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool) |
 | `MODULO_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class) |
-| `MODULO_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
+| `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `GUARDRAIL_DESTROY_PEPPER` | For destroy-mode redaction | `""` | HMAC pepper used by guardrails in `destroy` redaction mode to key replacement tokens. Empty (the default) leaves it unset, and a guardrail that declares a destroy-mode redaction rule then fails closed - the rule is rejected at save time and the block is terminal at the edge. Never logged. Rotating it breaks cross-run linkage of already-destroyed tokens by design. |
 | `INVITATION_EXPIRY_HOURS` | No | `72` | How long an in-app invitation token stays consumable |
 
@@ -176,7 +176,7 @@ See [`docs/deployment-security.md`](./deployment-security.md) for key rotation p
 
 Declarative `farna-control apply` configs reference these vault entries by key rather
 than embedding a value: `credential_ref: <key>` (or `api_key: secretref://<key>`)
-is resolved through the `MODULO_SECRETS_BACKEND` above, under the calling
+is resolved through the `FARNA_CONTROL_SECRETS_BACKEND` above, under the calling
 organization's context. A `credential_ref` that names no vault entry fails the
 plan; a `secretref://` that cannot be resolved fails the apply (typed 422).
 See [`docs/product-map/configure/apply.md`](./product-map/configure/apply.md).
@@ -187,9 +187,9 @@ See [`docs/product-map/configure/apply.md`](./product-map/configure/apply.md).
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_LICENSE_KEY` | No | – | Base64-encoded, Ed25519-signed JSON payload enabling Team-tier features. Verified against the configured trust anchor (`MODULO_LICENSE_PUBLIC_KEY`). Outside debug, configuring a license key while only the built-in development key is available fails startup closed instead of silently running on Community. |
-| `MODULO_LICENSE_PUBLIC_KEY` | No | built-in development key | Ed25519 public key (hex, 64 chars) that verifies the license signature – the production trust anchor. The default is the **development** keypair's public half, shipped so local and debug instances can exercise licensing; it is only trusted in debug and cannot verify a Farnalabs-issued production license. Set it to the public key Farnalabs issued with your license. |
-| `MODULO_LICENSE_PRIVATE_KEY` | No | – | Ed25519 private key (hex) used to SIGN team license keys issued via the admin license-issue endpoint and Stripe purchase fulfilment. Empty disables issuance (signing fails closed). |
+| `FARNA_CONTROL_LICENSE_KEY` | No | – | Base64-encoded, Ed25519-signed JSON payload enabling Team-tier features. Verified against the configured trust anchor (`FARNA_CONTROL_LICENSE_PUBLIC_KEY`). Outside debug, configuring a license key while only the built-in development key is available fails startup closed instead of silently running on Community. |
+| `FARNA_CONTROL_LICENSE_PUBLIC_KEY` | No | built-in development key | Ed25519 public key (hex, 64 chars) that verifies the license signature – the production trust anchor. The default is the **development** keypair's public half, shipped so local and debug instances can exercise licensing; it is only trusted in debug and cannot verify a Farnalabs-issued production license. Set it to the public key Farnalabs issued with your license. |
+| `FARNA_CONTROL_LICENSE_PRIVATE_KEY` | No | – | Ed25519 private key (hex) used to SIGN team license keys issued via the admin license-issue endpoint and Stripe purchase fulfilment. Empty disables issuance (signing fails closed). |
 
 ---
 
@@ -205,8 +205,8 @@ configured a signing key cannot emit signed evidence.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_EVIDENCE_SIGNING_KEY` | For signed evidence | – | PEM-encoded Ed25519 private key that signs the evidence manifest. Set it to enable signing; the matching public key is derived and published automatically via the admin verification-key endpoint. Empty disables signed evidence. |
-| `MODULO_EVIDENCE_EXPORTER_IDENTITY` | No | `""` (falls back to `modulo` at stamp time) | Human-readable identity stamped into the signed manifest as the exporter. Never a credential. |
+| `FARNA_CONTROL_EVIDENCE_SIGNING_KEY` | For signed evidence | – | PEM-encoded Ed25519 private key that signs the evidence manifest. Set it to enable signing; the matching public key is derived and published automatically via the admin verification-key endpoint. Empty disables signed evidence. |
+| `FARNA_CONTROL_EVIDENCE_EXPORTER_IDENTITY` | No | `""` (falls back to `modulo` at stamp time) | Human-readable identity stamped into the signed manifest as the exporter. Never a credential. |
 
 ---
 
@@ -233,12 +233,12 @@ Optional visitor demo experience (FAR-535): navigating to `/demo` logs the visit
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_DEMO_ENABLED` | Yes (for demo) | `false` | Kill switch. Truthy (`true`/`1`) activates the `POST /api/v1/auth/demo` endpoint and the demo seed. |
-| `MODULO_DEMO_USER` | Yes (for demo) | – | Email of the demo user account (created/updated idempotently at boot). |
-| `MODULO_DEMO_PASSWORD` | Yes (for demo) | – | Password of the demo user. The seed re-stamps the stored hash to match on every boot, so rotating the secret takes effect on restart. |
-| `MODULO_DEMO_TOKEN_MINUTES` | No | `120` | Demo access-token TTL in minutes. The demo session carries no refresh token and dies with this token. |
+| `FARNA_CONTROL_DEMO_ENABLED` | Yes (for demo) | `false` | Kill switch. Truthy (`true`/`1`) activates the `POST /api/v1/auth/demo` endpoint and the demo seed. |
+| `FARNA_CONTROL_DEMO_USER` | Yes (for demo) | – | Email of the demo user account (created/updated idempotently at boot). |
+| `FARNA_CONTROL_DEMO_PASSWORD` | Yes (for demo) | – | Password of the demo user. The seed re-stamps the stored hash to match on every boot, so rotating the secret takes effect on restart. |
+| `FARNA_CONTROL_DEMO_TOKEN_MINUTES` | No | `120` | Demo access-token TTL in minutes. The demo session carries no refresh token and dies with this token. |
 
-Point `MODULO_DEMO_USER` at a **dedicated** account: if it names an existing account, boot re-stamps that account's password to the demo password. Regardless, the demo endpoint only ever mints a session scoped to the `demo` organization with the `viewer` role; an authenticating account without a viewer membership in the demo org (e.g. a privileged account) answers the same 404 as the kill switch.
+Point `FARNA_CONTROL_DEMO_USER` at a **dedicated** account: if it names an existing account, boot re-stamps that account's password to the demo password. Regardless, the demo endpoint only ever mints a session scoped to the `demo` organization with the `viewer` role; an authenticating account without a viewer membership in the demo org (e.g. a privileged account) answers the same 404 as the kill switch.
 
 The demo user gets a `viewer`-role membership (read-only; `is_system_admin` is forced off) and the seed is idempotent: it creates the `demo` organization, the user, and benign sample data at boot, or immediately via `python -m farna.db.seed_demo`: five schemas, six agents, four pipelines with editor-valid graphs (UUID node ids, first-class edges), including the Demo Governance Pipeline (Implement → PR risk level → Human review when risk > 0.50 → Open PR, with a conditional edge straight to Open PR when risk ≤ 0.50); twenty synthetic runs carrying per-node execution traces and costs, three triggers (including "Ticket ready" on the governance pipeline), a published default System Map ("Demo Delivery System") with pipeline-backed nodes, intake and improvement loops, and other benign sample data. Lifecycle Maps are internal-only and withdrawn from Alpha; they are not ordinary demo data and are not part of the public demo seed. Every boot converges existing demo rows to the current seed, so an upgrade repairs demo data seeded by an older release. Rate limiting: 10 requests/hour per IP on the demo endpoint.
 
@@ -246,18 +246,18 @@ The demo user gets a `viewer`-role membership (read-only; `is_system_admin` is f
 
 ## SSO / SAML 2.0
 
-Team-tier feature (requires valid `MODULO_LICENSE_KEY`). Configurable via env vars or the admin SSO providers UI.
+Team-tier feature (requires valid `FARNA_CONTROL_LICENSE_KEY`). Configurable via env vars or the admin SSO providers UI.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_OIDC_PROVIDERS` | No | `[]` | JSON array of `{provider_id, client_id, client_secret, discovery_url}` objects. **Deprecated**; use the admin SSO providers UI. |
-| `MODULO_SAML_ENABLED` | No | `false` | Enable SAML 2.0 authentication |
-| `MODULO_SAML_IDP_METADATA_URL` | No | – | SAML IdP metadata URL |
-| `MODULO_SAML_IDP_METADATA_XML` | No | – | SAML IdP metadata XML (alternative to URL) |
-| `MODULO_SAML_ENTITY_ID` | No | `modulo` | SAML SP entity ID |
-| `MODULO_SAML_SP_PRIVATE_KEY` | No | – | SAML SP private key |
-| `MODULO_SAML_SP_X509_CERT` | No | – | SAML SP X.509 certificate |
-| `MODULO_SSO_DEFAULT_ROLE` | No | `runner` | Default org role assigned on JIT provisioning |
+| `FARNA_CONTROL_OIDC_PROVIDERS` | No | `[]` | JSON array of `{provider_id, client_id, client_secret, discovery_url}` objects. **Deprecated**; use the admin SSO providers UI. |
+| `FARNA_CONTROL_SAML_ENABLED` | No | `false` | Enable SAML 2.0 authentication |
+| `FARNA_CONTROL_SAML_IDP_METADATA_URL` | No | – | SAML IdP metadata URL |
+| `FARNA_CONTROL_SAML_IDP_METADATA_XML` | No | – | SAML IdP metadata XML (alternative to URL) |
+| `FARNA_CONTROL_SAML_ENTITY_ID` | No | `modulo` | SAML SP entity ID |
+| `FARNA_CONTROL_SAML_SP_PRIVATE_KEY` | No | – | SAML SP private key |
+| `FARNA_CONTROL_SAML_SP_X509_CERT` | No | – | SAML SP X.509 certificate |
+| `FARNA_CONTROL_SSO_DEFAULT_ROLE` | No | `runner` | Default org role assigned on JIT provisioning |
 
 ---
 
@@ -265,18 +265,18 @@ Team-tier feature (requires valid `MODULO_LICENSE_KEY`). Configurable via env va
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects, webhook callbacks, email links |
-| `MODULO_FRONTEND_URL` | No | `""` | Browser-facing SPA base URL for SSO post-login redirects and MCP OAuth authorize links. Set only for a split-origin deployment (SPA and API on different origins); empty falls back to `MODULO_PUBLIC_URL`, then `http://localhost:5173`. CORS origins are not used for post-login routing. |
+| `FARNA_CONTROL_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects, webhook callbacks, email links |
+| `FARNA_CONTROL_FRONTEND_URL` | No | `""` | Browser-facing SPA base URL for SSO post-login redirects and MCP OAuth authorize links. Set only for a split-origin deployment (SPA and API on different origins); empty falls back to `FARNA_CONTROL_PUBLIC_URL`, then `http://localhost:5173`. CORS origins are not used for post-login routing. |
 | `MODULO_LAN_ORIGINS` | No | `""` | Comma-separated LAN hostnames added to the loopback Host/Origin allowlist. Only consulted when the API serves the SPA itself (`MODULO_SERVE_SPA=1`, the native single-port path): a Host or Origin outside loopback plus this list is rejected with 403. An empty value keeps the allowlist loopback-only. Docker and Fly deployments are unaffected because nginx terminates the public Host there. |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed CORS origins |
 | `CORS_MAX_AGE` | No | `600` | Preflight cache max-age in seconds |
-| `MODULO_LOG_LEVEL` | No | `INFO` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `MODULO_WS_TOKEN_TTL_SECONDS` | No | `60` | WebSocket auth token TTL in seconds |
-| `MODULO_ACCESS_TOKEN_MINUTES` | No | `15` | Access token TTL in minutes (min 5, max 1440) |
-| `MODULO_REFRESH_TOKEN_TTL_HOURS` | No | `24` | Refresh-token lifetime in hours (min 1, max 168). The refresh token slides on every rotation, so this is the idle-logout window: an abandoned session cannot refresh after it lapses. |
+| `FARNA_CONTROL_LOG_LEVEL` | No | `INFO` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `FARNA_CONTROL_WS_TOKEN_TTL_SECONDS` | No | `60` | WebSocket auth token TTL in seconds |
+| `FARNA_CONTROL_ACCESS_TOKEN_MINUTES` | No | `15` | Access token TTL in minutes (min 5, max 1440) |
+| `FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS` | No | `24` | Refresh-token lifetime in hours (min 1, max 168). The refresh token slides on every rotation, so this is the idle-logout window: an abandoned session cannot refresh after it lapses. |
 | `REFRESH_REUSE_GRACE_SECONDS` | No | `30` | Refresh-token reuse grace window in seconds (min 0, max 120). A refresh presented with a stale family sequence within this window after the most recent rotation is treated as a benign retry/replay rather than a theft signal, so the token family is not blacklisted. `0` disables the grace: any reuse blacklists the family immediately. |
 | `DEBUG` | No | `false` | Enable debug mode (test/staging environments) |
-| `MODULO_DEV_MODE` | No | `false` | Enable preview / in-development features |
+| `FARNA_CONTROL_DEV_MODE` | No | `false` | Enable preview / in-development features |
 
 ---
 
@@ -427,10 +427,10 @@ mutation transaction, including the clone's separate-connection step-(a)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_TELEMETRY_ENABLED` | No | `false` | Enable OpenTelemetry instrumentation |
+| `FARNA_CONTROL_TELEMETRY_ENABLED` | No | `false` | Enable OpenTelemetry instrumentation |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | – | OTel gRPC exporter endpoint (e.g. `http://otel-collector:4317`) |
-| `MODULO_OTEL_SERVICE_NAME` | No | `modulo` | OTel service name attribute |
-| `MODULO_SLOW_CALLBACK_WARN_MS` | No | `0` | When greater than `0` (milliseconds), process startup arms asyncio's slow-callback warning at this threshold and starts a low-frequency sampler that records the loop thread's stack, so the readiness stall log can name the blocking callback (`file:line`) - the FAR-1439 class where a synchronous call freezes the event loop and starves every async DB op at once. `0` (the default) is a zero-cost no-op. |
+| `FARNA_CONTROL_OTEL_SERVICE_NAME` | No | `modulo` | OTel service name attribute |
+| `FARNA_CONTROL_SLOW_CALLBACK_WARN_MS` | No | `0` | When greater than `0` (milliseconds), process startup arms asyncio's slow-callback warning at this threshold and starts a low-frequency sampler that records the loop thread's stack, so the readiness stall log can name the blocking callback (`file:line`) - the FAR-1439 class where a synchronous call freezes the event loop and starves every async DB op at once. `0` (the default) is a zero-cost no-op. |
 
 Telemetry is opt-in. With default settings, Farna Control makes **zero** external network calls. See [`docs/operations/network-egress.md`](./operations/network-egress.md).
 
@@ -453,14 +453,14 @@ Additionally, the `AuthRateLimitMiddleware` enforces a separate login lockout:
 
 | Path | Limit | Window |
 |------|-------|--------|
-| Auth endpoints (all POST/PUT/PATCH) | `MODULO_AUTH_MAX_ATTEMPTS` (default 10) | `MODULO_AUTH_WINDOW_SECONDS` (default 60s) |
+| Auth endpoints (all POST/PUT/PATCH) | `FARNA_CONTROL_AUTH_MAX_ATTEMPTS` (default 10) | `FARNA_CONTROL_AUTH_WINDOW_SECONDS` (default 60s) |
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_AUTH_MAX_ATTEMPTS` | No | `10` | Login attempts per sliding window |
-| `MODULO_AUTH_RATE_LIMIT_ENABLED` | No | `true` | Enable auth-specific rate limiting |
-| `MODULO_AUTH_WINDOW_SECONDS` | No | `60` | Auth rate limit window in seconds |
-| `MODULO_RATELIMIT_BYPASS_TOKEN` | No | – | Shared secret to bypass rate limiting (for CI/CD) |
+| `FARNA_CONTROL_AUTH_MAX_ATTEMPTS` | No | `10` | Login attempts per sliding window |
+| `FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED` | No | `true` | Enable auth-specific rate limiting |
+| `FARNA_CONTROL_AUTH_WINDOW_SECONDS` | No | `60` | Auth rate limit window in seconds |
+| `FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN` | No | – | Shared secret to bypass rate limiting (for CI/CD) |
 
 Rate limiting uses Redis sliding window (ZADD + ZREMRANGEBYSCORE). Falls back to in-memory no-op without Redis. Auth rate limiter requires Redis and is disabled without it.
 
@@ -479,7 +479,7 @@ Rate limiting uses Redis sliding window (ZADD + ZREMRANGEBYSCORE). Falls back to
 | `MODULO_KUBERNETES_ENABLED` | For Kubernetes | – | Registers the `kubernetes`/`k8s` runtime provider when set to any value except an explicit negative (`0`, `false`, `no`, `off`); unset/falsy leaves it unregistered. In-cluster auth is used when `KUBERNETES_SERVICE_HOST` is set, otherwise the standard kubeconfig chain (`KUBECONFIG` / default path). |
 | `MODULO_KUBERNETES_NAMESPACE` | No | `modulo` | Namespace the provider creates workspace pods in. |
 | `MODULO_KUBERNETES_SERVICE_ACCOUNT` | No | `default` | ServiceAccount the workspace pods run under. |
-| `MODULO_MAX_LOCAL_CONCURRENCY` | No | `2` | Max concurrent local agents (LocalRuntimeProvider) |
+| `FARNA_CONTROL_MAX_LOCAL_CONCURRENCY` | No | `2` | Max concurrent local agents (LocalRuntimeProvider) |
 | `E2B_SANDBOX_USD_PER_HOUR` | No | `0.13` | Hourly USD rate for an E2B sandbox, used to estimate per-run agent runtime cost from wall-clock time; default reflects the opencode template (2 vCPU / 2 GiB) rate; set to your E2B sandbox rate. |
 | `RUN_API_KEY_DEFAULT_TTL_SECONDS` | No | `900` | Per-run agent runtime API key TTL floor (min 300, max 86400) |
 | `SANDBOX_PROVISIONING_TIMEOUT_SECONDS` | No | `90` | Timeout for sandbox workspace provisioning (min 15, max 600) |
@@ -512,7 +512,7 @@ LOAD.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_WORK_ITEM_REFS_CAP` | No | `100` | Unified cap (clamped to `[1, 100000]`) on work-item references carried through the refs pipeline: self-report normalization, the finalize merge, and node-input injection all read this one value. When more refs are supplied, drops drain lowest-provenance first (agent → derived → caller, then array position) and are counted. A pipeline declaring `work_item_refs_required: true` in its `run_context_defaults` refuses a delivery that supplied no refs: HTTP 422 with a `work_item_refs_required` error on the MCP and webhook paths, and a 422 with a prose detail (`This pipeline requires work_item_refs but none were supplied`) on the REST path. |
+| `FARNA_CONTROL_WORK_ITEM_REFS_CAP` | No | `100` | Unified cap (clamped to `[1, 100000]`) on work-item references carried through the refs pipeline: self-report normalization, the finalize merge, and node-input injection all read this one value. When more refs are supplied, drops drain lowest-provenance first (agent → derived → caller, then array position) and are counted. A pipeline declaring `work_item_refs_required: true` in its `run_context_defaults` refuses a delivery that supplied no refs: HTTP 422 with a `work_item_refs_required` error on the MCP and webhook paths, and a 422 with a prose detail (`This pipeline requires work_item_refs but none were supplied`) on the REST path. |
 | `MODULO_AGENT_MINT_BUDGET_LIMIT` | No | `500` | Maximum agent-sourced work items that may mint journey rows per organization in one rolling budget window. Read per call, so a change applies without a restart. Only consulted when the org setting `work_item_agent_minting_enabled` is on. Malformed or out-of-range values fall back to the default; the budget guard itself fails open (an error allows the mint and logs) so a cost cap never blocks run finalization. |
 | `MODULO_AGENT_MINT_BUDGET_WINDOW_MINUTES` | No | `60` | Length in minutes of the rolling agent-mint budget window. Read per call alongside `MODULO_AGENT_MINT_BUDGET_LIMIT`; malformed or out-of-range values fall back to the default. |
 
@@ -522,19 +522,19 @@ LOAD.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_PLUGIN_DISCOVERY` | No | `true` | Enable automatic plugin discovery |
-| `MODULO_AGENT_FAILURE_ELEVATION_ENABLED` | No | `true` | When a sandbox node reports agent_status=failed, terminalize the run as failed |
-| `MODULO_IDEMPOTENCY_GATE_ENABLED` | No | `true` | Enable sandbox idempotency gate (re-run skip for single sandbox nodes) |
-| `MODULO_CONNECTOR_WRITE_GATE_ENABLED` | No | `false` | Enable connector-write idempotency gate (skip byte-identical re-executed writes) |
-| `MODULO_SEED_DEMO_ORGS` | No | `false` | Seed demo organizations with signed licenses on boot (gated framework) |
+| `FARNA_CONTROL_PLUGIN_DISCOVERY` | No | `true` | Enable automatic plugin discovery |
+| `FARNA_CONTROL_AGENT_FAILURE_ELEVATION_ENABLED` | No | `true` | When a sandbox node reports agent_status=failed, terminalize the run as failed |
+| `FARNA_CONTROL_IDEMPOTENCY_GATE_ENABLED` | No | `true` | Enable sandbox idempotency gate (re-run skip for single sandbox nodes) |
+| `FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED` | No | `false` | Enable connector-write idempotency gate (skip byte-identical re-executed writes) |
+| `FARNA_CONTROL_SEED_DEMO_ORGS` | No | `false` | Seed demo organizations with signed licenses on boot (gated framework) |
 | `MODULO_PRODUCT_ANALYTICS_ENDPOINT_URL` | No | `""` | Endpoint URL for opt-in aggregate product analytics. Empty disables. |
 | `MODULO_PRODUCT_ANALYTICS_INSTANCE_SECRET` | No | `""` | Instance secret for HMAC signing product analytics. Empty disables. |
 | `MODULO_PRODUCT_ANALYTICS_ENABLED` | No | unset | Explicit instance-level product-analytics switch (`1`/`true`/`yes` = ON; `false`/`0`/`no` = OFF; a set-but-blank value reads OFF). `core/product_analytics/consent.resolve_instance_analytics_switch` resolves it in this order, first match wins: (1) the stored `system_config.product_analytics_enabled` value, written or cleared by a system admin via `PUT /api/v1/product-analytics/instance-switch` (or the switch on `/admin/product-analytics`); (2) this variable, honored only when no stored value exists; (3) the installed license's `product_analytics_required` claim, which sets the default ON; (4) otherwise OFF. An explicit operator value always wins – including OFF over a license that requires analytics – because the license claim is a partner expectation (a contractual default), never a control. `GET /api/v1/product-analytics/transparency` reports the effective switch and its source (`operator` / `environment` / `licence` / `default`), so an operator can always see why analytics is on and turn it off. Analytics never changes an organization's plan or tier. `MODULO_PRODUCT_ANALYTICS_ENDPOINT_URL` and `MODULO_PRODUCT_ANALYTICS_INSTANCE_SECRET` are the transport settings alongside this switch: either being empty disables delivery. |
-| `MODULO_MONITOR_DOMAINS` | No | `""` | Space-separated CSP connect-src expressions (e.g. custom Grafana Faro collectors) |
-| `MODULO_ARTIFACTS_ENABLED` | No | `true` | Enable pipeline artifact storage |
-| `MODULO_ARTIFACTS_DIR` | No | `""` | Base directory for artifact files. Empty defaults to `<backend>/.data/artifacts` resolved by the store factory. |
-| `MODULO_WORKSPACE_INPUTS_ENABLED` | No | `false` | Managed workspace inputs (MWI) kill-switch. When OFF (default), a `sandbox_agent` node that declares `workspace_inputs` short-circuits with `sandbox.workspace_inputs_disabled` and provisions nothing; existing sandbox behavior is unchanged. Operators enable it explicitly once MWI is ready for production use |
-| `MODULO_MULTI_ORG_ENABLED` | No | `false` | Multi-organization mode. OFF (the single-org default for self-hosted, ADR 005) blocks org creation, rejects org-slug login and makes the login-context endpoint always report single-org. ON enables multi-org behavior and the org-slug login path. A multi-org deployment also refuses a globally scoped secrets backend (e.g. Vault) for credential references rather than risk a cross-org read |
+| `FARNA_CONTROL_MONITOR_DOMAINS` | No | `""` | Space-separated CSP connect-src expressions (e.g. custom Grafana Faro collectors) |
+| `FARNA_CONTROL_ARTIFACTS_ENABLED` | No | `true` | Enable pipeline artifact storage |
+| `FARNA_CONTROL_ARTIFACTS_DIR` | No | `""` | Base directory for artifact files. Empty defaults to `<backend>/.data/artifacts` resolved by the store factory. |
+| `FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED` | No | `false` | Managed workspace inputs (MWI) kill-switch. When OFF (default), a `sandbox_agent` node that declares `workspace_inputs` short-circuits with `sandbox.workspace_inputs_disabled` and provisions nothing; existing sandbox behavior is unchanged. Operators enable it explicitly once MWI is ready for production use |
+| `FARNA_CONTROL_MULTI_ORG_ENABLED` | No | `false` | Multi-organization mode. OFF (the single-org default for self-hosted, ADR 005) blocks org creation, rejects org-slug login and makes the login-context endpoint always report single-org. ON enables multi-org behavior and the org-slug login path. A multi-org deployment also refuses a globally scoped secrets backend (e.g. Vault) for credential references rather than risk a cross-org read |
 | `MODULO_SCHEMA_VALIDATOR_MODE` | No | `lenient` | Schema-validator strictness, one of `lenient` or `strict`; any other value resolves to `lenient`. Read directly from the environment as a **first-boot seed only**: once the effective setting exists in the DB (per-org `settings_json`, then the instance-wide `system_config` row) that value wins. See [`docs/configuration-precedence.md`](./configuration-precedence.md) |
 
 ---
@@ -640,9 +640,9 @@ The same SMTP setup also sends the **error-tracking**, **readiness** and **worke
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_ENV` | No | `development` | Deployment environment name. Applied to error-tracking events and structured logs, and shown as `Environment: <value>` on error-tracking alert emails (an empty value renders as `N/A`) and on [readiness health](#readiness-health-alerts) / [worker-liveness watchdog](#worker-liveness-watchdog) alerts (an empty value renders as `unknown`). The Compose deployment sets it to `production` (`deploy/compose/docker-compose.prod.yml`) and the Helm chart defaults it to `production` (`deploy/helm/modulo/templates/configmap.yaml`). |
+| `FARNA_CONTROL_ENV` | No | `development` | Deployment environment name. Applied to error-tracking events and structured logs, and shown as `Environment: <value>` on error-tracking alert emails (an empty value renders as `N/A`) and on [readiness health](#readiness-health-alerts) / [worker-liveness watchdog](#worker-liveness-watchdog) alerts (an empty value renders as `unknown`). The Compose deployment sets it to `production` (`deploy/compose/docker-compose.prod.yml`) and the Helm chart defaults it to `production` (`deploy/helm/modulo/templates/configmap.yaml`). |
 | `ALERT_CONTEXT` | No | – | Operator-supplied free text appended verbatim to every readiness and [worker-liveness watchdog](#worker-liveness-watchdog) alert – runbook links, escalation notes, ticket pointers. One item per line; blank lines are dropped and the rendering is bounded (at most 20 lines, 300 chars each, the environment line always first). Carried on email, generic webhook and Teams channels alike. Never written to logs (the setting is `repr=False`). |
-| `ALERT_ENVIRONMENTS` | No | – (alerts in every environment) | Comma-separated allowlist of deployment environments allowed to SEND operator alerts. Matched case-insensitively and trimmed against `MODULO_ENV` (`"production"`, `" production "` and `"Production"` are the same entry). Unset or blank (the default) = alerts fire in **every** environment, so a self-hosted install that never sets it keeps alerting out of the box – the allowlist is opt-in noise control, not a new default-off. When set, the [readiness health](#readiness-health-alerts) alert and the [worker-liveness watchdog](#worker-liveness-watchdog) send on **no channel at all** – email, generic webhook and Teams alike; the name is channel-neutral precisely because the gate suppresses the whole fan-out – unless this deployment's `MODULO_ENV` is listed. Health is still evaluated and the watchdog still ticks; only the send is skipped, and **each channel logs the suppression with its own message**: there is no single shared suppression log line. The watchdog logs `watchdog.alert_suppressed_environment conditions=<list> (ALERT_ENVIRONMENTS does not include environment=<env>)`, at most once per hour and only while a condition is active (healthy ticks log nothing); the readiness cron logs `health_alerts.disabled: readiness alerting is off for this environment - set ALERT_ENVIRONMENTS to include it …`, at most once per hour. Both also clear (never strand) their incident state while excluded, so a later re-inclusion can alert again. Example: the Fly staging deployment sets `ALERT_ENVIRONMENTS=production` (`deploy/fly/fly.staging.toml`, same value as `fly.toml`) so staging – a CI-only E2E environment with no live workload – stops paging the operator while `control.farna.dev` keeps alerting. The single parse lives in `core.alert_context.alerting_enabled_for_environment`, shared by both alert paths so they can never disagree. |
+| `ALERT_ENVIRONMENTS` | No | – (alerts in every environment) | Comma-separated allowlist of deployment environments allowed to SEND operator alerts. Matched case-insensitively and trimmed against `FARNA_CONTROL_ENV` (`"production"`, `" production "` and `"Production"` are the same entry). Unset or blank (the default) = alerts fire in **every** environment, so a self-hosted install that never sets it keeps alerting out of the box – the allowlist is opt-in noise control, not a new default-off. When set, the [readiness health](#readiness-health-alerts) alert and the [worker-liveness watchdog](#worker-liveness-watchdog) send on **no channel at all** – email, generic webhook and Teams alike; the name is channel-neutral precisely because the gate suppresses the whole fan-out – unless this deployment's `FARNA_CONTROL_ENV` is listed. Health is still evaluated and the watchdog still ticks; only the send is skipped, and **each channel logs the suppression with its own message**: there is no single shared suppression log line. The watchdog logs `watchdog.alert_suppressed_environment conditions=<list> (ALERT_ENVIRONMENTS does not include environment=<env>)`, at most once per hour and only while a condition is active (healthy ticks log nothing); the readiness cron logs `health_alerts.disabled: readiness alerting is off for this environment - set ALERT_ENVIRONMENTS to include it …`, at most once per hour. Both also clear (never strand) their incident state while excluded, so a later re-inclusion can alert again. Example: the Fly staging deployment sets `ALERT_ENVIRONMENTS=production` (`deploy/fly/fly.staging.toml`, same value as `fly.toml`) so staging – a CI-only E2E environment with no live workload – stops paging the operator while `control.farna.dev` keeps alerting. The single parse lives in `core.alert_context.alerting_enabled_for_environment`, shared by both alert paths so they can never disagree. |
 
 The readiness and [worker-liveness watchdog](#worker-liveness-watchdog) emails, webhooks and Teams messages carry the environment line and `ALERT_CONTEXT`; the out-of-process Gatus sentinel and the error-tracking pipeline do not use `ALERT_CONTEXT`. The `ALERT_ENVIRONMENTS` allowlist gates the readiness and worker-liveness watchdog alerts on **every** channel (it is not an email-only switch) and does not apply to the Gatus sentinel or the error-tracking pipeline.
 
@@ -681,9 +681,9 @@ An in-process asyncio task running in the web-process FastAPI lifespan that read
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_SSE_MAX_CONNECTIONS_PER_ORG` | No | `100` | Max concurrent SSE connections per org |
-| `MODULO_SSE_MAX_CONNECTIONS_PER_USER` | No | `10` | Max concurrent SSE connections per user |
-| `MODULO_SSE_ZOMBIE_TIMEOUT_SECONDS` | No | `2.0` | Zombie connection timeout in seconds |
+| `FARNA_CONTROL_SSE_MAX_CONNECTIONS_PER_ORG` | No | `100` | Max concurrent SSE connections per org |
+| `FARNA_CONTROL_SSE_MAX_CONNECTIONS_PER_USER` | No | `10` | Max concurrent SSE connections per user |
+| `FARNA_CONTROL_SSE_ZOMBIE_TIMEOUT_SECONDS` | No | `2.0` | Zombie connection timeout in seconds |
 
 ---
 
@@ -691,8 +691,8 @@ An in-process asyncio task running in the web-process FastAPI lifespan that read
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_CSRF_ENABLED` | No | `true` | Enable CSRF protection middleware |
-| `MODULO_CSRF_EXEMPT_PATHS` | No | `/api/v1/health,/api/v1/triggers,/api/v1/auth,/api/v1/webhooks` | Comma-separated paths exempt from CSRF |
+| `FARNA_CONTROL_CSRF_ENABLED` | No | `true` | Enable CSRF protection middleware |
+| `FARNA_CONTROL_CSRF_EXEMPT_PATHS` | No | `/api/v1/health,/api/v1/triggers,/api/v1/auth,/api/v1/webhooks` | Comma-separated paths exempt from CSRF |
 
 ---
 
@@ -700,8 +700,8 @@ An in-process asyncio task running in the web-process FastAPI lifespan that read
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_SCIM_TOKEN` | No | – | SCIM bearer token for identity provider provisioning |
-| `MODULO_SCIM_DEFAULT_ORG_ID` | No | – | Default org ID for SCIM provisioning; uses first org if empty |
+| `FARNA_CONTROL_SCIM_TOKEN` | No | – | SCIM bearer token for identity provider provisioning |
+| `FARNA_CONTROL_SCIM_DEFAULT_ORG_ID` | No | – | Default org ID for SCIM provisioning; uses first org if empty |
 
 ---
 
@@ -722,7 +722,7 @@ An in-process asyncio task running in the web-process FastAPI lifespan that read
 
 See [`docs/security/secret-management.md`](./security/secret-management.md) for Vault and AWS Secrets Manager configuration.
 
-Secrets backend selection: `MODULO_SECRETS_BACKEND` (default: `fernet`, options: `fernet`, `vault`, `aws`).
+Secrets backend selection: `FARNA_CONTROL_SECRETS_BACKEND` (default: `fernet`, options: `fernet`, `vault`, `aws`).
 
 ---
 
@@ -794,26 +794,26 @@ private IP ranges.
 ## Health Checks
 
 Per-check timeout limits for `/healthz/ready` dependency probes. The global
-value (`MODULO_HEALTH_TIMEOUT_SECONDS`) applies to every check unless a
+value (`FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS`) applies to every check unless a
 per-check override is set to a positive value.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_HEALTH_TIMEOUT_SECONDS` | No | `5` | Global timeout for each readiness dependency check (seconds) |
-| `MODULO_HEALTH_DB_TIMEOUT_SECONDS` | No | `0` | Database check timeout; `0` = use global |
-| `MODULO_HEALTH_REDIS_TIMEOUT_SECONDS` | No | `0` | Redis check timeout; `0` = use global |
-| `MODULO_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS` | No | `0` | Checkpointer schema check timeout; `0` = use global |
-| `MODULO_HEALTH_MIGRATIONS_TIMEOUT_SECONDS` | No | `0` | Alembic migration check timeout; `0` = use global |
-| `MODULO_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS` | No | `1` | Database-hygiene check timeout (seconds); `0` = use global |
-| `MODULO_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES` | No | `10000` | Database-hygiene: absolute dead-tuple floor - a table's dead-tuple ratio is only acted on once it carries at least this many dead rows (minimum `0`; `0` considers every table, including zero-size relations) |
-| `MODULO_HEALTH_DB_HYGIENE_DEAD_RATIO` | No | `0.60` | Database-hygiene: worst-table dead-tuple ratio at/above which a table over the floor grades `degraded` (`0`–`1`) |
+| `FARNA_CONTROL_HEALTH_TIMEOUT_SECONDS` | No | `5` | Global timeout for each readiness dependency check (seconds) |
+| `FARNA_CONTROL_HEALTH_DB_TIMEOUT_SECONDS` | No | `0` | Database check timeout; `0` = use global |
+| `FARNA_CONTROL_HEALTH_REDIS_TIMEOUT_SECONDS` | No | `0` | Redis check timeout; `0` = use global |
+| `FARNA_CONTROL_HEALTH_CHECKPOINTER_TIMEOUT_SECONDS` | No | `0` | Checkpointer schema check timeout; `0` = use global |
+| `FARNA_CONTROL_HEALTH_MIGRATIONS_TIMEOUT_SECONDS` | No | `0` | Alembic migration check timeout; `0` = use global |
+| `FARNA_CONTROL_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS` | No | `1` | Database-hygiene check timeout (seconds); `0` = use global |
+| `FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES` | No | `10000` | Database-hygiene: absolute dead-tuple floor - a table's dead-tuple ratio is only acted on once it carries at least this many dead rows (minimum `0`; `0` considers every table, including zero-size relations) |
+| `FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO` | No | `0.60` | Database-hygiene: worst-table dead-tuple ratio at/above which a table over the floor grades `degraded` (`0`–`1`) |
 
 A check that exceeds its limit reports `degraded` (redis/checkpointer/migrations) or
 `unavailable` (database) with a "timed out after Ns" detail message instead of blocking
 readiness indefinitely.
 
 The database-hygiene probe is the exception to that wording (FAR-1510). When it does not
-complete within `MODULO_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS` it reports `degraded` with the
+complete within `FARNA_CONTROL_HEALTH_DB_HYGIENE_TIMEOUT_SECONDS` it reports `degraded` with the
 detail "database-hygiene probe did not complete within Ns (likely an event-loop stall; see
 event_loop_lag) – hygiene not measured", and that result is ADVISORY: it stays visible in
 the readiness body but is excluded from the aggregate gate, so on its own it neither flips
@@ -821,8 +821,8 @@ the readiness body but is excluded from the aggregate gate, so on its own it nei
 measured, so there is no hygiene verdict to act on – the stall itself is what the advisory
 `event_loop_lag` check reports.
 
-The database-hygiene sub-check's two thresholds (`MODULO_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES`,
-`MODULO_HEALTH_DB_HYGIENE_DEAD_RATIO`) are grading settings, not timeouts: the check
+The database-hygiene sub-check's two thresholds (`FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES`,
+`FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO`) are grading settings, not timeouts: the check
 reports the worst table from `pg_stat_user_tables` plus this database's freeze age
 against `autovacuum_freeze_max_age`, and grades `degraded` (never `unavailable`, so it
 never 503s readiness on its own) when either threshold is breached. A completed reading
@@ -834,13 +834,13 @@ advisory.
 When the migrations check reports repo-vs-DB divergence, its detail links the most recent
 run of the configured deploy workflow so an operator can jump straight to it. The lookup
 is best-effort and never gates readiness: it is skipped when no `GITHUB_TOKEN` /
-`GITHUB_REVIEWBOT_PAT` is set or when `MODULO_DEPLOY_RUN_REPO` is empty.
+`GITHUB_REVIEWBOT_PAT` is set or when `FARNA_CONTROL_DEPLOY_RUN_REPO` is empty.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_DEPLOY_RUN_REPO` | No | `farnalabs/farna-control` | `owner/repo` whose deploy workflow run is linked; empty disables the lookup |
-| `MODULO_DEPLOY_RUN_WORKFLOW` | No | `deploy.yml` | Workflow file name (or numeric id) whose latest run is linked |
-| `MODULO_DEPLOY_RUN_API_BASE` | No | `https://api.github.com` | GitHub API base URL; a GitHub Enterprise Server deployment sets `https://<host>/api/v3` |
+| `FARNA_CONTROL_DEPLOY_RUN_REPO` | No | `farnalabs/farna-control` | `owner/repo` whose deploy workflow run is linked; empty disables the lookup |
+| `FARNA_CONTROL_DEPLOY_RUN_WORKFLOW` | No | `deploy.yml` | Workflow file name (or numeric id) whose latest run is linked |
+| `FARNA_CONTROL_DEPLOY_RUN_API_BASE` | No | `https://api.github.com` | GitHub API base URL; a GitHub Enterprise Server deployment sets `https://<host>/api/v3` |
 
 ---
 
@@ -859,17 +859,17 @@ Operator-controlled emergency admin recovery for orgs whose only admin is
 locked out (see
 `docs/operations/break-glass-admin-recovery-runbook.md`). The CLI connects to
 the database as the dedicated `farna_control_breakglass` role via
-`MODULO_BREAK_GLASS_DATABASE_URL` – never the application `DATABASE_URL`.
+`FARNA_CONTROL_BREAK_GLASS_DATABASE_URL` – never the application `DATABASE_URL`.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_BREAK_GLASS_ENABLED` | No | from secret presence | Enable CLI `activate` + login-hook consumption. Deactivate/force/status stay operable while secrets + URL are present even when false |
-| `MODULO_BREAK_GLASS_SECRET` | Yes (when ENABLED) | – | Primary operator secret; must differ from `_STANDBY_SECRET`, minimum length |
-| `MODULO_BREAK_GLASS_STANDBY_SECRET` | Yes (when ENABLED) | – | Standby operator secret for rotation |
-| `MODULO_BREAK_GLASS_TTL_MINUTES` | No | `1440` | Default credential TTL in minutes (min 1, ≤ `MODULO_BREAK_GLASS_MAX_TTL_MINUTES`) |
-| `MODULO_BREAK_GLASS_MAX_TTL_MINUTES` | No | `4320` | Hard TTL cap (72h) |
-| `MODULO_BREAK_GLASS_DATABASE_URL` | Yes (when ENABLED) | – | Dedicated `farna_control_breakglass` role connection string (BYPASSRLS; never the app `DATABASE_URL`) |
-| `MODULO_BREAK_GLASS_BOOT_FAILURE_MODE` | No | `warn` | `warn` or `fail` for URL/secret-presence checks; the allow-list/role assertions are FATAL in both modes |
+| `FARNA_CONTROL_BREAK_GLASS_ENABLED` | No | from secret presence | Enable CLI `activate` + login-hook consumption. Deactivate/force/status stay operable while secrets + URL are present even when false |
+| `FARNA_CONTROL_BREAK_GLASS_SECRET` | Yes (when ENABLED) | – | Primary operator secret; must differ from `_STANDBY_SECRET`, minimum length |
+| `FARNA_CONTROL_BREAK_GLASS_STANDBY_SECRET` | Yes (when ENABLED) | – | Standby operator secret for rotation |
+| `FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES` | No | `1440` | Default credential TTL in minutes (min 1, ≤ `FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES`) |
+| `FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES` | No | `4320` | Hard TTL cap (72h) |
+| `FARNA_CONTROL_BREAK_GLASS_DATABASE_URL` | Yes (when ENABLED) | – | Dedicated `farna_control_breakglass` role connection string (BYPASSRLS; never the app `DATABASE_URL`) |
+| `FARNA_CONTROL_BREAK_GLASS_BOOT_FAILURE_MODE` | No | `warn` | `warn` or `fail` for URL/secret-presence checks; the allow-list/role assertions are FATAL in both modes |
 
 Operational procedure: `docs/operations/break-glass-admin-recovery-runbook.md`.
 
@@ -884,16 +884,16 @@ SECRET_KEY=<random-64-char-string>
 FERNET_KEY=<random-44-char-base64>
 
 # Server
-MODULO_PUBLIC_URL=https://modulo.example.com
+FARNA_CONTROL_PUBLIC_URL=https://modulo.example.com
 CORS_ORIGINS=https://app.modulo.example.com,https://admin.modulo.example.com
 CORS_MAX_AGE=3600
-MODULO_LOG_LEVEL=INFO
+FARNA_CONTROL_LOG_LEVEL=INFO
 
 # Redis (required for run dispatch and cron firing)
 REDIS_URL=redis://redis:6379/0
 
 # Observability (optional)
-MODULO_TELEMETRY_ENABLED=false
+FARNA_CONTROL_TELEMETRY_ENABLED=false
 ```
 
 ---

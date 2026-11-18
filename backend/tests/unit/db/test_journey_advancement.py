@@ -129,7 +129,7 @@ def _isolate_settings_caches() -> Generator[None, None, None]:
     test co-located in the same xdist shard silently drops the agent ref it
     expects to keep (observed on shard 1 of CI run 42315003224: four journey
     tests failed with an effective cap of 1), and a non-default
-    ``MODULO_WORK_ITEM_REFS_CAP`` from another module can leak the same way.
+    ``FARNA_CONTROL_WORK_ITEM_REFS_CAP`` from another module can leak the same way.
     Clearing both caches around each test makes this module independent of
     xdist co-location, mirroring ``test_work_item_refs_slice2b.py``'s module
     fixture.

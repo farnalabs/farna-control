@@ -59,7 +59,7 @@ from tests.unit.api.route_introspection import (
 # Key = (method, path) ; value = reason.
 # ---------------------------------------------------------------------------
 EXEMPT: dict[tuple[str, str], str] = {
-    # SCIM: shared-secret MODULO_SCIM_TOKEN is the authorization (phase 1).
+    # SCIM: shared-secret FARNA_CONTROL_SCIM_TOKEN is the authorization (phase 1).
     ("POST", "/scim/v2/Users"): "SCIM shared-secret channel",
     ("PUT", "/scim/v2/Users/{user_id}"): "SCIM shared-secret channel",
     ("PATCH", "/scim/v2/Users/{user_id}"): "SCIM shared-secret channel",

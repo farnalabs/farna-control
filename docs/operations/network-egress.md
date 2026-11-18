@@ -34,13 +34,13 @@ This satisfies the "no external DNS calls in default config" requirement.
 
 | Setting | Default | Egress When Enabled |
 |---|---|---|
-| `MODULO_TELEMETRY_ENABLED` | `false` | When `true`: writes JSON lines to stdout (no network) |
+| `FARNA_CONTROL_TELEMETRY_ENABLED` | `false` | When `true`: writes JSON lines to stdout (no network) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | not set | When set + telemetry enabled: HTTPS POST to configured endpoint |
 | OTel test connection (`POST /api/v1/settings/observability/test`) | – | Manual test: HTTPS POST to user-specified endpoint |
 
-✅ **Data residency OK**: Telemetry is off by default. When opted in via `MODULO_TELEMETRY_ENABLED=true` (Settings > Runtime Configuration), only aggregate counters and sanitized error categories are exported, no personal data, pipeline content, API keys, or raw error messages. Organization ids are truncated hashes, not raw identifiers.
+✅ **Data residency OK**: Telemetry is off by default. When opted in via `FARNA_CONTROL_TELEMETRY_ENABLED=true` (Settings > Runtime Configuration), only aggregate counters and sanitized error categories are exported, no personal data, pipeline content, API keys, or raw error messages. Organization ids are truncated hashes, not raw identifiers.
 
-> **Cross-process note:** the runtime-config override applies to the web process immediately. The SAQ worker is a separate process with its own store instance, so for consistent cross-process behavior, set `MODULO_TELEMETRY_ENABLED` in the deployment environment rather than relying on the runtime override.
+> **Cross-process note:** the runtime-config override applies to the web process immediately. The SAQ worker is a separate process with its own store instance, so for consistent cross-process behavior, set `FARNA_CONTROL_TELEMETRY_ENABLED` in the deployment environment rather than relying on the runtime override.
 
 ### LangSmith
 
@@ -124,7 +124,7 @@ No third-party CDNs, analytics scripts, or tracking pixels are loaded.
 
 | Category | Default Egress | User-Configurable Egress |
 |---|---|---|
-| Telemetry (OTel) | None | Yes – when `MODULO_TELEMETRY_ENABLED=true` |
+| Telemetry (OTel) | None | Yes – when `FARNA_CONTROL_TELEMETRY_ENABLED=true` |
 | Connectors | None | Yes – per-connector API config |
 | Webhooks | None | Yes – per-webhook URL config |
 | SSO/OIDC | None | Yes – IdP discovery URL |

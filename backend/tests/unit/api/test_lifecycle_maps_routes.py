@@ -1194,7 +1194,7 @@ def test_operator_is_denied_when_developer_mode_is_off() -> None:
 
     The retained lifecycle-map API is reachable only on the internal path: the
     router dependency (``_require_internal_lifecycle_map_access``) demands
-    ``MODULO_DEV_MODE`` *and* the ``library.search.in_dev`` operator grant. Every
+    ``FARNA_CONTROL_DEV_MODE`` *and* the ``library.search.in_dev`` operator grant. Every
     other route test runs with developer mode ON, so the dev-mode refusal branch
     was implemented but never reached. An operator on an Alpha deployment must
     get 403 and the service layer must never run — for a read and a mutation.

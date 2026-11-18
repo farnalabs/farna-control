@@ -765,7 +765,7 @@ class TestRunSystemWebStartupFailure:
         worker.cron_jobs = []
         # What a fail-closed licence anchor RuntimeError looks like when it
         # escapes ``Worker.start()``'s startup hooks.
-        worker.start = AsyncMock(side_effect=RuntimeError("MODULO_LICENSE_PUBLIC_KEY is not configured"))
+        worker.start = AsyncMock(side_effect=RuntimeError("FARNA_CONTROL_LICENSE_PUBLIC_KEY is not configured"))
         worker.stop = AsyncMock()
 
         monkeypatch.setattr(sw, "_assert_system_auth_configured", MagicMock())

@@ -352,7 +352,7 @@ def webhook_client() -> Generator[TestClient, None, None]:
         # Present a PROVISIONED system role. The predicate reads a process-global
         # flag set when the system engine is first built, so without this patch
         # the answer depends on which test module initialised the engine first
-        # (unset MODULO_SYSTEM_DATABASE_URL here → fallback → every delivery
+        # (unset FARNA_CONTROL_SYSTEM_DATABASE_URL here → fallback → every delivery
         # 503s). The dedicated 503 test patches this same seam to True.
         patch("farna.api.routes.webhooks.system_engine_is_fallback", return_value=False),
     ):

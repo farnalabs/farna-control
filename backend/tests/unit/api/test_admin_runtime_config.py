@@ -220,7 +220,7 @@ class TestRuntimeConfigRoute:
         assert "must be an integer" in resp.json()["detail"]
 
     def test_put_hot_key_runs_apply_hook(self, admin_client: TestClient) -> None:
-        """MODULO_LOG_LEVEL override is applied to the root logger immediately."""
+        """FARNA_CONTROL_LOG_LEVEL override is applied to the root logger immediately."""
         import logging
 
         resp = admin_client.put("/api/v1/admin/runtime-config", json={"overrides": {"FARNA_CONTROL_LOG_LEVEL": "ERROR"}})

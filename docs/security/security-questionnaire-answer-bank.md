@@ -131,7 +131,7 @@ Evidence: `docs/security/secret-management.md`; `.semgrep/credential_in_state.py
 A: Local accounts, OIDC, SAML 2.0, or scoped API keys. SCIM 2.0 is available for
 provisioning and deprovisioning. Two conditions apply: SSO (OIDC/SAML) and SCIM
 are **Team-tier** features - an unlicensed Community install answers HTTP 402 -
-and SCIM additionally requires `MODULO_SCIM_TOKEN` to be configured, answering
+and SCIM additionally requires `FARNA_CONTROL_SCIM_TOKEN` to be configured, answering
 "SCIM is not configured - set MODULO_SCIM_TOKEN" otherwise.
 
 Evidence: `docs/product-map/auth/oidc-integration.md`;
@@ -274,7 +274,7 @@ product is Team-tier**: browsing the trail, verifying the chain in place
 reports `truncated` when it stops short), exporting it, scanning it and taking
 the offline-verifiable, Ed25519-signed evidence pack all need the Team-tier
 `audit_viewer` feature plus the `audit.manage` permission. The signed evidence
-pack additionally needs a configured `MODULO_EVIDENCE_SIGNING_KEY`. On a
+pack additionally needs a configured `FARNA_CONTROL_EVIDENCE_SIGNING_KEY`. On a
 Community install the events exist and are hash-chained in the customer's own
 database, but no admin route through the product can browse, verify or export
 them.

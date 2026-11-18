@@ -63,7 +63,7 @@ def _make_settings() -> Settings:
         modulo_admin_password="testpass",
         modulo_auth_rate_limit_enabled=False,
         redis_url="",
-        # Explicit: sibling unit/api conftests leak MODULO_CSRF_ENABLED=false into the
+        # Explicit: sibling unit/api conftests leak FARNA_CONTROL_CSRF_ENABLED=false into the
         # process env, and this module's CSRF pair tests must be env-independent.
         modulo_csrf_enabled=True,
     )

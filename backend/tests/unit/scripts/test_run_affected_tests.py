@@ -6,7 +6,7 @@ Guards two regressions in the pre-push affected-tests gate:
    ``test_metrics_ingest.py`` (bare ``test_{stem}*`` prefix matching used to).
 2. Cross-suite process mixing: suites (unit / integration / bdd) must be run
    as SEPARATE pytest processes — ``tests/bdd/conftest.py`` sets
-   ``DATABASE_URL``/``MODULO_DB`` at import time, and when a BDD file and an
+   ``DATABASE_URL``/``FARNA_CONTROL_DB`` at import time, and when a BDD file and an
    integration file ran in one process, the BDD env leaked into the
    integration tests (sqlite engine vs testcontainers Postgres). The runner's
    grouping loop maps each suite to one ``_run_pytest`` call, so the output

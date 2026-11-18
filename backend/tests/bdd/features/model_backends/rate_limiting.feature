@@ -37,7 +37,7 @@ Feature: API Rate Limiting
     Then a new POST request to /api/v1/runs succeeds
 
   Scenario: Rate limit bypass token skips rate limiting
-    Given a valid MODULO_RATELIMIT_BYPASS_TOKEN is configured
+    Given a valid FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN is configured
     When I send a POST request to /api/v1/runs with the bypass token
     Then the request is allowed even if the rate limit would be exceeded
 

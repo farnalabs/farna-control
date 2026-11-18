@@ -876,7 +876,7 @@ class TestAuthenticatedRoutesStillGuarded:
 
 class TestOidcLoginPublicUrlBridge:
     """FAR-1159 prove-the-fix: the OIDC login redirect is anchored to the
-    effective MODULO_PUBLIC_URL, so a runtime override wins over Settings.
+    effective FARNA_CONTROL_PUBLIC_URL, so a runtime override wins over Settings.
 
     This exercises the handler body (SSO enabled), which the 402/401 gating
     tests above never reach, and asserts the redirect_uri is built from the

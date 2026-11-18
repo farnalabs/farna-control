@@ -6,7 +6,7 @@ already supported the fix, but the documented path never told the operator:
 * **F4** - the production compose path created no user, so a healthy stack
   answered ``401`` on login. The docs now name a first-run account command and
   a login verification step; the command is asserted to exist.
-* **F6** - the quickstart omitted ``MODULO_SYSTEM_DATABASE_URL``, so
+* **F6** - the quickstart omitted ``FARNA_CONTROL_SYSTEM_DATABASE_URL``, so
   ``dispatcher_reconcile`` never ran and ``/healthz/ready`` returned ``503``
   forever. The quickstart now sets it and documents the ``"status": "ok"``
   readiness check.
@@ -35,7 +35,7 @@ def _read(path: Path) -> str:
 
 def test_quickstart_sets_the_system_database_url() -> None:
     text = _read(_QUICKSTART_DOC)
-    assert "MODULO_SYSTEM_DATABASE_URL=postgresql+asyncpg://farna_control_system:" in text
+    assert "FARNA_CONTROL_SYSTEM_DATABASE_URL=postgresql+asyncpg://farna_control_system:" in text
 
 
 def test_quickstart_documents_the_readiness_ok_check() -> None:
@@ -55,7 +55,7 @@ def test_production_docs_document_a_first_run_user() -> None:
     assert "farna-control users add" in text
     # Only the exact email ``admin`` (or ``admin@modulo.run``) is seeded with
     # the admin role (farna.db.seed); any other address lands as ``runner``.
-    assert "MODULO_USERS=admin:<password>" in text
+    assert "FARNA_CONTROL_USERS=admin:<password>" in text
 
 
 def test_production_docs_document_a_login_verification() -> None:
@@ -66,11 +66,10 @@ def test_production_docs_document_a_login_verification() -> None:
 
 def test_production_docs_document_the_readiness_requirement() -> None:
     text = _read(_DEPLOYMENT_DOC)
-    # The docs currently use the legacy MODULO_ alias (MODULO_SYSTEM_DATABASE_URL).
-    # The canonical form is FARNA_CONTROL_SYSTEM_DATABASE_URL. This test checks for
-    # the form actually present in the docs; the docs should be updated to the
-    # canonical form in a separate change.
-    assert "MODULO_SYSTEM_DATABASE_URL" in text
+    # The docs name the canonical ``FARNA_CONTROL_`` spelling; the bare
+    # ``MODULO_`` alias is still accepted by Settings but is not what an
+    # operator should be told to set.
+    assert "FARNA_CONTROL_SYSTEM_DATABASE_URL" in text
     assert "dispatcher_reconcile" in text
 
 

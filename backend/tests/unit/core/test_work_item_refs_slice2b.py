@@ -47,7 +47,7 @@ def _isolate_refs_cap_cache() -> None:
 
     ``work_item_refs_cap`` and the ``get_settings`` it reads are ``lru_cache``d
     for the life of the process, so a test in another module that exercises a
-    non-default cap (for example by setting ``MODULO_WORK_ITEM_REFS_CAP`` to a
+    non-default cap (for example by setting ``FARNA_CONTROL_WORK_ITEM_REFS_CAP`` to a
     value that clamps to 1) leaves that value cached and visible here once
     xdist co-locates the modules in a shard. An unpinned test then sees a cap
     of 1 instead of the default 100 and drops a ref it expects to keep. Clear

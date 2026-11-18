@@ -39,7 +39,7 @@ class _ProvisionedSystemSettings:
     """Settings stub presenting a provisioned system database URL.
 
     These BDD scenarios mock the system SESSION but run without
-    ``MODULO_SYSTEM_DATABASE_URL``; the (robust) fallback predicate would
+    ``FARNA_CONTROL_SYSTEM_DATABASE_URL``; the (robust) fallback predicate would
     otherwise 503 every delivery. The created engine is lazy and never
     connects.
     """

@@ -199,7 +199,7 @@ async def test_create_provider_global_dedupe_two_orgs_same_name() -> None:
 async def test_create_provider_global_dedupe_real_system_session() -> None:
     """Regression test for the autobegin bug (FAR-464 CHANGES_REQUESTED #1).
 
-    When MODULO_SYSTEM_DATABASE_URL is set, ``create_provider`` runs the global
+    When FARNA_CONTROL_SYSTEM_DATABASE_URL is set, ``create_provider`` runs the global
     slug scan on the farna_control_system session, which is built with autobegin=False.
     The previous code called ``_unique_provider_id`` without an explicit
     transaction, raising ``InvalidRequestError`` and 503-ing the admin create

@@ -397,11 +397,11 @@ RUN pip install modulo-connector-slack==0.1.0
 
 | Variable | Default | Description |
 |---|---|---|
-| `MODULO_PLUGIN_DISCOVERY` | `true` | Enable automatic plugin discovery at startup. Set to `false` to disable. |
+| `FARNA_CONTROL_PLUGIN_DISCOVERY` | `true` | Enable automatic plugin discovery at startup. Set to `false` to disable. |
 
 ### What happens at startup
 
-1. On application startup, `PluginRegistry.discover_plugins()` is called if `MODULO_PLUGIN_DISCOVERY` is `true`.
+1. On application startup, `PluginRegistry.discover_plugins()` is called if `FARNA_CONTROL_PLUGIN_DISCOVERY` is `true`.
 2. The registry iterates all four entry point groups (`farna.connectors`, `farna.model_backends`, `modulo.evals`, `modulo.schema_types`).
 3. For each entry point, it reads distribution metadata and loads the builder function.
 4. Successful loads are stored keyed by entry point name; failed loads are recorded as unhealthy.

@@ -1143,7 +1143,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > provisioning** surface as a new `feat-scim` behavior tracker
 > (`auth/scim-provisioning.md`). The API-only `/scim/v2/*` surface (Users and
 > Groups CRUD, the `ServiceProviderConfig` document, the shared-secret
-> `MODULO_SCIM_TOKEN` auth, the `scim` plan gate, record-preserving
+> `FARNA_CONTROL_SCIM_TOKEN` auth, the `scim` plan gate, record-preserving
 > last-admin-safe deprovisioning, and fail-closed mutation audits) shipped with
 > executing BDD (`scim_provisioning.feature`) and five unit suites but was
 > described by NEITHER product-map layer - invisible to the feature graph and

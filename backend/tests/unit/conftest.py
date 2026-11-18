@@ -169,7 +169,7 @@ def _provisioned_system_engine(request: pytest.FixtureRequest, monkeypatch: pyte
     """Present a PROVISIONED system engine to the unit-test suite.
 
     Unit tests mock the system SESSION but run in an environment without
-    ``MODULO_SYSTEM_DATABASE_URL``. The (now robust) fallback predicate
+    ``FARNA_CONTROL_SYSTEM_DATABASE_URL``. The (now robust) fallback predicate
     initialises the engine factory itself, so an un-provisioned reading would
     503 every trigger delivery here. With a provisioned URL the flag reads
     False exactly as in production; the created engine is lazy and never

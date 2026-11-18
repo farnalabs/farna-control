@@ -4,7 +4,7 @@ Hermetic in-memory SQLite (mirrors tests/unit/db/test_seed.py — no Postgres
 required). Locks the seed contract: env-gated no-op when the demo trio is not
 fully configured, idempotent entity creation (org, account, viewer membership,
 2 published schemas, 1 pipeline + snapshot, deterministic terminal runs 1-2),
-password re-stamping on MODULO_DEMO_PASSWORD rotation (including a corrupt
+password re-stamping on FARNA_CONTROL_DEMO_PASSWORD rotation (including a corrupt
 stored hash re-stamping instead of crashing the seed), role/system-admin/
 must_change_password drift reset, the drift warning reporting the role captured
 BEFORE the overwrite, demo-org scoping of every seeded entity even with a

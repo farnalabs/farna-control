@@ -1,4 +1,4 @@
-"""Unit tests for the promoted MODULO_USERS seeder (FAR-671).
+"""Unit tests for the promoted FARNA_CONTROL_USERS seeder (FAR-671).
 
 ``farna.db.seed.seed_modulo_users`` / ``seed_modulo_user`` /
 ``rehash_existing_user`` are the single implementation (promoted verbatim from
@@ -279,11 +279,11 @@ async def test_main_users_wrapper_resolves_factory_and_delegates(monkeypatch: py
 async def test_main_users_wrapper_skips_empty_users_without_seams(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty MODULO_USERS returns before any engine/factory resolution."""
+    """Empty FARNA_CONTROL_USERS returns before any engine/factory resolution."""
     import farna.api.main as main_module
 
     async def _fail(*_a: object, **_kw: object) -> None:
-        raise AssertionError("seeder must not run for an empty MODULO_USERS")
+        raise AssertionError("seeder must not run for an empty FARNA_CONTROL_USERS")
 
     monkeypatch.setattr(main_module, "seed_modulo_users", _fail)
     settings = _make_settings(modulo_users="")

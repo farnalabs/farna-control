@@ -1,13 +1,13 @@
 """Tests for the single-org invariant (FAR-929 / ADR 005).
 
-When MODULO_MULTI_ORG_ENABLED is False (default):
+When FARNA_CONTROL_MULTI_ORG_ENABLED is False (default):
   - POST /api/v1/admin/orgs returns 403
   - POST /api/v1/auth/login ignores org_slug (uses memberships[0])
   - GET /api/v1/auth/login-context always reports multi_org=false
   - GET /api/v1/auth/org-login/{slug} returns 404 for any slug
   - seed_demo skips the demo org creation
 
-When MODULO_MULTI_ORG_ENABLED is True:
+When FARNA_CONTROL_MULTI_ORG_ENABLED is True:
   - All existing behaviour is preserved.
 """
 

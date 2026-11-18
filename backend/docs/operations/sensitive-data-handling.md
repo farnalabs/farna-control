@@ -369,7 +369,7 @@ To add a new pattern, edit this set and verify tests pass. The function
 `is_sensitive_key(key)` performs case-insensitive substring matching, so
 adding `"pwd"` would catch `db_pwd`, `ldap_pwd`, etc. Env-var names matched
 wholesale by `is_sensitive_env_key(key)` (on top of the substring patterns)
-are `MODULO_USERS`, `DATABASE_URL` and `PYPI_TOKEN`.
+are `FARNA_CONTROL_USERS`, `DATABASE_URL` and `PYPI_TOKEN`.
 
 ### Log redaction
 

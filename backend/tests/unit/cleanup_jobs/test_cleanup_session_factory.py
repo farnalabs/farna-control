@@ -16,7 +16,7 @@ class TestCleanupSessionFactory:
     """``_cleanup_session_factory`` picks the session factory by dialect.
 
     PostgreSQL (RLS, farna_control_app NOBYPASSRLS) → the system session factory,
-    still failing LOUD when ``MODULO_SYSTEM_DATABASE_URL`` is unset.
+    still failing LOUD when ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` is unset.
     Non-PostgreSQL (SQLite/MariaDB/MySQL — no RLS, no system role) → the
     plain factory; the system engine is never touched.
     """
@@ -50,7 +50,7 @@ class TestCleanupSessionFactory:
 
     def test_postgres_with_unset_system_url_fails_loud(self) -> None:
         """The PG fail-closed path is preserved: an unset
-        ``MODULO_SYSTEM_DATABASE_URL`` raises RuntimeError instead of silently
+        ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` raises RuntimeError instead of silently
         running the cross-org purge as farna_control_app."""
         settings = MagicMock(modulo_db="postgres")
         settings.modulo_system_database_url = ""

@@ -719,7 +719,7 @@ class TestUploadLicense:
         assert body["hint"]
 
     def test_rejects_production_key_under_dev_anchor_with_actionable_error(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The customer-facing failure: a real key, no MODULO_LICENSE_PUBLIC_KEY set."""
+        """The customer-facing failure: a real key, no FARNA_CONTROL_LICENSE_PUBLIC_KEY set."""
         monkeypatch.setattr("farna.core.license._configured_public_key_hex", None)
         kp = generate_keypair()
         key = _sign_license_payload(_make_valid_payload(), private_key=kp["private_key"])

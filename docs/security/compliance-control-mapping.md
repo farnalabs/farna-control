@@ -173,7 +173,7 @@ recording is not license-gated, so a Community install produces one too. It does
 not assert that the trail can be browsed, verified or exported here: those admin
 routes need the Team-tier `audit_viewer` feature plus `audit.manage`, and the
 signed evidence pack additionally needs a configured
-`MODULO_EVIDENCE_SIGNING_KEY`. The index does not probe either condition.
+`FARNA_CONTROL_EVIDENCE_SIGNING_KEY`. The index does not probe either condition.
 
 ### Missing artifacts are loud, never dropped
 
@@ -220,7 +220,7 @@ deployed at the time.
    events under a signature the auditor checks offline - do not read
    `valid: false` alone as an integrity failure.
 3. If the export is required, license the Team tier (`audit_viewer`) and
-   configure `MODULO_EVIDENCE_SIGNING_KEY`, then take the evidence pack
+   configure `FARNA_CONTROL_EVIDENCE_SIGNING_KEY`, then take the evidence pack
    (`GET /api/v1/admin/audit/evidence-pack`) and the verification key
    (`GET /api/v1/admin/audit/verification-key`). Without the feature the audit
    routes answer 402; without the signing key the pack and key routes answer
@@ -251,7 +251,7 @@ deployed at the time.
   export and scan routes carry the `audit_viewer` feature plus `audit.manage`
   and answer 402 without a Team license. The offline-verifiable export is also
   not on by default: `GET /api/v1/admin/audit/evidence-pack` and
-  `/verification-key` additionally need a configured `MODULO_EVIDENCE_SIGNING_KEY`
+  `/verification-key` additionally need a configured `FARNA_CONTROL_EVIDENCE_SIGNING_KEY`
   (503 without it). On a Community install the events exist in the customer's
   database, but the product gives the operator no admin route through which to
   browse or verify them, and no signed export.
