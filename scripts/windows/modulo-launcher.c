@@ -127,11 +127,15 @@ static BOOL build_clean_environment(const wchar_t *bundle_root, const wchar_t *b
          * FAR-2554 aligns the NAME only; the Windows bundled payload layout is
          * a separate follow-up. Do not read this as functional alignment. */
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_BUNDLED_BIN_DIR", bundle_bin_dir) ||
-        /* The single-port SPA contract (farna.launcher.env_contract). The names
-         * must be the canonical FARNA_CONTROL_* spelling the API reads: FAR-2563
-         * was the same drift class as FAR-2554 - a launcher exporting the
-         * pre-rebrand MODULO_* name the consumer never read, so the built SPA
-         * was not mounted. build-launcher.ps1 stages <bundle>\frontend-dist. */
+        /* The single-port SPA contract (farna.launcher.env_contract). This is a
+         * NEW capability on Windows, not a rename: before FAR-2563 this launcher
+         * exported no SPA name at all, so a Windows install never served the
+         * built SPA (build-launcher.ps1 does stage <bundle>\frontend-dist). The
+         * names must be the canonical FARNA_CONTROL_* spelling the API reads;
+         * the anchored C sweep in backend/tests/unit/launcher/test_env_contract.py
+         * is this file's only gate, because windows-installer is skipped on the
+         * default Alpha path - Windows compile coverage is CI-only (and only on
+         * a release run with include_windows=true). */
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_SERVE_SPA", L"1") ||
         !append_environment_entry(block, ENVIRONMENT_BLOCK_LEN, &used, L"FARNA_CONTROL_FRONTEND_DIST", frontend_dist_dir)) {
         free(block);

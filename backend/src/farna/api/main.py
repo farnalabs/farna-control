@@ -1439,12 +1439,15 @@ app.openapi = _openapi_schema  # type: ignore[method-assign]
 # (launcher.entry._serve_api); the middleware constants here stay in parity
 # with the nginx values above.
 
-# The names live in ONE registry shared with the launchers and the build gates
-# (FAR-2563). The macOS/Windows bundle launchers exported the pre-rebrand
-# ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST`` while this module read the
-# ``FARNA_CONTROL_`` spelling, so the built SPA was never mounted and ``/``
-# answered 404 on every installed app. Readers go through ``read_env`` so an
-# already-installed bundle that still exports the legacy name keeps working.
+# The names live in ONE registry shared with the launchers and the gates
+# (FAR-2563). The macOS bundle launcher exported the pre-rebrand
+# ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST`` and the Windows launcher
+# exported neither, while this module read the ``FARNA_CONTROL_`` spelling: on
+# macOS the built SPA was never mounted (``/`` answered 404), and on Windows
+# single-port SPA serving did not exist at all. Readers go through ``read_env``
+# so an already-installed bundle that still exports the legacy name keeps
+# working, and so the ``MODULO_LAN_ORIGINS`` spelling the configuration
+# reference publishes is actually honoured.
 _SERVE_SPA_ENV = SERVE_SPA_ENV
 _FRONTEND_DIST_ENV = FRONTEND_DIST_ENV
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
@@ -1544,7 +1547,7 @@ def _init_once_mount_spa(app: FastAPI, env: Mapping[str, str] | None = None) -> 
     app.mount("/", _SpaFallbackStaticFiles(directory=dist, html=True), name="spa")
     app.add_middleware(_UploadLimitMiddleware, limit_bytes=_UPLOAD_LIMIT_BYTES)
     app.add_middleware(_SpaCacheHeadersMiddleware)
-    app.add_middleware(HostOriginMiddleware, lan_origins=split_lan_origins(source.get(LAN_ORIGINS_ENV)))
+    app.add_middleware(HostOriginMiddleware, lan_origins=split_lan_origins(read_env(source, LAN_ORIGINS_ENV)))
     logger.info("launcher.serve_spa_enabled dist=%s host_origin=loopback_allowlist", dist)
     return True
 

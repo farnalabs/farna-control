@@ -11,18 +11,31 @@ the value was silently written and never read.
   a directory no bundle produces.
 * FAR-2560/FAR-2561 - two ``APP_DB_NAME`` constants, so the app connected to a
   database that first boot never created.
-* FAR-2563 - the macOS/Windows bundle launchers exported ``MODULO_SERVE_SPA`` /
-  ``MODULO_FRONTEND_DIST`` while :mod:`farna.api.main` read
-  ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST``, so the built
-  SPA was never mounted and ``/`` answered 404 on every installed app.
+* FAR-2563 - the macOS bundle launcher exported ``MODULO_SERVE_SPA`` /
+  ``MODULO_FRONTEND_DIST`` and the Windows bundled launcher exported NEITHER
+  name, while :mod:`farna.api.main` read ``FARNA_CONTROL_SERVE_SPA`` /
+  ``FARNA_CONTROL_FRONTEND_DIST``. On macOS the built SPA was therefore never
+  mounted and ``/`` answered 404; on Windows single-port SPA serving did not
+  exist at all (this module's Windows producer adds it, and only a release run
+  with ``include_windows=true`` compiles it - ``windows-installer`` is skipped
+  on the default Alpha path, so Windows compile coverage is CI-only).
+* FAR-2563 (second half) - ``MODULO_LAN_ORIGINS`` was documented as the
+  operator knob that widens the loopback allowlist, but the middleware read
+  ``FARNA_CONTROL_LAN_ORIGINS`` directly, so a self-hoster who followed the
+  docs got a silent 403. Every name a reader takes must live in this registry
+  and be read through :func:`read_env`; a documented spelling that no reader
+  accepts is a defect, not documentation.
 
 The names below are the ONE definition. Consumers read through :func:`read_env`
 so an already-installed bundle that still exports the legacy spelling keeps
 working across an app upgrade; producers must write the canonical name, and
 ``backend/tests/unit/launcher/test_env_contract.py`` fails when a service
 script writes or reads a ``MODULO_`` name without its canonical counterpart in
-the same file. The macOS bundle additionally enforces the SPA pair at BUILD
-time (``scripts/macos/build-native-bundle.sh``), mirroring the FAR-2554 gate.
+the same file, or when a Python reader takes a registered name any way other
+than through :func:`read_env`. The macOS bundle additionally enforces the SPA
+pair at BUILD time (``scripts/macos/build-native-bundle.sh``), mirroring the
+FAR-2554 gate; the Windows launcher has no build gate, so the anchored C sweep
+in that test module is its only compile-free gate.
 
 Deliberately a leaf module: no project imports and no environment reads at
 import time, so it is cheap and side-effect free for any caller.
@@ -42,6 +55,11 @@ SERVE_SPA_ENV: Final = "FARNA_CONTROL_SERVE_SPA"
 FRONTEND_DIST_ENV: Final = "FARNA_CONTROL_FRONTEND_DIST"
 #: The ``farna_control_system`` role URL used by cross-org system crons.
 SYSTEM_DATABASE_URL_ENV: Final = "FARNA_CONTROL_SYSTEM_DATABASE_URL"
+#: Comma-separated LAN hostnames the Host/Origin allowlist accepts when the API
+#: serves the SPA itself. ``MODULO_LAN_ORIGINS`` is the spelling
+#: ``docs/configuration-reference.md`` publishes, so the alias is load-bearing:
+#: registering it is what makes the documented knob work.
+LAN_ORIGINS_ENV: Final = "FARNA_CONTROL_LAN_ORIGINS"
 #: Native install root / shim directory / bundled data directory.
 INSTALL_ROOT_ENV: Final = "FARNA_CONTROL_INSTALL_ROOT"
 INSTALL_BIN_DIR_ENV: Final = "FARNA_CONTROL_BIN_DIR"
@@ -66,6 +84,7 @@ LEGACY_ALIASES: Final[Mapping[str, tuple[str, ...]]] = {
     SERVE_SPA_ENV: ("MODULO_SERVE_SPA",),
     FRONTEND_DIST_ENV: ("MODULO_FRONTEND_DIST",),
     SYSTEM_DATABASE_URL_ENV: ("MODULO_SYSTEM_DATABASE_URL",),
+    LAN_ORIGINS_ENV: ("MODULO_LAN_ORIGINS",),
     INSTALL_ROOT_ENV: ("MODULO_INSTALL_ROOT",),
     INSTALL_BIN_DIR_ENV: ("MODULO_BIN_DIR",),
     DATA_DIR_ENV: ("MODULO_DATA_DIR",),

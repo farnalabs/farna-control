@@ -161,6 +161,20 @@ def test_lan_origin_via_the_mount_helper(tmp_path: Path) -> None:
     assert client.get("/", headers={"Host": "evil.example"}).status_code == 403
 
 
+def test_documented_legacy_lan_origins_spelling_is_honoured(tmp_path: Path) -> None:
+    """FAR-2563: the LAN knob the configuration reference publishes must work.
+
+    The reference names ``MODULO_LAN_ORIGINS``; the mount used to read the
+    canonical spelling directly, so a self-hoster who followed the docs got a
+    silent 403 on their own LAN hostname.
+    """
+    dist = _dist(tmp_path)
+    _, client = _spa_app(dist, {"MODULO_LAN_ORIGINS": "192.168.1.10"})
+
+    assert client.get("/", headers={"Host": "192.168.1.10"}).status_code == 200
+    assert client.get("/", headers={"Host": "evil.example"}).status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # FAR-2563: the producer/consumer env contract
 # ---------------------------------------------------------------------------
