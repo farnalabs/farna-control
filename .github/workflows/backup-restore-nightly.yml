@@ -68,7 +68,12 @@ jobs:
           pg_dump --version
           psql --version
       - name: Install backend dependencies
-        run: uv sync --frozen --project backend
+        # The backend lockfile pins source-archive dependencies (pytest-bdd @ a
+        # git commit tarball), so `--no-build` would fail here - they must be
+        # built. The pins are immutable and `--frozen` pins exact revisions, so
+        # the build is deterministic. The shared wrapper also retries the
+        # codeload CDN flake those archives intermittently hit.
+        run: bash scripts/uv_sync_with_retry.sh --frozen --project backend  # NOSONAR githubactions:S8541: backend lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk); --frozen pins exact revisions so builds are deterministic.
       - name: Run the backup / restore / upgrade gate
         timeout-minutes: 20
         env:
