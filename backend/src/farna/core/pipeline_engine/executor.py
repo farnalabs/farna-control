@@ -2059,6 +2059,24 @@ def _apply_frozen_eval_mode_entry(entry: dict[str, Any], by_eval_id: dict[str, E
     return True
 
 
+def _sandbox_failure_class_code(exc: BaseException) -> str | None:
+    """The failure's OWN canonical sandbox class code, or None (FAR-2562).
+
+    ``sandbox_failure_error_code`` resolves the class code used by the terminal
+    write, which the registry's per-class attempt cap is keyed on. It applies
+    ONLY to a ``SandboxNodeFailedError``: a plain ``NodeCancelledError`` carries
+    no sandbox class, so its behaviour is unchanged. The FAR-136 hang death
+    ("likely hung") is also excluded — its terminal code stays the generic
+    ``node_cancelled``, so capping it under the no-output class would silently
+    change that code.
+    """
+    if not isinstance(exc, SandboxNodeFailedError):
+        return None
+    if "likely hung" in str(exc):
+        return None
+    return sandbox_failure_error_code(exc)
+
+
 class PipelineExecutor:
     """Execute a single pipeline run (HITL-aware, supports parallel fan-out).
 
@@ -6352,7 +6370,7 @@ class PipelineExecutor:
         #   * the FAR-136 hang death ("likely hung"), whose terminal code stays
         #     the generic ``node_cancelled`` — capping it under the no-output
         #     class would silently change that code.
-        failure_class_code = sandbox_failure_error_code(exc) if isinstance(exc, SandboxNodeFailedError) and "likely hung" not in str(exc) else None
+        failure_class_code = _sandbox_failure_class_code(exc)
         if _can_fenced_requeue(
             execution_attempt_count,
             retries,
