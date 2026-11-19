@@ -5,17 +5,20 @@
       subtitle="Frontend performance metrics — LCP, FCP, CLS, INP, TTFB"
     >
       <template #right>
-        <select
-          v-model="selectedDays"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm"
-          aria-label="Metrics time range"
+        <AppSelect
+          :model-value="selectedDays"
+          class="min-w-36"
+          :options="timeRangeOptions"
+          option-label="label"
+          option-value="value"
+          label="Metrics time range"
           data-testid="dev-metrics-time-range"
-          @change="loadData"
+          @update:model-value="onTimeRangeChange"
         >
-          <option :value="7">Last 7 days</option>
-          <option :value="30">Last 30 days</option>
-          <option :value="90">Last 90 days</option>
-        </select>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
         <button type="button"
           class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent"
           data-testid="dev-metrics-refresh"
@@ -111,6 +114,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import AppSelect from '../components/shared/AppSelect.vue'
 import { useApi } from '../composables/useApi'
 
 const { get } = useApi()
@@ -158,6 +162,19 @@ const error = ref<string | null>(null)
 const summary = ref<SummaryItem[]>([])
 const timeSeriesData = ref<TimeSeriesData[]>([])
 const selectedDays = ref(7)
+
+// The time-range dropdown is the design-system AppSelect; its options carry the
+// numeric day value the fetch query needs.
+const timeRangeOptions = [
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
+]
+
+function onTimeRangeChange(value: unknown): void {
+  selectedDays.value = Number(value)
+  void loadData()
+}
 
 function metricLabel(name: string): string {
   return METRIC_LABELS[name] || name

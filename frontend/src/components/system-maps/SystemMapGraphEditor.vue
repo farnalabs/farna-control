@@ -13,29 +13,43 @@
       >{{ type.replace('_', ' ') }}</button>
       <span class="ml-2 text-sm font-medium">{{ $t('views.SystemMapDetailView.relationship_types') }}</span>
       <label class="sr-only" :for="`${uid}-rel-source`">{{ $t('views.SystemMapDetailView.relationship_source') }}</label>
-      <select
+      <AppSelect
         :id="`${uid}-rel-source`"
         v-model="relationshipSource"
-        class="rounded border px-2 py-1 text-xs"
+        size="small"
+        :options="nodeOptions"
+        option-label="label"
+        option-value="value"
+        :label="$t('views.SystemMapDetailView.relationship_source')"
         :disabled="readOnly"
         data-testid="system-map-relationship-source"
       >
-        <option v-for="node in localNodes" :key="node.node_key" :value="node.node_key">{{ node.display_name }}</option>
-      </select>
+        <template #option="{ option }">
+          <span :data-value="option.value">{{ option.label }}</span>
+        </template>
+      </AppSelect>
       <label class="sr-only" :for="`${uid}-rel-type`">{{ $t('views.SystemMapDetailView.relationship_types') }}</label>
-      <select :id="`${uid}-rel-type`" v-model="relationshipType" class="rounded border px-2 py-1 text-xs" :disabled="readOnly" :aria-label="$t('views.SystemMapDetailView.relationship_type_label')" data-testid="system-map-relationship-type">
-        <option v-for="type in relationshipTypes" :key="type" :value="type">{{ type.replace('_', ' ') }}</option>
-      </select>
+      <AppSelect :id="`${uid}-rel-type`" v-model="relationshipType" size="small" :options="typeOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.relationship_type_label')" :disabled="readOnly" data-testid="system-map-relationship-type">
+        <template #option="{ option }">
+          <span :data-value="option.value">{{ option.label }}</span>
+        </template>
+      </AppSelect>
       <label class="sr-only" :for="`${uid}-rel-target`">{{ $t('views.SystemMapDetailView.relationship_target') }}</label>
-      <select
+      <AppSelect
         :id="`${uid}-rel-target`"
         v-model="relationshipTarget"
-        class="rounded border px-2 py-1 text-xs"
+        size="small"
+        :options="nodeOptions"
+        option-label="label"
+        option-value="value"
+        :label="$t('views.SystemMapDetailView.relationship_target')"
         :disabled="readOnly"
         data-testid="system-map-relationship-target"
       >
-        <option v-for="node in localNodes" :key="node.node_key" :value="node.node_key">{{ node.display_name }}</option>
-      </select>
+        <template #option="{ option }">
+          <span :data-value="option.value">{{ option.label }}</span>
+        </template>
+      </AppSelect>
       <button
         type="button"
         class="rounded border px-2 py-1 text-xs disabled:opacity-50"
@@ -118,6 +132,7 @@
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import type { SystemMapNode, SystemMapRelationship, NodeType, RelationshipType } from '../../stores/systemMaps'
 import { createSystemMapRendererModel } from '../../utils/system-map-renderer'
+import AppSelect from '../shared/AppSelect.vue'
 import type { SystemMapRendererNode } from '../../types/system-map-renderer'
 
 const props = defineProps<{ nodes: SystemMapNode[]; relationships: SystemMapRelationship[]; loopConfigs: unknown[]; nodeTypes: readonly NodeType[]; relationshipTypes: readonly RelationshipType[]; readOnly?: boolean; dataTestId?: string }>()
@@ -137,6 +152,15 @@ const relationshipType = ref<RelationshipType>(props.relationshipTypes[0])
 const relationshipSource = ref<string>('')
 const relationshipTarget = ref<string>('')
 const readOnly = computed(() => props.readOnly === true)
+// AppSelect option lists for the relationship controls (all three were native
+// <select> elements).
+const nodeOptions = computed(() =>
+  localNodes.value.map((node) => ({ value: node.node_key, label: node.display_name })),
+)
+const typeOptions = computed(() =>
+  props.relationshipTypes.map((type) => ({ value: type, label: type.replace('_', ' ') })),
+)
+
 const rendererModel = computed(() => createSystemMapRendererModel(localNodes.value, localRelationships.value, { readOnly: readOnly.value, selectedNodeKey: selectedNodeKey.value }))
 
 watch(() => props.nodes, (nodes) => {

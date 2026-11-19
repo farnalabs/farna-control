@@ -61,8 +61,12 @@ describe('ParameterPortForm resolveDefaultFallback (SonarCloud coverage)', () =>
     await checkbox.trigger('change')
     expect(booleanWrapper.emitted('update:modelValue')?.at(-1)).toEqual([true])
 
+    // The select-typed port renders the design-system AppSelect, so a choice is
+    // an `update:modelValue` emit on the inner Select rather than a native
+    // <select> change.
     const selectWrapper = mount(ParameterPortForm, { props: { port: makePort('select', undefined, false, [{ label: 'One', value: 'one' }]), modelValue: '' } })
-    await selectWrapper.find('select').setValue('one')
+    selectWrapper.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'one')
+    await selectWrapper.vm.$nextTick()
     expect(selectWrapper.emitted('update:modelValue')?.at(-1)).toEqual(['one'])
 
     const multilineWrapper = mount(ParameterPortForm, { props: { port: makePort('string', undefined, true), modelValue: '' } })

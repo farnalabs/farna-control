@@ -11,34 +11,73 @@
     <div v-if="error" class="mt-3 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive" role="alert">{{ error }}</div>
 
     <form v-if="!readOnly" class="mt-4 grid gap-3 md:grid-cols-4" @submit.prevent="createBinding">
-      <label class="grid gap-1 text-xs">
-        <span>{{ $t('views.SystemMapDetailView.binding_kind') }}</span>
-        <select v-model="bindingKind" class="rounded border bg-background px-2 py-1.5" data-testid="system-map-binding-kind">
-          <option value="trigger">{{ $t('views.SystemMapDetailView.trigger_binding') }}</option>
-          <option value="action_pipeline">{{ $t('views.SystemMapDetailView.action_pipeline_binding') }}</option>
-        </select>
-      </label>
-      <label class="grid gap-1 text-xs">
-        <span>{{ $t('views.SystemMapDetailView.binding_node') }}</span>
-        <select v-model="nodeKey" class="rounded border bg-background px-2 py-1.5" data-testid="system-map-binding-node" required>
-          <option value="" disabled>{{ $t('views.SystemMapDetailView.select_node') }}</option>
-          <option v-for="node in eligibleNodes" :key="node.node_key" :value="node.node_key">{{ node.display_name }}</option>
-        </select>
-      </label>
-      <label class="grid gap-1 text-xs">
-        <span>{{ $t('views.SystemMapDetailView.binding_pipeline') }}</span>
-        <select v-model="pipelineId" class="rounded border bg-background px-2 py-1.5" data-testid="system-map-binding-pipeline" required>
-          <option value="" disabled>{{ $t('views.SystemMapDetailView.select_pipeline') }}</option>
-          <option v-for="pipeline in pipelines" :key="pipeline.id" :value="pipeline.id">{{ pipeline.name }}</option>
-        </select>
-      </label>
-      <label v-if="bindingKind === 'trigger'" class="grid gap-1 text-xs">
-        <span>{{ $t('views.SystemMapDetailView.binding_trigger') }}</span>
-        <select v-model="triggerId" class="rounded border bg-background px-2 py-1.5" data-testid="system-map-binding-trigger" required>
-          <option value="" disabled>{{ $t('views.SystemMapDetailView.select_trigger') }}</option>
-          <option v-for="trigger in triggers" :key="trigger.id" :value="trigger.id">{{ trigger.name || trigger.trigger_type || trigger.id }}</option>
-        </select>
-      </label>
+      <div class="grid gap-1 text-xs">
+        <label for="system-map-binding-kind">{{ $t('views.SystemMapDetailView.binding_kind') }}</label>
+        <AppSelect
+          id="system-map-binding-kind"
+          v-model="bindingKind"
+          :options="kindOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.SystemMapDetailView.binding_kind')"
+          data-testid="system-map-binding-kind"
+        >
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
+      <div class="grid gap-1 text-xs">
+        <label for="system-map-binding-node">{{ $t('views.SystemMapDetailView.binding_node') }}</label>
+        <AppSelect
+          id="system-map-binding-node"
+          v-model="nodeKey"
+          :options="nodeOptions"
+          option-label="label"
+          option-value="value"
+          option-disabled="disabled"
+          :label="$t('views.SystemMapDetailView.binding_node')"
+          data-testid="system-map-binding-node"
+        >
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
+      <div class="grid gap-1 text-xs">
+        <label for="system-map-binding-pipeline">{{ $t('views.SystemMapDetailView.binding_pipeline') }}</label>
+        <AppSelect
+          id="system-map-binding-pipeline"
+          v-model="pipelineId"
+          :options="pipelineOptions"
+          option-label="label"
+          option-value="value"
+          option-disabled="disabled"
+          :label="$t('views.SystemMapDetailView.binding_pipeline')"
+          data-testid="system-map-binding-pipeline"
+        >
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
+      <div v-if="bindingKind === 'trigger'" class="grid gap-1 text-xs">
+        <label for="system-map-binding-trigger">{{ $t('views.SystemMapDetailView.binding_trigger') }}</label>
+        <AppSelect
+          id="system-map-binding-trigger"
+          v-model="triggerId"
+          :options="triggerOptions"
+          option-label="label"
+          option-value="value"
+          option-disabled="disabled"
+          :label="$t('views.SystemMapDetailView.binding_trigger')"
+          data-testid="system-map-binding-trigger"
+        >
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
       <button type="submit" class="rounded border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50 md:col-start-4" :disabled="saving || !nodeKey || !pipelineId || (bindingKind === 'trigger' && !triggerId)" data-testid="system-map-binding-create">{{ $t('views.SystemMapDetailView.add_binding') }}</button>
     </form>
 
@@ -58,6 +97,7 @@ import { useI18n } from 'vue-i18n'
 import type { AttributionBinding, AttributionBindingCreate, SystemMapNode } from '../../stores/systemMaps'
 import { api } from '../../lib/api/client'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import AppSelect from '../shared/AppSelect.vue'
 
 interface Pipeline { id: string; name: string }
 interface Trigger { id: string; name?: string | null; trigger_type?: string | null }
@@ -82,6 +122,30 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const readOnly = computed(() => props.readOnly === true)
 const eligibleNodes = computed(() => props.nodes.filter((node) => node.node_type === (bindingKind.value === 'trigger' ? 'pipeline' : 'improvement_loop')))
+
+// AppSelect option lists for the create form's dropdowns (they were native
+// <select> elements). Each keeps its disabled placeholder entry so an
+// unselected control reads "Select node/pipeline/trigger" rather than blank.
+const kindOptions = computed(() => [
+  { value: 'trigger', label: t('views.SystemMapDetailView.trigger_binding') },
+  { value: 'action_pipeline', label: t('views.SystemMapDetailView.action_pipeline_binding') },
+])
+const nodeOptions = computed(() => [
+  { value: '', label: t('views.SystemMapDetailView.select_node'), disabled: true },
+  ...eligibleNodes.value.map((node) => ({ value: node.node_key, label: node.display_name, disabled: false })),
+])
+const pipelineOptions = computed(() => [
+  { value: '', label: t('views.SystemMapDetailView.select_pipeline'), disabled: true },
+  ...pipelines.value.map((pipeline) => ({ value: pipeline.id, label: pipeline.name, disabled: false })),
+])
+const triggerOptions = computed(() => [
+  { value: '', label: t('views.SystemMapDetailView.select_trigger'), disabled: true },
+  ...triggers.value.map((trigger) => ({
+    value: trigger.id,
+    label: trigger.name || trigger.trigger_type || trigger.id,
+    disabled: false,
+  })),
+])
 
 watch(bindingKind, () => { nodeKey.value = ''; pipelineId.value = ''; triggerId.value = '' })
 watch(pipelineId, async (value) => {
@@ -111,6 +175,10 @@ async function loadOptions(): Promise<void> {
 }
 
 async function createBinding(): Promise<void> {
+  // The native selects carried `required`; the design-system control does not,
+  // so the same non-empty guard now lives here (the submit button already
+  // reflects it).
+  if (!nodeKey.value || !pipelineId.value) return
   if (bindingKind.value === 'trigger' && !triggerId.value) return
   saving.value = true
   error.value = null

@@ -187,6 +187,22 @@ function mountEditor(attachTo?: HTMLElement) {
   })
 }
 
+// The autonomy-ceiling control is the design-system AppSelect (PrimeVue
+// Select), not a native <select>: read its declared model value and choose a
+// value by emitting `update:modelValue` on the inner Select.
+function ceilingSelect(wrapper: ReturnType<typeof mountEditor>) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === 'pipeline-max-autonomy')
+  expect(found, 'expected the autonomy-ceiling AppSelect').toBeDefined()
+  return found!
+}
+
+async function chooseCeiling(wrapper: ReturnType<typeof mountEditor>, value: string): Promise<void> {
+  ceilingSelect(wrapper).vm.$emit('update:modelValue', value)
+  await nextTick()
+}
+
 async function mountEditorLoaded() {
   const wrapper = mountEditor()
   await flushPromises()
@@ -1688,12 +1704,12 @@ describe('PipelineEditorView — run dialog', () => {
     await flushPromises()
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
+    const select = ceilingSelect(wrapper)
     expect(select.exists()).toBe(true)
-    expect((select.element as HTMLSelectElement).value).toBe('notify_on_complete')
+    expect(select.props('modelValue')).toBe('notify_on_complete')
 
     // setValue on a SELECT sets the value and dispatches change — the handler runs here.
-    await select.setValue('fully_autonomous')
+    await chooseCeiling(wrapper, 'fully_autonomous')
     await flushPromises()
 
     const patch = vi.mocked(api.PATCH).mock.calls.find((c) => 'max_autonomy_level' in ((c[1] as any).body ?? {}))
@@ -1717,8 +1733,8 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = 'manual_approval'
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
-    expect((select.element as HTMLSelectElement).value).toBe('manual_approval')
+    const select = ceilingSelect(wrapper)
+    expect(select.props('modelValue')).toBe('manual_approval')
 
     // Reset first: earlier tests in this describe queue once-implementations
     // on api.PATCH that would otherwise consume this one (same hygiene as the
@@ -1730,11 +1746,11 @@ describe('PipelineEditorView — run dialog', () => {
       Promise.resolve({ data: null, error: { detail: 'ceiling below default' }, response: { status: 422 } }))
 
     // setValue on a SELECT sets the value and dispatches change — the handler runs here.
-    await select.setValue('fully_autonomous')
+    await chooseCeiling(wrapper, 'fully_autonomous')
     await flushPromises()
     await nextTick()
 
-    expect((select.element as HTMLSelectElement).value).toBe('manual_approval')
+    expect(select.props('modelValue')).toBe('manual_approval')
     expect(vm.pipeline.max_autonomy_level).toBe('manual_approval')
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain(
       'Autonomy ceiling cannot be below the pipeline default level',
@@ -1742,11 +1758,11 @@ describe('PipelineEditorView — run dialog', () => {
 
     // rejection — timeout / network failure: the catch path reverts too.
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockImplementationOnce(() => Promise.reject(new Error('network_down')))
-    await select.setValue('notify_on_complete')
+    await chooseCeiling(wrapper, 'notify_on_complete')
     await flushPromises()
     await nextTick()
 
-    expect((select.element as HTMLSelectElement).value).toBe('manual_approval')
+    expect(select.props('modelValue')).toBe('manual_approval')
     expect(vm.pipeline.max_autonomy_level).toBe('manual_approval')
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain('network_down')
     wrapper.unmount()
@@ -1762,12 +1778,11 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = 'notify_on_complete'
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
 
     // '' is the inherit option — it must send null, never the literal ''.
-    await select.setValue('')
+    await chooseCeiling(wrapper, '')
     await flushPromises()
     await nextTick()
 
@@ -1791,18 +1806,17 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = null
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
       Promise.resolve({ data: null, error: { detail: 'server exploded' }, response: { status: 500 } }))
 
-    await select.setValue('fully_autonomous')
+    await chooseCeiling(wrapper, 'fully_autonomous')
     await flushPromises()
     await nextTick()
 
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain('server exploded')
-    expect((select.element as HTMLSelectElement).value).toBe('')
+    expect(ceilingSelect(wrapper).props('modelValue')).toBe('')
     expect(vm.maxAutonomyInput).toBeNull()
     wrapper.unmount()
   })
@@ -1817,11 +1831,10 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = null
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
 
-    await select.setValue('notify_on_complete')
+    await chooseCeiling(wrapper, 'notify_on_complete')
     await flushPromises()
     await nextTick()
 
@@ -1840,17 +1853,16 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = null
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockImplementationOnce(() => Promise.reject(new Error('network_down_2')))
 
-    await select.setValue('notify_on_complete')
+    await chooseCeiling(wrapper, 'notify_on_complete')
     await flushPromises()
     await nextTick()
 
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain('network_down_2')
-    expect((select.element as HTMLSelectElement).value).toBe('')
+    expect(ceilingSelect(wrapper).props('modelValue')).toBe('')
     expect(vm.maxAutonomyInput).toBeNull()
     wrapper.unmount()
   })

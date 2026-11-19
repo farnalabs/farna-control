@@ -71,22 +71,23 @@
       >
         {{ $t('views.PipelineEditorView.autonomy_panel_target') }}
       </label>
-      <select
+      <AppSelect
         id="progressive-autonomy-target"
-        :value="targetLevel"
-        class="h-7 flex-1 rounded-md border border-input bg-background px-1.5 text-xs"
+        :model-value="targetLevel"
+        class="flex-1"
+        size="small"
+        :options="targetOptions"
+        option-label="label"
+        option-value="value"
+        option-disabled="disabled"
+        :label="$t('views.PipelineEditorView.autonomy_panel_target')"
         data-testid="progressive-autonomy-target"
-        @change="onTargetChange"
+        @update:model-value="onTargetChange"
       >
-        <option
-          v-for="level in LEVELS"
-          :key="level"
-          :value="level"
-          :disabled="isAboveCeiling(level)"
-        >
-          {{ levelLabel(level) }}
-        </option>
-      </select>
+        <template #option="{ option }">
+          <span :data-value="option.value">{{ option.label }}</span>
+        </template>
+      </AppSelect>
     </div>
 
     <div>
@@ -166,6 +167,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../../lib/api/client'
 import { formatApiError, isProblemDetail } from '../../lib/api/formatError'
 import { formatDateShortWithTime } from '../../lib/formatDate'
+import AppSelect from '../shared/AppSelect.vue'
 
 /** The autonomy ladder, lowest first (same canonical values the API uses). */
 const LEVELS = ['manual_approval', 'notify_on_complete', 'fully_autonomous'] as const
@@ -226,6 +228,17 @@ const ceilingLevel = computed(() => props.maxLevel || props.defaultLevel || 'man
 
 const targetLevel = ref<string>(currentLevel.value)
 
+// AppSelect option list for the promote/demote target (was a native <select>).
+// A level above the ceiling stays listed but disabled, exactly as the native
+// per-option `disabled` did.
+const targetOptions = computed(() =>
+  LEVELS.map((level) => ({
+    value: level,
+    label: levelLabel(level),
+    disabled: isAboveCeiling(level),
+  })),
+)
+
 const targetRank = computed(() => rank(targetLevel.value))
 const currentRank = computed(() => rank(currentLevel.value))
 const ceilingRank = computed(() => rank(ceilingLevel.value))
@@ -268,8 +281,8 @@ function levelLabel(level: string | null): string {
   return level ?? t('views.PipelineEditorView.autonomy_panel_unknown')
 }
 
-function onTargetChange(event: Event): void {
-  targetLevel.value = (event.target as HTMLSelectElement).value
+function onTargetChange(value: unknown): void {
+  targetLevel.value = value as string
 }
 
 /**

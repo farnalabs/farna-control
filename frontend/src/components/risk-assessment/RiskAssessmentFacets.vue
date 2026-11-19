@@ -23,21 +23,20 @@
         <label for="risk-assessment-pipeline" class="mb-1 block text-sm font-medium">
           {{ $t('views.RiskAssessmentView.pipeline_label') }}
         </label>
-        <select
+        <AppSelect
           id="risk-assessment-pipeline"
           v-model="localFilters.pipelineId"
-          class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          class="w-full"
+          :options="pipelineOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.RiskAssessmentView.pipeline_label')"
           data-testid="risk-assessment-pipeline"
         >
-          <option value="">{{ $t('views.RiskAssessmentView.all_pipelines') }}</option>
-          <option
-            v-for="pipeline in pipelines"
-            :key="pipeline.id"
-            :value="pipeline.id"
-          >
-            {{ pipeline.name }}
-          </option>
-        </select>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
       </div>
 
       <!-- Time Window Filter -->
@@ -45,16 +44,20 @@
         <label for="risk-assessment-days" class="mb-1 block text-sm font-medium">
           {{ $t('views.RiskAssessmentView.time_window_label') }}
         </label>
-        <select
+        <AppSelect
           id="risk-assessment-days"
           v-model="localFilters.days"
-          class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          class="w-full"
+          :options="windowOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.RiskAssessmentView.time_window_label')"
           data-testid="risk-assessment-days"
         >
-          <option v-for="choice in RISK_WINDOW_CHOICES" :key="choice.value" :value="choice.value">
-            {{ $t(`views.RiskAssessmentView.${choice.labelKey}`) }}
-          </option>
-        </select>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
       </div>
 
       <!-- Action Filter -->
@@ -62,18 +65,21 @@
         <label for="risk-assessment-action" class="mb-1 block text-sm font-medium">
           {{ $t('views.RiskAssessmentView.action_label') }}
         </label>
-        <select
+        <AppSelect
           id="risk-assessment-action"
           v-model="localFilters.action"
-          class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          class="w-full"
+          :options="actionOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.RiskAssessmentView.action_label')"
           :disabled="facetDegraded"
           data-testid="risk-assessment-action"
         >
-          <option value="">{{ $t('views.RiskAssessmentView.all_actions') }}</option>
-          <option v-for="action in RISK_ACTIONS" :key="action" :value="action">
-            {{ $t(`views.RiskAssessmentView.action_${action}`) }}
-          </option>
-        </select>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
         <p v-if="facetDegraded" class="mt-1 text-xs text-warning-text" data-testid="risk-assessment-facet-degraded-note">
           {{ $t('views.RiskAssessmentView.facet_degraded_note') }}
         </p>
@@ -113,8 +119,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
+import AppSelect from '../shared/AppSelect.vue'
 import {
   RISK_ACTIONS,
   RISK_WINDOW_CHOICES,
@@ -141,6 +149,31 @@ const emit = defineEmits<{
 
 // Local reactive copy of filters to avoid mutating props directly
 const localFilters = reactive<RiskAssessmentFilters>(defaultRiskAssessmentFilters())
+
+const { t } = useI18n()
+
+// AppSelect option lists. Each keeps the native control's leading empty entry
+// ("all pipelines" / "all actions"), so clearing a facet still means "no
+// filter"; the window list is the shared deep-link vocabulary, unchanged.
+const pipelineOptions = computed(() => [
+  { value: '', label: t('views.RiskAssessmentView.all_pipelines') },
+  ...props.pipelines.map((pipeline) => ({ value: pipeline.id, label: pipeline.name })),
+])
+
+const windowOptions = computed(() =>
+  RISK_WINDOW_CHOICES.map((choice) => ({
+    value: choice.value,
+    label: t(`views.RiskAssessmentView.${choice.labelKey}`),
+  })),
+)
+
+const actionOptions = computed(() => [
+  { value: '', label: t('views.RiskAssessmentView.all_actions') },
+  ...RISK_ACTIONS.map((action) => ({
+    value: action,
+    label: t(`views.RiskAssessmentView.action_${action}`),
+  })),
+])
 
 // Sync local filters with props when props change
 watch(

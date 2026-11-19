@@ -209,6 +209,21 @@ async function mountView() {
   return wrapper
 }
 
+// The confidence control is the design-system AppSelect, so a correction is an
+// `update:modelValue` emit on the row's inner Select rather than a native change.
+async function chooseConfidence(
+  wrapper: Awaited<ReturnType<typeof mountView>>,
+  elementId: string,
+  value: string,
+): Promise<void> {
+  const select = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === `determination-review-confidence-input-${elementId}`)
+  expect(select, `expected the confidence AppSelect for ${elementId}`).toBeDefined()
+  select!.vm.$emit('update:modelValue', value)
+  await flushPromises()
+}
+
 async function generateDraft(wrapper: Awaited<ReturnType<typeof mountView>>) {
   await wrapper.find('[data-testid="determination-generate-draft"]').trigger('click')
   await flushPromises()
@@ -343,7 +358,7 @@ describe('DeterminationView', () => {
     await generateDraft(wrapper)
 
     await wrapper.find(`[data-testid="determination-review-statement-${DERIVED_ID}"]`).setValue('Rewritten stage statement')
-    await wrapper.find(`[data-testid="determination-review-confidence-${DERIVED_ID}"]`).setValue('medium')
+    await chooseConfidence(wrapper, DERIVED_ID, 'medium')
     await wrapper.find('[data-testid="determination-review-needs-review"]').trigger('click')
     await flushPromises()
 

@@ -75,6 +75,21 @@ function mountPanel() {
   })
 }
 
+// The confidence control is the design-system AppSelect, so a correction is an
+// `update:modelValue` emit on the row's inner Select rather than a native change.
+async function chooseConfidence(
+  wrapper: ReturnType<typeof mountPanel>,
+  elementId: string,
+  value: string,
+): Promise<void> {
+  const select = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === `determination-review-confidence-input-${elementId}`)
+  expect(select, `expected the confidence AppSelect for ${elementId}`).toBeDefined()
+  select!.vm.$emit('update:modelValue', value)
+  await wrapper.vm.$nextTick()
+}
+
 describe('DeterminationReviewPanel', () => {
   it('blocks approve until all blocking assumptions are acknowledged', async () => {
     const wrapper = mountPanel()
@@ -154,7 +169,7 @@ describe('DeterminationReviewPanel', () => {
   it('sends a correction only when the value actually changed', async () => {
     const wrapper = mountPanel()
 
-    await wrapper.find(`[data-testid="determination-review-confidence-${SECOND_DERIVED_ID}"]`).setValue('high')
+    await chooseConfidence(wrapper, SECOND_DERIVED_ID, 'high')
     await wrapper.find('[data-testid="determination-review-needs-review"]').trigger('click')
 
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
@@ -162,7 +177,7 @@ describe('DeterminationReviewPanel', () => {
     })
 
     // Reverting the confidence leaves no correction for that element at all.
-    await wrapper.find(`[data-testid="determination-review-confidence-${SECOND_DERIVED_ID}"]`).setValue('medium')
+    await chooseConfidence(wrapper, SECOND_DERIVED_ID, 'medium')
     await wrapper.find('[data-testid="determination-review-needs-review"]').trigger('click')
 
     expect(wrapper.emitted('submit')?.[1]?.[0]).toMatchObject({ correctedDerivedElements: [] })

@@ -43,6 +43,34 @@ function mountComponent(options: {
   })
 }
 
+type BindingsWrapper = ReturnType<typeof mountComponent>
+
+// The create form's four dropdowns are the design-system AppSelect (PrimeVue
+// Select), not native <select> elements: options come from props and a choice
+// is an `update:modelValue` emit on the inner Select.
+function bindingSelect(wrapper: BindingsWrapper, testid: string) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === testid)
+  expect(found, `expected an AppSelect with id "${testid}"`).toBeDefined()
+  return found!
+}
+
+function optionLabels(wrapper: BindingsWrapper, testid: string): string[] {
+  return (bindingSelect(wrapper, testid).props('options') as Array<{ label: string }>).map(
+    (option) => option.label,
+  )
+}
+
+async function choose(
+  wrapper: BindingsWrapper,
+  testid: string,
+  value: string,
+): Promise<void> {
+  bindingSelect(wrapper, testid).vm.$emit('update:modelValue', value)
+  await wrapper.vm.$nextTick()
+}
+
 function pipelinesResponse() {
   return {
     data: {
@@ -75,15 +103,13 @@ describe('SystemMapAttributionBindings', () => {
     expect(wrapper.find('[data-testid="system-map-binding-empty"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="system-map-binding-trigger"]').exists()).toBe(true)
 
-    const nodeSelect = wrapper.get('[data-testid="system-map-binding-node"]')
-    expect(nodeSelect.findAll('option').map((option) => option.text())).toContain('Pipeline 1')
-    expect(nodeSelect.findAll('option').map((option) => option.text())).not.toContain('Loop 1')
+    expect(optionLabels(wrapper, 'system-map-binding-node')).toContain('Pipeline 1')
+    expect(optionLabels(wrapper, 'system-map-binding-node')).not.toContain('Loop 1')
 
-    await wrapper.get('[data-testid="system-map-binding-kind"]').setValue('action_pipeline')
+    await choose(wrapper, 'system-map-binding-kind', 'action_pipeline')
 
-    const loopNodeSelect = wrapper.get('[data-testid="system-map-binding-node"]')
-    expect(loopNodeSelect.findAll('option').map((option) => option.text())).toContain('Loop 1')
-    expect(loopNodeSelect.findAll('option').map((option) => option.text())).not.toContain('Pipeline 1')
+    expect(optionLabels(wrapper, 'system-map-binding-node')).toContain('Loop 1')
+    expect(optionLabels(wrapper, 'system-map-binding-node')).not.toContain('Pipeline 1')
     expect(wrapper.find('[data-testid="system-map-binding-trigger"]').exists()).toBe(false)
   })
 
@@ -97,23 +123,23 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent()
     await flushPromises()
 
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
 
     expect(mockGet).toHaveBeenCalledWith('/api/v1/triggers', { params: { query: { pipeline_id: 'pipe-1', page_size: 100 } } })
-    const triggerOptions = wrapper.get('[data-testid="system-map-binding-trigger"]').findAll('option').map((option) => option.text())
+    const triggerOptions = optionLabels(wrapper, 'system-map-binding-trigger')
     expect(triggerOptions).toContain('Nightly')
     expect(triggerOptions).toContain('schedule')
     expect(triggerOptions).toContain('trig-3')
 
     // Changing the binding kind resets the pipeline selection to an empty value.
-    await wrapper.get('[data-testid="system-map-binding-kind"]').setValue('action_pipeline')
+    await choose(wrapper, 'system-map-binding-kind', 'action_pipeline')
     await flushPromises()
     expect(wrapper.find('[data-testid="system-map-binding-trigger"]').exists()).toBe(false)
 
     // A pipeline selected while the kind is not "trigger" skips the trigger lookup.
     const callsBefore = mockGet.mock.calls.length
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
     expect(mockGet.mock.calls.length).toBe(callsBefore)
   })
@@ -124,7 +150,7 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent()
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="system-map-binding-pipeline"]').findAll('option')).toHaveLength(1)
+    expect(optionLabels(wrapper, 'system-map-binding-pipeline')).toHaveLength(1)
   })
 
   it('treats a trigger lookup without an items array as empty', async () => {
@@ -137,10 +163,10 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent()
     await flushPromises()
 
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="system-map-binding-trigger"]').findAll('option')).toHaveLength(1)
+    expect(optionLabels(wrapper, 'system-map-binding-trigger')).toHaveLength(1)
   })
 
   it('submits a trigger binding with the selected trigger id', async () => {
@@ -154,10 +180,10 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent({ createHandler: onCreate })
     await flushPromises()
 
-    await wrapper.get('[data-testid="system-map-binding-node"]').setValue('pipeline-1')
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(wrapper, 'system-map-binding-node', 'pipeline-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
-    await wrapper.get('[data-testid="system-map-binding-trigger"]').setValue('trig-1')
+    await choose(wrapper, 'system-map-binding-trigger', 'trig-1')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
@@ -180,8 +206,8 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent({ createHandler: onCreate })
     await flushPromises()
 
-    await wrapper.get('[data-testid="system-map-binding-node"]').setValue('pipeline-1')
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(wrapper, 'system-map-binding-node', 'pipeline-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
 
     expect(wrapper.get('[data-testid="system-map-binding-create"]').attributes('disabled')).toBeDefined()
@@ -199,9 +225,9 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent({ createHandler: onCreate })
     await flushPromises()
 
-    await wrapper.get('[data-testid="system-map-binding-kind"]').setValue('action_pipeline')
-    await wrapper.get('[data-testid="system-map-binding-node"]').setValue('loop-1')
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-2')
+    await choose(wrapper, 'system-map-binding-kind', 'action_pipeline')
+    await choose(wrapper, 'system-map-binding-node', 'loop-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-2')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
@@ -262,7 +288,7 @@ describe('SystemMapAttributionBindings', () => {
     const first = mountComponent()
     await flushPromises()
 
-    await first.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(first, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
     expect(first.text()).toContain('triggers unavailable')
 
@@ -274,15 +300,15 @@ describe('SystemMapAttributionBindings', () => {
     const second = mountComponent()
     await flushPromises()
 
-    await second.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-1')
+    await choose(second, 'system-map-binding-pipeline', 'pipe-1')
     await flushPromises()
     expect(second.text()).toContain('Could not load triggers')
   })
 
   async function submitActionPipelineBinding(wrapper: Awaited<ReturnType<typeof mountComponent>>): Promise<void> {
-    await wrapper.get('[data-testid="system-map-binding-kind"]').setValue('action_pipeline')
-    await wrapper.get('[data-testid="system-map-binding-node"]').setValue('loop-1')
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-2')
+    await choose(wrapper, 'system-map-binding-kind', 'action_pipeline')
+    await choose(wrapper, 'system-map-binding-node', 'loop-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-2')
     await wrapper.get('form').trigger('submit')
   }
 
@@ -328,9 +354,9 @@ describe('SystemMapAttributionBindings', () => {
     const wrapper = mountComponent({ createHandler: onCreate })
     await flushPromises()
 
-    await wrapper.get('[data-testid="system-map-binding-kind"]').setValue('action_pipeline')
-    await wrapper.get('[data-testid="system-map-binding-node"]').setValue('loop-1')
-    await wrapper.get('[data-testid="system-map-binding-pipeline"]').setValue('pipe-2')
+    await choose(wrapper, 'system-map-binding-kind', 'action_pipeline')
+    await choose(wrapper, 'system-map-binding-node', 'loop-1')
+    await choose(wrapper, 'system-map-binding-pipeline', 'pipe-2')
     await wrapper.get('form').trigger('submit')
     await wrapper.vm.$nextTick()
 

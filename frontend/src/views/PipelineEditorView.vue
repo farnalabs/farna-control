@@ -290,19 +290,23 @@
                 class="whitespace-nowrap text-[10px] text-muted-foreground"
                 :title="$t('views.PipelineEditorView.max_autonomy_level_hint')"
               >{{ $t('views.PipelineEditorView.max_autonomy_level') }}:</label>
-              <select
+              <AppSelect
                 id="pipeline-max-autonomy"
-                :value="maxAutonomyInput ?? ''"
-                class="w-44 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :model-value="maxAutonomyInput ?? ''"
+                class="w-44"
+                size="small"
+                :options="maxAutonomyOptions"
+                option-label="label"
+                option-value="value"
                 :title="$t('views.PipelineEditorView.max_autonomy_level_hint')"
-                @change="updateMaxAutonomyLevel"
+                :label="$t('views.PipelineEditorView.max_autonomy_level')"
+                @update:model-value="updateMaxAutonomyLevel"
                 data-testid="pipeline-editor-max-autonomy"
               >
-                <option value="">{{ $t('views.PipelineEditorView.max_autonomy_level_inherit') }}</option>
-                <option value="manual_approval">{{ $t('views.PipelineEditorView.autonomy_manual_approval') }}</option>
-                <option value="notify_on_complete">{{ $t('views.PipelineEditorView.autonomy_notify_on_complete') }}</option>
-                <option value="fully_autonomous">{{ $t('views.PipelineEditorView.autonomy_fully_autonomous') }}</option>
-              </select>
+                <template #option="{ option }">
+                  <span :data-value="option.value">{{ option.label }}</span>
+                </template>
+              </AppSelect>
             </div>
             <!-- FAR-1696 (ADR 043 S5): progressive-autonomy visibility panel,
                  mounted next to the ceiling control it reads alongside. The
@@ -370,18 +374,24 @@
                 class="whitespace-nowrap text-[10px] text-muted-foreground"
                 :title="$t('views.PipelineEditorView.owner_team_hint')"
               >{{ $t('views.PipelineEditorView.owner_team_label') }}:</label>
-              <select
+              <AppSelect
                 id="pipeline-owner-team"
-                :value="ownerTeamInput"
-                class="w-44 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :model-value="ownerTeamInput"
+                class="w-44"
+                size="small"
+                :options="ownerTeamSelectOptions"
+                option-label="label"
+                option-value="value"
                 :title="$t('views.PipelineEditorView.owner_team_hint')"
-                aria-describedby="pipeline-owner-team-help"
-                @change="updateOwnerTeam"
+                :label="$t('views.PipelineEditorView.owner_team_label')"
+                :pt="{ label: { 'aria-describedby': 'pipeline-owner-team-help' } }"
+                @update:model-value="updateOwnerTeam"
                 data-testid="pipeline-editor-owner-team"
               >
-                <option value="">{{ $t('views.PipelineEditorView.owner_team_none') }}</option>
-                <option v-for="tm in ownerTeamOptions" :key="tm.id" :value="tm.id">{{ tm.label }}</option>
-              </select>
+                <template #option="{ option }">
+                  <span :data-value="option.value">{{ option.label }}</span>
+                </template>
+              </AppSelect>
               <span id="pipeline-owner-team-help" class="sr-only">{{ $t('views.PipelineEditorView.owner_team_hint') }}</span>
               <span
                 v-if="ownerTeamError"
@@ -416,18 +426,24 @@
                 class="whitespace-nowrap text-[10px] text-muted-foreground"
                 :title="$t('views.PipelineEditorView.environment_profile_hint')"
               >{{ $t('views.PipelineEditorView.environment_profile_label') }}:</label>
-              <select
+              <AppSelect
                 id="pipeline-environment-profile"
-                :value="environmentProfileInput"
-                class="w-56 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :model-value="environmentProfileInput"
+                class="w-56"
+                size="small"
+                :options="environmentProfileSelectOptions"
+                option-label="label"
+                option-value="value"
                 :title="$t('views.PipelineEditorView.environment_profile_hint')"
-                aria-describedby="pipeline-environment-profile-help"
-                @change="updateEnvironmentProfile"
+                :label="$t('views.PipelineEditorView.environment_profile_label')"
+                :pt="{ label: { 'aria-describedby': 'pipeline-environment-profile-help' } }"
+                @update:model-value="updateEnvironmentProfile"
                 data-testid="pipeline-editor-environment-profile"
               >
-                <option value="">{{ $t('views.PipelineEditorView.environment_profile_none') }}</option>
-                <option v-for="p in environmentProfileOptions" :key="p.id" :value="p.id">{{ p.label }}</option>
-              </select>
+                <template #option="{ option }">
+                  <span :data-value="option.value">{{ option.label }}</span>
+                </template>
+              </AppSelect>
               <span id="pipeline-environment-profile-help" class="sr-only">{{ $t('views.PipelineEditorView.environment_profile_hint') }}</span>
               <!-- A bind/clear write is async: announce its outcome, and fail
                    LOUD on error (role="alert"), never silently. -->
@@ -1194,31 +1210,41 @@
           <template v-if="selectedNodeData.node_type === 'connector'">
             <div>
               <label for="pipeline-editor-connector-node-instance" class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.connector') }}</label>
-              <select
+              <AppSelect
                 id="pipeline-editor-connector-node-instance"
-                class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
+                class="mt-1 w-full"
                 :disabled="isViewing"
-                :value="selectedNodeData.connector_binding?.instance_id || ''"
+                :model-value="selectedNodeData.connector_binding?.instance_id || ''"
+                :options="connectorNodeInstanceOptions"
+                option-label="label"
+                option-value="value"
+                :label="$t('views.PipelineEditorView.connector')"
                 data-testid="pipeline-editor-connector-node-instance"
-                @change="onConnectorNodeInstanceChange"
+                @update:model-value="onConnectorNodeInstanceChange"
               >
-                <option value="">{{ $t('views.PipelineEditorView.connector_node_select_connector') }}</option>
-                <option v-for="c in connectors" :key="c.id" :value="c.id">{{ c.name }} ({{ c.connector_type_id }})</option>
-              </select>
+                <template #option="{ option }">
+                  <span :data-value="option.value">{{ option.label }}</span>
+                </template>
+              </AppSelect>
             </div>
             <div>
               <label for="pipeline-editor-connector-node-operation" class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.connector_node_operation') }}</label>
-              <select
+              <AppSelect
                 id="pipeline-editor-connector-node-operation"
-                class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
+                class="mt-1 w-full"
                 :disabled="isViewing"
-                :value="selectedNodeData.connector_binding?.operation || 'query'"
+                :model-value="selectedNodeData.connector_binding?.operation || 'query'"
+                :options="connectorNodeOperationOptions"
+                option-label="label"
+                option-value="value"
+                :label="$t('views.PipelineEditorView.connector_node_operation')"
                 data-testid="pipeline-editor-connector-node-operation"
-                @change="onConnectorNodeOperationChange"
+                @update:model-value="onConnectorNodeOperationChange"
               >
-                <option value="query">{{ $t('views.PipelineEditorView.connector_node_operation_query') }}</option>
-                <option value="write">{{ $t('views.PipelineEditorView.connector_node_operation_write') }}</option>
-              </select>
+                <template #option="{ option }">
+                  <span :data-value="option.value">{{ option.label }}</span>
+                </template>
+              </AppSelect>
             </div>
             <div>
               <label for="pipeline-editor-connector-node-resource" class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.connector_node_resource') }}</label>
@@ -1294,21 +1320,21 @@
             <div v-if="agentParamSchema(selectedNodeData.agent_id)">
               <dt class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.param_set') }}</dt>
               <dd>
-                <select
-                  v-model="selectedNodeParamSetId"
-                  :aria-label="$t('views.PipelineEditorView.param_set')"
+                <AppSelect
+                  :model-value="selectedNodeParamSetId ?? null"
+                  :label="$t('views.PipelineEditorView.param_set')"
                   :disabled="isViewing"
-                  class="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
-                  @change="onParamSetChange"
+                  class="w-full"
+                  :options="paramSetOptions"
+                  option-label="label"
+                  option-value="value"
+                  @update:model-value="onParamSetChange"
                   data-testid="pipeline-node-param-set"
                 >
-                  <option :value="undefined">{{ $t('views.PipelineEditorView.no_set') }}</option>
-                  <option
-                    v-for="ps in availableParamSets"
-                    :key="ps.id"
-                    :value="ps.id"
-                  >{{ ps.name }}</option>
-                </select>
+                  <template #option="{ option }">
+                    <span :data-value="option.value">{{ option.label }}</span>
+                  </template>
+                </AppSelect>
               </dd>
             </div>
             <div v-if="selectedNodeParamSetId && paramSetOverridesKeys.length > 0">
@@ -1340,47 +1366,74 @@
                     :disabled="isViewing"
                     class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
                   />
-                  <select
+                  <AppSelect
                     v-else-if="paramDefByKey(pkey)?.type === 'boolean'"
                     :id="'pipelineeditorview-override-' + pkey"
-                    v-model="selectedNodeOverrides[pkey]"
+                    :model-value="selectedNodeOverrides[pkey] ?? null"
                     :disabled="isViewing"
-                    class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
+                    class="w-full"
+                    size="small"
+                    :options="BOOLEAN_OVERRIDE_OPTIONS"
+                    option-label="label"
+                    option-value="value"
+                    :label="paramDefLabel(pkey)"
+                    @update:model-value="setOverride(pkey, $event)"
                   >
-                    <option :value="undefined"></option>
-                    <option :value="true">true</option>
-                    <option :value="false">false</option>
-                  </select>
-                  <select
+                    <template #option="{ option }">
+                      <span :data-value="option.value">{{ option.label }}</span>
+                    </template>
+                  </AppSelect>
+                  <AppSelect
                     v-else-if="paramDefByKey(pkey)?.type === 'select'"
                     :id="'pipelineeditorview-override-' + pkey"
-                    v-model="selectedNodeOverrides[pkey]"
+                    :model-value="selectedNodeOverrides[pkey] ?? null"
                     :disabled="isViewing"
-                    class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
+                    class="w-full"
+                    size="small"
+                    :options="selectOverrideOptions(pkey)"
+                    option-label="label"
+                    option-value="value"
+                    :label="paramDefLabel(pkey)"
+                    @update:model-value="setOverride(pkey, $event)"
                   >
-                    <option :value="undefined"></option>
-                    <option v-for="o in (paramDefByKey(pkey)?.options || [])" :key="o" :value="o">{{ o }}</option>
-                  </select>
-                  <select
+                    <template #option="{ option }">
+                      <span :data-value="option.value">{{ option.label }}</span>
+                    </template>
+                  </AppSelect>
+                  <AppSelect
                     v-else-if="paramDefByKey(pkey)?.type === 'model_backend_ref'"
                     :id="'pipelineeditorview-override-' + pkey"
-                    v-model="selectedNodeOverrides[pkey]"
+                    :model-value="selectedNodeOverrides[pkey] ?? null"
                     :disabled="isViewing"
-                    class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
+                    class="w-full"
+                    size="small"
+                    :options="modelBackendOverrideOptions"
+                    option-label="label"
+                    option-value="value"
+                    :label="paramDefLabel(pkey)"
+                    @update:model-value="setOverride(pkey, $event)"
                   >
-                    <option :value="undefined"></option>
-                    <option v-for="mb in modelBackends" :key="mb.id" :value="mb.id">{{ mb.display_name || mb.name || shortId(mb.id) }}</option>
-                  </select>
-                  <select
+                    <template #option="{ option }">
+                      <span :data-value="option.value">{{ option.label }}</span>
+                    </template>
+                  </AppSelect>
+                  <AppSelect
                     v-else-if="paramDefByKey(pkey)?.type === 'schema_ref'"
                     :id="'pipelineeditorview-override-' + pkey"
-                    v-model="selectedNodeOverrides[pkey]"
+                    :model-value="selectedNodeOverrides[pkey] ?? null"
                     :disabled="isViewing"
-                    class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
+                    class="w-full"
+                    size="small"
+                    :options="schemaOverrideOptions"
+                    option-label="label"
+                    option-value="value"
+                    :label="paramDefLabel(pkey)"
+                    @update:model-value="setOverride(pkey, $event)"
                   >
-                    <option :value="undefined"></option>
-                    <option v-for="s in schemas" :key="s.id" :value="s.id">{{ s.name || shortId(s.id) }}</option>
-                  </select>
+                    <template #option="{ option }">
+                      <span :data-value="option.value">{{ option.label }}</span>
+                    </template>
+                  </AppSelect>
                   <span v-else class="text-xs text-muted-foreground">—</span>
                 </div>
                 <button
@@ -2251,6 +2304,7 @@ import PipelineVersionChip from '../components/pipeline/PipelineVersionChip.vue'
 import SandboxCommandsEditor from '../components/pipeline/SandboxCommandsEditor.vue'
 import SnapshotLockCard from '../components/pipeline/SnapshotLockCard.vue'
 import ProgressiveAutonomyPanel from '../components/pipeline/ProgressiveAutonomyPanel.vue'
+import AppSelect from '../components/shared/AppSelect.vue'
 import AgentRunnerBindings from '../components/agent/AgentRunnerBindings.vue'
 import ManualNode from '../components/pipeline/nodes/ManualNode.vue'
 import AgentNode from '../components/pipeline/nodes/AgentNode.vue'
@@ -3603,9 +3657,24 @@ function ensureConnectorNodeBinding(): any | null {
   return node.connector_binding
 }
 
-function onConnectorNodeInstanceChange(event: Event): void {
+// AppSelect option lists for the connector node's binding controls (both were
+// native <select> elements).
+const connectorNodeInstanceOptions = computed(() => [
+  { value: '', label: t('views.PipelineEditorView.connector_node_select_connector') },
+  ...connectors.value.map((c: any) => ({
+    value: c.id,
+    label: `${c.name} (${c.connector_type_id})`,
+  })),
+])
+
+const connectorNodeOperationOptions = computed(() => [
+  { value: 'query', label: t('views.PipelineEditorView.connector_node_operation_query') },
+  { value: 'write', label: t('views.PipelineEditorView.connector_node_operation_write') },
+])
+
+function onConnectorNodeInstanceChange(value: unknown): void {
   if (isViewing.value) return
-  const id = (event.target as HTMLSelectElement).value
+  const id = String(value)
   const binding = ensureConnectorNodeBinding()
   if (!binding) return
   const connector = connectors.value.find((c: any) => c.id === id)
@@ -3614,12 +3683,11 @@ function onConnectorNodeInstanceChange(event: Event): void {
   connectorNodeJsonError.value = null
 }
 
-function onConnectorNodeOperationChange(event: Event): void {
+function onConnectorNodeOperationChange(selected: unknown): void {
   if (isViewing.value) return
-  const value = (event.target as HTMLSelectElement).value
   const binding = ensureConnectorNodeBinding()
   if (!binding) return
-  binding.operation = value === 'write' ? 'write' : 'query'
+  binding.operation = selected === 'write' ? 'write' : 'query'
 }
 
 function onConnectorNodeResourceInput(event: Event): void {
@@ -3774,7 +3842,52 @@ function paramDefLabel(key: string): string {
   return def?.label || def?.name || key
 }
 
-function onParamSetChange() {
+// AppSelect option lists for the node parameter controls (they were native
+// <select> elements). `undefined` is the explicit "no override / no set" value
+// the native `<option :value="undefined">` carried.
+// A null option value is the "no set / no override" entry (the native control
+// used `undefined`); `setOverride` maps the sentinel back to `undefined` so the
+// node payload shape is unchanged.
+const paramSetOptions = computed(() => [
+  { value: null, label: t('views.PipelineEditorView.no_set') },
+  ...availableParamSets.value.map((ps: any) => ({ value: ps.id, label: ps.name })),
+])
+
+const BOOLEAN_OVERRIDE_OPTIONS = [
+  { value: null, label: '' },
+  { value: true, label: 'true' },
+  { value: false, label: 'false' },
+]
+
+function selectOverrideOptions(key: string) {
+  const options = paramDefByKey(key)?.options || []
+  return [{ value: null, label: '' }, ...options.map((opt: string) => ({ value: opt, label: opt }))]
+}
+
+const modelBackendOverrideOptions = computed(() => [
+  { value: null, label: '' },
+  ...modelBackends.value.map((mb: any) => ({
+    value: mb.id,
+    label: mb.display_name || mb.name || shortId(mb.id),
+  })),
+])
+
+const schemaOverrideOptions = computed(() => [
+  { value: null, label: '' },
+  ...schemas.value.map((sch: any) => ({ value: sch.id, label: sch.name || shortId(sch.id) })),
+])
+
+function setOverride(key: string, value: unknown) {
+  selectedNodeOverrides.value[key] = value === null ? undefined : value
+}
+
+function onParamSetChange(value?: unknown) {
+  // The AppSelect emits the chosen set id (or null for the "no set" entry); an
+  // omitted argument keeps the current selection, which is how callers that
+  // only need the side effect (and the pre-AppSelect contract) invoke it.
+  if (value !== undefined) {
+    selectedNodeParamSetId.value = (value === null ? undefined : value) as string | undefined
+  }
   if (!selectedNodeParamSetId.value) {
     selectedNodeOverrides.value = {}
     return
@@ -5291,8 +5404,8 @@ async function resetCircuitBreaker() {
   }
 }
 
-async function updateMaxAutonomyLevel(event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
+async function updateMaxAutonomyLevel(selected: unknown) {
+  const raw = String(selected ?? '')
   const val = raw === '' ? null : raw
   maxAutonomyInput.value = val
   try {
@@ -5340,6 +5453,20 @@ const ownerTeamOptions = computed(() => {
   return rows
 })
 
+// AppSelect option lists for the editor chrome. Each control was a native
+// <select>; the leading empty entry is the same "none / inherit" choice.
+const maxAutonomyOptions = computed(() => [
+  { value: '', label: t('views.PipelineEditorView.max_autonomy_level_inherit') },
+  { value: 'manual_approval', label: t('views.PipelineEditorView.autonomy_manual_approval') },
+  { value: 'notify_on_complete', label: t('views.PipelineEditorView.autonomy_notify_on_complete') },
+  { value: 'fully_autonomous', label: t('views.PipelineEditorView.autonomy_fully_autonomous') },
+])
+
+const ownerTeamSelectOptions = computed(() => [
+  { value: '', label: t('views.PipelineEditorView.owner_team_none') },
+  ...ownerTeamOptions.value.map((row) => ({ value: row.id, label: row.label })),
+])
+
 // Resolves a HITL gate's team ID to the name only from teams this editor has
 // already loaded, so a node's gate pill never invents or fetches a team name.
 const teamNamesById = computed<Record<string, string>>(() =>
@@ -5383,8 +5510,8 @@ function ownerTeamLabelForId(id: string): string {
   return ownerTeams.value.find((tm) => tm.id === id)?.name ?? id
 }
 
-async function updateOwnerTeam(event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
+async function updateOwnerTeam(selected: unknown) {
+  const raw = String(selected ?? '')
   const val = raw === '' ? null : raw
   ownerTeamInput.value = raw
   ownerTeamUpdateError.value = null
@@ -5455,6 +5582,11 @@ const environmentProfileOptions = computed(() => {
   return rows
 })
 
+const environmentProfileSelectOptions = computed(() => [
+  { value: '', label: t('views.PipelineEditorView.environment_profile_none') },
+  ...environmentProfileOptions.value.map((row) => ({ value: row.id, label: row.label })),
+])
+
 // Load failure (feature gate, network) surfaces alongside a write failure -
 // a profile list we could not load must not render as a silent empty menu.
 const environmentProfileError = computed(() => {
@@ -5495,8 +5627,8 @@ watch(
   { immediate: true },
 )
 
-async function updateEnvironmentProfile(event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
+async function updateEnvironmentProfile(selected: unknown) {
+  const raw = String(selected ?? '')
   // '' clears (explicit null on the wire); anything else binds that profile.
   const val = raw === '' ? null : raw
   environmentProfileInput.value = raw

@@ -83,80 +83,119 @@
         </div>
       </div>
 
-      <label class="block">
-        <span class="mb-2 block text-xs font-medium text-muted-foreground">
-          {{ $t("views.AnalyticsView.dimension") }}
-        </span>
-        <select
-          :value="filters.dimension ?? ''"
-          class="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-          data-testid="analytics-filter-dimension"
-          @change="onDimensionChange"
+      <div>
+        <label
+          for="analytics-filter-dimension"
+          class="mb-2 block text-xs font-medium text-muted-foreground"
         >
-          <option value="">{{ $t("views.AnalyticsView.dimension_none") }}</option>
-          <option
-            v-for="d in dimensions"
-            :key="d.value"
-            :value="d.value"
-          >
-            {{ $t(d.labelKey) }}
-          </option>
-        </select>
-      </label>
+          {{ $t("views.AnalyticsView.dimension") }}
+        </label>
+        <AppSelect
+          id="analytics-filter-dimension"
+          :model-value="filters.dimension ?? ''"
+          :options="dimensionOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.AnalyticsView.dimension')"
+          class="w-full"
+          data-testid="analytics-filter-dimension"
+          @update:model-value="onDimensionChange"
+        >
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <label class="block">
-        <span class="text-xs font-medium text-muted-foreground">{{ $t("views.AnalyticsView.filter_folder") }}</span>
-        <select
-          :value="filters.folderId ?? ''"
-          class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      <div>
+        <label
+          for="analytics-filter-folder"
+          class="text-xs font-medium text-muted-foreground"
+        >{{ $t("views.AnalyticsView.filter_folder") }}</label>
+        <AppSelect
+          id="analytics-filter-folder"
+          :model-value="filters.folderId ?? ''"
+          :options="folderOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.AnalyticsView.filter_folder')"
+          class="mt-1 w-full"
           data-testid="analytics-filter-folder"
-          @change="onFolderChange"
+          @update:model-value="onFolderChange"
         >
-          <option value="">{{ $t("views.AnalyticsView.all") }}</option>
-          <option v-for="f in [...folders].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))" :key="f.id" :value="f.id">{{ f.name }}</option>
-        </select>
-      </label>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
 
-      <label class="block">
-        <span class="text-xs font-medium text-muted-foreground">{{ $t("views.AnalyticsView.filter_pipeline") }}</span>
-        <select
-          :value="filters.pipelineId ?? ''"
-          class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      <div>
+        <label
+          for="analytics-filter-pipeline"
+          class="text-xs font-medium text-muted-foreground"
+        >{{ $t("views.AnalyticsView.filter_pipeline") }}</label>
+        <AppSelect
+          id="analytics-filter-pipeline"
+          :model-value="filters.pipelineId ?? ''"
+          :options="pipelineOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.AnalyticsView.filter_pipeline')"
+          class="mt-1 w-full"
           data-testid="analytics-filter-pipeline"
-          @change="onPipelineChange"
+          @update:model-value="onPipelineChange"
         >
-          <option value="">{{ $t("views.AnalyticsView.all") }}</option>
-          <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
-      </label>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
 
-      <label class="block">
-        <span class="text-xs font-medium text-muted-foreground">{{ $t("views.AnalyticsView.filter_trigger_type") }}</span>
-        <select
-          :value="filters.triggerType ?? ''"
-          class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      <div>
+        <label
+          for="analytics-filter-trigger-type"
+          class="text-xs font-medium text-muted-foreground"
+        >{{ $t("views.AnalyticsView.filter_trigger_type") }}</label>
+        <AppSelect
+          id="analytics-filter-trigger-type"
+          :model-value="filters.triggerType ?? ''"
+          :options="triggerTypeOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.AnalyticsView.filter_trigger_type')"
+          class="mt-1 w-full"
           data-testid="analytics-filter-trigger-type"
-          @change="onTriggerTypeChange"
+          @update:model-value="onTriggerTypeChange"
         >
-          <option value="">{{ $t("views.AnalyticsView.all") }}</option>
-          <option v-for="t in triggerTypes" :key="t" :value="t">{{ t }}</option>
-        </select>
-      </label>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
 
-      <label class="block">
-        <span class="text-xs font-medium text-muted-foreground">{{ $t("views.AnalyticsView.filter_status") }}</span>
-        <select
-          :value="filters.status ?? ''"
-          class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      <div>
+        <label
+          for="analytics-filter-status"
+          class="text-xs font-medium text-muted-foreground"
+        >{{ $t("views.AnalyticsView.filter_status") }}</label>
+        <AppSelect
+          id="analytics-filter-status"
+          :model-value="filters.status ?? ''"
+          :options="statusOptions"
+          option-label="label"
+          option-value="value"
+          :label="$t('views.AnalyticsView.filter_status')"
+          class="mt-1 w-full"
           data-testid="analytics-filter-status"
-          @change="onStatusChange"
+          @update:model-value="onStatusChange"
         >
-          <option value="">{{ $t("views.AnalyticsView.all") }}</option>
-          <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-        </select>
-      </label>
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
 
       <label class="block">
         <span class="text-xs font-medium text-muted-foreground">{{ $t("views.AnalyticsView.filter_error_code") }}</span>
@@ -175,6 +214,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import AppSelect from "../shared/AppSelect.vue";
 import type { components } from "../../lib/api/schema";
 import {
   MEASURES,
@@ -199,6 +240,7 @@ const emit = defineEmits<{
   "update:measure": [measure: AnalyticsMeasure];
 }>();
 
+const { t } = useI18n();
 const timespans = TIMESPANS.map((t) => ({
   value: t.value,
   labelKey: `views.AnalyticsView.timespan_${t.value}`,
@@ -243,33 +285,66 @@ const measures = MEASURES;
 const triggerTypes = TRIGGER_TYPES;
 const statuses = RUN_STATUSES;
 
-function selectValue(e: Event): string {
-  return (e.target as HTMLSelectElement).value;
-}
+// AppSelect option lists. The empty value is the "all / none" entry the native
+// selects previously rendered as `<option value="">`, so clearing a filter
+// still emits the same empty string (mapped to null at the emit boundary).
+const dimensionOptions = computed(() => [
+  { value: "", label: t("views.AnalyticsView.dimension_none") },
+  ...dimensions.map((d) => ({ value: d.value as string, label: t(d.labelKey) })),
+]);
+
+const folderOptions = computed(() => [
+  { value: "", label: t("views.AnalyticsView.all") },
+  ...[...props.folders]
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }),
+    )
+    .map((f) => ({ value: f.id, label: f.name })),
+]);
+
+const pipelineOptions = computed(() => [
+  { value: "", label: t("views.AnalyticsView.all") },
+  ...props.pipelines.map((p) => ({ value: p.id, label: p.name })),
+]);
+
+const triggerTypeOptions = computed(() => [
+  { value: "", label: t("views.AnalyticsView.all") },
+  ...triggerTypes.map((value) => ({ value, label: value })),
+]);
+
+const statusOptions = computed(() => [
+  { value: "", label: t("views.AnalyticsView.all") },
+  ...statuses.map((value) => ({ value, label: value })),
+]);
 
 function emitFilters(patch: Partial<AnalyticsFilters>): void {
   emit("update:filters", { ...props.filters, ...patch });
 }
 
-function onDimensionChange(e: Event): void {
-  const v = selectValue(e);
-  emitFilters({ dimension: (v || null) as AnalyticsDimension | null });
+// AppSelect emits `unknown`; the pickers only ever carry string values (the
+// empty string being the "all / none" entry), so each handler narrows once.
+function selectValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
-function onFolderChange(e: Event): void {
-  emitFilters({ folderId: selectValue(e) || null });
+function onDimensionChange(value: unknown): void {
+  emitFilters({ dimension: (selectValue(value) || null) as AnalyticsDimension | null });
 }
 
-function onPipelineChange(e: Event): void {
-  emitFilters({ pipelineId: selectValue(e) || null });
+function onFolderChange(value: unknown): void {
+  emitFilters({ folderId: selectValue(value) || null });
 }
 
-function onTriggerTypeChange(e: Event): void {
-  emitFilters({ triggerType: selectValue(e) || null });
+function onPipelineChange(value: unknown): void {
+  emitFilters({ pipelineId: selectValue(value) || null });
 }
 
-function onStatusChange(e: Event): void {
-  emitFilters({ status: selectValue(e) || null });
+function onTriggerTypeChange(value: unknown): void {
+  emitFilters({ triggerType: selectValue(value) || null });
+}
+
+function onStatusChange(value: unknown): void {
+  emitFilters({ status: selectValue(value) || null });
 }
 
 function onErrorCodeInput(e: Event): void {

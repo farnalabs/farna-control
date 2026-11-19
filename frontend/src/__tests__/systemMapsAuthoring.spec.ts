@@ -103,6 +103,21 @@ describe('GraphEditor', () => {
     })
   }
 
+  // The relationship controls are design-system AppSelects (PrimeVue Select):
+  // source, type and target in render order, located by the id they map to.
+  async function chooseRelationship(
+    wrapper: ReturnType<typeof mountEditor>,
+    field: 'source' | 'type' | 'target',
+    value: string,
+  ): Promise<void> {
+    const select = wrapper.findAllComponents({ name: 'Select' }).at(
+      field === 'source' ? 0 : field === 'type' ? 1 : 2,
+    )
+    expect(select, `expected the relationship ${field} AppSelect`).toBeDefined()
+    select!.vm.$emit('update:modelValue', value)
+    await wrapper.vm.$nextTick()
+  }
+
   it('draws each edge between its own node centres rather than fixed coordinates', () => {
     const wrapper = mountEditor()
     const line = wrapper.get('line')
@@ -116,9 +131,11 @@ describe('GraphEditor', () => {
   it('adds a relationship using the selected source and target endpoints', async () => {
     const wrapper = mountEditor()
 
-    await wrapper.get('[data-testid="system-map-relationship-source"]').setValue('connector:b')
-    await wrapper.get('[data-testid="system-map-relationship-target"]').setValue('pipeline:a')
-    await wrapper.get('[data-testid="system-map-relationship-type"]').setValue('data')
+    // The three relationship pickers are design-system AppSelects, so a choice
+    // is an `update:modelValue` emit on the inner Select.
+    await chooseRelationship(wrapper, 'source', 'connector:b')
+    await chooseRelationship(wrapper, 'target', 'pipeline:a')
+    await chooseRelationship(wrapper, 'type', 'data')
     await wrapper.get('[data-testid="system-map-add-relationship"]').trigger('click')
 
     const emitted = wrapper.emitted('relationships-change')
@@ -213,6 +230,43 @@ describe('DiscoveryConfigPanel', () => {
     return mount(DiscoveryConfigPanel, { props: { canUseAi: true, ...props }, global: { plugins: [i18n] } })
   }
 
+  // The AI-assisted controls are design-system AppSelects: options come from
+  // props and a choice is an `update:modelValue` emit on the inner Select.
+  // The testids and the control ids differ for these two pickers; map them.
+  const DISCOVERY_INPUT_ID: Record<string, string> = {
+    'system-map-discovery-backend': 'discovery-backend',
+    'system-map-discovery-eval': 'discovery-eval',
+  }
+
+  function discoverySelect(wrapper: ReturnType<typeof mountConfig>, testid: string) {
+    const inputId = DISCOVERY_INPUT_ID[testid] ?? testid
+    const found = wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component) => component.props('inputId') === inputId)
+    expect(found, `expected an AppSelect with id "${testid}"`).toBeDefined()
+    return found!
+  }
+
+  function discoveryOptions(
+    wrapper: ReturnType<typeof mountConfig>,
+    testid: string,
+  ): Array<{ value: string; label: string }> {
+    return discoverySelect(wrapper, testid).props('options') as Array<{ value: string; label: string }>
+  }
+
+  async function chooseDiscovery(
+    wrapper: ReturnType<typeof mountConfig>,
+    testid: string,
+    value: string,
+  ): Promise<void> {
+    discoverySelect(wrapper, testid).vm.$emit('update:modelValue', value)
+    await wrapper.vm.$nextTick()
+  }
+
+  function hasOption(wrapper: ReturnType<typeof mountConfig>, testid: string, value: string): boolean {
+    return discoveryOptions(wrapper, testid).some((option) => option.value === value)
+  }
+
   it('fails closed when AI option loading fails', async () => {
     mockGet.mockRejectedValue(new Error('unavailable'))
     const wrapper = mountConfig()
@@ -276,13 +330,13 @@ describe('DiscoveryConfigPanel', () => {
     })
     const wrapper = mountConfig()
     await wrapper.get('[data-testid="system-map-discovery-mode-ai"]').setValue(true)
-    await vi.waitFor(() => expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true))
+    await vi.waitFor(() => expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true))
 
-    const backendLabels = wrapper.get('[data-testid="system-map-discovery-backend"]').findAll('option').map((option) => option.text())
+    const backendLabels = discoveryOptions(wrapper, 'system-map-discovery-backend').map((option) => option.label)
     expect(backendLabels).toContain('Primary (openai)')
     expect(backendLabels).not.toContain('Team only (openai)')
     expect(backendLabels).not.toContain('In dev (openai)')
-    const evalLabels = wrapper.get('[data-testid="system-map-discovery-eval"]').findAll('option').map((option) => option.text())
+    const evalLabels = discoveryOptions(wrapper, 'system-map-discovery-eval').map((option) => option.label)
     expect(evalLabels).toContain('Judge (v3)')
     expect(evalLabels).not.toContain('Other (v1)')
   })
@@ -291,13 +345,13 @@ describe('DiscoveryConfigPanel', () => {
     mockOptions({ backends: [backend], evals: [evaluation] })
     const wrapper = mountConfig()
     await wrapper.get('[data-testid="system-map-discovery-mode-ai"]').setValue(true)
-    await vi.waitFor(() => expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true))
+    await vi.waitFor(() => expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true))
 
-    await wrapper.get('[data-testid="system-map-discovery-backend"]').setValue('backend-1')
+    await chooseDiscovery(wrapper, 'system-map-discovery-backend', 'backend-1')
     await wrapper.get('[data-testid="system-map-discovery-submit"]').trigger('click')
     expect(wrapper.emitted('submit')).toBeUndefined()
 
-    await wrapper.get('[data-testid="system-map-discovery-eval"]').setValue('eval-1')
+    await chooseDiscovery(wrapper, 'system-map-discovery-eval', 'eval-1')
     await wrapper.get('[data-testid="system-map-discovery-submit"]').trigger('click')
     expect(wrapper.emitted('submit')![0][0]).toEqual({
       modelBackendId: 'backend-1',
@@ -314,7 +368,7 @@ describe('DiscoveryConfigPanel', () => {
     await wrapper.get('[data-testid="system-map-discovery-mode-ai"]').setValue(true)
     await vi.waitFor(() => expect(wrapper.text()).toContain('Loading authorised AI discovery options'))
     expect(wrapper.text()).toContain('An internal-access check is required')
-    expect(wrapper.get('[data-testid="system-map-discovery-backend"]').attributes('disabled')).toBeDefined()
+    expect(discoverySelect(wrapper, 'system-map-discovery-backend').props('disabled')).toBe(true)
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('submit')).toBeUndefined()
   })
@@ -323,7 +377,7 @@ describe('DiscoveryConfigPanel', () => {
     mockOptions({ backends: [backend], evals: [evaluation] })
     const wrapper = mountConfig()
     await wrapper.get('[data-testid="system-map-discovery-mode-ai"]').setValue(true)
-    await vi.waitFor(() => expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true))
+    await vi.waitFor(() => expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true))
     mockGet.mockClear()
 
     await wrapper.setProps({ canUseAi: false })
@@ -351,14 +405,14 @@ describe('DiscoveryConfigPanel', () => {
     loads[1][0].resolve({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
     loads[1][1].resolve({ data: { items: [backend] } })
     loads[1][2].resolve({ data: { items: [evaluation] } })
-    await vi.waitFor(() => expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true))
+    await vi.waitFor(() => expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true))
 
     loads[0][0].resolve({ data: { flags: [{ name: 'system_maps', currently_active: false }] } })
     loads[0][1].resolve({ data: { items: [] } })
     loads[0][2].resolve({ data: { items: [] } })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true)
+    expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true)
     expect(wrapper.text()).not.toContain('AI discovery options could not be loaded')
   })
 
@@ -382,12 +436,12 @@ describe('DiscoveryConfigPanel', () => {
     loads[1][0].resolve({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
     loads[1][1].resolve({ data: { items: [backend] } })
     loads[1][2].resolve({ data: { items: [evaluation] } })
-    await vi.waitFor(() => expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true))
+    await vi.waitFor(() => expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true))
 
     loads[0][0].reject(new Error('stale load failed'))
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="system-map-discovery-backend"] option[value="backend-1"]').exists()).toBe(true)
+    expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true)
     expect(wrapper.text()).not.toContain('AI discovery options could not be loaded')
   })
 

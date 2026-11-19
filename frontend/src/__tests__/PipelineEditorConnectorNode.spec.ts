@@ -148,7 +148,7 @@ describe('PipelineEditorView — FAR-1395 connector query authoring', () => {
     vm.addNode('connector')
     vm.selectedNodeData = vm.rawNodes[0]
 
-    vm.onConnectorNodeInstanceChange({ target: { value: 'conn-1' } } as unknown as Event)
+    vm.onConnectorNodeInstanceChange('conn-1')
 
     expect(vm.selectedNodeData.connector_binding.instance_id).toBe('conn-1')
     expect(vm.selectedNodeData.connector_binding.type).toBe('github')
@@ -159,11 +159,11 @@ describe('PipelineEditorView — FAR-1395 connector query authoring', () => {
     vm.addNode('connector')
     vm.selectedNodeData = vm.rawNodes[0]
 
-    vm.onConnectorNodeOperationChange({ target: { value: 'write' } } as unknown as Event)
+    vm.onConnectorNodeOperationChange('write')
     expect(vm.selectedNodeData.connector_binding.operation).toBe('write')
 
     // An out-of-vocabulary value can never be authored from the UI.
-    vm.onConnectorNodeOperationChange({ target: { value: 'frobnicate' } } as unknown as Event)
+    vm.onConnectorNodeOperationChange('frobnicate')
     expect(vm.selectedNodeData.connector_binding.operation).toBe('query')
   })
 
@@ -261,8 +261,13 @@ describe('PipelineEditorView — FAR-1395 connector query authoring', () => {
 
     const operation = wrapper.find('[data-testid="pipeline-editor-connector-node-operation"]')
     expect(operation.exists()).toBe(true)
-    // The unset verb falls back to the engine's query default in the UI.
-    expect((operation.element as HTMLSelectElement).value).toBe('query')
+    // The unset verb falls back to the engine's query default in the UI. The
+    // control is the design-system AppSelect, so read its declared model value.
+    const operationSelect = wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component) => component.props('inputId') === 'pipeline-editor-connector-node-operation')
+    expect(operationSelect, 'expected the connector-operation AppSelect').toBeDefined()
+    expect(operationSelect!.props('modelValue')).toBe('query')
   })
 
   it('ensureConnectorNodeBinding repairs a missing or non-object binding', async () => {
@@ -280,8 +285,8 @@ describe('PipelineEditorView — FAR-1395 connector query authoring', () => {
     const { vm } = await mountReady()
     vm.selectedNodeData = null
 
-    vm.onConnectorNodeInstanceChange({ target: { value: 'conn-1' } } as unknown as Event)
-    vm.onConnectorNodeOperationChange({ target: { value: 'write' } } as unknown as Event)
+    vm.onConnectorNodeInstanceChange('conn-1')
+    vm.onConnectorNodeOperationChange('write')
     vm.onConnectorNodeResourceInput({ target: { value: 'pr_files' } } as unknown as Event)
     vm.onConnectorNodeJsonInput('filters', { target: { value: '{"a": 1}' } } as unknown as Event)
 
@@ -314,8 +319,8 @@ describe('PipelineEditorView — FAR-1395 connector query authoring', () => {
     }
     const before = JSON.stringify(vm.selectedNodeData.connector_binding)
 
-    vm.onConnectorNodeInstanceChange({ target: { value: 'conn-1' } } as unknown as Event)
-    vm.onConnectorNodeOperationChange({ target: { value: 'write' } } as unknown as Event)
+    vm.onConnectorNodeInstanceChange('conn-1')
+    vm.onConnectorNodeOperationChange('write')
     vm.onConnectorNodeResourceInput({ target: { value: 'pr_files' } } as unknown as Event)
     vm.onConnectorNodeJsonInput('filters', { target: { value: '{"a": 1}' } } as unknown as Event)
 

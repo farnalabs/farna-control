@@ -22,15 +22,21 @@
 
         <div>
           <label for="restconn-connector-method" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.method') }}</label>
-          <select id="restconn-connector-method"
+          <AppSelect id="restconn-connector-method"
             v-model="config.method"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            class="w-full"
+            :options="methodOptions"
+            option-label="label"
+            option-value="value"
+            :label="$t('connectors.rest.method')"
+            :invalid="!!errors.method"
+            :pt="describedByPt(errors.method ? 'restconn-method-error' : undefined)"
             data-testid="rest-connector-method"
-            :aria-invalid="!!errors.method"
-            :aria-describedby="errors.method ? 'restconn-method-error' : undefined"
           >
-            <option v-for="m in METHOD_OPTIONS" :key="m" :value="m">{{ m }}</option>
-          </select>
+            <template #option="{ option }">
+              <span :data-value="option.value">{{ option.label }}</span>
+            </template>
+          </AppSelect>
           <p v-if="errors.method" id="restconn-method-error" class="mt-1 text-sm text-destructive">{{ errors.method }}</p>
         </div>
 
@@ -59,15 +65,21 @@
 
         <div>
           <label for="restconn-connector-on-unknown" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.on_unknown') }}</label>
-          <select id="restconn-connector-on-unknown"
+          <AppSelect id="restconn-connector-on-unknown"
             v-model="config.on_unknown"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            class="w-full"
+            :options="onUnknownOptions"
+            option-label="label"
+            option-value="value"
+            :label="$t('connectors.rest.on_unknown')"
+            :invalid="!!errors.on_unknown"
+            :pt="describedByPt(errors.on_unknown ? 'restconn-on-unknown-error restconn-on-unknown-help' : 'restconn-on-unknown-help')"
             data-testid="rest-connector-on-unknown"
-            :aria-invalid="!!errors.on_unknown"
-            :aria-describedby="errors.on_unknown ? 'restconn-on-unknown-error restconn-on-unknown-help' : 'restconn-on-unknown-help'"
           >
-            <option v-for="o in ON_UNKNOWN_OPTIONS" :key="o" :value="o">{{ $t(`connectors.rest.on_unknown_${o}`) }}</option>
-          </select>
+            <template #option="{ option }">
+              <span :data-value="option.value">{{ option.label }}</span>
+            </template>
+          </AppSelect>
           <p v-if="errors.on_unknown" id="restconn-on-unknown-error" class="mt-1 text-sm text-destructive">{{ errors.on_unknown }}</p>
           <p id="restconn-on-unknown-help" class="mt-1 text-xs text-muted-foreground">{{ $t(`connectors.rest.on_unknown_${config.on_unknown}_help`) }}</p>
         </div>
@@ -116,15 +128,21 @@
       <div class="space-y-4">
         <div>
           <label for="restconn-connector-auth-mode" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.auth_mode') }}</label>
-          <select id="restconn-connector-auth-mode"
+          <AppSelect id="restconn-connector-auth-mode"
             v-model="credentials.auth_mode"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            class="w-full"
+            :options="authModeOptions"
+            option-label="label"
+            option-value="value"
+            :label="$t('connectors.rest.auth_mode')"
+            :invalid="!!errors.auth_mode"
+            :pt="describedByPt(errors.auth_mode ? 'restconn-auth-mode-error' : undefined)"
             data-testid="rest-connector-auth-mode"
-            :aria-invalid="!!errors.auth_mode"
-            :aria-describedby="errors.auth_mode ? 'restconn-auth-mode-error' : undefined"
           >
-            <option v-for="m in AUTH_MODE_OPTIONS" :key="m" :value="m">{{ $t(`connectors.rest.auth_mode_${m}`) }}</option>
-          </select>
+            <template #option="{ option }">
+              <span :data-value="option.value">{{ option.label }}</span>
+            </template>
+          </AppSelect>
           <p v-if="errors.auth_mode" id="restconn-auth-mode-error" class="mt-1 text-sm text-destructive">{{ errors.auth_mode }}</p>
         </div>
 
@@ -185,14 +203,19 @@
           </div>
           <div>
             <label for="restconn-connector-api-key-in" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.api_key_in') }}</label>
-            <select id="restconn-connector-api-key-in"
+            <AppSelect id="restconn-connector-api-key-in"
               v-model="credentials.apiKeyIn"
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              class="w-full"
+              :options="apiKeyInOptions"
+              option-label="label"
+              option-value="value"
+              :label="$t('connectors.rest.api_key_in')"
               data-testid="rest-connector-api-key-in"
             >
-              <option value="header">{{ $t('connectors.rest.auth_in_header') }}</option>
-              <option value="query">{{ $t('connectors.rest.auth_in_query') }}</option>
-            </select>
+              <template #option="{ option }">
+                <span :data-value="option.value">{{ option.label }}</span>
+              </template>
+            </AppSelect>
           </div>
           <div v-if="credentials.apiKeyIn === 'header'">
             <label for="restconn-connector-header-name" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.header_name') }}</label>
@@ -431,8 +454,9 @@ function validateConnectorConfig(input: ConnectorValidationInput): Record<string
 </script>
 
 <script setup lang="ts">
-import { reactive, ref, watch, onMounted } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppSelect from '../shared/AppSelect.vue'
 
 const config = defineModel<RestConfigState>('config', { required: true })
 const credentials = defineModel<RestCredsState>('credentials', { required: true })
@@ -448,6 +472,28 @@ const props = defineProps<{ mode: 'add' | 'edit' | null; legacyAuthEcho?: boolea
 const { t } = useI18n()
 
 const errors = reactive<Record<string, string>>({})
+
+// AppSelect option lists for the form's dropdowns (they were native
+// <select>/<option> pairs).
+const methodOptions = METHOD_OPTIONS.map((method) => ({ value: method, label: method }))
+const onUnknownOptions = computed(() =>
+  ON_UNKNOWN_OPTIONS.map((value) => ({ value, label: t(`connectors.rest.on_unknown_${value}`) })),
+)
+const authModeOptions = computed(() =>
+  AUTH_MODE_OPTIONS.map((value) => ({ value, label: t(`connectors.rest.auth_mode_${value}`) })),
+)
+const apiKeyInOptions = computed(() => [
+  { value: 'header', label: t('connectors.rest.auth_in_header') },
+  { value: 'query', label: t('connectors.rest.auth_in_query') },
+])
+
+// PrimeVue Select forwards fallthrough attributes to its wrapper <div>, not to
+// the focusable combobox, so an error/help hint is routed through pt.label and
+// is read with the control itself (the same wiring the environment-profile form
+// uses). Omit the key entirely while there is no hint.
+function describedByPt(ids: string | undefined) {
+  return ids ? { label: { 'aria-describedby': ids } } : { label: {} }
+}
 
 function validate(): boolean {
   const found = validateConnectorConfig({

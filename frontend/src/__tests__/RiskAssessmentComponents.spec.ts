@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
@@ -326,6 +327,44 @@ describe('RiskAssessmentSummaryCard', () => {
 })
 
 describe('RiskAssessmentFacets', () => {
+  // The facets are design-system AppSelects (PrimeVue Select), not native
+  // <select> elements: options come from props and a selection is an
+  // `update:modelValue` emit on the inner Select.
+  // Accepts any wrapper around the facets (mountFacets or a direct mount) and
+  // locates the AppSelect by the id it maps to `inputId`.
+  function facetSelect(
+    wrapper: {
+      findAllComponents: (selector: { name: string }) => Array<{
+        props: (name: string) => unknown
+        exists: () => boolean
+        vm: { $emit: (event: string, value?: unknown) => void }
+      }>
+    },
+    inputId: string,
+  ) {
+    const found = wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component) => component.props('inputId') === inputId)
+    expect(found, `expected an AppSelect with id "${inputId}"`).toBeDefined()
+    return found!
+  }
+
+  function facetOptions(
+    wrapper: ReturnType<typeof mountFacets>,
+    inputId: string,
+  ): Array<{ value: unknown; label: string }> {
+    return facetSelect(wrapper, inputId).props('options') as Array<{ value: unknown; label: string }>
+  }
+
+  async function chooseFacet(
+    wrapper: ReturnType<typeof mountFacets>,
+    inputId: string,
+    value: unknown,
+  ): Promise<void> {
+    facetSelect(wrapper, inputId).vm.$emit('update:modelValue', value)
+    await nextTick()
+  }
+
   function mountFacets(overrides: Record<string, unknown> = {}) {
     return mountWithI18n(RiskAssessmentFacets, {
       props: {
@@ -344,25 +383,25 @@ describe('RiskAssessmentFacets', () => {
   it('offers every pipeline and every gate action from the shared vocabulary', () => {
     const wrapper = mountFacets()
 
-    const pipelineOptions = wrapper
-      .find('[data-testid="risk-assessment-pipeline"]')
-      .findAll('option')
-      .map((o) => o.text())
-    expect(pipelineOptions).toEqual(['All pipelines', 'Alpha', 'Beta'])
+    const pipelineLabels = facetOptions(wrapper, 'risk-assessment-pipeline').map((o) => o.label)
+    expect(pipelineLabels).toEqual(['All pipelines', 'Alpha', 'Beta'])
 
-    const actionValues = wrapper
-      .find('[data-testid="risk-assessment-action"]')
-      .findAll('option')
-      .map((o) => o.attributes('value'))
+    const actionValues = facetOptions(wrapper, 'risk-assessment-action').map((o) => o.value)
     expect(actionValues).toEqual(['', ...RISK_ACTIONS])
 
     // The rendered windows ARE the shared deep-link vocabulary — the facet and
     // the route hydration read one source, so neither can drift from the other.
-    const dayValues = wrapper
-      .find('[data-testid="risk-assessment-days"]')
-      .findAll('option')
-      .map((o) => Number(o.attributes('value')))
+    const dayValues = facetOptions(wrapper, 'risk-assessment-days').map((o) => Number(o.value))
     expect(dayValues).toEqual(RISK_WINDOW_CHOICES.map((choice) => choice.value))
+  })
+
+  it('renders the three facet dropdowns as AppSelects, not native selects', () => {
+    const wrapper = mountFacets()
+
+    for (const id of ['risk-assessment-pipeline', 'risk-assessment-days', 'risk-assessment-action']) {
+      expect(facetSelect(wrapper, id).exists()).toBe(true)
+    }
+    expect(wrapper.findAll('select')).toHaveLength(0)
   })
 
   it('emits the updated filters as the operator edits', async () => {
@@ -376,7 +415,7 @@ describe('RiskAssessmentFacets', () => {
   it('emits the pipeline selection as part of the filters', async () => {
     const wrapper = mountFacets()
 
-    await wrapper.find('[data-testid="risk-assessment-pipeline"]').setValue('p-2')
+    await chooseFacet(wrapper, 'risk-assessment-pipeline', 'p-2')
 
     expect(wrapper.emitted('update:filters')?.at(-1)?.[0]).toMatchObject({ pipelineId: 'p-2' })
   })
@@ -384,7 +423,7 @@ describe('RiskAssessmentFacets', () => {
   it('emits apply with the current filters', async () => {
     const wrapper = mountFacets()
 
-    await wrapper.find('[data-testid="risk-assessment-days"]').setValue('30')
+    await chooseFacet(wrapper, 'risk-assessment-days', 30)
     await wrapper.find('[data-testid="risk-assessment-apply"]').trigger('click')
 
     expect(wrapper.emitted('apply')?.at(-1)?.[0]).toMatchObject({ days: 30 })
@@ -404,9 +443,7 @@ describe('RiskAssessmentFacets', () => {
   it('disables the action facet and explains why when degraded', () => {
     const wrapper = mountFacets({ facetDegraded: true })
 
-    expect(
-      wrapper.find('[data-testid="risk-assessment-action"]').attributes('disabled'),
-    ).toBeDefined()
+    expect(facetSelect(wrapper, 'risk-assessment-action').props('disabled')).toBe(true)
     expect(wrapper.find('[data-testid="risk-assessment-facet-degraded-note"]').exists()).toBe(true)
   })
 
@@ -428,9 +465,7 @@ describe('RiskAssessmentFacets', () => {
     expect(
       (wrapper.find('[data-testid="risk-assessment-key-prefix"]').element as HTMLInputElement).value,
     ).toBe('assessment.')
-    expect(
-      (wrapper.find('[data-testid="risk-assessment-days"]').element as HTMLSelectElement).value,
-    ).toBe('90')
+    expect(facetSelect(wrapper, 'risk-assessment-days').props('modelValue')).toBe(90)
   })
 
   it('surfaces a pipeline load failure instead of hiding it', () => {

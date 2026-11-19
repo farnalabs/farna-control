@@ -84,7 +84,6 @@ const router = createRouter({
   ],
 })
 
-const SELECT = '[data-testid="pipeline-editor-owner-team"]'
 const ERROR = '[data-testid="pipeline-editor-owner-team-error"]'
 const STATUS = '[data-testid="pipeline-editor-owner-team-status"]'
 
@@ -107,6 +106,29 @@ async function mountEditor() {
   await flushPromises()
   await nextTick()
   return wrapper
+}
+
+// The owner-team control is the design-system AppSelect (PrimeVue Select), not
+// a native <select>: options are declared through props and a choice is an
+// `update:modelValue` emit on the inner Select.
+function ownerTeamSelect(wrapper: Awaited<ReturnType<typeof mountEditor>>) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === 'pipeline-owner-team')
+  expect(found, 'expected the owner-team AppSelect').toBeDefined()
+  return found!
+}
+
+async function chooseOwnerTeam(
+  wrapper: Awaited<ReturnType<typeof mountEditor>>,
+  value: string,
+): Promise<void> {
+  ownerTeamSelect(wrapper).vm.$emit('update:modelValue', value)
+  await flushPromises()
+}
+
+function ownerTeamOptions(wrapper: Awaited<ReturnType<typeof mountEditor>>) {
+  return ownerTeamSelect(wrapper).props('options') as Array<{ value: string; label: string }>
 }
 
 function ownerTeamPatchBodies(): unknown[] {
@@ -133,8 +155,8 @@ describe('PipelineEditorView - owner team selector', () => {
   it('lists the visible teams after the None (org-wide) option', async () => {
     const wrapper = await mountEditor()
 
-    const options = wrapper.find(SELECT).findAll('option')
-    expect(options.map((o) => o.text())).toEqual([
+    const options = ownerTeamOptions(wrapper)
+    expect(options.map((o) => o.label)).toEqual([
       MESSAGES.views.PipelineEditorView.owner_team_none,
       'Platform',
       'Growth',
@@ -146,7 +168,7 @@ describe('PipelineEditorView - owner team selector', () => {
     state.pipeline = { ...state.pipeline, owner_team_id: 'team-b' }
     const wrapper = await mountEditor()
 
-    expect((wrapper.find(SELECT).element as HTMLSelectElement).value).toBe('team-b')
+    expect(ownerTeamSelect(wrapper).props('modelValue')).toBe('team-b')
     wrapper.unmount()
   })
 
@@ -160,7 +182,7 @@ describe('PipelineEditorView - owner team selector', () => {
   it('PATCHes owner_team_id when a team is chosen and announces it', async () => {
     const wrapper = await mountEditor()
 
-    await wrapper.find(SELECT).setValue('team-a')
+    await chooseOwnerTeam(wrapper, 'team-a')
     await flushPromises()
 
     expect(ownerTeamPatchBodies()).toEqual([{ owner_team_id: 'team-a' }])
@@ -175,7 +197,7 @@ describe('PipelineEditorView - owner team selector', () => {
     )
     const wrapper = await mountEditor()
 
-    await wrapper.find(SELECT).setValue('team-a')
+    await chooseOwnerTeam(wrapper, 'team-a')
     await flushPromises()
 
     expect(wrapper.find(STATUS).text()).toContain(
@@ -188,7 +210,7 @@ describe('PipelineEditorView - owner team selector', () => {
     state.pipeline = { ...state.pipeline, owner_team_id: 'team-a' }
     const wrapper = await mountEditor()
 
-    await wrapper.find(SELECT).setValue('')
+    await chooseOwnerTeam(wrapper, '')
     await flushPromises()
 
     expect(ownerTeamPatchBodies()).toEqual([{ owner_team_id: null }])
@@ -206,13 +228,13 @@ describe('PipelineEditorView - owner team selector', () => {
     )
     const wrapper = await mountEditor()
 
-    await wrapper.find(SELECT).setValue('team-b')
+    await chooseOwnerTeam(wrapper, 'team-b')
     await flushPromises()
 
     const error = wrapper.find(ERROR)
     expect(error.attributes('role')).toBe('alert')
     expect(error.text()).toContain('environment_profile_binding_team_mismatch')
-    expect((wrapper.find(SELECT).element as HTMLSelectElement).value).toBe('team-a')
+    expect(ownerTeamSelect(wrapper).props('modelValue')).toBe('team-a')
     wrapper.unmount()
   })
 
@@ -224,7 +246,7 @@ describe('PipelineEditorView - owner team selector', () => {
     expect(error.attributes('role')).toBe('alert')
     expect(error.text()).toContain('teams_unavailable')
     // The failed list must not render as a silent empty menu: None remains.
-    expect(wrapper.find(SELECT).findAll('option')).toHaveLength(1)
+    expect(ownerTeamOptions(wrapper)).toHaveLength(1)
     wrapper.unmount()
   })
 
@@ -240,7 +262,7 @@ describe('PipelineEditorView - owner team selector', () => {
     state.teamsEmptyBody = true
     const wrapper = await mountEditor()
 
-    expect(wrapper.find(SELECT).findAll('option')).toHaveLength(1)
+    expect(ownerTeamOptions(wrapper)).toHaveLength(1)
     expect(wrapper.find(ERROR).exists()).toBe(false)
     wrapper.unmount()
   })
@@ -250,29 +272,26 @@ describe('PipelineEditorView - owner team selector', () => {
     vi.mocked(api.PATCH).mockImplementationOnce(() => Promise.reject(new Error('network down')))
     const wrapper = await mountEditor()
 
-    await wrapper.find(SELECT).setValue('team-b')
+    await chooseOwnerTeam(wrapper, 'team-b')
     await flushPromises()
 
     const error = wrapper.find(ERROR)
     expect(error.attributes('role')).toBe('alert')
     expect(error.text()).toContain('network down')
-    expect((wrapper.find(SELECT).element as HTMLSelectElement).value).toBe('team-a')
+    expect(ownerTeamSelect(wrapper).props('modelValue')).toBe('team-a')
     wrapper.unmount()
   })
 
   it('labels a chosen team absent from the loaded list by its id', async () => {
+    // A stored team the org list no longer returns must still be offered (and
+    // labelled) rather than silently rendering as None.
+    state.pipeline = { ...state.pipeline, owner_team_id: 'team-ghost' }
     const wrapper = await mountEditor()
-    const select = wrapper.find(SELECT)
-    // The select can only offer listed teams, so an unlisted value cannot be
-    // produced by a user click; pin the defensive fallback with an injected
-    // option rather than rendering an empty label if it ever happens.
-    const ghost = document.createElement('option')
-    ghost.value = 'team-ghost'
-    ghost.text = 'Ghost'
-    ;(select.element as HTMLSelectElement).appendChild(ghost)
 
-    await select.setValue('team-ghost')
-    await flushPromises()
+    const ghostOption = ownerTeamOptions(wrapper).find((option) => option.value === 'team-ghost')
+    expect(ghostOption, 'the unlisted stored team must stay offered').toBeDefined()
+
+    await chooseOwnerTeam(wrapper, 'team-ghost')
 
     expect(ownerTeamPatchBodies()).toEqual([{ owner_team_id: 'team-ghost' }])
     expect(wrapper.find(STATUS).text()).toBe('Owner team set to team-ghost')
@@ -283,7 +302,7 @@ describe('PipelineEditorView - owner team selector', () => {
     state.pipeline = null
     const wrapper = await mountEditor()
 
-    await wrapper.find(SELECT).setValue('team-a')
+    await chooseOwnerTeam(wrapper, 'team-a')
     await flushPromises()
 
     expect(ownerTeamPatchBodies()).toEqual([{ owner_team_id: 'team-a' }])
