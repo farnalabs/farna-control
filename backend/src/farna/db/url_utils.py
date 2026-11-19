@@ -62,6 +62,14 @@ SYSTEM_ROLE = "farna_control_system"
 #: composed ``DATABASE_URL`` with this role, so the app ran as a superuser, RLS
 #: was bypassed, and the boot-time role-posture assertion failed).
 OWNER_ROLE = "farna_control"
+#: The pre-FAR-2570 bundle bootstrap/owner role. Shipped bundles (for example
+#: ``bundle-v0.3.328``) initialised the bundled cluster with ``initdb -U
+#: modulo``, so an existing native install has this role (a SUPERUSER cluster
+#: owner) and no ``farna_control`` role. The launcher adopts such a cluster by
+#: renaming this role to :data:`OWNER_ROLE` before any owner connection; see
+#: :func:`farna.launcher.initdb.adopt_legacy_owner_role`. Defined here so the
+#: legacy name has a single definition like the three current role names.
+LEGACY_OWNER_ROLE = "modulo"
 
 # SSL modes asyncpg recognises (SSLMode enum). ``require``/``verify-ca``/
 # ``verify-full`` fail closed in asyncpg (the connection is refused unless the

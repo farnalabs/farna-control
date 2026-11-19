@@ -124,6 +124,21 @@ def test_compose_config_separates_application_from_owner_role() -> None:
     assert urlsplit(composed["FARNA_CONTROL_SYSTEM_DATABASE_URL"]).username == "farna_control_system"
 
 
+def test_compose_config_admin_url_names_the_role_legacy_adoption_creates() -> None:
+    """Upgrade path: on an existing native install the launcher renames the
+    legacy ``modulo`` owner to ``OWNER_ROLE`` (see
+    ``initdb.adopt_legacy_owner_role``) before composing, so the admin URL must
+    name the adopted canonical role, never the legacy name."""
+    from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
+    from farna.launcher.initdb import BOOTSTRAP_USERNAME
+
+    composed = compose_config(_state(), _secrets())
+    admin_user = urlsplit(composed["DATABASE_ADMIN_URL"]).username
+
+    assert admin_user == OWNER_ROLE == BOOTSTRAP_USERNAME
+    assert admin_user != LEGACY_OWNER_ROLE
+
+
 def test_pinned_config_preserves_existing_operator_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("SECRET_KEY", raising=False)
     monkeypatch.delenv("FERNET_KEY", raising=False)

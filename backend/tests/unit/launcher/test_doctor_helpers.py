@@ -27,6 +27,7 @@ from farna.launcher.doctor import (
     _decode_proc_address,
     _host_port_from_database_url,
     _load_state_readonly,
+    _owner_admin_urls,
     _parse_listeners_from_proc,
     _password_from_url,
     _state_problem_kind,
@@ -384,3 +385,22 @@ def test_default_probes_username_of_uid_unknown_uid_is_none(tmp_path: Path) -> N
 def test_default_probes_file_owner_missing_path_is_none(tmp_path: Path) -> None:
     probes = default_probes(tmp_path, None)
     assert probes.file_owner(tmp_path / "does-not-exist") is None
+
+
+def test_owner_admin_urls_falls_back_to_the_legacy_owner_role() -> None:
+    """Doctor is read-only: on a not-yet-adopted legacy cluster it probes the
+    canonical ``farna_control`` admin URL first, then the legacy ``modulo``
+    role the next boot will rename (FAR-2570)."""
+    from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
+
+    urls = _owner_admin_urls(f"postgresql+asyncpg://{OWNER_ROLE}:pw@127.0.0.1:15432/farna_control")
+
+    assert urls[0].startswith(f"postgresql+asyncpg://{OWNER_ROLE}:pw@")
+    assert len(urls) == 2
+    assert urls[1].startswith(f"postgresql+asyncpg://{LEGACY_OWNER_ROLE}:pw@")
+    assert urls[1].endswith("/farna_control")
+
+
+def test_owner_admin_urls_does_not_add_a_fallback_for_a_non_owner_url() -> None:
+    url = "postgresql+asyncpg://farna_control_app:pw@127.0.0.1:15432/farna_control"
+    assert _owner_admin_urls(url) == [url]

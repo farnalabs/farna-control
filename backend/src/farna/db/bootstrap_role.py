@@ -162,8 +162,9 @@ def _role_attributes(*, login: bool, bypassrls: bool) -> str:
       posture assertion would fail on every boot with no repair path.
 
     BYPASSRLS is only ever granted to the cross-org roles
-    (``farna_control_system`` / ``farna_control_breakglass``); the application
-    role is NOBYPASSRLS because tenant isolation relies on RLS policies.
+    (``farna_control_system``, ``farna_control_breakglass`` and the NOLOGIN
+    table-owner role ``farna_control_migrate``); the application role is
+    NOBYPASSRLS because tenant isolation relies on RLS policies.
     """
     if login and bypassrls:
         return "LOGIN NOSUPERUSER BYPASSRLS"
@@ -371,8 +372,12 @@ async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -
     # ``-U`` role a superuser, so owning the schema and running the app with
     # one role silently bypasses RLS. This is the exact FAR-2570 regression,
     # and it is checked explicitly so the message names the cause instead of
-    # only reporting the downstream "is a superuser" symptom.
-    if app_user == OWNER_ROLE:
+    # only reporting the downstream "is a superuser" symptom. Compare against
+    # the database OWNER too, not just the canonical name: a pre-FAR-2570
+    # cluster was initialised with ``-U modulo``, and an owner role under any
+    # other name must still get the actionable owner message.
+    db_owner = await conn.fetchval("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()")
+    if app_user == OWNER_ROLE or (db_owner is not None and app_user == db_owner):
         violations.append(f"app role {app_user} is the cluster OWNER/migrate role — the application must connect as farna_control_app (NOSUPERUSER, NOBYPASSRLS); see DATABASE_ADMIN_URL for the owner connection")
 
     if await conn.fetchval("SELECT rolsuper FROM pg_roles WHERE rolname = $1", app_user):

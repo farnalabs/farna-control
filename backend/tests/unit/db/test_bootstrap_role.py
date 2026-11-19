@@ -68,6 +68,7 @@ class _FakeConn:
       * ``table_update_grantees`` — list[str]: role_table_grants UPDATE grantees
       * ``column_updatable``      — set[str]: accounts columns farna_control_app may UPDATE
       * ``is_superuser``          — bool
+      * ``db_owner``              — str | None: role owning the current database
       * ``privileged_memberships``— list[str] — privileged roles app belongs to
       * ``function_exists``       — bool: deactivate_break_glass present
       * ``lock_available``        — bool: pg_try_advisory_lock result (FAR-1200)
@@ -82,6 +83,7 @@ class _FakeConn:
         self.table_update_grantees: list[str] = options.get("table_update_grantees", [])
         self.column_updatable: set[str] = set(options.get("column_updatable", set()))
         self.is_superuser: bool = options.get("is_superuser", False)
+        self.db_owner: str | None = options.get("db_owner")
         self.privileged_memberships: list[str] = options.get("privileged_memberships", [])
         self.function_exists: bool = options.get("function_exists", True)
         self.lock_available: bool = options.get("lock_available", True)
@@ -112,6 +114,8 @@ class _FakeConn:
             return col in self.column_updatable
         if "select rolsuper from pg_roles" in lowered:
             return self.is_superuser
+        if "pg_get_userbyid(datdba)" in lowered:
+            return self.db_owner
         if "rolbypassrls from pg_roles" in lowered:
             role_name = args[0] if args else ""
             return self.role_bypassrls.get(role_name, True)
@@ -776,6 +780,19 @@ class TestFindAllowListViolations:
         assert any("OWNER/migrate role" in v for v in violations)
         assert any("is a superuser" in v for v in violations)
         assert any("grant drift" in v and OWNER_ROLE in v for v in violations)
+
+    async def test_detects_a_differently_named_cluster_owner(self) -> None:
+        """A pre-FAR-2570 cluster was initialised with ``-U modulo``: an owner
+        role under a legacy name must still get the actionable owner message,
+        not only the generic superuser one."""
+        conn = _clean_posture_conn()
+        conn.is_superuser = True
+        conn.db_owner = "modulo"
+        conn.column_updatable = set(conn.columns["accounts"])
+
+        violations = await _find_allow_list_violations(conn, "modulo")
+
+        assert any("OWNER/migrate role" in v and "modulo" in v for v in violations)
 
     async def test_violation_messages_name_the_actual_app_role(self) -> None:
         """A misnamed app role must not be reported as ``farna_control_app``.

@@ -38,10 +38,12 @@ import secrets as _secrets
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote_plus
 
-from farna.db.url_utils import OWNER_ROLE
+from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
 from farna.launcher.platform import binary_name, initdb_locale, is_windows
 
 # The cluster OWNER / migration role initdb creates (and makes a superuser).
@@ -71,6 +73,7 @@ __all__ = [
     "GATE_INITDB_PRE_RENAME",
     "INITDB_LOCALE",
     "InitdbError",
+    "adopt_legacy_owner_role",
     "assert_supported_platform",
     "bootstrap_pgdata",
     "initdb_argv",
@@ -273,3 +276,60 @@ def bootstrap_pgdata(
             # moved the dir, so the exists() check only trips on failure).
             shutil.rmtree(tmp_pgdata, ignore_errors=True)
     return pgdata
+
+
+async def adopt_legacy_owner_role(
+    *,
+    host: str,
+    port: int,
+    password: str,
+    connect: Callable[..., Awaitable[Any]] | None = None,
+) -> bool:
+    """Rename a pre-FAR-2570 ``initdb -U modulo`` owner role to ``OWNER_ROLE``.
+
+    Existing native installs were initialised by a shipped bundle with
+    ``initdb -U modulo`` (see :data:`farna.db.url_utils.LEGACY_OWNER_ROLE`).
+    ``initdb`` only runs when ``PG_VERSION`` is absent, so an in-place upgrade
+    leaves that legacy role in place while the FAR-2570 launcher composes every
+    owner connection as ``farna_control``: the role does not exist and boot
+    fails. Renaming the role — rather than recreating it — preserves its OID,
+    so object ownership, grants, the SUPERUSER attribute and the credential all
+    carry across without an ownership sweep.
+
+    Idempotent and safe on every boot:
+
+    * fresh install (only ``farna_control`` exists) → the legacy connect is
+      rejected with "role does not exist" and this returns ``False``;
+    * already adopted (the rename happened on an earlier boot) → same;
+    * legacy cluster (only ``modulo`` exists) → the role is renamed, returns
+      ``True``.
+
+    If the legacy role exists but rejects the secrets-file password, the boot
+    fails loudly rather than silently connecting as the wrong role. ``connect``
+    is a test seam for ``asyncpg.connect``.
+    """
+    import asyncpg  # asyncpg does not publish a py.typed marker
+
+    from farna.db.url_utils import split_postgres_sslmode
+
+    legacy_url = f"postgresql://{LEGACY_OWNER_ROLE}:{quote_plus(password)}@{host}:{port}/postgres"
+    dsn, ssl = split_postgres_sslmode(legacy_url)
+    connector = connect if connect is not None else asyncpg.connect
+    try:
+        conn = await connector(dsn, ssl=ssl)
+    except asyncpg.InvalidPasswordError as exc:
+        raise InitdbError(f"The legacy bundle owner role {LEGACY_OWNER_ROLE!r} exists but rejected the secrets-file password. Refusing to guess the owner credential: reconcile the secrets file with the cluster owner before upgrading.") from exc
+    except asyncpg.InvalidAuthorizationSpecificationError:
+        # 28000 means the role is absent: a fresh install or an already-adopted
+        # cluster. Either way there is no legacy owner to migrate.
+        return False
+    try:
+        canonical_exists = await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname = $1", OWNER_ROLE)
+        if canonical_exists:
+            # Both roles exist: do not rename over an operator-managed role.
+            return False
+        # nosemgrep: raw-sql-fstring (both names are module constants)
+        await conn.execute(f'ALTER ROLE "{LEGACY_OWNER_ROLE}" RENAME TO "{OWNER_ROLE}"')
+        return True
+    finally:
+        await conn.close()

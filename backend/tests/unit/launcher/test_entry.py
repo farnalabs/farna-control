@@ -1885,6 +1885,9 @@ class TestEnsureAppDatabaseSafety:
             return _Conn()
 
         monkeypatch.setattr(asyncpg, "connect", _record_connect)
+        # Isolate the CREATE-DATABASE connection: legacy-owner adoption is
+        # covered by its own test below and by test_initdb.
+        monkeypatch.setattr(entry_module, "_adopt_legacy_owner_role", lambda *_a: False)
         secrets = SimpleNamespace(postgres_password="pw")
         launcher_state = SimpleNamespace(postgres_port=5432)
 
@@ -1929,6 +1932,9 @@ class TestEnsureAppDatabaseSafety:
             return _Conn()
 
         monkeypatch.setattr(asyncpg, "connect", _record_connect)
+        # Isolate the CREATE-DATABASE connection: legacy-owner adoption is
+        # covered by its own test below and by test_initdb.
+        monkeypatch.setattr(entry_module, "_adopt_legacy_owner_role", lambda *_a: False)
         entry_module._ensure_app_database(
             SimpleNamespace(postgres_port=5432),
             SimpleNamespace(postgres_password="pw"),
@@ -1943,6 +1949,68 @@ class TestEnsureAppDatabaseSafety:
         )
         assert urlsplit(composed["DATABASE_URL"]).username == APP_ROLE
         assert urlsplit(composed["DATABASE_URL"]).username != dsn_users[0]
+
+    def test_ensure_app_database_adopts_a_legacy_modulo_owner_cluster(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Upgrade path: a pgdata initialised by a shipped bundle (``-U modulo``)
+        has no ``farna_control`` role, so the first boot renames the owner
+        before connecting as it (FAR-2570 N-1 upgrade leg)."""
+        from types import SimpleNamespace
+        from urllib.parse import urlsplit
+
+        import asyncpg
+
+        from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
+
+        roles = {LEGACY_OWNER_ROLE}
+        connects: list[str] = []
+
+        class _Conn:
+            async def fetchval(self, query: str, *args: object) -> int | None:
+                if "pg_roles" in query:
+                    return 1 if args and args[0] in roles else None
+                return 1  # the application database already exists
+
+            async def execute(self, query: str) -> str:
+                if "RENAME TO" in query:
+                    roles.discard(LEGACY_OWNER_ROLE)
+                    roles.add(OWNER_ROLE)
+                return "OK"
+
+            async def close(self) -> None:
+                return None
+
+        async def _connect(dsn: str, **_kwargs: object) -> object:
+            user = urlsplit(dsn).username or ""
+            connects.append(user)
+            if user not in roles:
+                raise asyncpg.InvalidAuthorizationSpecificationError(f'role "{user}" does not exist')
+            return _Conn()
+
+        monkeypatch.setattr(asyncpg, "connect", _connect)
+
+        entry_module._ensure_app_database(SimpleNamespace(postgres_port=5432), SimpleNamespace(postgres_password="pw"))
+
+        # Adopt as the legacy role, then do the CREATE-DATABASE connection as
+        # the canonical owner role.
+        assert connects == [LEGACY_OWNER_ROLE, OWNER_ROLE]
+        assert roles == {OWNER_ROLE}
+
+    def test_adopt_legacy_owner_role_forwards_the_cluster_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from types import SimpleNamespace
+
+        import farna.launcher.initdb as initdb_module
+
+        calls: list[dict[str, object]] = []
+
+        async def _fake_adopt(**kwargs: object) -> bool:
+            calls.append(kwargs)
+            return True
+
+        monkeypatch.setattr(initdb_module, "adopt_legacy_owner_role", _fake_adopt)
+        result = entry_module._adopt_legacy_owner_role(SimpleNamespace(postgres_port=15432), SimpleNamespace(postgres_password="pw"))
+
+        assert result is True
+        assert calls == [{"host": entry_module.POSTGRES_HOST, "port": 15432, "password": "pw"}]
 
 
 def test_ensure_app_database_creates_the_name_the_composed_url_targets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1978,6 +2046,8 @@ def test_ensure_app_database_creates_the_name_the_composed_url_targets(monkeypat
         return _Conn()
 
     monkeypatch.setattr(asyncpg, "connect", _connect)
+    # Isolate the CREATE-DATABASE flow: legacy-owner adoption has its own test.
+    monkeypatch.setattr(entry_module, "_adopt_legacy_owner_role", lambda *_a: False)
     entry_module._ensure_app_database(SimpleNamespace(postgres_port=5432), SimpleNamespace(postgres_password="pw"))
 
     assert queried == ["farna_control"]

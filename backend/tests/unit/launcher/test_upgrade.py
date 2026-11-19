@@ -302,6 +302,28 @@ def test_dump_password_is_never_in_argv(tmp_path: Path, monkeypatch: pytest.Monk
     assert seen["env"]["PGPASSWORD"] == "pw"
 
 
+def test_pre_upgrade_dump_adopts_a_legacy_owner_role_before_dumping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Upgrade path: a pre-FAR-2570 cluster still owns itself via ``modulo``.
+
+    The dump must adopt (rename) that owner before connecting as the canonical
+    role, otherwise pg_dump runs as a role that does not exist yet.
+    """
+    _allow_windows_secrets(monkeypatch)
+    data_dir = _seed_data_dir(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    async def _fake_adopt(**kwargs: object) -> bool:
+        calls.append(kwargs)
+        return True
+
+    with patch("farna.launcher.initdb.adopt_legacy_owner_role", new=_fake_adopt), contextlib.ExitStack() as stack:
+        _enter_fake_run(stack)
+        snapshot = pre_upgrade_dump(data_dir)
+
+    assert snapshot.dump_path.exists()
+    assert calls == [{"host": "127.0.0.1", "port": 15432, "password": "pw"}]
+
+
 def test_state_with_last_backup_stamps_v2(tmp_path: Path) -> None:
     """FAR-672 forward-compat: the optional field stamps v2 so an OLD
     launcher refuses via the DESIGNED version gate (a clear "written by a

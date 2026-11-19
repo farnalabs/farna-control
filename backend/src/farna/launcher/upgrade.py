@@ -225,6 +225,20 @@ def pre_upgrade_dump(
     except Exception as exc:
         raise UpgradeError(f"state.json at {state_path} cannot be verified: {exc}") from exc
 
+    # Adopt a pre-FAR-2570 cluster (initialised by a shipped bundle with
+    # ``initdb -U modulo``) before connecting as the canonical owner role.
+    # Idempotent and a no-op on fresh/already-adopted installs. Best effort
+    # here: a genuinely unreachable cluster is reported by pg_dump below with
+    # the existing, actionable error rather than being masked here.
+    try:
+        import asyncio
+
+        from farna.launcher.initdb import adopt_legacy_owner_role
+
+        asyncio.run(adopt_legacy_owner_role(host=_POSTGRES_HOST, port=state.postgres_port, password=secrets.postgres_password))
+    except Exception as exc:
+        _log.warning("upgrade.owner_role_adoption_skipped error=%s", exc)
+
     # The pre-upgrade dump must run as the cluster OWNER (initdb's bootstrap
     # role), never the application role: farna_control_app is NOBYPASSRLS, so
     # pg_dump would read only the rows its session can see and produce a

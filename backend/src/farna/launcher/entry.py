@@ -884,6 +884,20 @@ def _await_health(
         sleep(interval)
 
 
+def _adopt_legacy_owner_role(launcher_state: Any, secrets: Any) -> bool:
+    """Rename a pre-FAR-2570 ``initdb -U modulo`` cluster owner to the canonical role.
+
+    Must run before the FIRST owner connection of the boot, because an existing
+    native install has no ``farna_control`` role until this rename happens.
+    Returns ``True`` when a legacy role was adopted.
+    """
+    import asyncio
+
+    from farna.launcher.initdb import adopt_legacy_owner_role
+
+    return asyncio.run(adopt_legacy_owner_role(host=POSTGRES_HOST, port=launcher_state.postgres_port, password=secrets.postgres_password))
+
+
 def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
     """Create the app database inside the bundled cluster (idempotent).
 
@@ -892,6 +906,10 @@ def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
     DATABASE`` requires CREATEDB, and the application role
     (``farna_control_app``) deliberately does not have it. Using the owner
     here and the app role for ``DATABASE_URL`` is the FAR-2570 role split.
+
+    Before connecting, an existing cluster initialised by a pre-FAR-2570
+    bundle (``initdb -U modulo``) is adopted by renaming that owner role; see
+    :func:`farna.launcher.initdb.adopt_legacy_owner_role`.
     """
     import asyncio
 
@@ -903,6 +921,11 @@ def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
     # be interpolated. Validate it against the strict identifier grammar
     # before the execute below.
     app_db_name = _validate_sql_identifier(APP_DB_NAME, "APP_DB_NAME")
+
+    # Existing native installs have the legacy ``modulo`` owner role, not the
+    # canonical ``farna_control`` role this boot connects as. Adopt it first
+    # (no-op on a fresh install or an already-adopted cluster).
+    _adopt_legacy_owner_role(launcher_state, secrets)
 
     async def _create() -> None:
         root_url = f"postgresql://{BOOTSTRAP_USERNAME}:{secrets.postgres_password}@{POSTGRES_HOST}:{launcher_state.postgres_port}/postgres"

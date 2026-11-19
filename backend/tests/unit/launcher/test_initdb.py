@@ -16,12 +16,13 @@ from subprocess import Popen
 import pytest
 
 import farna.launcher.initdb as initdb_module
-from farna.db.url_utils import APP_ROLE, OWNER_ROLE, SYSTEM_ROLE
+from farna.db.url_utils import APP_ROLE, LEGACY_OWNER_ROLE, OWNER_ROLE, SYSTEM_ROLE
 from farna.launcher.initdb import (
     BOOTSTRAP_USERNAME,
     GATE_INITDB_PRE_RENAME,
     INITDB_LOCALE,
     InitdbError,
+    adopt_legacy_owner_role,
     assert_supported_platform,
     bootstrap_pgdata,
     initdb_argv,
@@ -412,3 +413,85 @@ def test_assert_supported_platform_accepts_posix(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(initdb_module, "is_windows", lambda: False)
 
     assert assert_supported_platform() is None
+
+
+# ---------------------------------------------------------------------------
+# adopt_legacy_owner_role — pre-FAR-2570 cluster adoption
+# ---------------------------------------------------------------------------
+class _RoleConn:
+    """Minimal asyncpg connection stand-in for the adoption query/DDL."""
+
+    def __init__(self, *, canonical_exists: bool) -> None:
+        self.canonical_exists = canonical_exists
+        self.executed: list[str] = []
+        self.closed = False
+
+    async def fetchval(self, query: str, *args: object) -> int | None:
+        assert "pg_roles" in query
+        return 1 if self.canonical_exists else None
+
+    async def execute(self, query: str) -> str:
+        self.executed.append(query)
+        return "ALTER ROLE"
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def _recording_connector(conn: _RoleConn, seen: list[str]) -> object:
+    async def _connect(dsn: str, **_kwargs: object) -> _RoleConn:
+        seen.append(dsn)
+        return conn
+
+    return _connect
+
+
+async def test_adopt_legacy_owner_role_renames_modulo_to_farna_control() -> None:
+    """The exact upgrade path: a cluster initialised with ``initdb -U modulo``
+    has no canonical owner role, so the first FAR-2570 boot renames it."""
+    conn = _RoleConn(canonical_exists=False)
+    seen: list[str] = []
+
+    adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_recording_connector(conn, seen))
+
+    assert adopted is True
+    assert seen
+    assert seen[0].startswith(f"postgresql://{LEGACY_OWNER_ROLE}:")
+    assert conn.executed == [f'ALTER ROLE "{LEGACY_OWNER_ROLE}" RENAME TO "{OWNER_ROLE}"']
+    assert conn.closed is True
+
+
+async def test_adopt_legacy_owner_role_is_a_noop_on_a_fresh_install() -> None:
+    """No legacy role: connecting as ``modulo`` is rejected with 28000."""
+    import asyncpg
+
+    async def _reject(_dsn: str, **_kwargs: object) -> object:
+        raise asyncpg.InvalidAuthorizationSpecificationError('role "modulo" does not exist')
+
+    adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_reject)
+
+    assert adopted is False
+
+
+async def test_adopt_legacy_owner_role_never_renames_over_an_existing_owner() -> None:
+    """Both roles present (operator-managed): leave them untouched."""
+    conn = _RoleConn(canonical_exists=True)
+    seen: list[str] = []
+
+    adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_recording_connector(conn, seen))
+
+    assert adopted is False
+    assert conn.executed == []
+    assert conn.closed is True
+
+
+async def test_adopt_legacy_owner_role_fails_loudly_on_a_password_mismatch() -> None:
+    """The legacy role exists but the secrets-file password is wrong: never
+    silently continue to a canonical connection that cannot work."""
+    import asyncpg
+
+    async def _reject(_dsn: str, **_kwargs: object) -> object:
+        raise asyncpg.InvalidPasswordError('password authentication failed for user "modulo"')
+
+    with pytest.raises(InitdbError, match="rejected the secrets-file password"):
+        await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_reject)
