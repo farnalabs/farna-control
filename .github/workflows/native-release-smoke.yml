@@ -836,7 +836,22 @@ jobs:
           python3 scripts/validate_release_tag.py validate --tag "${TARGET}" --release-json rollback-release.json \
             || { echo "::error::release ${TARGET} is missing or is not published (draft/prerelease)"; exit 1; }
           version="${TARGET#bundle-v}"
-          tarball_url="https://github.com/${{ github.repository }}/releases/download/${TARGET}/farna-control-${version}-linux-amd64.tar.gz"
+          # FAR-2571 renamed the artifact (modulo-<v>-... -> farna-control-<v>-...).
+          # A rollback target can predate the rename, so verify the name that
+          # release actually publishes (the same transition rule the N-1 leg
+          # applies) instead of assuming the post-rename one.
+          tarball_name=""
+          for candidate in "farna-control-${version}-linux-amd64.tar.gz" "modulo-${version}-linux-amd64.tar.gz"; do
+            if jq -r '.assets[].name' rollback-release.json | grep -qxF "${candidate}"; then
+              tarball_name="${candidate}"
+              break
+            fi
+          done
+          if [ -z "${tarball_name}" ]; then
+            echo "::error::release ${TARGET} publishes no linux-amd64 bundle tarball (neither farna-control-${version} nor the legacy modulo-${version})"
+            exit 1
+          fi
+          tarball_url="https://github.com/${{ github.repository }}/releases/download/${TARGET}/${tarball_name}"
           curl --proto '=https' -fsSLI "${tarball_url}" | grep -q '^HTTP/. 200' \
             || { echo "::error::rollback artifact not reachable at ${tarball_url}"; exit 1; }
-          echo "rollback target ${TARGET} verified - proceed with the docs/upgrade-process.md rollout actions"
+          echo "rollback target ${TARGET} verified (${tarball_name}) - proceed with the docs/upgrade-process.md rollout actions"

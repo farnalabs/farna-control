@@ -468,6 +468,16 @@ jobs:
             *) launcher_dir=. ;;
           esac
           BUNDLE_ROOT=$(CDPATH= cd -- "$launcher_dir" && pwd)
+          # FAR-2571: the per-user install root (<root>/versions/<version> holds
+          # this launcher), exported so `farna-control upgrade` resolves the
+          # SAME root install.sh laid the bundle out under. farna.launcher.
+          # upgrade's default_install_root() reads this name; the generated PATH
+          # shim exports it too, but a direct `current/launcher` invocation (the
+          # form the docs use for stop/start) has no shim in the way, so the
+          # launcher states the root itself. Deriving it from $0 keeps a
+          # relocated or custom-root install correct. An explicit caller value
+          # wins: the :- default only supplies one.
+          export FARNA_CONTROL_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-$(CDPATH= cd -- "$BUNDLE_ROOT/../.." && pwd)}"
           SITE_PACKAGES="$BUNDLE_ROOT/backend/.venv/lib/python3.12/site-packages"
           export PATH="$BUNDLE_ROOT/runtime/bin:$BUNDLE_ROOT/pg/bin:$BUNDLE_ROOT/redis${PATH:+:$PATH}"
           export PYTHONPATH="$BUNDLE_ROOT/backend/src:$SITE_PACKAGES"

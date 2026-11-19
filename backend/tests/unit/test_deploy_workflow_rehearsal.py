@@ -396,6 +396,25 @@ def test_native_release_smoke_has_exactly_one_fail_closed_n_minus_one_leg() -> N
     assert 'gh attestation verify "${n1_dir}/${n1_tarball}"' in legs[0][1]["run"]
 
 
+def test_native_release_smoke_rollback_verifies_the_published_asset_name() -> None:
+    """FAR-2571: a rollback target can predate the artifact rename.
+
+    The rollback playbook's verify step named the post-rename artifact outright,
+    so verifying a rollback to a pre-rename release checked a URL that release
+    never published (``artifact not reachable``) instead of the asset it does
+    publish - the same transition the N-1 leg has to handle. Select the name
+    from the release payload and accept either prefix.
+    """
+    workflow = yaml.safe_load(NATIVE_SMOKE_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["rollback-verify"]["steps"]
+    script = next(step["run"] for step in steps if step.get("name", "").startswith("Assert the rollback target release exists"))
+
+    assert "jq -r '.assets[].name' rollback-release.json" in script
+    assert "farna-control-${version}-linux-amd64.tar.gz" in script
+    assert "modulo-${version}-linux-amd64.tar.gz" in script
+    assert "releases/download/${TARGET}/${tarball_name}" in script
+
+
 def test_native_release_smoke_uses_central_release_validator_for_all_consumers() -> None:
     workflow_text = NATIVE_SMOKE_WORKFLOW.read_text(encoding="utf-8")
     assert workflow_text.count("scripts/validate_release_tag.py validate") >= 4
