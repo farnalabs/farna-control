@@ -1990,3 +1990,23 @@ def test_macos_contract_gates_the_macho_inventory_helper() -> None:
     assert "test -x scripts/macos/macho-inventory.sh" in contract
     assert "shellcheck scripts/macos/macho-inventory.sh" in contract
     assert "bash -n scripts/macos/macho-inventory.sh" in contract
+
+
+def test_macos_notary_wait_fits_inside_the_job_timeout() -> None:
+    """FAR-2575: run 44525902038 timed out a 30m wait while Apple was still processing."""
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    _step, build_run = _native_installer_step()
+
+    submit = build_run[build_run.index("run_pre_smoke dmg_notary_submit") :]
+    submit = submit[: submit.index("--evidence")]
+    wait = re.search(r"--timeout (\d+)m", submit)
+    assert wait is not None
+    wait_minutes = int(wait.group(1))
+    assert wait_minutes >= 90
+    # Retry sleeps (~63m worst case) plus build/sign/smoke work must still fit
+    # alongside the wait, or the job dies before the notary verdict arrives.
+    assert workflow["jobs"]["build"]["timeout-minutes"] >= wait_minutes + 90
+    notary_tool = _NOTARY_TOOL.read_text(encoding="utf-8")
+    assert 'TIMEOUT="90m"' in notary_tool
+    # The status gate is unchanged: only an Accepted submission passes.
+    assert 'if [[ "$status" != "Accepted" ]]; then' in notary_tool

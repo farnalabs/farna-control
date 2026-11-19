@@ -163,9 +163,12 @@ jobs:
     name: Build and smoke-test macOS ${{ needs.normalize-inputs.outputs.architecture }} bundle
     needs: normalize-inputs
     runs-on: ${{ needs.normalize-inputs.outputs.architecture == 'x86_64' && 'macos-15-intel' || 'macos-15' }}
-    # Worst-case retry sleeps are 62m55s with +25% jitter, plus the 30m
-    # notarytool wait, so 90m leaves no budget for build/sign/smoke work.
-    timeout-minutes: 120
+    # Worst-case retry sleeps are 62m55s with +25% jitter, plus the 90m
+    # notarytool wait (FAR-2575: run 44525902038 hit a 30m wait with the
+    # submission still In Progress), plus ~25m of build/sign/smoke work, so
+    # the job needs ~180m; 200m keeps headroom without the job dying before
+    # the notary wait expires.
+    timeout-minutes: 200
     env:
       VERSION_NUM: ${{ needs.normalize-inputs.outputs.version }}
       MODE: ${{ needs.normalize-inputs.outputs.mode }}
@@ -1377,7 +1380,7 @@ jobs:
             --key "$NOTARY_KEY" \
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER" \
-            --timeout 30m \
+            --timeout 90m \
             --identity-out "$DATA/notarization-identity.env" \
             --evidence "$DATA/notarization-evidence.env"
           # The submission status is release evidence: print it on the SUCCESS

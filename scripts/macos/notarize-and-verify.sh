@@ -20,7 +20,7 @@
 #
 # Usage:
 #   notarize-and-verify.sh --dmg <path> --key <path> --key-id <id> --issuer <uuid> \
-#     [--timeout 30m] [--identity-out <file>] [--evidence <file>]
+#     [--timeout 90m] [--identity-out <file>] [--evidence <file>]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
@@ -30,20 +30,20 @@ DMG=""
 KEY=""
 KEY_ID=""
 ISSUER=""
-TIMEOUT="30m"
+TIMEOUT="90m"
 IDENTITY_OUT=""
 EVIDENCE=""
 
 usage() {
   cat >&2 <<'USAGE'
 usage: notarize-and-verify.sh --dmg <path> --key <path> --key-id <id> --issuer <uuid>
-                              [--timeout 30m] [--identity-out <file>] [--evidence <file>]
+                              [--timeout 90m] [--identity-out <file>] [--evidence <file>]
 
   --dmg <path>           signed DMG to submit (required)
   --key <path>           App Store Connect API key (.p8) path (required)
   --key-id <id>          API key id (required)
   --issuer <uuid>        API key issuer id (required)
-  --timeout <duration>   notarytool --wait timeout (default 30m)
+  --timeout <duration>   notarytool --wait timeout (default 90m)
   --identity-out <file>  write the pre-submit artefact identity here
   --evidence <file>      write the submission id/status/message evidence here
 USAGE
