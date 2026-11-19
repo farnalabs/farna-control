@@ -2465,6 +2465,10 @@ jobs:
             case "$arch" in
               arm64) arm64_sha256="$digest" ;;
               x86_64) x86_64_sha256="$digest" ;;
+              *)
+                echo "::error::unexpected architecture '${arch}' in the release-artefact set"
+                exit 1
+                ;;
             esac
             if ! ticket_output="$(xcrun stapler validate "$dmg" 2>&1)"; then
               tickets_verified="false"
@@ -2619,6 +2623,10 @@ jobs:
             case "$arch" in
               arm64) verified="${VERIFIED_ARM64_SHA256}" ;;
               x86_64) verified="${VERIFIED_X86_64_SHA256}" ;;
+              *)
+                echo "::error::unexpected architecture '${arch}' in the staple-verified set"
+                exit 1
+                ;;
             esac
             actual="$(sha256sum "$dmg" | awk '{print $1}')"
             if [ -z "$verified" ] || [ "$verified" != "$actual" ]; then
@@ -2764,6 +2772,7 @@ jobs:
           PRERELEASE_ARGS=()
           case "$RC_TAG" in
             v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
+            *) PRERELEASE_ARGS=() ;;
           esac
 
           # NEVER --clobber an existing asset: a replaced release artifact

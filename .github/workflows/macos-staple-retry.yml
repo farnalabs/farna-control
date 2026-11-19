@@ -492,6 +492,10 @@ jobs:
             case "$arch" in
               arm64) arm64_sha256="$digest" ;;
               x86_64) x86_64_sha256="$digest" ;;
+              *)
+                echo "::error::unexpected architecture '${arch}' in verified-digests.txt"
+                exit 1
+                ;;
             esac
           done <verified-digests.txt
           {
@@ -916,6 +920,10 @@ jobs:
               case "$arch" in
                 arm64) verified_digest="$VERIFIED_ARM64_SHA256" ;;
                 x86_64) verified_digest="$VERIFIED_X86_64_SHA256" ;;
+                *)
+                  echo "::error::unexpected architecture '${arch}' in the staple-verified set"
+                  exit 1
+                  ;;
               esac
               dmg_path="release-assets/Modulo-${VERSION}-macos-${arch}.dmg"
               actual_digest="$(sha256sum "$dmg_path" | awk '{print $1}')"
@@ -962,6 +970,7 @@ jobs:
             PRERELEASE_ARGS=()
             case "$RC_TAG" in
               v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
+              *) PRERELEASE_ARGS=() ;;
             esac
 
             gh release create "$RELEASE_TAG" \
