@@ -4023,6 +4023,7 @@ def test_publish_release_guard_all_success_exits_zero(tmp_path: Path) -> None:
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     result = _run_bash(script, cwd=tmp_path, env=env)
     assert result.returncode == 0, f"all success must exit 0: {result.stdout} {result.stderr}"
@@ -4039,6 +4040,7 @@ def test_publish_release_guard_final_manifest_failure_fails_and_names_it(tmp_pat
         "MANIFEST_RESULT": "failure",
         "ATTEST_RESULT": "success",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     result = _run_bash(script, cwd=tmp_path, env=env)
     assert result.returncode != 0, "failure must exit non-zero"
@@ -4057,6 +4059,7 @@ def test_publish_release_guard_attest_skipped_fails_and_names_it(tmp_path: Path)
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "skipped",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     result = _run_bash(script, cwd=tmp_path, env=env)
     assert result.returncode != 0, "skipped must exit non-zero"
@@ -4087,6 +4090,8 @@ def _post_condition_env(tmp_path: Path, *, gh_body: str, gh_rc: int, git_rc: int
         "VERSION": "0.1.0",
         "TAG": "bundle-v0.1.0",
         "GH_REPO": "farnalabs/modulo",
+        "PUBLISHED": "true",
+        "HANDOFF_DISPATCHED": "true",
     }
 
 
