@@ -255,7 +255,7 @@ class Settings(BaseSettings):
     modulo_saml_enabled: bool = Field(False, validation_alias="FARNA_CONTROL_SAML_ENABLED")
     modulo_saml_idp_metadata_url: str = Field("", validation_alias="FARNA_CONTROL_SAML_IDP_METADATA_URL")
     modulo_saml_idp_metadata_xml: str = Field("", validation_alias="FARNA_CONTROL_SAML_IDP_METADATA_XML")
-    modulo_saml_entity_id: str = Field("modulo", validation_alias="FARNA_CONTROL_SAML_ENTITY_ID")
+    modulo_saml_entity_id: str = Field("farna-control", validation_alias="FARNA_CONTROL_SAML_ENTITY_ID")
     modulo_saml_sp_private_key: str = Field("", validation_alias="FARNA_CONTROL_SAML_SP_PRIVATE_KEY")
     modulo_saml_sp_x509_cert: str = Field("", validation_alias="FARNA_CONTROL_SAML_SP_X509_CERT")
 

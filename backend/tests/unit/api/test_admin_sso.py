@@ -292,7 +292,7 @@ class TestCreateProvider:
                     "provider_type": "saml",
                     "name": "Test SAML",
                     "metadata_url": "https://idp.example.com/metadata",
-                    "entity_id": "modulo",
+                    "entity_id": "farna-control",
                     "auto_provision": False,
                 },
             )

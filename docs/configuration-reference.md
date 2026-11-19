@@ -269,7 +269,7 @@ Team-tier feature (requires valid `FARNA_CONTROL_LICENSE_KEY`). Configurable via
 | `FARNA_CONTROL_SAML_ENABLED` | No | `false` | Enable SAML 2.0 authentication |
 | `FARNA_CONTROL_SAML_IDP_METADATA_URL` | No | – | SAML IdP metadata URL |
 | `FARNA_CONTROL_SAML_IDP_METADATA_XML` | No | – | SAML IdP metadata XML (alternative to URL) |
-| `FARNA_CONTROL_SAML_ENTITY_ID` | No | `modulo` | SAML SP entity ID |
+| `FARNA_CONTROL_SAML_ENTITY_ID` | No | `farna-control` | SAML SP entity ID |
 | `FARNA_CONTROL_SAML_SP_PRIVATE_KEY` | No | – | SAML SP private key |
 | `FARNA_CONTROL_SAML_SP_X509_CERT` | No | – | SAML SP X.509 certificate |
 | `FARNA_CONTROL_SSO_DEFAULT_ROLE` | No | `runner` | Default org role assigned on JIT provisioning |
