@@ -163,9 +163,12 @@ jobs:
     name: Build and smoke-test macOS ${{ needs.normalize-inputs.outputs.architecture }} bundle
     needs: normalize-inputs
     runs-on: ${{ needs.normalize-inputs.outputs.architecture == 'x86_64' && 'macos-15-intel' || 'macos-15' }}
-    # Worst-case retry sleeps are 62m55s with +25% jitter, plus the 30m
-    # notarytool wait, so 90m leaves no budget for build/sign/smoke work.
-    timeout-minutes: 120
+    # Worst-case retry sleeps are 62m55s with +25% jitter, plus the 90m
+    # notarytool wait (FAR-2575: run 44525902038 hit a 30m wait with the
+    # submission still In Progress), plus ~25m of build/sign/smoke work, so
+    # the job needs ~180m; 200m keeps headroom without the job dying before
+    # the notary wait expires.
+    timeout-minutes: 200
     env:
       VERSION_NUM: ${{ needs.normalize-inputs.outputs.version }}
       MODE: ${{ needs.normalize-inputs.outputs.mode }}
@@ -242,6 +245,13 @@ jobs:
           shellcheck scripts/macos/artefact-identity.sh
           bash -n scripts/macos/notarize-and-verify.sh
           bash -n scripts/macos/artefact-identity.sh
+          # Every Mach-O under Contents is selected for signing and audited
+          # before submit, whatever its permission bits (FAR-2575).
+          test -x scripts/macos/macho-inventory.sh
+          shellcheck scripts/macos/macho-inventory.sh
+          bash -n scripts/macos/macho-inventory.sh
+          grep -q 'nested_binary_discovery bash scripts/macos/macho-inventory.sh discover' .github/workflows/macos-installer.yml
+          grep -q 'nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit' .github/workflows/macos-installer.yml
           grep -q 'notarytool submit' scripts/macos/notarize-and-verify.sh
           grep -q -- '--output-format json' scripts/macos/notarize-and-verify.sh
           grep -q 'dmg_notary_submit bash scripts/macos/notarize-and-verify.sh' .github/workflows/macos-installer.yml
@@ -1191,24 +1201,19 @@ jobs:
           run_pre_smoke keychain_find_identity security find-identity -v -p codesigning "$KEYCHAIN"
 
           APP="build/Modulo-${VERSION_NUM}.app"
-          # shellcheck disable=SC2016
-          # Discover only genuine Mach-O files. A bundled Python runtime ships
-          # executable-bit files that are not binaries (empty .py modules, shell
-          # script wrappers such as bin/pip3); those must not be signed or be
-           # required to be Mach-O. Any Mach-O that is not the selected native
-
-          # the per-binary check below, so this stays strict.
-          # shellcheck disable=SC2016
-          run_pre_smoke nested_binary_discovery bash -c '
-            set -euo pipefail
-            app="$1"
-            find "$app/Contents" -type f -perm -111 -print0 |
-              while IFS= read -r -d "" candidate; do
-                if file -b "$candidate" | grep -q "Mach-O"; then
-                  printf "%s\n" "$candidate"
-                fi
-              done
-          ' bash "$APP"
+          # Select EVERY Mach-O file under Contents - executables, dylibs, .so
+          # extension modules and bundles - by magic bytes, whatever their
+          # permission bits. The previous `find -perm -111` selection skipped
+          # mode-0644 dylibs, so the bundled Tcl/Itcl extension dylibs under
+          # Contents/Resources/bundle/runtime/lib were never Developer ID signed
+          # and Apple marked every submission Invalid (FAR-2575, run
+          # 44485999249). `codesign --deep` does not reach that non-standard
+          # location, so each one must be signed explicitly. The list is
+          # deepest-first, so signing in this order is inside-out. Non-Mach-O
+          # executables (empty .py modules, shell wrappers such as bin/pip3) are
+          # never selected; every selected file is still classified below and a
+          # wrong-architecture Mach-O fails closed.
+          run_pre_smoke nested_binary_discovery bash scripts/macos/macho-inventory.sh discover "$APP"
 
           # Negative guard: a foreign binary format (ELF) must never ship inside
           # a macOS bundle. Scanning only the executable-bit set keeps this
@@ -1244,6 +1249,10 @@ jobs:
           while IFS= read -r nested_binary_line; do
             [[ -n "$nested_binary_line" ]] && NESTED_BINARIES+=("$nested_binary_line")
           done < "$DATA/pre-smoke-nested_binary_discovery.log"
+          printf 'nested_binary_discovery: %d Mach-O file(s) selected for signing\n' "${#NESTED_BINARIES[@]}"
+          echo '::group::Mach-O files selected for signing (inside-out)'
+          cat "$DATA/pre-smoke-nested_binary_discovery.log"
+          echo '::endgroup::'
           binary_index=0
           for binary in "${NESTED_BINARIES[@]}"; do
             [[ -n "$binary" ]] || continue
@@ -1282,6 +1291,13 @@ jobs:
           run_pre_smoke app_codesign codesign_with_timestamp_retry app_codesign --force --deep --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP"
           # shellcheck disable=SC2016
           run_pre_smoke app_codesign_verify codesign --verify --deep --strict --verbose=2 "$APP"
+          # FAR-2575: prove, before any notary round trip, that EVERY Mach-O
+          # under Contents (any permission bits) passes `codesign --verify
+          # --strict`, is signed by a Developer ID Application authority and
+          # carries a secure timestamp. Apple rejects the whole submission for a
+          # single nested file that does not, so a gap fails here naming the file.
+          run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"
+          tail -n 1 "$DATA/pre-smoke-nested_macho_signature_audit.log"
 
 
           DMG="build/Modulo-${VERSION_NUM}-macos-${MACOS_ARCH}.dmg"
@@ -1364,7 +1380,7 @@ jobs:
             --key "$NOTARY_KEY" \
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER" \
-            --timeout 30m \
+            --timeout 90m \
             --identity-out "$DATA/notarization-identity.env" \
             --evidence "$DATA/notarization-evidence.env"
           # The submission status is release evidence: print it on the SUCCESS
