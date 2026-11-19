@@ -160,8 +160,9 @@ jobs:
     runs-on: ubuntu-24.04
     container: ubuntu:22.04
     # Packaging is dominated by xz-compressing ~1.4 GB (about 21 min on a
-    # 4-core local Docker host for 0.3.329); leave headroom for lintian.
-    timeout-minutes: 60
+    # 4-core local Docker host for 0.3.329) and lintian walking ~40k files
+    # (tens of minutes on the same host); leave headroom for both.
+    timeout-minutes: 90
     outputs:
       deb_artifact: ${{ steps.names.outputs.deb_artifact }}
     env:

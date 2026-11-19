@@ -262,7 +262,7 @@ Upstream-Name: farna-control
 Source: ${HOMEPAGE}
 
 Files: *
-Copyright: Farna Labs Ltd
+Copyright: 2025-2026 Farna Labs Ltd
 License: BUSL-1.1
  Farna Control is source-available under the Business Source License 1.1.
  The full license text ships in the upstream repository (LICENSE) at
@@ -304,11 +304,13 @@ MANPAGE
 cat > "${PKGROOT}/usr/share/lintian/overrides/${PACKAGE}" <<'EOF'
 farna-control: dir-or-file-in-opt *
 farna-control: embedded-library *
-farna-control: hardening-no-* *
+farna-control: hardening-no-pie *
+farna-control: hardening-no-fortify-functions *
+farna-control: hardening-no-relro *
+farna-control: hardening-no-bindnow *
 farna-control: unstripped-binary-or-object *
 farna-control: shared-library-lacks-prerequisites *
 farna-control: library-not-linked-against-libc *
-farna-control: binary-or-shlib-defines-rpath *
 farna-control: custom-library-search-path *
 farna-control: package-installs-python-pycache-dir *
 farna-control: package-installs-python-bytecode *
@@ -319,7 +321,7 @@ farna-control: non-standard-file-perm *
 farna-control: repeated-path-segment *
 farna-control: extra-license-file *
 farna-control: package-contains-documentation-outside-usr-share-doc *
-farna-control: python-script-but-no-python-dep *
+farna-control: python3-script-but-no-python3-dep *
 farna-control: unusual-interpreter *
 farna-control: interpreter-in-usr-local *
 farna-control: wrong-path-for-interpreter *
@@ -332,6 +334,8 @@ farna-control: executable-in-usr-lib *
 farna-control: national-encoding *
 farna-control: zero-byte-file-in-doc-directory *
 farna-control: package-contains-compiled-glib-schema *
+# PostgreSQL's timezone database ships aliases as hard links.
+farna-control: package-contains-hardlink *
 EOF
 
 # --- maintainer scripts -----------------------------------------------------
@@ -339,25 +343,6 @@ EOF
 # HARD RULE: none of these may reference a per-user data dir. Remove and purge
 # leave every user's ~/.local/share/modulo/data untouched; the only paths they
 # act on are the package's own tree under /opt/farna-control.
-
-cat > "${PKGROOT}/DEBIAN/postinst" <<'EOF'
-#!/bin/sh
-set -e
-case "$1" in
-  configure)
-    echo "Farna Control installed. As your normal (non-root) user run:"
-    echo "  farna-control start --detach"
-    echo "then 'farna-control status'. Each user gets their own data dir."
-    ;;
-  abort-upgrade|abort-remove|abort-deconfigure)
-    ;;
-  *)
-    echo "postinst called with unknown argument '$1'" >&2
-    exit 1
-    ;;
-esac
-exit 0
-EOF
 
 cat > "${PKGROOT}/DEBIAN/prerm" <<'EOF'
 #!/bin/sh
@@ -405,7 +390,7 @@ case "$1" in
 esac
 exit 0
 EOF
-chmod 0755 "${PKGROOT}/DEBIAN/postinst" "${PKGROOT}/DEBIAN/prerm" "${PKGROOT}/DEBIAN/postrm"
+chmod 0755 "${PKGROOT}/DEBIAN/prerm" "${PKGROOT}/DEBIAN/postrm"
 
 INSTALLED_SIZE="$(du -sk --exclude=DEBIAN "${PKGROOT}" | awk '{print $1}')"
 cat > "${PKGROOT}/DEBIAN/control" <<EOF

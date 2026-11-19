@@ -126,7 +126,7 @@ def test_unresolvable_system_libraries_fail_the_build() -> None:
 
 # --- maintainer scripts never touch user data -------------------------------
 
-_MAINTAINER_SCRIPTS = ("/DEBIAN/postinst", "/DEBIAN/prerm", "/DEBIAN/postrm")
+_MAINTAINER_SCRIPTS = ("/DEBIAN/prerm", "/DEBIAN/postrm")
 _USER_DATA_MARKERS = ("$HOME", "${HOME}", "/home", "/root", ".local/share", "modulo/data", "getent", "/etc/passwd")
 
 

@@ -177,8 +177,17 @@ else
 fi
 
 step "farna-control stop"
-as_user farna-control stop
-sleep 2
+# `stop` sends SIGTERM and only waits 10s to confirm; on a slow host the
+# ordered teardown (API drain, workers, Redis, Postgres) can take longer and
+# stop reports `stop.unconfirmed`. The real contract is that every packaged
+# process exits, so wait for that instead of trusting the 10s confirmation.
+if ! as_user farna-control stop; then
+  echo "farna-control stop did not confirm within its own window; waiting for the processes to exit"
+fi
+stop_deadline=$((SECONDS + 120))
+while pgrep -u "${VALIDATION_USER}" -f '/opt/farna-control/' >/dev/null 2>&1 && [[ "${SECONDS}" -lt "${stop_deadline}" ]]; do
+  sleep 2
+done
 if pgrep -u "${VALIDATION_USER}" -f '/opt/farna-control/' >/dev/null 2>&1; then
   pgrep -u "${VALIDATION_USER}" -af '/opt/farna-control/' >&2 || true
   fail "processes from /opt/farna-control still running after stop"
