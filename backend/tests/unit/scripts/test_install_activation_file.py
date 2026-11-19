@@ -270,9 +270,12 @@ def test_finalise_writes_a_usable_env_sh_under_set_u(tmp_path: Path) -> None:
     assert f'export PATH="{bin_dir}:${{PATH}}"' in text
 
     # The shim keeps its argv passthrough (a `$@` eaten at install time would
-    # make `farna-control <args>` silently drop every argument).
+    # make `farna-control <args>` silently drop every argument), and it states
+    # the install root so `farna-control upgrade` resolves THIS install even
+    # when it is not at the default root (FAR-2571).
     shim = (bin_dir / "farna-control").read_text(encoding="utf-8")
     assert f'exec "{install_root}/current/launcher" "$@"' in shim
+    assert f'export FARNA_CONTROL_INSTALL_ROOT="{install_root}"' in shim
 
     # EXECUTE the generated file the way an operator does: a strict shell
     # (`set -euo pipefail`) must source it without an unbound-variable abort,

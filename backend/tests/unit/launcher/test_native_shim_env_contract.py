@@ -46,6 +46,10 @@ import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+import pytest
+
+from farna.launcher import upgrade as upgrade_module
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # The project namespace. The canonical side is listed first deliberately.
@@ -283,6 +287,7 @@ def test_shim_extractors_find_the_shipped_names() -> None:
     assert sets[_LINUX_BUNDLE] == {
         "FARNA_CONTROL_BUNDLED_BIN_DIR",
         "FARNA_CONTROL_FRONTEND_DIST",
+        "FARNA_CONTROL_INSTALL_ROOT",
         "FARNA_CONTROL_SERVE_SPA",
     }
     assert sets[_LINUX_INSTALLER] == {
@@ -324,6 +329,60 @@ def test_linux_launcher_serves_the_bundled_spa() -> None:
     assert exported is not None, launcher
 
     assert exported.group("dir") == staged.group("dir")
+
+
+#: install.sh's own default install root: the per-user ``${HOME}/...`` tail of
+#: its INSTALL_ROOT line (after the FARNA_CONTROL_/MODULO_ env overrides), so
+#: ``~/.local/opt/farna-control`` stays the single answer.
+_INSTALLER_ROOT_DEFAULT_RE = re.compile(r'^INSTALL_ROOT=".*:-\$\{HOME\}/(?P<root>[^}"]+)\}\}"$', re.MULTILINE)
+
+
+def test_default_install_root_is_the_installer_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2571: the resolver's default MUST be install.sh's default.
+
+    ``farna-control upgrade`` with no ``--install-root`` resolves
+    ``default_install_root()``. It was left on the pre-rebrand
+    ``~/.local/opt/modulo`` while the installer wrote
+    ``~/.local/opt/farna-control``, so an upgrade on a current install died with
+    "no native install to upgrade". The shims now export the root explicitly,
+    but any invocation that reaches the resolver without that export still has
+    to land on the same path - so pin the two defaults together instead of
+    trusting them to stay in step by convention.
+    """
+    monkeypatch.delenv("FARNA_CONTROL_INSTALL_ROOT", raising=False)
+    monkeypatch.delenv("MODULO_INSTALL_ROOT", raising=False)
+
+    match = _INSTALLER_ROOT_DEFAULT_RE.search(_text(_LINUX_INSTALLER))
+    assert match is not None, "install.sh's INSTALL_ROOT default line changed shape; re-derive this pin"
+
+    expected = Path.home().joinpath(*match.group("root").split("/"))
+
+    assert upgrade_module.default_install_root() == expected
+
+
+def test_both_native_entrypoints_export_the_install_root() -> None:
+    """FAR-2571: the PATH shim AND the bundle launcher state the root.
+
+    The shim knows the root it was generated for and exports it verbatim; the
+    bundle launcher derives it from its own location (it sits at
+    ``<root>/versions/<version>/launcher``, so the root is two levels up) and
+    must not clobber an explicit value. Set membership alone would pass for a
+    launcher that computed the wrong directory, so the derivation and its
+    ``:-`` fallback are pinned as well.
+    """
+    launcher = _linux_launcher_source(_text(_LINUX_BUNDLE))
+
+    assert 'export FARNA_CONTROL_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-$(CDPATH= cd -- "$BUNDLE_ROOT/../.." && pwd)}"\n' in launcher
+
+    installer = _text(_LINUX_INSTALLER)
+    _, _, after_shim = installer.partition('shim="${BIN_DIR}/farna-control"')
+    assert after_shim, "install.sh no longer generates the farna-control shim where this test expects"
+    shim_source = after_shim.partition('chmod 755 "${shim}"')[0]
+
+    assert 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"' in shim_source
+    # The shim still forwards argv: an install-time-expanded $@ silently drops
+    # every argument, so the literal form is part of the same contract.
+    assert 'exec "${INSTALL_ROOT}/current/launcher" "\\$@"' in shim_source
 
 
 def test_python_read_extractor_sees_the_spa_seam() -> None:

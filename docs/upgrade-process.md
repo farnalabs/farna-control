@@ -113,6 +113,15 @@ acknowledgement that the out-of-band backup is the authoritative snapshot (a
 stopped stack cannot be dumped). The bundled data dir keeps its
 `~/.local/share/modulo/data` location so an upgrade never strands existing data.
 
+Both entrypoints to that install export `FARNA_CONTROL_INSTALL_ROOT`: the
+`~/.local/bin/farna-control` shim states the root it was generated for, and the
+bundle's own `current/launcher` derives it from its location (it sits at
+`<root>/versions/<version>/launcher`). So `farna-control upgrade` - including
+one run through `current/launcher` directly - targets the install that is
+actually on disk, even when `FARNA_CONTROL_INSTALL_ROOT` put it somewhere other
+than the default `~/.local/opt/farna-control`. The built-in default and
+`install.sh`'s default are additionally pinned together by a test.
+
 `farna-control upgrade` flow:
 
 1. **Enforced pre-upgrade dump.** The bundled pg_dump writes a versioned
@@ -252,6 +261,28 @@ Migrations run automatically on backend startup:
 5. On failure, it retries up to 5 times with backoff, then fails boot
 
 The advisory lock prevents concurrent migrations across multiple replicas. The lock key (`72001, 1`) must not conflict with other applications sharing the same Postgres instance.
+
+### The legacy `owner` org role on an upgraded database
+
+Current releases have no `owner` org role: the CHECK constraint on
+`org_memberships.role` admits only `admin`, `operator`, `runner` and `viewer`,
+and older releases converted `owner` rows to `admin` in migration 0030, so a
+database that has been upgraded continuously already carries none.
+
+A database that still has `owner` rows - restored from a pre-0030 backup, or
+carried over from a release that predates the conversion - is not renamed
+automatically. On the first boot after the upgrade a startup guard
+(`_assert_no_owner_rows`) refuses to boot, logs
+`infra_blocked=owner_rows_present` with the affected account ids, and prints
+the exact fix:
+
+```sql
+UPDATE org_memberships SET role='admin' WHERE role='owner';
+```
+
+Run that once against the database, then start the new version again. A boot
+that stops here is the guard doing its job, not a migration failure: the data
+is intact and the correction is one statement.
 
 ---
 
