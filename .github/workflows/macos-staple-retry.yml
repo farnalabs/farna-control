@@ -295,9 +295,11 @@ jobs:
             # ticket-propagation window is worth polling. Older releases are not
             # re-stapled by the schedule - a manual dispatch can target them.
             #
-            # FAR-2573: RC bundle releases are published as prereleases, so a
-            # prerelease is a normal, shipped bundle and must still be polled -
-            # excluding it would quietly stop retrying a deferred staple.
+            # Bundle releases are published non-prerelease (FAR-2576), but one
+            # from an earlier run may still be flagged prerelease (the FAR-2573
+            # behaviour). Never filter on .prerelease: either way it is a
+            # shipped bundle and must still be polled - excluding it would
+            # quietly stop retrying a deferred staple.
             release_json="$(gh api "repos/${REPO}/releases?per_page=30")"
             latest="$(printf '%s' "$release_json" |
               jq -c '[.[] | select(.draft == false) | select(.tag_name | startswith("bundle-v"))] | sort_by(.published_at) | reverse | first // empty')"
@@ -965,19 +967,32 @@ jobs:
               --version "$VERSION" \
               --output CHANGELOG.md > "$NOTES_FILE"
 
-            # A bundle cut is a release candidate; its title carries the RC tag,
-            # so it must not be published as a normal release.
-            PRERELEASE_ARGS=()
-            case "$RC_TAG" in
-              v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
-              *) PRERELEASE_ARGS=() ;;
-            esac
-
+            # FAR-2576: mirror release-unified.yml - the bundle release is a
+            # NORMAL (non-prerelease) release even though its title carries the
+            # RC tag. During alpha every bundle is an -rc build and is what users
+            # install; install.sh (/releases/latest), native-release-smoke.yml
+            # and validate_release_tag.py all require prerelease=false.
+            #
+            # Latest is decided explicitly from the published bundle releases.
+            # gh's default for a new release is make_latest=true (not date and
+            # semver), so a held publication that lands after a newer bundle was
+            # cut must pass --latest=false or it would point installers back at
+            # the older bundle.
+            existing_versions="$(gh release list --repo "$REPO" --limit 1000 --json tagName \
+              --jq '.[].tagName' | sed -n 's/^bundle-v\([0-9][0-9.]*\)$/\1/p')"
+            newest_version="$(printf '%s\n%s\n' "$existing_versions" "$VERSION" \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+            if [ "$newest_version" = "$VERSION" ]; then
+              LATEST_ARGS=(--latest)
+            else
+              LATEST_ARGS=(--latest=false)
+            fi
             gh release create "$RELEASE_TAG" \
               --title "Modulo ${RC_TAG}" \
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
-              "${PRERELEASE_ARGS[@]}" \
+              --prerelease=false \
+              "${LATEST_ARGS[@]}" \
               "${ASSETS[@]}"
             if ! gh api "repos/${REPO}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
               echo "::error::${RELEASE_TAG} was created but its tag could not be confirmed on origin."
@@ -987,6 +1002,15 @@ jobs:
             printf 'published=true\n' >>"$GITHUB_OUTPUT"
             exit 0
           fi
+
+          # Repair a release that an earlier FAR-2573 run published as a
+          # prerelease: the scheduled backstop re-staples existing (possibly
+          # older) releases, and a repaired staple must not leave the stale
+          # prerelease flag behind. This mirrors the release-unified edit
+          # repair. Latest is deliberately left untouched here - the backstop
+          # may target an older bundle, so forcing Latest could demote the
+          # actual newest release.
+          gh release edit "$RELEASE_TAG" --repo "$REPO" --prerelease=false
 
           # --clobber is deliberate here: the stapled bytes replace the unstapled
           # asset, and SHA256SUMS + the signed manifest were regenerated above to

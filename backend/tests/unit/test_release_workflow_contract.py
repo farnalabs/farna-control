@@ -1254,22 +1254,69 @@ def test_macos_staple_retry_is_the_publisher_for_a_held_release() -> None:
     verify = _step(workflow, "publish-stapled", "Verify the published release metadata")
     assert "needs.resolve-target.outputs.publish_release == 'true'" in str(verify.get("if", ""))
 
-    # The scheduled backstop must still find an RC bundle now that bundle
-    # releases are prereleases (FAR-2573).
+    # The scheduled backstop must still find a bundle release whatever its
+    # prerelease flag: one published by an earlier run may still be a
+    # prerelease (FAR-2573), even though new ones are not (FAR-2576).
     assert "select(.prerelease == false)" not in resolve
+    assert "select(.prerelease == true)" not in resolve
 
 
-def test_rc_bundle_release_is_created_as_a_prerelease() -> None:
-    # Both publishers create the bundle release; both must mark an RC.
+def _gh_release_commands(script: str, verb: str) -> list[str]:
+    """Return each ``gh release <verb>`` invocation, line continuations joined."""
+    joined = re.sub(r"\\\n\s*", " ", script)
+    return [line.strip() for line in joined.splitlines() if f"gh release {verb} " in line]
+
+
+def test_rc_bundle_release_is_published_as_a_non_prerelease() -> None:
+    # FAR-2576: during alpha every bundle is an -rc build and is what users
+    # install. install.sh (/releases/latest), native-release-smoke.yml and
+    # validate_release_tag.py all require prerelease=false, so neither
+    # publisher may mark the bundle release a prerelease.
     workflow = _release_workflow()
     create = _step(workflow, "publish-release", "Create GitHub Release with assets")["run"]
-    assert "v*-rc[0-9]*" in create
-    assert "PRERELEASE_ARGS=(--prerelease)" in create
+    # Latest is decided explicitly from the published bundle releases: the
+    # newest bundle is Latest, an older (re-run / out-of-order) one is not.
+    # gh's default for a new release is make_latest=true, so leaving it unset
+    # would let an older cut claim Latest.
+    assert "PUBLISH_ARGS=(--prerelease=false --latest)" in create
+    assert "PUBLISH_ARGS=(--prerelease=false --latest=false)" in create
+    assert 'if [ "$newest_version" = "$VERSION" ]' in create
+    assert re.search(r"--prerelease(?!=false)", create) is None
+    creates = _gh_release_commands(create, "create")
+    edits = _gh_release_commands(create, "edit")
+    assert len(creates) == 1
+    assert len(edits) == 1
+    # A new release is created non-prerelease; an existing one (e.g. a
+    # prerelease left by an earlier run) is repaired the same way, and both
+    # paths take the same explicit make_latest decision.
+    assert '"${PUBLISH_ARGS[@]}"' in creates[0]
+    assert '"${PUBLISH_ARGS[@]}"' in edits[0]
 
     retry = _staple_retry_workflow()
     retry_create = _step(retry, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")["run"]
-    assert "v*-rc[0-9]*" in retry_create
-    assert "PRERELEASE_ARGS=(--prerelease)" in retry_create
+    assert re.search(r"--prerelease(?!=false)", retry_create) is None
+    retry_creates = _gh_release_commands(retry_create, "create")
+    assert len(retry_creates) == 1
+    assert "--prerelease=false" in retry_creates[0]
+    # A late held publication must not force Latest over a newer bundle, and
+    # the decision must be explicit (absence of the flag is not a decision:
+    # the server defaults make_latest to true for a new release).
+    assert "LATEST_ARGS=(--latest=false)" in retry_create
+    assert "LATEST_ARGS=(--latest)" in retry_create
+    assert 'if [ "$newest_version" = "$VERSION" ]' in retry_create
+    assert '"${LATEST_ARGS[@]}"' in retry_creates[0]
+
+
+def test_staple_retry_republish_repairs_a_stale_prerelease_flag() -> None:
+    # FAR-2576: the scheduled backstop re-staples an existing release without
+    # recreating it. A release an earlier FAR-2573 run published as a
+    # prerelease must be repaired on that path too, not left a prerelease.
+    workflow = _staple_retry_workflow()
+    script = _step(workflow, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")["run"]
+    edits = _gh_release_commands(script, "edit")
+    assert any("--prerelease=false" in edit for edit in edits), "re-stapling an existing release must repair a stale prerelease flag"
+    # Repairing an older bundle must never drag Latest back to it.
+    assert all("--latest" not in edit for edit in edits)
 
 
 def test_held_publication_checkout_fetches_full_history_for_the_changelog() -> None:
