@@ -296,7 +296,9 @@ def test_dump_password_is_never_in_argv(tmp_path: Path, monkeypatch: pytest.Monk
         pre_upgrade_dump(data_dir)
     joined = " ".join(str(a) for a in seen["argv"])
     assert "pw" not in joined
-    assert seen["argv"][-1] == "postgresql://modulo@127.0.0.1:15432/farna_control"
+    # FAR-2570: the dump runs as the cluster OWNER role, never the
+    # NOBYPASSRLS application role (an RLS-filtered dump is silently partial).
+    assert seen["argv"][-1] == "postgresql://farna_control@127.0.0.1:15432/farna_control"
     assert seen["env"]["PGPASSWORD"] == "pw"
 
 

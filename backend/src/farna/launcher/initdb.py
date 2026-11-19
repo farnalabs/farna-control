@@ -2,7 +2,14 @@
 
 Rules enforced here, all locked by tests:
 
-* FIXED ``-U`` bootstrap role name (``modulo``) — NEVER the OS username.
+* FIXED ``-U`` bootstrap role name (:data:`BOOTSTRAP_USERNAME`, the cluster
+  OWNER / migration role) — NEVER the OS username, and NEVER the application
+  role. ``initdb`` always makes its ``-U`` role a Postgres SUPERUSER, so this
+  role may only own the schema and run DDL: the application connects as
+  ``farna_control_app`` (NOSUPERUSER, NOBYPASSRLS — see
+  ``farna.db.url_utils``). Composing the app URL with this role is the
+  FAR-2570 regression: the app then ran as a superuser, RLS was bypassed, and
+  the boot-time role-posture assertion failed.
 * Locale pinned to ``C.UTF-8`` (TODO(P3): Windows initdb has no C.UTF-8
   locale; the P3 delivery must pick the Windows-appropriate locale or ship
   one — this module refuses loudly rather than guessing).
@@ -34,9 +41,13 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from farna.db.url_utils import OWNER_ROLE
 from farna.launcher.platform import binary_name, initdb_locale, is_windows
 
-BOOTSTRAP_USERNAME = "modulo"
+# The cluster OWNER / migration role initdb creates (and makes a superuser).
+# Imported from the single role-name definition so it can never drift from the
+# role the launcher puts in ``DATABASE_ADMIN_URL``.
+BOOTSTRAP_USERNAME = OWNER_ROLE
 INITDB_LOCALE = "C.UTF-8"
 PG_VERSION_FILE = "PG_VERSION"
 

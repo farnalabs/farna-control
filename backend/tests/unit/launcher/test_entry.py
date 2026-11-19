@@ -1895,6 +1895,55 @@ class TestEnsureAppDatabaseSafety:
         assert kwargs["ssl"] is False
         assert "sslmode" not in str(args[0])
 
+    def test_ensure_app_database_connects_as_the_owner_role_not_the_app_role(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """FAR-2570: CREATE DATABASE needs the owner role, never the app role.
+
+        ``farna_control_app`` is NOSUPERUSER/NOBYPASSRLS and has no CREATEDB,
+        so the bootstrap connection must use the initdb owner role — and the
+        composed application URL must not name that same role.
+        """
+        from types import SimpleNamespace
+        from urllib.parse import urlsplit
+
+        import asyncpg
+
+        from farna.db.url_utils import APP_ROLE, OWNER_ROLE
+        from farna.launcher.config_source import compose_config
+        from farna.launcher.secrets_file import LauncherSecrets
+        from farna.launcher.state import LauncherState
+
+        dsn_users: list[str] = []
+
+        class _Conn:
+            async def fetchval(self, *_a: object, **_k: object) -> int:
+                return 1
+
+            async def execute(self, *_a: object, **_k: object) -> str:
+                return "OK"
+
+            async def close(self) -> None:
+                return None
+
+        async def _record_connect(dsn: str, **_kwargs: object) -> object:
+            dsn_users.append(urlsplit(dsn).username or "")
+            return _Conn()
+
+        monkeypatch.setattr(asyncpg, "connect", _record_connect)
+        entry_module._ensure_app_database(
+            SimpleNamespace(postgres_port=5432),
+            SimpleNamespace(postgres_password="pw"),
+        )
+
+        assert dsn_users == [OWNER_ROLE]
+        assert dsn_users != [APP_ROLE]
+
+        composed = compose_config(
+            LauncherState(postgres_port=5432, redis_port=6379, api_port=8000),
+            LauncherSecrets(postgres_password="pw", redis_password="pw", state_hmac_key=bytes(range(32))),
+        )
+        assert urlsplit(composed["DATABASE_URL"]).username == APP_ROLE
+        assert urlsplit(composed["DATABASE_URL"]).username != dsn_users[0]
+
 
 def test_ensure_app_database_creates_the_name_the_composed_url_targets(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-2561: the database first boot CREATES is the one the API connects to.

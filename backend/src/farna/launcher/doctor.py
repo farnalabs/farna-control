@@ -375,7 +375,9 @@ def check_postgres(_data_dir: Path, state: Any, probes: DoctorProbes) -> CheckRe
         return CheckResult(
             "postgres",
             False,
-            f"reachable on 127.0.0.1:{state.postgres_port} but role posture DRIFTED: " + "; ".join(violations),
+            f"reachable on 127.0.0.1:{state.postgres_port} but role posture DRIFTED: " + "; ".join(violations) + ". The application must connect as farna_control_app (NOSUPERUSER, NOBYPASSRLS) with "
+            "DATABASE_ADMIN_URL naming the owner/migration role (farna_control); fix DATABASE_URL, "
+            "then restart `modulo start` so the boot-time bootstrap re-applies the allow-list.",
         )
     return CheckResult(
         "postgres",

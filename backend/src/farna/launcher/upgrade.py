@@ -225,7 +225,13 @@ def pre_upgrade_dump(
     except Exception as exc:
         raise UpgradeError(f"state.json at {state_path} cannot be verified: {exc}") from exc
 
-    url_with_password = f"postgresql://modulo:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
+    # The pre-upgrade dump must run as the cluster OWNER (initdb's bootstrap
+    # role), never the application role: farna_control_app is NOBYPASSRLS, so
+    # pg_dump would read only the rows its session can see and produce a
+    # silently incomplete snapshot (FAR-2570).
+    from farna.launcher.initdb import BOOTSTRAP_USERNAME
+
+    url_with_password = f"postgresql://{BOOTSTRAP_USERNAME}:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
     dump_url, postgres_password = _decredential_url(url_with_password)
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")

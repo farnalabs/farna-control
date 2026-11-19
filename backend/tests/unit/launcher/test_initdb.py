@@ -16,6 +16,7 @@ from subprocess import Popen
 import pytest
 
 import farna.launcher.initdb as initdb_module
+from farna.db.url_utils import APP_ROLE, OWNER_ROLE, SYSTEM_ROLE
 from farna.launcher.initdb import (
     BOOTSTRAP_USERNAME,
     GATE_INITDB_PRE_RENAME,
@@ -120,9 +121,16 @@ def test_initdb_argv_uses_windows_locale_and_executable_seam(monkeypatch: pytest
 
 
 def test_bootstrap_role_name_is_fixed_not_os_username() -> None:
-    # ADR 031 Decision 8: the bundled cluster's bootstrap role is FIXED —
+    # ADR 031 Decision 8: the bundled cluster's bootstrap role is FIXED -
     # never derived from the OS user running the launcher.
-    assert BOOTSTRAP_USERNAME == "modulo"
+    #
+    # FAR-2570: it is the OWNER/migration role. initdb always makes its -U role
+    # a SUPERUSER, so it must never be the role the application connects as
+    # (that role is farna_control_app: NOSUPERUSER, NOBYPASSRLS).
+    assert BOOTSTRAP_USERNAME == OWNER_ROLE
+    assert BOOTSTRAP_USERNAME == "farna_control"
+    assert BOOTSTRAP_USERNAME != APP_ROLE
+    assert BOOTSTRAP_USERNAME != SYSTEM_ROLE
 
 
 def test_server_argv_pins_endpoint_arguments(tmp_path: Path) -> None:

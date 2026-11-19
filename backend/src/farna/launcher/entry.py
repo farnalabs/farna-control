@@ -885,10 +885,19 @@ def _await_health(
 
 
 def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
-    """Create the app database inside the bundled cluster (idempotent)."""
+    """Create the app database inside the bundled cluster (idempotent).
+
+    Connects as the initdb BOOTSTRAP role (:data:`farna.launcher.initdb
+    .BOOTSTRAP_USERNAME`, the cluster owner/migration role) — ``CREATE
+    DATABASE`` requires CREATEDB, and the application role
+    (``farna_control_app``) deliberately does not have it. Using the owner
+    here and the app role for ``DATABASE_URL`` is the FAR-2570 role split.
+    """
     import asyncio
 
     import asyncpg
+
+    from farna.launcher.initdb import BOOTSTRAP_USERNAME
 
     # CREATE DATABASE cannot take a bound parameter, so the database name must
     # be interpolated. Validate it against the strict identifier grammar
@@ -896,7 +905,7 @@ def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
     app_db_name = _validate_sql_identifier(APP_DB_NAME, "APP_DB_NAME")
 
     async def _create() -> None:
-        root_url = f"postgresql://modulo:{secrets.postgres_password}@{POSTGRES_HOST}:{launcher_state.postgres_port}/postgres"
+        root_url = f"postgresql://{BOOTSTRAP_USERNAME}:{secrets.postgres_password}@{POSTGRES_HOST}:{launcher_state.postgres_port}/postgres"
         # FAR-1441: never rely on asyncpg's fail-open ``prefer`` driver default
         # — derive the ``ssl`` arg explicitly. The bundled root URL is locally
         # constructed (no sslmode), so this yields the explicit plaintext

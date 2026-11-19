@@ -60,13 +60,18 @@ from urllib.parse import unquote, urlparse, urlunparse
 
 import asyncpg  # asyncpg does not publish a py.typed marker
 
+from farna.db.url_utils import OWNER_ROLE, SYSTEM_ROLE
+
 _log = logging.getLogger(__name__)
 
 REQUIRED_VARS = ["DATABASE_ADMIN_URL", "DATABASE_URL"]
 
 _BREAK_GLASS_ROLE = "farna_control_breakglass"
 _MIGRATE_ROLE = "farna_control_migrate"
-_SYSTEM_ROLE = "farna_control_system"
+# The canonical names live in the leaf URL-contract module so the launcher, the
+# bootstrap and the doctor can never disagree about which role is the system
+# role / the owner (FAR-2570).
+_SYSTEM_ROLE = SYSTEM_ROLE
 
 # FAR-1200: serialise concurrent first-boot bootstraps (multi-replica deploys).
 # Dedicated (int4, int4) advisory-lock key — distinct from the migration lock
@@ -142,19 +147,28 @@ def _escape_pg_string_literal(value: str) -> str:
 
 
 def _role_attributes(*, login: bool, bypassrls: bool) -> str:
-    """Build the LOGIN/BYPASSRLS attribute clause shared by CREATE/ALTER ROLE.
+    """Build the LOGIN/NOSUPERUSER/BYPASSRLS clause shared by CREATE/ALTER ROLE.
 
-    ``NOBYPASSRLS`` is stated EXPLICITLY when ``bypassrls`` is False: ALTER ROLE
-    ... WITH only sets the attributes it lists, so a role that already carries
-    BYPASSRLS (e.g. provisioned before the posture existed) would keep it
-    forever and fail the boot-time posture assertion on every release —
-    observed on prod 2026-09-03 where ``farna_control_app`` had ``rolbypassrls = true``
-    and the bootstrap asserted a posture it could never repair.
+    Every attribute that the posture assertion checks is stated EXPLICITLY.
+    ``ALTER ROLE ... WITH`` only sets the attributes it lists, so a role that
+    already carries a privileged attribute would keep it forever and fail the
+    boot-time posture assertion on every release:
+
+    * ``NOBYPASSRLS`` when ``bypassrls`` is False — observed on prod 2026-09-03
+      where ``farna_control_app`` had ``rolbypassrls = true``.
+    * ``NOSUPERUSER`` for every LOGIN role — a role provisioned as a superuser
+      (e.g. by an ``initdb -U`` bootstrap role that the app was wrongly wired
+      to, FAR-2570) can otherwise never be demoted by this bootstrap, so the
+      posture assertion would fail on every boot with no repair path.
+
+    BYPASSRLS is only ever granted to the cross-org roles
+    (``farna_control_system`` / ``farna_control_breakglass``); the application
+    role is NOBYPASSRLS because tenant isolation relies on RLS policies.
     """
     if login and bypassrls:
-        return "LOGIN BYPASSRLS"
+        return "LOGIN NOSUPERUSER BYPASSRLS"
     if login:
-        return "LOGIN NOBYPASSRLS"
+        return "LOGIN NOSUPERUSER NOBYPASSRLS"
     if bypassrls:
         return "NOSUPERUSER NOLOGIN BYPASSRLS"
     return "NOSUPERUSER NOLOGIN NOBYPASSRLS"
@@ -298,9 +312,11 @@ async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -
     * no table-level UPDATE grant on ``accounts`` for ``farna_control_app`` OR PUBLIC
       (``information_schema.role_table_grants`` is table-level only by
       construction — no ``column_name`` predicate);
-    * the set of ``accounts`` columns ``farna_control_app`` can UPDATE equals the
+    * the set of ``accounts`` columns the app role can UPDATE equals the
       allow-listed writable columns (inverted schema-evolution set-equality),
       and the three break-glass columns are NOT writable by it;
+    * the app role is not the cluster OWNER/migrate role (FAR-2570: an app
+      wired to the ``initdb -U`` role runs as a superuser and bypasses RLS);
     * ``rolsuper = false`` for the app role;
     * ``rolbypassrls = false`` for the app role (tenant isolation relies on
       RLS policies — BYPASSRLS is only for cross-org system roles);
@@ -329,14 +345,22 @@ async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -
         if ok:
             granted.add(col)
     if granted != writable:
-        violations.append(f"farna_control_app accounts UPDATE grant drift: granted={sorted(granted)} allow_list={sorted(writable)}")
+        violations.append(f"{app_user} accounts UPDATE grant drift: granted={sorted(granted)} allow_list={sorted(writable)}")
 
     for col in ("is_break_glass", "break_glass_expires_at", "break_glass_deactivated_at"):
         if col not in cols:
             continue
         ok = await conn.fetchval("SELECT has_column_privilege($1, 'public.accounts', $2, 'UPDATE')", app_user, col)
         if ok:
-            violations.append(f"farna_control_app can UPDATE break-glass column {col}")
+            violations.append(f"{app_user} can UPDATE break-glass column {col}")
+
+    # The application must never connect as the cluster owner: initdb makes its
+    # ``-U`` role a superuser, so owning the schema and running the app with
+    # one role silently bypasses RLS. This is the exact FAR-2570 regression,
+    # and it is checked explicitly so the message names the cause instead of
+    # only reporting the downstream "is a superuser" symptom.
+    if app_user == OWNER_ROLE:
+        violations.append(f"app role {app_user} is the cluster OWNER/migrate role — the application must connect as farna_control_app (NOSUPERUSER, NOBYPASSRLS); see DATABASE_ADMIN_URL for the owner connection")
 
     if await conn.fetchval("SELECT rolsuper FROM pg_roles WHERE rolname = $1", app_user):
         violations.append(f"app role {app_user} is a superuser")
@@ -362,10 +386,23 @@ async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -
 
 
 async def _assert_role_posture(conn: asyncpg.Connection, app_user: str) -> None:
-    """Fatal when the allow-list / role-posture assertions find a violation."""
+    """Fatal when the allow-list / role-posture assertions find a violation.
+
+    The message is deliberately ACTIONABLE: a posture failure is a security
+    regression (a privileged app role bypasses tenant isolation), not a
+    transient blip, so the operator must be told which role is wrong and how
+    to repair it rather than only that an assertion failed. ``modulo doctor``
+    reports the same violation list through the same predicate.
+    """
     violations = await _find_allow_list_violations(conn, app_user)
     if violations:
-        raise RuntimeError("Break-glass role posture assertion FAILED:\n  " + "\n  ".join(violations))
+        raise RuntimeError(
+            "Break-glass role posture assertion FAILED:\n  " + "\n  ".join(violations) + "\nRemediation: DATABASE_URL must name the least-privilege application role"
+            " (farna_control_app: NOSUPERUSER, NOBYPASSRLS) and DATABASE_ADMIN_URL the cluster"
+            " owner/migration role (farna_control). The bootstrap re-applies the accounts UPDATE"
+            " allow-list on every boot; restart the app with both URLs provisioned, then run"
+            " `modulo doctor` to confirm the posture."
+        )
 
 
 def _asyncpg_admin_connect(admin_url: str) -> tuple[str, bool | str]:
