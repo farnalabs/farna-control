@@ -2773,9 +2773,22 @@ jobs:
           # scripts/validate_release_tag.py rejects a prerelease. A prerelease
           # is invisible to all three, so the newest bundle would never ship.
           # --prerelease=false on edit also repairs a release that an earlier
-          # run published as a prerelease. This job only ever publishes the
-          # newest cut/recut (recut tags current main), so --latest is correct.
-          PUBLISH_ARGS=(--prerelease=false --latest)
+          # run published as a prerelease.
+          #
+          # Latest is decided explicitly from the published bundle releases and
+          # never left to gh's default: for a new release that is
+          # make_latest=true, so a re-run of an older cut, or an out-of-order
+          # cut that preflight does not reject, would point install.sh
+          # (/releases/latest) back at itself. Only the newest bundle is Latest.
+          existing_versions="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName \
+            --jq '.[].tagName' | sed -n 's/^bundle-v\([0-9][0-9.]*\)$/\1/p')"
+          newest_version="$(printf '%s\n%s\n' "$existing_versions" "$VERSION" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+          if [ "$newest_version" = "$VERSION" ]; then
+            PUBLISH_ARGS=(--prerelease=false --latest)
+          else
+            PUBLISH_ARGS=(--prerelease=false --latest=false)
+          fi
 
           # NEVER --clobber an existing asset: a replaced release artifact
           # invalidates every verify-against-the-manifest already downloaded.

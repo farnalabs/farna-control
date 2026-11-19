@@ -972,15 +972,27 @@ jobs:
             # RC tag. During alpha every bundle is an -rc build and is what users
             # install; install.sh (/releases/latest), native-release-smoke.yml
             # and validate_release_tag.py all require prerelease=false.
-            # Latest is deliberately left to GitHub's automatic choice (date and
-            # semver) rather than forced with --latest: a held publication can
-            # land after a newer bundle was cut, and forcing Latest would then
-            # point installers back at the older bundle.
+            #
+            # Latest is decided explicitly from the published bundle releases.
+            # gh's default for a new release is make_latest=true (not date and
+            # semver), so a held publication that lands after a newer bundle was
+            # cut must pass --latest=false or it would point installers back at
+            # the older bundle.
+            existing_versions="$(gh release list --repo "$REPO" --limit 1000 --json tagName \
+              --jq '.[].tagName' | sed -n 's/^bundle-v\([0-9][0-9.]*\)$/\1/p')"
+            newest_version="$(printf '%s\n%s\n' "$existing_versions" "$VERSION" \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+            if [ "$newest_version" = "$VERSION" ]; then
+              LATEST_ARGS=(--latest)
+            else
+              LATEST_ARGS=(--latest=false)
+            fi
             gh release create "$RELEASE_TAG" \
               --title "Modulo ${RC_TAG}" \
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
               --prerelease=false \
+              "${LATEST_ARGS[@]}" \
               "${ASSETS[@]}"
             if ! gh api "repos/${REPO}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
               echo "::error::${RELEASE_TAG} was created but its tag could not be confirmed on origin."
@@ -990,6 +1002,15 @@ jobs:
             printf 'published=true\n' >>"$GITHUB_OUTPUT"
             exit 0
           fi
+
+          # Repair a release that an earlier FAR-2573 run published as a
+          # prerelease: the scheduled backstop re-staples existing (possibly
+          # older) releases, and a repaired staple must not leave the stale
+          # prerelease flag behind. This mirrors the release-unified edit
+          # repair. Latest is deliberately left untouched here - the backstop
+          # may target an older bundle, so forcing Latest could demote the
+          # actual newest release.
+          gh release edit "$RELEASE_TAG" --repo "$REPO" --prerelease=false
 
           # --clobber is deliberate here: the stapled bytes replace the unstapled
           # asset, and SHA256SUMS + the signed manifest were regenerated above to
