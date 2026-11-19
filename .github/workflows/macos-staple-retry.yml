@@ -14,6 +14,15 @@ name: "macOS: Retry notarization stapling"
 # code-signing identity, so the notarytool submission id is not required),
 # re-verifies every hard gate, and republishes the stapled DMG.
 #
+# FAR-2573: it is ALSO the only publisher of a release whose publication was
+# HELD because no notarization ticket could be verified at build time. In that
+# mode (`publish_release=true`, dispatched by release-unified.yml with the
+# release run's id) it staples both DMGs, regenerates SHA256SUMS + the signed
+# manifest from the HELD RUN's artefacts, re-attests the new DMG bytes and
+# creates the GitHub Release with the full asset set. release-unified.yml never
+# creates that release itself, so there is exactly one publisher and no
+# partially published release to repair.
+#
 # It is idempotent: an already-stapled DMG validates offline and the run is a
 # no-op success, so the schedule can run every 30 minutes safely.
 #
@@ -67,6 +76,16 @@ on:
         type: string
         required: false
         default: ""
+      publish_release:
+        description: "Create the GitHub Release when publication was held on a missing notarization ticket (requires run_id; the release must not exist yet)"
+        type: boolean
+        required: false
+        default: false
+      rc_tag:
+        description: "RC tag (vX.Y.Z-rcN) a held release is published from; blank resolves the newest matching RC tag"
+        type: string
+        required: false
+        default: ""
       force:
         description: "Re-staple even when the DMG already validates"
         type: boolean
@@ -105,6 +124,8 @@ jobs:
       architectures: ${{ steps.resolve.outputs.architectures }}
       run_id: ${{ steps.resolve.outputs.run_id }}
       completed: ${{ steps.resolve.outputs.completed }}
+      publish_release: ${{ steps.resolve.outputs.publish_release }}
+      rc_tag: ${{ steps.resolve.outputs.rc_tag }}
     steps:
       - name: Resolve version, release tag and architectures
         id: resolve
@@ -115,6 +136,8 @@ jobs:
           DISPATCH_ARCHITECTURE: ${{ github.event.inputs.architecture }}
           DISPATCH_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
           DISPATCH_RUN_ID: ${{ github.event.inputs.run_id }}
+          DISPATCH_PUBLISH_RELEASE: ${{ github.event.inputs.publish_release }}
+          DISPATCH_RC_TAG: ${{ github.event.inputs.rc_tag }}
           DISPATCH_FORCE: ${{ github.event.inputs.force }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -126,6 +149,8 @@ jobs:
           architectures=""
           run_id=""
           completed="false"
+          publish_release="false"
+          rc_tag=""
 
           # A release whose stapling has already been completed AND verified
           # carries a MACOS_STAPLED.json marker naming each DMG's digest and an
@@ -218,13 +243,47 @@ jobs:
                 ;;
             esac
             run_id="$DISPATCH_RUN_ID"
+            # FAR-2573 held-publication mode: the release does not exist yet, so
+            # this run publishes it. The DMGs come from the release run's
+            # artefacts (run_id is mandatory - there is no release to read), and
+            # the RC tag identifies the commit to tag + the release title.
+            case "${DISPATCH_PUBLISH_RELEASE:-false}" in
+              true) publish_release="true" ;;
+              false | "") publish_release="false" ;;
+              *)
+                echo "::error::publish_release must be a boolean; got '$DISPATCH_PUBLISH_RELEASE'"
+                exit 1
+                ;;
+            esac
+            if [[ "$publish_release" == "true" ]]; then
+              if [[ -z "$run_id" ]]; then
+                echo "::error::publish_release=true requires run_id: a held release has no published assets to download from, so its artefacts must come from the release run."
+                exit 1
+              fi
+              rc_tag="$DISPATCH_RC_TAG"
+              if [[ -z "$rc_tag" ]]; then
+                rc_tag="$(git ls-remote --tags --refs "https://github.com/${REPO}.git" "refs/tags/v${version}-rc*" |
+                  awk -F'\t' '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -n1)"
+              fi
+              case "$rc_tag" in
+                v"${version}"-rc[0-9]*) ;;
+                *)
+                  echo "::error::could not resolve the RC tag for held publication of v${version} (got '${rc_tag}'); pass rc_tag explicitly"
+                  exit 1
+                  ;;
+              esac
+            fi
           else
             # Scheduled backstop: only the newest bundle-v* release within the
             # ticket-propagation window is worth polling. Older releases are not
             # re-stapled by the schedule - a manual dispatch can target them.
+            #
+            # FAR-2573: RC bundle releases are published as prereleases, so a
+            # prerelease is a normal, shipped bundle and must still be polled -
+            # excluding it would quietly stop retrying a deferred staple.
             release_json="$(gh api "repos/${REPO}/releases?per_page=30")"
             latest="$(printf '%s' "$release_json" |
-              jq -c '[.[] | select(.draft == false) | select(.prerelease == false) | select(.tag_name | startswith("bundle-v"))] | sort_by(.published_at) | reverse | first // empty')"
+              jq -c '[.[] | select(.draft == false) | select(.tag_name | startswith("bundle-v"))] | sort_by(.published_at) | reverse | first // empty')"
             if [[ -z "$latest" ]]; then
               echo "No published bundle-v* release found; nothing to staple."
               {
@@ -233,6 +292,8 @@ jobs:
                 printf 'architectures=%s\n' ""
                 printf 'run_id=%s\n' ""
                 printf 'completed=%s\n' "false"
+                printf 'publish_release=%s\n' "false"
+                printf 'rc_tag=%s\n' ""
               } >>"$GITHUB_OUTPUT"
               exit 0
             fi
@@ -249,6 +310,8 @@ jobs:
                 printf 'architectures=%s\n' ""
                 printf 'run_id=%s\n' ""
                 printf 'completed=%s\n' "false"
+                printf 'publish_release=%s\n' "false"
+                printf 'rc_tag=%s\n' ""
               } >>"$GITHUB_OUTPUT"
               exit 0
             fi
@@ -258,8 +321,9 @@ jobs:
 
           # Short-circuit a verified-complete release. `force` (dispatch only)
           # deliberately bypasses the marker so an operator can re-staple and
-          # re-verify on demand.
-          if [[ -n "$release_tag" && "${DISPATCH_FORCE:-false}" != "true" ]]; then
+          # re-verify on demand. A held publication has no release to carry a
+          # marker, so it never short-circuits.
+          if [[ -n "$release_tag" && "$publish_release" != "true" && "${DISPATCH_FORCE:-false}" != "true" ]]; then
             marker_state="$(check_staple_marker "$release_tag" "$version")"
             if [[ "$marker_state" == "complete" ]]; then
               echo "Release ${release_tag} records every DMG as staple-verified (MACOS_STAPLED.json); nothing to staple."
@@ -268,6 +332,8 @@ jobs:
               release_tag=""
               architectures=""
               run_id=""
+              publish_release="false"
+              rc_tag=""
             elif [[ "$marker_state" != "absent" ]]; then
               echo "::notice::Ignoring a stale MACOS_STAPLED.json on ${release_tag} (${marker_state}); re-stapling and re-verifying."
             fi
@@ -279,6 +345,8 @@ jobs:
             printf 'architectures=%s\n' "$architectures"
             printf 'run_id=%s\n' "$run_id"
             printf 'completed=%s\n' "$completed"
+            printf 'publish_release=%s\n' "$publish_release"
+            printf 'rc_tag=%s\n' "$rc_tag"
           } >>"$GITHUB_OUTPUT"
           echo "Staple target: version=${version} release_tag=${release_tag} architectures='${architectures}' run_id='${run_id}' completed=${completed}"
 
@@ -426,6 +494,14 @@ jobs:
   # job always runs for a resolved release, hashes the release's actual bytes,
   # and repairs the metadata whenever it disagrees - then re-downloads the
   # published metadata and verifies it against the published asset digests.
+  #
+  # FAR-2573: when publication was HELD (`publish_release=true`) there is no
+  # release to read. The job then takes the release run's own
+  # `final-release-artefacts-<version>` bundle, overlays the freshly stapled
+  # DMGs, regenerates SHA256SUMS + the signed manifest exactly as the published
+  # path does, and CREATES the release with the full asset set. It refuses to
+  # create unless this run's macOS job staple-verified BOTH architectures, so
+  # the only thing that ever publishes is verified-stapled bytes.
   # ---------------------------------------------------------------------------
   publish-stapled:
     name: Republish the stapled DMG(s)
@@ -445,7 +521,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-          ref: ${{ needs.resolve-target.outputs.release_tag }}
+          # A held publication has no bundle-v* tag yet; its bytes live on the
+          # RC tag, which is also the commit the release tag must point at.
+          ref: ${{ needs.resolve-target.outputs.rc_tag || needs.resolve-target.outputs.release_tag }}
           persist-credentials: false
 
       - name: Set up Python 3.12
@@ -461,7 +539,27 @@ jobs:
           name: macos-installer-stapled-${{ needs.resolve-target.outputs.version }}
           path: stapled
 
+      - name: Download the held publication's release artefacts
+        if: needs.resolve-target.outputs.publish_release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ needs.resolve-target.outputs.run_id }}
+          VERSION: ${{ needs.resolve-target.outputs.version }}
+        run: |
+          set -euo pipefail
+          # A held publication never created the release, so the asset set comes
+          # from the release run's final artefact - the same bundle the release
+          # job would have uploaded.
+          rm -rf release-assets
+          mkdir -p release-assets
+          gh run download "$RUN_ID" --repo "$REPO" \
+            --name "final-release-artefacts-${VERSION}" --dir release-assets
+          ls -l release-assets
+
       - name: Download the published release assets
+        if: needs.resolve-target.outputs.publish_release != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -509,6 +607,30 @@ jobs:
         # `--frozen` locks the exact revisions, so the builds are deterministic
         # and trusted (no untrusted setup scripts execute).
         run: uv sync --frozen  # NOSONAR
+
+      - name: Dump OpenAPI schema for a held publication
+        if: needs.resolve-target.outputs.publish_release == 'true'
+        # The release job produces this asset after downloading the final
+        # artefact, so a release created from that artefact must produce it too:
+        # a published release must carry exactly the same asset set either way.
+        working-directory: backend
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///./modulo-gen-test.db"
+          SECRET_KEY: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          FERNET_KEY: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          FARNA_CONTROL_CSRF_ENABLED: "false"
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/gen_openapi.py <<'EOF'
+          import os, json, sys
+          sys.tracebacklimit = 0
+          from farna.api.main import app
+          with open("../release-assets/openapi.json", "w", encoding="utf-8") as f:
+              json.dump(app.openapi(), f, ensure_ascii=False)
+          print(f"Schema: {os.path.getsize('../release-assets/openapi.json')} bytes")
+          EOF
+          uv run --no-build --no-sync python /tmp/gen_openapi.py
 
       - name: Detect whether the release metadata matches its artefacts
         id: consistency
@@ -682,13 +804,26 @@ jobs:
           subject-path: release-assets/Modulo-*-macos-*.dmg
 
       - name: Publish the stapled DMG(s) and refreshed manifest
-        if: success() && steps.consistency.outputs.needs_republish == 'true'
+        # Two legitimate reasons to publish:
+        #   * CONSISTENCY - repair a release whose metadata disagrees with its
+        #     asset bytes (including a half-finished earlier upload), and
+        #   * CREATION - publication was HELD (FAR-2573) so the release does not
+        #     exist yet and this run is its only publisher.
+        # Either way an unverified staple never publishes: the creation path
+        # additionally requires this run to have staple-verified the DMGs.
+        if: >-
+          success() &&
+          (steps.consistency.outputs.needs_republish == 'true' || needs.resolve-target.outputs.publish_release == 'true') &&
+          (needs.resolve-target.outputs.publish_release != 'true' || needs.staple.result == 'success')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.resolve-target.outputs.release_tag }}
           REPO: ${{ github.repository }}
           VERSION: ${{ needs.resolve-target.outputs.version }}
+          PUBLISH_RELEASE: ${{ needs.resolve-target.outputs.publish_release }}
+          RC_TAG: ${{ needs.resolve-target.outputs.rc_tag }}
+          VERIFIED_ARCHES: ${{ needs.staple.outputs.verified_arches }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -697,6 +832,76 @@ jobs:
             echo "::error::no macOS DMG to publish"
             exit 1
           fi
+
+          # Held publication (FAR-2573): release-unified.yml created nothing, so
+          # this run creates the release. It may only do so for bytes whose
+          # notarization ticket this run's macOS job verified - a release is
+          # published once and its DMGs are what users install.
+          if [[ "$PUBLISH_RELEASE" == "true" ]] && ! gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
+            verified=" ${VERIFIED_ARCHES} "
+            for arch in arm64 x86_64; do
+              case "$verified" in
+                *" $arch "*)
+                  ;;
+                *)
+                  echo "::error::refusing to publish ${RELEASE_TAG}: the ${arch} DMG was not staple-verified by this run (verified arches: '${VERIFIED_ARCHES}')."
+                  exit 1
+                  ;;
+              esac
+            done
+            ASSETS=(
+              "release-assets/modulo-${VERSION}-linux-amd64.tar.gz"
+              "release-assets/Modulo-${VERSION}-macos-arm64.dmg"
+              "release-assets/Modulo-${VERSION}-macos-x86_64.dmg"
+              "release-assets/modulo-${VERSION}-compose.tar.gz"
+              "release-assets/SHA256SUMS"
+              "release-assets/RELEASE_MANIFEST.json"
+              "release-assets/RELEASE_MANIFEST.json.sig"
+              "release-assets/openapi.json"
+            )
+            if [[ -f "release-assets/modulo-${VERSION}-windows-amd64.exe" ]]; then
+              ASSETS+=("release-assets/modulo-${VERSION}-windows-amd64.exe")
+            fi
+            for asset in "${ASSETS[@]}"; do
+              if [[ ! -s "$asset" ]]; then
+                echo "::error::held publication is missing ${asset} - refusing to create an incomplete release."
+                exit 1
+              fi
+            done
+
+            NOTES_FILE="$(mktemp)"
+            # Mirror release-unified.yml exactly: --match 'v*' keeps a leaked
+            # ci-verify-* helper tag from becoming the changelog base.
+            PREV="$(git describe --tags --match 'v*' --abbrev=0 "${RC_TAG}^" 2>/dev/null || true)"
+            if [[ -z "$PREV" ]]; then
+              PREV="$(git rev-list --max-parents=0 "$RC_TAG" | tail -n1)"
+            fi
+            python3 scripts/generate_changelog.py \
+              --from "$PREV" --to "$RC_TAG" \
+              --version "$VERSION" \
+              --output CHANGELOG.md > "$NOTES_FILE"
+
+            # A bundle cut is a release candidate; its title carries the RC tag,
+            # so it must not be published as a normal release.
+            PRERELEASE_ARGS=()
+            case "$RC_TAG" in
+              v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
+            esac
+
+            gh release create "$RELEASE_TAG" \
+              --title "Modulo ${RC_TAG}" \
+              --notes-file "$NOTES_FILE" \
+              --target "$(git rev-parse HEAD)" \
+              "${PRERELEASE_ARGS[@]}" \
+              "${ASSETS[@]}"
+            if ! gh api "repos/${REPO}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+              echo "::error::${RELEASE_TAG} was created but its tag could not be confirmed on origin."
+              exit 1
+            fi
+            echo "Published ${RELEASE_TAG} from the stapled DMGs with regenerated metadata (held publication)."
+            exit 0
+          fi
+
           # --clobber is deliberate here: the stapled bytes replace the unstapled
           # asset, and SHA256SUMS + the signed manifest were regenerated above to
           # match them. Publication in release-unified.yml never clobbers.
@@ -715,7 +920,9 @@ jobs:
       # fails rather than leaving a release whose advertised hashes do not match
       # its artefacts.
       - name: Verify the published release metadata
-        if: success() && steps.consistency.outputs.needs_republish == 'true'
+        if: >-
+          success() &&
+          (steps.consistency.outputs.needs_republish == 'true' || needs.resolve-target.outputs.publish_release == 'true')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

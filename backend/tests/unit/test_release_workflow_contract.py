@@ -929,7 +929,12 @@ def test_release_unified_dispatches_the_staple_retry() -> None:
 
     dispatch_jobs = [job_id for job_id, job in workflow["jobs"].items() if any("macos-staple-retry.yml" in str(step.get("run", "")) for step in job.get("steps", []))]
     assert dispatch_jobs, "release-unified must consume the staple retry path"
-    dispatch_job = workflow["jobs"][dispatch_jobs[0]]
+    # Two dispatch sites now exist (FAR-2573): the held-publication hand-off
+    # inside publish-release, and the post-publication republish trigger. Pin the
+    # post-publication one by identity - picking the first job that mentions the
+    # workflow coupled this test to step ordering instead of the contract.
+    assert "dispatch-staple-retry" in dispatch_jobs
+    dispatch_job = workflow["jobs"]["dispatch-staple-retry"]
     assert "publish-release" in dispatch_job["needs"]
     assert "actions" in dispatch_job.get("permissions", {})
     assert dispatch_job["permissions"]["actions"] == "write"
@@ -1007,6 +1012,7 @@ def test_publish_release_refuses_when_a_dependency_did_not_succeed(
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     completed = subprocess.run(  # noqa: S603 - fixed interpreter running repository-owned workflow text
         [_bash_executable(), str(script_path)],
@@ -1028,6 +1034,8 @@ def test_publish_release_refuses_when_a_dependency_did_not_succeed(
         ("RELEASE_RESULT", "release", "failure"),
         ("ATTEST_RESULT", "attest-artefacts", "skipped"),
         ("MACOS_RESULT", "macos-installer", "cancelled"),
+        ("NOTARIZATION_RESULT", "verify-notarization-tickets", "failure"),
+        ("NOTARIZATION_RESULT", "verify-notarization-tickets", "skipped"),
     ],
 )
 def test_publish_release_blocks_publication_for_every_unsuccessful_dependency(
@@ -1047,6 +1055,7 @@ def test_publish_release_blocks_publication_for_every_unsuccessful_dependency(
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
         env_var: result,
     }
     completed = subprocess.run(  # noqa: S603 - fixed interpreter running repository-owned workflow text
@@ -1088,6 +1097,179 @@ def test_release_unified_keeps_macos_hard_gates_while_consume_retry() -> None:
     assert "mounted_app_spctl spctl --assess" in installer
     assert "dmg_verify hdiutil verify" in installer
     assert "dmg_staple_validate xcrun stapler validate" in installer
+
+
+# ---------------------------------------------------------------------------
+# FAR-2573: publication requires a VERIFIED notarization ticket for the exact
+# bytes being published. bundle-v0.3.328 shipped both DMGs with a deferred
+# staple, so a Gatekeeper-ON Mac rejected the published asset.
+# ---------------------------------------------------------------------------
+
+_TICKET_GATE_STEP = "Verify notarization tickets cover the exact bytes being published"
+
+
+def _run_ticket_gate(
+    tmp_path: Path,
+    env: dict[str, str],
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Execute the publish job's ticket gate exactly as the workflow does."""
+    workflow = _release_workflow()
+    script = _step(workflow, "publish-release", _TICKET_GATE_STEP)["run"]
+    script_path = tmp_path / "ticket-gate.sh"
+    script_path.write_text(script, encoding="utf-8", newline="\n")
+    output_path = tmp_path / "github-output.txt"
+    output_path.write_text("", encoding="utf-8")
+    completed = subprocess.run(  # noqa: S603 - fixed interpreter running repository-owned workflow text
+        [_bash_executable(), str(script_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+        env={**os.environ, **env, "GITHUB_OUTPUT": str(output_path)},
+    )
+    return completed, output_path.read_text(encoding="utf-8")
+
+
+def _ticket_gate_env(tmp_path: Path, version: str) -> dict[str, str]:
+    artefacts = tmp_path / "release-artefacts"
+    artefacts.mkdir(exist_ok=True)
+    arm, x86 = b"arm64-dmg-bytes", b"x86_64-dmg-bytes"
+    (artefacts / f"Modulo-{version}-macos-arm64.dmg").write_bytes(arm)
+    (artefacts / f"Modulo-{version}-macos-x86_64.dmg").write_bytes(x86)
+    return {
+        "VERSION": version,
+        "VERIFIED_ARM64_SHA256": hashlib.sha256(arm).hexdigest(),
+        "VERIFIED_X86_64_SHA256": hashlib.sha256(x86).hexdigest(),
+    }
+
+
+def test_publish_ticket_gate_holds_publication_when_the_ticket_is_missing(tmp_path: Path) -> None:
+    version = "1.2.3"
+    env = _ticket_gate_env(tmp_path, version)
+
+    # No verified ticket: the gate must record `publish=false`, which skips
+    # release creation and the tag push. It must NOT conclude "publish".
+    completed, outputs = _run_ticket_gate(tmp_path, {**env, "TICKETS_VERIFIED": "false"})
+    assert completed.returncode == 0, completed.stderr
+    assert "publish=false" in outputs
+    assert "HELD" in completed.stdout
+
+    # An UNKNOWN verdict (empty output - the macOS job is a hard need, so this
+    # is defence in depth) must also fail closed, never publish.
+    completed, outputs = _run_ticket_gate(tmp_path, {**env, "TICKETS_VERIFIED": ""})
+    assert completed.returncode == 0, completed.stderr
+    assert "publish=false" in outputs
+
+    # A verified ticket on these exact bytes permits publication.
+    completed, outputs = _run_ticket_gate(tmp_path, {**env, "TICKETS_VERIFIED": "true"})
+    assert completed.returncode == 0, completed.stderr
+    assert "publish=true" in outputs
+
+    # The digest link is what makes the ticket apply to the PUBLISHED bytes: a
+    # different digest is a hard refusal, not a hold.
+    completed, _ = _run_ticket_gate(
+        tmp_path,
+        {**env, "TICKETS_VERIFIED": "true", "VERIFIED_X86_64_SHA256": "0" * 64},
+    )
+    assert completed.returncode == 1
+    assert "not the artefact a notarization ticket was verified on" in completed.stdout
+
+
+def test_publish_release_gates_creation_on_the_ticket_and_holds_rather_than_publishing() -> None:
+    workflow = _release_workflow()
+    publish = workflow["jobs"]["publish-release"]
+
+    # The verdict is produced on macOS, against the artefact that is uploaded.
+    assert "verify-notarization-tickets" in publish["needs"]
+    verify = workflow["jobs"]["verify-notarization-tickets"]
+    assert verify["runs-on"].startswith("macos-")
+    assert verify["outputs"]["tickets_verified"] == "${{ steps.verify.outputs.tickets_verified }}"
+    verify_script = _step(workflow, "verify-notarization-tickets", "Verify a notarization ticket is stapled to every DMG being published")["run"]
+    assert "xcrun stapler validate" in verify_script
+    assert "spctl --assess" in verify_script
+    # Both native DMGs are checked - a release cannot ship one verified ticket
+    # and one deferred staple.
+    assert "Modulo-${VERSION}-macos-${arch}.dmg" in verify_script
+    assert "for arch in arm64 x86_64" in verify_script
+
+    # Nothing is created or pushed unless the gate said publish.
+    for step_name in ("Create GitHub Release with assets", "Push the bundle tag"):
+        step = _step(workflow, "publish-release", step_name)
+        assert "steps.ticket-gate.outputs.publish == 'true'" in str(step.get("if", "")), f"{step_name} must be gated on the verified ticket"
+
+    # Held: a single, explicit hand-off to the retry - which is the publisher.
+    hold = _step(workflow, "publish-release", "Hold publication and hand it to the staple retry")
+    assert "steps.ticket-gate.outputs.publish != 'true'" in str(hold.get("if", ""))
+    hold_script = hold["run"]
+    assert "gh workflow run macos-staple-retry.yml" in hold_script
+    for flag in ("-f publish_release=true", "-f run_id=", "-f rc_tag=", "-f architecture=all"):
+        assert flag in hold_script, f"the hand-off must pass {flag}"
+    assert hold_script.rstrip().endswith("exit 1"), "a held release with no publisher must fail, never conclude green"
+
+    # The post-condition permits a green run only when the hand-off was
+    # confirmed; every other non-publication is still a failure.
+    post = _step(workflow, "publish-release", "Assert the release and bundle tag exist")
+    post_script = post["run"]
+    assert "HANDOFF_DISPATCHED" in post_script
+    assert "nothing will ever publish this release" in post_script
+
+    # The post-publication dispatch must not fire a second, publish-less run on
+    # top of the held hand-off.
+    dispatch_if = " ".join(str(workflow["jobs"]["dispatch-staple-retry"]["if"]).split())
+    assert "needs.publish-release.outputs.published == 'true'" in dispatch_if
+
+
+def test_macos_staple_retry_is_the_publisher_for_a_held_release() -> None:
+    workflow = _staple_retry_workflow()
+    dispatch_inputs = _workflow_triggers(workflow)["workflow_dispatch"]["inputs"]
+    assert dispatch_inputs["publish_release"]["type"] == "boolean"
+    assert dispatch_inputs["rc_tag"]["type"] == "string"
+
+    resolve = _step(workflow, "resolve-target", "Resolve version, release tag and architectures")["run"]
+    assert 'publish_release="true"' in resolve
+    assert "publish_release=true requires run_id" in resolve
+    assert "rc_tag" in resolve
+
+    # The held artefact set comes from the release run, not from a release.
+    download = _step(workflow, "publish-stapled", "Download the held publication's release artefacts")["run"]
+    assert "gh run download" in download
+    assert "final-release-artefacts-${VERSION}" in download
+
+    # A release created this way must carry the same asset set as a normal one.
+    openapi = _step(workflow, "publish-stapled", "Dump OpenAPI schema for a held publication")
+    assert "release-assets/openapi.json" in openapi["run"]
+
+    publish = _step(workflow, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")
+    script = publish["run"]
+    assert "gh release create" in script
+    assert "--target" in script
+    # It publishes ONLY bytes this run's macOS job staple-verified, both arches.
+    assert "VERIFIED_ARCHES" in script
+    assert "was not staple-verified by this run" in script
+    assert "needs.resolve-target.outputs.publish_release != 'true' || needs.staple.result == 'success'" in " ".join(str(publish.get("if", "")).split())
+    # An existing release is repaired, never re-created: no double publish.
+    assert 'gh release view "$RELEASE_TAG"' in script
+
+    verify = _step(workflow, "publish-stapled", "Verify the published release metadata")
+    assert "needs.resolve-target.outputs.publish_release == 'true'" in str(verify.get("if", ""))
+
+    # The scheduled backstop must still find an RC bundle now that bundle
+    # releases are prereleases (FAR-2573).
+    assert "select(.prerelease == false)" not in resolve
+
+
+def test_rc_bundle_release_is_created_as_a_prerelease() -> None:
+    # Both publishers create the bundle release; both must mark an RC.
+    workflow = _release_workflow()
+    create = _step(workflow, "publish-release", "Create GitHub Release with assets")["run"]
+    assert "v*-rc[0-9]*" in create
+    assert "PRERELEASE_ARGS=(--prerelease)" in create
+
+    retry = _staple_retry_workflow()
+    retry_create = _step(retry, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")["run"]
+    assert "v*-rc[0-9]*" in retry_create
+    assert "PRERELEASE_ARGS=(--prerelease)" in retry_create
 
 
 # ---------------------------------------------------------------------------
