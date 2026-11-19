@@ -138,6 +138,7 @@ from farna.core.alert_context import (
     alert_context_html,
     alert_context_text,
     alert_environment_line,
+    alert_recipients,
     alerting_enabled_for_environment,
     stamp_stdout,
 )
@@ -252,12 +253,9 @@ BENIGN_NON_TRIGGERING_CHECKS: frozenset[str] = frozenset({"break_glass", "event_
 SEVERE_EVENT_LOOP_STALL_MS: Final[float] = 1000.0
 
 
-#: ``settings.alert_email_to`` split into recipients (mirrors the watchdog's
-#: ``_parse_alert_email_to`` — comma-separated, trimmed, empties dropped).
 def _recipients(settings: Settings) -> list[str]:
-    if not settings.alert_email_to:
-        return []
-    return [address.strip() for address in settings.alert_email_to.split(",") if address.strip()]
+    """The shared ``ALERT_EMAIL_TO`` parse (see ``alert_context``)."""
+    return alert_recipients(settings)
 
 
 def alerting_configured(settings: Settings) -> bool:

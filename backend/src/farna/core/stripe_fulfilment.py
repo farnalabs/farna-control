@@ -35,14 +35,12 @@ not extend the window past a previous expiry.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import html
 import logging
 from datetime import UTC, datetime, timedelta
 
-from redis.asyncio import Redis
-
 from farna.core.email_service import EmailSendingError, send_email
+from farna.core.event_dedup import claim_event_id, is_event_claimed
 from farna.core.license import DEFAULT_RENEWAL_MODE, parse_and_verify
 from farna.core.license_signing import generate_team_license
 from farna.settings import Settings
@@ -250,36 +248,22 @@ def _licence_email_text(license_key: str, expires_at: str, starts_at: str | None
     )
 
 
+#: Redis key namespace for fulfilment idempotency, and the log namespace the
+#: shared dedup helper reports failures under.
+_FULFILMENT_KEY_PREFIX = "stripe:fulfilled:"
+_DEDUP_LOG_NAMESPACE = "stripe.fulfilment"
+
+
 async def _claim_event_id(settings: Settings, event_id: str) -> bool:
     """Atomically claim *event_id*. Returns True if newly claimed, False if already seen."""
-    if settings.redis_url:
-        redis = None
-        try:
-            redis = Redis.from_url(
-                settings.redis_url,
-                decode_responses=True,
-                socket_connect_timeout=2.0,
-                socket_timeout=2.0,
-            )
-            claimed = await redis.set(
-                f"stripe:fulfilled:{event_id}",
-                "1",
-                nx=True,
-                ex=_IDEMPOTENCY_TTL_SECONDS,
-            )
-            return bool(claimed)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning("stripe.fulfilment.redis_claim_failed event_id=%s", event_id, exc_info=True)
-        finally:
-            if redis is not None:
-                with contextlib.suppress(Exception):
-                    await redis.aclose()
-    if event_id in _processed_event_ids:
-        return False
-    _processed_event_ids.add(event_id)
-    return True
+    return await claim_event_id(
+        settings,
+        event_id,
+        key_prefix=_FULFILMENT_KEY_PREFIX,
+        ttl_seconds=_IDEMPOTENCY_TTL_SECONDS,
+        fallback=_processed_event_ids,
+        log_namespace=_DEDUP_LOG_NAMESPACE,
+    )
 
 
 async def _is_event_claimed(settings: Settings, event_id: str) -> bool:
@@ -290,25 +274,13 @@ async def _is_event_claimed(settings: Settings, event_id: str) -> bool:
     transient SMTP failure leaves the event unclaimed and Stripe's retries can
     re-attempt. A duplicate delivery is skipped BEFORE emailing.
     """
-    if settings.redis_url:
-        redis = None
-        try:
-            redis = Redis.from_url(
-                settings.redis_url,
-                decode_responses=True,
-                socket_connect_timeout=2.0,
-                socket_timeout=2.0,
-            )
-            return bool(await redis.exists(f"stripe:fulfilled:{event_id}"))
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning("stripe.fulfilment.redis_check_failed event_id=%s", event_id, exc_info=True)
-        finally:
-            if redis is not None:
-                with contextlib.suppress(Exception):
-                    await redis.aclose()
-    return event_id in _processed_event_ids
+    return await is_event_claimed(
+        settings,
+        event_id,
+        key_prefix=_FULFILMENT_KEY_PREFIX,
+        fallback=_processed_event_ids,
+        log_namespace=_DEDUP_LOG_NAMESPACE,
+    )
 
 
 async def email_team_license(

@@ -220,6 +220,21 @@ payment (`invoice.paid`). `checkout.session.completed` is treated as a pure
 ack and never fulfils, so a single card-paid purchase (which emits both
 events) issues exactly one license.
 
+Fulfilment is separate from operator alerting. Every commercially meaningful
+event additionally emails `ALERT_EMAIL_TO`: `invoice.paid` (which reads as a
+sale, not an incident), `checkout.session.completed`,
+`checkout.session.expired`, `payment_intent.requires_action`,
+`payment_intent.payment_failed`, `charge.dispute.created`, `charge.refunded`
+and `radar.early_fraud_warning.created`. Alerts reuse the SMTP configuration
+below (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+`EMAIL_FROM`, `ALERT_EMAIL_TO`), are deduplicated by Stripe event id, and are
+skipped for test-mode events (`livemode: false`) and for any environment the
+`ALERT_ENVIRONMENTS` allowlist excludes. A delivery failure never fails the
+webhook — it is logged with the event id and type and the endpoint still
+returns 200. Alerts can only fire for events Stripe actually delivers, so the
+endpoint's subscription in the Stripe dashboard must cover them; an unknown or
+unsubscribed event type is logged and acknowledged without an alert.
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `STRIPE_SECRET_KEY` | For Stripe | – | Stripe secret key, used for customer email lookups. When both Stripe keys are empty the webhook is inactive. |
