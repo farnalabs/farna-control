@@ -4,8 +4,10 @@ even when the caller (release-unified) was itself started by workflow_dispatch."
 import hashlib
 import http.server
 import io
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -24,7 +26,7 @@ from farna.launcher.platform import binary_name
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _run_bash(script: str, *, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _run_bash(script: str, *, cwd: Path, env: dict[str, str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
     bash = r"C:\Program Files\Git\bin\bash.exe" if Path(r"C:\Program Files\Git\bin\bash.exe").is_file() else shutil.which("bash")
     if bash is None:
         pytest.skip("bash is required to execute workflow scripts")
@@ -34,7 +36,7 @@ def _run_bash(script: str, *, cwd: Path, env: dict[str, str]) -> subprocess.Comp
         env=env,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=timeout,
         check=False,
     )
 
@@ -188,7 +190,7 @@ def test_macos_dmg_contract_structurally_preserves_signing_notarization_and_gate
         "run_pre_smoke app_codesign_verify codesign",
         "run_pre_smoke dmg_create bash -c",
         "run_pre_smoke dmg_codesign codesign",
-        "run_pre_smoke dmg_notary_submit xcrun notarytool submit",
+        "run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh",
         "run_pre_smoke dmg_codesign_verify codesign",
         "run_pre_smoke dmg_verify hdiutil verify",
         "run_pre_smoke dmg_attach hdiutil attach",
@@ -863,7 +865,7 @@ def test_macos_every_timestamped_codesign_call_routes_through_the_retry_helper()
     # signing gained a retry.
     assert 'run_pre_smoke app_codesign_verify codesign --verify --deep --strict --verbose=2 "$APP"' in build_run
     assert 'run_pre_smoke mounted_app_codesign codesign --verify --deep --strict "$MOUNTED_APP"' in build_run
-    assert "run_pre_smoke dmg_notary_submit xcrun notarytool submit" in build_run
+    assert "run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh" in build_run
     assert 'xcrun stapler validate "$DMG"' in build_run
 
 
@@ -1419,3 +1421,371 @@ def test_macos_bundle_spa_env_gate_fails_when_the_dist_directory_moves(tmp_path:
 
     assert result.returncode != 0
     assert "but the layout populates" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# FAR-2574: notarization outcome and artefact identity
+#
+# `notarytool submit ... --wait` exited 0 on every failing release run while
+# Apple never issued a ticket, so the two candidate causes (a post-notarization
+# rewrite of the artefact, or a submission that never reached `Accepted`) were
+# indistinguishable. These tests pin the diagnostics that distinguish them.
+# ---------------------------------------------------------------------------
+
+_NOTARY_TOOL = REPO_ROOT / "scripts" / "macos" / "notarize-and-verify.sh"
+_IDENTITY_TOOL = REPO_ROOT / "scripts" / "macos" / "artefact-identity.sh"
+
+#: Stand-in `codesign` for the identity helpers. It reports CDHash=/digest the
+#: same way `codesign --display --verbose=4` does, and can emit a sequence of
+#: hashes so "the artefact changed between two checks" is reproducible.
+_FAKE_CODESIGN = """#!/usr/bin/env bash
+set -u
+path=""
+for candidate in "$@"; do path="$candidate"; done
+calls_file="${FAKE_CODESIGN_CALLS:-}"
+count=1
+if [[ -n "$calls_file" ]]; then
+  [[ -f "$calls_file" ]] && count="$(cat "$calls_file")"
+  count=$((count + 1))
+  printf '%s' "$count" >"$calls_file"
+fi
+hash="${FAKE_CDHASH:-}"
+if [[ -n "${FAKE_CDHASH_SEQUENCE:-}" ]]; then
+  IFS=',' read -r -a hashes <<<"$FAKE_CDHASH_SEQUENCE"
+  hash="${hashes[$((count - 1))]:-${hashes[0]}}"
+fi
+if [[ -z "$hash" ]]; then
+  printf 'code object is not signed at all\nIn subcomponent: %s\n' "$path" >&2
+  exit 1
+fi
+printf 'Executable=%s\nFormat=disk image\n' "$path" >&2
+printf 'CDHash=%s\n' "$hash" >&2
+exit 0
+"""
+
+#: Stand-in `xcrun`. `notarytool submit` and `notarytool log` are the only
+#: invocations the wrapper is allowed to make.
+_FAKE_XCRUN = """#!/usr/bin/env bash
+set -u
+printf '%s\n' "$*" >>"${FAKE_NOTARY_CALLS:-/dev/null}"
+if [[ "${1:-}" == "notarytool" && "${2:-}" == "submit" ]]; then
+  if [[ -n "${FAKE_NOTARY_SUBMIT_STDERR:-}" ]]; then
+    printf '%s\n' "$FAKE_NOTARY_SUBMIT_STDERR" >&2
+  fi
+  printf '%s\n' "${FAKE_NOTARY_SUBMIT_JSON:-}"
+  exit "${FAKE_NOTARY_SUBMIT_EXIT:-0}"
+fi
+if [[ "${1:-}" == "notarytool" && "${2:-}" == "log" ]]; then
+  printf '%s\n' "${FAKE_NOTARY_LOG_JSON:-}"
+  exit "${FAKE_NOTARY_LOG_EXIT:-0}"
+fi
+printf 'unexpected xcrun invocation: %s\n' "$*" >&2
+exit 1
+"""
+
+
+def _posix_path(path: Path) -> str:
+    """Render a path for a bash PATH entry.
+
+    Git Bash does not translate a PATH value that bash itself sets, so a
+    Windows `C:/...` entry would split at the drive colon and silently drop the
+    stub directory. `/c/...` is the form the shell searches.
+    """
+    text = path.as_posix()
+    if len(text) > 2 and text[1] == ":":
+        return "/" + text[0].lower() + text[2:]
+    return text
+
+
+def _stub_bin(tmp_path: Path) -> Path:
+    """A PATH prefix holding the fake macOS tools plus a real python3."""
+    bin_dir = tmp_path / "stub-bin"
+    _write_executable(bin_dir / "codesign", _FAKE_CODESIGN)
+    _write_executable(bin_dir / "xcrun", _FAKE_XCRUN)
+    _write_executable(
+        bin_dir / "python3",
+        "#!/usr/bin/env bash\nexec " + shlex.quote(Path(sys.executable).as_posix()) + ' "$@"\n',
+    )
+    return bin_dir
+
+
+def _run_tool(
+    tmp_path: Path,
+    script: Path,
+    args: list[str],
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a repository-owned macOS helper with the stubbed toolchain on PATH."""
+    bin_dir = _stub_bin(tmp_path)
+    env = {key: value for key, value in os.environ.items() if not key.startswith("FAKE_")}
+    env.update(extra_env or {})
+    command = "\n".join(
+        [
+            'export PATH="' + _posix_path(bin_dir) + ':$PATH"',
+            " ".join(["bash", shlex.quote(script.as_posix()), *(shlex.quote(arg) for arg in args)]),
+        ]
+    )
+    # These helpers spawn many short-lived tools; a Windows host pays a
+    # process-creation cost per call that a macOS/Linux runner does not.
+    return _run_bash(command, cwd=tmp_path, env=env, timeout=180)
+
+
+def _notary_dmg(tmp_path: Path) -> Path:
+    dmg = tmp_path / "Modulo-0.3.328-macos-arm64.dmg"
+    dmg.write_bytes(b"fixture disk image bytes")
+    return dmg
+
+
+def _notary_args(tmp_path: Path, dmg: Path) -> list[str]:
+    key = tmp_path / "notary.p8"
+    key.write_text("fixture", encoding="utf-8")
+    return [
+        "--dmg",
+        dmg.as_posix(),
+        "--key",
+        key.as_posix(),
+        "--key-id",
+        "FAKEKEYID",
+        "--issuer",
+        "00000000-0000-0000-0000-000000000000",
+        "--identity-out",
+        (tmp_path / "identity.env").as_posix(),
+        "--evidence",
+        (tmp_path / "evidence.env").as_posix(),
+    ]
+
+
+def test_macos_notarization_records_an_accepted_submission_as_evidence(tmp_path: Path) -> None:
+    """FAR-2574: the submission status is captured and surfaced, not discarded."""
+    dmg = _notary_dmg(tmp_path)
+    calls = tmp_path / "notary-calls.log"
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_TOOL,
+        _notary_args(tmp_path, dmg),
+        {
+            "FAKE_CDHASH": "1111111111111111111111111111111111111111",
+            "FAKE_NOTARY_SUBMIT_JSON": json.dumps({"id": "abc-123", "status": "Accepted", "message": "Processing complete"}),
+            "FAKE_NOTARY_CALLS": calls.as_posix(),
+        },
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "submission_id=abc-123 status=Accepted" in result.stdout
+    evidence = (tmp_path / "evidence.env").read_text(encoding="utf-8")
+    assert "submission_id=abc-123" in evidence
+    assert "status=Accepted" in evidence
+    # The artefact identity is recorded before submission and re-checked after.
+    assert "cdhash=1111111111111111111111111111111111111111" in evidence
+    assert len(re.findall(r"^sha256_submitted=[0-9a-f]{64}$", evidence, re.MULTILINE)) == 1
+    invocation = calls.read_text(encoding="utf-8")
+    assert "--output-format json" in invocation
+    assert "notarytool log" not in invocation
+
+
+def test_macos_notarization_fails_loudly_on_a_non_accepted_status(tmp_path: Path) -> None:
+    """FAR-2574: a non-Accepted submission issues no ticket, so it must fail."""
+    dmg = _notary_dmg(tmp_path)
+    calls = tmp_path / "notary-calls.log"
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_TOOL,
+        _notary_args(tmp_path, dmg),
+        {
+            "FAKE_CDHASH": "2222222222222222222222222222222222222222",
+            "FAKE_NOTARY_SUBMIT_JSON": json.dumps({"id": "inv-1", "status": "Invalid", "message": "Archive contains critical validation errors"}),
+            "FAKE_NOTARY_LOG_JSON": json.dumps(
+                {
+                    "status": "Invalid",
+                    "message": "Archive contains critical validation errors",
+                    "issues": [
+                        {
+                            "severity": "error",
+                            "path": "Modulo-0.3.328.app/Contents/MacOS/modulo",
+                            "message": "The binary is not signed with a valid Developer ID certificate.",
+                        }
+                    ],
+                }
+            ),
+            "FAKE_NOTARY_CALLS": calls.as_posix(),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "status=Invalid" in result.stdout
+    assert "no ticket will be issued" in result.stderr
+    # The rejection reason is fetched and surfaced instead of guessed at later.
+    invocation = calls.read_text(encoding="utf-8")
+    assert "notarytool log inv-1" in invocation
+    surfaced = result.stdout + result.stderr
+    assert "not signed with a valid Developer ID certificate" in surfaced
+    assert not (tmp_path / "evidence.env").exists()
+
+
+def test_macos_notarization_fails_when_the_submit_result_is_not_parseable(tmp_path: Path) -> None:
+    """FAR-2574: exit 0 with unparseable output still leaves the status unknown."""
+    dmg = _notary_dmg(tmp_path)
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_TOOL,
+        _notary_args(tmp_path, dmg),
+        {
+            "FAKE_CDHASH": "3333333333333333333333333333333333333333",
+            "FAKE_NOTARY_SUBMIT_JSON": "Conducting pre-submission checks for Modulo.dmg",
+            "FAKE_NOTARY_CALLS": (tmp_path / "notary-calls.log").as_posix(),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "notarization status is unknown" in result.stderr
+
+
+def test_macos_notarization_fails_when_the_artefact_changed_after_the_submit(tmp_path: Path) -> None:
+    """FAR-2574 candidate 1: a re-signed artefact must fail the identity check."""
+    dmg = _notary_dmg(tmp_path)
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_TOOL,
+        _notary_args(tmp_path, dmg),
+        {
+            "FAKE_CDHASH_SEQUENCE": "4444444444444444444444444444444444444444,5555555555555555555555555555555555555555",
+            "FAKE_NOTARY_SUBMIT_JSON": json.dumps({"id": "abc-999", "status": "Accepted", "message": "Processing complete"}),
+            "FAKE_CODESIGN_CALLS": (tmp_path / "codesign-calls").as_posix(),
+            "FAKE_NOTARY_CALLS": (tmp_path / "notary-calls.log").as_posix(),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "cdhash changed after notarization" in result.stderr
+    assert "not the one Apple notarized" in result.stderr
+    assert not (tmp_path / "evidence.env").exists()
+
+
+def test_macos_artefact_identity_detects_a_rewritten_artefact(tmp_path: Path) -> None:
+    """FAR-2574: digest drift fails unless a staple explains it; cdhash never does."""
+    dmg = _notary_dmg(tmp_path)
+    recorded = tmp_path / "recorded.env"
+    common_env = {"FAKE_CDHASH": "6666666666666666666666666666666666666666"}
+    record = _run_tool(
+        tmp_path,
+        _IDENTITY_TOOL,
+        ["record", "--path", dmg.as_posix(), "--out", recorded.as_posix()],
+        common_env,
+    )
+    assert record.returncode == 0, record.stderr
+    recorded_text = recorded.read_text(encoding="utf-8")
+    assert "cdhash=6666666666666666666666666666666666666666" in recorded_text
+    assert len(re.findall(r"^sha256=[0-9a-f]{64}$", recorded_text, re.MULTILINE)) == 1
+
+    unchanged = _run_tool(
+        tmp_path,
+        _IDENTITY_TOOL,
+        ["verify", "--expected", recorded.as_posix(), "--path", dmg.as_posix()],
+        common_env,
+    )
+    assert unchanged.returncode == 0, unchanged.stderr
+
+    # Stapling legitimately rewrites the file: digest drift is tolerated only
+    # when the caller says a staple happened.
+    dmg.write_bytes(b"fixture disk image bytes with a stapled ticket")
+    rewritten = _run_tool(
+        tmp_path,
+        _IDENTITY_TOOL,
+        ["verify", "--expected", recorded.as_posix(), "--path", dmg.as_posix()],
+        common_env,
+    )
+    assert rewritten.returncode != 0
+    assert "bytes changed with no staple in between" in rewritten.stderr
+
+    stapled = _run_tool(
+        tmp_path,
+        _IDENTITY_TOOL,
+        ["verify", "--expected", recorded.as_posix(), "--path", dmg.as_posix(), "--after-staple"],
+        common_env,
+    )
+    assert stapled.returncode == 0, stapled.stderr
+
+    # A different cdhash is a different notarized artefact, staple or not.
+    resigned = _run_tool(
+        tmp_path,
+        _IDENTITY_TOOL,
+        ["verify", "--expected", recorded.as_posix(), "--path", dmg.as_posix(), "--after-staple"],
+        {"FAKE_CDHASH": "7777777777777777777777777777777777777777"},
+    )
+    assert resigned.returncode != 0
+    assert "cdhash changed after notarization" in resigned.stderr
+
+
+def test_macos_artefact_identity_refuses_an_unsigned_artefact(tmp_path: Path) -> None:
+    """FAR-2574: no CDHash means the identity cannot be established at all."""
+    dmg = _notary_dmg(tmp_path)
+    result = _run_tool(
+        tmp_path,
+        _IDENTITY_TOOL,
+        ["record", "--path", dmg.as_posix(), "--out", (tmp_path / "recorded.env").as_posix()],
+        {"FAKE_CDHASH": ""},
+    )
+
+    assert result.returncode != 0
+    assert "reported no CDHash" in result.stderr
+    assert not (tmp_path / "recorded.env").exists()
+
+
+def test_macos_notarization_submits_through_the_status_proving_wrapper() -> None:
+    """FAR-2574: no bare notarytool call may bypass the status/identity proof."""
+    _step, build_run = _native_installer_step()
+
+    assert "xcrun notarytool submit" not in build_run
+    assert "run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh" in build_run
+    assert "--output-format json" in _NOTARY_TOOL.read_text(encoding="utf-8")
+    # Evidence is printed on the success path too, not only in a failure branch.
+    assert 'cat "$DATA/notarization-evidence.env"' in build_run
+    assert "the notarization submission evidence file was not written" in build_run
+
+    submit_index = build_run.index("run_pre_smoke dmg_notary_submit")
+    gate_index = build_run.index("run_pre_smoke dmg_identity_before_upload")
+    assert submit_index < gate_index
+    # The identity gate is the last thing the step does before the upload step.
+    assert 'run_assertion "no_owned_postgres_redis"' in build_run
+    assert build_run.index('run_assertion "no_owned_postgres_redis"') < gate_index
+    # Digest drift is only tolerated when the staple actually succeeded.
+    assert 'dmg_identity_after_staple_arg="--after-staple"' in build_run
+    assert 'if [[ "$dmg_staple_ticket_unavailable" -eq 0 ]]; then' in build_run
+
+
+def test_macos_nothing_resigns_or_rewrites_the_dmg_after_notarization() -> None:
+    """FAR-2574 ordering invariant: the notarized bytes are the uploaded bytes."""
+    _step, build_run = _native_installer_step()
+    lines = build_run.splitlines()
+    submit_index = next(index for index, line in enumerate(lines) if "dmg_notary_submit" in line)
+
+    resigning = [line.strip() for line in lines[submit_index:] if not line.strip().startswith("#") and "codesign" in line and "--sign" in line]
+    recreating = [line.strip() for line in lines[submit_index:] if not line.strip().startswith("#") and "hdiutil create" in line]
+    rewriting = [line.strip() for line in lines[submit_index:] if not line.strip().startswith("#") and (re.search(r'>>?\s*"\$DMG"', line) or re.search(r'\b(cp|mv)\b[^|]*"\$DMG"\s*$', line))]
+
+    assert not resigning, resigning
+    assert not recreating, recreating
+    assert not rewriting, rewriting
+
+    # And the signed order that makes that possible: app signed, DMG built, DMG
+    # signed, then submitted.
+    order = ["run_pre_smoke app_codesign codesign", "run_pre_smoke dmg_create", "run_pre_smoke dmg_codesign", "run_pre_smoke dmg_notary_submit"]
+    positions = [build_run.index(command) for command in order]
+    assert positions == sorted(positions)
+
+
+def test_macos_upload_step_follows_the_notarizing_step_and_the_contract_checks_the_helpers() -> None:
+    """FAR-2574: the artefact is uploaded after the gate, and the helpers are gated."""
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build"]["steps"]
+    names = [step.get("name") for step in steps]
+    assert names.index("Sign, notarize and smoke-test native installer") < names.index("Upload real macOS installer")
+
+    upload = steps[names.index("Upload real macOS installer")]
+    assert upload["with"]["path"] == "build/Modulo-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg"
+
+    contract = next(step["run"] for step in steps if step.get("name") == "Validate workflow contract")
+    assert "shellcheck scripts/macos/notarize-and-verify.sh" in contract
+    assert "shellcheck scripts/macos/artefact-identity.sh" in contract
+    assert "bash -n scripts/macos/notarize-and-verify.sh" in contract
+    assert "bash -n scripts/macos/artefact-identity.sh" in contract

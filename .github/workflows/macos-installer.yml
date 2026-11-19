@@ -232,6 +232,20 @@ jobs:
           shellcheck scripts/macos/install.sh
           bash -n scripts/macos/build-native-bundle.sh
           bash -n scripts/macos/install.sh
+          # The notarization evidence helpers are part of the release contract:
+          # the submit path must run the wrapper (which proves the status and
+          # the artefact identity) rather than a bare `notarytool submit`, and
+          # both helpers must stay shellcheck-clean and parse cleanly. (FAR-2574)
+          test -x scripts/macos/notarize-and-verify.sh
+          test -x scripts/macos/artefact-identity.sh
+          shellcheck scripts/macos/notarize-and-verify.sh
+          shellcheck scripts/macos/artefact-identity.sh
+          bash -n scripts/macos/notarize-and-verify.sh
+          bash -n scripts/macos/artefact-identity.sh
+          grep -q 'notarytool submit' scripts/macos/notarize-and-verify.sh
+          grep -q -- '--output-format json' scripts/macos/notarize-and-verify.sh
+          grep -q 'dmg_notary_submit bash scripts/macos/notarize-and-verify.sh' .github/workflows/macos-installer.yml
+          grep -q 'dmg_identity_before_upload bash scripts/macos/artefact-identity.sh' .github/workflows/macos-installer.yml
           # The Intel build tools step must never depend on Homebrew, so the
           # pinned-download helper is part of the validated contract (FAR-2486).
           test -x scripts/macos/install-pinned-shellcheck.sh
@@ -1338,8 +1352,31 @@ jobs:
           fi
           # shellcheck disable=SC2016
           run_pre_smoke notary_key_decode bash -c 'printf "%s" "$1" | tr -d "[:space:]" | base64 -D > "$2"' bash "$NOTARY_KEY_B64" "$NOTARY_KEY"
-          # shellcheck disable=SC2016
-          run_pre_smoke dmg_notary_submit xcrun notarytool submit "$DMG" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --timeout 30m
+          # FAR-2574: a `notarytool submit` exit status is not the notarization
+          # status. Every failing cut reported `dmg_notary_submit=ok (exit=0)`
+          # and then never got a ticket, and because run_pre_smoke redirects the
+          # successful output, the run captured no status at all. The wrapper
+          # records the pre-submit cdhash, submits with --output-format json,
+          # fails unless the status is exactly `Accepted`, and dumps the notary
+          # log (with its issues) for any other status.
+          run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh \
+            --dmg "$DMG" \
+            --key "$NOTARY_KEY" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER" \
+            --timeout 30m \
+            --identity-out "$DATA/notarization-identity.env" \
+            --evidence "$DATA/notarization-evidence.env"
+          # The submission status is release evidence: print it on the SUCCESS
+          # path too, never only inside the failure branch of run_pre_smoke.
+          if [[ -s "$DATA/notarization-evidence.env" ]]; then
+            echo '::group::Apple notarization submission evidence'
+            cat "$DATA/notarization-evidence.env"
+            echo '::endgroup::'
+          else
+            echo '::error::the notarization submission evidence file was not written; the submission status is unproven.' >&2
+            exit 1
+          fi
           # Apple's notarization ticket can take time to propagate to CloudKit after
           # notarytool accepts the submission. Run 41127149139 observed "Record not found"
           # and "Could not find base64 encoded ticket in response" from stapler (exit 65).
@@ -1719,6 +1756,26 @@ jobs:
             run_assertion "no_owned_postgres_redis" bash -c '
               ! pgrep -f "'"$DATA"'/pgdata" >/dev/null 2>&1 && ! pgrep -f "'"$DATA"'/.*redis" >/dev/null 2>&1
             ' || exit 1
+
+            # FAR-2574: the bytes that get uploaded must be the bytes Apple
+            # notarized. Nothing after `dmg_notary_submit` may re-sign,
+            # re-create or rewrite the DMG (or the app inside it), so its
+            # cdhash must still match the one recorded before submission.
+            # Stapling rewrites the file without changing the cdhash, so a
+            # digest change is tolerated only when the staple actually
+            # succeeded. This is the last gate before the artefact is
+            # published, so a mismatch fails the run instead of shipping an
+            # artefact no ticket can ever describe.
+            dmg_identity_after_staple_arg=""
+            if [[ "$dmg_staple_ticket_unavailable" -eq 0 ]]; then
+              dmg_identity_after_staple_arg="--after-staple"
+            fi
+            # shellcheck disable=SC2086 # one controlled optional flag
+            run_pre_smoke dmg_identity_before_upload bash scripts/macos/artefact-identity.sh \
+              verify \
+              --expected "$DATA/notarization-identity.env" \
+              --path "$DMG" \
+              $dmg_identity_after_staple_arg || exit 1
 
       - name: Upload real macOS installer
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
