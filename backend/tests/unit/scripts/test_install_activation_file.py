@@ -79,6 +79,8 @@ _ENV_KEYS_TO_DROP = (
     "FARNA_CONTROL_BIN_DIR",
     "FARNA_CONTROL_DATA_DIR",
     "FARNA_CONTROL_LEGACY_SHIM_PATH",
+    "FARNA_CONTROL_LEGACY_INSTALL_ROOT",
+    "FARNA_CONTROL_LEGACY_USER_SHIM",
     "MODULO_INSTALL_ROOT",
     "MODULO_BIN_DIR",
     "MODULO_DATA_DIR",
@@ -131,13 +133,13 @@ def _signed_release(tmp_path: Path, *, trust_key: Ed25519PrivateKey) -> _Release
     """Lay out ``--from-bundle``'s contract: bundle dir + adjacent signed tarball.
 
     ``install.sh`` requires the extracted bundle directory to be named after the
-    archive (``modulo-<version>-linux-<arch>``) and the signed manifest plus the
+    archive (``farna-control-<version>-linux-<arch>``) and the signed manifest plus the
     tarball to sit BESIDE it. ``--from-bundle`` never extracts the tarball, so
     its bytes only need to match the manifest's sha256.
     """
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir(parents=True)
-    tarball_name = f"modulo-{_VERSION_NUM}-linux-{_host_arch()}.tar.gz"
+    tarball_name = f"farna-control-{_VERSION_NUM}-linux-{_host_arch()}.tar.gz"
     tarball = artifacts / tarball_name
     tarball.write_bytes(b"placeholder-tarball-for-from-bundle-mode\n")
 
@@ -211,7 +213,7 @@ def _install_env(tmp_path: Path) -> dict[str, str]:
 
 def _default_install_root(env: dict[str, str]) -> Path:
     """Where an install with this environment lays itself out (install.sh's defaults)."""
-    return Path(env["HOME"]) / ".local" / "opt" / "modulo"
+    return Path(env["HOME"]) / ".local" / "opt" / "farna-control"
 
 
 def _default_bin_dir(env: dict[str, str]) -> Path:
@@ -268,8 +270,8 @@ def test_finalise_writes_a_usable_env_sh_under_set_u(tmp_path: Path) -> None:
     assert f'export PATH="{bin_dir}:${{PATH}}"' in text
 
     # The shim keeps its argv passthrough (a `$@` eaten at install time would
-    # make `modulo <args>` silently drop every argument).
-    shim = (bin_dir / "modulo").read_text(encoding="utf-8")
+    # make `farna-control <args>` silently drop every argument).
+    shim = (bin_dir / "farna-control").read_text(encoding="utf-8")
     assert f'exec "{install_root}/current/launcher" "$@"' in shim
 
     # EXECUTE the generated file the way an operator does: a strict shell
@@ -339,3 +341,82 @@ def test_the_historical_unbound_heredoc_fails_the_finalise_stage(tmp_path: Path)
     # The failure lands AFTER `current` was re-pointed: that is why the install
     # is unusable rather than merely noisy.
     assert (_default_install_root(env) / "current").is_symlink()
+
+
+def test_a_pre_rename_install_root_and_shim_are_migrated(tmp_path: Path) -> None:
+    """FAR-2571: an install created before the rename is migrated, not orphaned.
+
+    The rebrand moved the user install root and the PATH shim. A machine that
+    ran the pre-rename installer must not end up with two half-installs: the old
+    root is carried over, the marker is renamed, and the old shim is removed.
+    """
+    _require_openssl_3()
+    trust_key = Ed25519PrivateKey.generate()
+    release = _signed_release(tmp_path, trust_key=trust_key)
+    script = _installer_with_test_trust_key(tmp_path, trust_key=trust_key)
+    env = _install_env(tmp_path)
+
+    install_root = _default_install_root(env)
+    bin_dir = _default_bin_dir(env)
+    legacy_root = Path(env["HOME"]) / ".local" / "opt" / "modulo"
+    (legacy_root / "versions" / "0.9.0").mkdir(parents=True)
+    (legacy_root / ".modulo-native-install").write_text("managed_by=install.sh\n", encoding="utf-8")
+    legacy_shim = bin_dir / "modulo"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    legacy_shim.write_text(f'#!/bin/sh\nexec "{legacy_root}/current/launcher" "$@"\n', encoding="utf-8")
+    legacy_shim.chmod(0o755)
+
+    result = _run_install(script, release, env, tmp_path)
+    assert result.returncode == 0, f"the installer failed while migrating a pre-rename install:\n{_diagnose(result)}"
+    assert (install_root / "versions" / "0.9.0").is_dir(), "the pre-rename version tree was not carried over"
+    assert not legacy_root.exists(), "the pre-rename install root was left behind (a half-migrated install)"
+    assert (install_root / ".farna-control-native-install").is_file(), "the install marker was not renamed"
+    assert not legacy_shim.exists(), "the pre-rename PATH shim was left behind"
+    assert (bin_dir / "farna-control").is_file(), "the farna-control PATH shim was not written"
+
+
+def test_an_unrelated_modulo_shim_is_left_untouched(tmp_path: Path) -> None:
+    """FAR-2571: only a shim that targets the legacy root is removed.
+
+    A user-owned binary at ``~/.local/bin/modulo`` is unrelated to the installer
+    and must survive a fresh install unchanged.
+    """
+    _require_openssl_3()
+    trust_key = Ed25519PrivateKey.generate()
+    release = _signed_release(tmp_path, trust_key=trust_key)
+    script = _installer_with_test_trust_key(tmp_path, trust_key=trust_key)
+    env = _install_env(tmp_path)
+
+    install_root = _default_install_root(env)
+    bin_dir = _default_bin_dir(env)
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    user_shim = bin_dir / "modulo"
+    user_content = "#!/bin/sh\necho user-owned\n"
+    user_shim.write_text(user_content, encoding="utf-8")
+    user_shim.chmod(0o755)
+
+    result = _run_install(script, release, env, tmp_path)
+    assert result.returncode == 0, f"the installer failed on an unrelated modulo shim:\n{_diagnose(result)}"
+    assert user_shim.is_file(), "the installer deleted an unrelated user-owned modulo shim"
+    assert user_shim.read_text(encoding="utf-8") == user_content, "the installer rewrote an unrelated user-owned modulo shim"
+    assert (install_root / "current").is_symlink(), "the install did not complete"
+
+
+def test_two_install_roots_is_refused_rather_than_guessed(tmp_path: Path) -> None:
+    """FAR-2571: both a pre-rename and a post-rename root -> refuse, never guess."""
+    _require_openssl_3()
+    trust_key = Ed25519PrivateKey.generate()
+    release = _signed_release(tmp_path, trust_key=trust_key)
+    script = _installer_with_test_trust_key(tmp_path, trust_key=trust_key)
+    env = _install_env(tmp_path)
+
+    install_root = _default_install_root(env)
+    legacy_root = Path(env["HOME"]) / ".local" / "opt" / "modulo"
+    legacy_root.mkdir(parents=True)
+    install_root.mkdir(parents=True)
+
+    result = _run_install(script, release, env, tmp_path)
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, f"the installer guessed between two install roots:\n{_diagnose(result)}"
+    assert "found BOTH a pre-rebrand install" in combined
+    assert legacy_root.is_dir(), "the ambiguous pre-rename root was mutated"

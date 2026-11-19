@@ -1,12 +1,12 @@
 """FAR-2303 — the installer persists its log and prints a support reference.
 
 ``scripts/install.sh`` streams everything to stdout, so a failed cold install
-left the operator with scrolling terminal output and no ``modulo`` binary to
-run ``modulo doctor --report`` with. This suite pins the replacement contract
+left the operator with scrolling terminal output and no ``farna-control`` binary to
+run ``farna-control doctor --report`` with. This suite pins the replacement contract
 by EXECUTING the real installer (never by string-matching it), in an isolated
 ``HOME``:
 
-* every run tees its transcript into ``~/.local/state/modulo/install-<UTC>-<ref>.log``
+* every run tees its transcript into ``~/.local/state/farna-control/install-<UTC>-<ref>.log``
   (state dir 0700, log 0600);
 * the transcript is size-capped and only the newest 5 logs are kept;
 * EVERY failure path — ``die``, a bare ``exit 1`` inside ``fetch``, an
@@ -101,7 +101,7 @@ def _run_installer(
 
 
 def _state_dir(tmp_path: Path) -> Path:
-    return tmp_path / "home" / ".local" / "state" / "modulo"
+    return tmp_path / "home" / ".local" / "state" / "farna-control"
 
 
 def _logs(tmp_path: Path) -> list[Path]:
@@ -207,7 +207,7 @@ def test_transcript_is_persisted_with_private_permissions(tmp_path: Path) -> Non
     ("args", "extra_env"),
     [
         ([], {"VERSION": "nonsense"}),
-        (["--from-file", "/nonexistent/modulo-1.0.0-linux-amd64.tar.gz"], {}),
+        (["--from-file", "/nonexistent/farna-control-1.0.0-linux-amd64.tar.gz"], {}),
         (["--unknown-option"], {}),
     ],
     ids=["bad-version", "missing-from-file", "unknown-argument"],
@@ -378,7 +378,7 @@ def test_redaction_withholds_credential_shaped_values(secret_text: str, leaked: 
 
 @pytest.mark.posix_only
 def test_redaction_leaves_public_urls_and_paths_untouched() -> None:
-    public = "https://github.com/farnalabs/modulo/releases/download/bundle-v1.0.0/modulo-1.0.0-linux-amd64.tar.gz"
+    public = "https://github.com/farnalabs/farna-control/releases/download/bundle-v1.0.0/farna-control-1.0.0-linux-amd64.tar.gz"
     assert _redact(public) == public
-    log_path = "/home/operator/.local/state/modulo/install-20261102T101500Z-a1b2c3d4.log"
+    log_path = "/home/operator/.local/state/farna-control/install-20261102T101500Z-a1b2c3d4.log"
     assert _redact(log_path) == log_path

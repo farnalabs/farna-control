@@ -85,16 +85,33 @@ swap:
 
 The Linux bundle also carries the exact checked-out `install.sh` as an executable
 file. After extracting a verified bundle, run `install.sh --from-bundle
-/path/to/modulo-<version>-linux-<arch>` from the bundle directory's parent. The
+/path/to/farna-control-<version>-linux-<arch>` from the bundle directory's parent. The
 installer requires the adjacent tarball plus its signed release manifest and
 signature, then verifies both the signed artifact and the bundle's internal
 `SHA256SUMS`; it never guesses a download or accepts an unsigned extracted tree.
-It writes a path-only activation helper to `~/.local/opt/modulo/env.sh` and
+It writes a path-only activation helper to `~/.local/opt/farna-control/env.sh` and
 prints the exact `source <path>` command at the end. The helper exports the
 canonical `FARNA_CONTROL_INSTALL_ROOT` and `FARNA_CONTROL_BIN_DIR` names and
 also supplies the bare `MODULO_INSTALL_ROOT` and `MODULO_BIN_DIR` compatibility
 aliases. That command must be run by the caller because an installer child
 process cannot modify its parent's shell.
+
+The installed command is `farna-control` (`~/.local/bin/farna-control`), the
+install root is `~/.local/opt/farna-control`, and the bundle artifact is
+`farna-control-<version>-linux-<arch>.tar.gz`. A machine still carrying a
+pre-rename install (`~/.local/opt/modulo` and `~/.local/bin/modulo`) is migrated
+automatically on the next install run: the root is renamed, the marker file
+becomes `.farna-control-native-install`, and the old shim is removed. The
+installer refuses — rather than guessing — when both an old and a new install
+root exist. A RUNNING pre-rebrand install is migrated in two passes, because the
+root rename needs it stopped while the enforced dump needs a live stack: take an
+out-of-band database backup first (see
+[backup](./operations/backup.md) — a `--data-dir` backup cannot run while the
+launcher is live, so use its `--db-url`/`pg_dump` form), stop it
+(`modulo stop`), then re-run this installer with `--skip-backup` — the loud
+acknowledgement that the out-of-band backup is the authoritative snapshot (a
+stopped stack cannot be dumped). The bundled data dir keeps its
+`~/.local/share/modulo/data` location so an upgrade never strands existing data.
 
 `farna-control upgrade` flow:
 

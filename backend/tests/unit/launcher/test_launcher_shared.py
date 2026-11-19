@@ -153,7 +153,7 @@ def _upgrade_release_fixture(staging: Path, target_version: str = "1.2.0") -> Si
 
     from farna.launcher import manifest as manifest_module
 
-    bundle_root = staging / f"modulo-{target_version}-linux-amd64"
+    bundle_root = staging / f"farna-control-{target_version}-linux-amd64"
     (bundle_root / "backend" / "src" / "farna" / "db" / "migrations").mkdir(parents=True)
     (bundle_root / "VERSION").write_text(f"bundle-v{target_version}\n", encoding="utf-8")
     (bundle_root / "launcher").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -166,7 +166,7 @@ def _upgrade_release_fixture(staging: Path, target_version: str = "1.2.0") -> Si
     digests = {artifact: hashlib.sha256((bundle_root / artifact).read_bytes()).hexdigest() for artifact in artifact_names}
     sums_payload = "".join(f"{digest}  {artifact}\n" for artifact, digest in digests.items())
     (bundle_root / "SHA256SUMS").write_text(sums_payload, encoding="utf-8")
-    tarball_path = staging / f"modulo-{target_version}-linux-amd64.tar.gz"
+    tarball_path = staging / f"farna-control-{target_version}-linux-amd64.tar.gz"
     with tarfile_module.open(tarball_path, "w:gz") as archive:
         archive.add(str(bundle_root), arcname=bundle_root.name)
     manifest_body = {

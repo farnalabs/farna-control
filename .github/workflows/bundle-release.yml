@@ -131,8 +131,8 @@ jobs:
             echo "PG_SOURCE_SHA256=${PG_SOURCE_SHA256}"
             echo "PG_REQUIRED_EXTENSIONS=${PG_REQUIRED_EXTENSIONS}"
             echo "REDIS_VERSION=${REDIS_VERSION}"
-            echo "BUNDLE_ROOT=modulo-${VERSION_NUM}-linux-${{ matrix.arch }}"
-            echo "TARBALL_NAME=modulo-${VERSION_NUM}-linux-${{ matrix.arch }}.tar.gz"
+            echo "BUNDLE_ROOT=farna-control-${VERSION_NUM}-linux-${{ matrix.arch }}"
+            echo "TARBALL_NAME=farna-control-${VERSION_NUM}-linux-${{ matrix.arch }}.tar.gz"
           } >> "$GITHUB_ENV"
 
       - name: Define verified external download helper

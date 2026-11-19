@@ -7,7 +7,7 @@
 # Docker Compose is the documented five-minute demo, so it is the first thing a
 # cold prospect runs - and it had no diagnostic story at all. No log volume is
 # mounted for the backend or the workers, so every log line disappears the
-# moment a container is recreated or the stack is brought down. `modulo doctor`
+# moment a container is recreated or the stack is brought down. `farna-control doctor`
 # is launcher-scoped and needs a data dir, so it does not apply here.
 #
 # This script captures what is still observable at the moment of failure, from

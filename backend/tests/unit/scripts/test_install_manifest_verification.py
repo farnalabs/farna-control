@@ -323,6 +323,8 @@ _ENV_KEYS_TO_DROP = (
     "FARNA_CONTROL_BIN_DIR",
     "FARNA_CONTROL_DATA_DIR",
     "FARNA_CONTROL_LEGACY_SHIM_PATH",
+    "FARNA_CONTROL_LEGACY_INSTALL_ROOT",
+    "FARNA_CONTROL_LEGACY_USER_SHIM",
 )
 
 
@@ -338,7 +340,7 @@ def _bare_tarball_name() -> str:
     archive_os = "darwin" if system == "Darwin" else "linux"
     archive_arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(machine)
     assert archive_arch is not None, f"unsupported test host architecture: {machine}"
-    return f"modulo-1.0.0-{archive_os}-{archive_arch}.tar.gz"
+    return f"farna-control-1.0.0-{archive_os}-{archive_arch}.tar.gz"
 
 
 def _run_installer_from_cwd(tmp_path: Path, tarball_arg: str) -> subprocess.CompletedProcess[str]:

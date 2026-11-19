@@ -709,7 +709,7 @@ jobs:
           root = Path("release-assets")
           version = os.environ["VERSION"]
           required = [
-              f"modulo-{version}-linux-amd64.tar.gz",
+              f"farna-control-{version}-linux-amd64.tar.gz",
               f"Modulo-{version}-macos-arm64.dmg",
               f"Modulo-{version}-macos-x86_64.dmg",
           ]
@@ -791,9 +791,9 @@ jobs:
 
           cd release-assets
           if [ -f "modulo-${VERSION}-windows-amd64.exe" ]; then
-            sha256sum "modulo-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-windows-amd64.exe" "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-windows-amd64.exe" "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
           else
-            sha256sum "modulo-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
           fi
           cd ..
 
@@ -811,7 +811,7 @@ jobs:
           version = os.environ["VERSION"]
           include_windows = (root / f"modulo-{version}-windows-amd64.exe").is_file()
           names = [
-              f"modulo-{version}-linux-amd64.tar.gz",
+              f"farna-control-{version}-linux-amd64.tar.gz",
               f"Modulo-{version}-macos-arm64.dmg",
               f"Modulo-{version}-macos-x86_64.dmg",
           ]
