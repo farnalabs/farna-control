@@ -168,6 +168,12 @@ fi
 
 if [[ -f /tmp/system_database_url.env ]]; then
   SYSTEM_URL=$(cat /tmp/system_database_url.env)
+  # Export the canonical name (farna.launcher.env_contract): farna.db.bootstrap_role
+  # reads ONLY this name, so exporting just the pre-rebrand
+  # MODULO_SYSTEM_DATABASE_URL left it with no system URL and it created the
+  # system role with a random placeholder password (FAR-2563). An operator-supplied
+  # legacy spelling is still accepted by the settings-level readers through the
+  # registry, so no compatibility export is needed here.
   export FARNA_CONTROL_SYSTEM_DATABASE_URL="$SYSTEM_URL"
   echo "FARNA_CONTROL_SYSTEM_DATABASE_URL fixed: $(printf '%s' "$SYSTEM_URL" | redact_url_credentials | cut -c1-80)..."
 fi
