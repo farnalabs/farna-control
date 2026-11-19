@@ -3779,7 +3779,7 @@ def test_publish_release_if_runs_despite_skipped_needs_and_never_after_cancel() 
 
 
 def test_publish_release_guard_step_exists_and_validates_dependencies() -> None:
-    """The first step must validate all four publication dependencies and fail
+    """The first step must validate every publication dependency and fail
     closed with a specific error naming the offending job."""
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["publish-release"]["steps"]
@@ -3789,16 +3789,23 @@ def test_publish_release_guard_step_exists_and_validates_dependencies() -> None:
     assert guard_idx == 0, "guard step must be the FIRST step (before checkout)"
     guard_step = steps[guard_idx]
 
-    # Must declare the four env vars
+    # Must declare every dependency's env var
     env = guard_step.get("env") or {}
     assert env.get("RELEASE_RESULT") == "${{ needs.release.result }}"
     assert env.get("MANIFEST_RESULT") == "${{ needs.final-release-manifest.result }}"
     assert env.get("ATTEST_RESULT") == "${{ needs.attest-artefacts.result }}"
     assert env.get("MACOS_RESULT") == "${{ needs.macos-installer.result }}"
+    assert env.get("NOTARIZATION_RESULT") == "${{ needs.verify-notarization-tickets.result }}"
 
-    # Script must check all four and fail with ::error:: naming the job
+    # Script must check every dependency and fail with ::error:: naming the job
     script = guard_step["run"]
-    for job_name in ("release", "final-release-manifest", "attest-artefacts", "macos-installer"):
+    for job_name in (
+        "release",
+        "final-release-manifest",
+        "attest-artefacts",
+        "macos-installer",
+        "verify-notarization-tickets",
+    ):
         assert job_name in script, f"guard must check {job_name}"
     assert "::error::" in script, "guard must emit ::error:: on failure"
     assert "Publication dependency" in script, "error must name the dependency"
@@ -4023,6 +4030,7 @@ def test_publish_release_guard_all_success_exits_zero(tmp_path: Path) -> None:
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     result = _run_bash(script, cwd=tmp_path, env=env)
     assert result.returncode == 0, f"all success must exit 0: {result.stdout} {result.stderr}"
@@ -4039,6 +4047,7 @@ def test_publish_release_guard_final_manifest_failure_fails_and_names_it(tmp_pat
         "MANIFEST_RESULT": "failure",
         "ATTEST_RESULT": "success",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     result = _run_bash(script, cwd=tmp_path, env=env)
     assert result.returncode != 0, "failure must exit non-zero"
@@ -4057,6 +4066,7 @@ def test_publish_release_guard_attest_skipped_fails_and_names_it(tmp_path: Path)
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "skipped",
         "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
     }
     result = _run_bash(script, cwd=tmp_path, env=env)
     assert result.returncode != 0, "skipped must exit non-zero"
@@ -4074,9 +4084,21 @@ def _post_condition_script() -> str:
     return _extract_publish_release_step_script(_ASSERT_STEP_NAME).replace('"${{ github.repository }}"', '"$GH_REPO"')
 
 
-def _post_condition_env(tmp_path: Path, *, gh_body: str, gh_rc: int, git_rc: int) -> dict[str, str]:
+def _post_condition_env(
+    tmp_path: Path,
+    *,
+    gh_body: str,
+    gh_rc: int,
+    git_rc: int,
+    published: str = "true",
+    handoff_dispatched: str = "true",
+) -> dict[str, str]:
     """Stub ``gh`` and ``git`` on PATH - both are external binaries here, so the
-    script's real invocations observe the injected exit codes."""
+    script's real invocations observe the injected exit codes.
+
+    ``published``/``handoff_dispatched`` default to the published path; the held
+    path (FAR-2573) is selected explicitly by the tests that cover it.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_executable(bin_dir / "gh", f"#!/usr/bin/env bash\nprintf '%s\\n' {shlex.quote(gh_body)}\nexit {gh_rc}\n")
@@ -4087,6 +4109,8 @@ def _post_condition_env(tmp_path: Path, *, gh_body: str, gh_rc: int, git_rc: int
         "VERSION": "0.1.0",
         "TAG": "bundle-v0.1.0",
         "GH_REPO": "farnalabs/modulo",
+        "PUBLISHED": published,
+        "HANDOFF_DISPATCHED": handoff_dispatched,
     }
 
 
@@ -4155,6 +4179,39 @@ def test_publish_release_assertion_reports_an_unknown_state_not_absence(tmp_path
     assert "state UNKNOWN, not proof of absence" in result.stdout
     assert "is ABSENT" not in result.stdout
     assert "Publication post-condition failed" in result.stdout
+
+
+@pytest.mark.posix_only
+def test_publish_release_assertion_accepts_a_confirmed_held_handoff(tmp_path: Path) -> None:
+    """A held publication (FAR-2573) is the one legitimate non-publication - but
+    only when the staple-retry hand-off was confirmed, so a publisher exists."""
+    env = _post_condition_env(
+        tmp_path,
+        gh_body="",
+        gh_rc=1,
+        git_rc=2,
+        published="false",
+        handoff_dispatched="true",
+    )
+    result = _run_bash(_post_condition_script(), cwd=tmp_path, env=env)
+    assert result.returncode == 0, f"a held publication with a confirmed publisher must not fail: {result.stdout} {result.stderr}"
+    assert "Publication HELD" in result.stdout
+    assert "dispatched to publish" in result.stdout
+
+
+@pytest.mark.posix_only
+def test_publish_release_assertion_fails_a_held_publication_with_no_publisher(tmp_path: Path) -> None:
+    env = _post_condition_env(
+        tmp_path,
+        gh_body="",
+        gh_rc=1,
+        git_rc=2,
+        published="false",
+        handoff_dispatched="false",
+    )
+    result = _run_bash(_post_condition_script(), cwd=tmp_path, env=env)
+    assert result.returncode != 0, "a held release with no publisher must fail, never conclude green"
+    assert "nothing will ever publish this release" in result.stdout
 
 
 # ---------------------------------------------------------------------------

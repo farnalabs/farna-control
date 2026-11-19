@@ -2405,11 +2405,104 @@ jobs:
           retention-days: 30
 
   # ---------------------------------------------------------------------------
+  # Notarization ticket gate (FAR-2573)
+  #
+  # A deferred staple must never publish. bundle-v0.3.328 shipped both DMGs
+  # while the in-run staple was deferred, so a real Gatekeeper-ON Mac rejected
+  # the published asset (`source=Unnotarized Developer ID`) and `stapler
+  # validate` found no ticket on it. The ticket can only be proven where it can
+  # be checked: on macOS, against the exact bytes that will be uploaded.
+  #
+  # This job reports, it does not crash: a missing ticket is a HOLD, and
+  # `publish-release` turns that hold into "do not publish, hand the release to
+  # macos-staple-retry.yml". It also records each DMG's digest so the publisher
+  # proves it uploads the very bytes a ticket was verified on. A genuine query
+  # failure (missing artefact, unreadable bytes) stays fail-closed.
+  # ---------------------------------------------------------------------------
+  verify-notarization-tickets:
+    name: Verify notarization tickets (macOS)
+    needs: [release, final-release-manifest]
+    if: >-
+      always() &&
+      (inputs.mode == 'cut' || inputs.mode == 'recut') &&
+      needs.release.result == 'success' &&
+      needs.final-release-manifest.result == 'success'
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      tickets_verified: ${{ steps.verify.outputs.tickets_verified }}
+      arm64_sha256: ${{ steps.verify.outputs.arm64_sha256 }}
+      x86_64_sha256: ${{ steps.verify.outputs.x86_64_sha256 }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: final-release-artefacts-${{ inputs.version }}
+          path: release-artefacts
+      - name: Verify a notarization ticket is stapled to every DMG being published
+        id: verify
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Both checks are the ones a real Gatekeeper-ON Mac performs against
+          # the published asset: `stapler validate` proves the ticket is on the
+          # exact bytes, `spctl --assess` proves Gatekeeper accepts them. A
+          # failure is reported (the release will be held), never ignored.
+          tickets_verified="true"
+          arm64_sha256=""
+          x86_64_sha256=""
+          for arch in arm64 x86_64; do
+            dmg="release-artefacts/Modulo-${VERSION}-macos-${arch}.dmg"
+            if [ ! -s "$dmg" ]; then
+              echo "::error::expected release artefact ${dmg} is missing - cannot verify a notarization ticket"
+              exit 1
+            fi
+            digest="$(sha256sum "$dmg" | awk '{print $1}')"
+            case "$arch" in
+              arm64) arm64_sha256="$digest" ;;
+              x86_64) x86_64_sha256="$digest" ;;
+              *)
+                echo "::error::unexpected architecture '${arch}' in the release-artefact set"
+                exit 1
+                ;;
+            esac
+            if ! ticket_output="$(xcrun stapler validate "$dmg" 2>&1)"; then
+              tickets_verified="false"
+              echo "::warning::${dmg} does not carry a fetchable notarization ticket - publication will be HELD: $(printf '%s' "$ticket_output" | tr '\n' ' ')"
+              continue
+            fi
+            if ! gatekeeper_output="$(spctl --assess --type open --context context:primary-signature "$dmg" 2>&1)"; then
+              tickets_verified="false"
+              echo "::warning::Gatekeeper rejects ${dmg} - publication will be HELD: $(printf '%s' "$gatekeeper_output" | tr '\n' ' ')"
+              continue
+            fi
+            echo "${dmg}: notarization ticket verified (${digest})"
+          done
+          {
+            printf 'tickets_verified=%s\n' "$tickets_verified"
+            printf 'arm64_sha256=%s\n' "$arm64_sha256"
+            printf 'x86_64_sha256=%s\n' "$x86_64_sha256"
+          } >>"$GITHUB_OUTPUT"
+          if [ "$tickets_verified" != "true" ]; then
+            echo "::notice::Notarization tickets are not available for every DMG; the release will be HELD and macos-staple-retry.yml will publish it once stapling succeeds."
+          fi
+
+  # ---------------------------------------------------------------------------
   # Create the GitHub Release from the final Linux + macOS artefacts
   # ---------------------------------------------------------------------------
   publish-release:
     name: Create GitHub Release
-    needs: [release, final-release-manifest, attest-artefacts, macos-installer]
+    needs: [release, final-release-manifest, attest-artefacts, macos-installer, verify-notarization-tickets]
+    # FAR-2573: the ticket gate above is a hard need. If it could not run to a
+    # conclusion the publication state is UNKNOWN, so the job fails closed in
+    # its dependency guard; if it ran and found no ticket, publication is HELD
+    # and handed to macos-staple-retry.yml instead of publishing unstapled bytes.
+    outputs:
+      published: ${{ steps.ticket-gate.outputs.publish }}
     # Do not publish until the final signed manifest covers the macOS DMG and the
     # signed Windows installer. Windows is Beta scope (FAR-2338) and a Beta-only
     # opt-in: windows-installer is a need of final-release-manifest when
@@ -2429,6 +2522,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      # The held-publication hand-off dispatches macos-staple-retry.yml.
+      actions: write
     steps:
       - name: Validate publication dependencies
         # Fail closed if any required dependency did not succeed. This makes a
@@ -2438,13 +2533,19 @@ jobs:
           MANIFEST_RESULT: ${{ needs.final-release-manifest.result }}
           ATTEST_RESULT: ${{ needs.attest-artefacts.result }}
           MACOS_RESULT: ${{ needs.macos-installer.result }}
+          NOTARIZATION_RESULT: ${{ needs.verify-notarization-tickets.result }}
         shell: bash
         run: |
           set -euo pipefail
           # macos-installer is a reusable workflow call; its conclusion is the
           # called workflow's overall conclusion. On a healthy run the API
-          # reports 'success'. Accept only 'success' for all four.
-          for job in "release=$RELEASE_RESULT" "final-release-manifest=$MANIFEST_RESULT" "attest-artefacts=$ATTEST_RESULT" "macos-installer=$MACOS_RESULT"; do
+          # reports 'success'. Accept only 'success' for every dependency.
+          #
+          # verify-notarization-tickets must also have succeeded: if it could
+          # not report a verdict, the ticket state is UNKNOWN and publishing
+          # unverified bytes is exactly the FAR-2573 defect. A missing ticket is
+          # a *reported* 'false' from that job, never a failed result.
+          for job in "release=$RELEASE_RESULT" "final-release-manifest=$MANIFEST_RESULT" "attest-artefacts=$ATTEST_RESULT" "macos-installer=$MACOS_RESULT" "verify-notarization-tickets=$NOTARIZATION_RESULT"; do
             name="${job%%=*}"
             result="${job#*=}"
             if [ "$result" != "success" ]; then
@@ -2494,7 +2595,57 @@ jobs:
              echo "Final signed manifest and SHA256SUMS cover Linux amd64, macOS arm64 and x86_64 artifacts and the self-hosted compose bundle."
           fi
 
+      # ---------------------------------------------------------------------
+      # FAR-2573: publication is gated on a notarization ticket VERIFIED for
+      # the exact bytes this job is about to upload.
+      #
+      # The macOS verification job proved the ticket on its own copy of the
+      # release artefact; recompute each DMG's digest HERE, from this job's
+      # copy, so a mismatch can never publish bytes no ticket was proven on.
+      # A missing ticket sets `publish=false`, which skips release creation and
+      # the bundle-tag push and hands publication to the staple retry. Every
+      # other outcome is a hard failure: the gate never publishes on doubt.
+      # ---------------------------------------------------------------------
+      - name: Verify notarization tickets cover the exact bytes being published
+        id: ticket-gate
+        env:
+          VERSION: ${{ inputs.version }}
+          TICKETS_VERIFIED: ${{ needs.verify-notarization-tickets.outputs.tickets_verified }}
+          VERIFIED_ARM64_SHA256: ${{ needs.verify-notarization-tickets.outputs.arm64_sha256 }}
+          VERIFIED_X86_64_SHA256: ${{ needs.verify-notarization-tickets.outputs.x86_64_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for arch in arm64 x86_64; do
+            dmg="release-artefacts/Modulo-${VERSION}-macos-${arch}.dmg"
+            test -s "$dmg"
+            case "$arch" in
+              arm64) verified="${VERIFIED_ARM64_SHA256}" ;;
+              x86_64) verified="${VERIFIED_X86_64_SHA256}" ;;
+              *)
+                echo "::error::unexpected architecture '${arch}' in the staple-verified set"
+                exit 1
+                ;;
+            esac
+            actual="$(sha256sum "$dmg" | awk '{print $1}')"
+            if [ -z "$verified" ] || [ "$verified" != "$actual" ]; then
+              echo "::error::${dmg} is not the artefact a notarization ticket was verified on (verified='${verified}', publishing='${actual}') - refusing to publish."
+              exit 1
+            fi
+            echo "${dmg}: publishing the exact bytes verified for a notarization ticket (${actual})"
+          done
+
+          if [ "${TICKETS_VERIFIED}" = "true" ]; then
+            printf 'publish=true\n' >>"$GITHUB_OUTPUT"
+            echo "A notarization ticket is verified for every macOS DMG; publication may proceed."
+          else
+            printf 'publish=false\n' >>"$GITHUB_OUTPUT"
+            echo "::warning::No verified notarization ticket for the macOS DMGs being published - publication is HELD; macos-staple-retry.yml publishes the stapled bytes once stapling succeeds."
+          fi
+
       - name: Set up Python 3.12 for OpenAPI dump
+        if: steps.ticket-gate.outputs.publish == 'true'
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
           python-version: "3.12"
@@ -2505,10 +2656,12 @@ jobs:
       # locks the exact revisions, so the builds are deterministic and trusted
       # (no untrusted setup scripts execute).
       - name: Sync backend dependencies
+        if: steps.ticket-gate.outputs.publish == 'true'
         working-directory: backend
         run: uv sync --frozen  # NOSONAR
 
       - name: Verify final manifest signature against the checked-in trust store
+        if: steps.ticket-gate.outputs.publish == 'true'
         working-directory: backend
         env:
           EXPECTED_KEY_ID: modulo-2026-a
@@ -2543,6 +2696,7 @@ jobs:
           PY
 
       - name: Dump OpenAPI schema from backend
+        if: steps.ticket-gate.outputs.publish == 'true'
         working-directory: backend
         env:
 
@@ -2564,6 +2718,7 @@ jobs:
           uv run --no-build --no-sync python /tmp/gen_openapi.py
 
       - name: Create GitHub Release with assets
+        if: steps.ticket-gate.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
@@ -2610,6 +2765,16 @@ jobs:
             fi
           done
 
+          # FAR-2573: a bundle cut publishes a release-candidate build (the title
+          # carries the RC tag even though the bundle tag itself is X.Y.Z), so it
+          # must be created as a prerelease. Advertising a candidate as the
+          # project's latest normal release is a false claim about its maturity.
+          PRERELEASE_ARGS=()
+          case "$RC_TAG" in
+            v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
+            *) PRERELEASE_ARGS=() ;;
+          esac
+
           # NEVER --clobber an existing asset: a replaced release artifact
           # invalidates every verify-against-the-manifest already downloaded.
           # An existing release gets an upload (which fails loudly on an
@@ -2617,18 +2782,23 @@ jobs:
           RELEASE_TITLE="Modulo ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
-            gh release edit "$TAG" --title "$RELEASE_TITLE"
+            gh release edit "$TAG" --title "$RELEASE_TITLE" "${PRERELEASE_ARGS[@]}"
             gh release upload "$TAG" "${ASSETS[@]}"
           else
+            # --target pins the tag to the checked-out RC commit instead of
+            # relying on the repository default branch happening to be there.
             gh release create "$TAG" \
               --title "$RELEASE_TITLE" \
               --notes-file "$NOTES_FILE" \
+              --target "$(git rev-parse HEAD)" \
+              "${PRERELEASE_ARGS[@]}" \
               "${ASSETS[@]}"
           fi
 
       - name: Push the bundle tag
         # LAST: native-release-smoke.yml triggers on the bundle-v* tag push and
         # downloads the GitHub Release assets, so the release must already exist.
+        if: steps.ticket-gate.outputs.publish == 'true'
         env:
           VERSION: ${{ inputs.version }}
         shell: bash
@@ -2698,6 +2868,58 @@ jobs:
           fi
           echo "Pushed and verified $BUNDLE_TAG at $RELEASE_SHA"
 
+      # ---------------------------------------------------------------------
+      # FAR-2573: no verified ticket, no publication. Nothing has been created
+      # or pushed by this run at this point, so the release is simply HELD.
+      # macos-staple-retry.yml is the ONLY publisher for a held release: it
+      # staples both DMGs from this run's artefacts, re-verifies every gate,
+      # regenerates SHA256SUMS + the signed manifest, then creates the release
+      # with the stapled bytes. A failed dispatch is fatal - a held release with
+      # no publisher would never ship, and the scheduled retry backstop only
+      # repairs an EXISTING release. The held run re-arms itself while the
+      # ticket propagates (bounded by `retry_deadline`), so a ticket that is not
+      # yet fetchable at the first retry is not stranded.
+      # ---------------------------------------------------------------------
+      - name: Hold publication and hand it to the staple retry
+        id: hold
+        if: steps.ticket-gate.outputs.publish != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          RC_TAG: ${{ needs.release.outputs.rc_tag }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="bundle-v${VERSION}"
+          # Bound the held path's automatic re-dispatch to the ticket-propagation
+          # window. The retry re-arms itself until this deadline; past it a human
+          # must intervene rather than the release retrying forever.
+          RETRY_DEADLINE=$(( $(date -u +%s) + 86400 ))
+          for attempt in 1 2 3; do
+            if gh workflow run macos-staple-retry.yml \
+              --repo "$REPO" \
+              --ref main \
+              -f version="$VERSION" \
+              -f architecture=all \
+              -f release_tag="$RELEASE_TAG" \
+              -f run_id="$SOURCE_RUN_ID" \
+              -f rc_tag="$RC_TAG" \
+              -f publish_release=true \
+              -f retry_deadline="$RETRY_DEADLINE"; then
+              printf 'dispatched=true\n' >>"$GITHUB_OUTPUT"
+              echo "::notice::Publication of ${RELEASE_TAG} is HELD on a missing notarization ticket; macos-staple-retry.yml was dispatched to staple the DMGs and publish the release (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Held-publication hand-off attempt ${attempt} failed."
+            if [ "$attempt" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+          echo "::error::Could not dispatch macos-staple-retry.yml for ${RELEASE_TAG} after 3 attempts - the release is HELD and has no publisher."
+          exit 1
+
       - name: Assert the release and bundle tag exist
         # Terminal post-condition for the "concluded success having done
         # nothing" class (docs/operations/workflow-noop-inventory.md). Run
@@ -2707,12 +2929,28 @@ jobs:
         # The GitHub Release and git tag this job publishes both use the
         # bundle-v* identity. They are asserted separately, and each failure
         # names exactly what is missing rather than warning.
+        #
+        # A held publication (FAR-2573) is the one legitimate non-publication:
+        # it is green only when its hand-off to the staple retry was confirmed,
+        # so a held release always has a publisher and never becomes a silent
+        # no-op.
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          PUBLISHED: ${{ steps.ticket-gate.outputs.publish }}
+          HANDOFF_DISPATCHED: ${{ steps.hold.outputs.dispatched }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ "${PUBLISHED}" != "true" ]; then
+            if [ "${HANDOFF_DISPATCHED}" != "true" ]; then
+              echo "::error::Publication was held on a missing notarization ticket but the staple-retry hand-off was not confirmed - nothing will ever publish this release."
+              exit 1
+            fi
+            echo "Publication HELD: no notarization ticket, so this run created no release and pushed no bundle tag. macos-staple-retry.yml was dispatched to publish the stapled DMGs."
+            exit 0
+          fi
+
           BUNDLE_TAG="bundle-v${VERSION}"
           missing=0
 
@@ -2771,7 +3009,10 @@ jobs:
         # .semgrep/continue-on-error-in-ci.yaml, so every command below is
         # individually best-effort and the script reports a non-fatal outcome
         # explicitly (::notice:: / ::warning::) before exiting 0 on every path.
-        if: ${{ success() }}
+        #
+        # FAR-2573: a HELD publication created no release, so there is nothing
+        # for the website to rebuild - the hand-off path is the retry's job.
+        if: ${{ success() && steps.ticket-gate.outputs.publish == 'true' }}
         env:
           WEBSITE_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_DEPLOY_HOOK_URL }}
         shell: bash
@@ -2810,6 +3051,10 @@ jobs:
   #
   # This job fires only AFTER a successful publication and never relaxes a gate
   # inside it: it is a post-publication trigger, not a publication dependency.
+  #
+  # FAR-2573: a HELD publication already dispatched the retry (with the release
+  # run's artefacts and the publish flag), so this job must not dispatch a
+  # second, publish-less run over the top of it.
   # ---------------------------------------------------------------------------
   dispatch-staple-retry:
     name: Dispatch macOS staple retry
@@ -2818,6 +3063,7 @@ jobs:
       always() &&
       (inputs.mode == 'cut' || inputs.mode == 'recut') &&
       needs.publish-release.result == 'success' &&
+      needs.publish-release.outputs.published == 'true' &&
       needs.macos-installer.result == 'success'
     runs-on: ubicloud-standard-2
     timeout-minutes: 5
