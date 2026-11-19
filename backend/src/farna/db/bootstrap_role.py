@@ -304,6 +304,24 @@ async def _grant_function_execute(conn: asyncpg.Connection, app_user: str, bg_us
         await conn.execute(f'GRANT EXECUTE ON FUNCTION public.deactivate_break_glass(uuid, uuid, boolean) TO "{app_user}", "{bg_user}"')
 
 
+async def _break_glass_column_violations(conn: asyncpg.Connection, app_user: str, cols: set[str]) -> list[str]:
+    """Return a violation for every break-glass column the app role can UPDATE.
+
+    The three break-glass columns are deliberately NOT writable by the
+    application role: only direct-DB / SECURITY DEFINER writes can create or
+    clear a break-glass row. Extracted from ``_find_allow_list_violations`` so
+    that function's cognitive complexity stays within the allowed budget.
+    """
+    violations: list[str] = []
+    for col in ("is_break_glass", "break_glass_expires_at", "break_glass_deactivated_at"):
+        if col not in cols:
+            continue
+        ok = await conn.fetchval("SELECT has_column_privilege($1, 'public.accounts', $2, 'UPDATE')", app_user, col)
+        if ok:
+            violations.append(f"{app_user} can UPDATE break-glass column {col}")
+    return violations
+
+
 async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -> list[str]:
     """Return a list of allow-list / role-posture violations, or [] when clean.
 
@@ -347,12 +365,7 @@ async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -
     if granted != writable:
         violations.append(f"{app_user} accounts UPDATE grant drift: granted={sorted(granted)} allow_list={sorted(writable)}")
 
-    for col in ("is_break_glass", "break_glass_expires_at", "break_glass_deactivated_at"):
-        if col not in cols:
-            continue
-        ok = await conn.fetchval("SELECT has_column_privilege($1, 'public.accounts', $2, 'UPDATE')", app_user, col)
-        if ok:
-            violations.append(f"{app_user} can UPDATE break-glass column {col}")
+    violations.extend(await _break_glass_column_violations(conn, app_user, cols))
 
     # The application must never connect as the cluster owner: initdb makes its
     # ``-U`` role a superuser, so owning the schema and running the app with
