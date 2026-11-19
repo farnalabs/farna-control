@@ -29,8 +29,9 @@ Two measured conditions, either of which makes deploy health UNHEALTHY:
    two real failures would break the streak and suppress the alert.
 
 A single flaky deploy therefore never alerts, and neither does a prod that is
-merely inside the grace window (the throttle batches up to 3h, staging E2E
-adds ~2h).
+merely inside the grace window (the throttle batches up to 3h, pre-deploy CI
+plus the deploy itself add ~1.5h, staging E2E adds ~2h, and a 10h window leaves
+one throttle period of headroom on top of that).
 
 A tick that could read only SOME of its inputs is **UNKNOWN, never healthy**
 (FAR-2159). An absent input is not evidence of health: scoring a partial read
@@ -68,10 +69,28 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-#: Production may lag main by this long before it is declared stale. Covers the
-#: deploy throttle (DEPLOY_INTERVAL_HOURS, default 3h) + pre-deploy CI +
-#: staging E2E (~2h) + retry headroom.
-GRACE_HOURS_DEFAULT = 6
+#: Production may lag main by this long before it is declared stale.
+#:
+#: A normal delivery cycle is ~4-6h of wall clock, not the ~3h the throttle
+#: alone implies: the deploy throttle (DEPLOY_INTERVAL_HOURS, default 3h) +
+#: pre-deploy CI (~30-40 min) + the deploy itself (~45-50 min) + staging E2E,
+#: and any merge that lands mid-cycle queues behind the whole thing. A 6h
+#: window therefore sat INSIDE that normal noise band, so an extra queue hop, a
+#: slow E2E or a burst of merges was enough to trip it and then clear it again -
+#: and since the email fires on every health TRANSITION, one flap costs two
+#: emails. Measured over the last 100 runs (2026-11-17..19): three flaps in
+#: three days - 17:33-23:03 on the 17th (5.5h), then 05:04-07:05 and
+#: 13:32-15:33 on the 19th (2h each) - i.e. six transition emails, with the
+#: 18th clean in between.
+#:
+#: 10h covers a normal cycle plus one full throttle window of queueing and
+#: retry headroom, so only a genuine starvation (the FAR-528 shape: production
+#: many hours behind with no deploy in flight) trips it. This is a calibration
+#: fix, not a fix to the throttle: the throttle anchors on the last run whose
+#: ``Deploy to control.farna.dev`` JOB concluded ``success`` (FAR-2152), so it
+#: cannot starve production - it was the alert threshold that was too tight.
+#: Overridable via the STALENESS_GRACE_HOURS repo variable.
+GRACE_HOURS_DEFAULT = 10
 
 #: Consecutive FAILED deploy runs before the deploy itself is unhealthy.
 FAILURE_THRESHOLD_DEFAULT = 2

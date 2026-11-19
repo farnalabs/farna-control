@@ -77,7 +77,7 @@ def _verdict(
     main: dict[str, Any] | None = None,
     prod: dict[str, Any] | None = None,
     runs: list[dict[str, Any]] | None = None,
-    grace_hours: int = 6,
+    grace_hours: int = 10,
     failure_threshold: int = 2,
     deploy_jobs: dict[str, dict[str, str]] | None = None,
 ) -> Any:
@@ -421,17 +421,17 @@ def test_prod_stale_beyond_grace_fires_and_names_the_figures() -> None:
     assert "7b1c064" in verdict.reason
     assert "4db7af2" in verdict.reason
     assert "46h" in verdict.reason
-    assert "6h grace" in verdict.reason
+    assert "10h grace" in verdict.reason
 
 
 def test_prod_just_below_grace_is_healthy() -> None:
-    verdict = _verdict(prod=_prod(age_hours=5), grace_hours=6)
+    verdict = _verdict(prod=_prod(age_hours=9), grace_hours=10)
     assert verdict.healthy is True
     assert verdict.stale is False
 
 
 def test_prod_exactly_at_grace_fires() -> None:
-    verdict = _verdict(prod=_prod(age_hours=6), grace_hours=6)
+    verdict = _verdict(prod=_prod(age_hours=10), grace_hours=10)
     assert verdict.healthy is False
     assert verdict.stale is True
 
@@ -439,6 +439,40 @@ def test_prod_exactly_at_grace_fires() -> None:
 def test_grace_is_configurable() -> None:
     assert _verdict(prod=_prod(age_hours=3), grace_hours=2).healthy is False
     assert _verdict(prod=_prod(age_hours=3), grace_hours=8).healthy is True
+
+
+def test_default_grace_window_is_ten_hours() -> None:
+    """The DEFAULT window (no argument passed), not a caller-supplied one.
+
+    A normal delivery cycle is ~4-6h: throttle (3h) + pre-deploy CI (~35min) +
+    the deploy itself (~50min) + staging E2E, with merges queueing behind it.
+    A 6h default sat inside that band, so ordinary queueing flapped the alert
+    on and off - and every transition is an email. Measured: three flaps in the
+    three days to 2026-11-19 (2h to 5.5h each), six emails.
+    """
+    assert health.GRACE_HOURS_DEFAULT == 10
+    # evaluate() called WITHOUT grace_hours, so this is the production default.
+    within = health.evaluate(main=_main(), prod=_prod(age_hours=9), deploy_runs=[], now=_NOW)
+    assert within.grace_hours == 10
+    assert within.stale is False
+    assert within.healthy is True
+
+
+def test_default_grace_boundary_is_9h_inside_10h_stale() -> None:
+    """9h behind main is inside the window; 11h behind is stale.
+
+    Both directions matter: the tight side is what flapped, and the loose side
+    is what would silently lose the starvation alert entirely.
+    """
+    within = health.evaluate(main=_main(), prod=_prod(age_hours=9), deploy_runs=[], now=_NOW)
+    assert within.stale is False
+    assert within.healthy is True
+
+    beyond = health.evaluate(main=_main(), prod=_prod(age_hours=11), deploy_runs=[], now=_NOW)
+    assert beyond.stale is True
+    assert beyond.healthy is False
+    assert "11h" in beyond.reason
+    assert "10h grace" in beyond.reason
 
 
 def test_unparseable_build_timestamp_with_prod_behind_fires() -> None:
@@ -729,7 +763,7 @@ def test_alert_email_names_every_figure_and_the_window() -> None:
     assert "prod 46h stale" in subject
     assert "7b1c064" in body
     assert "4db7af2" in body
-    assert "46h (grace 6h)" in body
+    assert "46h (grace 10h)" in body
     assert "threshold 2" in body
     assert "last 2 completed runs" in body
     assert "Evaluated every 30 minutes" in body
@@ -761,7 +795,7 @@ def test_alert_email_flags_an_unknown_age_without_inventing_one() -> None:
         run_url=_RUN_URL,
         deploy_url=_DEPLOY_URL,
     )
-    assert "unknown (grace 6h)" in body
+    assert "unknown (grace 10h)" in body
     assert "None" not in body
 
 

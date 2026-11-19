@@ -60,7 +60,7 @@ on:
     # surfaced within ~30 minutes of the second failure completing instead of
     # up to two hours later. The workflow is one 30s job (a couple of API
     # reads), and */30 is the cadence the sibling deploy-watchdog.yml already
-    # runs at. The staleness half is unaffected by the extra ticks (6h grace).
+    # runs at. The staleness half is unaffected by the extra ticks (10h grace).
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
@@ -95,11 +95,15 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
           # Grace window: how long production is allowed to lag behind main
-          # HEAD before starvation is declared. Covers the deploy throttle
-          # (DEPLOY_INTERVAL_HOURS, default 3h) + pre-deploy CI + staging
-          # E2E (~2h) + retry headroom. Default 6h; overridable via the
+          # HEAD before starvation is declared. A normal cycle is ~4-6h: the
+          # deploy throttle (DEPLOY_INTERVAL_HOURS, default 3h) + pre-deploy CI
+          # (~30-40 min) + the deploy itself (~45-50 min) + staging E2E, with
+          # merges queueing behind it. Default 10h - one full throttle period
+          # of headroom above that, so ordinary queueing cannot flap this alert
+          # (at 6h it did: three flaps in the three days to 2026-11-19, 2-5.5h
+          # each, and every transition is an email). Overridable via the
           # STALENESS_GRACE_HOURS repo variable.
-          GRACE_HOURS: ${{ vars.STALENESS_GRACE_HOURS || 6 }}
+          GRACE_HOURS: ${{ vars.STALENESS_GRACE_HOURS || 10 }}
           # FAR-2116: consecutive FAILED deploy runs before the deploy itself is
           # declared unhealthy. 2 is the ticket's suggestion: a single red
           # deploy is normal (transient npm timeout, a flake in pre-deploy CI),
