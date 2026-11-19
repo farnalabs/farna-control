@@ -1454,7 +1454,7 @@ class TestSamlProcessResponse:
         session = _mock_session()
 
         acs = "https://app.example.com/api/v1/auth/saml/acs"
-        entity_id = "modulo"  # settings.modulo_saml_entity_id default
+        entity_id = "farna-control"  # settings.modulo_saml_entity_id default
         xml = _build_xsd_compliant_saml_response(
             destination=acs,
             recipient=acs,

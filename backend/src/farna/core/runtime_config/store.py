@@ -57,7 +57,7 @@ _KEY_CONFIG: dict[str, _KeyConfig] = {
     "FARNA_CONTROL_SAML_ENABLED": _KeyConfig(default="false", boot_reason=_REASON_STARTUP),
     "FARNA_CONTROL_SAML_IDP_METADATA_URL": _KeyConfig(default="", boot_reason=_REASON_STARTUP),
     "FARNA_CONTROL_SAML_IDP_METADATA_XML": _KeyConfig(default="", boot_reason=_REASON_STARTUP),
-    "FARNA_CONTROL_SAML_ENTITY_ID": _KeyConfig(default="modulo", boot_reason=_REASON_STARTUP),
+    "FARNA_CONTROL_SAML_ENTITY_ID": _KeyConfig(default="farna-control", boot_reason=_REASON_STARTUP),
     "FARNA_CONTROL_SAML_SP_PRIVATE_KEY": _KeyConfig(default="", boot_reason=_REASON_SECRET),
     "FARNA_CONTROL_SAML_SP_X509_CERT": _KeyConfig(default="", boot_reason=_REASON_STARTUP),
     "FARNA_CONTROL_SSO_DEFAULT_ROLE": _KeyConfig(default="runner", boot_reason=_REASON_STARTUP),

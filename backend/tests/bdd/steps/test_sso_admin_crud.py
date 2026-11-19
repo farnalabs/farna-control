@@ -321,7 +321,7 @@ def _when_create_saml(request: Any, name: str, metadata_url: str) -> None:
         "provider_type": "saml",
         "name": name,
         "metadata_url": metadata_url,
-        "entity_id": "modulo",
+        "entity_id": "farna-control",
         "auto_provision": False,
         "default_role": "runner",
     }
