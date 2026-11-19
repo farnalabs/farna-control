@@ -47,7 +47,8 @@ Farnalabs service is contacted.
       and an `url <origin>/runs/<run_id>` line derived from the serving origin
       (trailing slashes removed; the url line is omitted when no origin exists
       rather than emitting a broken one). The run detail page copies it in one
-      action and reports a clipboard failure instead of silently doing nothing
+      action and logs a console warning on clipboard failure instead of silently
+      doing nothing
       (`frontend/src/lib/supportReference.ts`,
       `frontend/src/views/RunDetailView.vue`; `supportReference.spec.ts`,
       `RunDetailShare.spec.ts`, `RunDetailView.spec.ts`)
