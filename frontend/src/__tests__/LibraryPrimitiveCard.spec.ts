@@ -11,7 +11,6 @@ const i18n = createI18n({
       views: {
         LibraryView: {
           modulo_badge: 'modulo',
-          community_badge: 'not verified',
           preview_badge: 'preview',
           collection_badge: 'Collection',
           create_pipeline: 'Create Pipeline',
@@ -55,22 +54,14 @@ describe('LibraryPrimitiveCard', () => {
   it('shows the modulo badge for native primitives', () => {
     const wrapper = mountCard({ badge: 'modulo' })
     expect(wrapper.text()).toContain('modulo')
-    expect(wrapper.find('[data-testid="library-community-badge"]').exists()).toBe(false)
   })
 
-  it('shows the community badge for community primitives', () => {
-    const wrapper = mountCard({ badge: 'community' })
-    expect(wrapper.find('[data-testid="library-community-badge"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('not verified')
-  })
-
-  it('shows the community badge for community-sourced primitives in the native section', () => {
+  it('does not show the modulo badge for a non-modulo-sourced primitive', () => {
     const wrapper = mountCard({
       badge: 'modulo',
-      prim: { id: 'prim-1', source: 'community', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false },
+      prim: { id: 'prim-local', source: 'local', primitive_type: 'workflow', name: 'Local Primitive', description: null, tags: [], forked_from: null, auto_update: false },
     })
-    expect(wrapper.find('[data-testid="library-community-badge"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('not verified')
+    expect(wrapper.text()).not.toContain('modulo')
   })
 
   it('shows the preview badge for preview primitives', () => {
