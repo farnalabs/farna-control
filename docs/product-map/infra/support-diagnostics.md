@@ -120,10 +120,12 @@ Farnalabs service is contacted.
       `farna-control` binary exists: the installer tees its transcript to
       `~/.local/state/farna-control/install-<UTC>-<ref>.log` (state dir 0700,
       log 0600, newest five retained, size-capped), redacts credential-shaped
-      values, and prints one delimited support block LAST on every failure path
-      naming the target, failing stage, absolute log path and an 8-hex support
-      reference that also appears in the log filename. A successful run prints
-      no block and exit codes are unchanged (`scripts/install.sh`;
+      values in the support block's target, stage and log-path fields (the
+      transcript itself is verbatim), and prints one delimited support block
+      LAST on every failure path naming the target, failing stage, an 8-hex
+      support reference and, when logging is available, the absolute log path
+      that also embeds the reference. A successful run prints no block and exit
+      codes are unchanged (`scripts/install.sh`;
       `backend/tests/unit/scripts/test_install_support_block.py`)
 - [x] Kubernetes / Helm needs no extra install: the same module runs inside the
       backend pod (`python -m farna.support.bundle --out ...`) and the bundle is

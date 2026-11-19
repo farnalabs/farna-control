@@ -41,10 +41,11 @@ If the install itself failed, there is no `farna-control` binary to run yet. The
 installer prints a delimited support block as its final output on failure and
 keeps the full transcript under `~/.local/state/farna-control/install-*.log`
 (the newest five logs are retained and each is size-capped); send both the block
-and the log file it names. The block always answers the target, the failing
-stage, the absolute log path and an 8-hex support reference that also appears
-in the log filename. The installer redacts credential-shaped values before they
-reach the terminal, the log or the block.
+and the log file it names. The block answers the target, the failing stage, an
+8-hex support reference and, when logging is available, the absolute log path
+that also embeds that reference. The installer redacts credential-shaped values
+in the block's target, stage and log-path fields; the transcript itself is
+written verbatim, so open it and check before sending.
 
 ### Docker Compose
 
