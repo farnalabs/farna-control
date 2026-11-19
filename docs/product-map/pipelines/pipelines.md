@@ -11,9 +11,13 @@ code:
   - backend/src/farna/db/models/pipeline.py
   - backend/src/farna/db/migrations/versions/0286_pipeline_run_state.py
   - backend/src/farna/core/pipeline_engine
+  - backend/src/farna/core/pipeline_engine/graph_cache.py
   - backend/src/farna/core/graph_validator/__init__.py
   - backend/src/farna/connectors/base.py
   - backend/src/farna/connectors/ci_runner/base.py
+  - scripts/run_validate_graph_schema.py
+  - .semgrep/canonical-graph-write.yml
+  - frontend/src/types/pipeline-graph.ts
 unit-tests:
   - backend/tests/unit/api/test_pipelines_endpoint.py
   - backend/tests/unit/api/test_pipelines_routes_coverage.py
@@ -32,6 +36,8 @@ unit-tests:
   - backend/tests/unit/pipeline_engine/test_dispatch_guards.py
   - backend/tests/unit/pipeline_engine/test_dispatch_composed_e2e.py
   - backend/tests/unit/connectors/test_ci_runner.py
+  - backend/tests/unit/core/test_graph_cache.py
+  - frontend/src/__tests__/graph-schema.spec.ts
 bdd:
   - backend/tests/bdd/features/pipelines/create.feature
   - backend/tests/bdd/features/pipelines/crud.feature
@@ -127,6 +133,28 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
 - [x] Graph validation and run-time enforcement are unit-covered under
       `tests/unit/graph_validator` and `tests/unit/pipeline_engine`
       (`test_pipeline_execution.py`, `test_pipeline_node_conversion.py`)
+- [x] Pipeline graphs are written against a canonical node/edge contract
+      (FAR-2457): the editor validates the graph payload on whole-graph saves
+      and edge saves (and before computing an auto-layout) through
+      `validateCanonicalGraph`, so an unknown top-level, node or edge field
+      fails the save with a visible error instead of being silently dropped by
+      the API's `extra="ignore"` model. The same shape is denied at compile time by
+      `_reject_unknown_graph_fields` in `build_graph_from_json` for graphs that
+      bypass the API boundary (imported graphs, stored run snapshots), while
+      underscore-prefixed engine-internal keys
+      (`_resolved_model`, `_composite_parent_id`, ...) stay exempt and legacy
+      aliases still consumed by the compiler (`source` / `target` / `type`,
+      `model_backend_id`, `prompt_template`, `routing_prompt`,
+      `manual_prompt`, `allowed_hosts`, `input_schema_json`,
+      `output_schema_version`, `loop_intercept`, `prompt`) remain accepted so
+      historical snapshots keep compiling. A frontend graph write that does not
+      import and use the canonical helper is rejected by the repository gate
+      (`scripts/run_validate_graph_schema.py`, also enforced by the
+      `.semgrep/canonical-graph-write.yml` rule in pre-commit and CI)
+      (`backend/src/farna/core/pipeline_engine/graph_cache.py`,
+      `frontend/src/types/pipeline-graph.ts`,
+      `backend/tests/unit/core/test_graph_cache.py`,
+      `frontend/src/__tests__/graph-schema.spec.ts`)
 - [x] Sandbox `agent_commands` LIST items ending with a heredoc terminator are
       rejected at save time with code `SANDBOX_HEREDOC_TERMINATOR_IN_LIST_ITEM`
       – list items are joined with `commands_concatenation_string`, so a
@@ -189,6 +217,23 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
   covers the DB-backed pre-run checks.
 
 ## QA History
+- 2026-11-19: **Improve Architecture product-map walk** – closed the untracked
+  FAR-2457 canonical pipeline graph-write contract (PR #3020), which shipped
+  with no product-map coverage in either layer. Both write surfaces now reject
+  fields outside the canonical top-level/node/edge allowlist instead of letting
+  the Pydantic `extra="ignore"` write model drop them silently: the editor
+  validates every whole-graph and edge save (and the auto-layout input)
+  through `validateCanonicalGraph`, and
+  `build_graph_from_json` rejects unknown keys for imported graphs and stored
+  run snapshots that bypass the API (engine-internal underscore keys and the
+  legacy compiler-read aliases stay accepted so historical snapshots compile).
+  The repository gate `scripts/run_validate_graph_schema.py` plus the
+  `.semgrep/canonical-graph-write.yml` rule (pre-commit and CI) refuse a
+  frontend graph write that bypasses the canonical helper. Added to the
+  manifest `feat-pipelines` registry and this tracker with the
+  `test_graph_cache.py` / `graph-schema.spec.ts` citations, and corrected the
+  stale `docs/architecture.md` claim that no graph-schema CI step exists.
+  Status stays `covered`.
 - 2026-10-08: **Improve Architecture product-map walk** – closed the untracked
   FAR-1141 sub-surface (dispatch CI-runner operations to pipeline nodes, merged
   in PR #1370): the `dispatch` node type, the governed connector dispatch verb

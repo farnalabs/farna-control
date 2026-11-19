@@ -1201,8 +1201,13 @@ The pipeline graph contract has a single source of truth:
 - A parallel JSON Schema file (`graph.schema.json` or similar). No second
   validation artifact is added; the Pydantic → OpenAPI → TypeScript pipeline
   is the complete contract.
-- A separate "graph-schema" workflow or CI step. The existing `schema-freshness`
-  and `vue-tsc` gates are sufficient.
+- A second hand-authored JSON Schema artifact. The `schema-freshness` and
+  `vue-tsc` gates still police the generated contract. The FAR-2457 canonical
+  graph-write gate (`scripts/run_validate_graph_schema.py`, with the
+  `.semgrep/canonical-graph-write.yml` rule in pre-commit and CI) is a usage
+  check, not a schema source: it fails a frontend graph write that does not
+  import and call `validateCanonicalGraph`, whose dependency-free allowlist
+  mirrors the backend compiler's accepted node/edge fields.
 
 **Boundaries enforced by tests (FAR-2475):**
 - `backend/tests/architecture/test_graph_openapi_contract.py` asserts the
