@@ -87,7 +87,7 @@ if [[ "${MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET:-}" == '1' && "${MODULO_M
 else
   spctl --assess --type execute "$APP"
 fi
-INSTALL_ROOT="${MODULO_INSTALL_ROOT:-$HOME/Library/Application Support/Modulo}"
+INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-$HOME/Library/Application Support/Modulo}}"
 mkdir -p "$INSTALL_ROOT"
 TARGET="$INSTALL_ROOT/$(basename "$APP")"
 rm -rf "$TARGET"
@@ -99,7 +99,7 @@ env -u PYTHONPATH -u PYTHONHOME \
   -c 'import farna.launcher.supervisor'
 mkdir -p "$HOME/Library/LaunchAgents"
 PLIST="$HOME/Library/LaunchAgents/run.modulo.launcher.plist"
-DATA_DIR="${MODULO_DATA_DIR:-$HOME/Library/Application Support/Modulo/data}"
+DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR:-$HOME/Library/Application Support/Modulo/data}}"
 PYTHONPATH="$TARGET/Contents/Resources/bundle/backend/src:$TARGET/Contents/Resources/bundle/backend/.venv/lib/python3.12/site-packages" \
   "$TARGET/Contents/Resources/bundle/runtime/bin/python3" - "$TARGET" "$PLIST" "$DATA_DIR" <<'PY'
 import sys
