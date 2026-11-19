@@ -120,7 +120,7 @@ def test_the_installer_declares_and_copies_the_bundle_launcher() -> None:
 
 def test_the_installer_creates_a_start_menu_shortcut_for_the_launcher() -> None:
     icons = _section_entries(_source(), "Icons")
-    start_menu = [entry for entry in icons if 'Name: "{group}\\Modulo"' in entry]
+    start_menu = [entry for entry in icons if 'Name: "{group}\\Farna Control"' in entry]
     assert len(start_menu) == 1
     assert f'Filename: "{_LAUNCHER_DEST}\\modulo.exe"' in start_menu[0]
     assert 'WorkingDir: "{app}"' in start_menu[0]
@@ -128,7 +128,7 @@ def test_the_installer_creates_a_start_menu_shortcut_for_the_launcher() -> None:
 
 def test_the_installer_creates_an_optional_desktop_shortcut_for_the_launcher() -> None:
     icons = _section_entries(_source(), "Icons")
-    desktop = [entry for entry in icons if 'Name: "{commondesktop}\\Modulo"' in entry]
+    desktop = [entry for entry in icons if 'Name: "{commondesktop}\\Farna Control"' in entry]
     assert len(desktop) == 1
     assert f'Filename: "{_LAUNCHER_DEST}\\modulo.exe"' in desktop[0]
     assert 'WorkingDir: "{app}"' in desktop[0]

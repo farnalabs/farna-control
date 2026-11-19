@@ -86,7 +86,7 @@ jobs:
             --version "$VERSION" \
             --tag "$RC_TAG" \
             --output-dir "$RUNNER_TEMP/compose-bundle"
-          tar -xzf "$RUNNER_TEMP/compose-bundle/modulo-${VERSION}-compose.tar.gz" \
+          tar -xzf "$RUNNER_TEMP/compose-bundle/farna-control-${VERSION}-compose.tar.gz" \
             -C "$RUNNER_TEMP/compose-bundle"
           (cd "$RUNNER_TEMP/compose-bundle" && sha256sum --check SHA256SUMS)
 
@@ -227,7 +227,7 @@ jobs:
             --version "$version" \
             --tag "$RC_TAG" \
             --output-dir "$RUNNER_TEMP/compose-matrix"
-          tar -xzf "$RUNNER_TEMP/compose-matrix/modulo-${version}-compose.tar.gz" \
+          tar -xzf "$RUNNER_TEMP/compose-matrix/farna-control-${version}-compose.tar.gz" \
             -C "$RUNNER_TEMP/compose-matrix"
           (cd "$RUNNER_TEMP/compose-matrix" && sha256sum --check SHA256SUMS)
           cd "$RUNNER_TEMP/compose-matrix" && ./init-env.sh
@@ -286,10 +286,10 @@ jobs:
           bundle_version="${bundle_tag#bundle-v}"
           gh release download "$bundle_tag" \
             --repo "${{ github.repository }}" \
-            --pattern "modulo-${bundle_version}-compose.tar.gz" \
+            --pattern "farna-control-${bundle_version}-compose.tar.gz" \
             --dir "$RUNNER_TEMP" \
             --clobber
-          downloaded_archive="$RUNNER_TEMP/modulo-${bundle_version}-compose.tar.gz"
+          downloaded_archive="$RUNNER_TEMP/farna-control-${bundle_version}-compose.tar.gz"
           if [ ! -s "$downloaded_archive" ]; then
             echo "::error::published predecessor bundle ${bundle_tag} has no downloadable compose asset; refusing Docker upgrade/rollback coverage"
             exit 1

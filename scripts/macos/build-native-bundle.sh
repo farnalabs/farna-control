@@ -16,7 +16,11 @@ case "${MACOS_ARCH}" in
   *) echo "unsupported macOS architecture: ${MACOS_ARCH}" >&2; exit 2 ;;
 esac
 ROOT_DIR="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
-APP_NAME="Modulo-${VERSION}.app"
+# The build directory name is deliberately space-free: PostgreSQL is configured
+# with --prefix inside this bundle, and its makefiles do not quote the prefix
+# (its libpq install name also points here). The release workflow stages the
+# signed bundle into the DMG under its display name, "Farna Control.app".
+APP_NAME="FarnaControl.app"
 APP_ROOT="${BUILD_ROOT}/${APP_NAME}"
 BUNDLE_ROOT="${APP_ROOT}/Contents/Resources/bundle"
 DOWNLOADS="${BUILD_ROOT}/downloads"
@@ -267,7 +271,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) child[i + 2] = argv[i];
     child[argc + 2] = NULL;
     execv(python, child);
-    perror("Modulo launcher execv");
+    perror("Farna Control launcher execv");
     return 127;
 }
 EOF

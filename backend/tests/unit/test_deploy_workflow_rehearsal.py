@@ -100,14 +100,14 @@ def test_promote_rebuilds_compose_bundle_from_ga_tag_and_replaces_release_assets
     assert '--tag "$RC_TAG"' not in package_script
 
     sign_script = job["steps"][sign_idx]["run"]
-    assert 'sha256sum "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS' in sign_script
+    assert 'sha256sum "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS' in sign_script
     assert "RELEASE_MANIFEST.json.sig" in sign_script
     assert "sha256sum --check SHA256SUMS" in sign_script
 
     upload_script = job["steps"][upload_idx]["run"]
     assert 'gh release view "$TAG"' in upload_script
     assert 'gh release upload "$TAG"' in upload_script
-    assert "modulo-${VERSION}-compose.tar.gz" in upload_script
+    assert "farna-control-${VERSION}-compose.tar.gz" in upload_script
 
 
 def test_promote_retag_publishes_the_v_prefixed_ga_tag_the_compose_bundle_pins() -> None:
@@ -921,13 +921,13 @@ def test_windows_bundle_is_scoped_into_the_alpha_release_path() -> None:
     assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in build_script
     # The unconditional path must not have Windows
     assert "farna-control-${VERSION}-linux-amd64.tar.gz" in build_script
-    assert "Modulo-${VERSION}-macos-arm64.dmg" in build_script
-    assert "Modulo-${VERSION}-macos-x86_64.dmg" in build_script
+    assert "FarnaControl-${VERSION}-macos-arm64.dmg" in build_script
+    assert "FarnaControl-${VERSION}-macos-x86_64.dmg" in build_script
     # The components dict starts with linux+macos only
     assert 'components = {"linux": "amd64", "macos": "native"}' in build_script
     # Windows is only added conditionally
     assert 'components["windows"] = "amd64"' in build_script
-    assert 'names.append(f"modulo-{version}-windows-amd64.exe")' in build_script
+    assert 'names.append(f"farna-control-{version}-windows-amd64.exe")' in build_script
 
 
 def test_alpha_bundle_still_requires_the_macos_installer() -> None:
@@ -960,8 +960,8 @@ def test_publish_release_assets_match_the_alpha_bundle() -> None:
         # Windows must only appear inside the INCLUDE_WINDOWS conditional
         assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in script
         assert "farna-control-${VERSION}-linux-amd64.tar.gz" in script
-        assert "Modulo-${VERSION}-macos-arm64.dmg" in script
-        assert "Modulo-${VERSION}-macos-x86_64.dmg" in script
+        assert "FarnaControl-${VERSION}-macos-arm64.dmg" in script
+        assert "FarnaControl-${VERSION}-macos-x86_64.dmg" in script
 
 
 def test_portable_artifact_presence_check_is_not_signature_gate() -> None:
@@ -3321,13 +3321,13 @@ def test_final_release_manifest_builds_sha256sums_conditionally() -> None:
     assert "INCLUDE_WINDOWS" in script
     # Should conditionally add windows exe to sha256sum
     assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in script
-    assert "modulo-${VERSION}-windows-amd64.exe" in script
+    assert "farna-control-${VERSION}-windows-amd64.exe" in script
     # Should error if include_windows=true but artifact missing
     assert "include_windows=true but windows-installer" in script
     # Linux and both native macOS DMGs must always be included.
     assert "farna-control-${VERSION}-linux-amd64.tar.gz" in script
-    assert "Modulo-${VERSION}-macos-arm64.dmg" in script
-    assert "Modulo-${VERSION}-macos-x86_64.dmg" in script
+    assert "FarnaControl-${VERSION}-macos-arm64.dmg" in script
+    assert "FarnaControl-${VERSION}-macos-x86_64.dmg" in script
 
 
 def test_final_release_manifest_builds_components_dict_conditionally() -> None:
@@ -3344,8 +3344,8 @@ def test_final_release_manifest_builds_components_dict_conditionally() -> None:
     assert "if include_windows:" in script
     assert 'components["windows"] = "amd64"' in script
     # Both architecture-suffixed DMGs are unconditional manifest assets.
-    assert ('names = [f"farna-control-{version}-linux-amd64.tar.gz", f"Modulo-{version}-macos-arm64.dmg", f"Modulo-{version}-macos-x86_64.dmg"]') in script
-    assert 'names.append(f"modulo-{version}-windows-amd64.exe")' in script
+    assert ('names = [f"farna-control-{version}-linux-amd64.tar.gz", f"FarnaControl-{version}-macos-arm64.dmg", f"FarnaControl-{version}-macos-x86_64.dmg"]') in script
+    assert 'names.append(f"farna-control-{version}-windows-amd64.exe")' in script
 
 
 def test_publish_release_verifies_windows_asset_conditionally() -> None:
@@ -3359,14 +3359,14 @@ def test_publish_release_verifies_windows_asset_conditionally() -> None:
     verify_script = publish_steps[verify_idx]["run"]
     assert "INCLUDE_WINDOWS" in verify_script
     assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in verify_script
-    assert 'test -s "release-artefacts/modulo-${VERSION}-windows-amd64.exe"' in verify_script
+    assert 'test -s "release-artefacts/farna-control-${VERSION}-windows-amd64.exe"' in verify_script
 
     # Create GitHub Release with assets step
     create_idx = publish_names.index("Create GitHub Release with assets")
     create_script = publish_steps[create_idx]["run"]
     assert "INCLUDE_WINDOWS" in create_script
     assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in create_script
-    assert 'ASSETS+=("release-artefacts/modulo-${VERSION}-windows-amd64.exe")' in create_script
+    assert 'ASSETS+=("release-artefacts/farna-control-${VERSION}-windows-amd64.exe")' in create_script
 
 
 def test_attest_artefacts_downloads_windows_conditionally() -> None:
@@ -3403,8 +3403,8 @@ def test_alpha_bundle_sha256sums_generation_succeeds_without_windows(tmp_path: P
     artefacts_dir = tmp_path / "release-artefacts"
     artefacts_dir.mkdir()
     linux_tar = artefacts_dir / "farna-control-0.3.324-linux-amd64.tar.gz"
-    macos_arm64_dmg = artefacts_dir / "Modulo-0.3.324-macos-arm64.dmg"
-    macos_x86_64_dmg = artefacts_dir / "Modulo-0.3.324-macos-x86_64.dmg"
+    macos_arm64_dmg = artefacts_dir / "FarnaControl-0.3.324-macos-arm64.dmg"
+    macos_x86_64_dmg = artefacts_dir / "FarnaControl-0.3.324-macos-x86_64.dmg"
     linux_tar.write_bytes(b"linux-bundle-content")
     macos_arm64_dmg.write_bytes(b"macos-arm64-dmg-content")
     macos_x86_64_dmg.write_bytes(b"macos-x86_64-dmg-content")
@@ -3417,14 +3417,14 @@ cd release-artefacts
 if [ "$INCLUDE_WINDOWS" = "true" ]; then
   sha256sum \
     "farna-control-${VERSION}-linux-amd64.tar.gz" \
-    "Modulo-${VERSION}-macos-arm64.dmg" \
-    "Modulo-${VERSION}-macos-x86_64.dmg" \
-    "modulo-${VERSION}-windows-amd64.exe" > SHA256SUMS
+    "FarnaControl-${VERSION}-macos-arm64.dmg" \
+    "FarnaControl-${VERSION}-macos-x86_64.dmg" \
+    "farna-control-${VERSION}-windows-amd64.exe" > SHA256SUMS
 else
   sha256sum \
     "farna-control-${VERSION}-linux-amd64.tar.gz" \
-    "Modulo-${VERSION}-macos-arm64.dmg" \
-    "Modulo-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
+    "FarnaControl-${VERSION}-macos-arm64.dmg" \
+    "FarnaControl-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
 fi
 cd ..
 (cd release-artefacts && sha256sum --check SHA256SUMS)
@@ -3436,8 +3436,8 @@ cd ..
     sha256sums = (artefacts_dir / "SHA256SUMS").read_text(encoding="utf-8")
     expected_assets = {
         "farna-control-0.3.324-linux-amd64.tar.gz",
-        "Modulo-0.3.324-macos-arm64.dmg",
-        "Modulo-0.3.324-macos-x86_64.dmg",
+        "FarnaControl-0.3.324-macos-arm64.dmg",
+        "FarnaControl-0.3.324-macos-x86_64.dmg",
     }
     assert {line.split("  ", 1)[1] for line in sha256sums.strip().splitlines()} == expected_assets
     assert "windows-amd64.exe" not in sha256sums
@@ -3450,9 +3450,9 @@ def test_beta_bundle_sha256sums_generation_succeeds_with_windows(tmp_path: Path)
     artefacts_dir = tmp_path / "release-artefacts"
     artefacts_dir.mkdir()
     linux_tar = artefacts_dir / "farna-control-0.3.324-linux-amd64.tar.gz"
-    macos_arm64_dmg = artefacts_dir / "Modulo-0.3.324-macos-arm64.dmg"
-    macos_x86_64_dmg = artefacts_dir / "Modulo-0.3.324-macos-x86_64.dmg"
-    windows_exe = artefacts_dir / "modulo-0.3.324-windows-amd64.exe"
+    macos_arm64_dmg = artefacts_dir / "FarnaControl-0.3.324-macos-arm64.dmg"
+    macos_x86_64_dmg = artefacts_dir / "FarnaControl-0.3.324-macos-x86_64.dmg"
+    windows_exe = artefacts_dir / "farna-control-0.3.324-windows-amd64.exe"
     linux_tar.write_bytes(b"linux-bundle-content")
     macos_arm64_dmg.write_bytes(b"macos-arm64-dmg-content")
     macos_x86_64_dmg.write_bytes(b"macos-x86_64-dmg-content")
@@ -3465,14 +3465,14 @@ cd release-artefacts
 if [ "$INCLUDE_WINDOWS" = "true" ]; then
   sha256sum \
     "farna-control-${VERSION}-linux-amd64.tar.gz" \
-    "Modulo-${VERSION}-macos-arm64.dmg" \
-    "Modulo-${VERSION}-macos-x86_64.dmg" \
-    "modulo-${VERSION}-windows-amd64.exe" > SHA256SUMS
+    "FarnaControl-${VERSION}-macos-arm64.dmg" \
+    "FarnaControl-${VERSION}-macos-x86_64.dmg" \
+    "farna-control-${VERSION}-windows-amd64.exe" > SHA256SUMS
 else
   sha256sum \
     "farna-control-${VERSION}-linux-amd64.tar.gz" \
-    "Modulo-${VERSION}-macos-arm64.dmg" \
-    "Modulo-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
+    "FarnaControl-${VERSION}-macos-arm64.dmg" \
+    "FarnaControl-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
 fi
 cd ..
 (cd release-artefacts && sha256sum --check SHA256SUMS)
@@ -3484,9 +3484,9 @@ cd ..
     sha256sums = (artefacts_dir / "SHA256SUMS").read_text(encoding="utf-8")
     expected_assets = {
         "farna-control-0.3.324-linux-amd64.tar.gz",
-        "Modulo-0.3.324-macos-arm64.dmg",
-        "Modulo-0.3.324-macos-x86_64.dmg",
-        "modulo-0.3.324-windows-amd64.exe",
+        "FarnaControl-0.3.324-macos-arm64.dmg",
+        "FarnaControl-0.3.324-macos-x86_64.dmg",
+        "farna-control-0.3.324-windows-amd64.exe",
     }
     assert {line.split("  ", 1)[1] for line in sha256sums.strip().splitlines()} == expected_assets
     assert len(sha256sums.strip().splitlines()) == 4
@@ -3498,8 +3498,8 @@ def test_beta_bundle_sha256sums_generation_fails_when_windows_missing(tmp_path: 
     artefacts_dir = tmp_path / "release-artefacts"
     artefacts_dir.mkdir()
     linux_tar = artefacts_dir / "farna-control-0.3.324-linux-amd64.tar.gz"
-    macos_arm64_dmg = artefacts_dir / "Modulo-0.3.324-macos-arm64.dmg"
-    macos_x86_64_dmg = artefacts_dir / "Modulo-0.3.324-macos-x86_64.dmg"
+    macos_arm64_dmg = artefacts_dir / "FarnaControl-0.3.324-macos-arm64.dmg"
+    macos_x86_64_dmg = artefacts_dir / "FarnaControl-0.3.324-macos-x86_64.dmg"
     linux_tar.write_bytes(b"linux-bundle-content")
     macos_arm64_dmg.write_bytes(b"macos-arm64-dmg-content")
     macos_x86_64_dmg.write_bytes(b"macos-x86_64-dmg-content")
@@ -3509,20 +3509,20 @@ def test_beta_bundle_sha256sums_generation_fails_when_windows_missing(tmp_path: 
 set -euo pipefail
 cd release-artefacts
 if [ "$INCLUDE_WINDOWS" = "true" ]; then
-  if [ ! -f "modulo-${VERSION}-windows-amd64.exe" ]; then
+  if [ ! -f "farna-control-${VERSION}-windows-amd64.exe" ]; then
     echo "::error::include_windows=true but windows-installer-${VERSION} artifact is missing"
     exit 1
   fi
   sha256sum \
     "farna-control-${VERSION}-linux-amd64.tar.gz" \
-    "Modulo-${VERSION}-macos-arm64.dmg" \
-    "Modulo-${VERSION}-macos-x86_64.dmg" \
-    "modulo-${VERSION}-windows-amd64.exe" > SHA256SUMS
+    "FarnaControl-${VERSION}-macos-arm64.dmg" \
+    "FarnaControl-${VERSION}-macos-x86_64.dmg" \
+    "farna-control-${VERSION}-windows-amd64.exe" > SHA256SUMS
 else
   sha256sum \
     "farna-control-${VERSION}-linux-amd64.tar.gz" \
-    "Modulo-${VERSION}-macos-arm64.dmg" \
-    "Modulo-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
+    "FarnaControl-${VERSION}-macos-arm64.dmg" \
+    "FarnaControl-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
 fi
 cd ..
 (cd release-artefacts && sha256sum --check SHA256SUMS)
@@ -4334,7 +4334,7 @@ def test_windows_installer_attests_and_publishes_the_versioned_installer() -> No
 
     assert _step_by_name(attest, "Download signed Windows installer")["with"]["name"] == ("windows-installer-signed-${{ inputs.version }}")
     attest_step = next(step for step in steps if str(step.get("uses", "")).startswith("actions/attest-build-provenance@"))
-    assert attest_step["with"]["subject-path"] == "release-artefacts/modulo-*-windows-amd64.exe"
+    assert attest_step["with"]["subject-path"] == "release-artefacts/farna-control-*-windows-amd64.exe"
 
     upload = _step_by_name(attest, "Upload attested Windows installer")
     assert upload["with"]["name"] == "windows-installer-${{ inputs.version }}"
