@@ -44,7 +44,7 @@ const markWidth = computed(
       class="text-ink-900"
     />
     <!-- FAR-2582: the canonical two-tone mark, geometry copied verbatim from
-         Brand/Farna Control/01-mark/farna-control-mark-{dark,light}-bg.svg.
+         the brand's farna-control-mark-{dark,light}-bg.svg assets.
          The hexagons are drawn in the foreground ink (currentColor): the
          theme's --foreground when transparent, the brand dark-bg ink
          (ink-50, #E8EDF2) on the opaque ink-900 plate. Only the diagonal
