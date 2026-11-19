@@ -1789,3 +1789,204 @@ def test_macos_upload_step_follows_the_notarizing_step_and_the_contract_checks_t
     assert "shellcheck scripts/macos/artefact-identity.sh" in contract
     assert "bash -n scripts/macos/notarize-and-verify.sh" in contract
     assert "bash -n scripts/macos/artefact-identity.sh" in contract
+
+
+# --- FAR-2575: every Mach-O under Contents is signed and audited ------------
+
+_MACHO_TOOL = REPO_ROOT / "scripts" / "macos" / "macho-inventory.sh"
+_THIN_MACHO_ARM64 = b"\xcf\xfa\xed\xfe\x0c\x00\x00\x01" + b"\x00" * 24
+_FAT_MACHO = b"\xca\xfe\xba\xbe\x00\x00\x00\x02" + b"\x00" * 24
+_JAVA_CLASS = b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"\x00" * 24
+
+#: Stand-in `codesign` for the Mach-O audit. The verdict is keyed off the file
+#: name so one fixture tree can hold every signature state Apple distinguishes.
+_FAKE_AUDIT_CODESIGN = """#!/usr/bin/env bash
+set -u
+path=""
+for candidate in "$@"; do path="$candidate"; done
+name="$(basename "$path")"
+if [[ "$1" == "--verify" ]]; then
+  case "$name" in
+    *unsigned*) printf '%s: code object is not signed at all\\n' "$path" >&2; exit 1 ;;
+  esac
+  exit 0
+fi
+printf 'Executable=%s\\n' "$path" >&2
+case "$name" in
+  *adhoc*) printf 'Signature=adhoc\\n' >&2 ;;
+  *notimestamp*)
+    printf 'Authority=Developer ID Application: Farna Labs Ltd (TEAMID1234)\\n' >&2
+    printf 'Signed Time=19 Nov 2026 at 08:19:21\\n' >&2
+    ;;
+  *)
+    printf 'Authority=Developer ID Application: Farna Labs Ltd (TEAMID1234)\\n' >&2
+    printf 'Authority=Developer ID Certification Authority\\n' >&2
+    printf 'Timestamp=19 Nov 2026 at 08:19:21\\n' >&2
+    ;;
+esac
+exit 0
+"""
+
+
+def _macho_app(tmp_path: Path) -> Path:
+    """An app tree mirroring the bundled runtime layout Apple rejected."""
+    app = tmp_path / "Modulo-0.3.328.app"
+    contents = app / "Contents"
+    runtime = contents / "Resources" / "bundle" / "runtime"
+    lib = runtime / "lib"
+    files: dict[Path, bytes] = {
+        contents / "MacOS" / "modulo": _THIN_MACHO_ARM64,
+        lib / "thread3.0.6" / "libtcl9thread3.0.6.dylib": _THIN_MACHO_ARM64,
+        lib / "itcl4.3.8" / "libitcl4.3.8.dylib": _THIN_MACHO_ARM64,
+        lib / "python3.12" / "lib-dynload" / "_ssl.cpython-312-darwin.so": _THIN_MACHO_ARM64,
+        runtime / "bin" / "fat-tool": _FAT_MACHO,
+        runtime / "bin" / "pip3": b"#!/bin/sh\nexec python3 -m pip\n",
+        lib / "python3.12" / "empty.py": b"",
+        lib / "java" / "Example.class": _JAVA_CLASS,
+        contents / "Info.plist": b"<plist/>",
+    }
+    for path, body in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    # The four Apple-rejected dylibs shipped mode 0644: no executable bit.
+    for path in files:
+        if path.suffix in {".dylib", ".so"}:
+            path.chmod(0o644)
+    return app
+
+
+def _run_macho_tool(tmp_path: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    bin_dir = tmp_path / "macho-stub-bin"
+    _write_executable(bin_dir / "codesign", _FAKE_AUDIT_CODESIGN)
+    _write_executable(
+        bin_dir / "python3",
+        "#!/usr/bin/env bash\nexec " + shlex.quote(Path(sys.executable).as_posix()) + ' "$@"\n',
+    )
+    command = "\n".join(
+        [
+            'export PATH="' + _posix_path(bin_dir) + ':$PATH"',
+            " ".join(["bash", shlex.quote(_MACHO_TOOL.as_posix()), *(shlex.quote(arg) for arg in args)]),
+        ]
+    )
+    return _run_bash(command, cwd=tmp_path, env=dict(os.environ), timeout=180)
+
+
+def _relative_lines(output: str, app: Path) -> list[str]:
+    prefix = app.as_posix() + "/"
+    return [line.removeprefix(prefix) for line in output.splitlines() if line.strip()]
+
+
+def test_macos_macho_discovery_selects_non_executable_dylibs_and_extension_modules(tmp_path: Path) -> None:
+    """FAR-2575: mode-0644 dylibs and .so modules are Mach-O and must be signed."""
+    app = _macho_app(tmp_path)
+
+    result = _run_macho_tool(tmp_path, ["discover", app.as_posix()])
+
+    assert result.returncode == 0, result.stderr
+    selected = set(_relative_lines(result.stdout, app))
+    assert selected == {
+        "Contents/MacOS/modulo",
+        "Contents/Resources/bundle/runtime/lib/thread3.0.6/libtcl9thread3.0.6.dylib",
+        "Contents/Resources/bundle/runtime/lib/itcl4.3.8/libitcl4.3.8.dylib",
+        "Contents/Resources/bundle/runtime/lib/python3.12/lib-dynload/_ssl.cpython-312-darwin.so",
+        "Contents/Resources/bundle/runtime/bin/fat-tool",
+    }
+
+
+def test_macos_macho_discovery_lists_deepest_files_first_for_inside_out_signing(tmp_path: Path) -> None:
+    app = _macho_app(tmp_path)
+
+    result = _run_macho_tool(tmp_path, ["discover", app.as_posix()])
+
+    assert result.returncode == 0, result.stderr
+    depths = [line.count("/") for line in _relative_lines(result.stdout, app)]
+    assert depths == sorted(depths, reverse=True)
+
+
+def test_macos_macho_discovery_fails_when_the_bundle_holds_no_macho(tmp_path: Path) -> None:
+    app = tmp_path / "Empty.app"
+    (app / "Contents").mkdir(parents=True)
+    (app / "Contents" / "Info.plist").write_bytes(b"<plist/>")
+
+    result = _run_macho_tool(tmp_path, ["discover", app.as_posix()])
+
+    assert result.returncode != 0
+    assert "no Mach-O file found" in result.stderr
+
+
+def test_macos_macho_audit_passes_when_every_macho_is_developer_id_timestamped(tmp_path: Path) -> None:
+    app = _macho_app(tmp_path)
+
+    result = _run_macho_tool(tmp_path, ["audit", app.as_posix()])
+
+    assert result.returncode == 0, result.stderr
+    assert "all 5 Mach-O file(s) carry a Developer ID signature with a secure timestamp" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("file_name", "diagnostic"),
+    [
+        ("libtcl9thread3.0.6-unsigned.dylib", "unsigned or invalid signature"),
+        ("libitcl4.3.8-adhoc.dylib", "not signed with a Developer ID Application certificate"),
+        ("libthread3.0.6-notimestamp.dylib", "signature has no secure timestamp"),
+    ],
+)
+def test_macos_macho_audit_names_every_file_apple_would_reject(tmp_path: Path, file_name: str, diagnostic: str) -> None:
+    """FAR-2575: the audit reproduces each of Apple's per-file rejections."""
+    app = _macho_app(tmp_path)
+    bad = app / "Contents" / "Resources" / "bundle" / "runtime" / "lib" / "thread3.0.6" / file_name
+    bad.write_bytes(_THIN_MACHO_ARM64)
+    bad.chmod(0o644)
+
+    result = _run_macho_tool(tmp_path, ["audit", app.as_posix()])
+
+    assert result.returncode != 0
+    assert f"{diagnostic}: {bad.as_posix()}" in result.stderr
+    assert "1 of 6 Mach-O file(s) failed" in result.stderr
+
+
+def test_macos_signer_selects_every_macho_and_audits_before_submit() -> None:
+    """FAR-2575: selection ignores permission bits; the audit precedes the notary round trip."""
+    _step, build_run = _native_installer_step()
+
+    assert 'run_pre_smoke nested_binary_discovery bash scripts/macos/macho-inventory.sh discover "$APP"' in build_run
+    discovery_line = next(line for line in build_run.splitlines() if "run_pre_smoke nested_binary_discovery" in line)
+    assert "-perm" not in discovery_line
+    # The signer still consumes exactly the discovery output.
+    assert 'done < "$DATA/pre-smoke-nested_binary_discovery.log"' in build_run
+
+    order = [
+        "run_pre_smoke nested_binary_discovery",
+        'run_pre_smoke "nested_binary_${binary_index}"',
+        "run_pre_smoke app_codesign codesign",
+        "run_pre_smoke app_codesign_verify codesign",
+        'run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"',
+        "run_pre_smoke dmg_create bash -c",
+        "run_pre_smoke dmg_codesign codesign",
+        "run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh",
+    ]
+    positions = [build_run.index(command) for command in order]
+    assert positions == sorted(positions)
+
+
+def test_macos_nested_signer_keeps_its_fail_closed_classification() -> None:
+    """FAR-2575 must not loosen the per-file classification of selected binaries."""
+    _step, build_run = _native_installer_step()
+    start = build_run.index('run_pre_smoke "nested_binary_${binary_index}"')
+    signer = build_run[start : build_run.index("run_pre_smoke app_codesign codesign")]
+
+    assert '*"Mach-O 64-bit dynamically linked shared library $MACOS_ARCH"*' in signer
+    assert '*"Mach-O 64-bit bundle $MACOS_ARCH"*' in signer
+    assert "--force --options runtime --timestamp --sign" in signer
+    assert re.search(r'printf "unexpected Mach-O architecture: %s \(%s\)\\n" "\$binary" "\$kind" >&2\s+exit 1', signer)
+    assert re.search(r'printf "unexpected executable type: %s \(%s\)\\n" "\$binary" "\$kind" >&2\s+exit 1', signer)
+
+
+def test_macos_contract_gates_the_macho_inventory_helper() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build"]["steps"]
+    contract = next(step["run"] for step in steps if step.get("name") == "Validate workflow contract")
+
+    assert "test -x scripts/macos/macho-inventory.sh" in contract
+    assert "shellcheck scripts/macos/macho-inventory.sh" in contract
+    assert "bash -n scripts/macos/macho-inventory.sh" in contract
