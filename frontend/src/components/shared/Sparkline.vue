@@ -6,7 +6,10 @@
          coordinate system is scaled non-uniformly (X and Y scale factors
          differ). That's fine for the line/fill but silently squashes and
          stretches text glyphs into unreadable garbage. HTML text outside the
-         svg always renders 1:1 regardless of the chart's internal scale. -->
+         svg always renders 1:1 regardless of the chart's internal scale.
+         The no-data state below is HTML for the same reason — it used to be an
+         svg <text>, which the non-uniform scale squashed into a stretched mess
+         whenever the card box did not match the viewBox aspect ratio. -->
     <div
       v-if="showYAxis && hasData"
       class="flex shrink-0 flex-col justify-between pr-1.5 text-right"
@@ -29,6 +32,7 @@
       @pointerleave="onPointerLeave"
     >
       <svg
+        v-if="hasData"
         :viewBox="`0 0 ${width} ${height}`"
         class="h-full w-full overflow-hidden"
         preserveAspectRatio="none"
@@ -41,83 +45,71 @@
             <stop offset="100%" :stop-color="color" stop-opacity="0" />
           </linearGradient>
         </defs>
-        <template v-if="hasData">
-          <polygon
-              v-for="(points, segmentIndex) in areaPointSegments"
-              :key="`area-${segmentIndex}`"
-              :fill="`url(#${gradientId})`"
-              :points="points"
-            />
-          <polyline
-            v-for="(points, segmentIndex) in linePointSegments"
-              :key="`line-${segmentIndex}`"
-              fill="none"
-              :stroke="color"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            :points="points"
-          />
-          <!-- Endpoint marker: a <circle r="2.5"> would be stretched into a
-               flat dash by the non-uniform preserveAspectRatio="none" scale.
-               A zero-length path with a round linecap renders a uniform dot
-               (diameter = stroke width), and vector-effect="non-scaling-stroke"
-               keeps the stroke width in screen pixels so the dot stays round
-               regardless of the chart's X/Y scale factors. -->
-          <path
-            v-if="lastPoint"
-            data-testid="sparkline-endpoint"
-            :d="`M ${xFor(lastPoint.index)} ${yFor(lastPoint.value)} l 0 0`"
-            :stroke="color"
-            stroke-width="5"
-            stroke-linecap="round"
-            fill="none"
-            vector-effect="non-scaling-stroke"
-          />
-          <!-- X-axis ticks: plain vertical lines, no text — a squashed short
-               line still reads fine as a tick mark, so it's safe to leave
-               inside the non-uniformly-scaled svg. -->
-          <template v-if="showXTicks">
-            <line
-              v-for="ti in xTickIndices"
-              :key="'xtick-' + ti"
-              class="sparkline-x-tick"
-              :x1="xFor(ti)"
-              :y1="height - padding"
-              :x2="xFor(ti)"
-              :y2="height - padding - 2"
-              :stroke="color"
-              stroke-opacity="0.5"
-              stroke-width="1"
-            />
-          </template>
-        </template>
-        <!-- Muted placeholder when there are fewer than two real data points — a
-             fabricated line would read as a misleading zero/flat trend. -->
-        <template v-else>
+        <polygon
+          v-for="(points, segmentIndex) in areaPointSegments"
+          :key="`area-${segmentIndex}`"
+          :fill="`url(#${gradientId})`"
+          :points="points"
+        />
+        <polyline
+          v-for="(points, segmentIndex) in linePointSegments"
+          :key="`line-${segmentIndex}`"
+          fill="none"
+          :stroke="color"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          :points="points"
+        />
+        <!-- Endpoint marker: a <circle r="2.5"> would be stretched into a
+             flat dash by the non-uniform preserveAspectRatio="none" scale.
+             A zero-length path with a round linecap renders a uniform dot
+             (diameter = stroke width), and vector-effect="non-scaling-stroke"
+             keeps the stroke width in screen pixels so the dot stays round
+             regardless of the chart's X/Y scale factors. -->
+        <path
+          v-if="lastPoint"
+          data-testid="sparkline-endpoint"
+          :d="`M ${xFor(lastPoint.index)} ${yFor(lastPoint.value)} l 0 0`"
+          :stroke="color"
+          stroke-width="5"
+          stroke-linecap="round"
+          fill="none"
+          vector-effect="non-scaling-stroke"
+        />
+        <!-- X-axis ticks: plain vertical lines, no text — a squashed short
+             line still reads fine as a tick mark, so it's safe to leave
+             inside the non-uniformly-scaled svg. -->
+        <template v-if="showXTicks">
           <line
-            :x1="padding"
-            :y1="height / 2"
-            :x2="width - padding"
-            :y2="height / 2"
+            v-for="ti in xTickIndices"
+            :key="'xtick-' + ti"
+            class="sparkline-x-tick"
+            :x1="xFor(ti)"
+            :y1="height - padding"
+            :x2="xFor(ti)"
+            :y2="height - padding - 2"
             :stroke="color"
-            stroke-opacity="0.25"
-            stroke-dasharray="3 3"
+            stroke-opacity="0.5"
+            stroke-width="1"
           />
-          <text
-            :x="width / 2"
-            :y="height / 2"
-            text-anchor="middle"
-            dominant-baseline="middle"
-            font-size="10"
-            :fill="color"
-            fill-opacity="0.5"
-            class="sparkline-no-data"
-          >
-            {{ t('components.Sparkline.no_data') }}
-          </text>
         </template>
       </svg>
+      <!-- Empty state when there are fewer than two real data points: a
+           fabricated line would read as a misleading zero/flat trend, and an
+           svg <text> would be squashed by the non-uniform scale above. Plain
+           HTML text plus the dashed-box treatment used elsewhere on the
+           dashboard; role="img" + aria-label keeps the same assistive-tech
+           announcement the svg carried. -->
+      <div
+        v-else
+        class="flex h-full w-full items-center justify-center rounded-md border border-dashed border-border px-2 text-center text-xs text-muted-foreground"
+        role="img"
+        :aria-label="accessibleLabel"
+        data-testid="sparkline-no-data"
+      >
+        {{ t('components.Sparkline.no_data') }}
+      </div>
 
       <!-- Hover tooltip: the accessible label on the svg already carries the full
            series, so the tooltip is supplementary and hidden from AT to avoid
