@@ -29,11 +29,11 @@
       <section class="space-y-3" aria-labelledby="evidence-artifacts-heading">
         <div class="flex items-center justify-between"><h2 id="evidence-artifacts-heading" class="text-lg font-semibold">{{ $t('views.EvidenceIndexView.artifacts_title') }}</h2><span aria-live="polite" class="text-sm text-muted-foreground">{{ store.index.artifacts.length }}</span></div>
         <EmptyState v-if="!store.index.artifacts.length" :title="$t('views.EvidenceIndexView.empty_title')" :description="$t('views.EvidenceIndexView.empty_description')" />
-        <DataCard v-else padding="none" elevation="sm" card-class="overflow-x-auto">
-          <table class="w-full text-left text-sm"><thead><tr class="border-b bg-muted/50"><th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceIndexView.col_type') }}</th><th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceIndexView.col_status') }}</th><th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceIndexView.col_provenance') }}</th><th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceIndexView.col_records') }}</th><th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceIndexView.col_location') }}</th></tr></thead>
-            <tbody><tr v-for="artifact in store.index.artifacts" :key="artifact.artifact_type" class="border-b last:border-b-0 align-top"><td class="px-3 py-2 font-medium">{{ artifact.artifact_type }}</td><td class="px-3 py-2"><span class="rounded-full bg-muted px-2 py-1 text-xs">{{ artifact.status }}</span><div v-if="artifact.absence_reason" class="mt-1 text-xs text-muted-foreground">{{ artifact.absence_reason }}</div></td><td class="px-3 py-2">{{ artifact.provenance }}</td><td class="px-3 py-2">{{ artifact.record_count ?? '—' }}</td><td class="max-w-sm break-words px-3 py-2 font-mono text-xs">{{ artifact.location }}</td></tr></tbody>
+        <div v-else class="table-wrapper">
+          <table class="w-full text-left text-sm"><thead><tr><th scope="col" class="table-header">{{ $t('views.EvidenceIndexView.col_type') }}</th><th scope="col" class="table-header">{{ $t('views.EvidenceIndexView.col_status') }}</th><th scope="col" class="table-header">{{ $t('views.EvidenceIndexView.col_provenance') }}</th><th scope="col" class="table-header">{{ $t('views.EvidenceIndexView.col_records') }}</th><th scope="col" class="table-header">{{ $t('views.EvidenceIndexView.col_location') }}</th></tr></thead>
+            <tbody class="divide-y divide-border"><tr v-for="artifact in store.index.artifacts" :key="artifact.artifact_type" class="align-top"><td class="table-cell font-medium">{{ artifact.artifact_type }}</td><td class="table-cell"><span class="rounded-full bg-muted px-2 py-1 text-xs">{{ artifact.status }}</span><div v-if="artifact.absence_reason" class="mt-1 text-xs text-muted-foreground">{{ artifact.absence_reason }}</div></td><td class="table-cell">{{ artifact.provenance }}</td><td class="table-cell">{{ artifact.record_count ?? '—' }}</td><td class="table-cell max-w-sm break-words font-mono text-xs">{{ artifact.location }}</td></tr></tbody>
           </table>
-        </DataCard>
+        </div>
       </section>
       <p v-if="store.index.missing_artifact_types.length" aria-live="polite" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{{ $t('views.EvidenceIndexView.missing', { count: store.index.missing_artifact_types.length }) }}</p>
     </template>
@@ -46,7 +46,6 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import DataCard from '../components/ui/DataCard.vue'
 import { useEvidenceStore } from '../stores/evidence'
 
 const store = useEvidenceStore()

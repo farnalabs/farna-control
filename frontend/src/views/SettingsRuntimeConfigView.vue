@@ -41,26 +41,26 @@
       :description="$t('views.SettingsRuntimeConfigView.no_config_entries_description')"
     />
 
-    <div v-else-if="!featureRequired" class="rounded-lg border overflow-x-auto">
+    <div v-else-if="!featureRequired" class="table-wrapper">
       <table class="w-full">
         <thead>
-          <tr class="border-b text-left text-sm font-medium text-muted-foreground">
-            <th class="px-4 py-3">{{ $t('views.SettingsRuntimeConfigView.key') }}</th>
-            <th class="px-4 py-3">{{ $t('views.SettingsRuntimeConfigView.current_value') }}</th>
-            <th class="px-4 py-3">{{ $t('views.SettingsRuntimeConfigView.expected_env') }}</th>
-            <th class="px-4 py-3">{{ $t('views.SettingsRuntimeConfigView.default') }}</th>
-            <th class="px-4 py-3">{{ $t('views.SettingsRuntimeConfigView.provenance') }}</th>
-            <th class="px-4 py-3">{{ $t('views.SettingsRuntimeConfigView.actions') }}</th>
+          <tr>
+            <th class="table-header">{{ $t('views.SettingsRuntimeConfigView.key') }}</th>
+            <th class="table-header">{{ $t('views.SettingsRuntimeConfigView.current_value') }}</th>
+            <th class="table-header">{{ $t('views.SettingsRuntimeConfigView.expected_env') }}</th>
+            <th class="table-header">{{ $t('views.SettingsRuntimeConfigView.default') }}</th>
+            <th class="table-header">{{ $t('views.SettingsRuntimeConfigView.provenance') }}</th>
+            <th class="table-header">{{ $t('views.SettingsRuntimeConfigView.actions') }}</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="divide-y divide-border">
             <tr
               v-for="entry in items"
               :key="entry.key"
-              class="border-b last:border-0 hover:bg-muted/50 transition-colors"
+              class="hover:bg-muted/50 transition-colors"
               :class="{ 'bg-warning/5': entryHasDrift(entry) }"
             >
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <div class="flex items-center gap-2">
                   <AlertTriangle v-if="entryHasDrift(entry)" class="h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" focusable="false" />
                   <span v-if="entryHasDrift(entry)" class="sr-only">{{ $t('views.SettingsRuntimeConfigView.value_differs_from_environment') }}</span>
@@ -81,7 +81,7 @@
               </div>
             </td>
 
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <template v-if="isKeySensitive(entry.key) && !revealedKeys.has(entry.key)">
                 <div class="flex items-center gap-2">
                   <code class="text-sm font-mono">********</code>
@@ -110,7 +110,7 @@
               </template>
             </td>
 
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <template v-if="isKeySensitive(entry.key) && !revealedKeys.has(entry.key)">
                 <div class="flex items-center gap-2">
                   <code class="text-sm font-mono text-muted-foreground">********</code>
@@ -129,7 +129,7 @@
               </code>
             </td>
 
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <template v-if="isKeySensitive(entry.key) && !revealedKeys.has(entry.key)">
                 <div class="flex items-center gap-2">
                   <code class="text-sm text-muted-foreground">********</code>
@@ -148,13 +148,13 @@
               </code>
             </td>
 
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <span :class="provenanceBadgeClass(entry.provenance)">
                 {{ entry.provenance }}
               </span>
             </td>
 
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <button
                 type="button"
                 v-if="isEdited(entry.key)"

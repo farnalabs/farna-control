@@ -202,7 +202,7 @@
                 :description="$t('views.AdminRunRetentionView.no_runs_match_change_filters')"
               />
             </div>
-          <div v-else class="max-h-96 overflow-auto rounded-lg border" data-testid="admin-run-retention-candidates-table">
+          <div v-else class="table-wrapper max-h-96 overflow-y-auto" data-testid="admin-run-retention-candidates-table">
             <table class="w-full">
               <thead>
                 <tr>
@@ -213,7 +213,7 @@
                   <th class="table-header">{{ $t('views.AdminRunRetentionView.col_run_id') }}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y">
+              <tbody class="divide-y divide-border">
                 <tr v-for="run in candidates" :key="run.id">
                   <td class="table-cell">
                     <span :class="statusBadge(run.status.toLowerCase())" class="rounded px-2 py-0.5 text-xs font-medium capitalize">{{ run.status }}</span>

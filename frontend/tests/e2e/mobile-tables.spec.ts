@@ -66,3 +66,92 @@ test.describe('Mobile tables (390px)', () => {
     expect(geometry.docScrollWidth).toBeLessThanOrEqual(geometry.viewport)
   })
 })
+
+// FAR-2584: the unified table system. Every table scrolls horizontally inside
+// the same hairline shell while the page keeps scrolling vertically, uses the
+// same 16px cell padding, and lists sit at the page width with the page rhythm
+// between a filter card and the table.
+test.describe('Table system (FAR-2584)', () => {
+  test('the page still scrolls when the wheel is over a horizontally scrolling table', { tag: '@regression' }, async ({ page, env }) => {
+    test.skip(env.name !== 'local', 'needs the mocked dashboard summary with seeded teams')
+    await loginAsAdmin(page, env)
+    await page.setViewportSize({ width: 390, height: 420 })
+    await page.goto('/')
+
+    const scroll = page.locator('[data-scroll="team-breakdown"]')
+    await expect(scroll).toBeVisible()
+
+    const behaviour = await scroll.evaluate((el) => {
+      const style = getComputedStyle(el)
+      return {
+        x: style.overscrollBehaviorX,
+        y: style.overscrollBehaviorY,
+      }
+    })
+    // Only horizontal overscroll is contained. The both-axes shorthand here
+    // swallowed the vertical wheel and froze the page.
+    expect(behaviour.x).toBe('contain')
+    expect(behaviour.y).toBe('auto')
+
+    const before = await page.evaluate(() => {
+      const main = document.querySelector('main[data-main-landmark]') as HTMLElement
+      return main.scrollTop
+    })
+    await scroll.hover()
+    await page.mouse.wheel(0, 600)
+    await page.waitForFunction(
+      (top) => (document.querySelector('main[data-main-landmark]') as HTMLElement).scrollTop > top,
+      before,
+    )
+  })
+
+  test('Team Breakdown cells carry the canonical 16px horizontal padding', { tag: '@regression' }, async ({ page, env }) => {
+    test.skip(env.name !== 'local', 'needs the mocked dashboard summary with seeded teams')
+    await loginAsAdmin(page, env)
+    await page.goto('/')
+
+    const padding = await page.evaluate(() => {
+      const header = document.querySelector('[data-scroll="team-breakdown"] thead th') as HTMLElement
+      const cell = document.querySelector('[data-scroll="team-breakdown"] tbody tr td') as HTMLElement
+      return {
+        headerLeft: getComputedStyle(header).paddingLeft,
+        cellLeft: getComputedStyle(cell).paddingLeft,
+      }
+    })
+    expect(padding.headerLeft).toBe('16px')
+    expect(padding.cellLeft).toBe('16px')
+  })
+
+  test('Notification Preferences uses the full page width', { tag: '@regression' }, async ({ page, env }) => {
+    test.skip(env.name !== 'local', 'needs the mocked notification-preferences response')
+    await loginAsAdmin(page, env)
+    await page.goto('/settings/notifications')
+
+    const widths = await page.evaluate(() => {
+      const pageEl = document.querySelector('.page-wide') as HTMLElement
+      const card = document.querySelector('.page-wide .card') as HTMLElement
+      return {
+        page: pageEl.getBoundingClientRect().width,
+        card: card.getBoundingClientRect().width,
+        pagePadding: parseFloat(getComputedStyle(pageEl).paddingLeft),
+      }
+    })
+    // The card spans the page content box (page width minus its two paddings),
+    // not a narrower max-w-3xl column.
+    expect(Math.abs(widths.card - (widths.page - 2 * widths.pagePadding))).toBeLessThanOrEqual(1)
+  })
+
+  test('Audit Log keeps the page rhythm between the filter card and the table', { tag: '@regression' }, async ({ page, env }) => {
+    test.skip(env.name !== 'local', 'needs the mocked audit ledger response')
+    await loginAsAdmin(page, env)
+    await page.goto('/admin/audit')
+
+    const gap = await page.evaluate(() => {
+      const panel = document.querySelector('#admin-audit-source-org') as HTMLElement
+      const card = panel.querySelector('.card') as HTMLElement
+      const table = panel.querySelector('.table-wrapper') as HTMLElement
+      return table.getBoundingClientRect().top - card.getBoundingClientRect().bottom
+    })
+    expect(gap).toBeGreaterThanOrEqual(12)
+  })
+})

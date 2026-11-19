@@ -130,31 +130,31 @@
         {{ $t('views.EvidenceView.row_count', { count: rows.length }) }}
       </p>
       <p class="text-xs text-muted-foreground">{{ $t('views.EvidenceView.redaction_note') }}</p>
-      <DataCard padding="none" elevation="sm" card-class="overflow-x-auto">
+      <div class="table-wrapper">
         <table class="w-full text-left text-sm">
           <thead>
-            <tr class="border-b bg-muted/50">
-              <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceView.col_key') }}</th>
-              <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceView.col_subject') }}</th>
-              <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceView.col_observed') }}</th>
-              <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.EvidenceView.col_value') }}</th>
+            <tr>
+              <th scope="col" class="table-header">{{ $t('views.EvidenceView.col_key') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.EvidenceView.col_subject') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.EvidenceView.col_observed') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.EvidenceView.col_value') }}</th>
             </tr>
           </thead>
-          <tbody>
-            <tr v-for="row in rows" :key="row.id" class="border-b last:border-b-0 align-top">
-              <td class="px-3 py-2 font-mono text-xs">{{ row.key }}</td>
-              <td class="px-3 py-2">
+          <tbody class="divide-y divide-border">
+            <tr v-for="row in rows" :key="row.id" class="align-top">
+              <td class="table-cell font-mono text-xs">{{ row.key }}</td>
+              <td class="table-cell">
                 <div>{{ row.subject_type }}</div>
                 <div class="font-mono text-xs text-muted-foreground">{{ row.subject_id }}</div>
               </td>
-              <td class="px-3 py-2 text-xs">{{ row.observed_at }}</td>
-              <td class="px-3 py-2">
+              <td class="table-cell text-xs">{{ row.observed_at }}</td>
+              <td class="table-cell">
                 <pre class="max-w-xl whitespace-pre-wrap break-words font-mono text-xs">{{ formatValue(row.value) }}</pre>
               </td>
             </tr>
           </tbody>
         </table>
-      </DataCard>
+      </div>
     </div>
   </div>
 </template>
@@ -167,7 +167,6 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { fetchRuns, type RunListItem } from '../lib/api/runs'

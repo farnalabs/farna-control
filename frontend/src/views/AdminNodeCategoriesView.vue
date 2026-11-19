@@ -40,27 +40,27 @@
         </p>
       </div>
 
-      <div v-if="categories.length > 0" class="overflow-hidden rounded-lg border">
+      <div v-if="categories.length > 0" class="table-wrapper">
         <table class="w-full text-left text-sm">
-          <thead class="bg-muted/50">
+          <thead>
             <tr>
-              <th class="px-4 py-3 font-medium">{{ $t('views.AdminNodeCategoriesView.name') }}</th>
-              <th class="px-4 py-3 font-medium">{{ $t('views.AdminNodeCategoriesView.description') }}</th>
-              <th class="px-4 py-3 font-medium">{{ $t('views.AdminNodeCategoriesView.color') }}</th>
-              <th class="px-4 py-3 font-medium">{{ $t('views.AdminNodeCategoriesView.icon') }}</th>
-              <th class="px-4 py-3 font-medium">{{ $t('views.AdminNodeCategoriesView.sort_order') }}</th>
-              <th class="px-4 py-3 font-medium text-right">{{ $t('views.AdminNodeCategoriesView.actions') }}</th>
+              <th class="table-header">{{ $t('views.AdminNodeCategoriesView.name') }}</th>
+              <th class="table-header">{{ $t('views.AdminNodeCategoriesView.description') }}</th>
+              <th class="table-header">{{ $t('views.AdminNodeCategoriesView.color') }}</th>
+              <th class="table-header">{{ $t('views.AdminNodeCategoriesView.icon') }}</th>
+              <th class="table-header">{{ $t('views.AdminNodeCategoriesView.sort_order') }}</th>
+              <th class="table-header table-cell-numeric">{{ $t('views.AdminNodeCategoriesView.actions') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <tr
               v-for="cat in categories"
               :key="cat.id"
               class="hover:bg-muted/30 transition-colors"
             >
-              <td class="px-4 py-3 font-medium">{{ cat.name }}</td>
-              <td class="px-4 py-3 text-muted-foreground">{{ cat.description || '—' }}</td>
-              <td class="px-4 py-3">
+              <td class="table-cell font-medium">{{ cat.name }}</td>
+              <td class="table-cell text-muted-foreground">{{ cat.description || '—' }}</td>
+              <td class="table-cell">
                 <span class="inline-flex items-center gap-2">
                   <span
                     class="inline-block h-5 w-5 rounded-full border border-border"
@@ -70,15 +70,15 @@
                   <span class="font-mono text-xs text-muted-foreground">{{ cat.color || '#6366f1' }}</span>
                 </span>
               </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <span v-if="cat.icon" class="inline-flex items-center gap-1.5">
                   <span class="h-4 w-4 text-muted-foreground" v-html="iconSvg(cat.icon)" aria-hidden="true" />
                   {{ cat.icon }}
                 </span>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
-              <td class="px-4 py-3">{{ cat.sort_order }}</td>
-              <td class="px-4 py-3 text-right">
+              <td class="table-cell">{{ cat.sort_order }}</td>
+              <td class="table-cell-numeric">
                 <TableActions :actions="categoryActions(cat)" />
               </td>
             </tr>

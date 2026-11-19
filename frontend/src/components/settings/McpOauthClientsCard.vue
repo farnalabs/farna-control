@@ -51,32 +51,32 @@
           {{ $t('views.SettingsMcpView.no_oauth_clients_registered_yet') }}
         </div>
 
-        <div v-else class="overflow-x-auto">
+        <div v-else class="table-wrapper">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b text-left text-muted-foreground">
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.name') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.client_id') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.scopes') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.redirect_uris') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.created') }}</th>
-                <th class="pb-2 font-medium" />
+              <tr>
+                <th class="table-header">{{ $t('views.SettingsMcpView.name') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.client_id') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.scopes') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.redirect_uris') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.created') }}</th>
+                <th class="table-header" />
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
               <tr v-for="client in clients" :key="client.id" class="transition-colors hover:bg-muted/20">
-                <td class="py-2.5 font-medium">{{ client.name }}</td>
-                <td class="py-2.5 font-mono text-muted-foreground">{{ client.client_id }}</td>
-                <td class="py-2.5">
+                <td class="table-cell font-medium">{{ client.name }}</td>
+                <td class="table-cell font-mono text-muted-foreground">{{ client.client_id }}</td>
+                <td class="table-cell">
                   <span
                     v-for="scope in client.scopes"
                     :key="scope"
                     class="mr-1 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
                   >{{ scope }}</span>
                 </td>
-                <td class="max-w-xs py-2.5 font-mono text-xs break-all text-muted-foreground">{{ client.redirect_uris.join(', ') }}</td>
-                <td class="py-2.5 text-muted-foreground">{{ formatDate(client.created_at) }}</td>
-                <td class="py-2.5 text-right">
+                <td class="table-cell max-w-xs font-mono text-xs break-all text-muted-foreground">{{ client.redirect_uris.join(', ') }}</td>
+                <td class="table-cell text-muted-foreground">{{ formatDate(client.created_at) }}</td>
+                <td class="table-cell-numeric">
                   <Button severity="danger" size="small" data-testid="settings-mcp-revoke-oauth-client" @click="confirmRevokeOauth(client)">
                     {{ $t('views.SettingsMcpView.revoke') }}
                   </Button>

@@ -192,22 +192,22 @@
 
       <div
         v-else-if="rules.length > 0"
-        class="overflow-x-auto rounded-lg border"
+        class="table-wrapper"
         data-testid="admin-evidence-redaction-table"
       >
         <table class="w-full text-left text-sm">
-          <thead class="bg-muted/50">
+          <thead>
             <tr>
-              <th scope="col" class="px-4 py-3 font-medium">{{ $t('views.AdminEvidenceRedaction.col_key_pattern') }}</th>
-              <th scope="col" class="px-4 py-3 font-medium">{{ $t('views.AdminEvidenceRedaction.col_role') }}</th>
-              <th scope="col" class="px-4 py-3 font-medium">{{ $t('views.AdminEvidenceRedaction.col_redacted_fields') }}</th>
-              <th scope="col" class="px-4 py-3 font-medium">{{ $t('views.AdminEvidenceRedaction.col_updated') }}</th>
-              <th scope="col" class="px-4 py-3 text-right font-medium">{{ $t('views.AdminEvidenceRedaction.col_actions') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.AdminEvidenceRedaction.col_key_pattern') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.AdminEvidenceRedaction.col_role') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.AdminEvidenceRedaction.col_redacted_fields') }}</th>
+              <th scope="col" class="table-header">{{ $t('views.AdminEvidenceRedaction.col_updated') }}</th>
+              <th scope="col" class="table-header table-cell-numeric">{{ $t('views.AdminEvidenceRedaction.col_actions') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <tr v-for="rule in rules" :key="rule.id" class="hover:bg-muted/30 transition-colors">
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <span class="inline-flex flex-wrap items-center gap-2">
                   <code class="font-mono text-xs">{{ rule.key_pattern }}</code>
                   <span
@@ -219,8 +219,8 @@
                   </span>
                 </span>
               </td>
-              <td class="px-4 py-3">{{ roleLabel(rule.role) }}</td>
-              <td class="px-4 py-3">
+              <td class="table-cell">{{ roleLabel(rule.role) }}</td>
+              <td class="table-cell">
                 <span v-if="rule.redacted_fields.length === 0" class="text-muted-foreground">—</span>
                 <span v-else class="inline-flex flex-wrap gap-1.5">
                   <span
@@ -232,8 +232,8 @@
                   </span>
                 </span>
               </td>
-              <td class="px-4 py-3 text-muted-foreground">{{ formatDateShort(rule.updated_at) }}</td>
-              <td class="px-4 py-3 text-right">
+              <td class="table-cell text-muted-foreground">{{ formatDateShort(rule.updated_at) }}</td>
+              <td class="table-cell-numeric">
                 <button
                   type="button"
                   class="rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-60"

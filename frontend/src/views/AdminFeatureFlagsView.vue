@@ -118,7 +118,7 @@
         @update:search="searchQuery = $event"
       />
 
-      <div v-if="loading" aria-hidden="true" class="card mb-6 overflow-hidden">
+      <div v-if="loading" aria-hidden="true" class="table-wrapper mb-6">
         <div class="border-b bg-muted/30 px-4 py-2">
           <div class="h-4 w-32 rounded bg-muted/50" />
         </div>
@@ -154,7 +154,7 @@
           <div
               v-for="section in paginatedGroups"
               :key="section.tier"
-              class="card mb-6 overflow-hidden"
+              class="table-wrapper mb-6"
             >
               <div class="border-b bg-muted/30 px-4 py-2">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">

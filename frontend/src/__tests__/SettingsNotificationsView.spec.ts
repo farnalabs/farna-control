@@ -512,3 +512,40 @@ describe('SettingsNotificationsView', () => {
     }
   })
 })
+
+describe('SettingsNotificationsView — full-width table-style surface (FAR-2584)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    okPut()
+  })
+
+  it('renders the setting groups across the full page width', async () => {
+    okGet({
+      dashboard_level: 'warning',
+      notification_opt_outs: { 'hitl.awaiting': false, 'run.failed': false },
+    })
+    const wrapper = await mountView()
+
+    const cards = wrapper.findAll('.card')
+    expect(cards.length).toBeGreaterThan(0)
+    for (const card of cards) {
+      // the old `max-w-3xl` card class made this page read as a narrower,
+      // different table than every other settings list
+      expect(card.classes()).not.toContain('max-w-3xl')
+    }
+  })
+
+  it('keeps every toggle row a real switch after the width change', async () => {
+    okGet({
+      dashboard_level: 'warning',
+      notification_opt_outs: { 'hitl.awaiting': false, 'run.failed': false },
+    })
+    const wrapper = await mountView()
+
+    expect(switches(wrapper)).toHaveLength(2)
+    for (const toggle of switches(wrapper)) {
+      expect(toggle.attributes('role')).toBe('switch')
+      expect(toggle.attributes('aria-label')).toBeTruthy()
+    }
+  })
+})

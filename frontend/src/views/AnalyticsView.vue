@@ -121,20 +121,20 @@
               <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-base font-semibold">{{ $t('views.AnalyticsView.trend_table_title') }}</h2>
               </div>
-              <div class="overflow-x-auto">
+              <div class="table-wrapper">
                 <table class="w-full text-sm">
                   <thead>
-                    <tr class="border-b text-left text-muted-foreground">
-                      <th class="pb-2 font-medium">{{ $t('views.AnalyticsView.bucket_label') }}</th>
-                      <th class="pb-2 text-right font-medium">{{ currentMeasureLabel }}</th>
-                      <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.delta') }}</th>
+                    <tr>
+                      <th class="table-header">{{ $t('views.AnalyticsView.bucket_label') }}</th>
+                      <th class="table-header table-cell-numeric">{{ currentMeasureLabel }}</th>
+                      <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.delta') }}</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr v-for="row in tableRows" :key="row.label" class="border-b last:border-0">
-                      <td class="py-2.5 font-medium tabular-nums">{{ row.label }}</td>
-                      <td class="py-2.5 text-right tabular-nums">{{ row.formatted }}</td>
-                      <td class="py-2.5 text-right">
+                  <tbody class="divide-y divide-border">
+                    <tr v-for="row in tableRows" :key="row.label">
+                      <td class="table-cell font-medium tabular-nums">{{ row.label }}</td>
+                      <td class="table-cell-numeric">{{ row.formatted }}</td>
+                      <td class="table-cell-numeric">
                         <span
                           v-if="row.direction"
                           :class="arrowClass(row.direction)"

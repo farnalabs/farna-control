@@ -1133,3 +1133,58 @@ describe('DashboardView branches — team breakdown mobile overflow', () => {
     wrapper.unmount()
   })
 })
+
+// ── Team Breakdown canonical shell (FAR-2584) ───────────────────────────
+describe('DashboardView branches — team breakdown canonical table shell', () => {
+  async function mountTeamBreakdown() {
+    const teamSummaryData = {
+      ...mockSummaryData,
+      teams: [
+        {
+          id: 'team-a',
+          name: 'Alpha Team',
+          total_runs: 80,
+          active_pipelines: 4,
+          run_counts_by_status: { running: 2, awaiting_human: 1, failed: 3, idle: 7 },
+        },
+      ],
+    }
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') {
+        return Promise.resolve({ data: teamSummaryData, error: undefined })
+      }
+      if (url === '/api/v1/plan') return Promise.resolve({ data: mockPlanData, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+    const { usePlanStore } = await import('../stores/planStore')
+    setActivePinia(createPinia())
+    usePlanStore().currentTier = 'team'
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+    return wrapper
+  }
+
+  it('contains only horizontal overscroll so the page keeps scrolling vertically', async () => {
+    const wrapper = await mountTeamBreakdown()
+    const scroll = wrapper.get('[data-scroll="team-breakdown"]')
+
+    expect(scroll.classes()).toContain('overscroll-x-contain')
+    expect(scroll.classes()).not.toContain('overscroll-contain')
+
+    wrapper.unmount()
+  })
+
+  it('gives the Team column the canonical horizontal cell padding as the other tables', async () => {
+    const wrapper = await mountTeamBreakdown()
+    const headerCells = wrapper.findAll('[data-scroll="team-breakdown"] thead th')
+    const firstBodyCells = wrapper.findAll('[data-scroll="team-breakdown"] tbody tr td:first-child')
+
+    // `.table-header` / `.table-cell` carry the 16px (px-4) horizontal
+    // padding; the Team column previously had vertical-only padding and sat
+    // flush against the card edge.
+    expect(headerCells[0].classes()).toContain('table-header')
+    expect(firstBodyCells[0].classes()).toContain('table-cell')
+
+    wrapper.unmount()
+  })
+})

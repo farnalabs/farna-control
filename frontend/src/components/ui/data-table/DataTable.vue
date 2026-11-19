@@ -141,21 +141,22 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
      and aria-label gives that region its accessible name (S6845). tabindex="0" makes
      it a focus stop so users can scroll with arrow keys when no cell is focusable.
      Both are required by accessibility tests. -->
-    <div
-      class="max-w-full overflow-x-auto overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-      role="region"
-      tabindex="0"
-      :aria-label="t('components.DataTable.scroll_region_label')"
-      :aria-describedby="scrollInstructionsId"
-    >
-      <table :class="cn('w-full min-w-max', props.fit && 'table-auto lg:min-w-0 lg:table-fixed')">
+    <div class="table-wrapper">
+      <div
+        class="max-w-full overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        role="region"
+        tabindex="0"
+        :aria-label="t('components.DataTable.scroll_region_label')"
+        :aria-describedby="scrollInstructionsId"
+      >
+        <table v-if="!showEmpty" :class="cn('w-full min-w-max', props.fit && 'table-auto lg:min-w-0 lg:table-fixed')">
       <thead>
         <tr>
           <th
             v-for="col in columns"
             :key="col.key"
             :class="cn(
-              'px-4 py-3 text-xs font-medium uppercase tracking-wider text-left',
+              'table-header',
               col.numeric && 'text-right tabular-nums',
               col.sortable && 'cursor-pointer select-none hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               sortColumn === col.key ? 'text-foreground' : 'text-muted-foreground',
@@ -189,7 +190,7 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
           <td
             v-for="col in columns"
             :key="col.key"
-            :class="cn('px-4 py-3', col.numeric && 'text-right', hideBelowClass(col))"
+            :class="cn('table-cell', col.numeric && 'text-right tabular-nums', hideBelowClass(col))"
             :style="col.width ? { width: col.width } : undefined"
           >
             <div class="h-4 animate-pulse rounded bg-muted" :style="{ width: `${30 + (i * 7) % 50}%` }" />
@@ -211,7 +212,7 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
             v-for="col in columns"
             :key="col.key"
             :class="cn(
-              'px-4 py-3 text-sm',
+              'table-cell',
               col.numeric && 'text-right tabular-nums',
               hideBelowClass(col),
             )"
@@ -223,19 +224,22 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
           </td>
         </tr>
       </tbody>
-    </table>
-    </div>
-    <!-- FAR-2539: the empty state lives OUTSIDE the horizontally scrolling
-         region. Inside the table it took the table's min-w-max scroll width
-         (wider than a phone) and sat under the scroll-edge fade mask. -->
-    <div
-      v-if="showEmpty"
-      data-table-part="empty"
-      class="w-full min-w-0 px-4 py-8 text-center text-sm text-muted-foreground"
-    >
-      <slot name="empty">
-        No data available.
-      </slot>
+        </table>
+      </div>
+      <!-- FAR-2539: the empty state lives OUTSIDE the horizontally scrolling
+           region (inside it, it took the table's min-w-max scroll width -
+           wider than a phone - and sat under the scroll-edge fade mask) but
+           inside the canonical shell so an empty table keeps the same
+           surface as a populated one. -->
+      <div
+        v-if="showEmpty"
+        data-table-part="empty"
+        class="table-empty"
+      >
+        <slot name="empty">
+          No data available.
+        </slot>
+      </div>
     </div>
   </div>
 </template>

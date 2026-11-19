@@ -42,34 +42,32 @@
     </p>
 
     <template v-else>
-      <div class="mt-3 overflow-x-auto">
+      <div class="table-wrapper mt-3">
         <table data-testid="run-attempt-history-table" class="w-full text-left text-sm">
           <caption class="sr-only">{{ $t('components.RunAttemptHistory.table_caption') }}</caption>
           <thead>
-            <tr class="border-b text-xs uppercase tracking-wide text-muted-foreground">
-              <th scope="col" class="py-2 pr-4 font-medium">{{ $t('components.RunAttemptHistory.column_attempt') }}</th>
-              <th scope="col" class="py-2 pr-4 font-medium">{{ $t('components.RunAttemptHistory.column_started') }}</th>
-              <th scope="col" class="py-2 pr-4 font-medium">{{ $t('components.RunAttemptHistory.column_duration') }}</th>
-              <th scope="col" class="py-2 pr-4 font-medium">{{ $t('components.RunAttemptHistory.column_terminal_reason') }}</th>
-              <th scope="col" class="py-2 pr-4 font-medium">{{ $t('components.RunAttemptHistory.column_model') }}</th>
-              <th scope="col" class="py-2 font-medium">{{ $t('components.RunAttemptHistory.column_error_code') }}</th>
+            <tr>
+              <th scope="col" class="table-header">{{ $t('components.RunAttemptHistory.column_attempt') }}</th>
+              <th scope="col" class="table-header">{{ $t('components.RunAttemptHistory.column_started') }}</th>
+              <th scope="col" class="table-header">{{ $t('components.RunAttemptHistory.column_duration') }}</th>
+              <th scope="col" class="table-header">{{ $t('components.RunAttemptHistory.column_terminal_reason') }}</th>
+              <th scope="col" class="table-header">{{ $t('components.RunAttemptHistory.column_model') }}</th>
+              <th scope="col" class="table-header">{{ $t('components.RunAttemptHistory.column_error_code') }}</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody class="divide-y divide-border">
             <tr
               v-for="attempt in attempts"
               :key="attempt.attempt_index"
-              data-testid="run-attempt-history-row"
-              class="border-b border-border/60 last:border-0"
-            >
-              <th scope="row" class="py-2 pr-4 text-left font-medium tabular-nums">{{ attemptNumber(attempt.attempt_index) }}</th>
-              <td class="py-2 pr-4">
+              data-testid="run-attempt-history-row">
+              <th scope="row" class="table-cell font-medium tabular-nums">{{ attemptNumber(attempt.attempt_index) }}</th>
+              <td class="table-cell">
                 <time :datetime="attempt.started_at">{{ formatStarted(attempt.started_at) }}</time>
               </td>
-              <td class="py-2 pr-4">{{ durationText(attempt) }}</td>
-              <td class="py-2 pr-4">{{ terminalReasonText(attempt) }}</td>
-              <td class="py-2 pr-4 font-mono text-xs">{{ attempt.model_used || '—' }}</td>
-              <td class="py-2 font-mono text-xs">{{ attempt.error_code || '—' }}</td>
+              <td class="table-cell">{{ durationText(attempt) }}</td>
+              <td class="table-cell">{{ terminalReasonText(attempt) }}</td>
+              <td class="table-cell font-mono text-xs">{{ attempt.model_used || '—' }}</td>
+              <td class="table-cell font-mono text-xs">{{ attempt.error_code || '—' }}</td>
             </tr>
           </tbody>
         </table>

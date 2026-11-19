@@ -202,10 +202,21 @@
     transform: scale(0.97);
   }
 
+  /* THE canonical table shell (FAR-2584). A table lives on the page
+     background (never inside a bg-card block), separated by a hairline border
+     and a radius, and it is its own horizontal scroll container.
+
+     `overscroll-behavior-x: contain` (NOT `overscroll-behavior: contain`,
+     which is the shorthand for BOTH axes) contains only horizontal overscroll.
+     The shorthand trapped vertical wheel events on a container that scrolls
+     horizontally only, so the page stopped scrolling when the pointer was over
+     a table (FAR-2584). */
   .table-wrapper {
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius-lg);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
   }
 
   .table-header {
@@ -230,6 +241,15 @@
     font-size: 0.875rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Canonical empty state, rendered inside the shell so an empty table still
+     reads as the same surface as a populated one. */
+  .table-empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
   }
 
   .input-base {
