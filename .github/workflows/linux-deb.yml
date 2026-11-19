@@ -1,0 +1,275 @@
+name: "Linux: .deb package (FAR-2579)"
+
+# FAR-2579 phase 1: package the signed linux-amd64 native bundle as
+# farna-control_<version>_amd64.deb and prove it on Ubuntu 22.04 + 24.04.
+#
+# Two entry points:
+#   * workflow_call (release-unified.yml): the caller has already built the
+#     bundle with bundle-release.yml and passes the artefact name; this
+#     workflow packages + validates it and uploads the .deb (+ .sha256) as the
+#     artefact named by the `deb_artifact` output for the publish job to attach.
+#   * workflow_dispatch: give EXACTLY ONE of
+#       ref (+ version)  -> build a fresh bundle from that ref via
+#                           bundle-release.yml, then package + validate it;
+#       release_tag      -> download a PUBLISHED bundle-vX.Y.Z tarball, verify
+#                           it against the release SHA256SUMS, then package +
+#                           validate it.
+#
+# Packaging runs in an ubuntu:22.04 container (the bundle's glibc baseline) so
+# the computed Depends resolve against the oldest supported release. The
+# validation matrix runs scripts/linux/validate-deb.sh — the same script used
+# for local Docker validation — inside fresh ubuntu:22.04 / ubuntu:24.04
+# containers: apt install, non-root start, /healthz + SPA + both SAQ workers,
+# stop, remove (user data kept), purge (user data STILL kept).
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version in X.Y.Z form (the bundle's version)"
+        type: string
+        required: true
+      bundle_artifact:
+        description: "Workflow artefact holding farna-control-<version>-linux-amd64.tar.gz (bundle-release.yml uploads bundle-artefacts-amd64)"
+        type: string
+        required: false
+        default: bundle-artefacts-amd64
+    outputs:
+      deb_artifact:
+        description: "Workflow artefact holding farna-control_<version>_amd64.deb and its .sha256"
+        value: ${{ jobs.build-deb.outputs.deb_artifact }}
+    secrets:
+      BUNDLE_MANIFEST_SIGNING_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Build a fresh bundle from this git ref (requires version). Leave empty when using release_tag."
+        type: string
+        required: false
+        default: ""
+      version:
+        description: "X.Y.Z version for a ref build (ignored for release_tag, which carries its own)"
+        type: string
+        required: false
+        default: ""
+      release_tag:
+        description: "Package a PUBLISHED bundle release instead (bundle-vX.Y.Z). Leave empty when using ref."
+        type: string
+        required: false
+        default: ""
+      full_check:
+        description: "Also require the stack to stay up 180s and an admin login to succeed (enable once FAR-2581 lands)"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: linux-deb-${{ github.workflow }}-${{ inputs.version || inputs.release_tag || inputs.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve the bundle source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
+      version: ${{ steps.resolve.outputs.version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      bundle_artifact: ${{ steps.resolve.outputs.bundle_artifact }}
+    steps:
+      - name: Resolve mode and version
+        id: resolve
+        # The mode is decided from the INPUTS, never github.event_name: when a
+        # dispatched release-unified run calls this workflow, event_name is the
+        # caller's (workflow_dispatch) even though this is a workflow_call
+        # (FAR-2327). bundle_artifact only exists (and always has a value) on
+        # workflow_call; ref/release_tag only exist on workflow_dispatch.
+        env:
+          CALL_BUNDLE_ARTIFACT: ${{ inputs.bundle_artifact }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_REF: ${{ inputs.ref }}
+          IN_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          semver='^[0-9]+\.[0-9]+\.[0-9]+$'
+          if [ -n "${CALL_BUNDLE_ARTIFACT}" ]; then
+            mode=artifact
+            version="${IN_VERSION}"
+            release_tag=""
+            bundle_artifact="${CALL_BUNDLE_ARTIFACT}"
+          elif [ -n "${IN_RELEASE_TAG}" ] && [ -n "${IN_REF}" ]; then
+            echo "::error::give exactly one of ref or release_tag, not both"; exit 1
+          elif [ -n "${IN_RELEASE_TAG}" ]; then
+            case "${IN_RELEASE_TAG}" in
+              bundle-v*) ;;
+              *) echo "::error::release_tag '${IN_RELEASE_TAG}' is not a bundle-vX.Y.Z tag"; exit 1 ;;
+            esac
+            mode=release
+            version="${IN_RELEASE_TAG#bundle-v}"
+            release_tag="${IN_RELEASE_TAG}"
+            bundle_artifact=""
+          elif [ -n "${IN_REF}" ]; then
+            mode=ref
+            version="${IN_VERSION}"
+            release_tag=""
+            bundle_artifact=bundle-artefacts-amd64
+          else
+            echo "::error::nothing to package: dispatch with ref (+ version) or release_tag"; exit 1
+          fi
+          if ! [[ "${version}" =~ ${semver} ]]; then
+            echo "::error::version must be X.Y.Z (got '${version}')"; exit 1
+          fi
+          {
+            echo "mode=${mode}"
+            echo "version=${version}"
+            echo "release_tag=${release_tag}"
+            echo "bundle_artifact=${bundle_artifact}"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=${mode} version=${version} release_tag=${release_tag:-<none>} bundle_artifact=${bundle_artifact:-<none>}"
+
+  build-bundle:
+    name: Build bundle from ref
+    needs: resolve
+    if: needs.resolve.outputs.mode == 'ref'
+    uses: ./.github/workflows/bundle-release.yml
+    with:
+      version: ${{ needs.resolve.outputs.version }}
+      # A label only (lands in the throwaway bundle's RC_TAG); never created.
+      rc_tag: v${{ needs.resolve.outputs.version }}-deb-dispatch
+      ref: ${{ inputs.ref }}
+    secrets:
+      BUNDLE_MANIFEST_SIGNING_KEY: ${{ secrets.BUNDLE_MANIFEST_SIGNING_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+  build-deb:
+    name: Build farna-control_${{ needs.resolve.outputs.version }}_amd64.deb
+    needs: [resolve, build-bundle]
+    if: >-
+      always() &&
+      needs.resolve.result == 'success' &&
+      (needs.build-bundle.result == 'success' || needs.build-bundle.result == 'skipped')
+    runs-on: ubuntu-24.04
+    container: ubuntu:22.04
+    # Packaging is dominated by xz-compressing ~1.4 GB (about 21 min on a
+    # 4-core local Docker host for 0.3.329); leave headroom for lintian.
+    timeout-minutes: 60
+    outputs:
+      deb_artifact: ${{ steps.names.outputs.deb_artifact }}
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+      MODE: ${{ needs.resolve.outputs.mode }}
+      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+    steps:
+      - name: Install packaging tools
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends binutils ca-certificates curl lintian >/dev/null
+          dpkg-deb --version | head -n 1
+          lintian --version
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Name the artefacts
+        id: names
+        run: |
+          set -euo pipefail
+          echo "TARBALL=bundle/farna-control-${VERSION}-linux-amd64.tar.gz" >> "$GITHUB_ENV"
+          echo "deb_artifact=farna-control-deb-${VERSION}-amd64" >> "$GITHUB_OUTPUT"
+
+      - name: Download the bundle artefact
+        if: needs.resolve.outputs.mode != 'release'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.resolve.outputs.bundle_artifact }}
+          path: bundle
+
+      - name: Download the published bundle and verify it against SHA256SUMS
+        if: needs.resolve.outputs.mode == 'release'
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          base="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
+          tarball="farna-control-${VERSION}-linux-amd64.tar.gz"
+          curl --proto '=https' -fsSL --retry 3 -o "bundle/${tarball}" "${base}/${tarball}" \
+            || { echo "::error::${RELEASE_TAG} has no ${tarball} asset"; exit 1; }
+          curl --proto '=https' -fsSL --retry 3 -o bundle/SHA256SUMS "${base}/SHA256SUMS"
+          (cd bundle && grep -E "  ${tarball}\$" SHA256SUMS | sha256sum --check --strict -) \
+            || { echo "::error::${tarball} does not match the release SHA256SUMS"; exit 1; }
+
+      - name: Build the .deb
+        run: |
+          set -euo pipefail
+          test -s "${TARBALL}" || { echo "::error::bundle tarball missing: ${TARBALL}"; ls -la bundle >&2; exit 1; }
+          bash scripts/linux/build-deb.sh "${TARBALL}" "${VERSION}" dist
+
+      - name: Lintian
+        run: |
+          set -euo pipefail
+          # Errors fail the build; the bundled-runtime tags that are inherent to
+          # a self-contained /opt vendor package are overridden in the package
+          # itself (/usr/share/lintian/overrides/farna-control).
+          lintian --fail-on error --info "dist/farna-control_${VERSION}_amd64.deb"
+
+      - name: Upload the .deb
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.names.outputs.deb_artifact }}
+          path: |
+            dist/farna-control_${{ needs.resolve.outputs.version }}_amd64.deb
+            dist/farna-control_${{ needs.resolve.outputs.version }}_amd64.deb.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  validate:
+    name: Validate on ${{ matrix.image }}
+    needs: [resolve, build-deb]
+    if: always() && needs.build-deb.result == 'success'
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:22.04
+          - ubuntu:24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.build-deb.outputs.deb_artifact }}
+          path: dist
+
+      - name: Verify the .deb checksum
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check --strict "farna-control_${VERSION}_amd64.deb.sha256")
+
+      - name: Install, boot as a non-root user, stop, remove, purge
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          # The long-run checks (stable for 180s + admin login) are opt-in until
+          # FAR-2581 fixes the saq-system crash loop that tears the native stack
+          # down a few minutes after start. Flip the default once it lands.
+          FARNA_DEB_FULL_CHECK: ${{ inputs.full_check && '1' || '0' }}
+        run: bash scripts/linux/validate-deb.sh "dist/farna-control_${VERSION}_amd64.deb"
