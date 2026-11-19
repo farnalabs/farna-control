@@ -677,6 +677,30 @@ _SAQ_CHILD_ENV_KEYS: tuple[str, ...] = (
 )
 
 
+def _head_check_engine(settings: Any) -> Any:
+    """A PRIVATE, pool-less engine for one migration-head check (FAR-2581).
+
+    The check runs on the supervisor thread under ``asyncio.run`` — a fresh
+    event loop per call that is closed when the call returns. It must never
+    borrow the API's process-global pooled engine: a pooled asyncpg connection
+    is bound to the loop that opened it, so (a) every later check on a new
+    loop drew a dead connection, ``db_is_at_migration_head`` fail-safed to
+    False and the SAQ gate never opened when the FIRST check ran while
+    migrations were still in flight ("Event loop is closed" in launcher.log,
+    zero SAQ workers), and (b) the API's own loop could check out a
+    connection owned by a closed loop. NullPool + dispose per check means no
+    connection outlives its loop.
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from farna.db.url_utils import split_engine_sslmode
+
+    engine_url, ssl_arg = split_engine_sslmode(settings.database_url)
+    connect_args: dict[str, Any] = {"ssl": ssl_arg} if ssl_arg is not None else {}
+    return create_async_engine(engine_url, poolclass=NullPool, connect_args=connect_args)
+
+
 def _add_saq_children(supervisor: Any, settings: Any, composed: dict[str, str]) -> None:
     """Register the SAQ workers; they spawn only at migration-head readiness.
 
@@ -684,23 +708,28 @@ def _add_saq_children(supervisor: Any, settings: Any, composed: dict[str, str]) 
     the first tick can evaluate False (migrations still running in the
     lifespan), and caching that would seal the gate shut forever — the API
     would serve with zero SAQ workers. A False answer is simply re-asked on
-    the next tick.
+    the next tick, each time through a private pool-less engine (see
+    :func:`_head_check_engine`).
     """
-    from farna.api.dependencies import get_or_create_engine
     from farna.db.health_checks import db_is_at_migration_head
     from farna.launcher.supervisor import ChildSpec
 
-    engine = get_or_create_engine(settings)
     head_cache: list[bool] = [False]
-    head_checked: list[bool] = [False]
+
+    async def _check_head() -> bool:
+        engine = _head_check_engine(settings)
+        try:
+            return bool(await db_is_at_migration_head(engine))
+        finally:
+            dispose = getattr(engine, "dispose", None)
+            if dispose is not None:
+                await dispose()
 
     def _head_ready() -> bool:
-        if not head_checked[0]:
+        if not head_cache[0]:
             import asyncio
 
-            if asyncio.run(db_is_at_migration_head(engine)):
-                head_cache[0] = True
-                head_checked[0] = True
+            head_cache[0] = asyncio.run(_check_head())
         return head_cache[0]
 
     def _child_env(base: dict[str, str]) -> dict[str, str]:

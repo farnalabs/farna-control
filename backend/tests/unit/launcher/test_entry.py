@@ -592,7 +592,6 @@ def test_saq_children_gated_on_migration_head(monkeypatch: pytest.MonkeyPatch, t
         def monitor_thread_alive(self) -> bool:
             return True
 
-    import farna.api.dependencies as deps_module
     import farna.db.health_checks as health_module
     import farna.launcher.supervisor as supervisor_mod
 
@@ -618,7 +617,7 @@ def test_saq_children_gated_on_migration_head(monkeypatch: pytest.MonkeyPatch, t
         return True
 
     monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
-    monkeypatch.setattr(deps_module, "get_or_create_engine", lambda settings: object())
+    monkeypatch.setattr(entry_module, "_head_check_engine", lambda settings: object())
 
     _install_boot_mocks(monkeypatch, [], mock_saq=False)
     run_start(tmp_path / "data", serve=lambda host, port, ev: None)
@@ -654,7 +653,6 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
     unconditionally, so on a fresh install (migrations still running in the
     lifespan) the API served forever with zero SAQ workers.
     """
-    import farna.api.dependencies as deps_module
     import farna.db.health_checks as health_module
     from farna.launcher.supervisor import Supervisor, SupervisorKnobs
 
@@ -666,7 +664,7 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
         return migrated["value"]
 
     monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
-    monkeypatch.setattr(deps_module, "get_or_create_engine", lambda settings: object())
+    monkeypatch.setattr(entry_module, "_head_check_engine", lambda settings: object())
 
     clock = _fake_clock()
     spawned: list[list[str]] = []
@@ -693,7 +691,6 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
 
 def test_saq_children_receive_saq_web_auth_and_resolved_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-2581: both SAQ children get SAQ_AUTH_* (saq-system fail-closes without them)."""
-    import farna.api.dependencies as deps_module
     import farna.db.health_checks as health_module
     from farna.launcher.supervisor import Supervisor, SupervisorKnobs
 
@@ -701,7 +698,7 @@ def test_saq_children_receive_saq_web_auth_and_resolved_keys(monkeypatch: pytest
         return True
 
     monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
-    monkeypatch.setattr(deps_module, "get_or_create_engine", lambda settings: object())
+    monkeypatch.setattr(entry_module, "_head_check_engine", lambda settings: object())
     envs: dict[str, dict[str, str]] = {}
 
     def spawn(argv: list[str], env: dict[str, str] | None) -> object:
@@ -2221,3 +2218,65 @@ def test_compose_and_pin_config_returns_the_persisted_runtime_keys(monkeypatch: 
     assert composed["SECRET_KEY"] == SECRET_KEY
     assert composed["FERNET_KEY"] == FERNET_KEY
     assert composed["SAQ_AUTH_PASSWORD"]
+
+
+def test_head_gate_uses_a_fresh_disposed_engine_per_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: never reuse a pooled engine across the per-check asyncio.run loops.
+
+    A pooled connection opened under one asyncio.run loop is dead on the next
+    loop, so a False first answer (migrations still running) poisoned every
+    later check and the SAQ gate never opened.
+    """
+    import farna.db.health_checks as health_module
+    from farna.launcher.supervisor import Supervisor, SupervisorKnobs
+
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.disposed = False
+
+        async def dispose(self) -> None:
+            self.disposed = True
+
+    engines: list[FakeEngine] = []
+
+    def make_engine(settings: object) -> FakeEngine:
+        engines.append(FakeEngine())
+        return engines[-1]
+
+    answers = iter([False, True])
+
+    async def fake_head(engine: object, alembic_ini: object = None) -> bool:
+        return next(answers)
+
+    monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
+    monkeypatch.setattr(entry_module, "_head_check_engine", make_engine)
+    clock = _fake_clock()
+    spawned: list[list[str]] = []
+
+    def spawn(argv: list[str], env: dict[str, str] | None) -> object:
+        spawned.append(argv)
+        return FakeProc()
+
+    supervisor = Supervisor(
+        SupervisorKnobs(tick_seconds=0.01, restart_backoff_initial=0.01, restart_backoff_max=0.02),
+        spawner=spawn,
+        clock=clock,
+        sleep=lambda _s: None,
+    )
+    entry_module._add_saq_children(supervisor, settings=object(), composed={})
+    supervisor.tick()
+    clock.advance(0.02)
+    supervisor.tick()
+
+    assert len(spawned) == 2
+    assert len(engines) == 2  # one private engine per check, never a shared pool
+    assert all(engine.disposed for engine in engines)
+
+
+def test_head_check_engine_is_pool_less() -> None:
+    from sqlalchemy.pool import NullPool
+
+    settings = SimpleNamespace(database_url="postgresql+asyncpg://u:p@127.0.0.1:15432/farna_control")
+    engine = entry_module._head_check_engine(settings)
+
+    assert isinstance(engine.pool, NullPool)
