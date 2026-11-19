@@ -1,4 +1,4 @@
-"""``modulo support`` (FAR-2305): the command the docs page tells users to run.
+"""``farna-control support`` (FAR-2305): the command the docs page tells users to run.
 
 It must reuse the support-bundle builder (no second implementation), work with
 no launcher data dir, and print the per-run ref line plus the bundle path so a

@@ -1,8 +1,8 @@
-"""modulo backup/restore: CLI for self-hosted backup and disaster recovery.
+"""farna-control backup/restore: CLI for self-hosted backup and disaster recovery.
 
 Usage:
-  modulo backup [--db-url <url>] [--output-dir <path>] [--data-dir <path>] [--include-secrets]
-  modulo restore <backup-dir> [--db-url <url>] [--app-db-url <url>] [--yes]
+  farna-control backup [--db-url <url>] [--output-dir <path>] [--data-dir <path>] [--include-secrets]
+  farna-control restore <backup-dir> [--db-url <url>] [--app-db-url <url>] [--yes]
                [--previous-fernet-key <key>] [--dry-run] [--data-dir <path>]
                [--replace-cluster]
 
@@ -104,7 +104,7 @@ _TLS_DIRNAME = "tls"
 # false-positive on ordinary names like "dropbox-migrations-backup-tmp".
 _CLOUD_SYNC_VENDOR_ROOTS = frozenset({"dropbox", "onedrive", "icloud", "googledrive"})
 
-# The launcher-owned public surface (consumed by modulo.cli.main; vulture's
+# The launcher-owned public surface (consumed by farna.cli.main; vulture's
 # dead-code gate special-cases __all__).
 __all__ = ["MANIFEST_VERSION", "backup", "cli", "restore"]
 
@@ -1132,7 +1132,7 @@ def _ensure_restore_posture(admin_url: str, app_url: str) -> None:
     path).
 
     NOT best-effort: a failure raises :class:`RestorePostureError` so
-    ``modulo restore`` exits non-zero and names the failing check. A restored
+    ``farna-control restore`` exits non-zero and names the failing check. A restored
     cluster whose app role can still bypass RLS must never be reported as a
     completed restore.
     """

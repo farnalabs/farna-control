@@ -19,7 +19,7 @@ Contracts locked by tests (``tests/unit/launcher/test_supervisor.py``):
   is restarted with exponential backoff (initial → max); crash timestamps
   land in a sliding window and reaching the cap (default 5 crashes within
   10 minutes — the cap trips ON the Nth crash, ``>=``) trips the terminal
-  degraded state: ordered teardown, nonzero exit, and the ``modulo status``
+  degraded state: ordered teardown, nonzero exit, and the ``farna-control status``
   /launcher-log repair hint. A CLEAN exit (code 0) is not a crash: it does
   not feed the window (the window is cleared — a service that ran long
   enough to exit cleanly proves its crashes were transient), the crash
@@ -28,7 +28,7 @@ Contracts locked by tests (``tests/unit/launcher/test_supervisor.py``):
   crash before their start condition is met because they are not spawned
   until it is.
 * **Child shim owns death**: every supervised child ON LINUX OR macOS runs
-  under a shim process (``python -m modulo.launcher.supervisor child-shim``)
+  under a shim process (``python -m farna.launcher.supervisor child-shim``)
   that polls the launcher's start-time identity at most every 2 seconds —
   PID-reuse safe — and kills the child when the parent is gone. The identity
   comes from ``/proc/<ppid>/stat`` STARTTIME (field 22) on Linux and from
@@ -83,7 +83,7 @@ Contracts locked by tests (``tests/unit/launcher/test_supervisor.py``):
   doctor/status commands consume — status never mutates the data dir.
 
 Timing knobs default to the shared policy constants
-(:mod:`modulo.launcher.policy` — the single source) and are overridden
+(:mod:`farna.launcher.policy` — the single source) and are overridden
 directly by tests (≥6-8x tick-vs-window margins per the repo timing
 lesson); the ``MODULO_LAUNCHER_*`` environment variables are the operator
 override seam until Settings grows launcher knob fields.
@@ -151,7 +151,7 @@ _PRIORITY_REDIS = policy.TEARDOWN_PRIORITY_REDIS
 # Read-only access helpers for doctor/status (FAR-676): the supervisor
 # persists a degraded reason (and a crash-incident marker) next to the
 # child-PID manifest when it degrades, and exposes pure readers so
-# ``modulo status`` / ``modulo doctor`` can surface the degraded flag and
+# ``farna-control status`` / ``farna-control doctor`` can surface the degraded flag and
 # crash backtraces (from the launcher/app log tail) READ-ONLY.
 DEFAULT_LOG_TAIL_BYTES = 256 * 1024
 ROTATE_DEFAULT_MAX_BYTES = 10 * 1024 * 1024
@@ -343,7 +343,7 @@ class SupervisorKnobs:
     window. Clean exits (code 0) never count and clear the window.
 
     The defaults are the shared policy constants
-    (:mod:`modulo.launcher.policy`) — this dataclass binds them, it does not
+    (:mod:`farna.launcher.policy`) — this dataclass binds them, it does not
     restate them.
     """
 
@@ -467,7 +467,7 @@ class DataDirLock:
     process dies, which is exactly the semantics ADR 031 Decision 5 wants.
     The holder's PID + mode + start-time identity token are written into the file
     after acquiring so a refused concurrent start can name the culprit and
-    ``modulo stop`` can verify the identity before signalling. A clean
+    ``farna-control stop`` can verify the identity before signalling. A clean
     release truncates the holder record — a stale identity must never
     outlive the lock.
     """
@@ -545,7 +545,7 @@ class DataDirLock:
 
         The file itself is never unlinked, but a clean release truncates the
         holder JSON: a stale identity (PID + starttime) must never outlive
-        the lock it described, otherwise ``modulo stop`` would compare
+        the lock it described, otherwise ``farna-control stop`` would compare
         against a recycled PID's history forever.
         """
         if self._fd is None:
@@ -670,7 +670,7 @@ def _await_lock_release(lock_path: Path, pid: int, timeout: float) -> int:
 
 
 def request_stop(data_dir: Path, *, timeout: float = 10.0) -> int:
-    """Ask the launcher holding *data_dir* to stop (the ``modulo stop`` path).
+    """Ask the launcher holding *data_dir* to stop (the ``farna-control stop`` path).
 
     The recorded holder's start-time identity token is verified BEFORE
     signalling — a recycled PID is never SIGTERMed. Completion is detected
@@ -680,7 +680,7 @@ def request_stop(data_dir: Path, *, timeout: float = 10.0) -> int:
     confirmed stopped.
     """
     if not supports_posix_file_locking():
-        raise LauncherError("modulo stop requires a Windows service-control implementation and installer validation (FAR-2229); refusing to signal an unverified Windows launcher")
+        raise LauncherError("farna-control stop requires a Windows service-control implementation and installer validation (FAR-2229); refusing to signal an unverified Windows launcher")
     lock_path = data_dir.parent / (data_dir.name + LOCK_SUFFIX)
     holder = _read_lock_holder(lock_path)
     if holder is None:
@@ -1049,7 +1049,7 @@ def _child_shim_pythonpath() -> str:
     The launcher deliberately scrubs the caller's ``PYTHONPATH`` before boot,
     and bundled service environments must not inherit it.  The shim is still
     started with the bundled interpreter, so it needs a trusted path back to
-    this checkout in order to import ``modulo.launcher.supervisor`` after the
+    this checkout in order to import ``farna.launcher.supervisor`` after the
     service environment has been reduced to its allowlist.
     """
     source_root = Path(__file__).resolve().parents[2]
@@ -2134,7 +2134,7 @@ def _apply_degraded_reason(status: dict[str, Any], degraded_reason: str | None) 
         return
     status["degraded"] = {
         "reason": degraded_reason,
-        "remediation": ("the supervisor trip is terminal — restart `modulo start` once the underlying fault is cleared, and inspect the app log (`modulo logs`) for crash backtraces"),
+        "remediation": ("the supervisor trip is terminal — restart `farna-control start` once the underlying fault is cleared, and inspect the app log (`farna-control logs`) for crash backtraces"),
     }
 
 
@@ -2185,7 +2185,7 @@ def _apply_runtime_status(data_dir: Path, status: dict[str, Any], state: Any) ->
 
 
 def collect_status(data_dir: Path) -> dict[str, Any]:
-    """Assemble the ``modulo status`` payload (state + pids + lock holder).
+    """Assemble the ``farna-control status`` payload (state + pids + lock holder).
 
     Strictly READ-ONLY — a status query must never mutate the data dir: the
     secrets file is parsed WITHOUT the create-if-missing behaviour (a
@@ -2212,7 +2212,7 @@ def collect_status(data_dir: Path) -> dict[str, Any]:
 
 
 def _component_state(pid: int | None, _port: int | None) -> str:
-    """One-word per-component state (``modulo status --json`` enrichment)."""
+    """One-word per-component state (``farna-control status --json`` enrichment)."""
     if pid is not None and _pid_alive(pid):
         return "healthy"
     return "stopped"
@@ -2223,16 +2223,16 @@ def _component_remediation(name: str, pid: int | None, port: int | None) -> str 
     if pid is not None and _pid_alive(pid):
         return None
     if name == "postgres":
-        return f"postgres is not running on 127.0.0.1:{port} — restart `modulo start`"
+        return f"postgres is not running on 127.0.0.1:{port} — restart `farna-control start`"
     if name == "redis":
-        return f"redis is not running on 127.0.0.1:{port} — restart `modulo start`"
+        return f"redis is not running on 127.0.0.1:{port} — restart `farna-control start`"
     if name == "api":
-        return "the api process owns the data-dir lock while serving; restart `modulo start`"
-    return f"{name} worker is not running — restart `modulo start`"
+        return "the api process owns the data-dir lock while serving; restart `farna-control start`"
+    return f"{name} worker is not running — restart `farna-control start`"
 
 
 def _shim_cli_entry(argv: list[str]) -> int:  # pragma: no cover - __main__ only
-    """Dispatch ``python -m modulo.launcher.supervisor child-shim ...``."""
+    """Dispatch ``python -m farna.launcher.supervisor child-shim ...``."""
     if argv and argv[0] == "child-shim":
         return child_shim_main(argv)
     _log.error("shim.unknown_subcommand argv=%r", argv)

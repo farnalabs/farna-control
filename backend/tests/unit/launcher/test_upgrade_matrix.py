@@ -1,6 +1,6 @@
 """FAR-677 â€” upgrade verification matrix for the native launcher flow.
 
-The ``modulo upgrade`` flow (FAR-675) is exercised end-to-end here as a
+The ``farna-control upgrade`` flow (FAR-675) is exercised end-to-end here as a
 verification MATRIX over release-night operations, asserting that after
 EACH upgrade the previous release's data is intact and the doctor stays
 green, every refusal keeping the swap pointer on the previous release:

@@ -1,15 +1,15 @@
-"""``modulo start`` boot orchestration (ADR 031 Decisions 1/2).
+"""``farna-control start`` boot orchestration (ADR 031 Decisions 1/2).
 
 IMPORT-ORDER CONTRACT (locked by ``tests/unit/launcher/test_entry.py``):
 the FIRST ``modulo`` import at module top level must be
-``modulo.launcher.env_safety``, no other ``modulo`` import may appear at
+``farna.launcher.env_safety``, no other ``farna`` import may appear at
 module top level, and :func:`run_start`'s first action must be
 ``scrub_os_environment()``. A launcher-hostile variable inherited from the
 calling shell (``PG*``, ``PYTHONPATH``, ``LD_*``, a poisoned trust store)
 must never reach any project import or the bundled runtime. Every other
 project import below is therefore lazy and happens only after the scrub.
-The PUBLISHED console script (``modulo.cli.main``) also scrubs at its own
-module import — BEFORE it imports ``modulo.cli.backup`` (psycopg, settings,
+The PUBLISHED console script (``farna.cli.main``) also scrubs at its own
+module import — BEFORE it imports ``farna.cli.backup`` (psycopg, settings,
 apply) — so the backup/restore path is covered on the real entry point too
 (locked by the import-hygiene subprocess test).
 
@@ -43,8 +43,8 @@ Terminal degraded (FAR-674): a crash-cap trip is TERMINAL. The supervisor
 persists the degrade record (``degraded.json`` sibling of state.json —
 reason + the last crash backtraces) and the launcher exits with
 ``policy.DEGRADED_EXIT_CODE``; a subsequent normal start REFUSES with the
-persisted reason and the resume path until ``modulo start --clear-degraded``
-(or ``modulo clear-degraded``) clears the record. When the degrade happens
+persisted reason and the resume path until ``farna-control start --clear-degraded``
+(or ``farna-control clear-degraded``) clears the record. When the degrade happens
 within ``policy.UPGRADE_DEGRADED_WINDOW_SECONDS`` of a recorded upgrade
 boot (the ``upgrade.json`` marker FAR-675's machinery writes), the exit
 and refusal messages additionally carry the refuse/restore guidance and the
@@ -538,9 +538,9 @@ def _degraded_exit_message(reason: str, degraded_path: Path, data_dir: Path) -> 
         f"launcher degraded: {reason}",
         "This is a TERMINAL degraded state: the launcher exited without restarting its stack.",
         f"Inspect launcher.log in {data_dir} and the persisted crash backtraces in",
-        f"{degraded_path}; run `modulo doctor` for a per-check diagnosis and `modulo status`",
+        f"{degraded_path}; run `farna-control doctor` for a per-check diagnosis and `farna-control status`",
         "for the component table.",
-        "After fixing the cause, resume with `modulo start --clear-degraded`.",
+        "After fixing the cause, resume with `farna-control start --clear-degraded`.",
     ]
     guidance = _post_upgrade_guidance(read_degraded_record(degraded_path))
     if guidance:
@@ -565,8 +565,8 @@ def _degraded_refusal_message(record: dict[str, Any], degraded_path: Path, data_
         [
             f"The last crash backtraces are persisted in {degraded_path}; the launcher log",
             f"is {data_dir / 'launcher.log'}.",
-            "Inspect the cause (`modulo doctor`, `modulo status`), fix it, then resume with",
-            "`modulo start --clear-degraded` (or `modulo clear-degraded`).",
+            "Inspect the cause (`farna-control doctor`, `farna-control status`), fix it, then resume with",
+            "`farna-control start --clear-degraded` (or `farna-control clear-degraded`).",
         ]
     )
     guidance = _post_upgrade_guidance(record)
@@ -582,7 +582,7 @@ def _post_upgrade_guidance(record: dict[str, Any] | None) -> str:
     snapshot = record.get("pre_upgrade_snapshot")
     lines = [("This degraded state began within the upgrade watch window (an upgrade boot was recently recorded for this data dir).")]
     if isinstance(snapshot, str) and snapshot:
-        lines.append(f"A pre-upgrade snapshot was recorded at {snapshot} — restore it manually with `modulo restore {snapshot}` (see `modulo restore --help`), or downgrade the binary to the pre-upgrade version.")
+        lines.append(f"A pre-upgrade snapshot was recorded at {snapshot} — restore it manually with `farna-control restore {snapshot}` (see `farna-control restore --help`), or downgrade the binary to the pre-upgrade version.")
     else:
         lines.append("No pre-upgrade snapshot was recorded — restore from your external backups, or downgrade the binary to the pre-upgrade version.")
     lines.append("The full upgrade/rollback machinery is the upgrade epic (FAR-675).")

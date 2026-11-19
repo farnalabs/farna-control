@@ -1,14 +1,14 @@
-"""``modulo doctor --report``: delegate to the support bundle (FAR-2305).
+"""``farna-control doctor --report``: delegate to the support bundle (FAR-2305).
 
 Historically (FAR-676) this module built its own narrow redacted zip (versions,
 OS info, doctor output, log tails). The support bundle superseded it: a
 versioned format, a fixed member allowlist, five redaction layers and a
 fail-closed gate. This module is kept as the stable import surface the doctor
 command and its tests use; the implementation now delegates to
-:mod:`modulo.support.bundle`.
+:mod:`farna.support.bundle`.
 
 ``redact_text`` / ``redaction_map_from_data_dir`` also delegate to
-:mod:`modulo.support.redaction`, so there is ONE redaction implementation —
+:mod:`farna.support.redaction`, so there is ONE redaction implementation —
 never a second copy that can drift.
 """
 
@@ -50,7 +50,7 @@ def redact_text(text: str, secret_values: dict[str, str]) -> str:
     """Scrub *text* through the shared redaction layers (2-4).
 
     Kept for callers/tests that used the FAR-676 helper; the real work lives in
-    :class:`modulo.support.redaction.Redactor`.
+    :class:`farna.support.redaction.Redactor`.
     """
     result: RedactionResult = Redactor(secret_values).redact(text)
     return result.text
@@ -75,10 +75,10 @@ def build_report(
 ) -> Path:
     """Write the redacted support bundle to *out_path*; return its path.
 
-    Delegates to :func:`modulo.support.bundle.build_bundle_async` with the
+    Delegates to :func:`farna.support.bundle.build_bundle_async` with the
     launcher data dir (secrets seed + log tails + degraded record) and the
     captured doctor output. The container path (``python -m
-    modulo.support.bundle``) is the same module without a data dir.
+    farna.support.bundle``) is the same module without a data dir.
     """
     coroutine = build_bundle_async(
         out_path,

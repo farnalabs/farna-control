@@ -1,5 +1,5 @@
 """Extra coverage for the new ``modulo`` CLI commands (FAR-676): the doctor
-``--report`` capture/sink, ``modulo env --raw``, and the ``logs`` rotate /
+``--report`` capture/sink, ``farna-control env --raw``, and the ``logs`` rotate /
 missing-file paths.
 """
 
@@ -115,7 +115,7 @@ def test_status_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert result.exit_code == 0
     assert "some error" in result.output
     assert "DEGRADED: test degraded" in result.output
-    assert "resume with: modulo start --clear-degraded" in result.output
+    assert "resume with: farna-control start --clear-degraded" in result.output
     assert "initialized: True" in result.output
     assert "launcher: pid=123" in result.output
     assert "postgres" in result.output
