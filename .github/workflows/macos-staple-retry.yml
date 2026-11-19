@@ -47,6 +47,14 @@ name: "macOS: Retry notarization stapling"
 # while a genuinely deferred staple (no marker, or one artefact still unverified)
 # is still retried - bounded by the existing 24-hour propagation window.
 #
+# FAR-2577: a release can also be HELD because Apple was still PROCESSING its
+# notarization when the build job finished (macos-installer.yml's PENDING
+# outcome). Stapling alone cannot tell "still processing" from "rejected" - both
+# look like a missing ticket - so when the DMGs come from a run (`run_id`), the
+# staple job first asks Apple for the recorded submission's verdict. A
+# terminal rejection (Invalid/Rejected) fails this run with ::error:: and stops
+# the held-publication re-dispatch, instead of retrying until the deadline.
+#
 # This workflow does not touch product code and does not carry a build: it only
 # operates on bytes produced by a completed notarized build.
 
@@ -399,6 +407,10 @@ jobs:
       # name alone does not link the ticket to the published DMG.
       arm64_sha256: ${{ steps.collect.outputs.arm64_sha256 }}
       x86_64_sha256: ${{ steps.collect.outputs.x86_64_sha256 }}
+      # FAR-2577: `true` when Apple's verdict on a recorded submission is a
+      # terminal rejection. held-retry reads it to stop re-arming the publisher.
+      # Step outputs are recorded even when the step then fails the job.
+      notary_rejected: ${{ steps.verdict.outputs.notary_rejected }}
     env:
       VERSION: ${{ needs.resolve-target.outputs.version }}
       RELEASE_TAG: ${{ needs.resolve-target.outputs.release_tag }}
@@ -410,6 +422,74 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # FAR-2577: a submission that was still PENDING at build time either
+      # becomes Accepted (stapling then succeeds) or ends Invalid/Rejected
+      # (no ticket will EVER exist). Ask Apple which, so a rejection fails
+      # loudly now instead of being retried as a "missing ticket" until the
+      # held-publication deadline. Only a run's artefacts carry a submission
+      # record; a release-asset retry has none and skips this check.
+      - name: Check Apple's verdict on the recorded notarization submissions
+        id: verdict
+        if: env.RUN_ID != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NOTARY_KEY_B64: ${{ secrets.MACOS_NOTARY_API_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          printf 'notary_rejected=false\n' >>"$GITHUB_OUTPUT"
+          if [[ -z "$NOTARY_KEY_B64" || -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER" ]]; then
+            echo "::warning::Apple notarytool API-key secrets are not available; Apple's verdict cannot be checked, so stapling remains the only proof of a ticket."
+            exit 0
+          fi
+          NOTARY_KEY="$RUNNER_TEMP/modulo-notary.p8"
+          printf '%s' "$NOTARY_KEY_B64" | tr -d '[:space:]' | base64 -D >"$NOTARY_KEY"
+          rejected=""
+          read -r -a arches <<<"$ARCHITECTURES"
+          for arch in "${arches[@]}"; do
+            record_dir="$RUNNER_TEMP/notary-submission-${arch}"
+            rm -rf "$record_dir"
+            mkdir -p "$record_dir"
+            if ! gh run download "$RUN_ID" --repo "$REPO" \
+              --name "macos-notary-submission-${VERSION}-${arch}" --dir "$record_dir" >/dev/null 2>&1; then
+              echo "::notice::Run ${RUN_ID} has no notarization submission record for ${arch}; Apple's verdict cannot be checked for it."
+              continue
+            fi
+            record="$(find "$record_dir" -type f -name submission.env | sed -n '1p')"
+            if [[ -z "$record" ]]; then
+              echo "::notice::The ${arch} submission record artifact holds no submission.env; skipping the verdict check."
+              continue
+            fi
+            set +e
+            verdict="$(bash scripts/macos/notary-submission-status.sh \
+              --record "$record" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER")"
+            verdict_exit=$?
+            set -e
+            printf '%s\n' "$verdict"
+            submission_id="$(printf '%s\n' "$verdict" | sed -n 's/^submission_id=//p' | head -n 1)"
+            notary_status="$(printf '%s\n' "$verdict" | sed -n 's/^notary_status=//p' | head -n 1)"
+            case "$verdict_exit" in
+              0)
+                echo "${arch}: Apple notarization submission ${submission_id:-<none>} is '${notary_status}'."
+                ;;
+              4)
+                echo "::error::Apple notarization of the ${arch} DMG (submission ${submission_id}) ended '${notary_status}': no ticket will ever be issued, so this release can never be stapled or published. Fix the artefact and cut a new release."
+                rejected="${rejected} ${arch}"
+                ;;
+              *)
+                echo "::warning::Could not evaluate the ${arch} notarization verdict (exit ${verdict_exit}); stapling remains the only proof of a ticket."
+                ;;
+            esac
+          done
+          rm -f "$NOTARY_KEY"
+          if [[ -n "$rejected" ]]; then
+            printf 'notary_rejected=true\n' >>"$GITHUB_OUTPUT"
+            exit 1
+          fi
 
       - name: Staple each requested DMG
         shell: bash
@@ -1248,6 +1328,7 @@ jobs:
       RC_TAG: ${{ needs.resolve-target.outputs.rc_tag }}
       RUN_ID: ${{ needs.resolve-target.outputs.run_id }}
       RETRY_DEADLINE: ${{ needs.resolve-target.outputs.retry_deadline }}
+      NOTARY_REJECTED: ${{ needs.staple.outputs.notary_rejected }}
     steps:
       - name: Re-dispatch the held publication while its notarization ticket propagates
         shell: bash
@@ -1255,6 +1336,12 @@ jobs:
           set -euo pipefail
           if [[ -z "$RELEASE_TAG" || -z "$RUN_ID" ]]; then
             echo "::error::held-publication re-dispatch is missing release_tag or run_id - cannot re-arm the publisher."
+            exit 1
+          fi
+          # FAR-2577: Apple rejected a held submission. No ticket will ever
+          # exist, so re-arming would only burn runners until the deadline.
+          if [[ "$NOTARY_REJECTED" == "true" ]]; then
+            echo "::error::Held publication of ${RELEASE_TAG} will never publish: Apple rejected its notarization (see the staple job's verdict check). Not re-dispatching; fix the artefact and cut a new release."
             exit 1
           fi
           now="$(date -u +%s)"

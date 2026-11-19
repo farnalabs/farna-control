@@ -29,6 +29,17 @@ on:
         required: false
       MACOS_NOTARY_ISSUER_ID:
         required: false
+    # FAR-2577: the notarization outcome of this call (`accepted` or `pending`)
+    # and Apple's submission id. A matrix caller sees only one leg's value, so
+    # the per-architecture source of truth is the always-uploaded
+    # `macos-notary-submission-<version>-<arch>` artifact.
+    outputs:
+      notarization_outcome:
+        description: "accepted, or pending when Apple was still processing at the end of the notary budget"
+        value: ${{ jobs.build.outputs.notarization_outcome }}
+      notarization_submission_id:
+        description: "Apple notarytool submission id"
+        value: ${{ jobs.build.outputs.notarization_submission_id }}
   workflow_dispatch:
     inputs:
       version:
@@ -165,10 +176,15 @@ jobs:
     runs-on: ${{ needs.normalize-inputs.outputs.architecture == 'x86_64' && 'macos-15-intel' || 'macos-15' }}
     # Worst-case retry sleeps are 62m55s with +25% jitter, plus the 90m
     # notarytool wait (FAR-2575: run 44525902038 hit a 30m wait with the
-    # submission still In Progress), plus ~25m of build/sign/smoke work, so
-    # the job needs ~180m; 200m keeps headroom without the job dying before
-    # the notary wait expires.
-    timeout-minutes: 200
+    # submission still In Progress), plus the 45m `notarytool info` poll after
+    # a wait timeout (FAR-2577: Apple took ~3h on 2026-11-19), plus ~25m of
+    # build/sign/smoke work, so the job needs ~225m; 250m keeps headroom
+    # without the job dying before the notary budget expires. A submission
+    # still In Progress after that is a PENDING outcome, not a failure.
+    timeout-minutes: 250
+    outputs:
+      notarization_outcome: ${{ steps.native.outputs.notarization_outcome }}
+      notarization_submission_id: ${{ steps.native.outputs.notarization_submission_id }}
     env:
       VERSION_NUM: ${{ needs.normalize-inputs.outputs.version }}
       MODE: ${{ needs.normalize-inputs.outputs.mode }}
@@ -256,6 +272,14 @@ jobs:
           grep -q -- '--output-format json' scripts/macos/notarize-and-verify.sh
           grep -q 'dmg_notary_submit bash scripts/macos/notarize-and-verify.sh' .github/workflows/macos-installer.yml
           grep -q 'dmg_identity_before_upload bash scripts/macos/artefact-identity.sh' .github/workflows/macos-installer.yml
+          # A --wait timeout is a PENDING outcome polled via notarytool info,
+          # and the held-release staple retry asks Apple for a rejected verdict
+          # through the status helper (FAR-2577).
+          grep -q 'notarytool info' scripts/macos/notarize-and-verify.sh
+          grep -q -- '--submission-out' .github/workflows/macos-installer.yml
+          test -x scripts/macos/notary-submission-status.sh
+          shellcheck scripts/macos/notary-submission-status.sh
+          bash -n scripts/macos/notary-submission-status.sh
           # The Intel build tools step must never depend on Homebrew, so the
           # pinned-download helper is part of the validated contract (FAR-2486).
           test -x scripts/macos/install-pinned-shellcheck.sh
@@ -364,6 +388,7 @@ jobs:
 
 
       - name: Sign, notarize and smoke-test native installer
+        id: native
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
         env:
           CERTIFICATE_B64: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_P12 }}
@@ -1375,14 +1400,35 @@ jobs:
           # records the pre-submit cdhash, submits with --output-format json,
           # fails unless the status is exactly `Accepted`, and dumps the notary
           # log (with its issues) for any other status.
+          #
+          # FAR-2577: a `--wait` timeout is PENDING, not unknown. The wrapper
+          # polls `notarytool info` for --poll-budget seconds; Accepted
+          # continues normally, Invalid/Rejected is still a hard failure (exit
+          # 1), and a submission still In Progress exits 3 (PENDING). The
+          # submission record is written into the workspace from BEFORE the
+          # submit, so the always-run upload steps below preserve it (and the
+          # submitted DMG) whatever happens to this step.
+          notary_exit=0
           run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh \
             --dmg "$DMG" \
             --key "$NOTARY_KEY" \
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER" \
             --timeout 90m \
+            --poll-budget 2700 \
+            --submission-out "$GITHUB_WORKSPACE/build/notary-submission/submission.env" \
             --identity-out "$DATA/notarization-identity.env" \
-            --evidence "$DATA/notarization-evidence.env"
+            --evidence "$DATA/notarization-evidence.env" || notary_exit=$?
+          case "$notary_exit" in
+            0) notarization_outcome=accepted ;;
+            3)
+              notarization_outcome=pending
+              ;;
+            *)
+              echo "::error::Apple notarization did not succeed (notarize-and-verify exit=${notary_exit}); see the dmg_notary_submit output above." >&2
+              exit "$notary_exit"
+              ;;
+          esac
           # The submission status is release evidence: print it on the SUCCESS
           # path too, never only inside the failure branch of run_pre_smoke.
           if [[ -s "$DATA/notarization-evidence.env" ]]; then
@@ -1392,6 +1438,15 @@ jobs:
           else
             echo '::error::the notarization submission evidence file was not written; the submission status is unproven.' >&2
             exit 1
+          fi
+          notarization_submission_id="$(sed -n 's/^submission_id=//p' "$DATA/notarization-evidence.env" | head -n 1)"
+          {
+            printf 'notarization_outcome=%s\n' "$notarization_outcome"
+            printf 'notarization_submission_id=%s\n' "$notarization_submission_id"
+          } >>"$GITHUB_OUTPUT"
+          if [[ "$notarization_outcome" == pending ]]; then
+            printf '::warning::Apple notarization of the %s DMG is still PENDING (submission %s). The unstapled DMG continues through every non-ticket gate; a release built from it is HELD by the FAR-2573 ticket gate and published by macos-staple-retry.yml once Apple accepts, or failed loudly there if Apple rejects it.\n' \
+              "$MACOS_ARCH" "$notarization_submission_id"
           fi
           # Apple's notarization ticket can take time to propagate to CloudKit after
           # notarytool accepts the submission. Run 41127149139 observed "Record not found"
@@ -1424,34 +1479,45 @@ jobs:
 
           dmg_staple_output_file="$DATA/pre-smoke-dmg_staple.log"
           dmg_staple_ticket_unavailable=0
-          rm -f "$dmg_staple_output_file"
-          set +e
-          staple_dmg_with_retry >"$dmg_staple_output_file" 2>&1
-          dmg_staple_exit=$?
-          set -e
-          printf 'run_pre_smoke: dmg_staple command_exit=%d\n' "$dmg_staple_exit"
-          if [[ "$dmg_staple_exit" -eq 0 ]]; then
-            printf 'pre_smoke: dmg_staple=ok (exit=%d)\n' "$dmg_staple_exit"
-            # A stapled DMG must pass both ticket validation and the DMG-level
-            # Gatekeeper assessment. These remain hard gates in the success path.
-            run_pre_smoke dmg_staple_validate xcrun stapler validate "$DMG"
-            run_pre_smoke dmg_spctl spctl --assess --type open --context context:primary-signature "$DMG"
+          dmg_ticket_deferral_reason=apple_cloudkit_ticket_unavailable
+          if [[ "$notarization_outcome" == pending ]]; then
+            # FAR-2577: no ticket can exist while Apple is still processing, so
+            # stapling (and its ~1h retry loop) is skipped outright. The same
+            # deferral as an unfetchable ticket applies; every non-ticket gate
+            # (codesign, hdiutil, mounted-app codesign, install, smoke) stays hard.
+            dmg_staple_ticket_unavailable=1
+            dmg_ticket_deferral_reason=apple_notarization_pending
+            echo '::warning::DMG stapling skipped because Apple notarization is still pending; DMG stapler validation and Gatekeeper assessment are deferred to macos-staple-retry.yml.'
           else
-            printf 'pre_smoke: dmg_staple=FAILED (exit=%d)\n' "$dmg_staple_exit" >&2
-            if [[ -s "$dmg_staple_output_file" ]]; then
-              printf 'pre_smoke output: dmg_staple\n' >&2
-              redact_pre_smoke_output < "$dmg_staple_output_file" >&2
-            fi
-            # An accepted notarization can briefly lack a CloudKit ticket, or
-            # CloudKit can lose the connection while stapler fetches it. Only
-            # those explicit propagation/network diagnostics may defer the DMG
-            # ticket gates; every other stapler failure remains fail-closed.
-            if grep -Eiq 'NSURLErrorDomain.*-1005|network connection was lost|CloudKit.*(Record not found|response is inconsistent)|Could not find base64 encoded ticket' "$dmg_staple_output_file"; then
-              dmg_staple_ticket_unavailable=1
-              echo '::warning::DMG stapling failed because the notarization ticket could not be fetched from Apple CloudKit; DMG stapler validation and DMG-specific spctl assessment are deferred. Mounted-app codesign and Gatekeeper checks remain hard gates.'
+            rm -f "$dmg_staple_output_file"
+            set +e
+            staple_dmg_with_retry >"$dmg_staple_output_file" 2>&1
+            dmg_staple_exit=$?
+            set -e
+            printf 'run_pre_smoke: dmg_staple command_exit=%d\n' "$dmg_staple_exit"
+            if [[ "$dmg_staple_exit" -eq 0 ]]; then
+              printf 'pre_smoke: dmg_staple=ok (exit=%d)\n' "$dmg_staple_exit"
+              # A stapled DMG must pass both ticket validation and the DMG-level
+              # Gatekeeper assessment. These remain hard gates in the success path.
+              run_pre_smoke dmg_staple_validate xcrun stapler validate "$DMG"
+              run_pre_smoke dmg_spctl spctl --assess --type open --context context:primary-signature "$DMG"
             else
-              echo '::error::DMG stapling failed for a non-propagation/non-network reason; refusing to defer DMG ticket verification.' >&2
-              exit 1
+              printf 'pre_smoke: dmg_staple=FAILED (exit=%d)\n' "$dmg_staple_exit" >&2
+              if [[ -s "$dmg_staple_output_file" ]]; then
+                printf 'pre_smoke output: dmg_staple\n' >&2
+                redact_pre_smoke_output < "$dmg_staple_output_file" >&2
+              fi
+              # An accepted notarization can briefly lack a CloudKit ticket, or
+              # CloudKit can lose the connection while stapler fetches it. Only
+              # those explicit propagation/network diagnostics may defer the DMG
+              # ticket gates; every other stapler failure remains fail-closed.
+              if grep -Eiq 'NSURLErrorDomain.*-1005|network connection was lost|CloudKit.*(Record not found|response is inconsistent)|Could not find base64 encoded ticket' "$dmg_staple_output_file"; then
+                dmg_staple_ticket_unavailable=1
+                echo '::warning::DMG stapling failed because the notarization ticket could not be fetched from Apple CloudKit; DMG stapler validation and DMG-specific spctl assessment are deferred. Mounted-app codesign and Gatekeeper checks remain hard gates.'
+              else
+                echo '::error::DMG stapling failed for a non-propagation/non-network reason; refusing to defer DMG ticket verification.' >&2
+                exit 1
+              fi
             fi
           fi
           # shellcheck disable=SC2016
@@ -1522,7 +1588,7 @@ jobs:
             INSTALL_ENV=(
               env
               MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1
-              MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON=apple_cloudkit_ticket_unavailable
+              MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"
             )
           fi
 
@@ -1800,4 +1866,31 @@ jobs:
           name: macos-installer-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
           path: build/Modulo-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
           if-no-files-found: error
+          retention-days: 30
+
+      # FAR-2577: the submission record (Apple submission id, status, cdhash,
+      # submitted digest) is preserved on EVERY outcome - accepted, pending,
+      # rejected, a later smoke failure, or a job killed inside the notary
+      # wait - so a slow verdict is never lost. macos-staple-retry.yml reads it
+      # to tell a still-pending submission from a rejected one.
+      - name: Upload the notarization submission record
+        if: ${{ always() && env.RUN_NATIVE_BUILD == 'true' && hashFiles('build/notary-submission/submission.env') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-notary-submission-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
+          path: build/notary-submission/submission.env
+          if-no-files-found: error
+          retention-days: 30
+
+      # FAR-2577: when the run does not succeed after the DMG was submitted,
+      # keep the exact submitted bytes too. stapler fetches a ticket by cdhash,
+      # so a submission Apple accepts later is still stapleable from this
+      # artifact. (On success the DMG is the macos-installer-* artifact above.)
+      - name: Preserve the submitted DMG after an unsuccessful run
+        if: ${{ (failure() || cancelled()) && env.RUN_NATIVE_BUILD == 'true' && hashFiles('build/notary-submission/submission.env') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer-submitted-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
+          path: build/Modulo-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
+          if-no-files-found: warn
           retention-days: 30
