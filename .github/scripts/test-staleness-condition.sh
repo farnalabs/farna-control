@@ -6,7 +6,7 @@
 #
 # What it tests:
 # 1. OLD condition (age from main HEAD commit): on an active repo where main
-#    HEAD was committed <6h ago, the condition NEVER fires even when prod is
+#    HEAD was committed <10h ago, the condition NEVER fires even when prod is
 #    11h behind.
 # 2. NEW condition (age from prod build timestamp): when prod's build is
 #    older than the grace window and prod SHA != main HEAD, the condition
@@ -17,7 +17,8 @@
 
 set -euo pipefail
 
-GRACE_HOURS="${STALENESS_GRACE_HOURS:-6}"
+# Default matches GRACE_HOURS_DEFAULT in .github/scripts/deploy_health.py.
+GRACE_HOURS="${STALENESS_GRACE_HOURS:-10}"
 RESULT_STARVATION="exit 1 (STARVATION)"
 RESULT_WITHIN_GRACE="exit 0 (within grace)"
 PASS=0

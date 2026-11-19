@@ -20,7 +20,7 @@ name: "Deploy: Staleness Watchdog"
 # Division of labour with deploy-staleness-check.yml (independent cron; both
 # must exist):
 #   - deploy-staleness-check.yml = app-level VISIBILITY (2-hourly): reads the
-#     app's /api/v1/deployment build SHA vs origin/main; 6h grace; escalates
+#     app's /api/v1/deployment build SHA vs origin/main; 10h grace; escalates
 #     with ::error:: once staleness exceeds the grace window. It does NOT
 #     heal.
 #   - deploy-watchdog.yml (this file) = fly-level SELF-HEAL (*/30): compares
@@ -115,7 +115,10 @@ jobs:
           # in the script the scalar stays a plain literal, so future comment
           # growth cannot silently break the workflow again.
           REPO: ${{ github.repository }}
-          GRACE_HOURS: ${{ vars.STALENESS_GRACE_HOURS || 6 }}
+          # Shared staleness grace (10h default: one throttle period of headroom
+          # above a ~4-6h normal delivery cycle). Keep this in step with
+          # deploy_health.GRACE_HOURS_DEFAULT and deploy-staleness-check.yml.
+          GRACE_HOURS: ${{ vars.STALENESS_GRACE_HOURS || 10 }}
         run: |
           set -o pipefail
 
@@ -573,7 +576,7 @@ jobs:
               "Production was behind origin/main and the watchdog re-dispatched deploy.yml, but it could not evaluate the deploy failure streak locally. It is not escalating; check the deploy run if production stays stale."
           else
             # Not escalating: the self-heal path worked. A later in-sync tick
-            # (or the staleness check's 6h grace) covers a deploy that fails
+            # (or the staleness check's 10h grace) covers a deploy that fails
             # after this dispatch, and the recovery email is accurate because
             # it carries the measured detail rather than claiming prod is current.
             emit_verdict "true" "the deploy watchdog re-dispatched deploy.yml" \
