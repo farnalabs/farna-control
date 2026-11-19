@@ -1765,14 +1765,14 @@ def _installer_probe(
 # tests assert on workflow/file text and still run on Windows.
 @pytest.mark.posix_only
 def test_installer_rejects_linux_host_with_darwin_archive(tmp_path: Path) -> None:
-    result = _installer_probe(tmp_path, "modulo-1.2.3-darwin-amd64.tar.gz", "modulo-1.2.3-darwin-amd64")
+    result = _installer_probe(tmp_path, "farna-control-1.2.3-darwin-amd64.tar.gz", "farna-control-1.2.3-darwin-amd64")
     assert result.returncode != 0
     assert "archive OS 'darwin' does not match detected host OS 'linux'" in result.stderr
 
 
 @pytest.mark.posix_only
 def test_installer_accepts_linux_archive_shape_before_manifest_gate(tmp_path: Path) -> None:
-    result = _installer_probe(tmp_path, "modulo-1.2.3-linux-amd64.tar.gz", "modulo-1.2.3-linux-amd64")
+    result = _installer_probe(tmp_path, "farna-control-1.2.3-linux-amd64.tar.gz", "farna-control-1.2.3-linux-amd64")
     assert result.returncode != 0
     assert "SIGNED release manifest must sit beside the tarball" in result.stderr
     assert "archive OS 'linux' does not match" not in result.stderr
@@ -1781,7 +1781,7 @@ def test_installer_accepts_linux_archive_shape_before_manifest_gate(tmp_path: Pa
 
 @pytest.mark.posix_only
 def test_installer_rejects_mismatched_archive_root_before_install_mutation(tmp_path: Path) -> None:
-    result = _installer_probe(tmp_path, "modulo-1.2.3-linux-amd64.tar.gz", "unexpected-root", bypass_manifest=True)
+    result = _installer_probe(tmp_path, "farna-control-1.2.3-linux-amd64.tar.gz", "unexpected-root", bypass_manifest=True)
     assert result.returncode != 0
     assert "archive top-level directory 'unexpected-root' does not match archive identity" in result.stderr
     assert not (tmp_path / "install").exists()
@@ -1791,8 +1791,8 @@ def test_installer_rejects_mismatched_archive_root_before_install_mutation(tmp_p
 def test_installer_rejects_hidden_top_level_entry_before_install_mutation(tmp_path: Path) -> None:
     result = _installer_probe(
         tmp_path,
-        "modulo-1.2.3-linux-amd64.tar.gz",
-        "modulo-1.2.3-linux-amd64",
+        "farna-control-1.2.3-linux-amd64.tar.gz",
+        "farna-control-1.2.3-linux-amd64",
         bypass_manifest=True,
         extra_top_level=".hidden",
     )
@@ -1804,8 +1804,8 @@ def test_installer_rejects_hidden_top_level_entry_before_install_mutation(tmp_pa
 def test_installer_rejects_symlinked_checksum_parent_before_install_mutation(tmp_path: Path) -> None:
     result = _installer_probe(
         tmp_path,
-        "modulo-1.2.3-linux-amd64.tar.gz",
-        "modulo-1.2.3-linux-amd64",
+        "farna-control-1.2.3-linux-amd64.tar.gz",
+        "farna-control-1.2.3-linux-amd64",
         bypass_manifest=True,
         symlinked_checksum_parent=True,
     )
@@ -1885,8 +1885,8 @@ def test_installer_rejects_legacy_shim_before_install_root_mutation(tmp_path: Pa
     current = install_root / "current"
     result = _installer_probe(
         tmp_path,
-        "modulo-1.2.3-linux-amd64.tar.gz",
-        "modulo-1.2.3-linux-amd64",
+        "farna-control-1.2.3-linux-amd64.tar.gz",
+        "farna-control-1.2.3-linux-amd64",
         bypass_manifest=True,
         legacy_shim=legacy_shim,
     )

@@ -679,7 +679,7 @@ def test_bundle_smoke_setup_proves_runner_owned_bundle_and_writable_workspace() 
     # pytest's private 0700 tmp_path tree, or the smoke user cannot reach it.
     smoke_root = Path(tempfile.mkdtemp(prefix="modulo-smoke-"))
     extract_root = smoke_root / "extracted"
-    bundle = extract_root / "modulo-0.1.0-linux-amd64"
+    bundle = extract_root / "farna-control-0.1.0-linux-amd64"
     workspace = smoke_root / "workspace"
     home = workspace / "home"
     data = workspace / "data"
@@ -901,7 +901,7 @@ def test_windows_bundle_is_scoped_into_the_alpha_release_path() -> None:
     # Windows must only appear inside the INCLUDE_WINDOWS conditional block
     assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in build_script
     # The unconditional path must not have Windows
-    assert "modulo-${VERSION}-linux-amd64.tar.gz" in build_script
+    assert "farna-control-${VERSION}-linux-amd64.tar.gz" in build_script
     assert "Modulo-${VERSION}-macos-arm64.dmg" in build_script
     assert "Modulo-${VERSION}-macos-x86_64.dmg" in build_script
     # The components dict starts with linux+macos only
@@ -940,7 +940,7 @@ def test_publish_release_assets_match_the_alpha_bundle() -> None:
         script = steps[names.index(step_name)]["run"]
         # Windows must only appear inside the INCLUDE_WINDOWS conditional
         assert 'if [ "$INCLUDE_WINDOWS" = "true" ]; then' in script
-        assert "modulo-${VERSION}-linux-amd64.tar.gz" in script
+        assert "farna-control-${VERSION}-linux-amd64.tar.gz" in script
         assert "Modulo-${VERSION}-macos-arm64.dmg" in script
         assert "Modulo-${VERSION}-macos-x86_64.dmg" in script
 
@@ -3306,7 +3306,7 @@ def test_final_release_manifest_builds_sha256sums_conditionally() -> None:
     # Should error if include_windows=true but artifact missing
     assert "include_windows=true but windows-installer" in script
     # Linux and both native macOS DMGs must always be included.
-    assert "modulo-${VERSION}-linux-amd64.tar.gz" in script
+    assert "farna-control-${VERSION}-linux-amd64.tar.gz" in script
     assert "Modulo-${VERSION}-macos-arm64.dmg" in script
     assert "Modulo-${VERSION}-macos-x86_64.dmg" in script
 
@@ -3325,7 +3325,7 @@ def test_final_release_manifest_builds_components_dict_conditionally() -> None:
     assert "if include_windows:" in script
     assert 'components["windows"] = "amd64"' in script
     # Both architecture-suffixed DMGs are unconditional manifest assets.
-    assert ('names = [f"modulo-{version}-linux-amd64.tar.gz", f"Modulo-{version}-macos-arm64.dmg", f"Modulo-{version}-macos-x86_64.dmg"]') in script
+    assert ('names = [f"farna-control-{version}-linux-amd64.tar.gz", f"Modulo-{version}-macos-arm64.dmg", f"Modulo-{version}-macos-x86_64.dmg"]') in script
     assert 'names.append(f"modulo-{version}-windows-amd64.exe")' in script
 
 
@@ -3383,7 +3383,7 @@ def test_alpha_bundle_sha256sums_generation_succeeds_without_windows(tmp_path: P
     # We test the sha256sum generation logic directly
     artefacts_dir = tmp_path / "release-artefacts"
     artefacts_dir.mkdir()
-    linux_tar = artefacts_dir / "modulo-0.3.324-linux-amd64.tar.gz"
+    linux_tar = artefacts_dir / "farna-control-0.3.324-linux-amd64.tar.gz"
     macos_arm64_dmg = artefacts_dir / "Modulo-0.3.324-macos-arm64.dmg"
     macos_x86_64_dmg = artefacts_dir / "Modulo-0.3.324-macos-x86_64.dmg"
     linux_tar.write_bytes(b"linux-bundle-content")
@@ -3397,13 +3397,13 @@ set -euo pipefail
 cd release-artefacts
 if [ "$INCLUDE_WINDOWS" = "true" ]; then
   sha256sum \
-    "modulo-${VERSION}-linux-amd64.tar.gz" \
+    "farna-control-${VERSION}-linux-amd64.tar.gz" \
     "Modulo-${VERSION}-macos-arm64.dmg" \
     "Modulo-${VERSION}-macos-x86_64.dmg" \
     "modulo-${VERSION}-windows-amd64.exe" > SHA256SUMS
 else
   sha256sum \
-    "modulo-${VERSION}-linux-amd64.tar.gz" \
+    "farna-control-${VERSION}-linux-amd64.tar.gz" \
     "Modulo-${VERSION}-macos-arm64.dmg" \
     "Modulo-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
 fi
@@ -3416,7 +3416,7 @@ cd ..
     # Verify SHA256SUMS contains Linux and both native macOS DMGs.
     sha256sums = (artefacts_dir / "SHA256SUMS").read_text(encoding="utf-8")
     expected_assets = {
-        "modulo-0.3.324-linux-amd64.tar.gz",
+        "farna-control-0.3.324-linux-amd64.tar.gz",
         "Modulo-0.3.324-macos-arm64.dmg",
         "Modulo-0.3.324-macos-x86_64.dmg",
     }
@@ -3430,7 +3430,7 @@ def test_beta_bundle_sha256sums_generation_succeeds_with_windows(tmp_path: Path)
     """Running the SHA256SUMS generation with INCLUDE_WINDOWS=true must succeed when Windows artifact exists."""
     artefacts_dir = tmp_path / "release-artefacts"
     artefacts_dir.mkdir()
-    linux_tar = artefacts_dir / "modulo-0.3.324-linux-amd64.tar.gz"
+    linux_tar = artefacts_dir / "farna-control-0.3.324-linux-amd64.tar.gz"
     macos_arm64_dmg = artefacts_dir / "Modulo-0.3.324-macos-arm64.dmg"
     macos_x86_64_dmg = artefacts_dir / "Modulo-0.3.324-macos-x86_64.dmg"
     windows_exe = artefacts_dir / "modulo-0.3.324-windows-amd64.exe"
@@ -3445,13 +3445,13 @@ set -euo pipefail
 cd release-artefacts
 if [ "$INCLUDE_WINDOWS" = "true" ]; then
   sha256sum \
-    "modulo-${VERSION}-linux-amd64.tar.gz" \
+    "farna-control-${VERSION}-linux-amd64.tar.gz" \
     "Modulo-${VERSION}-macos-arm64.dmg" \
     "Modulo-${VERSION}-macos-x86_64.dmg" \
     "modulo-${VERSION}-windows-amd64.exe" > SHA256SUMS
 else
   sha256sum \
-    "modulo-${VERSION}-linux-amd64.tar.gz" \
+    "farna-control-${VERSION}-linux-amd64.tar.gz" \
     "Modulo-${VERSION}-macos-arm64.dmg" \
     "Modulo-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
 fi
@@ -3464,7 +3464,7 @@ cd ..
     # Verify SHA256SUMS includes Linux, both native macOS DMGs, and Windows.
     sha256sums = (artefacts_dir / "SHA256SUMS").read_text(encoding="utf-8")
     expected_assets = {
-        "modulo-0.3.324-linux-amd64.tar.gz",
+        "farna-control-0.3.324-linux-amd64.tar.gz",
         "Modulo-0.3.324-macos-arm64.dmg",
         "Modulo-0.3.324-macos-x86_64.dmg",
         "modulo-0.3.324-windows-amd64.exe",
@@ -3478,7 +3478,7 @@ def test_beta_bundle_sha256sums_generation_fails_when_windows_missing(tmp_path: 
     """Running the SHA256SUMS generation with INCLUDE_WINDOWS=true must fail when Windows artifact is missing."""
     artefacts_dir = tmp_path / "release-artefacts"
     artefacts_dir.mkdir()
-    linux_tar = artefacts_dir / "modulo-0.3.324-linux-amd64.tar.gz"
+    linux_tar = artefacts_dir / "farna-control-0.3.324-linux-amd64.tar.gz"
     macos_arm64_dmg = artefacts_dir / "Modulo-0.3.324-macos-arm64.dmg"
     macos_x86_64_dmg = artefacts_dir / "Modulo-0.3.324-macos-x86_64.dmg"
     linux_tar.write_bytes(b"linux-bundle-content")
@@ -3495,13 +3495,13 @@ if [ "$INCLUDE_WINDOWS" = "true" ]; then
     exit 1
   fi
   sha256sum \
-    "modulo-${VERSION}-linux-amd64.tar.gz" \
+    "farna-control-${VERSION}-linux-amd64.tar.gz" \
     "Modulo-${VERSION}-macos-arm64.dmg" \
     "Modulo-${VERSION}-macos-x86_64.dmg" \
     "modulo-${VERSION}-windows-amd64.exe" > SHA256SUMS
 else
   sha256sum \
-    "modulo-${VERSION}-linux-amd64.tar.gz" \
+    "farna-control-${VERSION}-linux-amd64.tar.gz" \
     "Modulo-${VERSION}-macos-arm64.dmg" \
     "Modulo-${VERSION}-macos-x86_64.dmg" > SHA256SUMS
 fi

@@ -510,7 +510,7 @@ def test_bundle_assembles_the_exact_executable_installer_and_internal_checksum()
 
 
 def test_bundle_tar_fixture_preserves_installer_mode_and_checksum_entry(tmp_path: Path) -> None:
-    bundle = tmp_path / "modulo-1.2.3-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.3-linux-amd64"
     bundle.mkdir()
     installer = bundle / "install.sh"
     installer.write_text("#!/usr/bin/env bash\\n", encoding="utf-8")

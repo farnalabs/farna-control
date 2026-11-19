@@ -143,7 +143,7 @@ jobs:
             python3 scripts/validate_release_tag.py validate --tag "${tag}" --release-json release.json \
               || { echo "::error::canary release ${tag} is missing or is not published (draft/prerelease)"; exit 1; }
             version="${tag#bundle-v}"
-            tarball="modulo-${version}-linux-amd64.tar.gz"
+            tarball="farna-control-${version}-linux-amd64.tar.gz"
             echo "TAG=${tag}" >> "$GITHUB_ENV"
             echo "TARBALL=${tarball}" >> "$GITHUB_ENV"
             curl --proto '=https' -fsSL -o "${tarball}" \
@@ -171,7 +171,7 @@ jobs:
             python3 scripts/validate_release_tag.py validate --tag "${TAG}" --release-json release.json \
               || { echo "::error::release ${TAG} is missing or is not published (draft/prerelease)"; exit 1; }
             version="${TAG#bundle-v}"
-            tarball="modulo-${version}-linux-amd64.tar.gz"
+            tarball="farna-control-${version}-linux-amd64.tar.gz"
             assets="$(gh release view "${TAG}" --json assets --jq '.assets[].name')"
             if ! echo "${assets}" | grep -qF "${tarball}"; then
               echo "::error::release ${TAG} does not carry ${tarball}"; exit 1
@@ -220,7 +220,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo start --detach
+          farna-control start --detach
           for _ in $(seq 1 30); do
             state_ready="$(python3 -c "import json, pathlib; p = pathlib.Path.home() / '.local' / 'share' / 'modulo' / 'data' / 'state.json'; print(json.loads(p.read_text()).get('api_port', '') if p.is_file() else '')")"
             if [ -n "${state_ready}" ]; then
@@ -232,7 +232,7 @@ jobs:
           if [ -z "${BASE:-}" ]; then
             echo "::error::state.json never appeared - boot failed"; exit 1
           fi
-          modulo status
+          farna-control status
 
       - name: Seed the admin user
         env:
@@ -243,7 +243,7 @@ jobs:
           if [ -z "${ADMIN_PASSWORD}" ]; then
             echo "::error::precondition missing: SMOKE_ADMIN_PASSWORD secret is not set - refusing to run a partially-faked smoke"; exit 1
           fi
-          modulo users add admin@modulo.run --admin --password "${ADMIN_PASSWORD}"
+          farna-control users add admin@modulo.run --admin --password "${ADMIN_PASSWORD}"
 
       - name: Endpoint smoke (health, SPA, authenticated API, MCP initialize, WS handshake)
         env:
@@ -265,14 +265,14 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo doctor --json | tee doctor.json > /dev/null
+          farna-control doctor --json | tee doctor.json > /dev/null
           echo "doctor OK (exit 0, green)"
 
       - name: Zero-egress proof (doctor under unshare -n)
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          unshare -n modulo doctor --json | tee offline-doctor.json > /dev/null
+          unshare -n farna-control doctor --json | tee offline-doctor.json > /dev/null
           echo "::notice::doctor exited 0 with zero network interfaces - zero-egress proof complete"
 
       - name: Backup -> wipe -> restore -> doctor green
@@ -280,11 +280,11 @@ jobs:
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
           farna-control backup --data-dir "${DATA_DIR}" --output-dir smoke-backup
-          modulo stop
+          farna-control stop
           rm -rf "${DATA_DIR}"
-          modulo start --detach
+          farna-control start --detach
           farna-control restore smoke-backup --data-dir "${DATA_DIR}" --yes
-          modulo doctor --json | tee doctor-restore.json > /dev/null
+          farna-control doctor --json | tee doctor-restore.json > /dev/null
           echo "backup/wipe/restore round-trip OK"
 
       - name: Force-kill the process tree; orphans reaped; recovery health within 60s
@@ -306,8 +306,8 @@ jobs:
             echo "::error::orphaned bundled services survived the kill-tree"; exit 1
           fi
           echo "orphans reaped"
-          modulo stop || true
-          modulo start --detach
+          farna-control stop || true
+          farna-control start --detach
           curl -fsS --retry 30 --retry-connrefused --retry-max-time 60 "${BASE}/healthz" > /dev/null  #NOSONAR install target is the local launcher on 127.0.0.1 (http-only by design); nothing leaves the runner
           echo "recovery health 200 within 60s OK"
 
@@ -315,8 +315,8 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo stop || true
-          modulo start &
+          farna-control stop || true
+          farna-control start &
           pid=$!
           curl -fsS --retry 30 --retry-connrefused "${BASE}/healthz" > /dev/null  #NOSONAR install target is the local launcher on 127.0.0.1 (http-only by design); nothing leaves the runner
           set +e
@@ -334,12 +334,12 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo stop || true
+          farna-control stop || true
           # REFUSAL: the stack is stopped AND no verified snapshot exists on this
           # fresh smoke data dir, so the enforced pre-upgrade dump refuses and the
           # swap does NOT happen (launcher/upgrade.py pre_upgrade_dump refusal).
           set +e
-          modulo upgrade "${TAG}" --from-file "${TARBALL}" 2>refusal.txt
+          farna-control upgrade "${TAG}" --from-file "${TARBALL}" 2>refusal.txt
           refusal_code=$?
           set -e
           if [ "${refusal_code}" -eq 0 ]; then
@@ -352,11 +352,11 @@ jobs:
           # SUCCESS: boot the stack (the dump needs the bundled Postgres reachable),
           # take the verified dump via farna-control backup, then upgrade --skip-backup
           # (the loud, one-flag installer ack per scripts/install.sh and FAR-675).
-          modulo start --detach
+          farna-control start --detach
           farna-control backup --data-dir "${DATA_DIR}" --output-dir smoke-backup2
-          modulo upgrade "${TAG}" --from-file "${TARBALL}" --skip-backup
+          farna-control upgrade "${TAG}" --from-file "${TARBALL}" --skip-backup
           curl -fsS --retry 30 --retry-connrefused "${BASE}/healthz" > /dev/null  #NOSONAR install target is the local launcher on 127.0.0.1 (http-only by design); nothing leaves the runner
-          modulo stop
+          farna-control stop
           echo "upgrade success OK"
 
   canary:
@@ -467,7 +467,7 @@ jobs:
             python3 scripts/validate_release_tag.py validate --tag "${tag}" --release-json release.json \
               || { echo "::error::canary release ${tag} is missing or is not published (draft/prerelease)"; exit 1; }
             version="${tag#bundle-v}"
-            tarball="modulo-${version}-linux-amd64.tar.gz"
+            tarball="farna-control-${version}-linux-amd64.tar.gz"
             echo "TAG=${tag}" >> "$GITHUB_ENV"
             echo "TARBALL=${tarball}" >> "$GITHUB_ENV"
             # Also surface the resolved tag as a job output so
@@ -521,7 +521,7 @@ jobs:
             python3 scripts/validate_release_tag.py validate --tag "${TAG}" --release-json release.json \
               || { echo "::error::release ${TAG} is missing or is not published (draft/prerelease)"; exit 1; }
             version="${TAG#bundle-v}"
-            tarball="modulo-${version}-linux-amd64.tar.gz"
+            tarball="farna-control-${version}-linux-amd64.tar.gz"
             assets="$(gh release view "${TAG}" --json assets --jq '.assets[].name')"
             if ! echo "${assets}" | grep -qF "${tarball}"; then
               echo "::error::release ${TAG} does not carry ${tarball}"; exit 1
@@ -560,7 +560,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo start --detach
+          farna-control start --detach
           for _ in $(seq 1 30); do
             state_ready="$(python3 -c "import json, pathlib; p = pathlib.Path.home() / '.local' / 'share' / 'modulo' / 'data' / 'state.json'; print(json.loads(p.read_text()).get('api_port', '') if p.is_file() else '')")"
             if [ -n "${state_ready}" ]; then
@@ -572,7 +572,7 @@ jobs:
           if [ -z "${BASE:-}" ]; then
             echo "::error::state.json never appeared - boot failed"; exit 1
           fi
-          modulo status
+          farna-control status
 
       - name: Seed the admin user
         if: steps.gate.outputs.skip != 'true'
@@ -584,7 +584,7 @@ jobs:
           if [ -z "${ADMIN_PASSWORD}" ]; then
             echo "::error::precondition missing: SMOKE_ADMIN_PASSWORD secret is not set - refusing to run a partially-faked smoke"; exit 1
           fi
-          modulo users add admin@modulo.run --admin --password "${ADMIN_PASSWORD}"
+          farna-control users add admin@modulo.run --admin --password "${ADMIN_PASSWORD}"
 
       - name: Endpoint smoke (health, SPA, authenticated API, MCP initialize, WS handshake)
         if: steps.gate.outputs.skip != 'true'
@@ -608,7 +608,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo doctor --json | tee doctor.json > /dev/null
+          farna-control doctor --json | tee doctor.json > /dev/null
           echo "doctor OK (exit 0, green)"
 
       - name: Zero-egress proof (doctor under unshare -n)
@@ -616,7 +616,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          unshare -n modulo doctor --json | tee offline-doctor.json > /dev/null
+          unshare -n farna-control doctor --json | tee offline-doctor.json > /dev/null
           echo "::notice::doctor exited 0 with zero network interfaces - zero-egress proof complete"
 
       - name: Backup -> wipe -> restore -> doctor green
@@ -625,11 +625,11 @@ jobs:
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
           farna-control backup --data-dir "${DATA_DIR}" --output-dir smoke-backup
-          modulo stop
+          farna-control stop
           rm -rf "${DATA_DIR}"
-          modulo start --detach
+          farna-control start --detach
           farna-control restore smoke-backup --data-dir "${DATA_DIR}" --yes
-          modulo doctor --json | tee doctor-restore.json > /dev/null
+          farna-control doctor --json | tee doctor-restore.json > /dev/null
           echo "backup/wipe/restore round-trip OK"
 
       - name: Force-kill the process tree; orphans reaped; recovery health within 60s
@@ -652,8 +652,8 @@ jobs:
             echo "::error::orphaned bundled services survived the kill-tree"; exit 1
           fi
           echo "orphans reaped"
-          modulo stop || true
-          modulo start --detach
+          farna-control stop || true
+          farna-control start --detach
           curl -fsS --retry 30 --retry-connrefused --retry-max-time 60 "${BASE}/healthz" > /dev/null  #NOSONAR install target is the local launcher on 127.0.0.1 (http-only by design); nothing leaves the runner
           echo "recovery health 200 within 60s OK"
 
@@ -662,8 +662,8 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo stop || true
-          modulo start &
+          farna-control stop || true
+          farna-control start &
           pid=$!
           curl -fsS --retry 30 --retry-connrefused "${BASE}/healthz" > /dev/null  #NOSONAR install target is the local launcher on 127.0.0.1 (http-only by design); nothing leaves the runner
           set +e
@@ -682,12 +682,12 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo stop || true
+          farna-control stop || true
           # REFUSAL: the stack is stopped AND no verified snapshot exists on this
           # fresh smoke data dir, so the enforced pre-upgrade dump refuses and the
           # swap does NOT happen (launcher/upgrade.py pre_upgrade_dump refusal).
           set +e
-          modulo upgrade "${TAG}" --from-file "${TARBALL}" 2>refusal.txt
+          farna-control upgrade "${TAG}" --from-file "${TARBALL}" 2>refusal.txt
           refusal_code=$?
           set -e
           if [ "${refusal_code}" -eq 0 ]; then
@@ -700,11 +700,11 @@ jobs:
           # SUCCESS: boot the stack (the dump needs the bundled Postgres reachable),
           # take the verified dump via farna-control backup, then upgrade --skip-backup
           # (the loud, one-flag installer ack per scripts/install.sh and FAR-675).
-          modulo start --detach
+          farna-control start --detach
           farna-control backup --data-dir "${DATA_DIR}" --output-dir smoke-backup2
-          modulo upgrade "${TAG}" --from-file "${TARBALL}" --skip-backup
+          farna-control upgrade "${TAG}" --from-file "${TARBALL}" --skip-backup
           curl -fsS --retry 30 --retry-connrefused "${BASE}/healthz" > /dev/null  #NOSONAR install target is the local launcher on 127.0.0.1 (http-only by design); nothing leaves the runner
-          modulo stop
+          farna-control stop
           echo "upgrade success OK"
 
       - name: N-1 upgrade leg (canary leg only)
@@ -723,7 +723,7 @@ jobs:
           fi
           prev_ver="${N_MINUS_1#bundle-v}"
           n1_dir="n1-artifact"
-          n1_tarball="modulo-${prev_ver}-linux-amd64.tar.gz"
+          n1_tarball="farna-control-${prev_ver}-linux-amd64.tar.gz"
           mkdir -p "${n1_dir}"
           n1_base="https://github.com/${{ github.repository }}/releases/download/${N_MINUS_1}"
           curl --proto '=https' -fsSL -o "${n1_dir}/${n1_tarball}" "${n1_base}/${n1_tarball}" \
@@ -744,17 +744,17 @@ jobs:
           fi
           # Install N-1, seed identifiable data, upgrade to TAG, prove data intact.
           bash scripts/install.sh --from-file "${n1_dir}/${n1_tarball}"  #NOSONAR install.sh is from the trusted checkout; the --from-file tarball is verified (ed25519 manifest signature + sha256 + internal SHA256SUMS + SLSA attestation) before this step
-          modulo start --detach
-          modulo users add n1-seed@modulo.run --admin --password "${ADMIN_PASSWORD}"
+          farna-control start --detach
+          farna-control users add n1-seed@modulo.run --admin --password "${ADMIN_PASSWORD}"
           farna-control backup --data-dir "${DATA_DIR}" --output-dir canary-backup
-          modulo doctor --json | tee canary-doctor.json > /dev/null
-          modulo stop || true
+          farna-control doctor --json | tee canary-doctor.json > /dev/null
+          farna-control stop || true
           bash scripts/install.sh --from-file "${TARBALL}" --skip-backup  #NOSONAR install.sh is from the trusted checkout; the --from-file tarball is verified (ed25519 signature + sha256 + SLSA attestation) before this step
-          modulo start --detach
-          modulo doctor --json | tee canary-doctor2.json > /dev/null
-          modulo users list --data-dir "${DATA_DIR}" | grep -q 'n1-seed@modulo.run' \
+          farna-control start --detach
+          farna-control doctor --json | tee canary-doctor2.json > /dev/null
+          farna-control users list --data-dir "${DATA_DIR}" | grep -q 'n1-seed@modulo.run' \
             || { echo "::error::seeded N-1 data did not survive the upgrade"; exit 1; }
-          modulo stop
+          farna-control stop
           echo "N-1 upgrade leg OK (data intact + doctor green)"
 
 
@@ -824,7 +824,7 @@ jobs:
           python3 scripts/validate_release_tag.py validate --tag "${TARGET}" --release-json rollback-release.json \
             || { echo "::error::release ${TARGET} is missing or is not published (draft/prerelease)"; exit 1; }
           version="${TARGET#bundle-v}"
-          tarball_url="https://github.com/${{ github.repository }}/releases/download/${TARGET}/modulo-${version}-linux-amd64.tar.gz"
+          tarball_url="https://github.com/${{ github.repository }}/releases/download/${TARGET}/farna-control-${version}-linux-amd64.tar.gz"
           curl --proto '=https' -fsSLI "${tarball_url}" | grep -q '^HTTP/. 200' \
             || { echo "::error::rollback artifact not reachable at ${tarball_url}"; exit 1; }
           echo "rollback target ${TARGET} verified - proceed with the docs/upgrade-process.md rollout actions"

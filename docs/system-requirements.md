@@ -73,7 +73,8 @@ Windows binaries.
 
 The native installer (`scripts/install.sh`) distributes a self-contained
 bundle: the backend, a bundled CPython runtime, PostgreSQL 16, Redis 8, and
-the built SPA, laid out under `~/.local/opt/modulo/`. The table below is
+the built SPA, laid out under `~/.local/opt/farna-control/` with the
+`farna-control` command on `PATH`. The table below is
 the honest v1 envelope (ADR 031; recenter on what `bundle-v*` artifacts
 actually ship - do not widen these rows until the packaging tickets land):
 

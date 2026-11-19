@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Modulo native installer (Linux only) — single-install distribution, P1a.
+# Farna Control native installer (Linux only) — single-install distribution, P1a.
 # macOS arm64 uses scripts/macos/install.sh and the signed .dmg artifact.
 # Spec: ADR 031 (single-install native distribution); this ticket: FAR-670.
 #        + pre-upgrade upgrade path (FAR-672).
@@ -9,8 +9,8 @@
 # artifact or implying that the Linux bundle is portable to macOS.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/farnalabs/modulo/main/scripts/install.sh -o modulo-install.sh
-#   bash modulo-install.sh [options]
+#   curl -fsSL https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh -o farna-control-install.sh
+#   bash farna-control-install.sh [options]
 #   ./install.sh [--force] [--from-file <tarball>] [--from-bundle <bundle-dir>] [--skip-backup]
 #
 # NOTE: download to a file and run it (as above) rather than streaming a
@@ -23,12 +23,12 @@
 #      (P1a: linux amd64/arm64) from GitHub Releases.
 #   2. Verifies its sha256 against the release SHA256SUMS BEFORE extraction.
 #   3. Lays it out under a user-writable install root:
-#        ~/.local/opt/modulo/versions/<version>/    (the extracted bundle)
-#        ~/.local/opt/modulo/current                (symlink -> versions/<version>)
+#        ~/.local/opt/farna-control/versions/<version>/    (the extracted bundle)
+#        ~/.local/opt/farna-control/current                (symlink -> versions/<version>)
 #      The `current` symlink is the primitive reused by the upgrade machinery
 #      (FAR-672): upgrades re-point it; nothing else is version-specific.
-#   4. Writes a PATH shim at ~/.local/bin/modulo pointing at current/launcher.
-#   5. Writes ~/.local/opt/modulo/env.sh with a safe PATH export and prints the
+#   4. Writes a PATH shim at ~/.local/bin/farna-control pointing at current/launcher.
+#   5. Writes ~/.local/opt/farna-control/env.sh with a safe PATH export and prints the
 #      exact `source <path>` command; the installer never changes the caller's
 #      current shell.
 #
@@ -45,7 +45,7 @@
 #      FIRST (while the launcher is running), then:
 #   2. The installer REFUSES to perform the versioned-dir/current-symlink
 #      swap while the data-dir lock is held (the live launcher holds it).
-#      Stop the launcher ('modulo stop'), then re-run this installer with
+#      Stop the launcher ('farna-control stop'), then re-run this installer with
 #      --skip-backup: the flag is THE loud, explicit acknowledgement that
 #      the enforced dump already succeeded and must not be redone (the
 #      stopped stack cannot be dumped).
@@ -53,10 +53,10 @@
 #      primitive from step 3 above; the PATH shim never changes.
 #
 # Migrating from Docker Compose (pg_dump -> `farna-control restore`):
-#   docker compose exec postgres pg_dump -U modulo --clean --if-exists \
-#            --no-owner --no-acl modulo > modulo-backup.sql
+#   docker compose exec postgres pg_dump -U farna_control --clean --if-exists \
+#            --no-owner --no-acl farna_control > farna-control-backup.sql
 #   docker compose down
-#   bash modulo-install.sh            # fresh native install
+#   bash farna-control-install.sh     # fresh native install
 #   farna-control restore <backup-dir> --data-dir <fresh-data-dir> --yes
 #   (or restore the SQL directly: pg_restore-free plain SQL is replayed via
 #   psql by the backup CLI). The compose cluster is alpine/musl and the
@@ -64,8 +64,8 @@
 #   (pg_collation versions) and prints reindexdb guidance (FAR-672).
 #
 # Bundle artifact layout (must stay in sync with .github/workflows/bundle-release.yml):
-#   modulo-<version>-linux-<arch>.tar.gz
-#     └── modulo-<version>-linux-<arch>/      (single top-level directory)
+#   farna-control-<version>-linux-<arch>.tar.gz
+#     └── farna-control-<version>-linux-<arch>/      (single top-level directory)
 #         ├── VERSION                         (the release tag, e.g. bundle-v0.1.0)
 #         ├── SHA256SUMS                      (sha256 over every shipped file)
 #         ├── install.sh                      (this exact executable installer)
@@ -78,13 +78,20 @@
 
 set -euo pipefail
 
-REPO="farnalabs/modulo"
+REPO="farnalabs/farna-control"
 RELEASES_LATEST_URL="https://github.com/${REPO}/releases/latest"
 RELEASES_DOWNLOAD_URL="https://github.com/${REPO}/releases/download"
 
-INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/modulo}}"
+INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}}"
 BIN_DIR="${FARNA_CONTROL_BIN_DIR:-${MODULO_BIN_DIR:-${HOME}/.local/bin}}"
-MARKER_FILE="${INSTALL_ROOT}/.modulo-native-install"
+MARKER_FILE="${INSTALL_ROOT}/.farna-control-native-install"
+
+# Pre-rebrand (FAR-2571) locations. A machine that ran the installer before the
+# rename has its bundle under this root and its shim at this path; both are
+# migrated in preflight (see migrate_legacy_install) so an upgrade never leaves
+# a half-migrated install behind.
+LEGACY_INSTALL_ROOT="${FARNA_CONTROL_LEGACY_INSTALL_ROOT:-${HOME}/.local/opt/modulo}"
+LEGACY_USER_SHIM="${FARNA_CONTROL_LEGACY_USER_SHIM:-${BIN_DIR}/modulo}"
 
 FORCE=0
 FROM_FILE=""
@@ -102,13 +109,13 @@ info() {
 
 usage() {
   cat <<'EOF'
-Modulo native installer (Linux, P1a)
+Farna Control native installer (Linux, P1a)
 
 Options:
   --force                  Replace an existing /usr/local/bin/modulo that this
                            installer did not create (it is renamed, not deleted).
   --from-file <tarball>    Install from a locally downloaded
-                           modulo-<version>-linux-<arch>.tar.gz instead of
+                           farna-control-<version>-linux-<arch>.tar.gz instead of
                            downloading from GitHub Releases (offline installs;
                            the signed manifest and adjacent .sig are required).
   --from-bundle <dir>      Install from an extracted bundle directory that
@@ -126,11 +133,11 @@ Options:
 
 Environment overrides:
   VERSION=<tag>            Install a specific bundle tag (default: latest release).
-  FARNA_CONTROL_INSTALL_ROOT  Install root (default: ~/.local/opt/modulo).
+  FARNA_CONTROL_INSTALL_ROOT  Install root (default: ~/.local/opt/farna-control).
   FARNA_CONTROL_BIN_DIR       Shim directory (default: ~/.local/bin).
   FARNA_CONTROL_DATA_DIR      Bundled data dir (default: ~/.local/share/modulo/data).
 
-When running the downloaded script, pass options like:  bash modulo-install.sh --force
+When running the downloaded script, pass options like:  bash farna-control-install.sh --force
 EOF
 }
 
@@ -139,7 +146,7 @@ EOF
 # A failed install is the most likely first experience for a new operator, and
 # the terminal scrollback is gone by the time they ask for help. Everything the
 # installer prints is mirrored into a private, size-capped log under
-# ~/.local/state/modulo/, and every failure path prints ONE delimited support
+# ~/.local/state/farna-control/, and every failure path prints ONE delimited support
 # block as its LAST output: the target being installed, the failing stage in
 # plain words, the absolute log path, and a short support reference. The
 # reference is also part of the log filename, so the block and the file can be
@@ -264,7 +271,7 @@ start_logging() {
   # PIDs are known and can be waited on: without that wait the script can exit
   # before tee has flushed, losing exactly the tail that matters.
   SUPPORT_REF="$(support_ref)"
-  STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/modulo"
+  STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/farna-control"
   if [[ ! -d "${STATE_DIR}" ]]; then
     if ! mkdir -p -- "${STATE_DIR}" 2>/dev/null; then
       printf 'WARNING: cannot create %s — the install transcript will not be saved.\n' "${STATE_DIR}" >&2
@@ -331,7 +338,7 @@ print_support_block() {
     printf '  Install log      : %s\n' "$(redact "${log_display}")"
     printf '  Support reference: %s\n' "${SUPPORT_REF:-unknown}"
     printf '\n'
-    printf 'Send this block AND the install log file above to Modulo support so the\n'
+    printf 'Send this block AND the install log file above to Farna Control support so the\n'
     printf 'failure can be diagnosed: https://github.com/%s/issues\n' "${REPO}"
     printf -- '----- end of Farna Control install support block -----\n'
   } >&2
@@ -370,7 +377,7 @@ fetch() {
     printf '  - Behind a corporate proxy? Export HTTPS_PROXY and HTTP_PROXY (curl honours both).\n' >&2
     printf '  - Corporate TLS interception? curl may reject the interception CA\n' >&2
     printf '    (curl exit 60). Ask IT to trust the CA system-wide, or install from a file:\n' >&2
-    printf '      install.sh --from-file /path/to/modulo-<version>-linux-<arch>.tar.gz\n' >&2
+    printf '      install.sh --from-file /path/to/farna-control-<version>-linux-<arch>.tar.gz\n' >&2
     exit 1
   }
 }
@@ -441,6 +448,78 @@ validate_legacy_shim_collision() {
   fi
 }
 
+legacy_install_state() {
+  # legacy_install_state — set LEGACY_HAVE_ROOT / LEGACY_HAVE_SHIM (0 or 1).
+  LEGACY_HAVE_ROOT=0
+  LEGACY_HAVE_SHIM=0
+  if [[ -e "${LEGACY_INSTALL_ROOT}" ]]; then
+    LEGACY_HAVE_ROOT=1
+  fi
+  if [[ -e "${LEGACY_USER_SHIM}" || -L "${LEGACY_USER_SHIM}" ]]; then
+    LEGACY_HAVE_SHIM=1
+  fi
+}
+
+validate_legacy_install() {
+  # FAR-2571: the rebrand renamed the user install root and the PATH shim. A
+  # machine that ran the PRE-rebrand installer still has its bundle under
+  # ${LEGACY_INSTALL_ROOT} and its shim at ${LEGACY_USER_SHIM}. This is the
+  # READ-ONLY half: it refuses the ambiguous cases before anything is
+  # downloaded or mutated. The mutation itself is apply_legacy_install_migration,
+  # which runs only after the new bundle has been verified, so a failed download
+  # leaves the existing install completely untouched.
+  legacy_install_state
+  if [[ "${LEGACY_HAVE_ROOT}" -eq 0 && "${LEGACY_HAVE_SHIM}" -eq 0 ]]; then
+    return 0
+  fi
+  # An explicit install root that IS the legacy path needs no migration.
+  if [[ "${INSTALL_ROOT}" = "${LEGACY_INSTALL_ROOT}" ]]; then
+    return 0
+  fi
+  if [[ -e "${INSTALL_ROOT}" ]]; then
+    die "found BOTH a pre-rebrand install at ${LEGACY_INSTALL_ROOT} and an install at ${INSTALL_ROOT}.\\nRefusing to guess which one is live: remove the unused install (or set FARNA_CONTROL_INSTALL_ROOT to the one to keep) and re-run."
+  fi
+  # A running pre-rebrand launcher keeps its bundle open and holds the data-dir
+  # lock; renaming the root underneath it would break the live process.
+  local holder_pid=""
+  if holder_pid="$(lock_holder_pid)"; then
+    if [[ -n "${holder_pid}" && -d "/proc/${holder_pid}" ]]; then
+      # Name a stop command the operator actually has: the legacy shim when it
+      # is still present, otherwise the old bundle's own launcher.
+      local stop_hint="${LEGACY_USER_SHIM}"
+      if [[ "${LEGACY_HAVE_SHIM}" -eq 0 ]]; then
+        stop_hint="${LEGACY_INSTALL_ROOT}/current/launcher"
+      fi
+      die "a pre-rebrand install at ${LEGACY_INSTALL_ROOT} is still running (holder PID ${holder_pid}).\\nStop it first:  ${stop_hint} stop\\nThen re-run this installer to migrate it to ${INSTALL_ROOT}."
+    fi
+  fi
+}
+
+apply_legacy_install_migration() {
+  # FAR-2571: migrate the unambiguous pre-rebrand install by RENAMING it into
+  # place. Called only after the new bundle is downloaded and verified, and
+  # BEFORE the pre-upgrade dump guard, so the dump still reads the OLD
+  # (migrated) install's bundled runtime and the swap keeps its snapshot.
+  legacy_install_state
+  if [[ "${LEGACY_HAVE_ROOT}" -eq 0 && "${LEGACY_HAVE_SHIM}" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "${INSTALL_ROOT}" = "${LEGACY_INSTALL_ROOT}" ]]; then
+    return 0
+  fi
+  if [[ "${LEGACY_HAVE_ROOT}" -eq 1 ]]; then
+    info "migrating the pre-rebrand install root: ${LEGACY_INSTALL_ROOT} -> ${INSTALL_ROOT}"
+    mv -- "${LEGACY_INSTALL_ROOT}" "${INSTALL_ROOT}" || die "could not move ${LEGACY_INSTALL_ROOT} to ${INSTALL_ROOT} — move it manually and re-run"
+    if [[ -f "${INSTALL_ROOT}/.modulo-native-install" ]]; then
+      mv -- "${INSTALL_ROOT}/.modulo-native-install" "${MARKER_FILE}" || die "could not rename the install marker in ${INSTALL_ROOT}"
+    fi
+  fi
+  if [[ "${LEGACY_HAVE_SHIM}" -eq 1 ]]; then
+    info "removing the pre-rebrand PATH shim: ${LEGACY_USER_SHIM}"
+    rm -f -- "${LEGACY_USER_SHIM}" || die "could not remove ${LEGACY_USER_SHIM} — remove it manually and re-run"
+  fi
+}
+
 # --- upgrade machinery (FAR-672) --------------------------------------------
 
 if [[ -n "${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR:-}}" ]]; then
@@ -486,7 +565,7 @@ refuse_when_locked() {
   if [[ -d "/proc/${holder_pid}" ]]; then
     holder_pid="$(lock_holder_pid)" || return 0
     holder_mode="$(lock_holder_mode)"
-    die "Refusing: the data dir is locked by another launcher (holder PID ${holder_pid}${holder_mode:+, mode ${holder_mode}}).\nStop it first:  modulo stop\nThen re-run this installer. The enforced pre-upgrade snapshot already on disk is reused when you pass --skip-backup:\n  bash modulo-install.sh --skip-backup"
+    die "Refusing: the data dir is locked by another launcher (holder PID ${holder_pid}${holder_mode:+, mode ${holder_mode}}).\nStop it first:  farna-control stop\nThen re-run this installer. The enforced pre-upgrade snapshot already on disk is reused when you pass --skip-backup:\n  bash farna-control-install.sh --skip-backup"
   fi
   info "INFO: stale lock record (holder PID ${holder_pid}${holder_mode:+, mode ${holder_mode}} is gone) — the kernel released the lock; proceeding."
 }
@@ -522,7 +601,7 @@ run_pre_upgrade_dump() {
     :
   else
     rc=$?
-    die "pre-upgrade pg_dump FAILED (exit ${rc}) — upgrade ABORTED, no binary swap was made. The installer aborted BEFORE installing anything; fix the dump failure and re-run. If a verified snapshot ALREADY exists in ${DATA_DIR} and the bundled stack is stopped (a stopped stack cannot be dumped), re-run with --skip-backup:\n  bash modulo-install.sh --skip-backup"
+    die "pre-upgrade pg_dump FAILED (exit ${rc}) — upgrade ABORTED, no binary swap was made. The installer aborted BEFORE installing anything; fix the dump failure and re-run. If a verified snapshot ALREADY exists in ${DATA_DIR} and the bundled stack is stopped (a stopped stack cannot be dumped), re-run with --skip-backup:\n  bash farna-control-install.sh --skip-backup"
   fi
   [[ -d "${snapshot_path}" ]] || die "pre-upgrade pg_dump succeeded but the snapshot path is missing: '${snapshot_path}'"
   UPGRADE_SNAPSHOT_PATH="${snapshot_path}"
@@ -532,7 +611,7 @@ run_pre_upgrade_dump() {
 
 resolve_latest_tag() {
   # Follow the /releases/latest redirect (no API token, no API rate limit):
-  # https://github.com/farnalabs/modulo/releases/latest -> .../tag/<tag>
+  # https://github.com/farnalabs/farna-control/releases/latest -> .../tag/<tag>
   local effective
   effective="$(curl -fsSLI --proto '=https' --tlsv1.2 --connect-timeout 15 -o /dev/null -w '%{url_effective}' "${RELEASES_LATEST_URL}")" || {
     printf 'ERROR: could not resolve the latest bundle release (network or proxy problem).\n' >&2
@@ -565,6 +644,7 @@ preflight() {
       die "unsupported architecture: $(uname -m). Supported: x86_64 (amd64), aarch64 (arm64). Browse https://github.com/${REPO}/releases for available artifacts."
       ;;
   esac
+  validate_legacy_install
   validate_legacy_shim_collision
 }
 
@@ -577,12 +657,12 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --from-file)
-      [[ $# -ge 2 ]] || die "--from-file requires a path to modulo-<version>-linux-<arch>.tar.gz"
+      [[ $# -ge 2 ]] || die "--from-file requires a path to farna-control-<version>-linux-<arch>.tar.gz"
       FROM_FILE="$2"
       shift 2
       ;;
     --from-bundle)
-      [[ $# -ge 2 ]] || die "--from-bundle requires the extracted modulo-<version>-linux-<arch> bundle directory"
+      [[ $# -ge 2 ]] || die "--from-bundle requires the extracted farna-control-<version>-linux-<arch> bundle directory"
       FROM_BUNDLE="$2"
       shift 2
       ;;
@@ -619,17 +699,17 @@ if [[ -n "${FROM_BUNDLE}" ]]; then
   [[ "${VERSION_NUM}" =~ ^bundle-v?([A-Za-z0-9][A-Za-z0-9._-]*)$ ]] || die "--from-bundle: invalid VERSION '${VERSION_NUM}'"
   VERSION_NUM="${BASH_REMATCH[1]}"
   RELEASE_TAG="(offline: extracted bundle)"
-  tarball_name="modulo-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
+  tarball_name="farna-control-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
   bundle_dir="$(CDPATH= cd -- "${FROM_BUNDLE}" && pwd)"
 elif [[ -n "${FROM_FILE}" ]]; then
   [[ -f "${FROM_FILE}" ]] || die "--from-file: no such file: ${FROM_FILE}"
   tarball_name="$(basename "${FROM_FILE}")"
-  if [[ "${tarball_name}" =~ ^modulo-([A-Za-z0-9][A-Za-z0-9._-]*)-(linux|darwin)-(amd64|arm64)\.tar\.gz$ ]]; then
+  if [[ "${tarball_name}" =~ ^farna-control-([A-Za-z0-9][A-Za-z0-9._-]*)-(linux|darwin)-(amd64|arm64)\.tar\.gz$ ]]; then
     VERSION_NUM="${BASH_REMATCH[1]}"
     archive_os="${BASH_REMATCH[2]}"
     archive_arch="${BASH_REMATCH[3]}"
   else
-    die "cannot parse archive name '${tarball_name}' (expected modulo-<version>-${OS}-<arch>.tar.gz)"
+    die "cannot parse archive name '${tarball_name}' (expected farna-control-<version>-${OS}-<arch>.tar.gz)"
   fi
   [[ "${archive_os}" = "${OS}" ]] || die \
     "archive OS '${archive_os}' does not match detected host OS '${OS}' — refusing to install"
@@ -647,7 +727,7 @@ else
     resolve_latest_tag
   fi
   VERSION_NUM="${RELEASE_TAG#bundle-v}"
-  tarball_name="modulo-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
+  tarball_name="farna-control-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
 fi
 
 tmp="$(mktemp -d)"
@@ -874,7 +954,7 @@ elif [[ -n "${FROM_FILE}" ]]; then
   verify_shipped_manifest "${manifest_file}" "${signature_file}" "${FROM_FILE}" "bundle-v${VERSION_NUM}"
   cp "${FROM_FILE}" "${tmp}/${tarball_name}"
 else
-  info "Installing Modulo bundle ${RELEASE_TAG} (${OS}-${ARCH})"
+  info "Installing Farna Control bundle ${RELEASE_TAG} (${OS}-${ARCH})"
   stage "download"
   fetch "${RELEASES_DOWNLOAD_URL}/${RELEASE_TAG}/${tarball_name}" "${tmp}/${tarball_name}"
   fetch "${RELEASES_DOWNLOAD_URL}/${RELEASE_TAG}/RELEASE_MANIFEST.json" "${tmp}/RELEASE_MANIFEST.json"
@@ -916,6 +996,15 @@ fi
 stage "verify (bundle checksums)"
 verify_sums_in_dir "${bundle_dir}"
 info "bundle internal SHA256SUMS verified"
+
+# --- migrate a pre-rebrand install (FAR-2571) -------------------------------
+#
+# The new bundle is downloaded and verified, so it is safe to mutate the old
+# install now. This MUST run before the upgrade guard below: the enforced
+# pre-upgrade dump reads ${INSTALL_ROOT}/current, which only exists once the
+# old root has been renamed into place.
+stage "migrate (pre-rebrand install)"
+apply_legacy_install_migration
 
 # --- upgrade guard (FAR-672): enforced pre-upgrade dump + lock refusal ------
 #
@@ -1061,17 +1150,17 @@ fi
 # install.sh. It gates future neutralisation of /usr/local/bin/modulo.
 cat > "${MARKER_FILE}" <<EOF
 # Written by install.sh (FAR-670). The presence of this file marks this
-# machine as having a Modulo native install managed by install.sh.
+# machine as having a Farna Control native install managed by install.sh.
 managed_by=install.sh
 installed_version=${VERSION_NUM}
 updated=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
 mkdir -p "${BIN_DIR}"
-shim="${BIN_DIR}/modulo"
+shim="${BIN_DIR}/farna-control"
 cat > "${shim}" <<EOF
 #!/bin/sh
-# Modulo shim — generated by install.sh (FAR-670). Do not edit.
+# Farna Control shim — generated by install.sh (FAR-670). Do not edit.
 # Points at the stable \`current\` symlink so upgrades need no shim change.
 exec "${INSTALL_ROOT}/current/launcher" "\$@"
 EOF
@@ -1084,7 +1173,7 @@ activation_file="${INSTALL_ROOT}/env.sh"
 # escaped as \${...}; everything else must name a variable that is actually SET
 # at this point, or `set -u` aborts finalise and env.sh is never written.
 cat > "${activation_file}" <<EOF
-# Modulo shell activation — generated by install.sh. Do not edit.
+# Farna Control shell activation — generated by install.sh. Do not edit.
 # This file contains paths only; it never contains runtime credentials.
 export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"
 export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"
@@ -1106,7 +1195,7 @@ for rc_file in "${HOME}/.bashrc" "${HOME}/.profile" "${HOME}/.zshrc"; do
     continue
   fi
   # shellcheck disable=SC2016  # $PATH must reach the generated rc line literally, not expand now.
-  printf '\n# Added by Modulo install.sh (FAR-670)\nexport PATH="%s:$PATH"\n' "${BIN_DIR}" >> "${rc_file}"
+  printf '\n# Added by Farna Control install.sh (FAR-670)\nexport PATH="%s:$PATH"\n' "${BIN_DIR}" >> "${rc_file}"
   path_updated=1
   info "added ${BIN_DIR} to PATH in ${rc_file}"
 done
@@ -1117,7 +1206,7 @@ case ":${PATH}:" in
 esac
 
 info ""
-info "Modulo bundle ${VERSION_NUM} installed."
+info "Farna Control bundle ${VERSION_NUM} installed."
 info "  Bundle: ${INSTALL_ROOT}/current"
 info "  Shim:   ${shim}"
 info "  Shell activation: ${activation_file}"
@@ -1134,4 +1223,4 @@ elif [[ "${bin_on_path}" -eq 0 ]]; then
   info "Start a new shell (or: source ~/.bashrc) to pick up the updated PATH."
 fi
 info ""
-info "The bundle includes the native launcher; 'modulo --help' is ready to run."
+info "The bundle includes the native launcher; 'farna-control --help' is ready to run."
