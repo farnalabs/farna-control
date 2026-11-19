@@ -2765,15 +2765,17 @@ jobs:
             fi
           done
 
-          # FAR-2573: a bundle cut publishes a release-candidate build (the title
-          # carries the RC tag even though the bundle tag itself is X.Y.Z), so it
-          # must be created as a prerelease. Advertising a candidate as the
-          # project's latest normal release is a false claim about its maturity.
-          PRERELEASE_ARGS=()
-          case "$RC_TAG" in
-            v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
-            *) PRERELEASE_ARGS=() ;;
-          esac
+          # FAR-2576: the bundle release is published as a NORMAL (non-prerelease)
+          # release and marked Latest, even though its title carries the RC tag.
+          # During alpha every published bundle is an -rc build and it is what
+          # users install: scripts/install.sh resolves /releases/latest,
+          # native-release-smoke.yml asserts prerelease=false, and
+          # scripts/validate_release_tag.py rejects a prerelease. A prerelease
+          # is invisible to all three, so the newest bundle would never ship.
+          # --prerelease=false on edit also repairs a release that an earlier
+          # run published as a prerelease. This job only ever publishes the
+          # newest cut/recut (recut tags current main), so --latest is correct.
+          PUBLISH_ARGS=(--prerelease=false --latest)
 
           # NEVER --clobber an existing asset: a replaced release artifact
           # invalidates every verify-against-the-manifest already downloaded.
@@ -2782,7 +2784,7 @@ jobs:
           RELEASE_TITLE="Modulo ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
-            gh release edit "$TAG" --title "$RELEASE_TITLE" "${PRERELEASE_ARGS[@]}"
+            gh release edit "$TAG" --title "$RELEASE_TITLE" "${PUBLISH_ARGS[@]}"
             gh release upload "$TAG" "${ASSETS[@]}"
           else
             # --target pins the tag to the checked-out RC commit instead of
@@ -2791,7 +2793,7 @@ jobs:
               --title "$RELEASE_TITLE" \
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
-              "${PRERELEASE_ARGS[@]}" \
+              "${PUBLISH_ARGS[@]}" \
               "${ASSETS[@]}"
           fi
 

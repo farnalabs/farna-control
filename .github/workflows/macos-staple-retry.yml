@@ -295,9 +295,11 @@ jobs:
             # ticket-propagation window is worth polling. Older releases are not
             # re-stapled by the schedule - a manual dispatch can target them.
             #
-            # FAR-2573: RC bundle releases are published as prereleases, so a
-            # prerelease is a normal, shipped bundle and must still be polled -
-            # excluding it would quietly stop retrying a deferred staple.
+            # Bundle releases are published non-prerelease (FAR-2576), but one
+            # from an earlier run may still be flagged prerelease (the FAR-2573
+            # behaviour). Never filter on .prerelease: either way it is a
+            # shipped bundle and must still be polled - excluding it would
+            # quietly stop retrying a deferred staple.
             release_json="$(gh api "repos/${REPO}/releases?per_page=30")"
             latest="$(printf '%s' "$release_json" |
               jq -c '[.[] | select(.draft == false) | select(.tag_name | startswith("bundle-v"))] | sort_by(.published_at) | reverse | first // empty')"
@@ -965,19 +967,20 @@ jobs:
               --version "$VERSION" \
               --output CHANGELOG.md > "$NOTES_FILE"
 
-            # A bundle cut is a release candidate; its title carries the RC tag,
-            # so it must not be published as a normal release.
-            PRERELEASE_ARGS=()
-            case "$RC_TAG" in
-              v*-rc[0-9]*) PRERELEASE_ARGS=(--prerelease) ;;
-              *) PRERELEASE_ARGS=() ;;
-            esac
-
+            # FAR-2576: mirror release-unified.yml - the bundle release is a
+            # NORMAL (non-prerelease) release even though its title carries the
+            # RC tag. During alpha every bundle is an -rc build and is what users
+            # install; install.sh (/releases/latest), native-release-smoke.yml
+            # and validate_release_tag.py all require prerelease=false.
+            # Latest is deliberately left to GitHub's automatic choice (date and
+            # semver) rather than forced with --latest: a held publication can
+            # land after a newer bundle was cut, and forcing Latest would then
+            # point installers back at the older bundle.
             gh release create "$RELEASE_TAG" \
               --title "Modulo ${RC_TAG}" \
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
-              "${PRERELEASE_ARGS[@]}" \
+              --prerelease=false \
               "${ASSETS[@]}"
             if ! gh api "repos/${REPO}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
               echo "::error::${RELEASE_TAG} was created but its tag could not be confirmed on origin."
