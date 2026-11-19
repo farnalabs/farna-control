@@ -1272,6 +1272,80 @@ def test_rc_bundle_release_is_created_as_a_prerelease() -> None:
     assert "PRERELEASE_ARGS=(--prerelease)" in retry_create
 
 
+def test_held_publication_checkout_fetches_full_history_for_the_changelog() -> None:
+    workflow = _staple_retry_workflow()
+    checkout = _step(workflow, "publish-stapled", "Check out the release tag")
+
+    # The held path generates release notes from the RC tag's history. A
+    # shallow clone makes `git describe` fail and `git rev-list
+    # --max-parents=0` return the RC commit itself, so the changelog range is
+    # empty and generate_changelog.py falls back to unrelated merged PRs.
+    assert checkout["with"]["fetch-depth"] == 0, "a held publication needs full history and tags"
+    assert checkout["with"]["ref"] == "${{ needs.resolve-target.outputs.rc_tag || needs.resolve-target.outputs.release_tag }}"
+
+    publish = _step(workflow, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")["run"]
+    assert "git describe --tags --match 'v*'" in publish
+    assert "git rev-list --max-parents=0" in publish
+    assert "scripts/generate_changelog.py" in publish
+
+
+def test_held_publication_publisher_links_uploaded_dmgs_to_verified_digests() -> None:
+    workflow = _staple_retry_workflow()
+    outputs = workflow["jobs"]["staple"]["outputs"]
+    assert outputs["arm64_sha256"] == "${{ steps.collect.outputs.arm64_sha256 }}"
+    assert outputs["x86_64_sha256"] == "${{ steps.collect.outputs.x86_64_sha256 }}"
+
+    # The macOS job records the digest of the exact bytes the helper verified.
+    staple = _step(workflow, "staple", "Staple each requested DMG")["run"]
+    assert 'sha256sum "$dmg"' in staple
+    assert "verified-digests.txt" in staple
+
+    publish_step = _step(workflow, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")
+    env = publish_step["env"]
+    assert env["VERIFIED_ARM64_SHA256"] == "${{ needs.staple.outputs.arm64_sha256 }}"
+    assert env["VERIFIED_X86_64_SHA256"] == "${{ needs.staple.outputs.x86_64_sha256 }}"
+    script = publish_step["run"]
+    # An arch name is not enough: `unchanged` publishes the release-run copy, so
+    # the publisher must prove that copy is the bytes the ticket was verified on.
+    assert "not the artefact a notarization ticket was verified on" in script
+    assert 'sha256sum "$dmg_path"' in script
+    assert "for arch in arm64 x86_64" in script
+
+
+def test_held_publication_rearms_itself_when_the_staple_is_still_missing() -> None:
+    workflow = _staple_retry_workflow()
+    publish = workflow["jobs"]["publish-stapled"]
+    assert publish["outputs"]["published"] == "${{ steps.publish.outputs.published }}"
+    publish_step = _step(workflow, "publish-stapled", "Publish the stapled DMG(s) and refreshed manifest")
+    assert publish_step.get("id") == "publish"
+    assert "printf 'published=true" in publish_step["run"]
+
+    # The scheduled backstop only scans EXISTING releases, so a held release
+    # that failed its first staple has no other publisher. The held run must
+    # re-arm itself until publication succeeds.
+    held = workflow["jobs"]["held-retry"]
+    condition = " ".join(str(held["if"]).split())
+    assert "needs.resolve-target.outputs.publish_release == 'true'" in condition
+    assert "needs.publish-stapled.outputs.published != 'true'" in condition
+    assert held["permissions"]["actions"] == "write"
+
+    step = next(s for s in held["steps"] if "gh workflow run macos-staple-retry.yml" in str(s.get("run", "")))
+    script = step["run"]
+    assert "-f publish_release=true" in script
+    assert '-f run_id="$RUN_ID"' in script
+    assert '-f rc_tag="$RC_TAG"' in script
+    assert '-f retry_deadline="$RETRY_DEADLINE"' in script
+    assert "now >= RETRY_DEADLINE" in script, "the re-dispatch must be bounded by a deadline"
+    assert "A human must re-dispatch" in script, "past the deadline the run must fail loudly for a human"
+    assert script.rstrip().endswith("exit 1")
+
+    # release-unified hands the first held run a deadline so the chain is bounded.
+    release = _release_workflow()
+    hold = _step(release, "publish-release", "Hold publication and hand it to the staple retry")["run"]
+    assert "RETRY_DEADLINE=$(( $(date -u +%s) + 86400 ))" in hold
+    assert '-f retry_deadline="$RETRY_DEADLINE"' in hold
+
+
 # ---------------------------------------------------------------------------
 # FAR-2484: the release proves schema freshness on the EXACT commit itself.
 #

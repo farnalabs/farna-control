@@ -86,6 +86,11 @@ on:
         type: string
         required: false
         default: ""
+      retry_deadline:
+        description: "Epoch seconds after which a held publication stops auto-retrying and fails for a human; blank disables the bound"
+        type: string
+        required: false
+        default: ""
       force:
         description: "Re-staple even when the DMG already validates"
         type: boolean
@@ -126,6 +131,7 @@ jobs:
       completed: ${{ steps.resolve.outputs.completed }}
       publish_release: ${{ steps.resolve.outputs.publish_release }}
       rc_tag: ${{ steps.resolve.outputs.rc_tag }}
+      retry_deadline: ${{ steps.resolve.outputs.retry_deadline }}
     steps:
       - name: Resolve version, release tag and architectures
         id: resolve
@@ -138,6 +144,7 @@ jobs:
           DISPATCH_RUN_ID: ${{ github.event.inputs.run_id }}
           DISPATCH_PUBLISH_RELEASE: ${{ github.event.inputs.publish_release }}
           DISPATCH_RC_TAG: ${{ github.event.inputs.rc_tag }}
+          DISPATCH_RETRY_DEADLINE: ${{ github.event.inputs.retry_deadline }}
           DISPATCH_FORCE: ${{ github.event.inputs.force }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -151,6 +158,7 @@ jobs:
           completed="false"
           publish_release="false"
           rc_tag=""
+          retry_deadline=""
 
           # A release whose stapling has already been completed AND verified
           # carries a MACOS_STAPLED.json marker naming each DMG's digest and an
@@ -272,6 +280,15 @@ jobs:
                   exit 1
                   ;;
               esac
+              # The held path re-dispatches itself while the ticket propagates.
+              # A deadline (epoch seconds) bounds that loop: past it the ticket
+              # is treated as permanently unavailable and a human is required,
+              # rather than retrying forever.
+              retry_deadline="${DISPATCH_RETRY_DEADLINE:-}"
+              if [[ -n "$retry_deadline" && ! "$retry_deadline" =~ ^[0-9]+$ ]]; then
+                echo "::error::retry_deadline must be epoch seconds; got '$retry_deadline'"
+                exit 1
+              fi
             fi
           else
             # Scheduled backstop: only the newest bundle-v* release within the
@@ -294,6 +311,7 @@ jobs:
                 printf 'completed=%s\n' "false"
                 printf 'publish_release=%s\n' "false"
                 printf 'rc_tag=%s\n' ""
+                printf 'retry_deadline=%s\n' ""
               } >>"$GITHUB_OUTPUT"
               exit 0
             fi
@@ -312,6 +330,7 @@ jobs:
                 printf 'completed=%s\n' "false"
                 printf 'publish_release=%s\n' "false"
                 printf 'rc_tag=%s\n' ""
+                printf 'retry_deadline=%s\n' ""
               } >>"$GITHUB_OUTPUT"
               exit 0
             fi
@@ -334,6 +353,7 @@ jobs:
               run_id=""
               publish_release="false"
               rc_tag=""
+              retry_deadline=""
             elif [[ "$marker_state" != "absent" ]]; then
               echo "::notice::Ignoring a stale MACOS_STAPLED.json on ${release_tag} (${marker_state}); re-stapling and re-verifying."
             fi
@@ -347,6 +367,7 @@ jobs:
             printf 'completed=%s\n' "$completed"
             printf 'publish_release=%s\n' "$publish_release"
             printf 'rc_tag=%s\n' "$rc_tag"
+            printf 'retry_deadline=%s\n' "$retry_deadline"
           } >>"$GITHUB_OUTPUT"
           echo "Staple target: version=${version} release_tag=${release_tag} architectures='${architectures}' run_id='${run_id}' completed=${completed}"
 
@@ -371,6 +392,11 @@ jobs:
       # `stapled` and `unchanged` mean the ticket validated). The record step
       # may only claim staple verification for these.
       verified_arches: ${{ steps.collect.outputs.verified_arches }}
+      # The exact digest the helper verified for each architecture. A held
+      # publisher must prove the bytes it uploads are these bytes - an arch
+      # name alone does not link the ticket to the published DMG.
+      arm64_sha256: ${{ steps.collect.outputs.arm64_sha256 }}
+      x86_64_sha256: ${{ steps.collect.outputs.x86_64_sha256 }}
     env:
       VERSION: ${{ needs.resolve-target.outputs.version }}
       RELEASE_TAG: ${{ needs.resolve-target.outputs.release_tag }}
@@ -396,6 +422,7 @@ jobs:
           : >staple-results.txt
           : >stapled-arches.txt
           : >verified-arches.txt
+          : >verified-digests.txt
 
           read -r -a arches <<<"$ARCHITECTURES"
           for arch in "${arches[@]}"; do
@@ -437,7 +464,11 @@ jobs:
               printf '%s\n' "$arch" >>stapled-arches.txt
             fi
             # `stapled` and `unchanged` both mean the helper ran its full gate
-            # set on this DMG and the ticket validated.
+            # set on this DMG and the ticket validated. Record the digest of
+            # the exact bytes it verified so a held publisher can prove the
+            # uploaded DMG is the one the ticket was proven on.
+            digest="$(sha256sum "$dmg" | awk '{print $1}')"
+            printf '%s %s\n' "$arch" "$digest" >>verified-digests.txt
             printf '%s\n' "$arch" >>verified-arches.txt
             printf '%s: %s\n' "$arch" "$result" >>staple-results.txt
           done
@@ -455,9 +486,19 @@ jobs:
             changed="false"
           fi
           verified_arches="$(tr '\n' ' ' <verified-arches.txt)"
+          arm64_sha256=""
+          x86_64_sha256=""
+          while read -r arch digest; do
+            case "$arch" in
+              arm64) arm64_sha256="$digest" ;;
+              x86_64) x86_64_sha256="$digest" ;;
+            esac
+          done <verified-digests.txt
           {
             printf 'changed=%s\n' "$changed"
             printf 'verified_arches=%s\n' "$verified_arches"
+            printf 'arm64_sha256=%s\n' "$arm64_sha256"
+            printf 'x86_64_sha256=%s\n' "$x86_64_sha256"
           } >>"$GITHUB_OUTPUT"
           {
             echo '### macOS notarization staple retry'
@@ -516,11 +557,23 @@ jobs:
       actions: read
       id-token: write
       attestations: write
+    outputs:
+      # Set only when this job actually created or updated the release. The
+      # held-publication re-dispatch uses it to decide whether publication is
+      # still outstanding.
+      published: ${{ steps.publish.outputs.published }}
     steps:
       - name: Check out the release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          # A held publication generates the changelog from the RC tag's
+          # history: `git describe` and `git rev-list --max-parents=0` need the
+          # full history and tags. A shallow clone makes the range empty and
+          # silently falls back to `gh pr list --state merged`, publishing
+          # unrelated release notes. This job only runs when there is real work
+          # (a deferred staple or an inconsistent release), so a full fetch is
+          # the safe default for both paths.
+          fetch-depth: 0
           # A held publication has no bundle-v* tag yet; its bytes live on the
           # RC tag, which is also the commit the release tag must point at.
           ref: ${{ needs.resolve-target.outputs.rc_tag || needs.resolve-target.outputs.release_tag }}
@@ -804,6 +857,7 @@ jobs:
           subject-path: release-assets/Modulo-*-macos-*.dmg
 
       - name: Publish the stapled DMG(s) and refreshed manifest
+        id: publish
         # Two legitimate reasons to publish:
         #   * CONSISTENCY - repair a release whose metadata disagrees with its
         #     asset bytes (including a half-finished earlier upload), and
@@ -824,6 +878,8 @@ jobs:
           PUBLISH_RELEASE: ${{ needs.resolve-target.outputs.publish_release }}
           RC_TAG: ${{ needs.resolve-target.outputs.rc_tag }}
           VERIFIED_ARCHES: ${{ needs.staple.outputs.verified_arches }}
+          VERIFIED_ARM64_SHA256: ${{ needs.staple.outputs.arm64_sha256 }}
+          VERIFIED_X86_64_SHA256: ${{ needs.staple.outputs.x86_64_sha256 }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -848,6 +904,26 @@ jobs:
                   exit 1
                   ;;
               esac
+            done
+
+            # An arch name proves the helper RAN; it does not prove the bytes
+            # being uploaded are the bytes the ticket was verified on. When the
+            # staple reports `unchanged` the publisher uploads the
+            # final-release-artefacts copy, so link the published DMG to the
+            # digest the macOS job verified (the same link release-unified.yml
+            # records). A mismatch is a hard refusal, never a best-effort warn.
+            for arch in arm64 x86_64; do
+              case "$arch" in
+                arm64) verified_digest="$VERIFIED_ARM64_SHA256" ;;
+                x86_64) verified_digest="$VERIFIED_X86_64_SHA256" ;;
+              esac
+              dmg_path="release-assets/Modulo-${VERSION}-macos-${arch}.dmg"
+              actual_digest="$(sha256sum "$dmg_path" | awk '{print $1}')"
+              if [[ -z "$verified_digest" || "$verified_digest" != "$actual_digest" ]]; then
+                echo "::error::refusing to publish ${RELEASE_TAG}: ${dmg_path} is not the artefact a notarization ticket was verified on (verified='${verified_digest}', publishing='${actual_digest}')."
+                exit 1
+              fi
+              echo "${dmg_path}: publishing the exact bytes staple-verified (${actual_digest})"
             done
             ASSETS=(
               "release-assets/modulo-${VERSION}-linux-amd64.tar.gz"
@@ -899,6 +975,7 @@ jobs:
               exit 1
             fi
             echo "Published ${RELEASE_TAG} from the stapled DMGs with regenerated metadata (held publication)."
+            printf 'published=true\n' >>"$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -913,6 +990,7 @@ jobs:
             --repo "$REPO" \
             --clobber
           echo "Republished stapled DMG(s) and refreshed SHA256SUMS + signed manifest for ${RELEASE_TAG}"
+          printf 'published=true\n' >>"$GITHUB_OUTPUT"
 
       # `gh release upload` is one API call per asset, so an upload can stop
       # half-way. This re-reads the metadata FROM the release (never the local
@@ -922,7 +1000,8 @@ jobs:
       - name: Verify the published release metadata
         if: >-
           success() &&
-          (steps.consistency.outputs.needs_republish == 'true' || needs.resolve-target.outputs.publish_release == 'true')
+          (steps.consistency.outputs.needs_republish == 'true' || needs.resolve-target.outputs.publish_release == 'true') &&
+          steps.publish.outputs.published == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1104,3 +1183,76 @@ jobs:
             echo "Recorded MACOS_STAPLED.json for ${RELEASE_TAG}; every DMG is staple-verified, so the scheduled backstop will now no-op."
           fi
           rm -rf "$marker_dir"
+
+  # ---------------------------------------------------------------------------
+  # Re-arm a held publication whose ticket has not propagated yet (FAR-2573)
+  #
+  # release-unified.yml dispatches the held publisher ONCE. If the ticket is
+  # still not fetchable that run's `staple` job fails and no release is created;
+  # the 30-minute scheduled backstop only scans EXISTING bundle-v* releases, so
+  # without this job the held release would be stranded while release-unified
+  # is green. This job re-dispatches the held publisher until it publishes,
+  # bounded by `retry_deadline` so a ticket that never arrives fails loudly for
+  # a human instead of looping forever.
+  # ---------------------------------------------------------------------------
+  held-retry:
+    name: Re-dispatch a held publication
+    needs: [resolve-target, staple, publish-stapled]
+    if: >-
+      always() &&
+      needs.resolve-target.outputs.publish_release == 'true' &&
+      needs.publish-stapled.outputs.published != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      VERSION: ${{ needs.resolve-target.outputs.version }}
+      RELEASE_TAG: ${{ needs.resolve-target.outputs.release_tag }}
+      RC_TAG: ${{ needs.resolve-target.outputs.rc_tag }}
+      RUN_ID: ${{ needs.resolve-target.outputs.run_id }}
+      RETRY_DEADLINE: ${{ needs.resolve-target.outputs.retry_deadline }}
+    steps:
+      - name: Re-dispatch the held publication while its notarization ticket propagates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$RELEASE_TAG" || -z "$RUN_ID" ]]; then
+            echo "::error::held-publication re-dispatch is missing release_tag or run_id - cannot re-arm the publisher."
+            exit 1
+          fi
+          now="$(date -u +%s)"
+          if [[ -n "$RETRY_DEADLINE" ]]; then
+            if ! [[ "$RETRY_DEADLINE" =~ ^[0-9]+$ ]]; then
+              echo "::error::retry_deadline must be epoch seconds; got '$RETRY_DEADLINE'"
+              exit 1
+            fi
+            if (( now >= RETRY_DEADLINE )); then
+              echo "::error::Held publication of ${RELEASE_TAG} still has no fetchable notarization ticket after its retry window (deadline ${RETRY_DEADLINE}). A human must re-dispatch macos-staple-retry.yml with publish_release=true."
+              exit 1
+            fi
+          fi
+          for attempt in 1 2 3; do
+            if gh workflow run macos-staple-retry.yml \
+              --repo "$REPO" \
+              --ref main \
+              -f version="$VERSION" \
+              -f architecture=all \
+              -f release_tag="$RELEASE_TAG" \
+              -f run_id="$RUN_ID" \
+              -f rc_tag="$RC_TAG" \
+              -f publish_release=true \
+              -f retry_deadline="$RETRY_DEADLINE"; then
+              echo "::notice::Publication of ${RELEASE_TAG} is still HELD (no fetchable notarization ticket); re-dispatched macos-staple-retry.yml (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Held-publication re-dispatch attempt ${attempt} failed."
+            if [ "$attempt" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+          echo "::error::Could not re-dispatch macos-staple-retry.yml for held publication ${RELEASE_TAG} after 3 attempts - the release has no publisher."
+          exit 1

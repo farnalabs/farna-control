@@ -2867,7 +2867,9 @@ jobs:
       # regenerates SHA256SUMS + the signed manifest, then creates the release
       # with the stapled bytes. A failed dispatch is fatal - a held release with
       # no publisher would never ship, and the scheduled retry backstop only
-      # repairs an EXISTING release.
+      # repairs an EXISTING release. The held run re-arms itself while the
+      # ticket propagates (bounded by `retry_deadline`), so a ticket that is not
+      # yet fetchable at the first retry is not stranded.
       # ---------------------------------------------------------------------
       - name: Hold publication and hand it to the staple retry
         id: hold
@@ -2882,6 +2884,10 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_TAG="bundle-v${VERSION}"
+          # Bound the held path's automatic re-dispatch to the ticket-propagation
+          # window. The retry re-arms itself until this deadline; past it a human
+          # must intervene rather than the release retrying forever.
+          RETRY_DEADLINE=$(( $(date -u +%s) + 86400 ))
           for attempt in 1 2 3; do
             if gh workflow run macos-staple-retry.yml \
               --repo "$REPO" \
@@ -2891,7 +2897,8 @@ jobs:
               -f release_tag="$RELEASE_TAG" \
               -f run_id="$SOURCE_RUN_ID" \
               -f rc_tag="$RC_TAG" \
-              -f publish_release=true; then
+              -f publish_release=true \
+              -f retry_deadline="$RETRY_DEADLINE"; then
               printf 'dispatched=true\n' >>"$GITHUB_OUTPUT"
               echo "::notice::Publication of ${RELEASE_TAG} is HELD on a missing notarization ticket; macos-staple-retry.yml was dispatched to staple the DMGs and publish the release (attempt ${attempt})."
               exit 0
