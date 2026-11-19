@@ -7,6 +7,7 @@ code:
   - backend/src/farna/core/license_signing.py
   - backend/src/farna/core/feature_flags.py
   - backend/src/farna/core/stripe_fulfilment.py
+  - backend/src/farna/core/event_dedup.py
   - backend/src/farna/api/routes/admin_license.py
   - backend/src/farna/api/routes/admin_tiers.py
   - backend/src/farna/api/routes/admin_feature_flags.py
@@ -20,6 +21,7 @@ unit-tests:
   - backend/tests/unit/core/test_license_anchor.py
   - backend/tests/unit/core/test_license_signing.py
   - backend/tests/unit/core/test_stripe_fulfilment.py
+  - backend/tests/unit/core/test_event_dedup.py
   - backend/tests/unit/api/test_admin_license.py
   - backend/tests/unit/api/test_admin_feature_flags.py
   - backend/tests/unit/api/test_admin_tiers_endpoint.py
@@ -188,6 +190,28 @@ trust-anchor caveat) are documented in
       `admin_license.issue_license`, which answers 500 for the same condition
       instead of returning a bad key (`test_stripe_fulfilment.py`,
       `test_unverifiable_generated_key_is_not_emailed_or_claimed`)
+- [x] Every commercially meaningful Stripe event also alerts the operator,
+      additively and without changing fulfilment. The webhook emails
+      `ALERT_EMAIL_TO` through the shared operator-alert SMTP path for
+      `invoice.paid` (framed as a sale, and still fulfilled) plus
+      `checkout.session.completed`, `checkout.session.expired`,
+      `payment_intent.requires_action`, `payment_intent.payment_failed`,
+      `charge.dispute.created`, `charge.refunded` and
+      `radar.early_fraud_warning.created`. An alert never changes what an event
+      fulfils or the HTTP response: it is queued AHEAD of fulfilment as a
+      never-raising background task, so a broken SMTP server still returns 200
+      and the failure is logged with the event id and type. Test-mode events
+      never alert (the authoritative `livemode` flag, falling back to the
+      account key's `sk_live_` prefix only when the flag is absent); alerts are
+      deduped per Stripe event id on the shared `core.event_dedup` substrate
+      under their own Redis namespace, and a failed send stays unclaimed so
+      Stripe's retry can alert again. A paid `invoice.paid` whose chosen
+      `starts_at` is refused (422) still alerts INLINE under a bounded
+      `asyncio.wait_for`, marked ACTION REQUIRED, because the 422 drops the
+      queued background task. Alert bodies render only fields Stripe already
+      exposes (HTML-escaped), never a card or credential-shaped metadata value
+      (`stripe_webhook.py`, `core/event_dedup.py`, `test_stripe_webhook.py`,
+      `test_event_dedup.py`)
 - [x] License-status cache is invalidated on every license mutation: the admin
       status cache (`license:{org_id}`, 60s TTL in `admin_license.py`) is busted
       when the underlying license changes - a system upload
@@ -272,6 +296,8 @@ trust-anchor caveat) are documented in
   cited above.
 
 ## QA History
+
+- 2026-11-19: **Improve Architecture product-map walk** - tracked the shipped Stripe operator-alert surface, which neither product-map layer described. The webhook now alerts `ALERT_EMAIL_TO` for every commercially meaningful event (invoice.paid as a sale plus checkout completed/expired, payment-intent action/failure, dispute, refund and early-fraud warning), additively and without changing fulfilment or the response: alerts are queued ahead of fulfilment as never-raising background tasks, test-mode events are skipped via `livemode` with the `sk_live_` account-key fallback, dedup is keyed on the Stripe event id through the shared `core.event_dedup` helper, and a refused `starts_at` on a PAID invoice alerts inline under a bounded timeout (`stripe_webhook.py`, `core/event_dedup.py`, `test_stripe_webhook.py`, `test_event_dedup.py`). Added to the manifest `feat-license` registry and the Behaviors list; status stays `partial` (the manifest's universal-gating deferral is unchanged).
 
 - 2026-10-26: **FAR-2158** - synced this entry to the FAR-2153 persistence change. Both license scopes are now durable (org key in `org.settings_json`, instance-wide key in the `system_config` row `system_license_key`), restored at startup and refreshed into the API and the SAQ worker within `SYSTEM_LICENSE_REFRESH_TTL_SECONDS` (15s). Corrected the stale statements that described the system license as in-memory only, recorded the precedence order (org → persisted system install → `FARNA_CONTROL_LICENSE_KEY` → Community) and the durable `DELETE /api/v1/admin/license` behavior. Status stays `partial` (the universal-gating deferral is unchanged).
 
