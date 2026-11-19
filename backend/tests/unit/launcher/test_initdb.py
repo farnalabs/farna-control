@@ -12,15 +12,18 @@ import subprocess
 import sys
 from pathlib import Path
 from subprocess import Popen
+from urllib.parse import urlsplit
 
 import pytest
 
 import farna.launcher.initdb as initdb_module
+from farna.db.url_utils import APP_ROLE, LEGACY_OWNER_ROLE, OWNER_ROLE, SYSTEM_ROLE
 from farna.launcher.initdb import (
     BOOTSTRAP_USERNAME,
     GATE_INITDB_PRE_RENAME,
     INITDB_LOCALE,
     InitdbError,
+    adopt_legacy_owner_role,
     assert_supported_platform,
     bootstrap_pgdata,
     initdb_argv,
@@ -120,9 +123,16 @@ def test_initdb_argv_uses_windows_locale_and_executable_seam(monkeypatch: pytest
 
 
 def test_bootstrap_role_name_is_fixed_not_os_username() -> None:
-    # ADR 031 Decision 8: the bundled cluster's bootstrap role is FIXED —
+    # ADR 031 Decision 8: the bundled cluster's bootstrap role is FIXED -
     # never derived from the OS user running the launcher.
-    assert BOOTSTRAP_USERNAME == "modulo"
+    #
+    # FAR-2570: it is the OWNER/migration role. initdb always makes its -U role
+    # a SUPERUSER, so it must never be the role the application connects as
+    # (that role is farna_control_app: NOSUPERUSER, NOBYPASSRLS).
+    assert BOOTSTRAP_USERNAME == OWNER_ROLE
+    assert BOOTSTRAP_USERNAME == "farna_control"
+    assert BOOTSTRAP_USERNAME != APP_ROLE
+    assert BOOTSTRAP_USERNAME != SYSTEM_ROLE
 
 
 def test_server_argv_pins_endpoint_arguments(tmp_path: Path) -> None:
@@ -404,3 +414,141 @@ def test_assert_supported_platform_accepts_posix(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(initdb_module, "is_windows", lambda: False)
 
     assert assert_supported_platform() is None
+
+
+# ---------------------------------------------------------------------------
+# adopt_legacy_owner_role — pre-FAR-2570 cluster adoption
+# ---------------------------------------------------------------------------
+class _RoleConn:
+    """Minimal asyncpg connection stand-in for the adoption query/DDL."""
+
+    def __init__(self, *, canonical_exists: bool) -> None:
+        self.canonical_exists = canonical_exists
+        self.executed: list[str] = []
+        self.closed = False
+
+    async def fetchval(self, query: str, *args: object) -> int | None:
+        assert "pg_roles" in query
+        return 1 if self.canonical_exists else None
+
+    async def execute(self, query: str) -> str:
+        self.executed.append(query)
+        return "ALTER ROLE"
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def _scram_connector(
+    conn: _RoleConn,
+    seen: list[str],
+    *,
+    present: set[str],
+    rejected: set[str] | None = None,
+) -> object:
+    """Role-aware fake of ``asyncpg.connect`` under ``scram-sha-256`` auth.
+
+    Unlike a trust/md5 cluster (which reports an absent role as 28000), a
+    scram cluster reports an ABSENT role as ``28P01`` invalid password — the
+    exact condition that made the first fresh-install boot fail. ``rejected``
+    lets a present role still reject the credential (a real password mismatch).
+    """
+    import asyncpg
+
+    rejected = rejected or set()
+
+    async def _connect(dsn: str, **_kwargs: object) -> _RoleConn:
+        seen.append(dsn)
+        role = urlsplit(dsn).username or ""
+        if role not in present or role in rejected:
+            raise asyncpg.InvalidPasswordError(f'password authentication failed for user "{role}"')
+        return conn
+
+    return _connect
+
+
+async def test_adopt_legacy_owner_role_renames_modulo_to_farna_control() -> None:
+    """The exact upgrade path: a legacy-only cluster rejects the canonical
+    owner as 28P01 (absent under scram), so the first FAR-2570 boot falls back
+    to ``modulo`` and renames it."""
+    conn = _RoleConn(canonical_exists=False)
+    seen: list[str] = []
+
+    adopted = await adopt_legacy_owner_role(
+        host="127.0.0.1",
+        port=15432,
+        password="pw",
+        connect=_scram_connector(conn, seen, present={LEGACY_OWNER_ROLE}),
+    )
+
+    assert adopted is True
+    assert [urlsplit(dsn).username for dsn in seen] == [OWNER_ROLE, LEGACY_OWNER_ROLE]
+    assert conn.executed == [f'ALTER ROLE "{LEGACY_OWNER_ROLE}" RENAME TO "{OWNER_ROLE}"']
+    assert conn.closed is True
+
+
+async def test_adopt_legacy_owner_role_is_a_noop_on_a_fresh_install() -> None:
+    """Fresh ``initdb -U farna_control`` cluster: the canonical owner connects
+    first, so the legacy role is never probed and nothing is renamed.
+
+    Regression lock for the critical boot failure: probing ``modulo`` first
+    raises 28P01 under scram and must NOT be mistaken for a bad credential.
+    """
+    conn = _RoleConn(canonical_exists=True)
+    seen: list[str] = []
+
+    adopted = await adopt_legacy_owner_role(
+        host="127.0.0.1",
+        port=15432,
+        password="pw",
+        connect=_scram_connector(conn, seen, present={OWNER_ROLE}),
+    )
+
+    assert adopted is False
+    assert [urlsplit(dsn).username for dsn in seen] == [OWNER_ROLE]
+    assert not conn.executed
+    assert conn.closed is True
+
+
+async def test_adopt_legacy_owner_role_refuses_both_roles_when_only_the_legacy_one_accepts() -> None:
+    """Both names exist but only ``modulo`` takes the secrets-file password.
+
+    A rename cannot overwrite a taken name and the canonical role cannot be
+    connected as, so the cluster cannot be adopted automatically. Returning
+    False here would let the boot die later on a bare authentication error —
+    the operator must be told which two roles disagree and how to reconcile.
+    """
+    conn = _RoleConn(canonical_exists=True)
+    seen: list[str] = []
+
+    with pytest.raises(InitdbError, match="BOTH owner roles"):
+        await adopt_legacy_owner_role(
+            host="127.0.0.1",
+            port=15432,
+            password="pw",
+            connect=_scram_connector(
+                conn,
+                seen,
+                present={OWNER_ROLE, LEGACY_OWNER_ROLE},
+                rejected={OWNER_ROLE},
+            ),
+        )
+
+    assert not conn.executed
+    assert conn.closed is True
+
+
+async def test_adopt_legacy_owner_role_fails_loudly_when_neither_role_accepts_the_password() -> None:
+    """Neither name accepts the secrets-file password: never guess."""
+    conn = _RoleConn(canonical_exists=False)
+    seen: list[str] = []
+
+    with pytest.raises(InitdbError, match="Neither the canonical owner role"):
+        await adopt_legacy_owner_role(
+            host="127.0.0.1",
+            port=15432,
+            password="pw",
+            connect=_scram_connector(conn, seen, present=set()),
+        )
+
+    assert [urlsplit(dsn).username for dsn in seen] == [OWNER_ROLE, LEGACY_OWNER_ROLE]

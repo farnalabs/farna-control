@@ -17,11 +17,27 @@ from __future__ import annotations
 import pytest
 
 from farna.db.url_utils import (
+    APP_ROLE,
+    OWNER_ROLE,
+    SYSTEM_ROLE,
     derive_system_database_url,
     fix_database_url,
     split_engine_sslmode,
     split_postgres_sslmode,
 )
+
+
+def test_role_names_are_the_least_privilege_set() -> None:
+    """FAR-2570: the three role names are one definition, and they differ.
+
+    ``initdb -U`` (the cluster owner) is always a SUPERUSER, so the application
+    role and the owner role must never be the same name.
+    """
+    assert APP_ROLE == "farna_control_app"
+    assert SYSTEM_ROLE == "farna_control_system"
+    assert OWNER_ROLE == "farna_control"
+    assert len({APP_ROLE, SYSTEM_ROLE, OWNER_ROLE}) == 3
+
 
 # ---------------------------------------------------------------------------
 # fix_database_url — prefix rewrites + per-family sslmode handling

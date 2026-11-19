@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus
 
-from farna.db.url_utils import derive_system_database_url
+from farna.db.url_utils import APP_ROLE, OWNER_ROLE, derive_system_database_url
 from farna.launcher.entry import APP_DB_NAME
 from farna.launcher.secrets_file import LauncherSecrets
 from farna.launcher.state import STATE_FILENAME, LauncherState, load_state
@@ -110,18 +110,41 @@ def compose_config(state: LauncherState, secrets: LauncherSecrets) -> dict[str, 
     ``postgresql+asyncpg://`` scheme is pinned explicitly (the async driver
     the engine requires); every asyncpg-level consumer downgrades it the way
     the container path does.
+
+    ROLE SEPARATION (FAR-2570). Each URL names the role that is allowed to do
+    its job, never "whatever role happens to own the cluster":
+
+    * ``DATABASE_URL`` (the application) → :data:`APP_ROLE`
+      (``farna_control_app``: NOSUPERUSER, NOBYPASSRLS, DML-only). Tenant
+      isolation depends on RLS policies, and a superuser bypasses them.
+    * ``DATABASE_ADMIN_URL`` (DDL / migrations / role bootstrap) →
+      :data:`OWNER_ROLE` (``farna_control``: the cluster owner ``initdb``
+      creates). Migrations must run as the owner, not the app role.
+    * ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` (cross-org system crons) →
+      derived from the app URL by :func:`derive_system_database_url`, which
+      swaps only the username to :data:`SYSTEM_ROLE`
+      (``farna_control_system``: LOGIN, BYPASSRLS).
+
+    The regression this closes: the app URL used the ``initdb`` bootstrap
+    role, so the application ran as a Postgres SUPERUSER — it bypassed RLS
+    and every boot failed the role-posture assertion.
     """
     # quote_plus hardening (FAR-680): a MANUAL secrets rotation can put
     # URL-special characters in the password; unquoted, they malformed the
     # URL (an '@' or '/' inside the password changed the host/userinfo split
     # and could leak the password into the path). Generated token_urlsafe
-    # secrets are unaffected.
-    database_url = f"postgresql+asyncpg://modulo:{quote_plus(secrets.postgres_password)}@{POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
+    # secrets are unaffected. One password is shared by all three bundled
+    # roles (the same value initdb set on the owner), exactly like the
+    # container compose contract.
+    password = quote_plus(secrets.postgres_password)
+    endpoint = f"{POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
+    database_url = f"postgresql+asyncpg://{APP_ROLE}:{password}@{endpoint}"
+    admin_url = f"postgresql+asyncpg://{OWNER_ROLE}:{password}@{endpoint}"
     system_url = derive_system_database_url(database_url)
     secret_key, fernet_key = _native_settings_keys(secrets)
     return {
         "DATABASE_URL": database_url,
-        "DATABASE_ADMIN_URL": database_url,
+        "DATABASE_ADMIN_URL": admin_url,
         "REDIS_URL": f"redis://:{secrets.redis_password}@{POSTGRES_HOST}:{state.redis_port}/{_REDIS_DB}",
         "FARNA_CONTROL_SYSTEM_DATABASE_URL": system_url or "",
         "SECRET_KEY": secret_key,

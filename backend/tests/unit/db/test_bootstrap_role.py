@@ -41,6 +41,7 @@ from farna.db.bootstrap_role import (
     bootstrap_roles,
     main,
 )
+from farna.db.url_utils import OWNER_ROLE
 
 _NOLOGIN_ROLE: str = "role_nologin_example"
 
@@ -67,6 +68,7 @@ class _FakeConn:
       * ``table_update_grantees`` — list[str]: role_table_grants UPDATE grantees
       * ``column_updatable``      — set[str]: accounts columns farna_control_app may UPDATE
       * ``is_superuser``          — bool
+      * ``db_owner``              — str | None: role owning the current database
       * ``privileged_memberships``— list[str] — privileged roles app belongs to
       * ``function_exists``       — bool: deactivate_break_glass present
       * ``lock_available``        — bool: pg_try_advisory_lock result (FAR-1200)
@@ -81,6 +83,7 @@ class _FakeConn:
         self.table_update_grantees: list[str] = options.get("table_update_grantees", [])
         self.column_updatable: set[str] = set(options.get("column_updatable", set()))
         self.is_superuser: bool = options.get("is_superuser", False)
+        self.db_owner: str | None = options.get("db_owner")
         self.privileged_memberships: list[str] = options.get("privileged_memberships", [])
         self.function_exists: bool = options.get("function_exists", True)
         self.lock_available: bool = options.get("lock_available", True)
@@ -111,6 +114,8 @@ class _FakeConn:
             return col in self.column_updatable
         if "select rolsuper from pg_roles" in lowered:
             return self.is_superuser
+        if "pg_get_userbyid(datdba)" in lowered:
+            return self.db_owner
         if "rolbypassrls from pg_roles" in lowered:
             role_name = args[0] if args else ""
             return self.role_bypassrls.get(role_name, True)
@@ -268,7 +273,7 @@ class TestAsyncpgAdminConnect:
 class TestCreateOrUpdateRole:
     async def test_creates_login_role_when_missing(self, conn: _FakeConn) -> None:
         await _create_or_update_role(conn, "farna_control_app", login=True, password="pw")
-        assert any('CREATE ROLE "farna_control_app" LOGIN BYPASSRLS PASSWORD' in q for q in conn.executed)
+        assert any('CREATE ROLE "farna_control_app" LOGIN NOSUPERUSER BYPASSRLS PASSWORD' in q for q in conn.executed)
 
     async def test_creates_nologin_role_when_missing(self, conn: _FakeConn) -> None:
         await _create_or_update_role(conn, _MIGRATE_ROLE, login=False, password=None)
@@ -277,7 +282,7 @@ class TestCreateOrUpdateRole:
     async def test_updates_existing_login_role(self, conn: _FakeConn) -> None:
         conn.roles["farna_control_app"] = True
         await _create_or_update_role(conn, "farna_control_app", login=True, password="newpw")
-        assert any('ALTER ROLE "farna_control_app" WITH LOGIN BYPASSRLS PASSWORD' in q for q in conn.executed)
+        assert any('ALTER ROLE "farna_control_app" WITH LOGIN NOSUPERUSER BYPASSRLS PASSWORD' in q for q in conn.executed)
         assert not any(q.startswith("CREATE ROLE") for q in conn.executed)
 
     async def test_updates_existing_nologin_role(self, conn: _FakeConn) -> None:
@@ -350,12 +355,27 @@ class TestCreateOrUpdateRole:
         """
         conn.roles["farna_control_app"] = True
         await _create_or_update_role(conn, "farna_control_app", login=True, password="pw", bypassrls=False)
-        assert any('ALTER ROLE "farna_control_app" WITH LOGIN NOBYPASSRLS PASSWORD' in q for q in conn.executed)
+        assert any('ALTER ROLE "farna_control_app" WITH LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD' in q for q in conn.executed)
         assert not any('ALTER ROLE "farna_control_app" WITH LOGIN PASSWORD' in q for q in conn.executed)
 
     async def test_create_of_app_role_states_nobypassrls_explicitly(self, conn: _FakeConn) -> None:
         await _create_or_update_role(conn, "farna_control_app", login=True, password="pw", bypassrls=False)
-        assert any('CREATE ROLE "farna_control_app" LOGIN NOBYPASSRLS PASSWORD' in q for q in conn.executed)
+        assert any('CREATE ROLE "farna_control_app" LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD' in q for q in conn.executed)
+
+    async def test_alter_of_app_role_states_nosuperuser_explicitly(self, conn: _FakeConn) -> None:
+        """FAR-2570: a legacy SUPERUSER app role must be REPAIRABLE.
+
+        The native launcher wired the ``initdb -U`` role (always a superuser)
+        into ``DATABASE_URL``; ALTER ROLE only sets what it lists, so without an
+        explicit NOSUPERUSER the bootstrap could never demote the role and the
+        posture assertion failed on every boot with no way out.
+        """
+        conn.roles["farna_control_app"] = True
+        conn.is_superuser = True
+        await _create_or_update_role(conn, "farna_control_app", login=True, password="pw", bypassrls=False)
+        alters = [q for q in conn.executed if q.startswith('ALTER ROLE "farna_control_app"')]
+        assert alters
+        assert all("NOSUPERUSER" in q for q in alters)
 
     async def test_alter_of_nologin_role_without_bypassrls_states_nobypassrls_explicitly(self, conn: _FakeConn) -> None:
         conn.roles[_NOLOGIN_ROLE] = True
@@ -744,6 +764,54 @@ class TestFindAllowListViolations:
         # farna_control_system has BYPASSRLS in the clean conn — no violation
         assert not any("farna_control_system" in v for v in violations)
 
+    async def test_detects_app_role_is_the_cluster_owner(self) -> None:
+        """FAR-2570: the app must never connect as the initdb owner role.
+
+        The native launcher composed ``DATABASE_URL`` with the ``initdb -U``
+        role, which is always a SUPERUSER. The explicit violation names the
+        CAUSE (wrong URL) instead of only the downstream symptom.
+        """
+        conn = _clean_posture_conn()
+        conn.is_superuser = True
+        conn.column_updatable = set(conn.columns["accounts"])  # superuser sees every column
+
+        violations = await _find_allow_list_violations(conn, OWNER_ROLE)
+
+        assert any("OWNER/migrate role" in v for v in violations)
+        assert any("is a superuser" in v for v in violations)
+        assert any("grant drift" in v and OWNER_ROLE in v for v in violations)
+
+    async def test_detects_a_differently_named_cluster_owner(self) -> None:
+        """A pre-FAR-2570 cluster was initialised with ``-U modulo``: an owner
+        role under a legacy name must still get the actionable owner message,
+        not only the generic superuser one."""
+        conn = _clean_posture_conn()
+        conn.is_superuser = True
+        conn.db_owner = "modulo"
+        conn.column_updatable = set(conn.columns["accounts"])
+
+        violations = await _find_allow_list_violations(conn, "modulo")
+
+        assert any("OWNER/migrate role" in v and "modulo" in v for v in violations)
+
+    async def test_violation_messages_name_the_actual_app_role(self) -> None:
+        """A misnamed app role must not be reported as ``farna_control_app``.
+
+        The observed FAR-2570 output said ``app role modulo is a superuser``
+        next to ``farna_control_app accounts UPDATE grant drift`` — two names
+        for one role, which sends the operator to the wrong fix.
+        """
+        conn = _clean_posture_conn()
+        conn.is_superuser = True
+        conn.column_updatable = set(conn.columns["accounts"])
+
+        violations = await _find_allow_list_violations(conn, OWNER_ROLE)
+
+        drift = [v for v in violations if "grant drift" in v]
+        assert drift
+        assert all(v.startswith(OWNER_ROLE) for v in drift)
+        assert not any(v.startswith("farna_control_app") for v in drift)
+
 
 # ---------------------------------------------------------------------------
 # _assert_role_posture
@@ -793,8 +861,8 @@ class TestBootstrap:
             )
 
         joined = "\n".join(fake.executed)
-        assert "CREATE ROLE \"farna_control_app\" LOGIN NOBYPASSRLS PASSWORD 'apppw'" in joined
-        assert "CREATE ROLE \"farna_control_app\" LOGIN BYPASSRLS PASSWORD 'apppw'" not in joined
+        assert "CREATE ROLE \"farna_control_app\" LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'apppw'" in joined
+        assert "CREATE ROLE \"farna_control_app\" LOGIN NOSUPERUSER BYPASSRLS PASSWORD 'apppw'" not in joined
         assert 'CREATE ROLE "farna_control_migrate" NOSUPERUSER NOLOGIN BYPASSRLS' in joined
         assert 'GRANT CREATE ON SCHEMA public TO "farna_control_migrate"' in joined
         assert "GRANT REFERENCES ON TABLE public.organisations" in joined
@@ -826,7 +894,7 @@ class TestBootstrap:
             )
 
         joined = "\n".join(fake.executed)
-        assert "CREATE ROLE \"my_bg\" LOGIN BYPASSRLS PASSWORD 'bgpw'" in joined
+        assert "CREATE ROLE \"my_bg\" LOGIN NOSUPERUSER BYPASSRLS PASSWORD 'bgpw'" in joined
         assert 'CREATE ROLE "farna_control_breakglass"' not in joined
 
     async def test_bootstrap_closes_connection_even_on_error(self, monkeypatch: pytest.MonkeyPatch) -> None:

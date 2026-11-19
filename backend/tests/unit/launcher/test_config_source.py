@@ -93,13 +93,51 @@ def test_no_settings_module_loaded_after_import_by_subprocess() -> None:
 
 def test_compose_config_derives_all_bundled_endpoints() -> None:
     composed = compose_config(_state(), _secrets())
-    assert composed["DATABASE_URL"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
+    assert composed["DATABASE_URL"] == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
     assert composed["SECRET_KEY"]
     assert composed["FERNET_KEY"]
-    assert composed["DATABASE_ADMIN_URL"] == composed["DATABASE_URL"]
     assert composed["REDIS_URL"] == "redis://:redis-pw@127.0.0.1:16379/0"
     system_url = composed["FARNA_CONTROL_SYSTEM_DATABASE_URL"]
     assert system_url.startswith("postgresql+asyncpg://farna_control_system:pg-pw@127.0.0.1:15432/farna_control")
+
+
+def test_compose_config_separates_application_from_owner_role() -> None:
+    """FAR-2570: the app role is NOT the initdb superuser / owner role.
+
+    ``initdb`` creates its ``-U`` role (``farna_control``) as a Postgres
+    SUPERUSER. Wiring it into ``DATABASE_URL`` made the application run as a
+    superuser: RLS was bypassed, the accounts UPDATE allow-list could not hold
+    (``has_column_privilege`` answers true for every column for a superuser),
+    and every boot failed the role-posture assertion.
+    """
+    from farna.db.url_utils import APP_ROLE, OWNER_ROLE
+
+    composed = compose_config(_state(), _secrets())
+
+    assert urlsplit(composed["DATABASE_URL"]).username == APP_ROLE
+    assert urlsplit(composed["DATABASE_URL"]).username == "farna_control_app"
+    # DDL / migrations / the role bootstrap need the owner role.
+    assert urlsplit(composed["DATABASE_ADMIN_URL"]).username == OWNER_ROLE
+    assert urlsplit(composed["DATABASE_ADMIN_URL"]).username == "farna_control"
+    assert urlsplit(composed["DATABASE_URL"]).username != urlsplit(composed["DATABASE_ADMIN_URL"]).username
+    # The system URL keeps the app password and swaps only the role.
+    assert urlsplit(composed["FARNA_CONTROL_SYSTEM_DATABASE_URL"]).username == "farna_control_system"
+
+
+def test_compose_config_admin_url_names_the_role_legacy_adoption_creates() -> None:
+    """Upgrade path: on an existing native install the launcher renames the
+    legacy ``modulo`` owner to ``OWNER_ROLE`` (see
+    ``initdb.adopt_legacy_owner_role``) before composing, so the admin URL must
+    name the adopted canonical role, never the legacy name."""
+    from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
+    from farna.launcher.initdb import BOOTSTRAP_USERNAME
+
+    composed = compose_config(_state(), _secrets())
+    admin_user = urlsplit(composed["DATABASE_ADMIN_URL"]).username
+
+    assert admin_user == OWNER_ROLE
+    assert admin_user == BOOTSTRAP_USERNAME
+    assert admin_user != LEGACY_OWNER_ROLE
 
 
 def test_pinned_config_preserves_existing_operator_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -255,7 +293,7 @@ def test_source_redis_url_environment_wins_over_composed(monkeypatch: pytest.Mon
     monkeypatch.setenv("REDIS_URL", "redis://operator:secret@cache.example.com:6379/7")
     resolved = LauncherConfigSource(data_dir)()
     assert "redis_url" not in resolved  # the operator's env wins
-    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
+    assert resolved["database_url"] == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
 
 
 def test_source_system_database_url_environment_wins_over_composed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -271,7 +309,7 @@ def test_source_system_database_url_environment_wins_over_composed(monkeypatch: 
     monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "postgresql://user:pass@host:5432/modulo")
     resolved = LauncherConfigSource(data_dir)()
     assert "modulo_system_database_url" not in resolved  # the operator's env wins
-    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
+    assert resolved["database_url"] == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
     assert resolved["redis_url"] == "redis://:redis-pw@127.0.0.1:16379/0"
 
 
@@ -308,7 +346,7 @@ def test_source_includes_everything_without_environment(clean_launcher_env, monk
 
     monkeypatch.setattr(sf, "load_or_create", lambda _path: _secrets())
     resolved = LauncherConfigSource(data_dir)()
-    assert resolved["database_url"] == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
+    assert resolved["database_url"] == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
     assert resolved["redis_url"] == "redis://:redis-pw@127.0.0.1:16379/0"
 
 
@@ -353,7 +391,7 @@ def test_source_settings_roundtrip_honours_priority(clean_launcher_env, monkeypa
         _env_file=None,
         **resolved,  # type: ignore[arg-type]
     )
-    assert settings.database_url == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
+    assert settings.database_url == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
     assert settings.redis_url == "redis://:redis-pw@127.0.0.1:16379/0"
 
 
@@ -386,7 +424,7 @@ def test_write_pinned_env_file_content_and_mode(tmp_path: Path) -> None:
     path = write_pinned_env_file(data_dir, _state(), _secrets())
     assert path.name == CONFIG_ENV_FILENAME
     content = path.read_text(encoding="utf-8")
-    assert "DATABASE_URL=postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control" in content
+    assert "DATABASE_URL=postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control" in content
     assert "REDIS_URL=redis://:redis-pw@127.0.0.1:16379/0" in content
     if os.name == "posix":
         mode = path.stat().st_mode & 0o777
@@ -443,7 +481,7 @@ def test_pinned_env_file_feeds_get_settings(clean_launcher_env, monkeypatch: pyt
     monkeypatch.setenv("FERNET_KEY", FERNET_KEY)
     pin_env_file(str(path))
     settings = get_settings()
-    assert settings.database_url == "postgresql+asyncpg://modulo:pg-pw@127.0.0.1:15432/farna_control"
+    assert settings.database_url == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
     assert settings.redis_url == "redis://:redis-pw@127.0.0.1:16379/0"
 
 

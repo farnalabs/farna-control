@@ -296,8 +296,57 @@ def test_dump_password_is_never_in_argv(tmp_path: Path, monkeypatch: pytest.Monk
         pre_upgrade_dump(data_dir)
     joined = " ".join(str(a) for a in seen["argv"])
     assert "pw" not in joined
-    assert seen["argv"][-1] == "postgresql://modulo@127.0.0.1:15432/farna_control"
+    # FAR-2570: the dump runs as the cluster OWNER role, never the
+    # NOBYPASSRLS application role (an RLS-filtered dump is silently partial).
+    assert seen["argv"][-1] == "postgresql://farna_control@127.0.0.1:15432/farna_control"
     assert seen["env"]["PGPASSWORD"] == "pw"
+
+
+def test_pre_upgrade_dump_adopts_a_legacy_owner_role_before_dumping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Upgrade path: a pre-FAR-2570 cluster still owns itself via ``modulo``.
+
+    The dump must adopt (rename) that owner before connecting as the canonical
+    role, otherwise pg_dump runs as a role that does not exist yet.
+    """
+    _allow_windows_secrets(monkeypatch)
+    data_dir = _seed_data_dir(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    async def _fake_adopt(**kwargs: object) -> bool:
+        calls.append(kwargs)
+        return True
+
+    with patch("farna.launcher.initdb.adopt_legacy_owner_role", new=_fake_adopt), contextlib.ExitStack() as stack:
+        _enter_fake_run(stack)
+        snapshot = pre_upgrade_dump(data_dir)
+
+    assert snapshot.dump_path.exists()
+    assert calls == [{"host": "127.0.0.1", "port": 15432, "password": "pw"}]
+
+
+def test_pre_upgrade_dump_surfaces_an_owner_role_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An adoption REFUSAL aborts the dump with its own diagnosis.
+
+    When neither owner role accepts the credential, the adoption already knows
+    exactly why. Logging that as a warning and letting pg_dump fail with a
+    generic authentication error would hide the only actionable cause, so the
+    upgrade aborts with it instead.
+    """
+    from farna.launcher.initdb import InitdbError
+
+    _allow_windows_secrets(monkeypatch)
+    data_dir = _seed_data_dir(tmp_path)
+
+    async def _refuse(**kwargs: object) -> bool:
+        raise InitdbError("Neither the canonical owner role nor the legacy bundle owner role accepted")
+
+    with (
+        patch("farna.launcher.initdb.adopt_legacy_owner_role", new=_refuse),
+        pytest.raises(UpgradeError, match="owner role cannot be resolved"),
+    ):
+        pre_upgrade_dump(data_dir)
+
+    assert not list(data_dir.glob("pre-upgrade-dump-*"))
 
 
 def test_state_with_last_backup_stamps_v2(tmp_path: Path) -> None:

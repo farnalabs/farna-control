@@ -46,6 +46,31 @@ Settings contract.
 import re
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
+# ---------------------------------------------------------------------------
+# The three database role names (THE single definition, FAR-2570)
+# ---------------------------------------------------------------------------
+#: The least-privilege LOGIN role the application connects as. It must be
+#: NOSUPERUSER and NOBYPASSRLS: tenant isolation relies on RLS policies, and a
+#: superuser (or the cluster owner) silently bypasses every one of them.
+APP_ROLE = "farna_control_app"
+#: The cross-org system cron role (LOGIN, NOSUPERUSER, BYPASSRLS). Only the
+#: system crons and instance-global pre-auth reads use it.
+SYSTEM_ROLE = "farna_control_system"
+#: The cluster owner / migration role ``initdb`` creates (superuser). It owns
+#: the schema and runs DDL (``DATABASE_ADMIN_URL``); the application must NEVER
+#: connect as it — that is exactly the regression FAR-2570 fixed (the launcher
+#: composed ``DATABASE_URL`` with this role, so the app ran as a superuser, RLS
+#: was bypassed, and the boot-time role-posture assertion failed).
+OWNER_ROLE = "farna_control"
+#: The pre-FAR-2570 bundle bootstrap/owner role. Shipped bundles (for example
+#: ``bundle-v0.3.328``) initialised the bundled cluster with ``initdb -U
+#: modulo``, so an existing native install has this role (a SUPERUSER cluster
+#: owner) and no ``farna_control`` role. The launcher adopts such a cluster by
+#: renaming this role to :data:`OWNER_ROLE` before any owner connection; see
+#: :func:`farna.launcher.initdb.adopt_legacy_owner_role`. Defined here so the
+#: legacy name has a single definition like the three current role names.
+LEGACY_OWNER_ROLE = "modulo"
+
 # SSL modes asyncpg recognises (SSLMode enum). ``require``/``verify-ca``/
 # ``verify-full`` fail closed in asyncpg (the connection is refused unless the
 # server negotiates TLS); ``allow``/``prefer`` downgrade silently to plaintext
@@ -175,24 +200,24 @@ def split_engine_sslmode(url: str) -> tuple[str, str | bool | None]:
 
 
 def derive_system_database_url(runtime_url: str) -> str:
-    """Derive the farna_control_system URL from the runtime DATABASE_URL.
+    """Derive the ``farna_control_system`` URL from the runtime DATABASE_URL.
 
-    Swaps the username to ``farna_control_system``, preserving the password (so
-    ``modulo.db.bootstrap_role`` can create the role with the same
+    Swaps the username to :data:`SYSTEM_ROLE`, preserving the password (so
+    ``farna.db.bootstrap_role`` can create the role with the same
     credential), the host/port, the scheme, and any query params. Returns an
     empty string when the netloc has no ``@`` separator (no userinfo), when
     the userinfo has no password, or when the password is explicitly empty
-    (``user:@host``) — in all three cases the caller falls back to farna_control_app
-    rather than wiring a farna_control_system URL whose credential could never match
-    the role bootstrap would create (it seeds ``secrets.token_urlsafe`` when
-    the URL carries no password).
+    (``user:@host``) — in all three cases the caller falls back to
+    :data:`APP_ROLE` rather than wiring a system URL whose credential could
+    never match the role bootstrap would create (it seeds
+    ``secrets.token_urlsafe`` when the URL carries no password).
     """
     parts = urlsplit(runtime_url)
     userinfo, sep, hostport = parts.netloc.rpartition("@")
     if sep:
         _, _, password = userinfo.partition(":")
         if password:
-            new_userinfo = f"farna_control_system:{password}"
+            new_userinfo = f"{SYSTEM_ROLE}:{password}"
             parts = parts._replace(netloc=f"{new_userinfo}@{hostport}")
             return urlunsplit(parts)
     return ""

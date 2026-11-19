@@ -2,7 +2,14 @@
 
 Rules enforced here, all locked by tests:
 
-* FIXED ``-U`` bootstrap role name (``modulo``) — NEVER the OS username.
+* FIXED ``-U`` bootstrap role name (:data:`BOOTSTRAP_USERNAME`, the cluster
+  OWNER / migration role) — NEVER the OS username, and NEVER the application
+  role. ``initdb`` always makes its ``-U`` role a Postgres SUPERUSER, so this
+  role may only own the schema and run DDL: the application connects as
+  ``farna_control_app`` (NOSUPERUSER, NOBYPASSRLS — see
+  ``farna.db.url_utils``). Composing the app URL with this role is the
+  FAR-2570 regression: the app then ran as a superuser, RLS was bypassed, and
+  the boot-time role-posture assertion failed.
 * Locale pinned to ``C.UTF-8`` (TODO(P3): Windows initdb has no C.UTF-8
   locale; the P3 delivery must pick the Windows-appropriate locale or ship
   one — this module refuses loudly rather than guessing).
@@ -31,12 +38,18 @@ import secrets as _secrets
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote_plus
 
+from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
 from farna.launcher.platform import binary_name, initdb_locale, is_windows
 
-BOOTSTRAP_USERNAME = "modulo"
+# The cluster OWNER / migration role initdb creates (and makes a superuser).
+# Imported from the single role-name definition so it can never drift from the
+# role the launcher puts in ``DATABASE_ADMIN_URL``.
+BOOTSTRAP_USERNAME = OWNER_ROLE
 INITDB_LOCALE = "C.UTF-8"
 PG_VERSION_FILE = "PG_VERSION"
 
@@ -60,6 +73,7 @@ __all__ = [
     "GATE_INITDB_PRE_RENAME",
     "INITDB_LOCALE",
     "InitdbError",
+    "adopt_legacy_owner_role",
     "assert_supported_platform",
     "bootstrap_pgdata",
     "initdb_argv",
@@ -262,3 +276,99 @@ def bootstrap_pgdata(
             # moved the dir, so the exists() check only trips on failure).
             shutil.rmtree(tmp_pgdata, ignore_errors=True)
     return pgdata
+
+
+async def adopt_legacy_owner_role(
+    *,
+    host: str,
+    port: int,
+    password: str,
+    connect: Callable[..., Awaitable[Any]] | None = None,
+) -> bool:
+    """Rename a pre-FAR-2570 ``initdb -U modulo`` owner role to ``OWNER_ROLE``.
+
+    Existing native installs were initialised by a shipped bundle with
+    ``initdb -U modulo`` (see :data:`farna.db.url_utils.LEGACY_OWNER_ROLE`).
+    ``initdb`` only runs when ``PG_VERSION`` is absent, so an in-place upgrade
+    leaves that legacy role in place while the FAR-2570 launcher composes every
+    owner connection as ``farna_control``: the role does not exist and boot
+    fails. Renaming the role — rather than recreating it — preserves its OID,
+    so object ownership, grants, the SUPERUSER attribute and the credential all
+    carry across without an ownership sweep.
+
+    Idempotent and safe on every boot:
+
+    * fresh install (only ``farna_control`` exists) → the canonical owner
+      connects, so this returns ``False`` without touching anything;
+    * already adopted (the rename happened on an earlier boot) → same;
+    * legacy cluster (only ``modulo`` exists) → the role is renamed, returns
+      ``True``.
+
+    The canonical owner is probed FIRST and the legacy role is only tried when
+    that connect is rejected: under ``initdb --auth=scram-sha-256`` (how the
+    bundle initialises the cluster) an ABSENT role and a wrong password are
+    indistinguishable — both surface as ``28P01`` invalid password, not the
+    ``28000`` invalid-authorization a trust/md5 cluster would return. Treating
+    ``28P01`` as a hard credential error, or trying the legacy role first,
+    makes a fresh install fail to boot. If neither role accepts the
+    secrets-file password the boot fails loudly rather than guessing the
+    owner credential. A cluster with BOTH names, where only the legacy one
+    accepts the password, cannot be adopted (a rename cannot overwrite a taken
+    name) and refuses with the reconciliation. ``connect`` is a test seam for
+    ``asyncpg.connect``.
+    """
+    import asyncpg  # asyncpg does not publish a py.typed marker
+
+    from farna.db.url_utils import split_postgres_sslmode
+
+    connector = connect if connect is not None else asyncpg.connect
+
+    async def _connect_as(role: str) -> Any | None:
+        """Connect as ``role``; ``None`` when the credential is rejected.
+
+        ``InvalidPasswordError`` subclasses
+        ``InvalidAuthorizationSpecificationError``, so this one handler covers
+        both ``28P01`` and ``28000``.
+        """
+        url = f"postgresql://{role}:{quote_plus(password)}@{host}:{port}/postgres"
+        dsn, ssl = split_postgres_sslmode(url)
+        try:
+            return await connector(dsn, ssl=ssl)
+        except asyncpg.InvalidAuthorizationSpecificationError:
+            return None
+
+    # The canonical owner exists on a fresh install and on a cluster adopted by
+    # an earlier boot: nothing to migrate.
+    conn = await _connect_as(OWNER_ROLE)
+    if conn is not None:
+        await conn.close()
+        return False
+
+    # Canonical owner absent (or its credential rejected). A pre-FAR-2570
+    # cluster still has the legacy ``modulo`` owner, so try it before deciding
+    # the secrets file is wrong.
+    conn = await _connect_as(LEGACY_OWNER_ROLE)
+    if conn is None:
+        raise InitdbError(f"Neither the canonical owner role {OWNER_ROLE!r} nor the legacy bundle owner role {LEGACY_OWNER_ROLE!r} accepted the secrets-file password. Refusing to guess the owner credential: reconcile the secrets file with the cluster owner before booting.")
+    try:
+        canonical_exists = await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname = $1", OWNER_ROLE)
+        if canonical_exists:
+            # Both names exist, and the canonical role did NOT accept the
+            # secrets-file password — that rejection is why this legacy
+            # connection is the live one. A rename is impossible while the
+            # target name is taken, so the cluster cannot be adopted
+            # automatically: fail with the reconciliation instead of letting
+            # the boot die later on a bare authentication error.
+            raise InitdbError(
+                f"The bundled cluster has BOTH owner roles ({OWNER_ROLE!r} and the pre-FAR-2570 "
+                f"{LEGACY_OWNER_ROLE!r}), but only {LEGACY_OWNER_ROLE!r} accepted the secrets-file "
+                f"password, and {OWNER_ROLE!r} cannot be renamed onto. Reconcile the cluster: either "
+                f"drop the stray {OWNER_ROLE!r} role and re-run `modulo start` (the boot then renames "
+                f"{LEGACY_OWNER_ROLE!r}), or point the data dir's secrets file at the existing "
+                f"{OWNER_ROLE!r} credential."
+            )
+        # nosemgrep: raw-sql-fstring (both names are module constants)
+        await conn.execute(f'ALTER ROLE "{LEGACY_OWNER_ROLE}" RENAME TO "{OWNER_ROLE}"')
+        return True
+    finally:
+        await conn.close()

@@ -375,7 +375,9 @@ def check_postgres(_data_dir: Path, state: Any, probes: DoctorProbes) -> CheckRe
         return CheckResult(
             "postgres",
             False,
-            f"reachable on 127.0.0.1:{state.postgres_port} but role posture DRIFTED: " + "; ".join(violations),
+            f"reachable on 127.0.0.1:{state.postgres_port} but role posture DRIFTED: " + "; ".join(violations) + ". The application must connect as farna_control_app (NOSUPERUSER, NOBYPASSRLS) with "
+            "DATABASE_ADMIN_URL naming the owner/migration role (farna_control); fix DATABASE_URL, "
+            "then restart `modulo start` so the boot-time bootstrap re-applies the allow-list.",
         )
     return CheckResult(
         "postgres",
@@ -1230,19 +1232,71 @@ def _build_composed_config(data_dir: Path, state: Any) -> dict[str, str]:
         return {}
 
 
+def _owner_admin_urls(admin_url: str) -> list[str]:
+    """The canonical admin URL followed by the pre-FAR-2570 legacy-owner fallback.
+
+    A native install upgraded in place still has the legacy ``modulo`` owner
+    role until the launcher's next boot adopts it (renames it to
+    ``farna_control``). The doctor is READ-ONLY, so it probes the canonical
+    role first and falls back to the legacy name instead of performing the
+    rename itself — it must be able to report on a cluster whose next boot has
+    not happened yet.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    from farna.db.url_utils import LEGACY_OWNER_ROLE, OWNER_ROLE
+
+    parts = urlsplit(admin_url)
+    userinfo, sep, hostport = parts.netloc.rpartition("@")
+    if not sep:
+        return [admin_url]
+    username, colon, password = userinfo.partition(":")
+    if username != OWNER_ROLE:
+        return [admin_url]
+    legacy_url = urlunsplit(parts._replace(netloc=f"{LEGACY_OWNER_ROLE}{colon}{password}@{hostport}"))
+    return [admin_url, legacy_url]
+
+
+async def _connect_owner(admin_url: str) -> Any:
+    """Connect as the cluster OWNER, falling back once to the legacy role.
+
+    The canonical owner (``farna_control``) is tried first. When that connect
+    is rejected the pre-FAR-2570 legacy owner (``modulo``) is tried — its
+    rename happens on the next boot, and the doctor must still report on a
+    not-yet-adopted cluster. Both rejection codes must trigger the fallback:
+    under ``initdb --auth=scram-sha-256`` an ABSENT role is reported as
+    ``28P01`` invalid password, not ``28000`` invalid authorization, so
+    re-raising ``InvalidPasswordError`` early would make the legacy fallback
+    unreachable for exactly the cluster it exists for. When neither name is
+    accepted the last auth error is surfaced (the secrets file matches neither
+    role).
+    """
+    import asyncpg  # asyncpg does not publish a py.typed marker
+
+    from farna.db.bootstrap_role import _asyncpg_admin_connect
+
+    candidates = _owner_admin_urls(admin_url)
+    last_exc: Exception | None = None
+    for candidate in candidates:
+        dsn, ssl_arg = _asyncpg_admin_connect(candidate)
+        try:
+            return await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+        except asyncpg.InvalidAuthorizationSpecificationError as exc:
+            # ``InvalidPasswordError`` subclasses this, so both 28P01 (absent
+            # role under scram) and 28000 are handled here.
+            last_exc = exc
+    assert last_exc is not None
+    raise last_exc
+
+
 def _probe_postgres_admin(composed: dict[str, str]) -> None:
     """Admin probe: raise when the bundled Postgres is not reachable."""
     admin_url = composed.get("DATABASE_ADMIN_URL") or ""
     if not admin_url:
         raise RuntimeError("no composed DATABASE_ADMIN_URL (state/secrets unavailable)")
-    import asyncpg  # asyncpg does not publish a py.typed marker
-
-    from farna.db.bootstrap_role import _asyncpg_admin_connect
-
-    dsn, ssl_arg = _asyncpg_admin_connect(admin_url)
 
     async def _go() -> None:
-        conn = await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+        conn = await _connect_owner(admin_url)
         try:
             await conn.fetchval("SELECT 1")
         finally:
@@ -1257,17 +1311,10 @@ def _probe_role_posture_violations(composed: dict[str, str]) -> list[str]:
     app_url = composed.get("DATABASE_URL") or ""
     if not admin_url or not app_url:
         raise RuntimeError("no composed database URLs (state/secrets unavailable)")
-    import asyncpg
-
-    from farna.db.bootstrap_role import (
-        _asyncpg_admin_connect,
-        _find_allow_list_violations,
-        _parse_role,
-    )
+    from farna.db.bootstrap_role import _find_allow_list_violations, _parse_role
 
     async def _go() -> list[str]:
-        dsn, ssl_arg = _asyncpg_admin_connect(admin_url)
-        conn = await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+        conn = await _connect_owner(admin_url)
         try:
             return list(await _find_allow_list_violations(conn, _parse_role(app_url)))
         finally:

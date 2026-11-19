@@ -173,6 +173,31 @@ def assert_not_held(data_dir: Path) -> None:
     _log.info("upgrade.stale_lock_record_ignored holder_pid=%s (process is gone)", holder.pid)
 
 
+def _adopt_legacy_owner_for_dump(*, port: int, password: str) -> None:
+    """Adopt a pre-FAR-2570 cluster owner before the pre-upgrade dump connects.
+
+    A shipped bundle before FAR-2570 initialised the cluster with
+    ``initdb -U modulo``; the dump must adopt (rename) that owner before
+    connecting as the canonical role. Idempotent and a no-op on
+    fresh/already-adopted installs. An adoption REFUSAL (:class:`InitdbError` —
+    neither owner role accepts the credential, or both names exist and only the
+    legacy one does) IS the diagnosis the dump would otherwise report generically
+    as an authentication failure, so it aborts the upgrade with that text. Any
+    other failure (an unreachable cluster) stays best effort: pg_dump below
+    reports it with its own actionable error.
+    """
+    import asyncio
+
+    from farna.launcher.initdb import InitdbError, adopt_legacy_owner_role
+
+    try:
+        asyncio.run(adopt_legacy_owner_role(host=_POSTGRES_HOST, port=port, password=password))
+    except InitdbError as exc:
+        raise UpgradeError(f"the bundled cluster's owner role cannot be resolved for the pre-upgrade dump — upgrade ABORTED, no binary swap was made: {exc}") from exc
+    except Exception as exc:
+        _log.warning("upgrade.owner_role_adoption_skipped error=%s", exc)
+
+
 def pre_upgrade_dump(
     data_dir: Path,
     *,
@@ -225,7 +250,17 @@ def pre_upgrade_dump(
     except Exception as exc:
         raise UpgradeError(f"state.json at {state_path} cannot be verified: {exc}") from exc
 
-    url_with_password = f"postgresql://modulo:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
+    # Adopt a pre-FAR-2570 cluster before connecting as the canonical owner
+    # role; the helper owns the refusal/attestation semantics.
+    _adopt_legacy_owner_for_dump(port=state.postgres_port, password=secrets.postgres_password)
+
+    # The pre-upgrade dump must run as the cluster OWNER (initdb's bootstrap
+    # role), never the application role: farna_control_app is NOBYPASSRLS, so
+    # pg_dump would read only the rows its session can see and produce a
+    # silently incomplete snapshot (FAR-2570).
+    from farna.launcher.initdb import BOOTSTRAP_USERNAME
+
+    url_with_password = f"postgresql://{BOOTSTRAP_USERNAME}:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
     dump_url, postgres_password = _decredential_url(url_with_password)
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
