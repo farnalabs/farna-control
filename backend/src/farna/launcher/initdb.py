@@ -298,31 +298,55 @@ async def adopt_legacy_owner_role(
 
     Idempotent and safe on every boot:
 
-    * fresh install (only ``farna_control`` exists) → the legacy connect is
-      rejected with "role does not exist" and this returns ``False``;
+    * fresh install (only ``farna_control`` exists) → the canonical owner
+      connects, so this returns ``False`` without touching anything;
     * already adopted (the rename happened on an earlier boot) → same;
     * legacy cluster (only ``modulo`` exists) → the role is renamed, returns
       ``True``.
 
-    If the legacy role exists but rejects the secrets-file password, the boot
-    fails loudly rather than silently connecting as the wrong role. ``connect``
-    is a test seam for ``asyncpg.connect``.
+    The canonical owner is probed FIRST and the legacy role is only tried when
+    that connect is rejected: under ``initdb --auth=scram-sha-256`` (how the
+    bundle initialises the cluster) an ABSENT role and a wrong password are
+    indistinguishable — both surface as ``28P01`` invalid password, not the
+    ``28000`` invalid-authorization a trust/md5 cluster would return. Treating
+    ``28P01`` as a hard credential error, or trying the legacy role first,
+    makes a fresh install fail to boot. If neither role accepts the
+    secrets-file password the boot fails loudly rather than guessing the owner
+    credential. ``connect`` is a test seam for ``asyncpg.connect``.
     """
     import asyncpg  # asyncpg does not publish a py.typed marker
 
     from farna.db.url_utils import split_postgres_sslmode
 
-    legacy_url = f"postgresql://{LEGACY_OWNER_ROLE}:{quote_plus(password)}@{host}:{port}/postgres"
-    dsn, ssl = split_postgres_sslmode(legacy_url)
     connector = connect if connect is not None else asyncpg.connect
-    try:
-        conn = await connector(dsn, ssl=ssl)
-    except asyncpg.InvalidPasswordError as exc:
-        raise InitdbError(f"The legacy bundle owner role {LEGACY_OWNER_ROLE!r} exists but rejected the secrets-file password. Refusing to guess the owner credential: reconcile the secrets file with the cluster owner before upgrading.") from exc
-    except asyncpg.InvalidAuthorizationSpecificationError:
-        # 28000 means the role is absent: a fresh install or an already-adopted
-        # cluster. Either way there is no legacy owner to migrate.
+
+    async def _connect_as(role: str) -> Any | None:
+        """Connect as ``role``; ``None`` when the credential is rejected.
+
+        ``InvalidPasswordError`` subclasses
+        ``InvalidAuthorizationSpecificationError``, so this one handler covers
+        both ``28P01`` and ``28000``.
+        """
+        url = f"postgresql://{role}:{quote_plus(password)}@{host}:{port}/postgres"
+        dsn, ssl = split_postgres_sslmode(url)
+        try:
+            return await connector(dsn, ssl=ssl)
+        except asyncpg.InvalidAuthorizationSpecificationError:
+            return None
+
+    # The canonical owner exists on a fresh install and on a cluster adopted by
+    # an earlier boot: nothing to migrate.
+    conn = await _connect_as(OWNER_ROLE)
+    if conn is not None:
+        await conn.close()
         return False
+
+    # Canonical owner absent (or its credential rejected). A pre-FAR-2570
+    # cluster still has the legacy ``modulo`` owner, so try it before deciding
+    # the secrets file is wrong.
+    conn = await _connect_as(LEGACY_OWNER_ROLE)
+    if conn is None:
+        raise InitdbError(f"Neither the canonical owner role {OWNER_ROLE!r} nor the legacy bundle owner role {LEGACY_OWNER_ROLE!r} accepted the secrets-file password. Refusing to guess the owner credential: reconcile the secrets file with the cluster owner before booting.")
     try:
         canonical_exists = await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname = $1", OWNER_ROLE)
         if canonical_exists:

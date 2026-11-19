@@ -923,8 +923,11 @@ def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
     app_db_name = _validate_sql_identifier(APP_DB_NAME, "APP_DB_NAME")
 
     # Existing native installs have the legacy ``modulo`` owner role, not the
-    # canonical ``farna_control`` role this boot connects as. Adopt it first
-    # (no-op on a fresh install or an already-adopted cluster).
+    # canonical ``farna_control`` role this boot connects as. Adopt it first.
+    # This is a no-op on a fresh install (the canonical owner connects) and on
+    # an already-adopted cluster; it raises only when NEITHER role accepts the
+    # secrets-file password, which the CREATE-DATABASE connection below could
+    # not survive either — so failing loudly here is correct.
     _adopt_legacy_owner_role(launcher_state, secrets)
 
     async def _create() -> None:

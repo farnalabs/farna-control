@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 from subprocess import Popen
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -438,39 +439,75 @@ class _RoleConn:
         self.closed = True
 
 
-def _recording_connector(conn: _RoleConn, seen: list[str]) -> object:
+def _scram_connector(
+    conn: _RoleConn,
+    seen: list[str],
+    *,
+    present: set[str],
+    rejected: set[str] | None = None,
+) -> object:
+    """Role-aware fake of ``asyncpg.connect`` under ``scram-sha-256`` auth.
+
+    Unlike a trust/md5 cluster (which reports an absent role as 28000), a
+    scram cluster reports an ABSENT role as ``28P01`` invalid password — the
+    exact condition that made the first fresh-install boot fail. ``rejected``
+    lets a present role still reject the credential (a real password mismatch).
+    """
+    import asyncpg
+
+    rejected = rejected or set()
+
     async def _connect(dsn: str, **_kwargs: object) -> _RoleConn:
         seen.append(dsn)
+        role = urlsplit(dsn).username or ""
+        if role not in present or role in rejected:
+            raise asyncpg.InvalidPasswordError(f'password authentication failed for user "{role}"')
         return conn
 
     return _connect
 
 
 async def test_adopt_legacy_owner_role_renames_modulo_to_farna_control() -> None:
-    """The exact upgrade path: a cluster initialised with ``initdb -U modulo``
-    has no canonical owner role, so the first FAR-2570 boot renames it."""
+    """The exact upgrade path: a legacy-only cluster rejects the canonical
+    owner as 28P01 (absent under scram), so the first FAR-2570 boot falls back
+    to ``modulo`` and renames it."""
     conn = _RoleConn(canonical_exists=False)
     seen: list[str] = []
 
-    adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_recording_connector(conn, seen))
+    adopted = await adopt_legacy_owner_role(
+        host="127.0.0.1",
+        port=15432,
+        password="pw",
+        connect=_scram_connector(conn, seen, present={LEGACY_OWNER_ROLE}),
+    )
 
     assert adopted is True
-    assert seen
-    assert seen[0].startswith(f"postgresql://{LEGACY_OWNER_ROLE}:")
+    assert [urlsplit(dsn).username for dsn in seen] == [OWNER_ROLE, LEGACY_OWNER_ROLE]
     assert conn.executed == [f'ALTER ROLE "{LEGACY_OWNER_ROLE}" RENAME TO "{OWNER_ROLE}"']
     assert conn.closed is True
 
 
 async def test_adopt_legacy_owner_role_is_a_noop_on_a_fresh_install() -> None:
-    """No legacy role: connecting as ``modulo`` is rejected with 28000."""
-    import asyncpg
+    """Fresh ``initdb -U farna_control`` cluster: the canonical owner connects
+    first, so the legacy role is never probed and nothing is renamed.
 
-    async def _reject(_dsn: str, **_kwargs: object) -> object:
-        raise asyncpg.InvalidAuthorizationSpecificationError('role "modulo" does not exist')
+    Regression lock for the critical boot failure: probing ``modulo`` first
+    raises 28P01 under scram and must NOT be mistaken for a bad credential.
+    """
+    conn = _RoleConn(canonical_exists=True)
+    seen: list[str] = []
 
-    adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_reject)
+    adopted = await adopt_legacy_owner_role(
+        host="127.0.0.1",
+        port=15432,
+        password="pw",
+        connect=_scram_connector(conn, seen, present={OWNER_ROLE}),
+    )
 
     assert adopted is False
+    assert [urlsplit(dsn).username for dsn in seen] == [OWNER_ROLE]
+    assert not conn.executed
+    assert conn.closed is True
 
 
 async def test_adopt_legacy_owner_role_never_renames_over_an_existing_owner() -> None:
@@ -478,20 +515,34 @@ async def test_adopt_legacy_owner_role_never_renames_over_an_existing_owner() ->
     conn = _RoleConn(canonical_exists=True)
     seen: list[str] = []
 
-    adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_recording_connector(conn, seen))
+    adopted = await adopt_legacy_owner_role(
+        host="127.0.0.1",
+        port=15432,
+        password="pw",
+        connect=_scram_connector(
+            conn,
+            seen,
+            present={OWNER_ROLE, LEGACY_OWNER_ROLE},
+            rejected={OWNER_ROLE},
+        ),
+    )
 
     assert adopted is False
     assert not conn.executed
     assert conn.closed is True
 
 
-async def test_adopt_legacy_owner_role_fails_loudly_on_a_password_mismatch() -> None:
-    """The legacy role exists but the secrets-file password is wrong: never
-    silently continue to a canonical connection that cannot work."""
-    import asyncpg
+async def test_adopt_legacy_owner_role_fails_loudly_when_neither_role_accepts_the_password() -> None:
+    """Neither name accepts the secrets-file password: never guess."""
+    conn = _RoleConn(canonical_exists=False)
+    seen: list[str] = []
 
-    async def _reject(_dsn: str, **_kwargs: object) -> object:
-        raise asyncpg.InvalidPasswordError('password authentication failed for user "modulo"')
+    with pytest.raises(InitdbError, match="Neither the canonical owner role"):
+        await adopt_legacy_owner_role(
+            host="127.0.0.1",
+            port=15432,
+            password="pw",
+            connect=_scram_connector(conn, seen, present=set()),
+        )
 
-    with pytest.raises(InitdbError, match="rejected the secrets-file password"):
-        await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_reject)
+    assert [urlsplit(dsn).username for dsn in seen] == [OWNER_ROLE, LEGACY_OWNER_ROLE]

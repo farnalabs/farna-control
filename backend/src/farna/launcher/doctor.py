@@ -1260,29 +1260,33 @@ def _owner_admin_urls(admin_url: str) -> list[str]:
 async def _connect_owner(admin_url: str) -> Any:
     """Connect as the cluster OWNER, falling back once to the legacy role.
 
-    The canonical owner (``farna_control``) is tried first. Only when it is
-    ABSENT (``InvalidAuthorizationSpecificationError``) is the pre-FAR-2570
-    legacy owner (``modulo``) tried — its rename happens on the next boot, and
-    the doctor must still report on a not-yet-adopted cluster. A password
-    mismatch is never retried under another name: it means the secrets file
-    matches neither role, so the actionable error is surfaced immediately.
+    The canonical owner (``farna_control``) is tried first. When that connect
+    is rejected the pre-FAR-2570 legacy owner (``modulo``) is tried — its
+    rename happens on the next boot, and the doctor must still report on a
+    not-yet-adopted cluster. Both rejection codes must trigger the fallback:
+    under ``initdb --auth=scram-sha-256`` an ABSENT role is reported as
+    ``28P01`` invalid password, not ``28000`` invalid authorization, so
+    re-raising ``InvalidPasswordError`` early would make the legacy fallback
+    unreachable for exactly the cluster it exists for. When neither name is
+    accepted the last auth error is surfaced (the secrets file matches neither
+    role).
     """
     import asyncpg  # asyncpg does not publish a py.typed marker
 
     from farna.db.bootstrap_role import _asyncpg_admin_connect
 
     candidates = _owner_admin_urls(admin_url)
-    dsn, ssl_arg = _asyncpg_admin_connect(candidates[0])
-    try:
-        return await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
-    except asyncpg.InvalidPasswordError:
-        raise
-    except asyncpg.InvalidAuthorizationSpecificationError:
-        if len(candidates) == 1:
-            raise
-    # Canonical owner absent on a not-yet-adopted legacy cluster (FAR-2570).
-    dsn, ssl_arg = _asyncpg_admin_connect(candidates[1])
-    return await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+    last_exc: Exception | None = None
+    for candidate in candidates:
+        dsn, ssl_arg = _asyncpg_admin_connect(candidate)
+        try:
+            return await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+        except asyncpg.InvalidAuthorizationSpecificationError as exc:
+            # ``InvalidPasswordError`` subclasses this, so both 28P01 (absent
+            # role under scram) and 28000 are handled here.
+            last_exc = exc
+    assert last_exc is not None
+    raise last_exc
 
 
 def _probe_postgres_admin(composed: dict[str, str]) -> None:

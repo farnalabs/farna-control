@@ -1983,16 +1983,19 @@ class TestEnsureAppDatabaseSafety:
             user = urlsplit(dsn).username or ""
             connects.append(user)
             if user not in roles:
-                raise asyncpg.InvalidAuthorizationSpecificationError(f'role "{user}" does not exist')
+                # scram reports an absent role as 28P01 invalid password, not
+                # 28000 — the condition that broke the fresh-install boot.
+                raise asyncpg.InvalidPasswordError(f'password authentication failed for user "{user}"')
             return _Conn()
 
         monkeypatch.setattr(asyncpg, "connect", _connect)
 
         entry_module._ensure_app_database(SimpleNamespace(postgres_port=5432), SimpleNamespace(postgres_password="pw"))
 
-        # Adopt as the legacy role, then do the CREATE-DATABASE connection as
-        # the canonical owner role.
-        assert connects == [LEGACY_OWNER_ROLE, OWNER_ROLE]
+        # Adoption probes the canonical owner first (rejected here), adopts as
+        # the legacy role, then does the CREATE-DATABASE connection as the
+        # canonical owner role.
+        assert connects == [OWNER_ROLE, LEGACY_OWNER_ROLE, OWNER_ROLE]
         assert roles == {OWNER_ROLE}
 
     def test_adopt_legacy_owner_role_forwards_the_cluster_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:

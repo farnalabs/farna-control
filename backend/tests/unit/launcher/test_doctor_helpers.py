@@ -466,9 +466,10 @@ def test_owner_admin_urls_without_userinfo_has_no_fallback() -> None:
 
 
 def test_probe_postgres_admin_falls_back_to_the_legacy_owner_when_canonical_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A not-yet-adopted legacy cluster rejects the canonical owner with 28000;
-    the probe then connects as the legacy role the next boot renames."""
-    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"), object()])
+    """A not-yet-adopted legacy cluster rejects the canonical owner as 28P01
+    (an absent role under scram auth, NOT 28000); the probe then connects as
+    the legacy role the next boot renames."""
+    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidPasswordError("28P01"), object()])
 
     _probe_postgres_admin({"DATABASE_ADMIN_URL": _OWNER_ADMIN})
 
@@ -476,11 +477,13 @@ def test_probe_postgres_admin_falls_back_to_the_legacy_owner_when_canonical_is_a
     assert fake.conns[0].closed is True
 
 
-def test_probe_postgres_admin_does_not_retry_a_password_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A 28P01 means the secrets file matches neither role; never guess the
-    owner credential by retrying the legacy name."""
-    err = _FakeProbeAsyncpg.InvalidPasswordError("28P01")
-    fake = _fake_probe_asyncpg(monkeypatch, [err])
+def test_probe_postgres_admin_tries_the_legacy_name_then_raises_when_neither_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When both owner names reject the credential the last auth error is
+    surfaced: the secrets file matches neither role, so never guess."""
+    fake = _fake_probe_asyncpg(
+        monkeypatch,
+        [_FakeProbeAsyncpg.InvalidPasswordError("28P01"), _FakeProbeAsyncpg.InvalidPasswordError("28P01")],
+    )
 
     with pytest.raises(_FakeProbeAsyncpg.InvalidPasswordError):
         _probe_postgres_admin({"DATABASE_ADMIN_URL": _OWNER_ADMIN})
@@ -500,7 +503,8 @@ def test_probe_postgres_admin_raises_when_only_a_non_owner_url_is_available(monk
 
 
 def test_probe_role_violations_falls_back_to_the_legacy_owner_when_canonical_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"), object()])
+    """An absent canonical role is 28P01 under scram, not 28000."""
+    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidPasswordError("28P01"), object()])
 
     async def _no_violations(_conn: object, _role: object) -> list[str]:
         return []
@@ -519,12 +523,12 @@ def test_probe_role_violations_raises_when_both_owner_names_are_absent(monkeypat
     fake = _fake_probe_asyncpg(
         monkeypatch,
         [
-            _FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"),
-            _FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"),
+            _FakeProbeAsyncpg.InvalidPasswordError("28P01"),
+            _FakeProbeAsyncpg.InvalidPasswordError("28P01"),
         ],
     )
 
-    with pytest.raises(_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError):
+    with pytest.raises(_FakeProbeAsyncpg.InvalidPasswordError):
         _probe_role_posture_violations({"DATABASE_ADMIN_URL": _OWNER_ADMIN, "DATABASE_URL": _NON_OWNER_ADMIN})
 
     assert not fake.conns

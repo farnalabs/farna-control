@@ -378,7 +378,7 @@ async def _find_allow_list_violations(conn: asyncpg.Connection, app_user: str) -
     # other name must still get the actionable owner message.
     db_owner = await conn.fetchval("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()")
     if app_user == OWNER_ROLE or (db_owner is not None and app_user == db_owner):
-        violations.append(f"app role {app_user} is the cluster OWNER/migrate role — the application must connect as farna_control_app (NOSUPERUSER, NOBYPASSRLS); see DATABASE_ADMIN_URL for the owner connection")
+        violations.append(f"app role {app_user} is the cluster OWNER/migrate role — the application must connect as its dedicated least-privilege app role (the bundled install uses farna_control_app: NOSUPERUSER, NOBYPASSRLS); see DATABASE_ADMIN_URL for the owner connection")
 
     if await conn.fetchval("SELECT rolsuper FROM pg_roles WHERE rolname = $1", app_user):
         violations.append(f"app role {app_user} is a superuser")
@@ -416,7 +416,7 @@ async def _assert_role_posture(conn: asyncpg.Connection, app_user: str) -> None:
     if violations:
         raise RuntimeError(
             "Break-glass role posture assertion FAILED:\n  " + "\n  ".join(violations) + "\nRemediation: DATABASE_URL must name the least-privilege application role"
-            " (farna_control_app: NOSUPERUSER, NOBYPASSRLS) and DATABASE_ADMIN_URL the cluster"
+            " (for the bundled install, farna_control_app: NOSUPERUSER, NOBYPASSRLS) and DATABASE_ADMIN_URL the cluster"
             " owner/migration role (farna_control). The bootstrap re-applies the accounts UPDATE"
             " allow-list on every boot; restart the app with both URLs provisioned, then run"
             " `modulo doctor` to confirm the posture."
