@@ -1446,8 +1446,8 @@ app.openapi = _openapi_schema  # type: ignore[method-assign]
 # macOS the built SPA was never mounted (``/`` answered 404), and on Windows
 # single-port SPA serving did not exist at all. Readers go through ``read_env``
 # so an already-installed bundle that still exports the legacy name keeps
-# working, and so the ``MODULO_LAN_ORIGINS`` spelling the configuration
-# reference publishes is actually honoured.
+# working, and so the legacy ``MODULO_LAN_ORIGINS`` spelling (published by the
+# configuration reference before the rebrand) is still honoured.
 _SERVE_SPA_ENV = SERVE_SPA_ENV
 _FRONTEND_DIST_ENV = FRONTEND_DIST_ENV
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
