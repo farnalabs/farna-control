@@ -819,10 +819,10 @@ def _manifest_triple(staging, target_version="1.2.0", *, manifest_release=None):
 
     from farna.launcher import manifest as manifest_module
 
-    bundle_root = staging / f"modulo-{target_version}-linux-amd64"
+    bundle_root = staging / f"farna-control-{target_version}-linux-amd64"
     bundle_root.mkdir(parents=True, exist_ok=True)
     (bundle_root / "SHA256SUMS").write_text("", encoding="utf-8")
-    tarball_path = staging / f"modulo-{target_version}-linux-amd64.tar.gz"
+    tarball_path = staging / f"farna-control-{target_version}-linux-amd64.tar.gz"
     with tarfile_module.open(tarball_path, "w:gz") as archive:
         archive.add(str(bundle_root), arcname=bundle_root.name)
     manifest_body = {
@@ -849,7 +849,7 @@ def _manifest_triple(staging, target_version="1.2.0", *, manifest_release=None):
 
 
 def test_from_file_rejects_archive_for_other_host_os(tmp_path, monkeypatch):
-    archive = tmp_path / "modulo-1.2.0-darwin-arm64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-darwin-arm64.tar.gz"
     archive.write_bytes(b"archive")
     monkeypatch.setattr(upgrade_module, "_host_os", lambda: "linux")
     with pytest.raises(UpgradeError, match="OS does not match"):
@@ -864,10 +864,10 @@ def test_from_file_rejects_archive_for_other_host_os(tmp_path, monkeypatch):
 def test_extract_rejects_mismatched_top_level_identity(tmp_path):
     import tarfile
 
-    wrong_dir = tmp_path / "modulo-1.2.0-linux-amd64"
+    wrong_dir = tmp_path / "farna-control-1.2.0-linux-amd64"
     wrong_dir.mkdir()
     (wrong_dir / "SHA256SUMS").write_text("", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-arm64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-arm64.tar.gz"
     with tarfile.open(archive, "w:gz") as handle:
         handle.add(wrong_dir, arcname=wrong_dir.name)
     with pytest.raises(UpgradeError, match="top-level directory"):
@@ -1917,12 +1917,12 @@ def test_host_arch_rejects_unknown_architecture(machine):
 def test_extract_rejects_extra_top_level_file(tmp_path):
     import tarfile
 
-    bundle = tmp_path / "modulo-1.2.0-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.0-linux-amd64"
     bundle.mkdir()
     (bundle / "SHA256SUMS").write_text("", encoding="utf-8")
     extra = tmp_path / "extra.txt"
     extra.write_text("unexpected", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-amd64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-amd64.tar.gz"
     with tarfile.open(archive, "w:gz") as handle:
         handle.add(bundle, arcname=bundle.name)
         handle.add(extra, arcname=extra.name)
@@ -1935,14 +1935,14 @@ def test_extract_rejects_symlink_listed_artifact(tmp_path):
 
     if os.name != "posix":
         pytest.skip("POSIX symlinks")
-    bundle = tmp_path / "modulo-1.2.0-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.0-linux-amd64"
     bundle.mkdir()
     target = bundle / "target.txt"
     target.write_text("target", encoding="utf-8")
     (bundle / "artifact.txt").symlink_to("target.txt")
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
     (bundle / "SHA256SUMS").write_text(f"{digest}  artifact.txt\n", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-amd64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-amd64.tar.gz"
     with tarfile.open(archive, "w:gz", dereference=False) as handle:
         handle.add(bundle, arcname=bundle.name, recursive=True)
     with pytest.raises(UpgradeError, match="not a regular file"):
@@ -1953,13 +1953,13 @@ def test_extract_accepts_root_version_and_safe_dot_prefixed_artifact(tmp_path: P
     """A leading ``./`` is safe after canonicalisation when the file exists."""
     import tarfile
 
-    bundle = tmp_path / "modulo-1.2.0-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.0-linux-amd64"
     bundle.mkdir()
     version = bundle / "VERSION"
     version.write_text("bundle-v1.2.0\n", encoding="utf-8")
     digest = hashlib.sha256(version.read_bytes()).hexdigest()
     (bundle / "SHA256SUMS").write_text(f"{digest}  ./VERSION\n", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-amd64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-amd64.tar.gz"
     with tarfile.open(archive, "w:gz") as handle:
         handle.add(bundle, arcname=bundle.name, recursive=True)
 
@@ -1980,13 +1980,13 @@ def test_extract_rejects_dot_prefixed_malformed_artifact_path(tmp_path: Path) ->
     """A genuinely unsafe near-match reaches the path-shape guard."""
     import tarfile
 
-    bundle = tmp_path / "modulo-1.2.0-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.0-linux-amd64"
     bundle.mkdir()
     foo = bundle / "foo"
     foo.write_text("near-match\n", encoding="utf-8")
     digest = hashlib.sha256(foo.read_bytes()).hexdigest()
     (bundle / "SHA256SUMS").write_text(f"{digest}  ./.\n", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-amd64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-amd64.tar.gz"
     with tarfile.open(archive, "w:gz") as handle:
         handle.add(bundle, arcname=bundle.name, recursive=True)
 
@@ -1997,7 +1997,7 @@ def test_extract_rejects_dot_prefixed_malformed_artifact_path(tmp_path: Path) ->
 def _checksum_archive(tmp_path: Path, listed_name: str, *, symlink_parent: bool = False) -> Path:
     import tarfile
 
-    bundle = tmp_path / "modulo-1.2.0-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.0-linux-amd64"
     bundle.mkdir()
     real = bundle / "real"
     real.mkdir()
@@ -2007,7 +2007,7 @@ def _checksum_archive(tmp_path: Path, listed_name: str, *, symlink_parent: bool 
         (bundle / "linked").symlink_to("real", target_is_directory=True)
     digest = hashlib.sha256(payload.read_bytes()).hexdigest()
     (bundle / "SHA256SUMS").write_text(f"{digest}  {listed_name}\n", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-amd64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-amd64.tar.gz"
     with tarfile.open(archive, "w:gz", dereference=False) as handle:
         handle.add(bundle, arcname=bundle.name, recursive=True)
     return archive
@@ -2039,7 +2039,7 @@ def test_extract_rejects_explicit_dot_checksum_components(tmp_path: Path, listed
 
 
 def test_resolve_upgrade_assets_rejects_malformed_from_file_name(tmp_path):
-    tarball = tmp_path / "modulo-1.2.0-linux-amd64-extra.tar.gz"
+    tarball = tmp_path / "farna-control-1.2.0-linux-amd64-extra.tar.gz"
     tarball.write_bytes(b"archive")
     with pytest.raises(UpgradeError, match="name is malformed"):
         upgrade_module._resolve_upgrade_assets(
@@ -2051,7 +2051,7 @@ def test_resolve_upgrade_assets_rejects_malformed_from_file_name(tmp_path):
 
 
 def test_resolve_upgrade_assets_rejects_unsupported_from_file_arch(tmp_path, monkeypatch):
-    tarball = tmp_path / "modulo-1.2.0-linux-arm64.tar.gz"
+    tarball = tmp_path / "farna-control-1.2.0-linux-arm64.tar.gz"
     tarball.write_bytes(b"archive")
     monkeypatch.setattr(upgrade_module, "_host_arch", lambda: "amd64")
     with pytest.raises(UpgradeError, match="archive architecture 'arm64' does not match"):
@@ -2066,7 +2066,7 @@ def test_resolve_upgrade_assets_rejects_unsupported_from_file_arch(tmp_path, mon
 def test_resolve_upgrade_assets_darwin_tarball(tmp_path, monkeypatch):
     monkeypatch.setattr(upgrade_module, "_host_os", lambda: "darwin")
     monkeypatch.setattr(upgrade_module, "_host_arch", lambda: "arm64")
-    tarball = tmp_path / "modulo-1.2.3-darwin-arm64.tar.gz"
+    tarball = tmp_path / "farna-control-1.2.3-darwin-arm64.tar.gz"
     tarball.write_text("dummy", encoding="utf-8")
     manifest = tmp_path / "RELEASE_MANIFEST.json"
     manifest.write_text("{}", encoding="utf-8")
@@ -2264,7 +2264,7 @@ class TestPerformUpgradeFromFilePath:
         install_root = tmp_path / "install"
         _upgrade_seed_data_dir(data_dir)
         _upgrade_seed_install_root(install_root)
-        fake_tarball = tmp_path / "modulo-1.0.0-linux-amd64.tar.gz"
+        fake_tarball = tmp_path / "farna-control-1.0.0-linux-amd64.tar.gz"
         fake_tarball.write_bytes(b"fake")
         with pytest.raises(UpgradeError, match="from-file requires"):
             upgrade_module.perform_upgrade(
@@ -2521,7 +2521,7 @@ def test_custom_fetch_seam_records_all_asset_urls(tmp_path):
         )
     assert result.version == "1.0.0"
     assert len(fetched_urls) == 3
-    assert any("modulo-1.0.0-linux-amd64.tar.gz" in u for u in fetched_urls)
+    assert any("farna-control-1.0.0-linux-amd64.tar.gz" in u for u in fetched_urls)
 
 
 class TestExtractAndVerifyBundle:
@@ -2531,9 +2531,9 @@ class TestExtractAndVerifyBundle:
         bundle_dir = tmp_path / "bundle"
         bundle_dir.mkdir()
         (bundle_dir / "somefile.txt").write_text("data", encoding="utf-8")
-        tarball = tmp_path / "modulo-1.0.0-linux-amd64.tar.gz"
+        tarball = tmp_path / "farna-control-1.0.0-linux-amd64.tar.gz"
         with tarfile_mod.open(tarball, "w:gz") as archive:
-            archive.add(str(bundle_dir), arcname="modulo-1.0.0-linux-amd64")
+            archive.add(str(bundle_dir), arcname="farna-control-1.0.0-linux-amd64")
         staging = tmp_path / "staging"
         with pytest.raises(UpgradeError, match="SHA256SUMS missing"):
             upgrade_module.extract_and_verify_bundle(tarball, staging)
@@ -2566,9 +2566,9 @@ class TestExtractAndVerifyBundle:
         bundle_dir.mkdir()
         (bundle_dir / "SHA256SUMS").write_text("short  file.txt\n", encoding="utf-8")
         (bundle_dir / "file.txt").write_text("data", encoding="utf-8")
-        tarball = tmp_path / "modulo-1.0.0-linux-amd64.tar.gz"
+        tarball = tmp_path / "farna-control-1.0.0-linux-amd64.tar.gz"
         with tarfile_mod.open(tarball, "w:gz") as archive:
-            archive.add(str(bundle_dir), arcname="modulo-1.0.0-linux-amd64")
+            archive.add(str(bundle_dir), arcname="farna-control-1.0.0-linux-amd64")
         staging = tmp_path / "staging"
         with pytest.raises(UpgradeError, match="malformed SHA256SUMS"):
             upgrade_module.extract_and_verify_bundle(tarball, staging)
@@ -2580,9 +2580,9 @@ class TestExtractAndVerifyBundle:
         bundle_dir.mkdir()
         fake_hash = "a" * 64
         (bundle_dir / "SHA256SUMS").write_text(f"{fake_hash}  missing.txt\n", encoding="utf-8")
-        tarball = tmp_path / "modulo-1.0.0-linux-amd64.tar.gz"
+        tarball = tmp_path / "farna-control-1.0.0-linux-amd64.tar.gz"
         with tarfile_mod.open(tarball, "w:gz") as archive:
-            archive.add(str(bundle_dir), arcname="modulo-1.0.0-linux-amd64")
+            archive.add(str(bundle_dir), arcname="farna-control-1.0.0-linux-amd64")
         staging = tmp_path / "staging"
         with pytest.raises(UpgradeError, match="is missing"):
             upgrade_module.extract_and_verify_bundle(tarball, staging)
@@ -2915,7 +2915,7 @@ def test_fetch_release_assets_rejects_symlinked_tarball_escape(tmp_path):
     the path-containment guard fires before any fetch (GitHub #1176)."""
     downloads = tmp_path / "downloads"
     downloads.mkdir()
-    tarball_name = f"modulo-1.2.3-linux-{upgrade_module._host_arch()}.tar.gz"
+    tarball_name = f"farna-control-1.2.3-linux-{upgrade_module._host_arch()}.tar.gz"
     outside = tmp_path / "outside.tar.gz"
     outside.write_bytes(b"")
     (downloads / tarball_name).symlink_to(outside)
@@ -2939,10 +2939,10 @@ def test_extract_rejects_checksum_entry_with_missing_parent_directory(tmp_path: 
     """A SHA256SUMS name whose parent dir is absent refuses (fail closed, never skips)."""
     import tarfile
 
-    bundle = tmp_path / "modulo-1.2.0-linux-amd64"
+    bundle = tmp_path / "farna-control-1.2.0-linux-amd64"
     bundle.mkdir()
     (bundle / "SHA256SUMS").write_text(f"{'0' * 64}  absent/payload.txt\n", encoding="utf-8")
-    archive = tmp_path / "modulo-1.2.0-linux-amd64.tar.gz"
+    archive = tmp_path / "farna-control-1.2.0-linux-amd64.tar.gz"
     with tarfile.open(archive, "w:gz") as handle:
         handle.add(bundle, arcname=bundle.name, recursive=True)
     with pytest.raises(UpgradeError, match="unsafe artifact path"):
