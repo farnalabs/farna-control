@@ -2418,6 +2418,15 @@ jobs:
   # macos-staple-retry.yml". It also records each DMG's digest so the publisher
   # proves it uploads the very bytes a ticket was verified on. A genuine query
   # failure (missing artefact, unreadable bytes) stays fail-closed.
+  #
+  # FAR-2577: this is also how a PENDING notarization reaches publication. When
+  # Apple is still processing a submission at the end of macos-installer.yml's
+  # notary budget, that job succeeds with the DMG unstapled (Invalid/Rejected
+  # still fails it), so no ticket validates here and the release is HELD -
+  # never published unstapled. macos-staple-retry.yml then publishes it once
+  # Apple accepts, or fails loudly (no re-dispatch) if Apple rejects it; the
+  # submission id travels in the macos-notary-submission-<version>-<arch>
+  # artifact of this run.
   # ---------------------------------------------------------------------------
   verify-notarization-tickets:
     name: Verify notarization tickets (macOS)

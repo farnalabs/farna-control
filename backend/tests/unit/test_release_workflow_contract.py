@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1775,3 +1776,233 @@ def test_changelog_base_resolution_ignores_helper_tags() -> None:
     assert len(describes) >= 3
     for line in describes:
         assert "--match 'v*'" in line, line
+
+
+# ---------------------------------------------------------------------------
+# FAR-2577: a notarization still PENDING at build time is HELD and handed to
+# macos-staple-retry.yml. A submission Apple later REJECTS must fail that retry
+# loudly and stop the held-publication re-dispatch, not be retried as a
+# "missing ticket" until the 24h deadline.
+# ---------------------------------------------------------------------------
+
+_VERDICT_STEP = "Check Apple's verdict on the recorded notarization submissions"
+_HELD_RETRY_STEP = "Re-dispatch the held publication while its notarization ticket propagates"
+
+
+def _write_stub(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+
+
+def _posix_path(path: Path) -> str:
+    """Render a path for a bash PATH entry (Git Bash does not translate `C:/...`)."""
+    text = path.as_posix()
+    if len(text) > 2 and text[1] == ":":
+        return "/" + text[0].lower() + text[2:]
+    return text
+
+
+def _run_step_with_stubs(script_path: Path, bin_dir: Path, *, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    """Run a workflow step with the stub tools first on PATH.
+
+    Git Bash prepends its own directories to an inherited PATH, so the stubs are
+    exported inside the shell rather than passed through the environment.
+    """
+    prefix = 'export PATH="' + _posix_path(bin_dir) + ':$PATH"; exec bash "$0"'
+    return subprocess.run(  # noqa: S603 - fixed interpreter running repository-owned workflow text
+        [_bash_executable(), "-c", prefix, str(script_path)],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+        env=env,
+    )
+
+
+def _verdict_stub_bin(tmp_path: Path) -> Path:
+    """gh / base64 / xcrun / python3 stand-ins for the verdict step."""
+    bin_dir = tmp_path / "stub-bin"
+    bin_dir.mkdir()
+    # `gh run download <run> --repo <r> --name <artifact> --dir <dir>` copies a
+    # prepared record into <dir>, or fails when no such artifact was prepared.
+    _write_stub(
+        bin_dir / "gh",
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >>"$FAKE_GH_CALLS"\n'
+        'name=""; dir=""\n'
+        'while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --dir) dir="$2"; shift 2 ;; *) shift ;; esac; done\n'
+        '[[ -f "$FAKE_ARTIFACTS/$name.env" ]] || exit 1\n'
+        'cp "$FAKE_ARTIFACTS/$name.env" "$dir/submission.env"\n',
+    )
+    _write_stub(bin_dir / "base64", "#!/usr/bin/env bash\ncat >/dev/null\nprintf 'fixture-key'\n")
+    _write_stub(
+        bin_dir / "xcrun",
+        '#!/usr/bin/env bash\n[[ "$1 $2" == "notarytool info" ]] || exit 1\nprintf \'{"id": "%s", "status": "%s"}\\n\' "$3" "$(cat "$FAKE_ARTIFACTS/status-$3")"\n',
+    )
+    _write_stub(bin_dir / "python3", "#!/usr/bin/env bash\nexec " + shlex.quote(Path(sys.executable).as_posix()) + ' "$@"\n')
+    return bin_dir
+
+
+def _run_verdict_step(tmp_path: Path, statuses: dict[str, str], *, secrets: bool = True) -> tuple[subprocess.CompletedProcess[str], str, str]:
+    """Execute the staple job's verdict step exactly as the workflow does."""
+    version = "1.2.3"
+    artefacts = tmp_path / "artefacts"
+    artefacts.mkdir()
+    for arch, status in statuses.items():
+        submission_id = f"sub-{arch}"
+        (artefacts / f"macos-notary-submission-{version}-{arch}.env").write_text(f"phase=pending\nsubmission_id={submission_id}\nstatus=In Progress\n", encoding="utf-8")
+        (artefacts / f"status-{submission_id}").write_text(status, encoding="utf-8")
+    script = _step(_staple_retry_workflow(), "staple", _VERDICT_STEP)["run"]
+    script_path = tmp_path / "verdict.sh"
+    script_path.write_text(script, encoding="utf-8", newline="\n")
+    output_path = tmp_path / "github-output.txt"
+    output_path.write_text("", encoding="utf-8")
+    runner_temp = tmp_path / "runner-temp"
+    runner_temp.mkdir()
+    bin_dir = _verdict_stub_bin(tmp_path)
+    env = {
+        **os.environ,
+        "GITHUB_OUTPUT": str(output_path),
+        "RUNNER_TEMP": str(runner_temp),
+        "FAKE_ARTIFACTS": str(artefacts),
+        "FAKE_GH_CALLS": str(tmp_path / "gh-calls.log"),
+        "VERSION": version,
+        "RUN_ID": "4242",
+        "REPO": "farnalabs/farna-control",
+        "ARCHITECTURES": "arm64 x86_64",
+        "NOTARY_KEY_B64": "Zml4dHVyZQ==" if secrets else "",
+        "NOTARY_KEY_ID": "FAKEKEYID" if secrets else "",
+        "NOTARY_ISSUER": "00000000-0000-0000-0000-000000000000" if secrets else "",
+    }
+    completed = _run_step_with_stubs(script_path, bin_dir, cwd=REPO_ROOT, env=env)
+    calls_path = tmp_path / "gh-calls.log"
+    calls = calls_path.read_text(encoding="utf-8") if calls_path.exists() else ""
+    return completed, output_path.read_text(encoding="utf-8"), calls
+
+
+def test_staple_retry_checks_apples_verdict_before_stapling() -> None:
+    workflow = _staple_retry_workflow()
+    staple = workflow["jobs"]["staple"]
+    names = [step.get("name") for step in staple["steps"]]
+    assert names.index(_VERDICT_STEP) < names.index("Staple each requested DMG")
+    verdict = _step(workflow, "staple", _VERDICT_STEP)
+    assert verdict.get("id") == "verdict"
+    assert verdict["if"] == "env.RUN_ID != ''"
+    assert "scripts/macos/notary-submission-status.sh" in verdict["run"]
+    assert verdict["env"]["NOTARY_KEY_B64"] == "${{ secrets.MACOS_NOTARY_API_KEY_P8 }}"
+    assert staple["outputs"]["notary_rejected"] == "${{ steps.verdict.outputs.notary_rejected }}"
+
+
+def test_staple_retry_fails_loudly_when_apple_rejected_a_held_submission(tmp_path: Path) -> None:
+    completed, output, _calls = _run_verdict_step(tmp_path, {"arm64": "Invalid", "x86_64": "In Progress"})
+
+    assert completed.returncode == 1, completed.stdout + completed.stderr
+    assert "notary_rejected=true" in output.splitlines()
+    error_lines = [line for line in completed.stdout.splitlines() if line.startswith("::error::")]
+    assert len(error_lines) == 1, completed.stdout
+    assert "arm64 DMG (submission sub-arm64) ended 'Invalid'" in error_lines[0]
+
+
+@pytest.mark.parametrize("apple_status", ["In Progress", "Accepted"])
+def test_staple_retry_keeps_retrying_a_submission_apple_has_not_rejected(tmp_path: Path, apple_status: str) -> None:
+    completed, output, calls = _run_verdict_step(tmp_path, {"arm64": apple_status, "x86_64": apple_status})
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert output.splitlines() == ["notary_rejected=false"]
+    assert "::error::" not in completed.stdout
+    assert "--name macos-notary-submission-1.2.3-arm64" in calls
+    assert "--name macos-notary-submission-1.2.3-x86_64" in calls
+
+
+def test_staple_retry_verdict_check_tolerates_a_run_without_a_record(tmp_path: Path) -> None:
+    """An older run has no submission record; stapling stays the proof."""
+    completed, output, _calls = _run_verdict_step(tmp_path, {})
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert output.splitlines() == ["notary_rejected=false"]
+    assert "has no notarization submission record for arm64" in completed.stdout
+
+
+def test_staple_retry_verdict_check_without_secrets_never_blocks(tmp_path: Path) -> None:
+    completed, output, calls = _run_verdict_step(tmp_path, {"arm64": "Invalid"}, secrets=False)
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert output.splitlines() == ["notary_rejected=false"]
+    assert not calls
+
+
+def test_held_retry_stops_rearming_a_rejected_submission(tmp_path: Path) -> None:
+    workflow = _staple_retry_workflow()
+    held = workflow["jobs"]["held-retry"]
+    assert held["env"]["NOTARY_REJECTED"] == "${{ needs.staple.outputs.notary_rejected }}"
+    script = _step(workflow, "held-retry", _HELD_RETRY_STEP)["run"]
+    script_path = tmp_path / "held-retry.sh"
+    script_path.write_text(script, encoding="utf-8", newline="\n")
+    bin_dir = tmp_path / "stub-bin"
+    bin_dir.mkdir()
+    _write_stub(bin_dir / "gh", '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >>"$FAKE_GH_CALLS"\n')
+    calls_path = tmp_path / "gh-calls.log"
+    completed = _run_step_with_stubs(
+        script_path,
+        bin_dir,
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "FAKE_GH_CALLS": str(calls_path),
+            "NOTARY_REJECTED": "true",
+            "RELEASE_TAG": "bundle-v1.2.3",
+            "RUN_ID": "4242",
+            "VERSION": "1.2.3",
+            "RC_TAG": "v1.2.3-rc1",
+            "REPO": "farnalabs/farna-control",
+            "RETRY_DEADLINE": "",
+        },
+    )
+
+    assert completed.returncode == 1
+    assert "Apple rejected its notarization" in completed.stdout
+    assert not calls_path.exists(), "a rejected submission must never be re-dispatched"
+
+
+def test_held_retry_still_rearms_a_submission_apple_has_not_rejected(tmp_path: Path) -> None:
+    """The control case for the test above: the stub sees the re-dispatch."""
+    script = _step(_staple_retry_workflow(), "held-retry", _HELD_RETRY_STEP)["run"]
+    script_path = tmp_path / "held-retry.sh"
+    script_path.write_text(script, encoding="utf-8", newline="\n")
+    bin_dir = tmp_path / "stub-bin"
+    bin_dir.mkdir()
+    _write_stub(bin_dir / "gh", '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >>"$FAKE_GH_CALLS"\n')
+    calls_path = tmp_path / "gh-calls.log"
+    completed = _run_step_with_stubs(
+        script_path,
+        bin_dir,
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "FAKE_GH_CALLS": str(calls_path),
+            "NOTARY_REJECTED": "false",
+            "RELEASE_TAG": "bundle-v1.2.3",
+            "RUN_ID": "4242",
+            "VERSION": "1.2.3",
+            "RC_TAG": "v1.2.3-rc1",
+            "REPO": "farnalabs/farna-control",
+            "RETRY_DEADLINE": "",
+        },
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "workflow run macos-staple-retry.yml" in calls_path.read_text(encoding="utf-8")
+
+
+def test_release_holds_a_pending_notarization_instead_of_publishing_it() -> None:
+    """FAR-2577 relies on FAR-2573: an unstapled (pending) DMG is HELD, never published."""
+    workflow = _release_workflow()
+    gate = _step(workflow, "publish-release", _TICKET_GATE_STEP)
+    hold = _step(workflow, "publish-release", "Hold publication and hand it to the staple retry")
+    assert hold["if"] == "steps.ticket-gate.outputs.publish != 'true'"
+    assert gate.get("id") == "ticket-gate"
+    verify = workflow["jobs"]["verify-notarization-tickets"]
+    verify_script = next(step["run"] for step in verify["steps"] if step.get("id") == "verify")
+    assert 'xcrun stapler validate "$dmg"' in verify_script
+    assert 'tickets_verified="false"' in verify_script

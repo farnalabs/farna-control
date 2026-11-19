@@ -1463,8 +1463,8 @@ printf 'CDHash=%s\n' "$hash" >&2
 exit 0
 """
 
-#: Stand-in `xcrun`. `notarytool submit` and `notarytool log` are the only
-#: invocations the wrapper is allowed to make.
+#: Stand-in `xcrun`. `notarytool submit`, `notarytool log` and (FAR-2577)
+#: `notarytool info` are the only invocations the helpers are allowed to make.
 _FAKE_XCRUN = """#!/usr/bin/env bash
 set -u
 printf '%s\n' "$*" >>"${FAKE_NOTARY_CALLS:-/dev/null}"
@@ -1478,6 +1478,21 @@ fi
 if [[ "${1:-}" == "notarytool" && "${2:-}" == "log" ]]; then
   printf '%s\n' "${FAKE_NOTARY_LOG_JSON:-}"
   exit "${FAKE_NOTARY_LOG_EXIT:-0}"
+fi
+if [[ "${1:-}" == "notarytool" && "${2:-}" == "info" ]]; then
+  count=1
+  if [[ -n "${FAKE_NOTARY_INFO_COUNTER:-}" ]]; then
+    if [[ -f "$FAKE_NOTARY_INFO_COUNTER" ]]; then
+      count="$(cat "$FAKE_NOTARY_INFO_COUNTER")"
+      count=$((count + 1))
+    fi
+    printf '%s' "$count" >"$FAKE_NOTARY_INFO_COUNTER"
+  fi
+  IFS=',' read -r -a statuses <<<"${FAKE_NOTARY_INFO_SEQUENCE:-In Progress}"
+  last=$((${#statuses[@]} - 1))
+  info_status="${statuses[$((count - 1))]:-${statuses[$last]}}"
+  printf '{"id": "%s", "status": "%s", "message": "fixture"}\n' "${3:-}" "$info_status"
+  exit "${FAKE_NOTARY_INFO_EXIT:-0}"
 fi
 printf 'unexpected xcrun invocation: %s\n' "$*" >&2
 exit 1
@@ -2003,10 +2018,254 @@ def test_macos_notary_wait_fits_inside_the_job_timeout() -> None:
     assert wait is not None
     wait_minutes = int(wait.group(1))
     assert wait_minutes >= 90
+    poll = re.search(r"--poll-budget (\d+)", submit)
+    assert poll is not None
+    poll_minutes = int(poll.group(1)) // 60
+    assert poll_minutes >= 30
     # Retry sleeps (~63m worst case) plus build/sign/smoke work must still fit
-    # alongside the wait, or the job dies before the notary verdict arrives.
-    assert workflow["jobs"]["build"]["timeout-minutes"] >= wait_minutes + 90
+    # alongside the wait AND the post-timeout poll (FAR-2577), or the job dies
+    # before the notary verdict arrives.
+    assert workflow["jobs"]["build"]["timeout-minutes"] >= wait_minutes + poll_minutes + 90
+    assert workflow["jobs"]["build"]["timeout-minutes"] <= 360
     notary_tool = _NOTARY_TOOL.read_text(encoding="utf-8")
     assert 'TIMEOUT="90m"' in notary_tool
     # The status gate is unchanged: only an Accepted submission passes.
     assert 'if [[ "$status" != "Accepted" ]]; then' in notary_tool
+
+
+# --- FAR-2577: a slow Apple verdict is PENDING, not a failure ---------------
+#
+# On 2026-11-19 Apple took ~3h to accept submission 52f6997c. notarytool's
+# `--wait --timeout 90m` exited 124 with the timeout reported as JSON on stderr
+# (stdout empty), the wrapper reported "no parseable JSON result", the job
+# failed, and the submitted DMG was never uploaded - so the later Accepted
+# ticket was unusable. These tests pin the pending outcome and its hand-off.
+
+_NOTARY_STATUS_TOOL = REPO_ROOT / "scripts" / "macos" / "notary-submission-status.sh"
+_TIMEOUT_SUBMISSION_ID = "52f6997c-0000-4000-8000-000000000000"
+_TIMEOUT_JSON = json.dumps(
+    {
+        "message": "Timeout of 5400 second(s) was reached before processing completed.",
+        "id": _TIMEOUT_SUBMISSION_ID,
+    }
+)
+_NOTARY_PENDING_EXIT = 3
+
+
+def _timed_out_submit_env(tmp_path: Path, info_sequence: str) -> dict[str, str]:
+    """The observed 2026-11-19 shape: exit 124, the timeout JSON only on stderr."""
+    return {
+        "FAKE_CDHASH": "8888888888888888888888888888888888888888",
+        "FAKE_NOTARY_SUBMIT_JSON": "",
+        "FAKE_NOTARY_SUBMIT_STDERR": _TIMEOUT_JSON,
+        "FAKE_NOTARY_SUBMIT_EXIT": "124",
+        "FAKE_NOTARY_INFO_SEQUENCE": info_sequence,
+        "FAKE_NOTARY_INFO_COUNTER": (tmp_path / "info-count").as_posix(),
+        "FAKE_NOTARY_CALLS": (tmp_path / "notary-calls.log").as_posix(),
+        "FAKE_NOTARY_LOG_JSON": json.dumps({"status": "Invalid", "issues": []}),
+    }
+
+
+def _pending_args(tmp_path: Path, dmg: Path, budget: str) -> list[str]:
+    return [
+        *_notary_args(tmp_path, dmg),
+        "--poll-budget",
+        budget,
+        "--poll-interval",
+        "1",
+        "--submission-out",
+        (tmp_path / "submission" / "submission.env").as_posix(),
+    ]
+
+
+def _env_file(path: Path) -> dict[str, str]:
+    pairs = (line.split("=", 1) for line in path.read_text(encoding="utf-8").splitlines() if "=" in line)
+    return dict(pairs)
+
+
+def test_macos_notarization_wait_timeout_is_pending_with_the_submission_id(tmp_path: Path) -> None:
+    """FAR-2577: a --wait timeout parses the id and exits with the distinct PENDING code."""
+    dmg = _notary_dmg(tmp_path)
+    result = _run_tool(tmp_path, _NOTARY_TOOL, _pending_args(tmp_path, dmg, "2"), _timed_out_submit_env(tmp_path, "In Progress"))
+
+    assert result.returncode == _NOTARY_PENDING_EXIT, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "notarization status is unknown" not in result.stderr
+    assert f"outcome=pending submission_id={_TIMEOUT_SUBMISSION_ID}" in result.stdout
+    evidence = _env_file(tmp_path / "evidence.env")
+    assert evidence["outcome"] == "pending"
+    assert evidence["submission_id"] == _TIMEOUT_SUBMISSION_ID
+    assert evidence["status"] == "In Progress"
+    record = _env_file(tmp_path / "submission" / "submission.env")
+    assert record["phase"] == "pending"
+    assert record["submission_id"] == _TIMEOUT_SUBMISSION_ID
+    assert record["cdhash"] == "8888888888888888888888888888888888888888"
+    # Apple was actively polled with the parsed id, not just waited on.
+    assert f"notarytool info {_TIMEOUT_SUBMISSION_ID}" in (tmp_path / "notary-calls.log").read_text(encoding="utf-8")
+
+
+def test_macos_notarization_pending_then_accepted_continues_normally(tmp_path: Path) -> None:
+    """FAR-2577: Accepted during the poll is an ordinary success."""
+    dmg = _notary_dmg(tmp_path)
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_TOOL,
+        _pending_args(tmp_path, dmg, "30"),
+        _timed_out_submit_env(tmp_path, "In Progress,Accepted"),
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    evidence = _env_file(tmp_path / "evidence.env")
+    assert evidence["outcome"] == "accepted"
+    assert evidence["status"] == "Accepted"
+    assert evidence["submission_id"] == _TIMEOUT_SUBMISSION_ID
+    assert _env_file(tmp_path / "submission" / "submission.env")["phase"] == "accepted"
+    assert (tmp_path / "info-count").read_text(encoding="utf-8") == "2"
+
+
+def test_macos_notarization_pending_then_invalid_still_hard_fails(tmp_path: Path) -> None:
+    """FAR-2577: Invalid stays a hard failure even when it arrives after a timeout."""
+    dmg = _notary_dmg(tmp_path)
+    result = _run_tool(tmp_path, _NOTARY_TOOL, _pending_args(tmp_path, dmg, "30"), _timed_out_submit_env(tmp_path, "Invalid"))
+
+    assert result.returncode == 1, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "no ticket will be issued" in result.stderr
+    assert f"notarytool log {_TIMEOUT_SUBMISSION_ID}" in (tmp_path / "notary-calls.log").read_text(encoding="utf-8")
+    assert _env_file(tmp_path / "submission" / "submission.env")["phase"] == "rejected"
+    assert not (tmp_path / "evidence.env").exists()
+
+
+def test_macos_notarization_non_timeout_failure_is_not_pending(tmp_path: Path) -> None:
+    """FAR-2577: only a --wait timeout is pending; any other non-zero exit fails."""
+    dmg = _notary_dmg(tmp_path)
+    env = _timed_out_submit_env(tmp_path, "In Progress")
+    env["FAKE_NOTARY_SUBMIT_STDERR"] = json.dumps({"message": "HTTP status code: 401. Unable to authenticate.", "id": ""})
+    env["FAKE_NOTARY_SUBMIT_EXIT"] = "69"
+    result = _run_tool(tmp_path, _NOTARY_TOOL, _pending_args(tmp_path, dmg, "30"), env)
+
+    assert result.returncode == 1
+    assert "notarytool submit exited 69" in result.stderr
+    assert not (tmp_path / "info-count").exists()
+
+
+def test_macos_notarization_records_the_submission_before_the_verdict(tmp_path: Path) -> None:
+    """FAR-2577: the record exists even when the submit result is unusable."""
+    dmg = _notary_dmg(tmp_path)
+    env = _timed_out_submit_env(tmp_path, "In Progress")
+    env["FAKE_NOTARY_SUBMIT_STDERR"] = "notarytool: connection reset"
+    result = _run_tool(tmp_path, _NOTARY_TOOL, _pending_args(tmp_path, dmg, "30"), env)
+
+    assert result.returncode == 1
+    assert "notarization status is unknown" in result.stderr
+    record = _env_file(tmp_path / "submission" / "submission.env")
+    assert record["phase"] == "unknown"
+    assert len(record["sha256_submitted"]) == 64
+
+
+def _status_record(tmp_path: Path, submission_id: str) -> Path:
+    record = tmp_path / "submission.env"
+    record.write_text(f"phase=pending\nsubmission_id={submission_id}\nstatus=In Progress\n", encoding="utf-8")
+    return record
+
+
+def _status_args(tmp_path: Path, record: Path) -> list[str]:
+    key = tmp_path / "notary.p8"
+    key.write_text("fixture", encoding="utf-8")
+    return ["--record", record.as_posix(), "--key", key.as_posix(), "--key-id", "FAKEKEYID", "--issuer", "00000000-0000-0000-0000-000000000000"]
+
+
+@pytest.mark.parametrize(("apple_status", "expected_exit"), [("Accepted", 0), ("In Progress", 0), ("Invalid", 4), ("Rejected", 4)])
+def test_macos_notary_status_helper_flags_only_a_terminal_rejection(tmp_path: Path, apple_status: str, expected_exit: int) -> None:
+    """FAR-2577: the staple retry can tell a still-pending submission from a rejected one."""
+    record = _status_record(tmp_path, _TIMEOUT_SUBMISSION_ID)
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_STATUS_TOOL,
+        _status_args(tmp_path, record),
+        {"FAKE_NOTARY_INFO_SEQUENCE": apple_status, "FAKE_NOTARY_CALLS": (tmp_path / "calls.log").as_posix()},
+    )
+
+    assert result.returncode == expected_exit, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert f"notary_status={apple_status}" in result.stdout
+    assert f"submission_id={_TIMEOUT_SUBMISSION_ID}" in result.stdout
+
+
+def test_macos_notary_status_helper_treats_an_unreadable_verdict_as_unknown(tmp_path: Path) -> None:
+    """FAR-2577: a failed query is transient and must never be read as a rejection."""
+    record = _status_record(tmp_path, _TIMEOUT_SUBMISSION_ID)
+    result = _run_tool(
+        tmp_path,
+        _NOTARY_STATUS_TOOL,
+        _status_args(tmp_path, record),
+        {"FAKE_NOTARY_INFO_SEQUENCE": "Invalid", "FAKE_NOTARY_INFO_EXIT": "1"},
+    )
+
+    assert result.returncode == 0
+    assert "notary_status=unknown" in result.stdout
+
+
+def test_macos_notary_status_helper_without_an_id_is_unknown(tmp_path: Path) -> None:
+    record = _status_record(tmp_path, "")
+    result = _run_tool(tmp_path, _NOTARY_STATUS_TOOL, _status_args(tmp_path, record), {"FAKE_NOTARY_CALLS": (tmp_path / "calls.log").as_posix()})
+
+    assert result.returncode == 0
+    assert "notary_status=unknown" in result.stdout
+    assert not (tmp_path / "calls.log").exists()
+
+
+def test_macos_workflow_treats_a_pending_notarization_as_a_held_success() -> None:
+    """FAR-2577: exit 3 continues unstapled; every other non-zero exit still fails."""
+    step, build_run = _native_installer_step()
+
+    assert step.get("id") == "native"
+    assert '--submission-out "$GITHUB_WORKSPACE/build/notary-submission/submission.env"' in build_run
+    assert '--evidence "$DATA/notarization-evidence.env" || notary_exit=$?' in build_run
+    case_block = build_run[build_run.index('case "$notary_exit" in') :]
+    case_block = case_block[: case_block.index("esac")]
+    assert "0) notarization_outcome=accepted ;;" in case_block
+    assert "notarization_outcome=pending" in case_block
+    assert 'exit "$notary_exit"' in case_block
+    assert "printf 'notarization_submission_id=%s\\n'" in build_run
+
+    # Pending skips stapling (no ticket can exist) and defers only the ticket
+    # gates, with a reason install.sh recognises.
+    pending_branch = build_run[build_run.index("dmg_ticket_deferral_reason=apple_cloudkit_ticket_unavailable") :]
+    pending_branch = pending_branch[: pending_branch.index("\nelse\n")]
+    assert "dmg_staple_ticket_unavailable=1" in pending_branch
+    assert "dmg_ticket_deferral_reason=apple_notarization_pending" in pending_branch
+    assert "staple_dmg_with_retry" not in pending_branch
+    assert 'MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"' in build_run
+    install_sh = (REPO_ROOT / "scripts" / "macos" / "install.sh").read_text(encoding="utf-8")
+    assert "'apple_notarization_pending'" in install_sh
+    # Hard gates that do not depend on a ticket are still unconditional.
+    assert "run_pre_smoke dmg_codesign_verify codesign --verify" in build_run
+    assert "run_pre_smoke dmg_verify hdiutil verify" in build_run
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    outputs = workflow["jobs"]["build"]["outputs"]
+    assert outputs["notarization_outcome"] == "${{ steps.native.outputs.notarization_outcome }}"
+    assert outputs["notarization_submission_id"] == "${{ steps.native.outputs.notarization_submission_id }}"
+    triggers = workflow.get("on", workflow.get(True))
+    assert "notarization_submission_id" in triggers["workflow_call"]["outputs"]
+
+
+def test_macos_workflow_preserves_the_submission_whatever_the_verdict() -> None:
+    """FAR-2577: the submission record and submitted DMG survive any outcome."""
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build"]["steps"]
+    by_name = {step.get("name"): step for step in steps}
+    names = [step.get("name") for step in steps]
+
+    record = by_name["Upload the notarization submission record"]
+    assert record["if"].startswith("${{ always() && ")
+    assert "hashFiles('build/notary-submission/submission.env')" in record["if"]
+    assert record["with"]["path"] == "build/notary-submission/submission.env"
+    assert record["with"]["name"].startswith("macos-notary-submission-")
+
+    preserved = by_name["Preserve the submitted DMG after an unsuccessful run"]
+    assert "(failure() || cancelled())" in preserved["if"]
+    assert preserved["with"]["path"] == by_name["Upload real macOS installer"]["with"]["path"]
+    assert preserved["with"]["name"] != by_name["Upload real macOS installer"]["with"]["name"]
+
+    native = names.index("Sign, notarize and smoke-test native installer")
+    assert native < names.index("Upload the notarization submission record")
+    assert native < names.index("Preserve the submitted DMG after an unsuccessful run")
