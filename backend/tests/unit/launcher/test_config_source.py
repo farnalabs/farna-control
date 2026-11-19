@@ -170,6 +170,46 @@ def test_pinned_runtime_keys_match_installer_precedence(monkeypatch: pytest.Monk
     assert resolved["FERNET_KEY"] == "environment-fernet"
 
 
+def test_compose_config_supplies_saq_system_web_auth() -> None:
+    """FAR-2581: saq-system fail-closes without SAQ_AUTH_USERNAME/PASSWORD."""
+    composed = compose_config(_state(), _secrets())
+
+    assert composed["SAQ_AUTH_USERNAME"] == "admin"
+    assert len(composed["SAQ_AUTH_PASSWORD"]) >= 32
+    # Domain-separated from the application keys and stable per data dir.
+    assert composed["SAQ_AUTH_PASSWORD"] not in {composed["SECRET_KEY"], composed["FERNET_KEY"]}
+    assert compose_config(_state(), _secrets())["SAQ_AUTH_PASSWORD"] == composed["SAQ_AUTH_PASSWORD"]
+
+
+def test_saq_auth_password_precedence_env_over_file_over_derived(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    path = tmp_path / CONFIG_ENV_FILENAME
+    derived = compose_config(_state(), _secrets())
+    monkeypatch.delenv("SAQ_AUTH_PASSWORD", raising=False)
+    monkeypatch.delenv("SAQ_AUTH_USERNAME", raising=False)
+
+    assert resolve_pinned_runtime_keys(dict(derived), path)["SAQ_AUTH_PASSWORD"] == derived["SAQ_AUTH_PASSWORD"]
+
+    path.write_text("SAQ_AUTH_PASSWORD=persisted-saq\nSAQ_AUTH_USERNAME=persisted-user\n", encoding="utf-8")
+    from_file = resolve_pinned_runtime_keys(dict(derived), path)
+    assert from_file["SAQ_AUTH_PASSWORD"] == "persisted-saq"
+    assert from_file["SAQ_AUTH_USERNAME"] == "persisted-user"
+
+    monkeypatch.setenv("SAQ_AUTH_PASSWORD", "operator-saq")
+    assert resolve_pinned_runtime_keys(dict(derived), path)["SAQ_AUTH_PASSWORD"] == "operator-saq"
+
+
+def test_pinned_config_persists_saq_auth_password(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SAQ_AUTH_PASSWORD", raising=False)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    path = write_pinned_env_file(data_dir, _state(), _secrets())
+
+    rendered = path.read_text(encoding="utf-8")
+    assert f"SAQ_AUTH_PASSWORD={compose_config(_state(), _secrets())['SAQ_AUTH_PASSWORD']}\n" in rendered
+    assert "SAQ_AUTH_USERNAME=admin\n" in rendered
+
+
 def test_compose_config_is_password_free_on_state_alone() -> None:
     payload = _state().to_payload()
     joined = repr(payload)

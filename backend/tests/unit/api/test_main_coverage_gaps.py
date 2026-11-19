@@ -53,12 +53,19 @@ async def test_seed_modulo_users_empty_env(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.anyio
-async def test_seed_modulo_users_no_org(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_seed_modulo_users_no_org_creates_default_org(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: with no TENANT org the seeder creates the default org, never skips into a sentinel."""
+    from farna.db.models.organisation import Organisation
+
     settings = _make_settings(modulo_users="admin:secret1")
     session = _mock_session(_result(scalar_one_or_none=None))
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
+    monkeypatch.setattr("farna.auth.passwords.hash_password", lambda pw: "$2b$12$fakehash")
     await main._seed_modulo_users(settings)
-    assert session.add.call_count == 0
+    created_org = session.add.call_args_list[0].args[0]
+    assert isinstance(created_org, Organisation)
+    assert created_org.slug == "default"
+    assert session.add.call_count == 3  # default org + account + membership
 
 
 @pytest.mark.anyio

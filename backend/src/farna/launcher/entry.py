@@ -628,14 +628,22 @@ def _load_or_init_state(data_dir: Path, secrets: Any, state_module: Any) -> Any:
 
 
 def _compose_and_pin_config(data_dir: Path, launcher_state: Any, secrets: Any) -> dict[str, str]:
-    """Compose the launcher config, write it (0600) and pin it for Settings."""
-    from farna.launcher.config_source import compose_config, write_pinned_env_file
+    """Compose the launcher config, write it (0600) and pin it for Settings.
+
+    Returns the composition WITH the runtime-key precedence applied (operator
+    env > config.env > derived) — the exact values written to config.env.
+    The SAQ children receive these through their environment, which outranks
+    the pinned dotenv; returning the raw derivation instead handed the workers
+    a different SECRET_KEY/FERNET_KEY from the API whenever install.sh had
+    persisted its own keys (FAR-2581).
+    """
+    from farna.launcher.config_source import compose_config, resolve_pinned_runtime_keys, write_pinned_env_file
     from farna.settings import pin_env_file, set_first_boot_guard
 
     config_path = write_pinned_env_file(data_dir, launcher_state, secrets)
     pin_env_file(str(config_path))
     set_first_boot_guard(env_safety.make_first_boot_guard(data_dir, env_file=config_path))
-    return compose_config(launcher_state, secrets)
+    return resolve_pinned_runtime_keys(compose_config(launcher_state, secrets), config_path)
 
 
 def _prepare_database_env(composed: dict[str, str]) -> None:
@@ -652,6 +660,21 @@ def _build_settings() -> Any:
     from farna.settings import get_settings
 
     return get_settings()
+
+
+# The composed keys every SAQ child receives. SAQ_AUTH_USERNAME/PASSWORD are
+# load-bearing for saq-system: it FAIL-CLOSES without them (FAR-2581); both
+# children get them so the pair never diverges between the two workers.
+_SAQ_CHILD_ENV_KEYS: tuple[str, ...] = (
+    "DATABASE_URL",
+    "DATABASE_ADMIN_URL",
+    "REDIS_URL",
+    "FARNA_CONTROL_SYSTEM_DATABASE_URL",
+    "SECRET_KEY",
+    "FERNET_KEY",
+    "SAQ_AUTH_USERNAME",
+    "SAQ_AUTH_PASSWORD",
+)
 
 
 def _add_saq_children(supervisor: Any, settings: Any, composed: dict[str, str]) -> None:
@@ -682,7 +705,7 @@ def _add_saq_children(supervisor: Any, settings: Any, composed: dict[str, str]) 
 
     def _child_env(base: dict[str, str]) -> dict[str, str]:
         env = dict(base)
-        for key in ("DATABASE_URL", "DATABASE_ADMIN_URL", "REDIS_URL", "FARNA_CONTROL_SYSTEM_DATABASE_URL", "SECRET_KEY", "FERNET_KEY"):
+        for key in _SAQ_CHILD_ENV_KEYS:
             if composed.get(key):
                 env[key] = composed[key]
         return env

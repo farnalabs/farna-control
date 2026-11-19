@@ -153,7 +153,18 @@ def test_server_argv_pins_endpoint_arguments(tmp_path: Path) -> None:
         "127.0.0.1",
         "-p",
         "18000",
+        "-k",
+        "",
     ]
+
+
+def test_server_argv_disables_unix_sockets(tmp_path: Path) -> None:
+    """FAR-2581: no Unix socket, so no shared /tmp/.s.PGSQL.<port>.lock to collide on."""
+    argv = postgres_server_argv(tmp_path / "pgdata", "127.0.0.1", 15432, tmp_path / "bin")
+
+    socket_flag = argv.index("-k")
+    assert not argv[socket_flag + 1]
+    assert isinstance(argv[socket_flag + 1], str)
 
 
 def test_bootstrap_happy_path_records_pinned_invocation_and_promotes(

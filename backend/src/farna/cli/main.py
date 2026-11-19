@@ -74,6 +74,17 @@ def _scrub_for_launcher_command() -> None:
 
 
 def _package_version() -> str:
+    """The running build's version: a native bundle's own stamp wins (FAR-2581).
+
+    The bundled venv's dist-info carries the pyproject version of the built
+    commit, which for a dry-run bundle is the PREVIOUS release; the bundle's
+    ``VERSION`` file is the release identity (see ``farna.version``).
+    """
+    from farna.version import _bundle_version
+
+    bundled = _bundle_version()
+    if bundled is not None:
+        return bundled
     try:
         from importlib.metadata import version
 
@@ -83,7 +94,7 @@ def _package_version() -> str:
 
 
 def _print_version() -> None:
-    click.echo(f"modulo {_package_version()}")
+    click.echo(f"{_PACKAGE_NAME} {_package_version()}")
 
 
 class ModuloGroup(click.Group):

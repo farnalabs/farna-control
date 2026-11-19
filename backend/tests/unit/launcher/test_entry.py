@@ -691,6 +691,40 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
     assert len(calls) >= 3  # a False answer is re-evaluated, never cached
 
 
+def test_saq_children_receive_saq_web_auth_and_resolved_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: both SAQ children get SAQ_AUTH_* (saq-system fail-closes without them)."""
+    import farna.api.dependencies as deps_module
+    import farna.db.health_checks as health_module
+    from farna.launcher.supervisor import Supervisor, SupervisorKnobs
+
+    async def fake_head(engine: object, alembic_ini: object = None) -> bool:
+        return True
+
+    monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
+    monkeypatch.setattr(deps_module, "get_or_create_engine", lambda settings: object())
+    envs: dict[str, dict[str, str]] = {}
+
+    def spawn(argv: list[str], env: dict[str, str] | None) -> object:
+        envs[" ".join(argv)] = dict(env or {})
+        return FakeProc()
+
+    supervisor = Supervisor(
+        SupervisorKnobs(tick_seconds=0.01, restart_backoff_initial=0.01, restart_backoff_max=0.02),
+        spawner=spawn,
+        clock=_fake_clock(),
+        sleep=lambda _s: None,
+    )
+    composed = {"SAQ_AUTH_USERNAME": "admin", "SAQ_AUTH_PASSWORD": "saq-secret", "SECRET_KEY": "persisted-secret"}
+    entry_module._add_saq_children(supervisor, settings=object(), composed=composed)
+    supervisor.tick()
+
+    assert len(envs) == 2
+    for env in envs.values():
+        assert env["SAQ_AUTH_USERNAME"] == "admin"
+        assert env["SAQ_AUTH_PASSWORD"] == "saq-secret"
+        assert env["SECRET_KEY"] == "persisted-secret"
+
+
 def test_run_probe_command_maps_missing_binary_to_unavailable(tmp_path: Path) -> None:
     from farna.launcher.supervisor import ProbeOutcome
 
@@ -2159,3 +2193,31 @@ def test_serve_until_shutdown_uses_serve_api_when_no_serve_callable(monkeypatch:
 
     assert code == 0
     assert calls == [(entry_module.POSTGRES_HOST, 18001)]
+
+
+def test_compose_and_pin_config_returns_the_persisted_runtime_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """FAR-2581: the SAQ children must get config.env's keys, not the raw derivation.
+
+    install.sh persists its own SECRET_KEY/FERNET_KEY in config.env; the API
+    reads them via the pinned dotenv while the children's ENVIRONMENT outranks
+    it, so returning the derived keys split the two processes' Fernet keys.
+    """
+    from farna.launcher.config_source import CONFIG_ENV_FILENAME
+    from farna.launcher.secrets_file import LauncherSecrets
+    from farna.launcher.state import LauncherState
+
+    for name in ("SECRET_KEY", "FERNET_KEY", "SAQ_AUTH_PASSWORD", "SAQ_AUTH_USERNAME"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(settings_module, "pin_env_file", lambda path: None)
+    monkeypatch.setattr(settings_module, "set_first_boot_guard", lambda guard: None)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / CONFIG_ENV_FILENAME).write_text(f"SECRET_KEY={SECRET_KEY}\nFERNET_KEY={FERNET_KEY}\n", encoding="utf-8")
+    secrets = LauncherSecrets(postgres_password="pg-pw", redis_password="redis-pw", state_hmac_key=bytes(range(32)))
+    state = LauncherState(postgres_port=15432, redis_port=16379, api_port=18000)
+
+    composed = entry_module._compose_and_pin_config(data_dir, state, secrets)
+
+    assert composed["SECRET_KEY"] == SECRET_KEY
+    assert composed["FERNET_KEY"] == FERNET_KEY
+    assert composed["SAQ_AUTH_PASSWORD"]

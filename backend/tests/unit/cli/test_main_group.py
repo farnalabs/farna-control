@@ -145,8 +145,8 @@ def test_version_flag_and_subcommand() -> None:
     subcommand = CliRunner().invoke(cli_main.cli, ["version"])
     assert flag.exit_code == 0
     assert subcommand.exit_code == 0
-    assert flag.output.startswith("modulo ")
-    assert subcommand.output.startswith("modulo ")
+    assert flag.output.startswith("farna-control ")
+    assert subcommand.output.startswith("farna-control ")
 
 
 def test_env_redacts_every_credential(monkeypatch: pytest.MonkeyPatch) -> None:

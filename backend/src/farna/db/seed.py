@@ -166,12 +166,65 @@ async def seed_bundled_runner_profile(session: AsyncSession, org_id: uuid.UUID, 
     )
 
 
+#: The tenant organisation a fresh install gets (API boot, MODULO_USERS seeding
+#: and ``farna-control users add`` all resolve it through
+#: :func:`ensure_default_organisation`).
+DEFAULT_ORG_NAME = "Default Organisation"
+DEFAULT_ORG_SLUG = "default"
+
+
+async def first_tenant_organisation(session: Any) -> Any:
+    """The oldest LIVE tenant organisation, or None.
+
+    The sentinel rows the baseline migration seeds — the nil-UUID
+    "Orphan (unattributed errors)" org (``SYSTEM_ORG_ID``) and the library
+    registry org (``MODULO_REGISTRY_ORG_ID``) — are infrastructure, never a
+    tenant. "Oldest org" without excluding them picks the orphan org on every
+    fresh install, because the migration creates it first (FAR-2581): users
+    seeded there are RLS-partitioned away from every tenant and the login
+    tenant resolver ignores the org entirely.
+    """
+    from farna.db.models.organisation import MODULO_REGISTRY_ORG_ID, SYSTEM_ORG_ID, Organisation
+
+    result = await session.execute(
+        select(Organisation)
+        .where(
+            Organisation.id.notin_((SYSTEM_ORG_ID, MODULO_REGISTRY_ORG_ID)),
+            Organisation.deleted_at.is_(None),
+        )
+        .order_by(Organisation.created_at)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def ensure_default_organisation(session: Any) -> tuple[Any, bool]:
+    """Return ``(tenant_org, created)``, creating the default org when none exists.
+
+    The single implementation of "a fresh install gets a Default
+    Organisation" shared by the API boot (``_ensure_default_org``), the
+    MODULO_USERS boot seeder and the ``users add`` CLI, so a first admin can
+    never land in a sentinel org whichever path creates it.
+    """
+    from farna.db.models.organisation import Organisation
+
+    org = await first_tenant_organisation(session)
+    if org is not None:
+        return org, False
+    org = Organisation(name=DEFAULT_ORG_NAME, slug=DEFAULT_ORG_SLUG)
+    session.add(org)
+    await session.flush()
+    _log.info("startup.default_org_created", extra={"org_id": str(org.id)})
+    return org, True
+
+
 async def seed_modulo_users(session_factory: Callable[[], Any], modulo_users: str) -> None:
     """Seed MODULO_USERS env var entries into the account + membership tables.
 
     Accepts both bcrypt hashes (user1:$2b$12$hash) and plaintext passwords
     (admin:admin). Plaintext passwords are auto-hashed with bcrypt at seed
-    time. Skips when *modulo_users* is empty or no organisation exists.
+    time. Skips when *modulo_users* is empty. Users land in the oldest TENANT
+    organisation (never a sentinel org), created on demand (FAR-2581).
 
     Takes the session FACTORY (not Settings) so this DB-layer module never
     imports the API layer — the API boot wrapper and the native launcher each
@@ -180,15 +233,8 @@ async def seed_modulo_users(session_factory: Callable[[], Any], modulo_users: st
     if not modulo_users:
         return
 
-    from farna.db.models.organisation import Organisation
-
     async with session_factory() as session, session.begin():
-        org_result = await session.execute(select(Organisation).order_by(Organisation.created_at).limit(1))
-        org = org_result.scalar_one_or_none()
-        if org is None:
-            _log.warning("startup.no_org_for_user_seed")
-            return
-
+        org, _created = await ensure_default_organisation(session)
         for entry in modulo_users.split(","):
             await seed_modulo_user(session, org, entry)
 
