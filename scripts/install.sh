@@ -490,7 +490,7 @@ validate_legacy_install() {
       if [[ "${LEGACY_HAVE_SHIM}" -eq 0 ]]; then
         stop_hint="${LEGACY_INSTALL_ROOT}/current/launcher"
       fi
-      die "a pre-rebrand install at ${LEGACY_INSTALL_ROOT} is still running (holder PID ${holder_pid}).\\nStop it first:  ${stop_hint} stop\\nThen re-run this installer to migrate it to ${INSTALL_ROOT}."
+      die "a pre-rebrand install at ${LEGACY_INSTALL_ROOT} is still running (holder PID ${holder_pid}).\nA RUNNING pre-rebrand install cannot be migrated in place: the root rename needs it stopped, while the installer's enforced dump needs a live stack. Take an out-of-band database backup first (see docs/operations/backup.md; a --data-dir backup cannot run while the launcher is live, so use its --db-url/pg_dump form), then:\n  1) ${stop_hint} stop\n  2) bash <this installer> --skip-backup\n--skip-backup is the explicit acknowledgement that the out-of-band backup above is the authoritative snapshot (a stopped stack cannot be dumped)."
     fi
   fi
 }
@@ -515,8 +515,20 @@ apply_legacy_install_migration() {
     fi
   fi
   if [[ "${LEGACY_HAVE_SHIM}" -eq 1 ]]; then
-    info "removing the pre-rebrand PATH shim: ${LEGACY_USER_SHIM}"
-    rm -f -- "${LEGACY_USER_SHIM}" || die "could not remove ${LEGACY_USER_SHIM} — remove it manually and re-run"
+    # Only remove the shim when it actually targets the pre-rebrand install root.
+    # An unrelated user-owned 'modulo' binary at this path must never be deleted.
+    local shim_target=""
+    if [[ -L "${LEGACY_USER_SHIM}" ]]; then
+      shim_target="$(readlink -- "${LEGACY_USER_SHIM}" 2>/dev/null || true)"
+    elif [[ -f "${LEGACY_USER_SHIM}" ]]; then
+      shim_target="$(cat -- "${LEGACY_USER_SHIM}" 2>/dev/null || true)"
+    fi
+    if [[ "${shim_target}" == *"${LEGACY_INSTALL_ROOT}"* ]]; then
+      info "removing the pre-rebrand PATH shim: ${LEGACY_USER_SHIM}"
+      rm -f -- "${LEGACY_USER_SHIM}" || die "could not remove ${LEGACY_USER_SHIM} — remove it manually and re-run"
+    else
+      info "leaving ${LEGACY_USER_SHIM} in place: it does not target the pre-rebrand install root ${LEGACY_INSTALL_ROOT} (looks user-owned, not a stale shim)"
+    fi
   fi
 }
 
@@ -704,12 +716,15 @@ if [[ -n "${FROM_BUNDLE}" ]]; then
 elif [[ -n "${FROM_FILE}" ]]; then
   [[ -f "${FROM_FILE}" ]] || die "--from-file: no such file: ${FROM_FILE}"
   tarball_name="$(basename "${FROM_FILE}")"
-  if [[ "${tarball_name}" =~ ^farna-control-([A-Za-z0-9][A-Za-z0-9._-]*)-(linux|darwin)-(amd64|arm64)\.tar\.gz$ ]]; then
-    VERSION_NUM="${BASH_REMATCH[1]}"
-    archive_os="${BASH_REMATCH[2]}"
-    archive_arch="${BASH_REMATCH[3]}"
+  # Accept the pre-rebrand 'modulo-' prefix for legacy archives: the N-1
+  # upgrade leg installs the previous release, whose asset predates the
+  # farna-control rename. New artifacts are always 'farna-control-'.
+  if [[ "${tarball_name}" =~ ^(farna-control|modulo)-([A-Za-z0-9][A-Za-z0-9._-]*)-(linux|darwin)-(amd64|arm64)\.tar\.gz$ ]]; then
+    VERSION_NUM="${BASH_REMATCH[2]}"
+    archive_os="${BASH_REMATCH[3]}"
+    archive_arch="${BASH_REMATCH[4]}"
   else
-    die "cannot parse archive name '${tarball_name}' (expected farna-control-<version>-${OS}-<arch>.tar.gz)"
+    die "cannot parse archive name '${tarball_name}' (expected farna-control-<version>-${OS}-<arch>.tar.gz, or the pre-rebrand modulo-<version>-<os>-<arch>.tar.gz for a legacy archive)"
   fi
   [[ "${archive_os}" = "${OS}" ]] || die \
     "archive OS '${archive_os}' does not match detected host OS '${OS}' — refusing to install"

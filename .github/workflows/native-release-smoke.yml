@@ -214,7 +214,7 @@ jobs:
           fi
           bash scripts/install.sh --from-file "${TARBALL}"  #NOSONAR install.sh is from the trusted checkout; the --from-file tarball is verified (ed25519 signature + sha256 + SLSA attestation) before this step
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo --version
+          farna-control --version
 
       - name: Boot the stack (detached) and resolve the API base
         run: |
@@ -553,7 +553,7 @@ jobs:
           gh attestation verify "${TARBALL}" --repo "${{ github.repository }}" || { echo "::error::no verifiable build-provenance attestation for ${TARBALL} - refusing to install (fail closed)"; exit 1; }
           bash scripts/install.sh --from-file "${TARBALL}"  #NOSONAR install.sh is from the trusted checkout; the --from-file tarball is verified (ed25519 signature + sha256 + SLSA attestation) before this step
           export PATH="${HOME}/.local/bin:${PATH}"
-          modulo --version
+          farna-control --version
 
       - name: Boot the stack (detached) and resolve the API base
         if: steps.gate.outputs.skip != 'true'
@@ -723,11 +723,23 @@ jobs:
           fi
           prev_ver="${N_MINUS_1#bundle-v}"
           n1_dir="n1-artifact"
-          n1_tarball="farna-control-${prev_ver}-linux-amd64.tar.gz"
           mkdir -p "${n1_dir}"
           n1_base="https://github.com/${{ github.repository }}/releases/download/${N_MINUS_1}"
-          curl --proto '=https' -fsSL -o "${n1_dir}/${n1_tarball}" "${n1_base}/${n1_tarball}" \
-            || { echo "::error::N-1 tarball is not downloadable at ${N_MINUS_1}"; exit 1; }
+          # N-1 may predate the farna-control rename: that release's asset was
+          # published as modulo-<ver>-linux-amd64.tar.gz. Accept either prefix so
+          # the upgrade-from-previous-release leg keeps exercising the real prior
+          # artifact across the rename boundary.
+          n1_tarball=""
+          for candidate in "farna-control-${prev_ver}-linux-amd64.tar.gz" "modulo-${prev_ver}-linux-amd64.tar.gz"; do
+            if curl --proto '=https' -fsSL -o "${n1_dir}/${candidate}" "${n1_base}/${candidate}"; then
+              n1_tarball="${candidate}"
+              break
+            fi
+            rm -f "${n1_dir}/${candidate}"
+          done
+          if [ -z "${n1_tarball}" ]; then
+            echo "::error::N-1 tarball is not downloadable at ${N_MINUS_1} (tried farna-control and modulo prefixes)"; exit 1
+          fi
           curl --proto '=https' -fsSL -o "${n1_dir}/RELEASE_MANIFEST.json" "${n1_base}/RELEASE_MANIFEST.json" \
             || { echo "::error::N-1 RELEASE_MANIFEST.json is not downloadable at ${N_MINUS_1}"; exit 1; }
           curl --proto '=https' -fsSL -o "${n1_dir}/RELEASE_MANIFEST.json.sig" "${n1_base}/RELEASE_MANIFEST.json.sig" \

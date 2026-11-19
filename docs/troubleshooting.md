@@ -260,7 +260,7 @@ farna-control logs app         # launcher/supervisor log (pass -f to follow; pos
   for each install shape (native, Docker Compose, Kubernetes), and how to
   inspect it before sending.
 
-Where things live: install root `~/.local/opt/modulo/` (versions under
+Where things live: install root `~/.local/opt/farna-control/` (versions under
 `versions/<version>/`, the `current` symlink), data dir
 `~/.local/share/modulo/data/` (state.json, secrets.json at 0600, pgdata,
 logs). Bundled servers bind NON-default high ports (write their ports

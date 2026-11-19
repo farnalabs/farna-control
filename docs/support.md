@@ -39,7 +39,7 @@ report, so you can read the summary before opening the zip.
 
 If the install itself failed, there is no `farna-control` binary to run yet. The
 installer prints a delimited support block as its final output on failure and
-keeps the full transcript under `~/.local/state/modulo/install-*.log`; send
+keeps the full transcript under `~/.local/state/farna-control/install-*.log`; send
 both the block and the log file. Both the transcript and the block are landing
 in this milestone. Until they are in your build, capture the installer output
 yourself:
@@ -137,7 +137,7 @@ error 7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f · fingerprint 9f8e7d6c5b4a · level 
 ----- Farna Control install failed: support reference 4f2a91c0 -----
   Install target   : bundle-v0.3.324 (linux-x86_64)
   Failing stage    : verify
-  Install log      : /home/you/.local/state/modulo/install-20261102T101500Z-4f2a91c0.log
+  Install log      : /home/you/.local/state/farna-control/install-20261102T101500Z-4f2a91c0.log
   Support reference: 4f2a91c0
 ----- end of Farna Control install support block -----
 ```

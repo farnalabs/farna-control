@@ -1286,6 +1286,24 @@ class TestDefaultInstallRoot:
         result = upgrade_module.default_install_root()
         assert str(result).endswith("my-modulo")
 
+    def test_defaults_to_the_install_sh_root(self, monkeypatch, tmp_path):
+        """The Python default must stay equal to install.sh's own default.
+
+        FAR-2571 renamed the native install root; a mismatch here made
+        `farna-control upgrade` resolve the pre-rebrand root and fail with
+        "no native install to upgrade" on every fresh or migrated install.
+        """
+        monkeypatch.delenv("FARNA_CONTROL_INSTALL_ROOT", raising=False)
+        monkeypatch.delenv("MODULO_INSTALL_ROOT", raising=False)
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(home))
+
+        assert upgrade_module.default_install_root() == home / ".local" / "opt" / "farna-control"
+
+        install_sh = Path(__file__).resolve().parents[4] / "scripts" / "install.sh"
+        assert "${HOME}/.local/opt/farna-control" in install_sh.read_text(encoding="utf-8")
+
 
 class TestResolvePgBinDir:
     def test_explicit_bin_dir(self):
@@ -1780,6 +1798,16 @@ def test_installer_accepts_linux_archive_shape_before_manifest_gate(tmp_path: Pa
 
 
 @pytest.mark.posix_only
+def test_installer_accepts_legacy_modulo_archive_shape(tmp_path: Path) -> None:
+    """The N-1 upgrade leg installs a pre-rebrand ``modulo-`` archive."""
+    result = _installer_probe(tmp_path, "modulo-1.2.3-linux-amd64.tar.gz", "modulo-1.2.3-linux-amd64")
+    assert result.returncode != 0
+    assert "SIGNED release manifest must sit beside the tarball" in result.stderr
+    assert "cannot parse archive name" not in result.stderr
+    assert "archive OS 'linux' does not match" not in result.stderr
+
+
+@pytest.mark.posix_only
 def test_installer_rejects_mismatched_archive_root_before_install_mutation(tmp_path: Path) -> None:
     result = _installer_probe(tmp_path, "farna-control-1.2.3-linux-amd64.tar.gz", "unexpected-root", bypass_manifest=True)
     assert result.returncode != 0
@@ -2061,6 +2089,24 @@ def test_resolve_upgrade_assets_rejects_unsupported_from_file_arch(tmp_path, mon
             staging_dir=tmp_path / "stage",
             fetch=None,
         )
+
+
+def test_resolve_upgrade_assets_accepts_legacy_modulo_from_file(tmp_path, monkeypatch):
+    """The pre-rebrand ``modulo-`` archive name is accepted for legacy archives."""
+    monkeypatch.setattr(upgrade_module, "_host_os", lambda: "linux")
+    monkeypatch.setattr(upgrade_module, "_host_arch", lambda: "amd64")
+    tarball = tmp_path / "modulo-1.2.3-linux-amd64.tar.gz"
+    tarball.write_text("dummy", encoding="utf-8")
+    (tmp_path / "RELEASE_MANIFEST.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "RELEASE_MANIFEST.json.sig").write_text("dummy", encoding="utf-8")
+
+    _tb, ver, _mf, _sf = upgrade_module._resolve_upgrade_assets(
+        from_file=tarball,
+        target_version=None,
+        staging_dir=tmp_path / "staging",
+        fetch=None,
+    )
+    assert ver == "1.2.3"
 
 
 def test_resolve_upgrade_assets_darwin_tarball(tmp_path, monkeypatch):

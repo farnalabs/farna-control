@@ -454,7 +454,7 @@ def default_install_root() -> Path:
     from_env = os.environ.get(INSTALL_ROOT_ENV)
     if from_env:
         return Path(from_env).expanduser()
-    return Path.home() / ".local" / "opt" / "modulo"
+    return Path.home() / ".local" / "opt" / "farna-control"
 
 
 def _strip_bundle_prefix(version_text: str) -> str:
@@ -1337,11 +1337,11 @@ def _resolve_upgrade_assets(
     if not tarball.is_file():
         raise UpgradeError(f"--from-file: no such file: {from_file}")
     match = re.fullmatch(
-        r"farna-control-(?P<version>[A-Za-z0-9][A-Za-z0-9._-]*)-(?P<os>linux|darwin)-(?P<arch>amd64|arm64)\.tar\.gz",
+        r"(?:farna-control|modulo)-(?P<version>[A-Za-z0-9][A-Za-z0-9._-]*)-(?P<os>linux|darwin)-(?P<arch>amd64|arm64)\.tar\.gz",
         tarball.name,
     )
     if match is None:
-        raise UpgradeError("--from-file archive name is malformed: expected exactly farna-control-<version>-<os>-<arch>.tar.gz")
+        raise UpgradeError("--from-file archive name is malformed: expected exactly farna-control-<version>-<os>-<arch>.tar.gz (or the pre-rebrand modulo-<version>-<os>-<arch>.tar.gz for a legacy archive)")
     os_token = _host_os()
     archive_os = match.group("os")
     if archive_os != os_token:

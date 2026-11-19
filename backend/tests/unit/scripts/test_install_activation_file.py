@@ -363,7 +363,7 @@ def test_a_pre_rename_install_root_and_shim_are_migrated(tmp_path: Path) -> None
     (legacy_root / ".modulo-native-install").write_text("managed_by=install.sh\n", encoding="utf-8")
     legacy_shim = bin_dir / "modulo"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    legacy_shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    legacy_shim.write_text(f'#!/bin/sh\nexec "{legacy_root}/current/launcher" "$@"\n', encoding="utf-8")
     legacy_shim.chmod(0o755)
 
     result = _run_install(script, release, env, tmp_path)
@@ -373,6 +373,33 @@ def test_a_pre_rename_install_root_and_shim_are_migrated(tmp_path: Path) -> None
     assert (install_root / ".farna-control-native-install").is_file(), "the install marker was not renamed"
     assert not legacy_shim.exists(), "the pre-rename PATH shim was left behind"
     assert (bin_dir / "farna-control").is_file(), "the farna-control PATH shim was not written"
+
+
+def test_an_unrelated_modulo_shim_is_left_untouched(tmp_path: Path) -> None:
+    """FAR-2571: only a shim that targets the legacy root is removed.
+
+    A user-owned binary at ``~/.local/bin/modulo`` is unrelated to the installer
+    and must survive a fresh install unchanged.
+    """
+    _require_openssl_3()
+    trust_key = Ed25519PrivateKey.generate()
+    release = _signed_release(tmp_path, trust_key=trust_key)
+    script = _installer_with_test_trust_key(tmp_path, trust_key=trust_key)
+    env = _install_env(tmp_path)
+
+    install_root = _default_install_root(env)
+    bin_dir = _default_bin_dir(env)
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    user_shim = bin_dir / "modulo"
+    user_content = "#!/bin/sh\necho user-owned\n"
+    user_shim.write_text(user_content, encoding="utf-8")
+    user_shim.chmod(0o755)
+
+    result = _run_install(script, release, env, tmp_path)
+    assert result.returncode == 0, f"the installer failed on an unrelated modulo shim:\n{_diagnose(result)}"
+    assert user_shim.is_file(), "the installer deleted an unrelated user-owned modulo shim"
+    assert user_shim.read_text(encoding="utf-8") == user_content, "the installer rewrote an unrelated user-owned modulo shim"
+    assert (install_root / "current").is_symlink(), "the install did not complete"
 
 
 def test_two_install_roots_is_refused_rather_than_guessed(tmp_path: Path) -> None:
