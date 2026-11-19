@@ -170,6 +170,16 @@ def seeded_db(db_url: str) -> str:
     return db_url
 
 
+def test_first_org_without_an_organisation_refuses() -> None:
+    """An empty database names the fix instead of returning no org."""
+    session = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=result)
+    with pytest.raises(users_module.UserCliError, match="no organisation exists"):
+        run_db(lambda: users_module._first_org(session))
+
+
 async def _fetch_account(db_url: str, email: str) -> Any:
     from farna.db.models.account import Account
 

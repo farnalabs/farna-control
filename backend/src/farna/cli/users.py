@@ -245,7 +245,7 @@ async def _first_org(session: AsyncSession) -> Any:
     result = await session.execute(include_soft_deleted(select(Organisation).order_by(Organisation.created_at).limit(1)))
     org = result.scalar_one_or_none()
     if org is None:
-        raise UserCliError("no organisation exists in this database — run 'modulo start' once to bootstrap")
+        raise UserCliError("no organisation exists in this database — run 'farna-control start' once to bootstrap")
     return org
 
 

@@ -63,8 +63,9 @@ FRONTEND_DIST_ENV: Final = "FARNA_CONTROL_FRONTEND_DIST"
 SYSTEM_DATABASE_URL_ENV: Final = "FARNA_CONTROL_SYSTEM_DATABASE_URL"
 #: Comma-separated LAN hostnames the Host/Origin allowlist accepts when the API
 #: serves the SPA itself. ``MODULO_LAN_ORIGINS`` is the spelling
-#: ``docs/configuration-reference.md`` publishes, so the alias is load-bearing:
-#: registering it is what makes the documented knob work.
+#: ``docs/configuration-reference.md`` published before the rebrand, so the
+#: alias is load-bearing: registering it keeps installs configured from the old
+#: docs working.
 LAN_ORIGINS_ENV: Final = "FARNA_CONTROL_LAN_ORIGINS"
 #: Native install root / shim directory / bundled data directory.
 INSTALL_ROOT_ENV: Final = "FARNA_CONTROL_INSTALL_ROOT"

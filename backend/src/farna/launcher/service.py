@@ -1,6 +1,6 @@
 """OS service management for the single-install launcher (FAR-674, ADR 031).
 
-Management surface for a user-scoped service running ``modulo start`` in
+Management surface for a user-scoped service running ``farna-control start`` in
 the FOREGROUND as the installing user. Linux uses a **systemd USER unit**;
 macOS uses a **launchd LaunchAgent**. Windows service management remains a
 TODO(P3) seam and refuses loudly here. This module describes the service
@@ -19,7 +19,7 @@ SERVICE-MODE CONTRACT (co-design with the OS manager, locked by tests):
   (75), which the unit lists in ``SuccessExitStatus``: systemd records the
   exit as SUCCESS, so ``Restart=on-failure`` does NOT fire and the service
   stays stopped until the operator resumes with
-  ``modulo start --clear-degraded``. There is no exit code that would make
+  ``farna-control start --clear-degraded``. There is no exit code that would make
   systemd out-restart the launcher's own cap.
 * **Co-designed restart budget.** The unit's ``StartLimitIntervalSec``/
   ``StartLimitBurst`` mirror :data:`policy.CRASH_WINDOW_SECONDS`/
@@ -31,7 +31,7 @@ Remaining facts this module encodes:
 
 * Data dir: the user-scoped default (``~/.local/share/modulo/data`` via the
   entry's ``default_data_dir``) — machine-wide dirs are a future extension
-  per ADR 031, so the unit runs plain ``modulo start`` with no override.
+  per ADR 031, so the unit runs plain ``farna-control start`` with no override.
 * Executable assumption (documented seam): the INSTALLED ``modulo`` console
   script, resolved from ``sys.argv[0]`` (a wheel/venv install whose
   console-script entry point is executing) — falling back to PATH lookup.
@@ -101,7 +101,7 @@ class ServiceError(RuntimeError):
 
 @dataclass
 class ServiceInstallResult:
-    """Outcome of ``modulo service install``."""
+    """Outcome of ``farna-control service install``."""
 
     unit_path: Path
     executable: Path
@@ -113,7 +113,7 @@ class ServiceInstallResult:
 
 @dataclass
 class ServiceUninstallResult:
-    """Outcome of ``modulo service uninstall`` (best-effort by design)."""
+    """Outcome of ``farna-control service uninstall`` (best-effort by design)."""
 
     unit_removed: bool
     stopped: bool
@@ -135,9 +135,9 @@ def _default_runner(argv: list[str]) -> subprocess.CompletedProcess[str]:
 def assert_linux() -> None:
     """Refuse unsupported service platforms loudly (Windows = TODO(P3))."""
     if is_windows():
-        raise ServiceError("Windows service lifecycle requires Task Scheduler validation with the native installer (FAR-2229); use `modulo start` directly until that validation is complete")
+        raise ServiceError("Windows service lifecycle requires Task Scheduler validation with the native installer (FAR-2229); use `farna-control start` directly until that validation is complete")
     if sys.platform not in ("linux", "darwin"):
-        raise ServiceError(f"The service install is not implemented on {sys.platform} yet; use `modulo start` directly meanwhile.")
+        raise ServiceError(f"The service install is not implemented on {sys.platform} yet; use `farna-control start` directly meanwhile.")
 
 
 def assert_not_elevated() -> None:
@@ -154,9 +154,9 @@ def assert_systemd_available(runner: CommandRunner, *, marker_path: Path = SYSTE
     try:
         probe = runner(["systemctl", "--user", "is-system-running"])
     except OSError as exc:
-        raise ServiceError(f"systemd was not detected (no {marker_path} and probing `systemctl --user` failed: {exc}) — this command manages a systemd USER unit; on a non-systemd host run `modulo start` directly (the launcher is self-supervising)") from exc
+        raise ServiceError(f"systemd was not detected (no {marker_path} and probing `systemctl --user` failed: {exc}) — this command manages a systemd USER unit; on a non-systemd host run `farna-control start` directly (the launcher is self-supervising)") from exc
     if probe.returncode != 0:
-        raise ServiceError(f"systemd was not detected (no {marker_path} and `systemctl --user` did not answer) — this command manages a systemd USER unit; on a non-systemd host run `modulo start` directly (the launcher is self-supervising)")
+        raise ServiceError(f"systemd was not detected (no {marker_path} and `systemctl --user` did not answer) — this command manages a systemd USER unit; on a non-systemd host run `farna-control start` directly (the launcher is self-supervising)")
 
 
 def resolve_executable(argv0: str | None = None) -> Path:
@@ -234,14 +234,14 @@ def render_unit(executable: Path) -> str:
     supervisor owns child restart, systemd owns only the launcher restart,
     the degraded exit code is listed as SUCCESS, and the restart budget
     mirrors the launcher's own crash cap (all values single-sourced from
-    :mod:`modulo.launcher.policy`).
+    :mod:`farna.launcher.policy`).
     """
     lines = [
         "[Unit]",
         "Description=Modulo single-install launcher (bundled Postgres/Redis + API)",
         "After=network-online.target",
         "Wants=network-online.target",
-        "# Co-designed with the launcher's own crash cap (modulo.launcher.policy): the",
+        "# Co-designed with the launcher's own crash cap (farna.launcher.policy): the",
         "# in-app supervisor restarts failing children with backoff and trips its terminal",
         "# degraded state within this same window, so systemd's restart budget must not",
         "# out-shout it.",
@@ -257,7 +257,7 @@ def render_unit(executable: Path) -> str:
         f"RestartSec={int(policy.SERVICE_RESTART_SECONDS)}s",
         f"# Terminal degraded (crash cap exhausted) exits {int(policy.DEGRADED_EXIT_CODE)} on",
         "# purpose; listing it as success makes systemd leave the service STOPPED instead",
-        "# of fighting the launcher's own cap. Resume with `modulo start --clear-degraded`.",
+        "# of fighting the launcher's own cap. Resume with `farna-control start --clear-degraded`.",
         f"SuccessExitStatus={int(policy.DEGRADED_EXIT_CODE)}",
         "KillSignal=SIGTERM",
         "TimeoutStopSec=90s",

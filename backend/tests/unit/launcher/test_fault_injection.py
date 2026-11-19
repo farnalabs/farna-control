@@ -11,7 +11,7 @@ ships; this suite makes the recovery contracts hard to regress:
 * a never-healthy child (occupied persisted port) must terminate the
   crash ladder: backoff progression, sliding-window eviction of stale
   crashes, and the terminal degraded state persisted + surfaced via
-  ``collect_status`` (the ``modulo status --json`` payload), with the
+  ``collect_status`` (the ``farna-control status --json`` payload), with the
   documented remediation hint.
 * restore-while-running: a start holding the data-dir lock refuses a
   concurrent restore/backup naming the holder PID and its mode.
@@ -350,7 +350,7 @@ def test_crash_ladder_trips_terminal_degraded_and_surfaces_in_status(
     persisted = json.loads(degraded_path.read_text(encoding="utf-8"))
     assert len(persisted["crashes"]) >= cap
     assert all(entry["child"] == "postgres" for entry in persisted["crashes"])
-    # And the status JSON surface (modulo status) reports the same state.
+    # And the status JSON surface (farna-control status) reports the same state.
     status = collect_status(data_dir)
     assert json.dumps(status), "the status payload must always serialise"
     assert status["degraded"]["reason"] == reason
@@ -536,15 +536,18 @@ def test_occupied_persisted_port_gets_a_precise_error_and_remediation(
     from farna.launcher.doctor import check_port_collisions
     from farna.launcher.state import LauncherState
 
-    pg_port = 15432
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    state = LauncherState(postgres_port=pg_port, redis_port=16379, api_port=18000)
     # Pre-squat the configured port for real (the fault is real, the
     # attribution probe is injected because /proc attribution is Linux-only).
+    # Bind an ephemeral port rather than a fixed one: a fixed port (15432) is
+    # often already held on a dev host (another stack's postgres), which made
+    # the bind itself fail before the code under test ran.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", pg_port))
+        sock.bind(("127.0.0.1", 0))
         sock.listen(1)
+        pg_port = sock.getsockname()[1]
+        state = LauncherState(postgres_port=pg_port, redis_port=16379, api_port=18000)
         probes = minimal_probes(
             port_owner_description=lambda _port: "foreign service bound to 0.0.0.0",
             launcher_running=lambda: True,

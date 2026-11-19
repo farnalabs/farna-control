@@ -10,10 +10,10 @@ frames/pages never gain access).
 LAN mode: ``FARNA_CONTROL_LAN_ORIGINS`` (comma-separated hostnames) widens the
 allowlist with the explicitly configured LAN hostnames ONLY — an open allow
 everything behaviour would re-open the rebinding class. ``MODULO_LAN_ORIGINS``
-is the spelling the configuration reference publishes and is accepted as the
-registered legacy alias (FAR-2563: the middleware used to read the canonical
-name only, so a self-hoster who followed the docs was rejected with a silent
-403). The name comes from :mod:`farna.launcher.env_contract` and the caller
+(the spelling the configuration reference published before the rebrand) is
+accepted as the registered legacy alias (FAR-2563: the middleware used to read
+the canonical name only, so a self-hoster who followed the docs was rejected
+with a silent 403). The name comes from :mod:`farna.launcher.env_contract` and the caller
 reads it through ``read_env``.
 
 Only mounted when ``serve_spa`` is ON (``farna.api.main._init_once_mount_spa``);

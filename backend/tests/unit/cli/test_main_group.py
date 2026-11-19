@@ -211,7 +211,7 @@ def test_env_redacts_every_real_credential_carrier(monkeypatch: pytest.MonkeyPat
         "redis-secret",
     )
     for secret in secrets:
-        assert secret not in result.output, f"{secret!r} leaked through modulo env"
+        assert secret not in result.output, f"{secret!r} leaked through farna-control env"
     assert "admin@modulo.run:plaintext-password-1" not in result.output
     if as_json:
         payload = json.loads(result.output)

@@ -1,4 +1,4 @@
-"""``modulo doctor`` (FAR-671 core checks + FAR-676 full doctor + FAR-2316 provider reachability).
+"""``farna-control doctor`` (FAR-671 core checks + FAR-676 full doctor + FAR-2316 provider reachability).
 
 Every check is a PURE function over an INJECTED probe interface
 (:class:`DoctorProbes`) so every pass/fail path is unit-testable without
@@ -166,7 +166,7 @@ CLOUD_SYNC_VENDOR_MARKERS: tuple[str, ...] = (
     "google_drive",
 )
 
-# Documented exit codes for ``modulo doctor`` (see the module docstring).
+# Documented exit codes for ``farna-control doctor`` (see the module docstring).
 EXIT_HEALTHY = 0
 EXIT_UNHEALTHY = 1
 EXIT_DEGRADED = 2
@@ -377,7 +377,7 @@ def check_postgres(_data_dir: Path, state: Any, probes: DoctorProbes) -> CheckRe
             False,
             f"reachable on 127.0.0.1:{state.postgres_port} but role posture DRIFTED: " + "; ".join(violations) + ". The application must connect as farna_control_app (NOSUPERUSER, NOBYPASSRLS) with "
             "DATABASE_ADMIN_URL naming the owner/migration role (farna_control); fix DATABASE_URL, "
-            "then restart `modulo start` so the boot-time bootstrap re-applies the allow-list.",
+            "then restart `farna-control start` so the boot-time bootstrap re-applies the allow-list.",
         )
     return CheckResult(
         "postgres",
@@ -417,7 +417,7 @@ def check_migrations(_data_dir: Path, state: Any, probes: DoctorProbes) -> Check
         return CheckResult(
             "migrations",
             False,
-            "database is NOT at the alembic head — restart `modulo start` so the lifespan migration path runs",
+            "database is NOT at the alembic head — restart `farna-control start` so the lifespan migration path runs",
         )
     return CheckResult("migrations", True, "database at the alembic migration head")
 
@@ -441,7 +441,7 @@ def check_cwd_env_influence(_data_dir: Path, _state: Any, probes: DoctorProbes) 
     return CheckResult(
         "env-influence",
         False,
-        f"{', '.join(ambient)} in {env_file} would influence Settings (no pinned launcher config) — rename/remove the file, or start with `modulo start`",
+        f"{', '.join(ambient)} in {env_file} would influence Settings (no pinned launcher config) — rename/remove the file, or start with `farna-control start`",
     )
 
 
@@ -454,7 +454,7 @@ def check_privileges(data_dir: Path, _state: Any, probes: DoctorProbes) -> Check
         return CheckResult(
             "privileges",
             False,
-            "running as root/sudo — the bundled postgres refuses a root-owned data dir; start `modulo start` as an unprivileged user",
+            "running as root/sudo — the bundled postgres refuses a root-owned data dir; start `farna-control start` as an unprivileged user",
         )
     me = probes.username_of_uid(uid)
     owner = probes.file_owner(data_dir)
@@ -674,7 +674,7 @@ def check_bundle_versions(_data_dir: Path, state: Any, probes: DoctorProbes) -> 
             return CheckResult(
                 "bundle-version",
                 True,
-                f"available upgrade: data dir last ran {installed_version}, the bundle now ships {bundle_version} — restart `modulo start` to upgrade",
+                f"available upgrade: data dir last ran {installed_version}, the bundle now ships {bundle_version} — restart `farna-control start` to upgrade",
                 warning=True,
             )
     return CheckResult(
@@ -777,7 +777,7 @@ def check_degraded(_data_dir: Path, _state: Any, probes: DoctorProbes) -> CheckR
     return CheckResult(
         "degraded",
         False,
-        f"the supervisor tripped its terminal degraded state: {reason} — inspect `modulo status` and the app log (`modulo logs`), clear the underlying fault, then restart `modulo start`",
+        f"the supervisor tripped its terminal degraded state: {reason} — inspect `farna-control status` and the app log (`farna-control logs`), clear the underlying fault, then restart `farna-control start`",
     )
 
 
@@ -828,7 +828,7 @@ def check_stale_backup(_data_dir: Path, _state: Any, probes: DoctorProbes) -> Ch
         return CheckResult(
             "stale-backup",
             True,
-            f"the last recorded backup is {age / 86400:.0f} days old (> {STALE_BACKUP_SECONDS // 86400}d) — run `modulo backup` and point it at the fixed data dir to refresh",
+            f"the last recorded backup is {age / 86400:.0f} days old (> {STALE_BACKUP_SECONDS // 86400}d) — run `farna-control backup` and point it at the fixed data dir to refresh",
             warning=True,
         )
     return CheckResult("stale-backup", True, f"last recorded backup is {age / 86400:.0f} days old")
@@ -1878,7 +1878,7 @@ def _load_state_readonly(data_dir: Path) -> tuple[Any, str | None]:
 
     secrets_path = data_dir / _SECRETS_FILENAME
     if not secrets_path.exists():
-        return None, "data dir is not initialized (no secrets file) — run `modulo start` first"
+        return None, "data dir is not initialized (no secrets file) — run `farna-control start` first"
     try:
         secrets = _parse(secrets_path.read_bytes())
     except (SecretsFileError, OSError) as exc:
@@ -1888,7 +1888,7 @@ def _load_state_readonly(data_dir: Path) -> tuple[Any, str | None]:
     except (StateIntegrityError, StateVersionError) as exc:
         return None, f"state.json unreadable: {exc}"
     except FileNotFoundError:
-        return None, f"no {STATE_FILENAME} in {data_dir} — run `modulo start` first"
+        return None, f"no {STATE_FILENAME} in {data_dir} — run `farna-control start` first"
 
 
 def _state_problem_kind(data_dir: Path, state_error: str | None) -> str | None:
@@ -1946,7 +1946,7 @@ def apply_fixes(data_dir: Path) -> list[str]:
     try:
         action = reconcile_orphans(pgdata)
     except LauncherError as exc:
-        raise RuntimeError(f"refused: {exc}; stop the postgres that owns the pidfile (via its owner first), then re-run `modulo doctor --fix`") from exc
+        raise RuntimeError(f"refused: {exc}; stop the postgres that owns the pidfile (via its owner first), then re-run `farna-control doctor --fix`") from exc
     if action is None:
         actions.append("no orphan debris found (nothing swept)")
     else:
@@ -2048,7 +2048,7 @@ def _payload_json(data_dir: Path, healthy: bool, results: list[CheckResult], exi
 
 
 def _print_report(data_dir: Path, results: list[CheckResult], healthy: bool, emit: Callable[[str], Any]) -> None:
-    emit(f"modulo doctor — data dir: {data_dir}")
+    emit(f"farna-control doctor — data dir: {data_dir}")
     width = max(len(result.name) for result in results)
     for result in results:
         if not result.ok:

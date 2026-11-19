@@ -2,7 +2,7 @@
 
 P1a upgrade flow = rerun the installer. The installer ENFORCES a pre-upgrade
 pg_dump before it touches anything version-specific: it calls the OLD
-installation's bundled runtime here (``python -m modulo.launcher.upgrade``),
+installation's bundled runtime here (``python -m farna.launcher.upgrade``),
 which resolves the BUNDLED pg_dump client, dumps the bundled app database to
 a versioned snapshot directory inside the data dir, verifies the dump is
 non-empty, and prints the snapshot path as its final stdout line.
@@ -60,7 +60,7 @@ _log = logging.getLogger(__name__)
 SNAPSHOT_PREFIX = "pre-upgrade-dump-"
 SNAPSHOT_MANIFEST_NAME = "manifest.json"
 SNAPSHOT_MANIFEST_VERSION = 1
-# The restore-side manifest: `modulo restore` hard-requires backup-info.json
+# The restore-side manifest: `farna-control restore` hard-requires backup-info.json
 # (shape-validated, checksum-verified). The snapshot carries BOTH manifest
 # files so the installer's printed command works verbatim.
 _RESTORE_MANIFEST_NAME = "backup-info.json"
@@ -169,7 +169,7 @@ def assert_not_held(data_dir: Path) -> None:
         # primitive before any destructive step can run unguarded.
         raise UpgradeError(f"The data-dir lock record exists (holder PID {holder.pid}, mode {holder.mode!r}) and holder liveness cannot be verified on Windows yet (TODO(P3)). Stop the launcher, clear the stale lock record only if the holder process is confirmed dead, then retry.")
     if _pid_alive(holder.pid):
-        raise UpgradeError(f"Refusing: data dir {data_dir} is locked by another launcher (holder PID {holder.pid}, mode {holder.mode!r}). Stop that launcher first ('modulo stop'), then re-run — the snapshot survives; pass --skip-backup on the re-run.")
+        raise UpgradeError(f"Refusing: data dir {data_dir} is locked by another launcher (holder PID {holder.pid}, mode {holder.mode!r}). Stop that launcher first ('farna-control stop'), then re-run — the snapshot survives; pass --skip-backup on the re-run.")
     _log.info("upgrade.stale_lock_record_ignored holder_pid=%s (process is gone)", holder.pid)
 
 
@@ -265,7 +265,7 @@ def pre_upgrade_dump(
 
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     # `parent` is the operator-chosen data/snapshot directory, supplied by the
-    # bundled installer via the local `modulo upgrade --data-dir` CLI -- never an
+    # bundled installer via the local `farna-control upgrade --data-dir` CLI -- never an
     # HTTP request or agent input. The block above has already refused unless the
     # directory holds a bootstrapped state.json (HMAC-verified against the
     # secrets file) plus a secrets.json, so the path is trusted by construction,
@@ -365,7 +365,7 @@ def _alembic_heads() -> list[str]:
 def _write_restore_manifest(snapshot_dir: Path, *, created_at: str) -> None:
     """Write the restore-compatible manifest the installer's printed command needs.
 
-    ``modulo restore`` hard-requires ``backup-info.json`` (shape-validated +
+    ``farna-control restore`` hard-requires ``backup-info.json`` (shape-validated +
     checksum-verified). Without it the installer's "restore later with" hint
     refuses immediately. The snapshot is written as a legacy-shaped archive
     (no ``manifest_version`` -> accepted) carrying the dump checksum and the
@@ -427,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     The snapshot directory path is the FINAL stdout line; the installer
     captures it and aborts (non-zero exit) when the helper fails.
     """
-    parser = argparse.ArgumentParser(prog="python -m modulo.launcher.upgrade", description="Pre-upgrade pg_dump")
+    parser = argparse.ArgumentParser(prog="python -m farna.launcher.upgrade", description="Pre-upgrade pg_dump")
     parser.add_argument("--data-dir", type=Path, required=True, help="Bundled launcher data dir")
     parser.add_argument("--bin-dir", type=Path, default=None, help="Bundled pg/ binaries dir override (packaging seam)")
     args = parser.parse_args(argv)
@@ -444,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 # ---------------------------------------------------------------------------
-# The full `modulo upgrade` flow (FAR-675, ADR 031 Decision 7)
+# The full `farna-control upgrade` flow (FAR-675, ADR 031 Decision 7)
 #
 # Stage order (destructive last):
 #   1. fetch the target bundle; SIGNATURE-verify the release manifest;
@@ -550,7 +550,7 @@ def _version_sort_key(name: str) -> tuple[int, int, int]:
 
 @dataclass(frozen=True)
 class UpgradeResult:
-    """Outcome of one completed `modulo upgrade` run."""
+    """Outcome of one completed `farna-control upgrade` run."""
 
     previous_version: str
     version: str
@@ -990,7 +990,7 @@ def stop_running_stack(data_dir: Path, *, unit_file: Path | None = None) -> None
     holder = _read_lock_holder(data_dir.parent / (data_dir.name + ".lock"))
     if holder is not None and _pid_alive(holder.pid):
         _restart_unit_best_effort(why="post-stop abort: restoring the stopped service")
-        raise UpgradeError(f"Refusing: the data dir {data_dir} is STILL locked by a live launcher (holder PID {holder.pid}) - stop it first: modulo stop")
+        raise UpgradeError(f"Refusing: the data dir {data_dir} is STILL locked by a live launcher (holder PID {holder.pid}) - stop it first: farna-control stop")
 
 
 def _restart_unit_best_effort(*, why: str) -> None:
@@ -1283,7 +1283,7 @@ def _resolve_current_target(install_root: Path) -> Path:
     """The incumbent (state.json-referenced) version dir - never deleted.
 
     A DANGLING `current` is repaired first (repair_current_symlink —
-    `modulo start` runs the same repair): an operator's bricked install
+    `farna-control start` runs the same repair): an operator's bricked install
     self-heals instead of dead-ending on an internal Python function.
     """
     current_link = install_root / "current"
@@ -1309,7 +1309,7 @@ def assert_upgrade_platform() -> None:
     if sys.platform == "darwin":
         raise UpgradeError("macOS native artifact is not yet published; the macOS service/data/launcher seam exists, but no complete signed and notarized Darwin bundle is available for upgrade")
     if sys.platform == "win32":
-        raise UpgradeError("the full modulo upgrade flow is not implemented on Windows yet (TODO(P3)): the versioned-dir/current-symlink swap is a POSIX symlink primitive today")
+        raise UpgradeError("the full farna-control upgrade flow is not implemented on Windows yet (TODO(P3)): the versioned-dir/current-symlink swap is a POSIX symlink primitive today")
 
 
 def _service_unit_path() -> Path:
@@ -1434,7 +1434,7 @@ def perform_upgrade(
     boot: Callable[..., int] | None = None,
     now: Callable[[], float] = time.time,
 ) -> UpgradeResult:
-    """The end-to-end `modulo upgrade` flow (FAR-675, ADR 031 Decision 7).
+    """The end-to-end `farna-control upgrade` flow (FAR-675, ADR 031 Decision 7).
 
     Stage order (destructive last):
 

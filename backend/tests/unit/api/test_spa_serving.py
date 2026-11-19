@@ -162,9 +162,9 @@ def test_lan_origin_via_the_mount_helper(tmp_path: Path) -> None:
 
 
 def test_documented_legacy_lan_origins_spelling_is_honoured(tmp_path: Path) -> None:
-    """FAR-2563: the LAN knob the configuration reference publishes must work.
+    """FAR-2563: the LAN knob the configuration reference published must work.
 
-    The reference names ``MODULO_LAN_ORIGINS``; the mount used to read the
+    The pre-rebrand reference named ``MODULO_LAN_ORIGINS``; the mount used to read the
     canonical spelling directly, so a self-hoster who followed the docs got a
     silent 403 on their own LAN hostname.
     """

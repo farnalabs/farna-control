@@ -2,16 +2,16 @@
 
 Publishes the native-launcher surface (``start``/``stop``/``status``/
 ``version``/``env``) while keeping the published backup/restore/apply
-surface working VERBATIM: the commands from ``modulo.cli.backup`` are
+surface working VERBATIM: the commands from ``farna.cli.backup`` are
 lifted onto this group and an unrecognised first token falls back to
-``backup``, so bare ``modulo backup ...`` / ``modulo restore ...`` (and
+``backup``, so bare ``farna-control backup ...`` / ``farna-control restore ...`` (and
 even ``modulo --db-url ... --output-dir ...``) behave exactly as they did
 when ``backup:cli`` WAS the entry point (locked by ``tests/unit/cli/
 test_main_group.py``).
 
 IMPORT-TIME SCRUB (ADR 031 Decision 2, locked by the import-hygiene
 subprocess test): this module is the published console script, and its
-module-level import graph (``modulo.cli.backup`` -> settings, apply,
+module-level import graph (``farna.cli.backup`` -> settings, apply,
 psycopg) loads BEFORE any command runs — so the FIRST thing this module
 does at import time is scrub the OS environment. The launcher-owned
 commands additionally re-scrub at invocation (defence-in-depth after the
@@ -34,7 +34,7 @@ from typing import Any
 import click
 
 # FIRST modulo import — the scrub must precede the backup import graph
-# (psycopg, modulo.settings, modulo.cli.apply) so no launcher-hostile
+# (psycopg, farna.settings, farna.cli.apply) so no launcher-hostile
 # variable is visible to any project import on the console-script path.
 from farna.launcher.env_safety import scrub_os_environment
 
@@ -59,7 +59,7 @@ _DEFAULT_COMMAND = "backup"
 _PACKAGE_NAME = "farna-control"
 
 # Canonical sensitive-field vocabulary (single source of truth: FAR-2305).
-# ``modulo env``, ``modulo doctor --report`` and the support bundle all
+# ``farna-control env``, ``farna-control doctor --report`` and the support bundle all
 # classify through ``modulo.core.secret_patterns`` so a credential carrier can
 # never be redacted in one surface and leaked in another.
 _WHOLESALE_REDACT_FIELDS = WHOLESALE_REDACT_FIELDS
@@ -102,7 +102,7 @@ class ModuloGroup(click.Group):
     is_eager=True,
     expose_value=False,
     callback=lambda ctx, _param, value: _eager_version(ctx, value),
-    help="Print the modulo version and exit.",
+    help="Print the Farna Control version and exit.",
 )
 def cli() -> None:
     """Farna Control command line: start/stop/status plus backup and restore."""
@@ -342,7 +342,7 @@ def status(data_dir: Path | None, as_json: bool) -> None:
     degraded = payload.get("degraded")
     if isinstance(degraded, dict):
         click.echo(f"DEGRADED: {degraded.get('reason')}")
-        click.echo("resume with: modulo start --clear-degraded")
+        click.echo("resume with: farna-control start --clear-degraded")
     click.echo(f"initialized: {payload.get('initialized', False)}")
     launcher = payload.get("launcher")
     if isinstance(launcher, dict):
@@ -441,7 +441,7 @@ def _build_doctor_report(data_dir: Path, report_path: Path, doctor_output: str) 
 def _launcher_data_dir_or_none(data_dir: Path | None) -> Path | None:
     """The launcher data dir when this host has one, else ``None``.
 
-    ``modulo support`` must work in a container (no launcher, no data dir), so a
+    ``farna-control support`` must work in a container (no launcher, no data dir), so a
     resolution failure degrades to the launcher-less bundle rather than erroring.
     """
     if data_dir is not None:
@@ -604,7 +604,7 @@ def _rotate_log_or_exit(resolved: Path, path: Path, component: str) -> None:
     holder = _read_lock_holder(lock_path)
     if holder is not None and _pid_alive(holder.pid):
         click.echo(
-            "refused: the launcher is still running — rotating launcher.log while the launcher holds it open for appending would redirect writes into the rotated-away inode. Stop the launcher (`modulo stop`) first, then re-run `modulo logs --rotate`.",
+            "refused: the launcher is still running — rotating launcher.log while the launcher holds it open for appending would redirect writes into the rotated-away inode. Stop the launcher (`farna-control stop`) first, then re-run `farna-control logs --rotate`.",
             err=True,
         )
         raise SystemExit(1)
@@ -732,7 +732,7 @@ def service_status(data_dir: Path | None) -> None:
     help="Data dir override (default: the per-OS launcher root).",
 )
 def clear_degraded_cmd(data_dir: Path | None) -> None:
-    """Clear a persisted terminal-degraded state so `modulo start` can resume."""
+    """Clear a persisted terminal-degraded state so `farna-control start` can resume."""
     _scrub_for_launcher_command()
     from farna.launcher.supervisor import DEGRADED_FILENAME, clear_degraded_record
 
@@ -742,7 +742,7 @@ def clear_degraded_cmd(data_dir: Path | None) -> None:
     except OSError as exc:
         raise click.ClickException(f"could not clear the degraded state: {exc}") from exc
     if removed:
-        click.echo(f"terminal-degraded state cleared ({path}) — `modulo start` can resume")
+        click.echo(f"terminal-degraded state cleared ({path}) — `farna-control start` can resume")
     else:
         click.echo("no terminal-degraded state present")
 

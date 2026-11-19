@@ -3,7 +3,7 @@
 Two delivery mechanisms share ONE composition core:
 
 * :func:`write_pinned_env_file` writes the composed config as a 0600 dotenv
-  file inside the data dir; the entry pins it via ``modulo.settings
+  file inside the data dir; the entry pins it via ``farna.settings
   .pin_env_file`` so every ``get_settings()`` call (the API, the SAQ
   children's settings, the CLI) sees the bundled endpoints through the
   standard dotenv source — real environment variables outrank it and field
@@ -16,7 +16,7 @@ Two delivery mechanisms share ONE composition core:
   shadow an explicit operator environment variable.
 
 IMPORT HYGIENE (locked by tests): this module must NOT import
-``modulo.settings`` at module import time — the source is installed ONLY by
+``farna.settings`` at module import time — the source is installed ONLY by
 the native launcher, after the environment scrub and the config pin.
 
 The composed values contain credentials (the generated passwords embedded

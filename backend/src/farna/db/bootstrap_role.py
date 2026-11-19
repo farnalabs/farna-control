@@ -409,7 +409,7 @@ async def _assert_role_posture(conn: asyncpg.Connection, app_user: str) -> None:
     The message is deliberately ACTIONABLE: a posture failure is a security
     regression (a privileged app role bypasses tenant isolation), not a
     transient blip, so the operator must be told which role is wrong and how
-    to repair it rather than only that an assertion failed. ``modulo doctor``
+    to repair it rather than only that an assertion failed. ``farna-control doctor``
     reports the same violation list through the same predicate.
     """
     violations = await _find_allow_list_violations(conn, app_user)
@@ -419,7 +419,7 @@ async def _assert_role_posture(conn: asyncpg.Connection, app_user: str) -> None:
             " (for the bundled install, farna_control_app: NOSUPERUSER, NOBYPASSRLS) and DATABASE_ADMIN_URL the cluster"
             " owner/migration role (farna_control). The bootstrap re-applies the accounts UPDATE"
             " allow-list on every boot; restart the app with both URLs provisioned, then run"
-            " `modulo doctor` to confirm the posture."
+            " `farna-control doctor` to confirm the posture."
         )
 
 
