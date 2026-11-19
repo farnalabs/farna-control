@@ -166,6 +166,16 @@ def test_non_systemd_host_refuses_and_names_the_manager(tmp_path: Path) -> None:
         assert_systemd_available(runner, marker_path=missing_marker)
 
 
+def test_systemd_probe_oserror_names_the_missing_manager(tmp_path: Path) -> None:
+    missing_marker = tmp_path / "no-systemd-here"
+
+    def _raising(_argv: list[str]) -> subprocess.CompletedProcess[str]:
+        raise OSError("systemctl not found")
+
+    with pytest.raises(ServiceError, match=r"probing `systemctl --user` failed"):
+        assert_systemd_available(_raising, marker_path=missing_marker)
+
+
 def test_systemd_marker_present_short_circuits(tmp_path: Path) -> None:
     marker = tmp_path / "systemd-system"
     marker.mkdir()
