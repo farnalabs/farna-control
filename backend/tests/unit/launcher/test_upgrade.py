@@ -324,6 +324,31 @@ def test_pre_upgrade_dump_adopts_a_legacy_owner_role_before_dumping(tmp_path: Pa
     assert calls == [{"host": "127.0.0.1", "port": 15432, "password": "pw"}]
 
 
+def test_pre_upgrade_dump_surfaces_an_owner_role_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An adoption REFUSAL aborts the dump with its own diagnosis.
+
+    When neither owner role accepts the credential, the adoption already knows
+    exactly why. Logging that as a warning and letting pg_dump fail with a
+    generic authentication error would hide the only actionable cause, so the
+    upgrade aborts with it instead.
+    """
+    from farna.launcher.initdb import InitdbError
+
+    _allow_windows_secrets(monkeypatch)
+    data_dir = _seed_data_dir(tmp_path)
+
+    async def _refuse(**kwargs: object) -> bool:
+        raise InitdbError("Neither the canonical owner role nor the legacy bundle owner role accepted")
+
+    with (
+        patch("farna.launcher.initdb.adopt_legacy_owner_role", new=_refuse),
+        pytest.raises(UpgradeError, match="owner role cannot be resolved"),
+    ):
+        pre_upgrade_dump(data_dir)
+
+    assert not list(data_dir.glob("pre-upgrade-dump-*"))
+
+
 def test_state_with_last_backup_stamps_v2(tmp_path: Path) -> None:
     """FAR-672 forward-compat: the optional field stamps v2 so an OLD
     launcher refuses via the DESIGNED version gate (a clear "written by a

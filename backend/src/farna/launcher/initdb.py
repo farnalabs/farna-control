@@ -311,8 +311,11 @@ async def adopt_legacy_owner_role(
     ``28000`` invalid-authorization a trust/md5 cluster would return. Treating
     ``28P01`` as a hard credential error, or trying the legacy role first,
     makes a fresh install fail to boot. If neither role accepts the
-    secrets-file password the boot fails loudly rather than guessing the owner
-    credential. ``connect`` is a test seam for ``asyncpg.connect``.
+    secrets-file password the boot fails loudly rather than guessing the
+    owner credential. A cluster with BOTH names, where only the legacy one
+    accepts the password, cannot be adopted (a rename cannot overwrite a taken
+    name) and refuses with the reconciliation. ``connect`` is a test seam for
+    ``asyncpg.connect``.
     """
     import asyncpg  # asyncpg does not publish a py.typed marker
 
@@ -350,8 +353,20 @@ async def adopt_legacy_owner_role(
     try:
         canonical_exists = await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname = $1", OWNER_ROLE)
         if canonical_exists:
-            # Both roles exist: do not rename over an operator-managed role.
-            return False
+            # Both names exist, and the canonical role did NOT accept the
+            # secrets-file password — that rejection is why this legacy
+            # connection is the live one. A rename is impossible while the
+            # target name is taken, so the cluster cannot be adopted
+            # automatically: fail with the reconciliation instead of letting
+            # the boot die later on a bare authentication error.
+            raise InitdbError(
+                f"The bundled cluster has BOTH owner roles ({OWNER_ROLE!r} and the pre-FAR-2570 "
+                f"{LEGACY_OWNER_ROLE!r}), but only {LEGACY_OWNER_ROLE!r} accepted the secrets-file "
+                f"password, and {OWNER_ROLE!r} cannot be renamed onto. Reconcile the cluster: either "
+                f"drop the stray {OWNER_ROLE!r} role and re-run `modulo start` (the boot then renames "
+                f"{LEGACY_OWNER_ROLE!r}), or point the data dir's secrets file at the existing "
+                f"{OWNER_ROLE!r} credential."
+            )
         # nosemgrep: raw-sql-fstring (both names are module constants)
         await conn.execute(f'ALTER ROLE "{LEGACY_OWNER_ROLE}" RENAME TO "{OWNER_ROLE}"')
         return True

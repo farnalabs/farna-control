@@ -510,24 +510,30 @@ async def test_adopt_legacy_owner_role_is_a_noop_on_a_fresh_install() -> None:
     assert conn.closed is True
 
 
-async def test_adopt_legacy_owner_role_never_renames_over_an_existing_owner() -> None:
-    """Both roles present (operator-managed): leave them untouched."""
+async def test_adopt_legacy_owner_role_refuses_both_roles_when_only_the_legacy_one_accepts() -> None:
+    """Both names exist but only ``modulo`` takes the secrets-file password.
+
+    A rename cannot overwrite a taken name and the canonical role cannot be
+    connected as, so the cluster cannot be adopted automatically. Returning
+    False here would let the boot die later on a bare authentication error —
+    the operator must be told which two roles disagree and how to reconcile.
+    """
     conn = _RoleConn(canonical_exists=True)
     seen: list[str] = []
 
-    adopted = await adopt_legacy_owner_role(
-        host="127.0.0.1",
-        port=15432,
-        password="pw",
-        connect=_scram_connector(
-            conn,
-            seen,
-            present={OWNER_ROLE, LEGACY_OWNER_ROLE},
-            rejected={OWNER_ROLE},
-        ),
-    )
+    with pytest.raises(InitdbError, match="BOTH owner roles"):
+        await adopt_legacy_owner_role(
+            host="127.0.0.1",
+            port=15432,
+            password="pw",
+            connect=_scram_connector(
+                conn,
+                seen,
+                present={OWNER_ROLE, LEGACY_OWNER_ROLE},
+                rejected={OWNER_ROLE},
+            ),
+        )
 
-    assert adopted is False
     assert not conn.executed
     assert conn.closed is True
 
