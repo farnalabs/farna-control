@@ -1257,34 +1257,46 @@ def _owner_admin_urls(admin_url: str) -> list[str]:
     return [admin_url, legacy_url]
 
 
+async def _connect_owner(admin_url: str) -> Any:
+    """Connect as the cluster OWNER, falling back once to the legacy role.
+
+    The canonical owner (``farna_control``) is tried first. Only when it is
+    ABSENT (``InvalidAuthorizationSpecificationError``) is the pre-FAR-2570
+    legacy owner (``modulo``) tried — its rename happens on the next boot, and
+    the doctor must still report on a not-yet-adopted cluster. A password
+    mismatch is never retried under another name: it means the secrets file
+    matches neither role, so the actionable error is surfaced immediately.
+    """
+    import asyncpg  # asyncpg does not publish a py.typed marker
+
+    from farna.db.bootstrap_role import _asyncpg_admin_connect
+
+    candidates = _owner_admin_urls(admin_url)
+    dsn, ssl_arg = _asyncpg_admin_connect(candidates[0])
+    try:
+        return await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+    except asyncpg.InvalidPasswordError:
+        raise
+    except asyncpg.InvalidAuthorizationSpecificationError:
+        if len(candidates) == 1:
+            raise
+    # Canonical owner absent on a not-yet-adopted legacy cluster (FAR-2570).
+    dsn, ssl_arg = _asyncpg_admin_connect(candidates[1])
+    return await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
+
+
 def _probe_postgres_admin(composed: dict[str, str]) -> None:
     """Admin probe: raise when the bundled Postgres is not reachable."""
     admin_url = composed.get("DATABASE_ADMIN_URL") or ""
     if not admin_url:
         raise RuntimeError("no composed DATABASE_ADMIN_URL (state/secrets unavailable)")
-    import asyncpg  # asyncpg does not publish a py.typed marker
-
-    from farna.db.bootstrap_role import _asyncpg_admin_connect
 
     async def _go() -> None:
-        last_exc: Exception | None = None
-        for candidate in _owner_admin_urls(admin_url):
-            dsn, ssl_arg = _asyncpg_admin_connect(candidate)
-            try:
-                conn = await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
-            except asyncpg.InvalidPasswordError:
-                raise
-            except asyncpg.InvalidAuthorizationSpecificationError as exc:
-                # Canonical owner absent on a not-yet-adopted legacy cluster.
-                last_exc = exc
-                continue
-            try:
-                await conn.fetchval("SELECT 1")
-            finally:
-                await conn.close()
-            return
-        if last_exc is not None:
-            raise last_exc
+        conn = await _connect_owner(admin_url)
+        try:
+            await conn.fetchval("SELECT 1")
+        finally:
+            await conn.close()
 
     asyncio.run(_go())
 
@@ -1295,33 +1307,14 @@ def _probe_role_posture_violations(composed: dict[str, str]) -> list[str]:
     app_url = composed.get("DATABASE_URL") or ""
     if not admin_url or not app_url:
         raise RuntimeError("no composed database URLs (state/secrets unavailable)")
-    import asyncpg
-
-    from farna.db.bootstrap_role import (
-        _asyncpg_admin_connect,
-        _find_allow_list_violations,
-        _parse_role,
-    )
+    from farna.db.bootstrap_role import _find_allow_list_violations, _parse_role
 
     async def _go() -> list[str]:
-        last_exc: Exception | None = None
-        for candidate in _owner_admin_urls(admin_url):
-            dsn, ssl_arg = _asyncpg_admin_connect(candidate)
-            try:
-                conn = await asyncpg.connect(dsn, ssl=ssl_arg, timeout=5)
-            except asyncpg.InvalidPasswordError:
-                raise
-            except asyncpg.InvalidAuthorizationSpecificationError as exc:
-                # Canonical owner absent on a not-yet-adopted legacy cluster.
-                last_exc = exc
-                continue
-            try:
-                return list(await _find_allow_list_violations(conn, _parse_role(app_url)))
-            finally:
-                await conn.close()
-        if last_exc is not None:
-            raise last_exc
-        return []
+        conn = await _connect_owner(admin_url)
+        try:
+            return list(await _find_allow_list_violations(conn, _parse_role(app_url)))
+        finally:
+            await conn.close()
 
     return asyncio.run(_go())
 

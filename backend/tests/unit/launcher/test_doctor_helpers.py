@@ -30,6 +30,8 @@ from farna.launcher.doctor import (
     _owner_admin_urls,
     _parse_listeners_from_proc,
     _password_from_url,
+    _probe_postgres_admin,
+    _probe_role_posture_violations,
     _state_problem_kind,
     check_cwd_env_influence,
     check_migrations,
@@ -404,3 +406,125 @@ def test_owner_admin_urls_falls_back_to_the_legacy_owner_role() -> None:
 def test_owner_admin_urls_does_not_add_a_fallback_for_a_non_owner_url() -> None:
     url = "postgresql+asyncpg://farna_control_app:pw@127.0.0.1:15432/farna_control"
     assert _owner_admin_urls(url) == [url]
+
+
+# ---------------------------------------------------------------------------
+# FAR-2570: owner connect — canonical role first, legacy fallback, or raise
+# ---------------------------------------------------------------------------
+
+_OWNER_ADMIN = "postgresql+asyncpg://farna_control:pw@127.0.0.1:15432/farna_control"
+_NON_OWNER_ADMIN = "postgresql+asyncpg://farna_control_app:pw@127.0.0.1:15432/farna_control"
+
+
+class _ProbeConn:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def fetchval(self, _query: str) -> int:
+        return 1
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _FakeProbeAsyncpg:
+    """asyncpg module stand-in: ``connect`` consumes queued outcomes in order.
+
+    An outcome that is an ``Exception`` instance is raised; any other outcome
+    is a successful connect that yields a fresh ``_ProbeConn``.
+    """
+
+    class InvalidAuthorizationSpecificationError(Exception):
+        pass
+
+    class InvalidPasswordError(InvalidAuthorizationSpecificationError):
+        pass
+
+    def __init__(self, outcomes: list[object]) -> None:
+        self._outcomes = list(outcomes)
+        self.conns: list[_ProbeConn] = []
+
+    async def connect(self, _dsn: str, **_kwargs: object) -> _ProbeConn:
+        outcome = self._outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        conn = _ProbeConn()
+        self.conns.append(conn)
+        return conn
+
+
+def _fake_probe_asyncpg(monkeypatch: pytest.MonkeyPatch, outcomes: list[object]) -> _FakeProbeAsyncpg:
+    fake = _FakeProbeAsyncpg(outcomes)
+    monkeypatch.setitem(sys.modules, "asyncpg", fake)
+    monkeypatch.setattr(bootstrap_role, "_asyncpg_admin_connect", lambda _url: ("dsn", None))
+    return fake
+
+
+def test_owner_admin_urls_without_userinfo_has_no_fallback() -> None:
+    url = "postgresql+asyncpg://127.0.0.1:15432/farna_control"
+    assert _owner_admin_urls(url) == [url]
+
+
+def test_probe_postgres_admin_falls_back_to_the_legacy_owner_when_canonical_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A not-yet-adopted legacy cluster rejects the canonical owner with 28000;
+    the probe then connects as the legacy role the next boot renames."""
+    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"), object()])
+
+    _probe_postgres_admin({"DATABASE_ADMIN_URL": _OWNER_ADMIN})
+
+    assert len(fake.conns) == 1
+    assert fake.conns[0].closed is True
+
+
+def test_probe_postgres_admin_does_not_retry_a_password_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 28P01 means the secrets file matches neither role; never guess the
+    owner credential by retrying the legacy name."""
+    err = _FakeProbeAsyncpg.InvalidPasswordError("28P01")
+    fake = _fake_probe_asyncpg(monkeypatch, [err])
+
+    with pytest.raises(_FakeProbeAsyncpg.InvalidPasswordError):
+        _probe_postgres_admin({"DATABASE_ADMIN_URL": _OWNER_ADMIN})
+
+    assert not fake.conns
+
+
+def test_probe_postgres_admin_raises_when_only_a_non_owner_url_is_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a canonical-owner URL there is no legacy name to derive, so an
+    absent role is reported rather than masked."""
+    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000")])
+
+    with pytest.raises(_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError):
+        _probe_postgres_admin({"DATABASE_ADMIN_URL": _NON_OWNER_ADMIN})
+
+    assert not fake.conns
+
+
+def test_probe_role_violations_falls_back_to_the_legacy_owner_when_canonical_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _fake_probe_asyncpg(monkeypatch, [_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"), object()])
+
+    async def _no_violations(_conn: object, _role: object) -> list[str]:
+        return []
+
+    monkeypatch.setattr(bootstrap_role, "_find_allow_list_violations", _no_violations)
+    monkeypatch.setattr(bootstrap_role, "_parse_role", lambda _url: "farna_control_app")
+
+    violations = _probe_role_posture_violations({"DATABASE_ADMIN_URL": _OWNER_ADMIN, "DATABASE_URL": _NON_OWNER_ADMIN})
+
+    assert not violations
+    assert len(fake.conns) == 1
+    assert fake.conns[0].closed is True
+
+
+def test_probe_role_violations_raises_when_both_owner_names_are_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _fake_probe_asyncpg(
+        monkeypatch,
+        [
+            _FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"),
+            _FakeProbeAsyncpg.InvalidAuthorizationSpecificationError("28000"),
+        ],
+    )
+
+    with pytest.raises(_FakeProbeAsyncpg.InvalidAuthorizationSpecificationError):
+        _probe_role_posture_violations({"DATABASE_ADMIN_URL": _OWNER_ADMIN, "DATABASE_URL": _NON_OWNER_ADMIN})
+
+    assert not fake.conns

@@ -135,7 +135,8 @@ def test_compose_config_admin_url_names_the_role_legacy_adoption_creates() -> No
     composed = compose_config(_state(), _secrets())
     admin_user = urlsplit(composed["DATABASE_ADMIN_URL"]).username
 
-    assert admin_user == OWNER_ROLE == BOOTSTRAP_USERNAME
+    assert admin_user == OWNER_ROLE
+    assert admin_user == BOOTSTRAP_USERNAME
     assert admin_user != LEGACY_OWNER_ROLE
 
 

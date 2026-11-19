@@ -481,7 +481,7 @@ async def test_adopt_legacy_owner_role_never_renames_over_an_existing_owner() ->
     adopted = await adopt_legacy_owner_role(host="127.0.0.1", port=15432, password="pw", connect=_recording_connector(conn, seen))
 
     assert adopted is False
-    assert conn.executed == []
+    assert not conn.executed
     assert conn.closed is True
 
 
