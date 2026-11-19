@@ -39,14 +39,12 @@ report, so you can read the summary before opening the zip.
 
 If the install itself failed, there is no `farna-control` binary to run yet. The
 installer prints a delimited support block as its final output on failure and
-keeps the full transcript under `~/.local/state/farna-control/install-*.log`; send
-both the block and the log file. Both the transcript and the block are landing
-in this milestone. Until they are in your build, capture the installer output
-yourself:
-
-```bash
-bash scripts/install.sh 2>&1 | tee install.log
-```
+keeps the full transcript under `~/.local/state/farna-control/install-*.log`
+(the newest five logs are retained and each is size-capped); send both the block
+and the log file it names. The block always answers the target, the failing
+stage, the absolute log path and an 8-hex support reference that also appears
+in the log filename. The installer redacts credential-shaped values before they
+reach the terminal, the log or the block.
 
 ### Docker Compose
 
@@ -157,9 +155,8 @@ might carry a credential, a `withheld: <member> - <n> item(s) removed
 (<reason>)` line appears there too: the bundle still builds, minus that named
 item.
 
-The run, error-group and installer lines are landing in this milestone.
-On an older build, `farna-control doctor --report` prints
-`diagnostic report written: <path>` and does not print the reference.
+All three lines ship today. `farna-control doctor --report` also prints
+`diagnostic report written: <path>` and keeps the doctor exit status.
 
 Send the line before you build anything. Between them the lines usually answer
 the first questions: which version and install shape you are on, which

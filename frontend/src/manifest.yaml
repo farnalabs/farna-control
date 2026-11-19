@@ -259,7 +259,7 @@ routes:
         name: run-detail
         breadcrumb: Run Detail
         parent: /runs
-        product_map: [feat-runs]
+        product_map: [feat-runs, feat-support]
         sidebar_group: build
         sidebar_order: 8
         type: detail_page
@@ -801,7 +801,7 @@ routes:
         name: admin-errors
         breadcrumb: Error Dashboard
         parent: /
-        product_map: [feat-observability]
+        product_map: [feat-observability, feat-support]
         sidebar_group: monitor
         sidebar_order: 1
         type: list_page
@@ -812,7 +812,7 @@ routes:
         name: admin-error-detail
         breadcrumb: Error Detail
         parent: /admin/errors
-        product_map: [feat-observability]
+        product_map: [feat-observability, feat-support]
         sidebar_group: admin
         sidebar_order: 2
         type: detail_page
@@ -8560,6 +8560,24 @@ features:
         deferrals:
             - IdP-initiated SSO and ACS paths are exercised with the XML-signature step mocked (xmlsec cannot sign/verify round-trip on this Windows host); a Linux CI job with a real signed response would close the gap
             - SAML single logout (SLO) is not implemented yet (SCIM user/group provisioning and deprovisioning ship API-only and are tracked under feat-scim)
+    feat-support:
+        description: Canonical support references and redacted, bounded support bundles
+        status: covered
+        behaviours:
+            - "[x] A failed run exposes one canonical support reference built by the shared buildRunSupportReference helper: the FULL run id, pipeline id (plus the name when known), status, error code (none when absent) and an url <origin>/runs/<run_id> line derived from the serving origin (trailing slashes removed, omitted when no origin exists). The run detail page copies it in one action and reports a clipboard failure instead of silently doing nothing (frontend/src/lib/supportReference.ts, frontend/src/views/RunDetailView.vue; supportReference.spec.ts, RunDetailShare.spec.ts, RunDetailView.spec.ts)"
+            - "[x] An error group exposes one canonical support reference built by buildErrorGroupSupportReference: group id, fingerprint, level and count, plus the source segment only when the caller has one (the list payload does not). The Error Dashboard rows and the error detail page copy it through the same helper so the surfaces cannot drift (frontend/src/views/AdminErrorsView.vue, frontend/src/views/AdminErrorDetailView.vue; AdminErrorsView.spec.ts, AdminErrorDetailView.spec.ts)"
+            - "[x] farna-control support builds the redacted bundle and prints the pasteable ref line, absolute path and byte size, the instruction to open the bundle before sending, and one missing/withheld line per affected member; --out chooses the destination, --json emits one machine-readable object, --data-dir selects the launcher data dir, and the default destination is ./modulo-support-<ref>.zip carrying the same per-run ref as the archive (backend/src/farna/cli/main.py; test_support_command.py)"
+            - "[x] farna-control doctor --report PATH writes the same v1 redacted bundle format (the historical narrow report is an import shim now), keeps the doctor exit status rather than the report status, and prints diagnostic report written: <path> so a non-zero exit is not mistaken for a missing report (backend/src/farna/launcher/doctor_report.py, backend/src/farna/cli/main.py; test_doctor_report.py, test_bundle.py)"
+            - "[x] The bundle is a versioned zip with a FIXED member allowlist: MANIFEST.txt, report.json, version.txt, doctor.txt, health.json, settings.txt, deployment.txt, db.txt, errors.json, runs.json, licence.txt, degraded.json and well-formed logs/<component>.log.tail members. Any other member shape is refused at assembly time, and a new member needs a format-version change (backend/src/farna/support/bundle.py; test_bundle.py::test_golden_member_set_is_exact, test_support_coverage_gaps.py)"
+            - "[x] Bundle contents are bounded and honest: settings carry a full key inventory with values only for a reviewed safe-list and set/unset for everything else, the licence member never carries the key, database and run members carry counts/identity rather than rows or payloads, and log tails collapse consecutive repeats and cap bytes and lines. Over the compressed size cap logs are truncated and the truncation is recorded; if it still exceeds the cap the build refuses rather than writing an oversized archive (backend/src/farna/support/bundle.py; test_bundle.py, test_support_coverage_gaps.py)"
+            - "[x] Redaction is five ordered layers and fails closed: the fixed member allowlist; exact-value scrubbing of generated Settings and launcher secrets including percent-encoded forms; structural sensitive KEY=value scrubbing through the canonical classifier; shared secret-shape patterns (tokens, URL userinfo, private keys, JWTs); and a post-assembly gate that re-scans every member and withholds the offending item (or a small invariant member whole), records the withholding in MANIFEST.txt/report.json and keeps the rest of the bundle. An unattributable trip, or a member that still looks secret-bearing, aborts the build and writes NO zip; the one entropy exemption is a content-hashed build asset filename, scoped narrowly so a credential in a URL path is still caught (backend/src/farna/support/redaction.py; test_bundle.py, test_bundle_withholding.py)"
+            - "[x] Docker Compose has its own collector, scripts/support-bundle.sh: it writes one zip (default modulo-support-bundle-<UTC>.zip), works with the stack down by recording the app-level half as missing, merges the in-container module bundle when reachable, never reads .env or secrets.json, never dumps interpolated docker compose config, and pipes Docker log output through the module's own redaction (withholding the member when that filter cannot run) (scripts/support-bundle.sh; backend/tests/unit/scripts/test_support_bundle_sh.py)"
+            - "[x] A failed native install leaves a diagnosable artefact before any farna-control binary exists: the installer tees its transcript to ~/.local/state/farna-control/install-<UTC>-<ref>.log (state dir 0700, log 0600, newest five retained, size-capped), redacts credential-shaped values, and prints one delimited support block LAST on every failure path naming the target, failing stage, absolute log path and an 8-hex support reference that also appears in the log filename. A successful run prints no block and exit codes are unchanged (scripts/install.sh; backend/tests/unit/scripts/test_install_support_block.py)"
+            - "[x] Kubernetes / Helm needs no extra install: the same module runs inside the backend pod (python -m farna.support.bundle --out ...) and the bundle is copied out with kubectl cp, with cluster facts and raw logs captured via kubectl alongside it (docs/support.md)"
+        deferrals:
+            - The bundle is generated by the CLI, the Compose collector script or an in-pod module invocation; there is no HTTP/API or in-product download route and nothing is uploaded automatically
+            - The format is v1 with a fixed member list, so adding a member is a deliberate format-version change rather than an additive field
+            - Kubernetes has no bundled Helm job/chart for collection; the operator runs the documented kubectl exec / kubectl cp steps
     feat-system-config:
         description: System-level configuration administration
         status: covered
