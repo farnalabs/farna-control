@@ -165,7 +165,7 @@ routes:
     /pipelines/copy:
         name: pipeline-copy
         breadcrumb: Copy Pipeline
-        parent: /library
+        parent: /pipelines
         product_map: [feat-pipelines]
         sidebar_group:
         sidebar_order:

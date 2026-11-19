@@ -101,7 +101,7 @@ import { OverlayScrollbarsComponent } from "overlayscrollbars-vue";
 import SidebarLink from "./SidebarLink.vue";
 import SidebarGroup from "./SidebarGroup.vue";
 
-import { getVisibleNavGroups } from "../config/navigation";
+import { getVisibleNavGroups, isNavItemActive } from "../config/navigation";
 import type { NavGroup } from "../config/navigation";
 import { useNavVisibilityContext } from "../composables/useNavVisibilityContext";
 import { useSidebar } from "../composables/useSidebar";
@@ -160,10 +160,9 @@ function groupToggleLabel(group: NavGroup): string {
 
 const activeGroupIds = computed(() => {
   const ids = new Set<string>()
-  const path = route.path
   for (const group of visibleSidebarGroups.value) {
     for (const item of group.items) {
-      if (item.exact ? path === item.to : path.startsWith(item.to)) {
+      if (isNavItemActive(item, route)) {
         ids.add(group.id)
         break
       }
