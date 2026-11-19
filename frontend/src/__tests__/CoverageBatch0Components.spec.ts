@@ -107,6 +107,27 @@ describe('LogoMark', () => {
     expect(svg.find('rect').exists()).toBe(false)
     expect(svg.findAll('polygon')).toHaveLength(2)
   })
+
+  it('renders the canonical two-tone mark: ink hexagons, accent diagonal (FAR-2582)', () => {
+    // The canonical brand mark is multi-colour: the hexagons carry the
+    // foreground ink and only the diagonal stroke carries the accent (resolved
+    // per theme by the .logo-mark-accent helper in style.css). A monochrome
+    // mark is the brand's fallback for media that cannot carry colour.
+    const wrapper = mount(LogoMark, { props: { transparent: true } })
+    const accent = wrapper.get('line')
+    expect(accent.classes()).toContain('logo-mark-accent')
+    const hexagons = wrapper.findAll('polygon')
+    expect(hexagons[0].classes()).not.toContain('logo-mark-accent')
+    expect(hexagons[1].classes()).not.toContain('logo-mark-accent')
+    // Transparent rendering draws the ink with the theme foreground.
+    expect(wrapper.get('svg').classes()).toContain('text-foreground')
+
+    // The opaque plate keeps the brand dark-bg ink (ink-50, #E8EDF2) rather
+    // than pure white, so the hexagons are the canonical ink on both surfaces.
+    const opaque = mount(LogoMark)
+    expect(opaque.get('svg').classes()).toContain('text-ink-50')
+    expect(opaque.get('rect').classes()).toContain('text-ink-900')
+  })
 })
 
 describe('DataTable', () => {

@@ -132,7 +132,12 @@ async function runAutoLogin(navigateHome = false): Promise<boolean> {
         // Non-critical: error tracker user context is best-effort
       }
     }
-    if (navigateHome) router.push('/')
+    // FAR-2582: await the navigation so auto-login's success is only reported
+    // once the shell has actually left whatever public route it mounted on.
+    // setAccessToken fires onAuthChange synchronously, so the shell (and its
+    // navbar) is already rendering while this navigation is in flight — the
+    // AppLayout content guard covers that window.
+    if (navigateHome) await router.push('/')
     return true
   } catch {
     // Silent — fall back to login screen

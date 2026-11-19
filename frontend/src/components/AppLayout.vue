@@ -55,7 +55,35 @@
         </div>
       </div>
       <Breadcrumb class="px-6 pt-4 pb-3" />
-      <router-view v-slot="{ Component, route }">
+      <!--
+        FAR-2582: the authenticated shell must NEVER paint a public credential
+        route in its content region. `setAccessToken()` flips App's
+        `isAuthenticated` synchronously, so AppLayout mounts (and the navbar
+        renders) while `router.currentRoute` is still the route we are leaving —
+        `/login`, `/login/:slug` or `/auth/callback`. Without this guard the
+        login form (email/password inputs) paints for the duration of the
+        dashboard navigation, which is a visible flash. Render a neutral
+        placeholder instead until the navigation settles.
+
+        Only credential routes are suppressed. `/oauth/authorize` and
+        `/accept-invite` are ALSO public routes but legitimately render inside
+        the shell for a signed-in visitor (browser consent, invite enrollment),
+        so they are deliberately absent from the set.
+      -->
+      <div
+        v-if="suppressesRoutedContent"
+        class="flex items-center justify-center py-16"
+        aria-live="polite"
+        aria-busy="true"
+        data-shell-content-loading
+      >
+        <span class="sr-only">{{ $t('common.loading') }}</span>
+        <div
+          class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
+          aria-hidden="true"
+        />
+      </div>
+      <router-view v-else v-slot="{ Component, route }">
         <transition name="page" mode="out-in" @after-enter="focusRouteContent">
           <component :is="Component" :key="route.fullPath" />
         </transition>
@@ -233,6 +261,21 @@ provide(LICENCE_STATUS_INJECTION_KEY, {
 
 const route = useRoute();
 const router = useRouter();
+
+// FAR-2582: routes that present a credential/login surface and must never be
+// rendered inside the authenticated content region. AppLayout only ever mounts
+// for an authenticated session (App.vue owns the auth gate), so membership of
+// the current route here is the whole condition: a missing entry leaves the
+// shell rendering that public view while the post-login navigation is still in
+// flight. `/oauth/authorize` and `/accept-invite` are public but legitimately
+// render authenticated — see the template comment.
+const CREDENTIAL_ROUTE_NAMES: ReadonlySet<string> = new Set([
+  "login",
+  "org-login",
+  "auth-callback",
+]);
+
+const suppressesRoutedContent = computed(() => CREDENTIAL_ROUTE_NAMES.has(route.name as string));
 
 /**
  * Send the administrator to the licence key input from anywhere in the app.

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, useRoute } from 'vue-router'
 import { nextTick } from 'vue'
 import { focusRouteContent } from '../../router'
 
@@ -484,6 +484,95 @@ describe('AppLayout main-window scrolling (FAR-2365)', () => {
     expect(shell.classList.contains('min-h-screen')).toBe(false)
     expect(main.classes()).toContain('min-h-0')
     expect(main.classes()).toContain('overflow-y-auto')
+    wrapper.unmount()
+  })
+})
+
+describe('AppLayout authenticated content guard (FAR-2582)', () => {
+  // Stands in for <router-view>: it WOULD paint the credential form the user
+  // just submitted, so the moment the guard stops suppressing the routed view
+  // these inputs reappear and the assertions below fail.
+  const credentialRouteStub = {
+    name: 'CredentialRouteStub',
+    template:
+      '<form><input data-testid="login-email" /><input type="password" data-testid="login-password" /></form>',
+  }
+
+  // The suite's global vue-router mock (src/__tests__/setup.ts) returns one
+  // shared route object from `useRoute()`. `setAccessToken()` flips the shell's
+  // auth state synchronously, so the shell is mounted while the current route
+  // is still the one being left — pin that route here.
+  const useRouteMock = vi.mocked(useRoute)
+
+  function setCurrentRoute(name: string | null) {
+    useRouteMock.mockReturnValue({
+      path: '/',
+      fullPath: '/',
+      params: {},
+      query: {},
+      hash: '',
+      matched: [],
+      name,
+      redirectedFrom: undefined,
+      meta: {},
+    } as unknown as ReturnType<typeof useRoute>)
+  }
+
+  async function mountShell() {
+    const wrapper = mount(AppLayout, {
+      global: {
+        plugins: [createPinia()],
+        stubs: { LogoMark: true, 'router-view': credentialRouteStub },
+      },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  afterEach(() => {
+    // Restore the setup mock's neutral (unnamed) route so the next test in this
+    // file is not left on a credential route.
+    setCurrentRoute(null)
+  })
+
+  it.each(['login', 'org-login', 'auth-callback'])(
+    'renders a neutral placeholder instead of the routed credential view while the shell is authenticated (%s)',
+    async (routeName) => {
+      setCurrentRoute(routeName)
+      const wrapper = await mountShell()
+
+      // The credential inputs never reach the authenticated content region...
+      expect(wrapper.find('[data-testid="login-email"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="login-password"]').exists()).toBe(false)
+      // ...a neutral placeholder stands in for the routed view...
+      expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(true)
+      // ...and the navbar keeps rendering (Duncan's stated expectation).
+      expect(wrapper.find('aside').exists()).toBe(true)
+
+      wrapper.unmount()
+    },
+  )
+
+  it('renders routed content once the shell is on a private route', async () => {
+    setCurrentRoute('dashboard')
+    const wrapper = await mountShell()
+
+    expect(wrapper.find('[data-testid="login-email"]').exists()).toBe(true)
+    expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('does not suppress a public route that legitimately renders authenticated', async () => {
+    // /oauth/authorize is public so an anonymous visitor can land on it, but a
+    // SIGNED-IN visitor reaches the consent screen inside the shell — blanking
+    // it would break the flow.
+    setCurrentRoute('oauth-authorize')
+    const wrapper = await mountShell()
+
+    expect(wrapper.find('[data-testid="login-email"]').exists()).toBe(true)
+    expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(false)
+
     wrapper.unmount()
   })
 })

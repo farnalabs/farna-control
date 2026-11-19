@@ -751,6 +751,24 @@ select option {
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
 }
 
+/* FAR-2582: the canonical brand mark's accent stroke.
+   LogoMark draws its hexagons in `currentColor` and only the diagonal line in
+   the accent colour, so that one line is the whole theme-aware surface. The
+   accent must be the brand accent for the surface it sits on: the neon accent
+   (#00FFD0) on dark/agent, the deep teal (#03816C) on light. Light mode reuses
+   --primary, whose light value IS that deep teal; --accent-bright carries the
+   neon value in both themes, so it is the dark default and light overrides it.
+   Unlayered on purpose: a CSS declaration on the element beats the inherited
+   `stroke="currentColor"` of the SVG group without touching presentation
+   attributes. */
+.logo-mark-accent {
+  stroke: hsl(var(--accent-bright));
+}
+
+.light .logo-mark-accent {
+  stroke: hsl(var(--primary));
+}
+
 /* FAR-2537: mobile layout primitives (see docs/frontend-mobile-layout.md).
    Unlayered on purpose: unlayered rules beat every @layer, so these win over
    the `h-screen` utility without depending on utility ordering. */

@@ -246,7 +246,11 @@ const { loading: loadingLogin, error: loginError, mutate: login } = useMutation(
   loginPrefs.setLastOrgSlug(slug)
   loginPrefs.setLastMethod('password')
   lastUsedMethod.value = 'password'
-  router.push('/')
+  // FAR-2582: setAccessToken flips the shell's auth state synchronously, so the
+  // shell is already mounted while this navigation resolves. Await it so the
+  // mutation reports success only once the route has settled — AppLayout's
+  // content guard suppresses this credential form for that window.
+  await router.push('/')
   return data
 })
 </script>
