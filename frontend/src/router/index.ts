@@ -1082,7 +1082,17 @@ async function enforceRouteFeatureFlag(
   return true
 }
 
+/**
+ * FAR-2594: the fullPath of the navigation currently being resolved.
+ *
+ * A failed lazy route-chunk fetch ABORTS the navigation, so `currentRoute` is
+ * still the page the user is looking at. Recovery has to retry the
+ * DESTINATION, which is only known from the attempted navigation.
+ */
+let _chunkRetryTarget: string | null = null
+
 router.beforeEach(async (to) => {
+  _chunkRetryTarget = to.fullPath
   try {
     // FAR-535 demo auto-login: /demo never renders as a page. The guard owns
     // the hand-off so it runs pre-mount — main.ts awaits router.isReady()
@@ -1123,23 +1133,57 @@ router.beforeEach(async (to) => {
   }
 })
 
+/**
+ * FAR-2594: a route's lazy chunk can be missing even though the SPA itself is
+ * running. Every deploy replaces the hashed asset filenames, and a tab left
+ * open across one keeps the OLD index.html in memory (index.html is served
+ * `no-cache`, but the SPA never re-fetches it until a document load), so any
+ * route the user had not visited yet requests a chunk that now 404s. The
+ * failure surfaces only as a console error and the click looks like it did
+ * nothing, which is exactly how "none of the buttons on the Costs page work"
+ * was reported (FAR-2594).
+ *
+ * The previous recovery retried `router.currentRoute` — the page the user is
+ * already on — which cannot retry the failed chunk at all, and the retry's
+ * own `afterEach` reset the counter, so `window.location.reload()` was
+ * unreachable and the app stayed wedged for the life of the tab.
+ */
+const CHUNK_LOAD_ERROR =
+  /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically|ChunkLoadError/i
+
+/** In-app retries before falling back to a hard document load. */
+const CHUNK_RETRY_LIMIT = 1
+
 let _chunkRetryCount = 0
-router.afterEach((to) => {
-  _chunkRetryCount = 0
+router.afterEach((to, _from, failure) => {
+  // Only a navigation that actually landed proves the chunks are healthy.
+  // A failed (or duplicated) navigation must NOT refill the budget: that is
+  // what made the hard-load fallback unreachable.
+  if (!failure) {
+    _chunkRetryCount = 0
+  }
   document.title = documentTitleFor(to.meta)
 })
 router.onError((err) => {
   console.error('[router] navigation error:', err)
-  const msg = formatApiError(err)
-  if (/Failed to fetch|error loading dynamically|ChunkLoadError/i.test(msg)) {
-    if (_chunkRetryCount < 2) {
-      _chunkRetryCount++
-      const route = router.currentRoute.value
-      router.replace(route.fullPath).catch(() => {})
-      return
-    }
-    window.location.reload()
+  if (!CHUNK_LOAD_ERROR.test(formatApiError(err))) return
+
+  // No target means the failure did not come from a navigation (e.g. an
+  // optimistic preload); there is nothing to recover.
+  const target = _chunkRetryTarget
+  if (!target) return
+
+  if (_chunkRetryCount < CHUNK_RETRY_LIMIT) {
+    _chunkRetryCount += 1
+    // Retry the DESTINATION, never `router.currentRoute` (see above).
+    router.replace(target).catch(() => {})
+    return
   }
+
+  // Budget exhausted: this document's chunk map is stale. Only a full load
+  // picks up the current index.html and its chunk filenames; `reload()` would
+  // drop the user back on the page they are already stuck on.
+  window.location.assign(target)
 })
 
 export default router
