@@ -80,13 +80,19 @@ events into typed notification payloads; and in-app notifications stream over SS
       (delivered / failed / dead_lettered); a "Dead Lettered" line says the
       delivery gave up after the final attempt and that a retry starts a fresh
       attempt; the empty state distinguishes "no deliveries yet" from "no
-      deliveries match these filters"; and a banner warns when
-      `GET /api/v1/notifications` reports zero endpoints, with an "Add a webhook
-      endpoint" link to `/settings/teams` (omitted when `team_rbac` is
-      inactive). The endpoint signal is read from the endpoint list, never
-      inferred from the delivery log — a soft-deleted endpoint leaves its
-      historical deliveries behind — and the fetch fails open, so an error or
-      unexpected body renders no banner.
+      deliveries match these filters". The "No outbound notification webhooks
+      are configured" banner is shown ONLY when `GET /api/v1/notifications`
+      reports zero endpoints AND the log is empty — its copy is forward-looking
+      ("New deliveries appear once you add an endpoint"), it links to
+      `/settings/teams` (omitted when `team_rbac` is inactive) and carries a
+      secondary line telling an org with no team to create one first. An empty
+      endpoint list alongside retained history (a deleted webhook keeps its
+      rows) shows a quieter history notice instead, so the page never claims
+      "nothing will appear here" above a populated table. The endpoint signal is
+      read from the endpoint list, never inferred from the delivery log, and is
+      ONE tri-state (`unknown` / `none` / `configured`): a failed or malformed
+      read stays `unknown` and renders no claim at all, so no empty state is
+      ever shown before the read resolves.
 - [x] In-app notifications stream over SSE with a dashboard panel, per-user filters and a
       dismiss flow (`in_app_notifications/*.feature`, `test_in_app_notifications.py`)
 - [x] Email delivery settings and message sending are configured under `/settings/email`
@@ -219,6 +225,17 @@ coverage gate is satisfied by that test rather than by deleting the branch.
       version negotiation.
 
 ## QA History
+- 2026-11-20: **FAR-2596 pre-PR QA — the banner can no longer contradict the
+  table.** `GET /api/v1/notifications` excludes soft-deleted endpoints while the
+  log deliberately keeps their delivery rows, so an operator who deleted their
+  last webhook saw "Nothing will appear here until you add one" directly above
+  a table of retained history. The banner now renders only when the log is also
+  empty, its copy is forward-looking, and an empty endpoint list with history
+  shows a quieter notice. Also fixed in the same pass: the endpoint read is ONE
+  tri-state (`unknown` / `none` / `configured`) so no empty state is rendered
+  before it resolves, and a secondary line under the CTA tells an org with no
+  team to create one first (endpoints are created per team). Pinned by the
+  retained-history regression test, which fails with the old banner condition.
 - 2026-11-20: **FAR-2596 follow-up — the page is now strictly outbound.** The
   first slice's banner claim ("Nothing will appear here until you add one") was
   false for an org with in-app error-alert rules: the error-tracking alert

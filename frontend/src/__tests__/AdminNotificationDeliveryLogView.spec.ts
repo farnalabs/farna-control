@@ -166,7 +166,7 @@ describe('AdminNotificationDeliveryLogView', () => {
     expect(wrapper.find('[data-testid="admin-notification-log-empty-reset"]').exists()).toBe(false)
   })
 
-  it('warns when no outbound webhook endpoints are configured (FAR-2596)', async () => {
+  it('warns when no outbound webhook endpoints are configured and the log is empty (FAR-2596)', async () => {
     withEndpoints([])
     const wrapper = mountView()
     await flushPromises()
@@ -175,8 +175,11 @@ describe('AdminNotificationDeliveryLogView', () => {
     const banner = wrapper.find('[data-testid="admin-notification-log-no-endpoints"]')
     expect(banner.exists()).toBe(true)
     expect(banner.text()).toContain('No outbound notification webhooks are configured')
-    expect(banner.text()).toContain('Nothing will appear here until you add one')
+    // Forward-looking, never absolute: the claim "nothing will appear here"
+    // is false as soon as history exists (see the retained-history test).
+    expect(banner.text()).toContain('New deliveries appear once you add an endpoint')
     expect(banner.text()).toContain('run failures, HITL deadlines, budget alerts or capacity warnings')
+    expect(wrapper.text()).not.toContain('Nothing will appear here')
 
     // The warning is announced, not merely rendered: the live region is
     // mounted unconditionally so the appearing banner is picked up.
@@ -185,6 +188,61 @@ describe('AdminNotificationDeliveryLogView', () => {
     // The "your webhooks are configured" empty state would contradict the
     // banner, so it is withheld rather than shown underneath it.
     expect(wrapper.find('[data-testid="admin-notification-log-empty"]').exists()).toBe(false)
+  })
+
+  it('never claims nothing will appear while retained delivery history exists (FAR-2596)', async () => {
+    // The exact production shape that made the old copy false: an operator
+    // deleted their last webhook, so GET /api/v1/notifications is empty, while
+    // the delivery log still holds the history (endpoint_id nulled).
+    mockGet().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/notifications/available-events') {
+        return Promise.resolve({ data: mockAvailableEvents, error: undefined })
+      }
+      if (url === '/api/v1/notifications') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({
+        data: {
+          items: [
+            {
+              id: '1',
+              event_type: 'run_failed',
+              status: 'delivered',
+              attempt_count: 1,
+              response_code: 200,
+              last_error: null,
+              response_body: null,
+              endpoint_url: null,
+              endpoint_id: null,
+              created_at: '2025-06-30T12:00:00Z',
+            },
+          ],
+          total: 1,
+          next_cursor: null,
+        },
+        error: undefined,
+      })
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await nextTick()
+
+    // No banner, and above all no absolute claim contradicting the table.
+    expect(wrapper.find('[data-testid="admin-notification-log-no-endpoints"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Nothing will appear here')
+
+    // A quieter, accurate notice instead.
+    const notice = wrapper.find('[data-testid="admin-notification-log-no-endpoints-history"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('No outbound webhooks are configured right now')
+    expect(notice.text()).toContain('history from webhooks that have since been deleted')
+
+    // The retained delivery row still renders (its endpoint is gone, so no URL).
+    const row = wrapper.find('tbody tr')
+    expect(row.exists()).toBe(true)
+    expect(row.text()).toContain('Run Failed')
+    expect(row.text()).toContain('—')
   })
 
   it('links the banner CTA to /settings/teams when team_rbac is active (FAR-2596)', async () => {
@@ -198,6 +256,13 @@ describe('AdminNotificationDeliveryLogView', () => {
     expect(cta.exists()).toBe(true)
     expect(cta.attributes('href')).toBe('/settings/teams')
     expect(cta.text()).toBe('Add a webhook endpoint')
+
+    // Endpoints are created per team: the CTA must say what to do first when
+    // the org has no team yet, or it dead-ends at a page with no team to add to.
+    const hint = wrapper.find('[data-testid="admin-notification-log-team-hint"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('Webhooks belong to a team')
+    expect(hint.text()).toContain('create one first')
   })
 
   it('withholds the banner CTA when team_rbac is inactive, rather than linking into a disabled gate (FAR-2596)', async () => {
@@ -210,22 +275,28 @@ describe('AdminNotificationDeliveryLogView', () => {
 
     expect(wrapper.find('[data-testid="admin-notification-log-no-endpoints"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="admin-notification-log-add-endpoint"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="admin-notification-log-team-hint"]').exists()).toBe(false)
   })
 
-  it('fails open when the endpoint list request errors (never a false warning)', async () => {
+  it('fails open when the endpoint list request errors (never a false warning or claim)', async () => {
     withEndpoints(undefined, { detail: 'boom' })
     const wrapper = mountView()
+    // First paint: the endpoint read has not resolved yet, so nothing is claimed.
+    expect(wrapper.find('[data-testid="admin-notification-log-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="admin-notification-log-no-endpoints"]').exists()).toBe(false)
+
     await flushPromises()
     await nextTick()
 
     expect(wrapper.find('[data-testid="admin-notification-log-no-endpoints"]').exists()).toBe(false)
-    // A failed best-effort endpoint read must not break the page it decorates.
+    // A failed best-effort endpoint read must not break the page it decorates...
     expect(wrapper.text()).not.toContain('boom')
-    const empty = wrapper.find('[data-testid="admin-notification-log-empty"]')
-    expect(empty.exists()).toBe(true)
-    // ...and it must not assert a configuration it could not verify.
-    expect(empty.text()).toContain('A row appears here each time a subscribed event fires.')
-    expect(empty.text()).not.toContain('Your webhooks are configured')
+    // ...and an `unknown` endpoint state renders no empty state at all: neither
+    // the warning nor "No deliveries yet" (which would assert a configuration
+    // that could not be verified).
+    expect(wrapper.find('[data-testid="admin-notification-log-empty"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('No deliveries yet')
+    expect(wrapper.text()).not.toContain('Your webhooks are configured')
   })
 
   it('fails open when the endpoint list body is not an array', async () => {
@@ -235,9 +306,8 @@ describe('AdminNotificationDeliveryLogView', () => {
     await nextTick()
 
     expect(wrapper.find('[data-testid="admin-notification-log-no-endpoints"]').exists()).toBe(false)
-    const empty = wrapper.find('[data-testid="admin-notification-log-empty"]')
-    expect(empty.exists()).toBe(true)
-    expect(empty.text()).not.toContain('Your webhooks are configured')
+    expect(wrapper.find('[data-testid="admin-notification-log-empty"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('No deliveries yet')
   })
 
   it('splits the filters empty state and resets the filters from it (FAR-2596)', async () => {

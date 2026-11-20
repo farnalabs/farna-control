@@ -10,7 +10,14 @@
 
     <!-- FAR-2596: the warning is announced through a PERSISTENTLY mounted
          live region, so it is announced when it appears rather than depending
-         on a just-inserted aria-live node being picked up by the AT. -->
+         on a just-inserted aria-live node being picked up by the AT.
+
+         The absolute "nothing will appear here" claim is made ONLY when the
+         log is empty as well. A deleted webhook drops out of
+         GET /api/v1/notifications while its delivery history stays in the log
+         (the FK is nulled, the rows are kept), so an empty endpoint list can
+         sit above a full table — in that case a quieter notice replaces the
+         banner rather than contradicting the rows beneath it. -->
     <div aria-live="polite">
       <div
         v-if="showNoEndpointsBanner"
@@ -23,15 +30,43 @@
         <p class="mt-1 text-sm text-muted-foreground">
           {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_body') }}
         </p>
+        <template v-if="canConfigureEndpoints">
+          <RouterLink
+            to="/settings/teams"
+            data-testid="admin-notification-log-add-endpoint"
+            class="mt-2 inline-block text-sm font-medium text-primary-text underline hover:no-underline"
+          >
+            {{ $t('views.AdminNotificationDeliveryLogView.add_webhook_endpoint') }}
+          </RouterLink>
+          <!-- Endpoints are created per team: the CTA dead-ends for an org
+               that has no team yet, so say what to do first. -->
+          <span
+            data-testid="admin-notification-log-team-hint"
+            class="mt-1 block text-xs text-muted-foreground"
+          >
+            {{ $t('views.AdminNotificationDeliveryLogView.add_endpoint_needs_team') }}
+          </span>
+        </template>
+      </div>
+
+      <p
+        v-else-if="showHistoryOnlyNotice"
+        data-testid="admin-notification-log-no-endpoints-history"
+        class="mb-4 text-sm text-muted-foreground"
+      >
+        {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_history') }}
         <RouterLink
           v-if="canConfigureEndpoints"
           to="/settings/teams"
           data-testid="admin-notification-log-add-endpoint"
-          class="mt-2 inline-block text-sm font-medium text-primary-text underline hover:no-underline"
+          class="font-medium text-primary-text underline hover:no-underline"
         >
           {{ $t('views.AdminNotificationDeliveryLogView.add_webhook_endpoint') }}
         </RouterLink>
-      </div>
+        <span v-if="canConfigureEndpoints" class="text-xs">
+          {{ $t('views.AdminNotificationDeliveryLogView.add_endpoint_needs_team_inline') }}
+        </span>
+      </p>
     </div>
 
     <DataCard variant="bordered" padding="md" elevation="sm">
@@ -183,19 +218,15 @@
        </button>
      </EmptyState>
 
-    <!-- FAR-2596: with no outbound endpoints configured the banner above is
-         the whole story, so the "your webhooks are configured" empty state is
-         deliberately withheld — it would claim a configuration that does not
-         exist. When the endpoint read failed (unknown), the neutral body is
-         used instead of the configuration claim: fail-open must not turn into
-         a false assertion either way. -->
+    <!-- FAR-2596: "No deliveries yet" is only rendered once the endpoint read
+         has positively resolved to `configured`. While the state is `unknown`
+         (still loading, failed, or a malformed body) nothing is claimed; when
+         it is `none` the banner above is the whole story. -->
     <EmptyState
-      v-else-if="items.length === 0 && !showNoEndpointsBanner"
+      v-else-if="items.length === 0 && endpointsConfigured"
       data-testid="admin-notification-log-empty"
       :title="$t('views.AdminNotificationDeliveryLogView.no_deliveries_yet_title')"
-      :description="endpointsConfigured
-        ? $t('views.AdminNotificationDeliveryLogView.no_deliveries_yet_body')
-        : $t('views.AdminNotificationDeliveryLogView.no_deliveries_yet_body_unverified')"
+      :description="$t('views.AdminNotificationDeliveryLogView.no_deliveries_yet_body')"
     />
 
     <template v-else>
@@ -354,7 +385,7 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
 import { formatApiError } from '../lib/api/formatError'
@@ -404,10 +435,7 @@ const { data: deliveriesData, loading, error, load: loadDeliveries } = useDataFe
 
 const items = computed(() => deliveriesData.value?.items ?? [])
 
-interface NotificationEndpointSummary {
-  id: string
-  url?: string
-}
+type EndpointState = 'unknown' | 'none' | 'configured'
 
 /**
  * FAR-2596 — "no outbound webhooks are configured" is read from the org's
@@ -417,42 +445,39 @@ interface NotificationEndpointSummary {
  * nothing has fired yet". This page lists outbound deliveries only; inbound
  * trigger webhooks are recorded on the Trigger Event Log.
  *
- * Best-effort and FAIL OPEN: this load never surfaces an error and never
- * touches the page's error state. Any transport failure, or a body that is not
- * an array, resolves to `null` ("unknown"), and the banner is rendered ONLY for
- * a positively-read empty array. A failed fetch can therefore never accuse the
- * operator of having no endpoints.
+ * ONE tri-state drives every surface that would otherwise guess, so no claim is
+ * rendered before the read resolves:
+ *
+ * - ``unknown``    — not resolved yet, or the read failed / returned an
+ *                    unexpected body. Fail open: no warning, and no
+ *                    "your webhooks are configured" claim either.
+ * - ``none``       — positively read an EMPTY list.
+ * - ``configured`` — positively read at least one endpoint.
  */
-const { data: endpoints } = useDataFetch<NotificationEndpointSummary[] | null>(
-  async () => {
-    try {
-      const response = await api.GET('/api/v1/notifications')
-      const body: unknown = response.data
-      return {
-        data: Array.isArray(body) ? (body as NotificationEndpointSummary[]) : null,
-        error: undefined,
-      }
-    } catch {
-      // Fail open: an unknown endpoint count is never a warning.
-      return { data: null, error: undefined }
-    }
-  },
-  { initialValue: null }
-)
-
-const noEndpointsConfigured = computed(
-  () => Array.isArray(endpoints.value) && endpoints.value.length === 0
-)
+const endpointState = ref<EndpointState>('unknown')
+const endpointsConfigured = computed(() => endpointState.value === 'configured')
+const noEndpointsConfigured = computed(() => endpointState.value === 'none')
 
 /**
- * Positively-read endpoints. Only this state may claim "your webhooks are
- * configured" — an unknown endpoint count (failed / malformed read) must not.
+ * Best-effort and FAIL OPEN: never surfaces an error and never touches the
+ * page's error state. A failure (or a body that is not an array) leaves the
+ * state ``unknown``, so it can never accuse the operator of having no
+ * endpoints.
  */
-const endpointsConfigured = computed(
-  () => Array.isArray(endpoints.value) && endpoints.value.length > 0
-)
+async function loadEndpoints(): Promise<void> {
+  try {
+    const response = await api.GET('/api/v1/notifications')
+    const body: unknown = response.data
+    if (!Array.isArray(body)) return
+    endpointState.value = body.length === 0 ? 'none' : 'configured'
+  } catch {
+    // Leave `unknown` — no claim either way.
+  }
+}
 
-const showNoEndpointsBanner = computed(() => noEndpointsConfigured.value)
+onMounted(() => {
+  void loadEndpoints()
+})
 
 /**
  * The empty state must distinguish "your webhooks are configured, nothing has
@@ -518,6 +543,21 @@ const eventTypeOptions = computed(() => [
   })),
 ])
 const total = computed(() => deliveriesData.value?.total ?? 0)
+
+/**
+ * FAR-2596: a deleted webhook disappears from the endpoint list while its
+ * delivery history stays in the log (the FK is nulled, the rows are kept), so
+ * the absolute "nothing will appear here" claim is only true when the LOG is
+ * empty too. With retained history a quieter notice replaces the banner rather
+ * than contradicting the table beneath it.
+ */
+const logIsEmpty = computed(() => items.value.length === 0 && total.value === 0)
+const showNoEndpointsBanner = computed(
+  () => noEndpointsConfigured.value && logIsEmpty.value && !loading.value
+)
+const showHistoryOnlyNotice = computed(
+  () => noEndpointsConfigured.value && !logIsEmpty.value
+)
 const nextCursor = computed(() => deliveriesData.value?.next_cursor ?? null)
 const prevCursor = computed(() => {
   const dc = deliveriesData.value
