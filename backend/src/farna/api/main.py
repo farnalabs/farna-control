@@ -756,7 +756,7 @@ async def _seed_environment_profiles(settings: Settings) -> None:
             session,
             org_id=org.id,
             name="modulo-dev",
-            description="Default sandbox for Modulo dogfood development. Python 3.12, git, pip.",
+            description="Default sandbox for Farna Control dogfood development. Python 3.12, git, pip.",
             provider_type="local_docker",
             image_ref="python:3.12-slim",
             capabilities=["git", "python>=3.12", "shell", "network:github.com", "network:pypi.org"],
@@ -1208,7 +1208,7 @@ async def _seed_tier_catalog() -> None:
 
 
 app = FastAPI(
-    title="Modulo",
+    title="Farna Control",
     description="Agent governance for your agentic SDLC",
     version="0.1.0",
     lifespan=_lifespan,

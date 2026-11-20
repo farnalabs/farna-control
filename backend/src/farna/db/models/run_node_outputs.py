@@ -53,9 +53,9 @@ them to ``jsonb`` on Postgres, so they are declared with
 JSONB_COL``) rather than a bare generic ``JSON`` — a bare ``JSON`` over a jsonb
 column binds equality/containment predicates as ``$1::JSON`` and Postgres
 raises ``operator does not exist: jsonb = json`` (FAR-1856's failure class).
-The alias keeps SQLite/MariaDB parity because the generic ``JSON`` is used on
-those dialects. JSONB is NOT migration-only in this repo — the alias lives in
-``db/models``. Sentinel constants live here (the DB layer) because core imports
+The alias keeps parity with the SQLite (test-only) backend because the generic
+``JSON`` is used there. JSONB is NOT migration-only in this repo — the alias
+lives in ``db/models``. Sentinel constants live here (the DB layer) because core imports
 db freely and the reverse is forbidden by importlinter.
 """
 

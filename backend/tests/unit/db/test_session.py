@@ -18,9 +18,9 @@ exactly once.
 factory's own contract so the overrides, per-backend knobs and singleton
 semantics can't silently drift:
 
-  * **Pool sizing** — postgres/mariadb get 20/10/1500/30 defaults; a caller's
-    ``pool_size``/``max_overflow`` wins; sqlite skips every pool knob
-    (aiosqlite has no real pool).
+  * **Pool sizing** — postgres gets 20/10/1500/30 defaults; a caller's
+    ``pool_size``/``max_overflow`` wins; sqlite (test-only) skips every pool
+    knob (aiosqlite has no real pool).
   * **Proxy-window recycle (FAR-1524)** — ``pool_recycle`` comes from
     ``Settings.db_pool_recycle_seconds`` and MUST stay strictly below the
     Fly HAProxy session inactivity window (``timeout client/server 30m`` =
@@ -31,8 +31,8 @@ semantics can't silently drift:
     additionally gets an explicit ``ssl`` value (``False`` when absent/
     ``disable``; the operator's ``require``/``verify-*`` string otherwise;
     ``prefer``/``allow``/unknown rejected — FAR-1440) +
-    ``statement_cache_size=0`` (asyncpg / HAProxy compat); mariadb/sqlite do
-    NOT get the asyncpg-only knobs.
+    ``statement_cache_size=0`` (asyncpg / HAProxy compat); sqlite (test-only)
+    does NOT get the asyncpg-only knobs.
   * **RLS reset hook** — registered on the engine for postgres only.
   * **Global hooks** — ``register_append_only_guard`` + ``register_tenant_filter``
     are process-global (engine-agnostic) and must run exactly once even under
@@ -61,7 +61,6 @@ from farna.settings import Settings
 
 POSTGRES_URL = "postgresql+asyncpg://u:p@localhost/db"
 SQLITE_URL = "sqlite+aiosqlite:///./test.db"
-MARIADB_URL = "mysql+aiomysql://u:p@localhost:3306/db"
 
 # Fly HAProxy in front of Postgres closes a session after 30 minutes of
 # inactivity (``timeout client 30m`` in /fly/haproxy.cfg). ``pool_recycle``
@@ -244,39 +243,9 @@ class TestBuildEngine:
         assert "ssl" not in kw["connect_args"]
         assert mock_create.return_value is engine
 
-    def test_mariadb_pool_knobs_without_asyncpg_knobs(self, session_mod: Any) -> None:
-        """MariaDB gets a real pool but must NOT get the asyncpg-only ssl/statement_cache args."""
-        with (
-            patch("farna.db.session.get_settings", return_value=_settings("mariadb", MARIADB_URL)),
-            patch("farna.db.session.create_async_engine") as mock_create,
-            patch("farna.db.session.register_rls_reset_hook"),
-        ):
-            session_mod._build_engine()
-
-        kw = mock_create.call_args[1]
-        assert kw["pool_size"] == 20
-        assert kw["max_overflow"] == 10
-        assert kw["pool_recycle"] == 1500
-        assert kw["pool_timeout"] == 30
-        assert kw["connect_args"] == {"timeout": 10}
-
-    def test_mysql_alias_matches_mariadb(self, session_mod: Any) -> None:
-        """The mysql alias is treated exactly like mariadb."""
-        with (
-            patch("farna.db.session.get_settings", return_value=_settings("mysql", MARIADB_URL)),
-            patch("farna.db.session.create_async_engine") as mock_create,
-            patch("farna.db.session.register_rls_reset_hook"),
-        ):
-            session_mod._build_engine()
-
-        kw = mock_create.call_args[1]
-        assert kw["connect_args"] == {"timeout": 10}
-        assert "ssl" not in kw["connect_args"]
-        assert "statement_cache_size" not in kw["connect_args"]
-
     def test_every_backend_gets_timeout_connect_arg(self, session_mod: Any) -> None:
         """timeout=10 is the one connect arg shared by all backends."""
-        for modulo_db, url in (("postgres", POSTGRES_URL), ("sqlite", SQLITE_URL), ("mariadb", MARIADB_URL)):
+        for modulo_db, url in (("postgres", POSTGRES_URL), ("sqlite", SQLITE_URL)):
             with (
                 patch("farna.db.session.get_settings", return_value=_settings(modulo_db, url)),
                 patch("farna.db.session.create_async_engine") as mock_create,
@@ -305,13 +274,11 @@ class TestPoolRecycleProxyWindowContract:
     """The engine must never hold a pooled connection longer than the Fly
     HAProxy session window, and pre-ping must stay enabled (FAR-1524)."""
 
-    @pytest.mark.parametrize("modulo_db", ["postgres", "mariadb"])
-    def test_default_recycle_sits_below_the_haproxy_idle_window(self, session_mod: Any, modulo_db: str) -> None:
+    def test_default_recycle_sits_below_the_haproxy_idle_window(self, session_mod: Any) -> None:
         """Default pool_recycle < 1800s — a pooled connection is recycled by
         SQLAlchemy BEFORE the proxy's 30m inactivity kill can strand it."""
-        url = POSTGRES_URL if modulo_db == "postgres" else MARIADB_URL
         with (
-            patch("farna.db.session.get_settings", return_value=_settings(modulo_db, url)),
+            patch("farna.db.session.get_settings", return_value=_settings("postgres", POSTGRES_URL)),
             patch("farna.db.session.create_async_engine") as mock_create,
             patch("farna.db.session.register_rls_reset_hook"),
         ):
@@ -394,18 +361,10 @@ class TestRlsResetHookRegistration:
         mock_hook.assert_called_once_with(engine)
         assert mock_hook.call_args[0][0] is mock_create.return_value
 
-    @pytest.mark.parametrize(
-        ("modulo_db", "url"),
-        [
-            pytest.param("sqlite", SQLITE_URL, id="sqlite"),
-            pytest.param("mariadb", MARIADB_URL, id="mariadb"),
-            pytest.param("mysql", MARIADB_URL, id="mysql"),
-        ],
-    )
-    def test_skipped_for_non_postgres(self, session_mod: Any, modulo_db: str, url: str) -> None:
+    def test_skipped_for_non_postgres(self, session_mod: Any) -> None:
         """The RLS reset hook is a Postgres pool concern — never registered elsewhere."""
         with (
-            patch("farna.db.session.get_settings", return_value=_settings(modulo_db, url)),
+            patch("farna.db.session.get_settings", return_value=_settings("sqlite", SQLITE_URL)),
             patch("farna.db.session.create_async_engine"),
             patch("farna.db.session.register_rls_reset_hook") as mock_hook,
         ):

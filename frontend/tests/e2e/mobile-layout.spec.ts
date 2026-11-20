@@ -109,7 +109,11 @@ const DEACTIVATED_ROUTES: Record<string, string> = {
 
 const DEACTIVATED_ROUTES_SET = new Set(Object.keys(DEACTIVATED_ROUTES))
 
-const NARROW_ROUTES = ['/login', '/', '/pipelines', '/schemas', '/analytics']
+// FAR-2598: /variants/compare joined the narrow sweep when its group dropdown
+// became a wide comparison-groups table — low-priority columns hide below their
+// DataTable breakpoints and the rest scrolls inside the table shell, so this
+// route must stay free of page-level horizontal overflow at 320/393/768.
+const NARROW_ROUTES = ['/login', '/', '/pipelines', '/schemas', '/analytics', '/variants/compare']
 
 function sanitizePath(p: string): string {
   return p.replace(/[^a-z0-9-]/gi, '_').replace(/^_+|_+$/g, '') || 'root'

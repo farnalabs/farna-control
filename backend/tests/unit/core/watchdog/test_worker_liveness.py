@@ -900,7 +900,7 @@ class TestMultiChannelAlertFanout:
         send.assert_called_once()
         call = send.call_args
         assert call.args[1] == ["ops@example.com", "alice@example.com"]
-        assert call.args[2] == "[Modulo Watchdog] Worker-liveness alert"
+        assert call.args[2] == "[Farna Control Watchdog] Worker-liveness alert"
         assert "<li>no live SAQ worker</li>" in call.args[3]
         assert "Detected at" in call.args[4]
 
@@ -1005,7 +1005,7 @@ class TestEdgeTriggeredAlertRecovery:
             )
 
         send.assert_called_once()
-        assert send.call_args.args[2] == "[Modulo Watchdog] Worker-liveness recovered"
+        assert send.call_args.args[2] == "[Farna Control Watchdog] Worker-liveness recovered"
         assert "recovered" in send.call_args.args[4]
         assert "no live SAQ worker" in send.call_args.args[3]
 

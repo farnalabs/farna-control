@@ -1,7 +1,8 @@
 """Unit tests covering multi-backend behaviour from multi_backend.feature scenarios.
 
-Verifies tenant isolation, migrations, locks, and time functions across Postgres,
-MariaDB, and SQLite backends.  Mirrors the BDD scenarios in:
+Verifies tenant isolation, migrations, locks, and time functions on PostgreSQL
+(the only supported runtime database, ADR 068) and SQLite (test-only). Mirrors
+the BDD scenarios in:
     backend/tests/bdd/features/organisation/multi_backend.feature
 """
 
@@ -63,16 +64,16 @@ def _make_stmt(*, entities: list | None = None) -> MagicMock:
 
 
 # ===========================================================================
-# Scenario 1-2: GenericRepository tenant filtering (SQLite / MariaDB)
+# Scenario 1-2: GenericRepository tenant filtering (SQLite, test-only)
 # ===========================================================================
 
 
 class TestGenericRepositoryTenantFilter:
     """Verify GenericRepository dispatches tenant filtering via session.info."""
 
-    @pytest.fixture(params=["sqlite", "mysql"])
-    def dialect(self, request: pytest.FixtureRequest) -> str:
-        return request.param
+    @pytest.fixture
+    def dialect(self) -> str:
+        return "sqlite"
 
     @pytest.fixture
     def repo(self) -> GenericRepository:
@@ -240,7 +241,7 @@ class TestCrossOrgIsolationGeneric:
 
 
 # ===========================================================================
-# Scenario 5: Alembic migration on all backends
+# Scenario 5: Alembic migration on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
 
@@ -251,11 +252,6 @@ class TestMigrationBackendConfig:
         from farna.db.migrations.env import _detect_backend
 
         assert _detect_backend("postgresql+asyncpg://user:pass@localhost/db") == "postgresql"
-
-    def test_detect_mysql(self) -> None:
-        from farna.db.migrations.env import _detect_backend
-
-        assert _detect_backend("mysql+aiomysql://user:pass@localhost/db") == "mysql"
 
     def test_detect_sqlite(self) -> None:
         from farna.db.migrations.env import _detect_backend
@@ -273,14 +269,6 @@ class TestMigrationBackendConfig:
         assert "+async" not in converted
         assert "psycopg2" in converted
 
-    @pytest.mark.parametrize("driver", ["aiomysql", "asyncmy"])
-    def test_async_mysql_driver_converts_to_pymysql(self, driver: str) -> None:
-        from farna.db.migrations.env import _to_sync_url
-
-        converted = _to_sync_url(f"mysql+{driver}://user:pass@localhost/db")
-        assert "+async" not in converted
-        assert "pymysql" in converted
-
     def test_sqlite_preserved_as_is(self) -> None:
         url = "sqlite:///test.db"
         assert "+async" not in url
@@ -295,12 +283,6 @@ class TestMigrationBackendConfig:
 
         backend = _detect_backend("postgresql+asyncpg://user:pass@localhost/db")
         assert backend == "postgresql"
-
-    def test_render_as_batch_disabled_for_mysql(self) -> None:
-        from farna.db.migrations.env import _detect_backend
-
-        backend = _detect_backend("mysql+aiomysql://user:pass@localhost/db")
-        assert backend == "mysql"
 
 
 # ===========================================================================
@@ -325,10 +307,6 @@ class TestAdvisoryLockAbstraction:
 
     def test_sqlite_lock_service_type(self) -> None:
         svc = _build_lock_service("sqlite")
-        assert isinstance(svc, GenericLock)
-
-    def test_mariadb_lock_service_type(self) -> None:
-        svc = _build_lock_service("mariadb")
         assert isinstance(svc, GenericLock)
 
     async def test_postgres_lock_calls_pg_try_advisory_lock(self) -> None:
@@ -441,15 +419,18 @@ class TestAdvisoryLockAbstraction:
 
 
 # ===========================================================================
-# Scenario 7: Time functions on all backends
+# Scenario 7: Time functions on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
 
 class TestTimeFunctionsMultiBackend:
-    """Verify func.now() / func.current_timestamp() work on all backends.
+    """Verify func.now() / func.current_timestamp() work on the supported pair.
 
-    The test validates that ORM models using SA-generic time functions are
-    backend-agnostic — no dialect-specific timestamp calls.
+    The supported pair is the SQLite test backend and PostgreSQL; those are the
+    only two dialects reachable at all, since SQLite is test-only and the
+    MySQL/MariaDB family is rejected at startup (ADR 068). The test validates
+    that ORM models using SA-generic time functions are backend-agnostic — no
+    dialect-specific timestamp calls.
     """
 
     def test_model_uses_sa_func_now_not_backend_specific(self) -> None:
@@ -496,20 +477,12 @@ class TestRepositoryHubDispatch:
         hub = RepositoryHub(session_factory=MagicMock(), db_type="sqlite")
         assert isinstance(hub.repo, GenericRepository)
 
-    def test_mariadb_repo_is_generic_repository(self) -> None:
-        hub = RepositoryHub(session_factory=MagicMock(), db_type="mariadb")
-        assert isinstance(hub.repo, GenericRepository)
-
     def test_postgres_lock_is_postgres_lock(self) -> None:
         hub = RepositoryHub(session_factory=MagicMock(), db_type="postgres")
         assert isinstance(hub.locks, PostgresLock)
 
     def test_sqlite_lock_is_generic_lock(self) -> None:
         hub = RepositoryHub(session_factory=MagicMock(), db_type="sqlite")
-        assert isinstance(hub.locks, GenericLock)
-
-    def test_mariadb_lock_is_generic_lock(self) -> None:
-        hub = RepositoryHub(session_factory=MagicMock(), db_type="mariadb")
         assert isinstance(hub.locks, GenericLock)
 
 
@@ -551,23 +524,6 @@ class TestRegisterTenantFilter:
         with patch("farna.db.rls.get_settings") as mock_get_settings:
             mock_settings = MagicMock(spec=Settings)
             mock_settings.modulo_db = "sqlite"
-            mock_get_settings.return_value = mock_settings
-
-            from farna.db.rls import register_tenant_filter
-
-            with patch("farna.db.rls.event.listen") as mock_listen:
-                register_tenant_filter()
-
-            mock_listen.assert_called_once()
-
-    def test_registers_for_mariadb(self) -> None:
-        from unittest.mock import patch
-
-        from farna.settings import Settings
-
-        with patch("farna.db.rls.get_settings") as mock_get_settings:
-            mock_settings = MagicMock(spec=Settings)
-            mock_settings.modulo_db = "mariadb"
             mock_get_settings.return_value = mock_settings
 
             from farna.db.rls import register_tenant_filter
@@ -648,18 +604,6 @@ class TestRegisterRlsResetHookSkip:
     def test_skips_for_sqlite(self) -> None:
         engine = MagicMock()
         engine.dialect.name = "sqlite"
-        engine.sync_engine = MagicMock()
-
-        from farna.db.rls import register_rls_reset_hook
-
-        with patch("farna.db.rls.event.listens_for") as mock_listens:
-            register_rls_reset_hook(engine)
-
-        mock_listens.assert_not_called()
-
-    def test_skips_for_mysql(self) -> None:
-        engine = MagicMock()
-        engine.dialect.name = "mysql"
         engine.sync_engine = MagicMock()
 
         from farna.db.rls import register_rls_reset_hook

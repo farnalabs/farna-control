@@ -184,7 +184,7 @@ class GiteaConnector(ConnectorBase):
                     path = payload.data["path"]
                     body: dict[str, Any] = {
                         "content": payload.data["content"],
-                        "message": payload.data.get("message", "Update via Modulo"),
+                        "message": payload.data.get("message", "Update via Farna Control"),
                     }
                     if payload.data.get("sha"):
                         body["sha"] = payload.data["sha"]

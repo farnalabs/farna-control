@@ -109,7 +109,8 @@ _NOTE_DRIFT = "Advisory only — a drift indicator never gates or blocks anythin
 
 # ---------------------------------------------------------------------------
 # Dialect-aware JSON field extraction (guardrail_summary_json is a generic
-# JSON column; per-field access differs between Postgres and SQLite/MariaDB)
+# JSON column; per-field access differs between Postgres and the SQLite
+# (test-only) backend)
 # ---------------------------------------------------------------------------
 
 
@@ -465,8 +466,9 @@ def _evasion_band_section(
 async def _maybe_apply_postgres_timeout(session: AsyncSession, settings: Settings) -> None:
     """Apply the analytics statement timeout + UTC timezone on Postgres only.
 
-    SQLite/MariaDB ignore these (and have no equivalent knobs), so this is a
-    no-op for non-Postgres dialects — callers gate on dialect before calling.
+    The SQLite (test-only) backend ignores these (and has no equivalent
+    knobs), so this is a no-op for non-Postgres dialects — callers gate on
+    dialect before calling.
     """
     timeout_ms = getattr(settings, "analytics_query_statement_timeout_ms", _DEFAULT_STATEMENT_TIMEOUT_MS)
     await session.execute(text(_SQL_SET_TIMEZONE_UTC))

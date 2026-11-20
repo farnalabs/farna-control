@@ -316,8 +316,8 @@ class TestRuntimeConfigStore:
             assert store.get("FARNA_CONTROL_DB") == "sqlite"
             entry = next(item for item in store.get_all() if item.key == "FARNA_CONTROL_DB")
             assert entry.provenance == "environment"
-            store.set_override("FARNA_CONTROL_DB", "mariadb")
-            assert store.get("FARNA_CONTROL_DB") == "mariadb"
+            store.set_override("FARNA_CONTROL_DB", "postgres")
+            assert store.get("FARNA_CONTROL_DB") == "postgres"
             entry = next(item for item in store.get_all() if item.key == "FARNA_CONTROL_DB")
             assert entry.provenance == "override"
 

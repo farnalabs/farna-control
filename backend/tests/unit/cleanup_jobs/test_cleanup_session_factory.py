@@ -17,7 +17,7 @@ class TestCleanupSessionFactory:
 
     PostgreSQL (RLS, farna_control_app NOBYPASSRLS) → the system session factory,
     still failing LOUD when ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` is unset.
-    Non-PostgreSQL (SQLite/MariaDB/MySQL — no RLS, no system role) → the
+    Non-PostgreSQL (SQLite, test-only — no RLS, no system role) → the
     plain factory; the system engine is never touched.
     """
 
@@ -33,7 +33,7 @@ class TestCleanupSessionFactory:
         mock_system.assert_called_once()
         assert factory is sentinel
 
-    @pytest.mark.parametrize("non_pg_db", ["sqlite", "mariadb", "mysql", "SQLite", "MariaDB"])
+    @pytest.mark.parametrize("non_pg_db", ["sqlite", "SQLite"])
     def test_non_postgres_uses_plain_factory(self, non_pg_db: str) -> None:
         sentinel = MagicMock(name="plain_factory")
 

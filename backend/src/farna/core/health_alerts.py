@@ -796,7 +796,7 @@ def _alert_html(settings: Settings, status: str, conditions: list[str], observed
     items = "".join(f"<li>{html.escape(condition)}</li>" for condition in conditions)
     return (
         "<html><body>"
-        "<h2>Modulo: readiness degraded</h2>"
+        "<h2>Farna Control: readiness degraded</h2>"
         f"<p>Readiness is now <strong>{html.escape(status)}</strong>. Failing checks:</p>"
         f"<ul>{items}</ul>"
         f"<p>Detected at {html.escape(observed_at)} on {html.escape(_host())}</p>"
@@ -808,7 +808,7 @@ def _alert_html(settings: Settings, status: str, conditions: list[str], observed
 
 
 def _alert_text(settings: Settings, status: str, conditions: list[str], observed_at: str) -> str:
-    return f"Modulo: readiness degraded\nReadiness is now {status}. Failing checks:\n" + "\n".join(f"- {condition}" for condition in conditions) + f"\nDetected at {observed_at} on {_host()}\n" + alert_context_text(settings)
+    return f"Farna Control: readiness degraded\nReadiness is now {status}. Failing checks:\n" + "\n".join(f"- {condition}" for condition in conditions) + f"\nDetected at {observed_at} on {_host()}\n" + alert_context_text(settings)
 
 
 def _split_cleared_conditions(
@@ -878,7 +878,7 @@ def _recovery_html(
 ) -> str:
     intro, items = _recovery_summary(cleared, still_failing, duration_seconds)
     list_html = "<ul>" + "".join(f"<li>{html.escape(item)}</li>" for item in items) + "</ul>" if items else ""
-    return f"<html><body><h2>Modulo: readiness recovered</h2><p>{html.escape(intro)}</p>{list_html}<p>Resolved at {html.escape(resolved_at)} on {html.escape(_host())}</p>{alert_context_html(settings)}</body></html>"
+    return f"<html><body><h2>Farna Control: readiness recovered</h2><p>{html.escape(intro)}</p>{list_html}<p>Resolved at {html.escape(resolved_at)} on {html.escape(_host())}</p>{alert_context_html(settings)}</body></html>"
 
 
 def _recovery_text(
@@ -892,7 +892,7 @@ def _recovery_text(
     listing = "\n".join(f"- {item}" for item in items)
     if listing:
         listing = f"\n{listing}"
-    return f"Modulo: readiness recovered\n{intro}{listing}\nResolved at {resolved_at} on {_host()}\n" + alert_context_text(settings)
+    return f"Farna Control: readiness recovered\n{intro}{listing}\nResolved at {resolved_at} on {_host()}\n" + alert_context_text(settings)
 
 
 async def _notify_alert(
@@ -916,7 +916,7 @@ async def _notify_alert(
     delivered = await sender(
         settings,
         recipients,
-        f"[Modulo] Readiness {status}",
+        f"[Farna Control] Readiness {status}",
         _alert_html(settings, status, conditions, observed_at),
         _alert_text(settings, status, conditions, observed_at),
     )
@@ -963,7 +963,7 @@ async def _notify_recovery(
     delivered = await sender(
         settings,
         recipients,
-        "[Modulo] Readiness recovered",
+        "[Farna Control] Readiness recovered",
         _recovery_html(settings, cleared, still_failing, duration_seconds, resolved_at),
         _recovery_text(settings, cleared, still_failing, duration_seconds, resolved_at),
     )

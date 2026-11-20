@@ -1,7 +1,7 @@
 """Registry service — Ed25519 signing, SHA-256 integrity, publish/pull protocol.
 
 Primitives are identified by ``author/name`` namespaced slugs.
-The in-memory built-in registry can be replaced with a hosted Modulo-operated
+The in-memory built-in registry can be replaced with a hosted Farna Control-operated
 registry in production.
 
 State of the art:
@@ -284,13 +284,13 @@ _BUILTIN_REGISTRY: dict[str, RegistryEntry] = {
             private_key=_registry_private,
         ),
         # -------------------------------------------------------------------
-        # Modulo dogfood pipeline primitives
+        # Farna Control dogfood pipeline primitives
         # -------------------------------------------------------------------
         _build_entry(
             author="modulo",
             name="github-issue-input-schema",
             primitive_type="schema",
-            description="Schema for a GitHub issue to be processed by the Modulo dogfood pipeline.",
+            description="Schema for a GitHub issue to be processed by the Farna Control dogfood pipeline.",
             tags=["schema", "github", "issue", "dogfood"],
             content_json={
                 "fields": [
@@ -384,7 +384,7 @@ _BUILTIN_REGISTRY: dict[str, RegistryEntry] = {
             author="modulo",
             name="modulo-dogfood-pipeline",
             primitive_type="workflow",
-            description=("End-to-end pipeline that builds Modulo from a GitHub issue: reads spec, generates code, applies changes, runs tests, and creates a PR with HITL review."),
+            description=("End-to-end pipeline that builds Farna Control from a GitHub issue: reads spec, generates code, applies changes, runs tests, and creates a PR with HITL review."),
             tags=["workflow", "dogfood", "modulo", "pipeline"],
             content_json={
                 "nodes": [
@@ -488,7 +488,7 @@ def publish_primitive(
 ) -> RegistryEntry:
     """Publish a new primitive to the registry (in-memory for alpha).
 
-    In production this would POST to the hosted Modulo registry API.
+    In production this would POST to the hosted Farna Control registry API.
     The signing key must correspond to the author's registered key.
     """
     _validate_registry_inputs(author, name, primitive_type, description, tags, content_json)
@@ -596,7 +596,7 @@ _publishers_lock = threading.Lock()
 _publishers: dict[str, Publisher] = {
     _registry_fingerprint: Publisher(
         author="modulo",
-        name="Modulo Team",
+        name="Farna Control Team",
         fingerprint=_registry_fingerprint,
         status=PUBLISHER_TRUST_VERIFIED,
         website="https://modulo.ai",

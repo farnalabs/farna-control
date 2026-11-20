@@ -3,8 +3,9 @@
 Every read and write of the ``run_node_outputs`` table goes through this
 module. It provides:
 
-* dialect-guarded upserts (Postgres/SQLite ``ON CONFLICT``; MariaDB explicitly
-  guarded out — no ``on_conflict`` support and deprecated) with an explicit
+* dialect-guarded upserts (Postgres/SQLite ``ON CONFLICT``; the MySQL/MariaDB
+  family explicitly guarded out — no ``on_conflict`` support, unsupported since
+  ADR 068) with an explicit
   ``updated_at = current_timestamp()`` in ``set_`` (the ``system_config``
   precedent: ``TimestampMixin.onupdate`` does not fire for Core upserts). The
   stamp is PER-ROW (FAR-2083): the ``DO UPDATE`` carries a ``WHERE`` that
@@ -458,8 +459,8 @@ def resolve_dialect(session: AsyncSession) -> str:
 def dialect_insert(dialect: str) -> Any:
     """Dialect-guarded insert factory with ON CONFLICT support.
 
-    MariaDB is explicitly guarded out: deprecated, untested, and its
-    ``INSERT ... ON DUPLICATE KEY UPDATE`` has different semantics.
+    The MySQL/MariaDB family is explicitly guarded out (ADR 068: unsupported),
+    and its ``INSERT ... ON DUPLICATE KEY UPDATE`` has different semantics.
     """
     if dialect == "postgresql":
         return pg_insert

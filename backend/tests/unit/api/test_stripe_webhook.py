@@ -639,7 +639,7 @@ class TestOperatorAlerts:
         mock_fulfil.assert_awaited_once()
         recipients, subject, _html, text = _sent(mock_send)
         assert recipients == ["ops@example.com"]
-        assert subject == "[Modulo Billing] New sale — 49.00 GBP — bob@acme.com"
+        assert subject == "[Farna Control Billing] New sale — 49.00 GBP — bob@acme.com"
         assert "Event: evt_sale (invoice.paid)" in text
         assert "Amount: 49.00 GBP (4,900 minor units)" in text
         assert "Dashboard: https://dashboard.stripe.com/invoices/in_evt_sale" in text
@@ -656,7 +656,7 @@ class TestOperatorAlerts:
         assert resp.status_code == 200
         mock_fulfil.assert_not_awaited()
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Checkout completed")
+        assert subject.startswith("[Farna Control Billing] Checkout completed")
         assert "Payment status: paid" in text
 
     def test_checkout_expired_alerts(self, alert_client: TestClient) -> None:
@@ -669,7 +669,7 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 200
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Checkout expired")
+        assert subject.startswith("[Farna Control Billing] Checkout expired")
         assert "Payment status: unpaid" in text
 
     def test_payment_intent_requires_action_alerts_with_the_next_action(self, alert_client: TestClient) -> None:
@@ -685,7 +685,7 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 200
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Payment requires action")
+        assert subject.startswith("[Farna Control Billing] Payment requires action")
         assert "Next action: use_stripe_sdk" in text
         assert "Dashboard: https://dashboard.stripe.com/payments/pi_evt_action" in text
 
@@ -710,7 +710,7 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 200
         _recipients, subject, html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Payment failed")
+        assert subject.startswith("[Farna Control Billing] Payment failed")
         assert "Failure detail: type=card_error, code=card_declined, decline_code=insufficient_funds" in text
         assert "4242424242424242" not in text
         assert "4242424242424242" not in html
@@ -723,7 +723,7 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 200
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Dispute opened")
+        assert subject.startswith("[Farna Control Billing] Dispute opened")
         assert "Dispute reason: fraudulent" in text
         assert "Dispute status: needs_response" in text
         assert "Dashboard: https://dashboard.stripe.com/disputes/dp_123" in text
@@ -736,7 +736,7 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 200
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Refund issued")
+        assert subject.startswith("[Farna Control Billing] Refund issued")
         assert "Amount: 49.00 GBP (4,900 minor units)" in text
         assert "Refunded: 49.00 GBP (4,900 minor units)" in text
         assert "Metadata starts_at: 2027-03-12" in text
@@ -775,7 +775,7 @@ class TestOperatorAlerts:
 
         assert resp.status_code == 200
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] Early fraud warning")
+        assert subject.startswith("[Farna Control Billing] Early fraud warning")
         assert "Fraud type: made_with_stolen_card" in text
         assert "Dashboard: https://dashboard.stripe.com/payments/pi_123" in text
 
@@ -939,7 +939,7 @@ class TestOperatorAlerts:
         assert resp.status_code == 422, resp.text
         mock_fulfil.assert_not_awaited()
         _recipients, subject, _html, text = _sent(mock_send)
-        assert subject.startswith("[Modulo Billing] ACTION REQUIRED New sale")
+        assert subject.startswith("[Farna Control Billing] ACTION REQUIRED New sale")
         assert "Note: The licence was NOT issued" in text
 
     def test_a_refused_starts_at_does_not_wait_for_a_hung_smtp_server(self, alert_client: TestClient) -> None:

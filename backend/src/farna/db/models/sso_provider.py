@@ -31,7 +31,7 @@ class SsoProvider(OrgScoped):
     # ("anyone who authenticates") which additionally requires the
     # sso_unrestricted_provisioning feature flag (default OFF). Physical jsonb
     # (0246); JSONB_COL keeps the ORM declaration honest while preserving
-    # SQLite/MariaDB parity.
+    # SQLite (test-only) parity.
     allowed_domains: Mapped[list[str]] = mapped_column(JSONB_COL, nullable=False, default=list, server_default="[]")
     default_role: Mapped[str] = mapped_column(String(32), default="runner", server_default="runner")
     group_mappings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB_COL, nullable=False, server_default="[]")

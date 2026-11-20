@@ -235,9 +235,9 @@ class TestDispatchEmail:
         assert sent_settings.smtp_port == 465
         assert sent_settings.email_from == "org@example.com"
         assert send.call_args.args[1] == ["admin@example.com"]
-        assert "[Modulo Alert] error: Test Rule" in send.call_args.args[2]
-        assert "View in Modulo" in send.call_args.args[3]
-        assert send.call_args.args[4].startswith("Modulo Alert: Test Rule")
+        assert "[Farna Control Alert] error: Test Rule" in send.call_args.args[2]
+        assert "View in Farna Control" in send.call_args.args[3]
+        assert send.call_args.args[4].startswith("Farna Control Alert: Test Rule")
 
     async def test_email_org_missing_uses_global_settings(self) -> None:
         account_id = uuid.uuid4()

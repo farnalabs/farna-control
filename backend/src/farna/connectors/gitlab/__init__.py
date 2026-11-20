@@ -1069,7 +1069,7 @@ class GitLabConnector(ConnectorBase):
         encoded = _project_path(project)
         branch = payload.data.get("ref", payload.data.get("branch", "main"))
         content = payload.data["content"]
-        message = payload.data.get("message", "Update via Modulo")
+        message = payload.data.get("message", "Update via Farna Control")
         explicit_sha = payload.data.get("sha")
         file_url = f"/projects/{encoded}/repository/files/{quote(path, safe='')}"
 
@@ -1176,7 +1176,7 @@ class GitLabConnector(ConnectorBase):
             raise ValueError(f"GitLab resource {payload.resource!r} requires a non-empty 'actions' list")
         commit_body: dict[str, Any] = {
             "branch": payload.data.get("ref", payload.data.get("branch", "main")),
-            "commit_message": payload.data.get("message", "Update via Modulo"),
+            "commit_message": payload.data.get("message", "Update via Farna Control"),
             "actions": [self._normalize_commit_action(a, payload.resource) for a in actions],
         }
         r = await self._call_api(
@@ -1198,7 +1198,7 @@ class GitLabConnector(ConnectorBase):
         if payload.data.get("sha"):
             delete_params["sha"] = payload.data["sha"]
         delete_body: dict[str, Any] = {
-            "commit_message": payload.data.get("message", f"Delete {path} via Modulo"),
+            "commit_message": payload.data.get("message", f"Delete {path} via Farna Control"),
         }
         r = await self._call_api(
             "DELETE",

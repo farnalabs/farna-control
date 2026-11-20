@@ -101,8 +101,8 @@ def _build_engine(
     # ``modulo_db`` is an independent knob defaulting to "postgres", so a
     # SQLite-configured process (schema generation, local dev) would otherwise
     # pass this branch and ``split_postgres_sslmode`` would fail the boot
-    # (FAR-1440 schema-freshness defect). SQLite/MySQL keep ``timeout`` only —
-    # their drivers have no ``ssl``/``statement_cache_size`` knobs.
+    # (FAR-1440 schema-freshness defect). The SQLite (test-only) backend keeps
+    # ``timeout`` only — aiosqlite has no ``ssl``/``statement_cache_size`` knobs.
     if str(make_url(url).drivername).startswith("postgres"):
         from farna.db.url_utils import split_postgres_sslmode
 

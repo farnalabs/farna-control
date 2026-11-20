@@ -19,7 +19,7 @@ class SpendAnomaly(OrgScoped):
         # rows describing the same day. Detection is org-level today (pipeline_id
         # is always NULL for detected rows), so the partial predicate scopes
         # uniqueness to that surface; postgresql_where is ignored by the
-        # conformance SQLite/MariaDB backends.
+        # conformance SQLite (test-only) backend.
         Index(
             "uq_spend_anomalies_org_date",
             "organisation_id",

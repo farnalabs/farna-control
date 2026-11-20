@@ -22,7 +22,6 @@ from farna.db.models import Base
 _log = logging.getLogger(__name__)
 
 _DRIVER_POSTGRES_SYNC = "postgresql+psycopg"
-_DRIVER_MYSQL_SYNC = "mysql+pymysql"
 _CONFIG_KEY_SQLALCHEMY_URL = "sqlalchemy.url"
 
 #: Raised when a code path needs alembic's ``config`` before it is populated.
@@ -45,14 +44,13 @@ _ERR_NO_MIGRATION_DATABASE_URL = (
     "is unrecoverable."
 )
 
+#: Async-driver → sync-driver map for the migration engine. PostgreSQL is the
+#: only supported runtime database (ADR 068); SQLite remains for the test suite.
 _DRIVER_MAP: dict[str, str] = {
     "postgresql+asyncpg": _DRIVER_POSTGRES_SYNC,
     "sqlite+aiosqlite": "sqlite",
-    "mysql+aiomysql": _DRIVER_MYSQL_SYNC,
-    "mysql+asyncmy": _DRIVER_MYSQL_SYNC,
     "postgresql": _DRIVER_POSTGRES_SYNC,
     "postgres": _DRIVER_POSTGRES_SYNC,
-    "mysql": _DRIVER_MYSQL_SYNC,
 }
 
 
@@ -105,8 +103,9 @@ def _migration_advisory_lock(engine: Engine, url: str) -> Iterator[None]:
     Uses ``pg_try_advisory_lock`` in a polling loop (per AGENTS.md: a bare
     ``pg_advisory_lock`` under a client timeout races server-side acquisition
     against the client). The lock is session-scoped and held on a dedicated
-    connection so it survives the migration transaction. Non-Postgres backends
-    (SQLite/MariaDB — dev-only) have no advisory locks and are skipped.
+    connection so it survives the migration transaction. The SQLite (test-only)
+    backend has no advisory locks, so it is skipped. PostgreSQL is the only
+    supported runtime database (ADR 068).
     """
     if not url.startswith("postgresql") or _lock_state.is_held_by_caller():
         yield
@@ -305,10 +304,14 @@ if config is not None:
 
 
 def _detect_backend(url: str) -> str:
+    """Classify a migration URL: ``postgresql``, ``sqlite`` (test-only) or ``unknown``.
+
+    PostgreSQL is the only supported runtime database (ADR 068). An unknown
+    scheme stays ``unknown`` rather than being coerced into a supported
+    backend.
+    """
     if url.startswith("postgresql"):
         return "postgresql"
-    if url.startswith("mysql"):
-        return "mysql"
     if url.startswith("sqlite"):
         return "sqlite"
     return "unknown"

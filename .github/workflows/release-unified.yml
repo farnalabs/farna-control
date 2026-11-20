@@ -2759,6 +2759,10 @@ jobs:
         env:
 
           DATABASE_URL: "sqlite+aiosqlite:///./modulo-gen-test.db"
+          # SQLite is the test/tooling backend only (ADR 068): Settings refuses a
+          # SQLite DSN unless BOTH halves of the test-only opt-in are set.
+          FARNA_CONTROL_DB: "sqlite"
+          FARNA_CONTROL_ALLOW_SQLITE: "1"
           SECRET_KEY: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           FERNET_KEY: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           FARNA_CONTROL_CSRF_ENABLED: "false"

@@ -543,7 +543,8 @@ def _drift_predicate(dialect: str) -> Any:
     across ticks instead of re-scanning the same already-reconciled window
     forever. Per-ref JSON element access is dialect-specific: ``jsonb_array_elements``
     + ``->>`` on Postgres (``work_item_refs`` is JSONB there), ``json_each`` +
-    ``json_extract`` on the generic JSON column used by SQLite/MariaDB. Each
+    ``json_extract`` on the generic JSON column used by the SQLite (test-only)
+    backend. Each
     ref element is LEFT JOINed to its journey; an element is drift when the
     join misses OR (for advancing runs only) the journey's ``updated_at`` is
     older than the run's ``completed_at``. ``Run`` is correlated to the outer

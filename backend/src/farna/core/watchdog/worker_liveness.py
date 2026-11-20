@@ -317,7 +317,7 @@ def _alert_text(settings: Settings, conditions: list[str]) -> str:
     — every text channel therefore carries the context exactly once and the
     three renderings can never drift apart.
     """
-    return "\U0001f6a8 *Modulo watchdog: worker-liveness alert*\n" + "\n".join(f"\u2022 {condition}" for condition in conditions) + f"\nDetected at {datetime.now(UTC).isoformat()} on {_hostname()}" + _alert_context_suffix(settings)
+    return "\U0001f6a8 *Farna Control watchdog: worker-liveness alert*\n" + "\n".join(f"\u2022 {condition}" for condition in conditions) + f"\nDetected at {datetime.now(UTC).isoformat()} on {_hostname()}" + _alert_context_suffix(settings)
 
 
 def _recovery_text(settings: Settings, state: dict[str, Any]) -> str:
@@ -329,7 +329,7 @@ def _recovery_text(settings: Settings, state: dict[str, Any]) -> str:
     prior_conditions = state.get("conditions") or []
     started_at = state.get("started_at")
     duration = f" for {(time.time() - float(started_at)):.0f}s" if started_at else ""
-    return "\u2705 *Modulo watchdog: worker-liveness recovered*\nThe following conditions have cleared" + duration + ":\n" + "\n".join(f"\u2022 {condition}" for condition in prior_conditions) + f"\nResolved at {datetime.now(UTC).isoformat()} on {_hostname()}" + _alert_context_suffix(settings)
+    return "\u2705 *Farna Control watchdog: worker-liveness recovered*\nThe following conditions have cleared" + duration + ":\n" + "\n".join(f"\u2022 {condition}" for condition in prior_conditions) + f"\nResolved at {datetime.now(UTC).isoformat()} on {_hostname()}" + _alert_context_suffix(settings)
 
 
 async def _post_webhook_payload(url: str, payload: bytes, channel: str) -> None:
@@ -381,8 +381,8 @@ async def _post_teams_webhook(settings: Settings, text: str) -> None:
         {
             "@type": "MessageCard",
             "@context": "http://schema.org/extensions",
-            "summary": "Modulo watchdog: worker-liveness alert",
-            "title": "Modulo watchdog: worker-liveness alert",
+            "summary": "Farna Control watchdog: worker-liveness alert",
+            "title": "Farna Control watchdog: worker-liveness alert",
             "text": text,
         }
     ).encode()
@@ -435,11 +435,11 @@ async def _send_email_alert(
     context_html = alert_context_html(settings)
 
     if recovery_state is not None:
-        subject = "[Modulo Watchdog] Worker-liveness recovered"
+        subject = "[Farna Control Watchdog] Worker-liveness recovered"
         prior = recovery_state.get("conditions") or []
         body_html = (
             "<html><body>"
-            "<h2>Modulo watchdog: worker-liveness recovered</h2>"
+            "<h2>Farna Control watchdog: worker-liveness recovered</h2>"
             "<p>The following worker-liveness conditions have cleared:</p>"
             "<ul>" + "".join(f"<li>{html.escape(condition)}</li>" for condition in prior) + "</ul>"
             f"<p>Resolved at {html.escape(datetime.now(UTC).isoformat())} "
@@ -447,10 +447,10 @@ async def _send_email_alert(
         )
         body_text = _recovery_text(settings, recovery_state)
     else:
-        subject = "[Modulo Watchdog] Worker-liveness alert"
+        subject = "[Farna Control Watchdog] Worker-liveness alert"
         body_html = (
             "<html><body>"
-            "<h2>Modulo watchdog: worker-liveness alert</h2>"
+            "<h2>Farna Control watchdog: worker-liveness alert</h2>"
             "<p>The in-process watchdog detected one or more worker-liveness conditions:</p>"
             "<ul>" + "".join(f"<li>{html.escape(condition)}</li>" for condition in conditions) + "</ul>"
             f"<p>Detected at {html.escape(datetime.now(UTC).isoformat())} "

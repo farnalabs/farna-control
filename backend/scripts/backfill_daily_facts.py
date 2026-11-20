@@ -49,8 +49,6 @@ def _normalise_async_url(raw: str) -> str:
     """Ensure the URL carries an async driver usable by ``create_async_engine``."""
     if raw.startswith(("postgresql://", "postgresql+psycopg://")):
         return raw.replace("postgresql://", "postgresql+asyncpg://").replace("postgresql+psycopg://", "postgresql+asyncpg://")
-    if raw.startswith(("mysql://", "mysql+pymysql://")):
-        return raw.replace("mysql://", "mysql+aiomysql://").replace("mysql+pymysql://", "mysql+aiomysql://")
     return raw
 
 

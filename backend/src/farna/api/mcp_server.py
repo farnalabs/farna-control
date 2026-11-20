@@ -2172,8 +2172,8 @@ class McpAuthMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 mcp = FastMCP(
-    name="Modulo",
-    instructions=("Modulo is agent governance for your agentic SDLC. Use create_pipeline to define new pipelines, trigger_pipeline to fire runs, get_run_status to track them, get_run_output to inspect node outputs, and review_hitl to handle human-in-the-loop gates."),
+    name="Farna Control",
+    instructions=("Farna Control is agent governance for your agentic SDLC. Use create_pipeline to define new pipelines, trigger_pipeline to fire runs, get_run_status to track them, get_run_output to inspect node outputs, and review_hitl to handle human-in-the-loop gates."),
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",

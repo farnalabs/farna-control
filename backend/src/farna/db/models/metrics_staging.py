@@ -38,7 +38,7 @@ class MetricsStaging(OrgScoped):
     event_id: Mapped[str] = mapped_column(String(128), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     # Physical jsonb (0121); JSONB_COL keeps the ORM declaration honest while
-    # preserving SQLite/MariaDB parity.
+    # preserving SQLite (test-only) parity.
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB_COL, nullable=False, default=dict)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

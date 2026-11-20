@@ -203,6 +203,13 @@ class TestIsUniqueViolation:
         exc = IntegrityError("stmt", {}, orig)
         assert _is_unique_violation(exc) is False
 
+    def test_mysql_duplicate_entry_1062_returns_false(self) -> None:
+        # PostgreSQL is the only supported runtime database (ADR 068); the
+        # MySQL/MariaDB 1062 duplicate-entry code must not be recognised.
+        orig = Exception(1062, "Duplicate entry 'abc' for key 'PRIMARY'")
+        exc = IntegrityError("stmt", {}, orig)
+        assert _is_unique_violation(exc) is False
+
     def test_no_orig_returns_false(self) -> None:
         exc = IntegrityError("stmt", {}, None)
         assert _is_unique_violation(exc) is False

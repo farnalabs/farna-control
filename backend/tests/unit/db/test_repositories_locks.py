@@ -63,10 +63,6 @@ class TestBuildLockService:
         svc = _build_lock_service("sqlite")
         assert isinstance(svc, GenericLock)
 
-    def test_mariadb_returns_generic_lock(self) -> None:
-        svc = _build_lock_service("mariadb")
-        assert isinstance(svc, GenericLock)
-
     def test_unknown_returns_generic_lock(self) -> None:
         svc = _build_lock_service("some_unknown_backend")
         assert isinstance(svc, GenericLock)

@@ -39,7 +39,8 @@ def test_product_setting_accepts_canonical_and_bare_legacy_with_canonical_preced
     before the field name, so it wins when both are set.
     """
     monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
-    monkeypatch.setenv("MODULO_DB", "mariadb")
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
+    monkeypatch.setenv("MODULO_DB", "postgres")
 
     settings = Settings(**_BASE_ENV)
 
@@ -55,6 +56,7 @@ def test_product_setting_still_reads_bare_modulo_name_via_field_name(monkeypatch
     """
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
     monkeypatch.setenv("MODULO_DB", "sqlite")
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
 
     settings = Settings(**_BASE_ENV)
 
