@@ -803,10 +803,20 @@ def _codesign_retry_driver(tmp_path: Path) -> Path:
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         + block
         + """
-fake_codesign_calls=0
+# Each bounded attempt runs codesign in a background subshell (FAR-2593), so
+# the call count lives in a file rather than a shell variable.
+fake_codesign_calls_file="$(mktemp)"
+printf '0\\n' >"$fake_codesign_calls_file"
 codesign() {
-  fake_codesign_calls=$((fake_codesign_calls + 1))
-  if [[ "$fake_codesign_calls" -le "${FAKE_CODESIGN_FAILURES:-0}" ]]; then
+  local calls
+  calls=$(( $(cat "$fake_codesign_calls_file") + 1 ))
+  printf '%d\\n' "$calls" >"$fake_codesign_calls_file"
+  if [[ "$calls" -le "${FAKE_CODESIGN_STALLS:-0}" ]]; then
+    # A stalled timestamp request: never returns on its own within the bound.
+    sleep 6
+    return 0
+  fi
+  if [[ "$calls" -le $(( ${FAKE_CODESIGN_STALLS:-0} + ${FAKE_CODESIGN_FAILURES:-0} )) ]]; then
     printf 'build/FarnaControl.app/Contents/MacOS/modulo: %s\\n' "${FAKE_CODESIGN_MESSAGE:-}" >&2
     return "${FAKE_CODESIGN_STATUS:-1}"
   fi
@@ -816,7 +826,7 @@ codesign() {
 
 status=0
 codesign_with_timestamp_retry fixture --force --timestamp --sign "Developer ID Application: Fixture (AAAAAAAAAA)" build/FarnaControl.app || status=$?
-printf 'fake_codesign_calls=%d\\n' "$fake_codesign_calls"
+printf 'fake_codesign_calls=%d\\n' "$(cat "$fake_codesign_calls_file")"
 exit "$status"
 """,
         encoding="utf-8",
@@ -971,6 +981,51 @@ def test_macos_codesign_retry_stops_at_the_bounded_attempt_cap(tmp_path: Path) -
     assert result.returncode == 1
     assert "fake_codesign_calls=3" in result.stdout
     assert "persisted through 3 attempt(s)" in result.stderr
+
+
+def test_macos_codesign_retry_terminates_a_stalled_attempt_and_retries_it(tmp_path: Path) -> None:
+    """FAR-2593: run 44743991976 sat in `codesign --timestamp` on the DMG for
+    2h16m. A stalled attempt is now terminated at its bound and retried."""
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(CODESIGN_ATTEMPT_TIMEOUT="1", FAKE_CODESIGN_STALLS="1"),
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "fake_codesign_calls=2" in result.stdout
+    assert "attempt=1/3 exit=124 class=timeout" in result.stderr
+    assert "codesign attempt exceeded 1s and was terminated" in result.stderr
+    assert "class=success" in result.stderr
+
+
+def test_macos_codesign_retry_bounds_a_codesign_that_always_stalls(tmp_path: Path) -> None:
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(CODESIGN_TIMESTAMP_MAX_ATTEMPTS="2", CODESIGN_ATTEMPT_TIMEOUT="1", FAKE_CODESIGN_STALLS="99"),
+    )
+
+    assert result.returncode == 124
+    assert "fake_codesign_calls=2" in result.stdout
+    assert "persisted through 2 attempt(s)" in result.stderr
+
+
+def test_macos_codesign_attempts_carry_a_production_time_bound() -> None:
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "codesign_with_timestamp_retry")
+
+    assert "CODESIGN_ATTEMPT_TIMEOUT:-300" in block
+    assert 'codesign_attempt_bounded "$attempt_timeout" "$output_file" "$@"' in block
+    # Inside the helper, codesign itself is only ever invoked by the bounded runner.
+    bare_calls = [line.strip() for line in block.splitlines() if re.match(r"\s*codesign\s", line)]
+    assert bare_calls == ['codesign "$@" >"$output_file" 2>&1 &']
+    # The nested-binary signer runs in a `bash -c` child, so it must be exported.
+    assert "export -f codesign_attempt_bounded" in build_run
 
 
 # ---------------------------------------------------------------------------
@@ -2646,7 +2701,7 @@ def test_macos_signed_bundle_is_diagnosed_before_it_is_staged() -> None:
 
     order = [
         'run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"',
-        'bash scripts/macos/signature-diagnostics.sh pre_dmg "$APP"',
+        'bash scripts/macos/signature-diagnostics.sh --quick pre_dmg "$APP"',
         "run_pre_smoke dmg_create bash -c",
     ]
     positions = [build_run.index(command) for command in order]
@@ -2669,6 +2724,68 @@ def test_macos_signature_diagnostics_helper_never_fails_its_caller() -> None:
     assert "codesign --verify --deep --strict --verbose=4" in code
     assert "spctl -a -vvv -t exec" in code
     assert "SecStaticCodeCheckValidityWithErrors" in code
+
+
+def _signature_diagnostics_helper() -> str:
+    return (REPO_ROOT / "scripts" / "macos" / "signature-diagnostics.sh").read_text(encoding="utf-8")
+
+
+_DIAGNOSTIC_TOOLS = ("codesign", "spctl", "syspolicy_check", "xcrun", "log", "python3", "xattr", "diff", "find", "lipo")
+
+
+def test_macos_signature_diagnostics_bound_every_external_tool_call() -> None:
+    """FAR-2593: a stalled tool must never hang the job, so no diagnostic tool
+    is invoked except through the time-bounded runner."""
+    code = _code_only(_signature_diagnostics_helper())
+    tool = "|".join(_DIAGNOSTIC_TOOLS)
+    unbounded = [line.strip() for line in code.splitlines() if re.match(rf"\s*(?:if\s+!?\s*)?(?:{tool})\s", line)]
+    assert not unbounded, unbounded
+    assert re.search(r"run_bounded \d+ codesign --verify --deep --strict --verbose=4", code)
+    assert re.search(r"run_bounded \d+ spctl -a -vvv -t exec", code)
+    assert re.search(r'run_bounded \d+ python3 -I "\$work_dir/scan.py"', code)
+    # The per-file lipo loop took 20 minutes in run 44743991976; fat Mach-O
+    # detection is now part of the single-pass scan.
+    assert "lipo" not in code
+
+
+def test_macos_signature_diagnostics_quick_mode_skips_the_whole_bundle_scans() -> None:
+    code = _signature_diagnostics_helper()
+    quick_branch = code.index('if [[ "$mode" == quick ]]; then')
+    quick_exit = code.index("exit 0", quick_branch)
+
+    for heavy in ("for attempt in 1 2 3", "syspolicy_check distribution", "xcrun swiftc", "log show", 'scan.py"', "xattr -r", "diff -rq"):
+        assert code.index(heavy) > quick_exit, heavy
+
+
+def _run_bounded_harness(helper: str) -> str:
+    start = helper.index("run_bounded() {")
+    function = helper[start : helper.index("\n}\n", start) + 3]
+    return "\n".join(
+        [
+            "set -uo pipefail",
+            function,
+            "started=$SECONDS",
+            'run_bounded "$1" sleep 8',
+            'printf "rc=%d elapsed=%d\\n" "$?" "$(( SECONDS - started ))"',
+            'run_bounded 5 sh -c "exit 7"',
+            'printf "fast_rc=%d\\n" "$?"',
+            "",
+        ]
+    )
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_signature_diagnostics_runner_terminates_a_stalled_tool(flavour: str) -> None:
+    result = _run_bash_stdin(flavour, _run_bounded_harness(_signature_diagnostics_helper()), ["1"])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(r"rc=(\d+) elapsed=(\d+)", result.stdout)
+    assert match, result.stdout
+    assert match.group(1) == "124"
+    assert int(match.group(2)) < 6
+    assert "sleep exceeded 1s and was terminated" in result.stdout
+    # A tool that finishes inside its bound keeps its own exit status.
+    assert "fast_rc=7" in result.stdout
 
 
 def test_macos_contract_gates_the_signature_diagnostics_helper() -> None:

@@ -7,28 +7,38 @@
 # `spctl --assess --type execute` rejected it with
 #   Farna Control.app: a sealed resource is missing or invalid
 # without naming a file. spctl validates with stricter Security framework flags
-# than codesign's command line exposes (symlink, app-like and sideband-data
-# restrictions), so this helper reproduces each flag individually through
-# SecStaticCodeCheckValidityWithErrors and prints the CFError user info, which
-# names the altered / missing / added resource.
+# than codesign's command line exposes, so the full mode reproduces each flag
+# through SecStaticCodeCheckValidityWithErrors, re-derives every CodeResources
+# hash independently and scans the bundle for symlink, name, hard-link,
+# multi-architecture and extended-attribute oddities.
 #
 # Diagnostics only: this helper never fails the caller. It always exits 0 so a
 # diagnostic gap can never mask, or replace, the hard gate that invoked it.
+# Every external call is time-bounded (run 44743991976 showed how long an
+# unbounded whole-bundle scan can take), so a stalled tool cannot hang the job.
 #
 # Usage:
-#   signature-diagnostics.sh <label> <app> [<reference-app>]
-#       <label>          free-text tag printed on every line (e.g. pre_dmg)
+#   signature-diagnostics.sh [--quick] <label> <app> [<reference-app>]
+#       --quick          codesign verify plus one Gatekeeper assessment only;
+#                        used on the success path. Without it the full (slow)
+#                        diagnostics run, which belongs on failure paths.
+#       <label>          free-text tag printed on every section header
 #       <app>            the bundle to diagnose
 #       <reference-app>  optional bundle <app> was copied from; when given the
-#                        two trees are compared (content, symlinks, names).
+#                        two trees are compared.
 set -uo pipefail
 
+mode=full
+if [[ "${1:-}" == "--quick" ]]; then
+  mode=quick
+  shift
+fi
 label="${1:-}"
 app="${2:-}"
 reference="${3:-}"
 
 if [[ -z "$label" || -z "$app" ]]; then
-  echo 'usage: signature-diagnostics.sh <label> <app> [<reference-app>]' >&2
+  echo 'usage: signature-diagnostics.sh [--quick] <label> <app> [<reference-app>]' >&2
   exit 0
 fi
 
@@ -36,30 +46,72 @@ section() {
   printf '\n=== signature-diagnostics[%s]: %s ===\n' "$label" "$1"
 }
 
+# Run "$@" for at most $1 seconds (bash 3.2-safe watchdog; macOS ships no
+# timeout(1)). Prints a marker and returns 124 when the bound is hit.
+run_bounded() {
+  local timeout_secs="$1" pid status started
+  shift
+  "$@" &
+  pid=$!
+  started=$SECONDS
+  while kill -0 "$pid" 2>/dev/null; do
+    if [[ $(( SECONDS - started )) -ge "$timeout_secs" ]]; then
+      pkill -TERM -P "$pid" 2>/dev/null || true
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 1
+      pkill -KILL -P "$pid" 2>/dev/null || true
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      printf 'signature-diagnostics: %s exceeded %ss and was terminated\n' "$1" "$timeout_secs"
+      return 124
+    fi
+    sleep 0.2
+  done
+  status=0
+  wait "$pid" || status=$?
+  return "$status"
+}
+
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/sigdiag.XXXXXX")"
+trap 'rm -rf "$work_dir"' EXIT
+
+section "mode=$mode"
+
 section "codesign --verify --deep --strict --verbose=4"
-codesign --verify --deep --strict --verbose=4 "$app" 2>&1 | tail -n 60
-printf 'codesign_verify_exit=%s\n' "${PIPESTATUS[0]}"
+run_bounded 180 codesign --verify --deep --strict --verbose=4 "$app" >"$work_dir/codesign.log" 2>&1
+printf 'codesign_verify_exit=%s\n' "$?"
+tail -n 40 "$work_dir/codesign.log"
+
+if [[ "$mode" == quick ]]; then
+  section "spctl -a -vvv -t exec"
+  run_bounded 120 spctl -a -vvv -t exec "$app" >"$work_dir/spctl.log" 2>&1
+  printf 'spctl_exit=%s\n' "$?"
+  tail -n 20 "$work_dir/spctl.log"
+  section "end"
+  exit 0
+fi
 
 # Repeat the assessment: a verdict that changes between identical calls
 # points at the assessment service, not at the bundle contents.
 assessment_started="$(date '+%Y-%m-%d %H:%M:%S')"
 for attempt in 1 2 3; do
   section "spctl -a -vvv -t exec (attempt $attempt)"
-  spctl -a -vvv -t exec "$app" 2>&1 | tail -n 40
-  printf 'spctl_exit=%s\n' "${PIPESTATUS[0]}"
+  run_bounded 120 spctl -a -vvv -t exec "$app" >"$work_dir/spctl.log" 2>&1
+  printf 'spctl_exit=%s\n' "$?"
+  tail -n 20 "$work_dir/spctl.log"
 done
 
 if command -v syspolicy_check >/dev/null 2>&1; then
   section "syspolicy_check distribution"
-  syspolicy_check distribution "$app" --verbose 2>&1 | tail -n 80
-  printf 'syspolicy_check_exit=%s\n' "${PIPESTATUS[0]}"
+  run_bounded 180 syspolicy_check distribution "$app" --verbose >"$work_dir/syspolicy_check.log" 2>&1
+  printf 'syspolicy_check_exit=%s\n' "$?"
+  tail -n 60 "$work_dir/syspolicy_check.log"
 fi
 
 # Reproduce Gatekeeper's validation flags one at a time. Raw values are the
 # public SecCSFlags constants from <Security/CSCommon.h>.
 section "Security framework flag probes"
-probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/sigdiag.XXXXXX")"
-cat >"$probe_dir/probe.swift" <<'SWIFT'
+cat >"$work_dir/probe.swift" <<'SWIFT'
 import Foundation
 import Security
 
@@ -99,158 +151,154 @@ for (name, flags) in probes {
 }
 SWIFT
 if command -v xcrun >/dev/null 2>&1; then
-  xcrun swiftc -O -o "$probe_dir/probe" "$probe_dir/probe.swift" >"$probe_dir/build.log" 2>&1
-  build_exit=$?
-  if [[ "$build_exit" -eq 0 ]]; then
-    "$probe_dir/probe" "$app" 2>&1 | head -n 400
+  if run_bounded 240 xcrun swiftc -O -o "$work_dir/probe" "$work_dir/probe.swift" >"$work_dir/build.log" 2>&1; then
+    run_bounded 240 "$work_dir/probe" "$app" >"$work_dir/probe.log" 2>&1
+    printf 'probe_exit=%s\n' "$?"
+    head -n 200 "$work_dir/probe.log"
   else
-    printf 'probe build failed (exit=%d)\n' "$build_exit"
-    tail -n 30 "$probe_dir/build.log"
+    echo 'probe build failed or timed out'
+    tail -n 20 "$work_dir/build.log"
   fi
 else
   echo 'probe skipped: xcrun unavailable'
 fi
-rm -rf "$probe_dir"
 
 section "syspolicyd log since the first assessment (info + debug)"
-log show --info --debug --style compact --start "$assessment_started" \
-  --predicate 'process == "syspolicyd" OR process == "spctl" OR subsystem == "com.apple.syspolicy"' 2>/dev/null \
-  | grep -Ev 'CSSMERR_CSP_INVALID_KEYATTR_MASK|SecKeyVerifySignature|SecTrustEvaluate|SecCertificate|SecTrustCopy|SecPolicyCreate' \
-  | tail -n 250
-
-section "symbolic links (absolute or escaping the bundle are flagged)"
-python3 -I - "$app" <<'PY'
-import os
-import sys
-
-root = os.path.realpath(sys.argv[1])
-count = 0
-for dirpath, dirnames, filenames in os.walk(sys.argv[1]):
-    for name in dirnames + filenames:
-        path = os.path.join(dirpath, name)
-        if not os.path.islink(path):
-            continue
-        count += 1
-        target = os.readlink(path)
-        resolved = os.path.realpath(path)
-        flags = []
-        if os.path.isabs(target):
-            flags.append("ABSOLUTE")
-        if not (resolved == root or resolved.startswith(root + os.sep)):
-            flags.append("ESCAPES_BUNDLE")
-        if not os.path.exists(path):
-            flags.append("DANGLING")
-        rel = os.path.relpath(path, sys.argv[1])
-        print(f"symlink {rel} -> {target} {' '.join(flags)}".rstrip())
-print(f"symlink_count={count}")
-PY
-
-section "file names that are not plain ASCII or collide case-insensitively"
-python3 -I - "$app" <<'PY'
-import os
-import sys
-import unicodedata
-
-seen = {}
-for dirpath, dirnames, filenames in os.walk(sys.argv[1]):
-    for name in dirnames + filenames:
-        rel = os.path.relpath(os.path.join(dirpath, name), sys.argv[1])
-        if not name.isascii():
-            nfc = unicodedata.normalize("NFC", name) == name
-            nfd = unicodedata.normalize("NFD", name) == name
-            print(f"non_ascii {rel!r} nfc={nfc} nfd={nfd}")
-        key = os.path.join(dirpath, name).casefold()
-        if key in seen and seen[key] != rel:
-            print(f"case_collision {seen[key]!r} {rel!r}")
-        seen[key] = rel
-PY
+run_bounded 90 log show --info --debug --style compact --start "$assessment_started" \
+  --predicate 'process == "syspolicyd" OR process == "spctl" OR subsystem == "com.apple.syspolicy"' \
+  >"$work_dir/syspolicyd.log" 2>/dev/null
+printf 'log_show_exit=%s\n' "$?"
+grep -Ev 'CSSMERR_CSP_INVALID_KEYATTR_MASK|SecKeyVerifySignature|SecTrustEvaluate|SecCertificate|SecTrustCopy|SecPolicyCreate|com.apple.network' \
+  "$work_dir/syspolicyd.log" | tail -n 150
 
 section "main executable signature and entitlements"
-codesign -dvvv "$app" 2>&1 | grep -Ev '^(Authority|Signed Time|Timestamp)=' | head -n 30
-codesign -d --entitlements - "$app" 2>&1 | head -n 30
+run_bounded 60 codesign -dvvv "$app" >"$work_dir/display.log" 2>&1
+grep -Ev '^(Authority|Signed Time|Timestamp)=' "$work_dir/display.log" | head -n 30
+run_bounded 60 codesign -d --entitlements - "$app" 2>&1 | head -n 30
 
-# Re-derive resource validation independently of the Security framework:
-# every sealed hash in CodeResources is compared against the file on disk,
-# and every regular file under Contents must be sealed, nested or omitted.
-section "independent CodeResources seal check"
-python3 -I - "$app" <<'PY'
+# One pass over the bundle: re-derive every CodeResources seal, and record
+# unsealed files, symlinks, hard links, multi-architecture (fat) Mach-O,
+# non-ASCII and case-colliding names. Hashing is sequential and streams each
+# file, so the pass is bounded by disk speed, not by process spawning.
+section "single-pass bundle scan (CodeResources seal, links, fat Mach-O, names)"
+cat >"$work_dir/scan.py" <<'PY'
 import hashlib
 import os
 import plistlib
 import re
+import struct
 import sys
+import unicodedata
 
 app = sys.argv[1]
 contents = os.path.join(app, "Contents")
-seal_path = os.path.join(contents, "_CodeSignature", "CodeResources")
-with open(seal_path, "rb") as handle:
+root = os.path.realpath(app)
+with open(os.path.join(contents, "_CodeSignature", "CodeResources"), "rb") as handle:
     seal = plistlib.load(handle)
 files2 = seal.get("files2", {})
 rules2 = seal.get("rules2", {})
 omit = [re.compile(pattern) for pattern, rule in rules2.items() if isinstance(rule, dict) and rule.get("omit")]
-problems = 0
+FAT_MAGICS = {b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"}
+CPU = {7: "i386", 0x01000007: "x86_64", 12: "arm", 0x0100000C: "arm64"}
+counts = dict.fromkeys(("seal", "link", "hardlink", "fat", "name"), 0)
+
+
+def report(kind: str, line: str) -> None:
+    counts[kind] += 1
+    if counts[kind] <= 40:
+        print(line)
+
+
+def sha256(path: str) -> bytes:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.digest()
+
+
 for rel, entry in sorted(files2.items()):
     path = os.path.join(contents, rel)
     if isinstance(entry, dict) and "symlink" in entry:
         if not os.path.islink(path) or os.readlink(path) != entry["symlink"]:
-            print(f"seal_symlink_mismatch {rel} sealed={entry['symlink']!r}")
-            problems += 1
+            report("seal", f"seal_symlink_mismatch {rel}")
         continue
     if isinstance(entry, dict) and ("cdhash" in entry or "requirement" in entry):
         if not os.path.exists(path):
-            print(f"seal_nested_missing {rel}")
-            problems += 1
+            report("seal", f"seal_nested_missing {rel}")
+        continue
+    if not os.path.isfile(path) or os.path.islink(path):
+        report("seal", f"seal_missing {rel}")
         continue
     expected = entry.get("hash2") if isinstance(entry, dict) else None
-    if not os.path.isfile(path) or os.path.islink(path):
-        print(f"seal_missing {rel}")
-        problems += 1
-        continue
-    if expected is None:
-        continue
-    with open(path, "rb") as handle:
-        actual = hashlib.sha256(handle.read()).digest()
-    if actual != bytes(expected):
-        print(f"seal_hash_mismatch {rel}")
-        problems += 1
-sealed = set(files2)
-for dirpath, _dirnames, filenames in os.walk(contents):
-    for name in filenames:
-        rel = os.path.relpath(os.path.join(dirpath, name), contents).replace(os.sep, "/")
-        if rel in sealed or rel.startswith("_CodeSignature/") or rel in ("MacOS/modulo", "Info.plist", "PkgInfo"):
+    if expected is not None and sha256(path) != bytes(expected):
+        report("seal", f"seal_hash_mismatch {rel}")
+
+seen = {}
+for dirpath, dirnames, filenames in os.walk(app):
+    for name in dirnames + filenames:
+        path = os.path.join(dirpath, name)
+        rel_app = os.path.relpath(path, app).replace(os.sep, "/")
+        if not name.isascii():
+            nfc = unicodedata.normalize("NFC", name) == name
+            report("name", f"non_ascii {rel_app!r} nfc={nfc}")
+        key = path.casefold()
+        if key in seen and seen[key] != rel_app:
+            report("name", f"case_collision {seen[key]!r} {rel_app!r}")
+        seen[key] = rel_app
+        if os.path.islink(path):
+            target = os.readlink(path)
+            resolved = os.path.realpath(path)
+            flags = []
+            if os.path.isabs(target):
+                flags.append("ABSOLUTE")
+            if not (resolved == root or resolved.startswith(root + os.sep)):
+                flags.append("ESCAPES_BUNDLE")
+            if not os.path.exists(path):
+                flags.append("DANGLING")
+            if flags:
+                report("link", f"symlink {rel_app} -> {target} {' '.join(flags)}")
             continue
-        if any(pattern.search(rel) for pattern in omit):
-            continue
-        print(f"seal_unsealed {rel}")
-        problems += 1
-print(f"seal_entries={len(files2)} seal_problems={problems}")
+        if name in filenames and os.path.isfile(path):
+            info = os.lstat(path)
+            if info.st_nlink > 1:
+                report("hardlink", f"hardlink nlink={info.st_nlink} {rel_app}")
+            with open(path, "rb") as handle:
+                header = handle.read(8)
+            if header[:4] in FAT_MAGICS:
+                (nfat,) = struct.unpack(">I", header[4:8])
+                if 0 < nfat < 8:
+                    with open(path, "rb") as handle:
+                        handle.seek(8)
+                        archs = []
+                        for _ in range(nfat):
+                            cputype = struct.unpack(">i", handle.read(4))[0] & 0xFFFFFFFF
+                            handle.read(16 if header[3] == 0xBE else 28)
+                            archs.append(CPU.get(cputype, hex(cputype)))
+                    report("fat", f"fat_macho {rel_app}: {' '.join(archs)}")
+        if rel_app.startswith("Contents/") and name in filenames and not os.path.islink(path):
+            rel = rel_app[len("Contents/"):]
+            if rel in files2 or rel.startswith("_CodeSignature/") or rel in ("MacOS/modulo", "Info.plist", "PkgInfo"):
+                continue
+            if any(pattern.search(rel) for pattern in omit):
+                continue
+            report("seal", f"seal_unsealed {rel}")
+
+print(f"seal_entries={len(files2)} seal_problems={counts['seal']}")
+print(f"symlink_problems={counts['link']} hardlinks={counts['hardlink']} fat_macho={counts['fat']} name_problems={counts['name']}")
 PY
+run_bounded 300 python3 -I "$work_dir/scan.py" "$app"
+printf 'bundle_scan_exit=%s\n' "$?"
 
-section "hard links and multi-architecture Mach-O"
-find "$app" -type f -links +1 -print 2>/dev/null | head -n 40
-find "$app/Contents" -type f -print0 2>/dev/null | while IFS= read -r -d '' candidate; do
-  archs="$(lipo -archs "$candidate" 2>/dev/null)" || continue
-  case "$archs" in
-    arm64|x86_64) ;;
-    *) printf 'macho_archs %s: %s\n' "$candidate" "$archs" ;;
-  esac
-done | head -n 60
-
-section "files carrying extended attributes"
-find "$app" -print0 2>/dev/null | xargs -0 xattr 2>/dev/null | grep -v 'com.apple.cs.Code' | head -n 80
-
-section "files that are not readable or are special"
-find "$app" \( ! -type f ! -type d ! -type l \) -print 2>/dev/null | head -n 40
-find "$app" ! -perm -u+r -print 2>/dev/null | head -n 40
+section "files carrying extended attributes (other than code signatures)"
+run_bounded 120 xattr -r -l "$app" >"$work_dir/xattr.log" 2>/dev/null
+grep -v 'com.apple.cs.Code' "$work_dir/xattr.log" | head -n 40
 
 if [[ -n "$reference" && -d "$reference" ]]; then
   section "comparison with reference $reference"
-  diff -rq "$reference" "$app" 2>&1 | head -n 80
-  printf 'diff_exit=%s\n' "${PIPESTATUS[0]}"
-  (cd "$reference" && find . -type l -print | sort) >"${TMPDIR:-/tmp}/sigdiag-ref-links.$$"
-  (cd "$app" && find . -type l -print | sort) >"${TMPDIR:-/tmp}/sigdiag-app-links.$$"
-  diff "${TMPDIR:-/tmp}/sigdiag-ref-links.$$" "${TMPDIR:-/tmp}/sigdiag-app-links.$$" | head -n 40
-  rm -f "${TMPDIR:-/tmp}/sigdiag-ref-links.$$" "${TMPDIR:-/tmp}/sigdiag-app-links.$$"
+  run_bounded 300 diff -rq "$reference" "$app" >"$work_dir/diff.log" 2>&1
+  printf 'diff_exit=%s\n' "$?"
+  head -n 60 "$work_dir/diff.log"
 fi
 
 section "end"
