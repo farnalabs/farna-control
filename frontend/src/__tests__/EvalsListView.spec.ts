@@ -355,4 +355,76 @@ describe('EvalsListView', () => {
     wrapper.unmount()
     warn.mockRestore()
   })
+
+  it('falls back for rows missing optional fields and for unknown eval types', async () => {
+    mockApi({
+      evals: {
+        items: [
+          // A null threshold and a type outside the known set.
+          evalItem({ id: 'eval-null', pass_threshold: null, eval_type: 'custom_type' }),
+          // An undefined threshold and a missing version.
+          evalItem({ id: 'eval-undef', pass_threshold: undefined, version: undefined }),
+        ],
+        total: 2,
+      },
+    })
+    const wrapper = mountView()
+    await flush()
+
+    const rows = wrapper.findAll('[data-testid="evals-list-row"]')
+    expect(rows).toHaveLength(2)
+    // Both null and undefined render the em-dash placeholder.
+    expect(rows[0].text()).toContain('—')
+    expect(rows[1].text()).toContain('—')
+    // An unknown type shows its raw value instead of being dropped.
+    expect(rows[0].text()).toContain('custom_type')
+    // The missing version falls back to 1.
+    expect(rows[1].text()).toContain('1')
+    wrapper.unmount()
+  })
+
+  it('copes with list responses that omit items and total', async () => {
+    apiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/pipelines') return { data: {}, error: undefined }
+      if (path === '/api/v1/evals') return { data: {}, error: undefined }
+      return { data: {}, error: undefined }
+    })
+    const wrapper = mountView()
+    await flush()
+
+    expect(wrapper.find('[data-testid="evals-list-empty"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('guards pagination at the edges, ignores unknown filters, and opens a pipeline-only editor', async () => {
+    const wrapper = mountView()
+    await flush()
+    const vm = wrapper.vm as unknown as {
+      prevPage: () => void
+      nextPage: () => void
+      openEditor: (pipelineId?: string, evalId?: string) => void
+    }
+    const evalCalls = () => apiGet.mock.calls.filter(call => call[0] === '/api/v1/evals').length
+
+    // Page one has no previous page: the guard returns before re-querying.
+    const callsBefore = evalCalls()
+    vm.prevPage()
+    await flush()
+    expect(evalCalls()).toBe(callsBefore)
+
+    // A single (empty) page has no next page either.
+    vm.nextPage()
+    await flush()
+    expect(evalCalls()).toBe(callsBefore)
+
+    // An unknown filter key is ignored rather than treated as a filter change.
+    filterBar(wrapper).vm.$emit('update:filter', 'search', 'anything')
+    await flush()
+    expect(lastEvalsQuery()).toEqual({ page: 1, page_size: 25 })
+
+    // A pipeline without a selected eval opens the editor with the filter only.
+    vm.openEditor('p2')
+    expect(routerMocks.push).toHaveBeenCalledWith({ path: '/evals/editor', query: { pipeline_id: 'p2' } })
+    wrapper.unmount()
+  })
 })

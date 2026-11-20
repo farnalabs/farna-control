@@ -628,6 +628,38 @@ describe('EvalEditorView — ?pipeline_id= deep link (FAR-2597)', () => {
     expect((routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query.pipeline_id).toBeUndefined()
   })
 
+  it('reads the first value of an array query param and can write an eval id back to the URL', async () => {
+    // A repeated ?pipeline_id= arrives as an array; the first string value wins.
+    routerMocks.query.pipeline_id = ['p1']
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as {
+      selectedPipelineId: string
+      replacePipelineQuery: (pipelineId?: string, evalId?: string) => void
+    }
+    expect(vm.selectedPipelineId).toBe('p1')
+
+    vm.replacePipelineQuery('p1', 'eval-1')
+    const replaced = (routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query
+    expect(replaced.eval_id).toBe('eval-1')
+    wrapper.unmount()
+  })
+
+  it('clears the stale-link notice when the pipeline selection changes again', async () => {
+    routerMocks.query.pipeline_id = 'deleted-pipeline'
+    const wrapper = mountView()
+    await flush()
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(true)
+
+    const vm = wrapper.vm as unknown as { onPipelineChange: () => Promise<void> }
+    await vm.onPipelineChange()
+    await flush()
+
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('preselects the eval named by ?eval_id= once its pipeline has loaded', async () => {
     routerMocks.query.pipeline_id = 'p1'
     routerMocks.query.eval_id = 'eval-1'

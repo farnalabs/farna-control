@@ -104,7 +104,7 @@
             <span class="font-mono text-xs">{{ formatThreshold(row.pass_threshold as number | null | undefined) }}</span>
           </template>
           <template #cell-version="{ row }">
-            <span class="font-mono text-xs">{{ row.version ?? 1 }}</span>
+            <span class="font-mono text-xs">{{ row.version }}</span>
           </template>
         </DataTable>
 
