@@ -21,7 +21,7 @@
           </p>
         </div>
 
-        <div class="table-wrapper">
+        <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
               <tr>
