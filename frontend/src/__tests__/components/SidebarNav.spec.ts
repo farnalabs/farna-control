@@ -31,7 +31,18 @@ vi.mock('@/manifest.yaml', () => ({
   default: mockManifest,
 }))
 
+// Wrap the visibility composable so a test can supply a group that the real
+// nav cache (populated on first use) cannot otherwise be made to return.
+vi.mock('../../config/navigation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../config/navigation')>()
+  return {
+    ...actual,
+    getVisibleNavGroups: vi.fn(actual.getVisibleNavGroups),
+  }
+})
+
 import SidebarNav from '../../components/SidebarNav.vue'
+import { getVisibleNavGroups } from '../../config/navigation'
 import { usePlanStore } from '../../stores/planStore'
 import { setDemoSession } from '../../lib/api/auth'
 
@@ -345,6 +356,47 @@ describe('SidebarNav', () => {
         expect(link.classes()).not.toContain('sidebar-link--collapsed--touch')
       }
     })
+  })
+
+  it('falls back to the raw group label when the group has no translation key', async () => {
+    // groupLabel normally resolves the label through i18n. Guard the fallback
+    // for a group that carries no usable key by supplying one directly — the
+    // built-in nav cache is populated on first use, so a manifest mutation
+    // cannot reach it here.
+    const craftedGroup = {
+      id: 'build',
+      label: 'RAW_BUILD',
+      labelKey: '',
+      defaultCollapsed: false,
+      items: [
+        {
+          to: '/',
+          icon: 'LayoutDashboard',
+          label: 'Dashboard',
+          labelKey: 'components.SidebarNav.item_dashboard',
+          exact: true,
+        },
+      ],
+    }
+    const mocked = vi.mocked(getVisibleNavGroups)
+    const realImpl = mocked.getMockImplementation()
+    mocked.mockReturnValue([craftedGroup] as never)
+    try {
+      const { wrapper } = mountSidebar({ collapsed: true })
+      await flushPromises()
+
+      const toggle = wrapper
+        .findAll('.sidebar-group-rail-toggle')
+        .find(
+          (candidate) => candidate.attributes('aria-controls') === 'sidebar-group-rail-build',
+        )!
+      // groupToggleLabel prefixes the accessible name with groupLabel(group);
+      // an empty key must fall back to the raw label, not the i18n lookup.
+      expect(toggle.attributes('aria-label')).toContain('RAW_BUILD')
+    } finally {
+      if (realImpl) mocked.mockImplementation(realImpl)
+      else mocked.mockReset()
+    }
   })
 
   describe('active-route reveal (FAR-2602)', () => {
