@@ -245,6 +245,25 @@ def test_workflow_packages_on_the_glibc_baseline() -> None:
     assert _workflow()["jobs"]["build-deb"]["container"] == "ubuntu:22.04"
 
 
+def _checkout_preceded_by_git_install(steps: list[dict]) -> bool:
+    """True when a git-installing step precedes the first actions/checkout step."""
+    git_installed = False
+    for step in steps:
+        uses = str(step.get("uses", ""))
+        if uses.startswith("actions/checkout"):
+            return git_installed
+        if "git" in str(step.get("run", "")):
+            git_installed = True
+    return False
+
+
+@pytest.mark.parametrize("job", ["build-deb", "validate"])
+def test_checkout_inside_a_container_installs_git_first(job: str) -> None:
+    # The stock ubuntu base images do not ship git, and actions/checkout shells
+    # out to it, so every container job must install it before checkout runs.
+    assert _checkout_preceded_by_git_install(_workflow()["jobs"][job]["steps"])
+
+
 def test_validation_boots_as_non_root_and_keeps_data_through_purge() -> None:
     text = VALIDATE_DEB.read_text(encoding="utf-8")
     assert 'runuser -u "${VALIDATION_USER}"' in text

@@ -175,7 +175,7 @@ jobs:
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends binutils ca-certificates curl lintian >/dev/null
+          apt-get install -y -qq --no-install-recommends binutils ca-certificates curl git lintian >/dev/null
           dpkg-deb --version | head -n 1
           lintian --version
 
@@ -250,6 +250,15 @@ jobs:
           - ubuntu:22.04
           - ubuntu:24.04
     steps:
+      - name: Install checkout prerequisites
+        # actions/checkout shells out to git, which the stock ubuntu base
+        # images do not ship; install it before checkout runs.
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates git >/dev/null
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
