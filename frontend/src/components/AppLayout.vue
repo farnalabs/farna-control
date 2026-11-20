@@ -76,16 +76,12 @@
       -->
       <div
         v-if="suppressesRoutedContent"
-        class="flex items-center justify-center py-16"
         aria-live="polite"
         aria-busy="true"
         data-shell-content-loading
       >
         <span class="sr-only">{{ $t('common.loading') }}</span>
-        <div
-          class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
-          aria-hidden="true"
-        />
+        <LoadingSpinner aria-hidden="true" />
       </div>
       <router-view v-else v-slot="{ Component, route }">
         <transition name="page" mode="out-in" @after-enter="focusRouteContent">
@@ -121,6 +117,7 @@ import CommandPalette from "./CommandPalette.vue";
 import SpotlightOverlay from "./onboarding/SpotlightOverlay.vue";
 import ProductAnalyticsConsentPrompt from "./product-analytics/ProductAnalyticsConsentPrompt.vue";
 import LicenceRenewalNotice from "./licence/LicenceRenewalNotice.vue";
+import LoadingSpinner from "./shared/LoadingSpinner.vue";
 import type { components } from "../lib/api/schema";
 
 const planStore = usePlanStore();
