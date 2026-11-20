@@ -1,4 +1,4 @@
-"""The 0357 migration rebrands ONLY the exact seeded library copy (FAR-3300).
+"""The 0357 migration rebrands ONLY the exact seeded library copy (PR #3300).
 
 The migration is a pair of data-only UPDATEs. These tests pin the two properties
 that matter:
