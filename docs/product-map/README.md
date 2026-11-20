@@ -111,7 +111,7 @@ Fresh entries for these features are added to the graph below as behavior tracke
 - **feat-risk-assessment** - Risk assessment dashboard for evidence-based risk analysis - routes: `/risk-assessment`
 
 ### Improve
-- **feat-evals** - Evaluation editor and proposal queue - routes: `/evals/editor`, `/evals/proposals`
+- **feat-evals** - Evaluation list, editor and proposal queue - routes: `/evals`, `/evals/editor`, `/evals/proposals`
 - **feat-variants** - Variant comparison and batch runs - routes: `/variants/compare`, `/variants/compare/:batchId`
 
 ### Configure

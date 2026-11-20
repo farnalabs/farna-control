@@ -114,12 +114,18 @@ describe('EvalProposalsQueueView', () => {
     expect(wrapper.text()).toContain('views.EvalProposalsQueueView.title')
   })
 
-  it('does not render the redundant page-level tab strip (FAR-1236)', async () => {
+  it('renders the three eval-surface tabs, costs-style (FAR-2597)', async () => {
     const wrapper = mountView()
     await vi.waitFor(() => {
       expect(wrapper.find('[data-testid="proposal-card-rec-1"]').exists()).toBe(true)
     })
-    expect(wrapper.findComponent(PageTabs).exists()).toBe(false)
+    const tabs = wrapper.findComponent(PageTabs)
+    expect(tabs.exists()).toBe(true)
+    expect(tabs.props('tabs')).toEqual([
+      { label: 'views.EvalsListView.tabs_all', to: '/evals' },
+      { label: 'views.EvalsListView.tabs_editor', to: '/evals/editor' },
+      { label: 'views.EvalsListView.tabs_proposals', to: '/evals/proposals' },
+    ])
   })
 
   const typedJudgeConfig = {

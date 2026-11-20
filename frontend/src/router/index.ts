@@ -77,6 +77,7 @@ const SchemaListView = () => import('../views/SchemaListView.vue')
 const SchemaEditorView = () => import('../views/SchemaEditorView.vue')
 const OnboardingWizard = () => import('../views/OnboardingWizard.vue')
 const FeedbackInboxView = () => import('../views/FeedbackInboxView.vue')
+const EvalsListView = () => import('../views/EvalsListView.vue')
 const EvalEditorView = () => import('../views/EvalEditorView.vue')
 const EvalProposalsQueueView = () => import('../views/EvalProposalsQueueView.vue')
 const VariantCompareView = () => import('../views/VariantCompareView.vue')
@@ -382,6 +383,11 @@ const router = createRouter({
       path: '/feedback/inbox',
       name: 'feedback-inbox',
       component: FeedbackInboxView,
+    },
+    {
+      path: '/evals',
+      name: 'evals-list',
+      component: EvalsListView,
     },
     {
       path: '/evals/editor',
