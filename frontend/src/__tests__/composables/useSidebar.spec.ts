@@ -143,6 +143,16 @@ describe('useSidebar', () => {
       )
     })
 
+    it('does not record a preference when it merely reveals an active group', async () => {
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true, true)).toBe(false)
+
+      // A reveal is transient state, not a user choice: writing it would keep
+      // the group expanded after navigating away (FAR-2602 review).
+      expect(sidebar.groupPrefs.value).toEqual({})
+    })
+
     it('keeps the two-argument call meaning "default only"', async () => {
       const sidebar = await setupSidebar()
 

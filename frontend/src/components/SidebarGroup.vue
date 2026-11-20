@@ -1,6 +1,7 @@
 <template>
   <div>
     <button
+      ref="headerButtonRef"
       type="button"
       :aria-expanded="!collapsed"
       :aria-controls="`sidebar-group-${id}`"
@@ -28,6 +29,7 @@
     </button>
     <Transition name="fade">
       <section
+        ref="itemsSectionRef"
         v-show="!collapsed"
         :id="`sidebar-group-${id}`"
         class="sidebar-group-items"
@@ -40,7 +42,9 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { ref, watch } from 'vue'
+
+const props = defineProps<{
   id: string;
   label: string;
   labelKey?: string;
@@ -51,6 +55,26 @@ defineProps<{
 defineEmits<{
   toggle: [];
 }>();
+
+const headerButtonRef = ref<HTMLButtonElement | null>(null)
+const itemsSectionRef = ref<HTMLElement | null>(null)
+
+// FAR-2602: an auto-revealed group collapses again when the route leaves it.
+// If focus was inside the items, the focused link becomes `display:none` and
+// focus falls to <body>, so the next Tab restarts at the top of the document.
+// Move focus to the group header instead. The default `flush: 'pre'` runs this
+// before the re-render hides the section, so the link is still the active
+// element and `contains` can see it.
+watch(
+  () => props.collapsed,
+  (collapsed) => {
+    if (!collapsed) return
+    const active = document.activeElement
+    if (active !== null && itemsSectionRef.value?.contains(active)) {
+      headerButtonRef.value?.focus()
+    }
+  },
+)
 </script>
 
 <style scoped>

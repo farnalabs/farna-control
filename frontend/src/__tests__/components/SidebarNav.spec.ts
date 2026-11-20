@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick, reactive } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useRoute } from 'vue-router'
@@ -66,6 +67,12 @@ function groupHeader(wrapper: ReturnType<typeof mountSidebar>['wrapper'], label:
   const header = wrapper.findAll('.sidebar-group-header').find((h) => h.text() === label)
   expect(header, `expected group header "${label}" to render`).toBeTruthy()
   return header!
+}
+
+// Parsed equality beats a substring check: it proves the exact preference map
+// rather than merely that a group id appears somewhere in the blob.
+function storedPrefs(): Record<string, boolean> {
+  return JSON.parse(localStorage.getItem('sidebar-group-prefs') ?? '{}')
 }
 
 // Only links the user can actually SEE. A collapsed `SidebarGroup` keeps its
@@ -238,7 +245,7 @@ describe('SidebarNav', () => {
     await wrapper.find('.sidebar-group-header').trigger('click')
     await flushPromises()
     expect(wrapper.find('.sidebar-group-header').attributes('aria-expanded')).toBe('false')
-    expect(localStorage.getItem('sidebar-group-prefs')).toContain('build')
+    expect(storedPrefs()).toEqual({ build: true })
   })
 
   it('renders a collapsed rail with per-group disclosure controls instead of a flat list', async () => {
@@ -273,7 +280,7 @@ describe('SidebarNav', () => {
     // a collapsed group renders no item links in the rail
     expect(wrapper.findAll('.sidebar-link').length).toBe(0)
     // persisted for the next mount
-    expect(localStorage.getItem('sidebar-group-prefs')).toContain('build')
+    expect(storedPrefs()).toEqual({ build: true })
   })
 
   it('honours per-group collapse state for system admins in the rail', async () => {
@@ -351,6 +358,40 @@ describe('SidebarNav', () => {
       expect(linkHrefs(wrapper)).toContain('/settings/license')
     })
 
+    it('does not record a preference when it merely reveals an active group', async () => {
+      setRoute('/settings/license')
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+
+      // Revealed on entry, yet nothing was written: a reveal is transient
+      // state, not a user choice. If it were persisted the group would stay
+      // expanded after navigating away — the behaviour FAR-2602 forbids.
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('true')
+      expect(localStorage.getItem('sidebar-group-prefs')).toBeNull()
+    })
+
+    it('keeps an explicitly collapsed active group collapsed when the preference is seeded before mount', async () => {
+      // Seed the stored preference the same way a prior session would, then
+      // let the module-level useStorage ref observe it before mounting.
+      const seeded = JSON.stringify({ admin: true })
+      localStorage.setItem('sidebar-group-prefs', seeded)
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'sidebar-group-prefs',
+          newValue: seeded,
+          storageArea: localStorage,
+        }),
+      )
+      setRoute('/settings/license')
+
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('false')
+      expect(linkHrefs(wrapper)).not.toContain('/settings/license')
+      expect(storedPrefs()).toEqual({ admin: true })
+    })
+
     it('keeps a group the user explicitly collapsed collapsed while it holds the active route', async () => {
       setRoute('/settings/license')
       const { wrapper } = mountSidebar({ isSystemAdmin: true })
@@ -364,7 +405,7 @@ describe('SidebarNav', () => {
 
       expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('false')
       expect(linkHrefs(wrapper)).not.toContain('/settings/license')
-      expect(localStorage.getItem('sidebar-group-prefs')).toContain('admin')
+      expect(storedPrefs()).toEqual({ admin: true })
     })
 
     it('keeps an explicitly collapsed group collapsed across a remount on the same route', async () => {
@@ -424,6 +465,26 @@ describe('SidebarNav', () => {
         .find((toggle) => toggle.attributes('aria-controls') === 'sidebar-group-rail-admin')!
       expect(collapsedToggle.attributes('aria-expanded')).toBe('false')
       expect(linkHrefs(wrapper)).not.toContain('/settings/license')
+    })
+
+    it('collapses an auto-revealed group when the route moves outside it', async () => {
+      // The shared route double is a plain object, so a computed cannot track
+      // it — supply a reactive route instead. The sidebar mounts once, then the
+      // route changes under it, which is the dominant in-app journey.
+      const route = reactive({ path: '/settings/license' })
+      vi.mocked(useRoute).mockReturnValueOnce(route as never)
+
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('true')
+
+      route.path = '/runs'
+      await nextTick()
+
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('false')
+      expect(linkHrefs(wrapper)).not.toContain('/settings/license')
+      // Navigated away without a toggle, so still no stored preference.
+      expect(localStorage.getItem('sidebar-group-prefs')).toBeNull()
     })
   })
 })

@@ -101,7 +101,7 @@ import { OverlayScrollbarsComponent } from "overlayscrollbars-vue";
 import SidebarLink from "./SidebarLink.vue";
 import SidebarGroup from "./SidebarGroup.vue";
 
-import { getVisibleNavGroups, isNavItemActive } from "../config/navigation";
+import { getNavGroups, getVisibleNavGroups, isNavItemActive } from "../config/navigation";
 import type { NavGroup } from "../config/navigation";
 import { useNavVisibilityContext } from "../composables/useNavVisibilityContext";
 import { useSidebar } from "../composables/useSidebar";
@@ -161,9 +161,14 @@ const visibleSidebarGroups = computed(() => getVisibleNavGroups(navVisibility.va
 // Groups holding the current route. FAR-2602 reuses the same activation the
 // link highlight uses, so a detail page (`/runs/:id`, which has no nav row of
 // its own) activates — and so reveals — the sidebar item that owns it.
+//
+// Derived from the UNFILTERED manifest groups, not the visible ones: route
+// ownership is a manifest fact, not a visibility fact (FAR-2602 review). For a
+// permission-gated active item the visible set resolves after the plan/tier
+// fetch, so keying off it reveals the group one paint late.
 const activeGroupIds = computed(() => {
   const ids = new Set<string>()
-  for (const group of visibleSidebarGroups.value) {
+  for (const group of getNavGroups()) {
     for (const item of group.items) {
       if (isNavItemActive(item, route)) {
         ids.add(group.id)
