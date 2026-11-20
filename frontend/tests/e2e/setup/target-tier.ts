@@ -76,20 +76,18 @@ const TEAM_GATED_PATHS = loadTeamGatedPaths()
  * Legacy paths that the router redirects onto a Team-tier manifest route.
  *
  * The manifest lists the CURRENT paths only; `src/router/index.ts` keeps
- * one-release aliases alive (`/admin/sandbox-concurrency` →
- * `/admin/runners/concurrency`, `/environment-profiles/**` →
- * `/admin/runners/profiles/**`, ...). A spec that navigates to an alias is
- * gated exactly as its target is, so the alias has to be matched here too.
- * Keep this list in step with the router's redirects to a Team-tier path.
+ * one-release aliases alive. A spec that navigates to an alias is gated
+ * exactly as its target is, so the alias has to be matched here too.
+ *
+ * FAR-2604 lowered every alias target to community, so no legacy path is
+ * Team-gated today: `/admin` and `/admin/remy` redirect to `/admin/assistant`,
+ * `/admin/sandbox-concurrency` to `/admin/runners/concurrency`,
+ * `/admin/environments` and `/environment-profiles/**` to
+ * `/admin/runners/profiles/**`, and `/settings/remy` to `/settings/assistant`.
+ * Keep these lists in step with the router's redirects to a Team-tier path.
  */
-const LEGACY_TEAM_GATED_EXACT = new Set([
-  '/admin',
-  '/admin/sandbox-concurrency',
-  '/admin/environments',
-  '/admin/remy',
-  '/settings/remy',
-])
-const LEGACY_TEAM_GATED_PREFIXES = ['/environment-profiles', '/admin/runners']
+const LEGACY_TEAM_GATED_EXACT: ReadonlySet<string> = new Set()
+const LEGACY_TEAM_GATED_PREFIXES: readonly string[] = []
 
 /** Return the team-gated manifest path *pathname* falls under, if any. */
 export function matchTeamGatedPath(pathname: string): string | undefined {

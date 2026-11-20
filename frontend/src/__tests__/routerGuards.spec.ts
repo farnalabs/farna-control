@@ -98,7 +98,13 @@ describe('route content focus', () => {
   })
 })
 
-it('keeps organisation email settings reachable for a team org admin', async () => {
+it('keeps organisation email settings reachable for a community org admin', async () => {
+  // FAR-2604: `/settings/email` is the organisation SMTP configuration that
+  // HITL email alerts and readiness alerts send through, so a self-hosted
+  // Community install cannot work without it. BOTH levers are Community: this
+  // route tier, and the view's own `FeatureGate required-tier="community"` on
+  // the `email_config` capability (which is what would otherwise show the page
+  // and then a "Team Feature" lock, with 402s on every call).
   decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
   const resolved = router.resolve('/settings/email')
   const route = {
@@ -114,7 +120,7 @@ it('keeps organisation email settings reachable for a team org admin', async () 
   expect(route.path).toBe('/settings/email')
   expect(route.meta.requiresSystemAdmin).toBeUndefined()
   expect(route.meta.requiredRoles).toEqual(['admin'])
-  expect(route.meta.requiredTier).toBe('team')
+  expect(route.meta.requiredTier).toBe('community')
   await expect(enforceRoleTierVisibility(route as never, adminToken())).resolves.toBe(true)
 })
 

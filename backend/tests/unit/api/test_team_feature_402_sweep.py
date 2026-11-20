@@ -21,6 +21,7 @@ from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
+from farna.core.feature_flags import CommunityTier
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
 from tests.unit.api.plan_stubs import all_features, community_features
@@ -85,6 +86,12 @@ def community_client() -> Generator[TestClient, None, None]:
 
 
 @pytest.fixture
+def community_tier_client() -> Generator[TestClient, None, None]:
+    """Real Community plan — community-tier flags active without a licence."""
+    yield from _build_client(CommunityTier())
+
+
+@pytest.fixture
 def team_client() -> Generator[TestClient, None, None]:
     yield from _build_client(all_features())
 
@@ -98,7 +105,6 @@ TEAM_ROUTES: list[tuple[str, str, str]] = [
     ("admin_spend_limits", "get", "/api/v1/admin/costs/limits"),
     ("admin_cost_controls", "get", "/api/v1/admin/costs/controls"),
     ("admin_cost_breakdown", "get", "/api/v1/admin/costs/export"),
-    ("environment_profiles", "get", "/api/v1/environment-profiles"),
     ("plugin_management", "get", "/api/v1/plugins"),
     ("admin_run_retention", "get", "/api/v1/admin/runs/retention"),
     ("error_forwarders", "get", "/api/v1/errors/forwarders"),
@@ -108,12 +114,26 @@ TEAM_ROUTES: list[tuple[str, str, str]] = [
     ("observability", "get", "/api/v1/settings/observability"),
     ("analytics_page", "get", "/api/v1/analytics/query"),
     ("error_tracking", "get", "/api/v1/errors"),
+]
+
+
+# FAR-2604: features lowered to the community tier. A real Community plan has
+# these active without a licence, so they must NEVER be in TEAM_ROUTES (which
+# asserts a 402 on the community plan).
+COMMUNITY_ROUTES: list[tuple[str, str, str]] = [
+    ("environment_profiles", "get", "/api/v1/environment-profiles"),
     ("email_config", "get", f"/api/v1/admin/org/{_DUMMY_UUID}/email-settings"),
 ]
 
 
 def _call(client: TestClient, method: str, path: str):
     return getattr(client, method)(path)
+
+
+@pytest.mark.parametrize(("feature", "method", "path"), COMMUNITY_ROUTES)
+def test_community_tier_feature_is_not_gated(community_tier_client: TestClient, feature: str, method: str, path: str) -> None:
+    resp = _call(community_tier_client, method, path)
+    assert resp.status_code != 402, f"Community feature '{feature}' was gated on {method.upper()} {path}: {resp.text[:200]}"
 
 
 @pytest.mark.parametrize(("feature", "method", "path"), TEAM_ROUTES)

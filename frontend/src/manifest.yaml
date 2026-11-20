@@ -395,6 +395,7 @@ routes:
         sidebar_order: 10
         type: form_page
         <<: *team
+        required_tier: community
         visibility: private_preview
         deprecated: false
 
@@ -578,6 +579,7 @@ routes:
         deprecated: false
 
         <<: *team
+        required_tier: community
     /settings/monitoring:
         name: settings-monitoring
         breadcrumb: Browser Monitoring
@@ -690,6 +692,7 @@ routes:
         sidebar_order: 7
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/model-backends:
@@ -701,6 +704,7 @@ routes:
         sidebar_order: 3
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/node-categories:
@@ -712,6 +716,7 @@ routes:
         sidebar_order: 7
         type: list_page
         <<: *team
+        required_tier: community
         visibility: private_preview
         deprecated: false
 
@@ -727,6 +732,7 @@ routes:
         deprecated: false
 
         <<: *team
+        required_tier: community
     /admin/housekeeping:
         name: admin-housekeeping
         breadcrumb: Housekeeping
@@ -747,6 +753,7 @@ routes:
         sidebar_order: 2
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/run-retention:
@@ -769,6 +776,7 @@ routes:
         sidebar_order:
         type: form_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/evidence-redaction:
@@ -847,6 +855,7 @@ routes:
         feature_flag: webhook_notification_log
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/trigger-events:
@@ -858,6 +867,7 @@ routes:
         sidebar_order: 9
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/product-analytics:
@@ -872,7 +882,10 @@ routes:
         <<: *team
         # A system_admin_only route is an INSTANCE-level gate; the org-ROLE
         # requirement *team carries does not apply (FAR-1795), so it is
-        # overridden to none. The Team TIER gate is deliberate.
+        # overridden to none. The TIER is community: the ratified Team bundle
+        # does not name product analytics, and this is an instance-level admin
+        # surface, so a system admin on a community install must reach it.
+        required_tier: community
         required_roles:
         deprecated: false
 
@@ -1016,6 +1029,7 @@ routes:
         sidebar_order: 8
         type: page
         <<: *team
+        required_tier: community
         deprecated: false
         exact: true
 
@@ -1028,6 +1042,7 @@ routes:
         sidebar_order:
         type: form_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/runners/profiles/:id/edit:
@@ -1042,6 +1057,7 @@ routes:
         dynamic_params:
           - id
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/my-profile:

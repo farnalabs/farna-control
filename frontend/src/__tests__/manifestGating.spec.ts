@@ -74,13 +74,14 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
 
   it('/admin/errors and /admin/errors/:id keep the team tier and admit viewers as well as admins (FAR-2356)', () => {
     // FAR-2356 relaxes the error dashboard from `<<: *team` (admin-only) to
-    // `<<: *team_viewer` so a demo-org viewer can reach it. Pin the gate on the
-    // REAL manifest: the tier must stay `team` (the demo org seeds that
-    // tier and the views wrap themselves in a FeatureGate) and the role list
-    // must admit `viewer` WITHOUT dropping `admin` (the router role gate is
-    // ANY-of, so a regression that replaces the list with [viewer] would lock
-    // admins out). An access-control relaxation without a pinning test can
-    // silently regress.
+    // `<<: *team_viewer` so a demo-org viewer can reach it. The dashboard stays
+    // team-tier in FAR-2604 — it is a Beta observability surface, and its
+    // `error_tracking` capability gate is team-tier too, so a lower route tier
+    // would show a Community admin a page whose backend 402s. Pin the gate on
+    // the REAL manifest: the tier is `team` and the role list must admit
+    // `viewer` WITHOUT dropping `admin` (the router role gate is ANY-of, so a
+    // regression that replaces the list with [viewer] would lock admins out).
+    // An access-control relaxation without a pinning test can silently regress.
     for (const path of ['/admin/errors', '/admin/errors/:id']) {
       const route = routes[path]
       expect(route, `${path} must exist`).toBeDefined()
@@ -121,16 +122,18 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
     }
   })
 
-  it('/admin/product-analytics keeps the Team tier gate but drops the accidental admin org-role gate (FAR-1795)', () => {
+  it('/admin/product-analytics is system-admin gated and drops the accidental admin org-role gate (FAR-1795/FAR-2604)', () => {
     // `<<: *team` injects BOTH `required_tier: team` AND `required_roles: [admin]`.
     // A system_admin_only route is an INSTANCE-level gate; the org-ROLE
     // requirement does not apply and wrongly redirected a system admin whose
     // org_role != 'admin'. The explicit `required_roles:` after `<<:` must
-    // override the merged value to null while the tier gate survives.
+    // override the merged value to null, and FAR-2604 lowers the tier to
+    // community (product analytics is not in the ratified Team bundle) — the
+    // route is gated by system_admin_only alone.
     const route = routes['/admin/product-analytics']
     expect(route).toBeDefined()
     expect(route.system_admin_only).toBe(true)
-    expect(route.required_tier).toBe('team')
+    expect(route.required_tier).toBe('community')
     expect(route.required_roles == null).toBe(true)
   })
 
