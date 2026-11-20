@@ -68,17 +68,25 @@ events into typed notification payloads; and in-app notifications stream over SS
       Deliveries** — (status/event filters, retry of failed deliveries)
       (`api/routes/admin_notifications.py`, `test_admin_notifications_webhooks.py`).
       The page explains its own scope (FAR-2596): each row is one outbound
-      delivery attempt, and inbound trigger webhooks are linked out to the
-      Trigger Event Log; event types and statuses render their human labels; a
-      "Dead Lettered" line says the delivery gave up after the final attempt and
-      that a retry starts a fresh attempt; the empty state distinguishes "no
-      deliveries yet" from "no deliveries match these filters"; and a banner
-      warns when `GET /api/v1/notifications` reports zero endpoints, with an
-      "Add a webhook endpoint" link to `/settings/teams` (omitted when
-      `team_rbac` is inactive). The endpoint signal is read from the endpoint
-      list, never inferred from the delivery log — a soft-deleted endpoint
-      leaves its historical deliveries behind — and the fetch fails open, so an
-      error or unexpected body renders no banner.
+      delivery attempt, including deliveries to a webhook that has since been
+      deleted (the FK is nulled, the history is kept), while in-app error alerts
+      are excluded — the error-tracking alert dispatcher also writes
+      `NotificationDeliveryLog` rows, with `status='in_app'` and a NULL
+      `endpoint_id`, and both the list query and its count filter them by STATUS
+      (`status != 'in_app'`, never `endpoint_id IS NOT NULL`), so the page and
+      its `total` describe only outbound attempts; inbound trigger webhooks are
+      linked out to the Trigger Event Log; event types and statuses render their
+      human labels, and the status filter offers only values the log can contain
+      (delivered / failed / dead_lettered); a "Dead Lettered" line says the
+      delivery gave up after the final attempt and that a retry starts a fresh
+      attempt; the empty state distinguishes "no deliveries yet" from "no
+      deliveries match these filters"; and a banner warns when
+      `GET /api/v1/notifications` reports zero endpoints, with an "Add a webhook
+      endpoint" link to `/settings/teams` (omitted when `team_rbac` is
+      inactive). The endpoint signal is read from the endpoint list, never
+      inferred from the delivery log — a soft-deleted endpoint leaves its
+      historical deliveries behind — and the fetch fails open, so an error or
+      unexpected body renders no banner.
 - [x] In-app notifications stream over SSE with a dashboard panel, per-user filters and a
       dismiss flow (`in_app_notifications/*.feature`, `test_in_app_notifications.py`)
 - [x] Email delivery settings and message sending are configured under `/settings/email`
@@ -211,6 +219,18 @@ coverage gate is satisfied by that test rather than by deleting the branch.
       version negotiation.
 
 ## QA History
+- 2026-11-20: **FAR-2596 follow-up — the page is now strictly outbound.** The
+  first slice's banner claim ("Nothing will appear here until you add one") was
+  false for an org with in-app error-alert rules: the error-tracking alert
+  dispatcher writes `NotificationDeliveryLog` rows with `status='in_app'` and a
+  NULL `endpoint_id`, and the org-wide delivery-log query did not exclude them.
+  Both the list query and `_count_deliveries` now filter `status != 'in_app'`
+  (deliberately NOT `endpoint_id IS NOT NULL`, because `ondelete=SET NULL` keeps
+  a deleted webhook's history visible), the page's status filter drops its
+  never-matching `pending` option, the boundary explainer states that in-app
+  error alerts are not shown and that deliveries to deleted webhooks remain, and
+  a real-SQLite unit test pins all three outcomes
+  (`test_list_all_deliveries_excludes_in_app_rows_and_keeps_deleted_endpoint_rows`).
 - 2026-11-20: **FAR-2596 delivery page comprehension pass** – the product
   owner opened `/admin/notification-delivery` against production, saw an empty
   page and could not tell what it was for. The page now states its boundary

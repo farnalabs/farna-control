@@ -45,7 +45,7 @@
   :placeholder="$t('views.AdminNotificationDeliveryLogView.status')"
   data-testid="admin-notification-log-status"
   class="w-full"
-  :options="[{ value: '__all__', label: $t('views.AdminErrorsView.all_statuses') }, { value: 'delivered', label: $t('views.AdminNotificationDeliveryLogView.delivered') }, { value: 'failed', label: $t('views.AdminNotificationDeliveryLogView.failed') }, { value: 'dead_lettered', label: $t('views.AdminNotificationDeliveryLogView.dead_lettered') }, { value: 'pending', label: $t('views.AdminNotificationDeliveryLogView.pending') }]"
+  :options="[{ value: '__all__', label: $t('views.AdminErrorsView.all_statuses') }, { value: 'delivered', label: $t('views.AdminNotificationDeliveryLogView.delivered') }, { value: 'failed', label: $t('views.AdminNotificationDeliveryLogView.failed') }, { value: 'dead_lettered', label: $t('views.AdminNotificationDeliveryLogView.dead_lettered') }]"
   option-label="label"
   option-value="value"
 >

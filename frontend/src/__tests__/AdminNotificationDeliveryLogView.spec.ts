@@ -114,7 +114,11 @@ describe('AdminNotificationDeliveryLogView', () => {
     const boundary = wrapper.find('[data-testid="admin-notification-log-boundary"]')
     expect(boundary.exists()).toBe(true)
     expect(boundary.text()).toContain('outbound delivery attempt')
-    expect(boundary.text()).toContain('Inbound trigger webhooks are not shown here')
+    // Historical deliveries to a since-deleted webhook stay visible...
+    expect(boundary.text()).toContain('including webhooks you have since deleted')
+    // ...while in-app error alerts (same table, status 'in_app') do not.
+    expect(boundary.text()).toContain('In-app error alerts are not shown here')
+    expect(boundary.text()).toContain('Inbound trigger webhooks are recorded on the')
 
     // Inbound webhooks are not on this page — the explainer points at the
     // Trigger Event Log, the surface that actually records them.
@@ -123,6 +127,28 @@ describe('AdminNotificationDeliveryLogView', () => {
     expect(link.attributes('href')).toBe('/admin/trigger-events')
     expect(link.text()).toBe('Trigger Event Log')
     expect(boundary.text()).toContain('instead.')
+  })
+
+  it('offers only status filters the delivery log can actually satisfy (FAR-2596)', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await nextTick()
+
+    // The status Select is the first AppSelect in the filter bar.
+    const statusSelect = wrapper.findAllComponents(AppSelect).at(0)
+    expect(statusSelect).toBeDefined()
+    const values = (statusSelect!.props('options') as Array<{ value: string }>).map((o) => o.value)
+
+    expect(values).toContain('__all__')
+    expect(values).toContain('delivered')
+    expect(values).toContain('failed')
+    expect(values).toContain('dead_lettered')
+    // 'in_app' rows are excluded server-side and 'pending' is not in the
+    // delivery-log status vocabulary (the CHECK constraint allows only
+    // delivered / failed / dead_lettered / in_app), so either filter could
+    // only ever return nothing.
+    expect(values).not.toContain('in_app')
+    expect(values).not.toContain('pending')
   })
 
   it('renders the "no deliveries yet" state when endpoints exist and nothing has fired', async () => {

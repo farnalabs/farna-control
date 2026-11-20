@@ -16,7 +16,7 @@ import hmac
 import json
 import uuid
 from collections.abc import AsyncGenerator, Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -24,12 +24,16 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import farna.api.routes.admin_notifications as admin_notifications
 from farna.api.dependencies import get_db_session, get_plan_context
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
+from farna.db.models.base import Base
+from farna.db.models.notification_delivery import NotificationDeliveryLog
+from farna.db.models.notification_endpoint import NotificationEndpoint
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_rls_preamble
 
@@ -818,6 +822,114 @@ def test_list_all_deliveries_invalid_date_422(api: tuple[TestClient, AsyncMock])
     client, _ = api
     resp = client.get("/api/v1/admin/notifications/deliveries", params={"from": "not-a-date"})
     assert resp.status_code == 422
+
+
+async def test_list_all_deliveries_excludes_in_app_rows_and_keeps_deleted_endpoint_rows() -> None:
+    """FAR-2596: the org-wide log is the OUTBOUND delivery surface only.
+
+    Runs against real in-memory SQLite (not a mocked session) so the WHERE
+    clauses actually execute. The error-tracking alert dispatcher writes
+    ``NotificationDeliveryLog`` rows with ``status='in_app'`` and a NULL
+    ``endpoint_id`` for in-app error alerts; they belong to the in-app inbox and
+    must appear in neither the page NOR ``total``. A webhook delivery whose
+    endpoint row was since deleted (``endpoint_id`` NULLed by
+    ``ondelete=SET NULL``) must still be returned — the exclusion is by STATUS,
+    never by a NULL endpoint.
+    """
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(
+                lambda sync_conn: Base.metadata.create_all(
+                    sync_conn,
+                    tables=[NotificationEndpoint.__table__, NotificationDeliveryLog.__table__],
+                )
+            )
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        org_id = uuid.uuid4()
+        endpoint_id = uuid.uuid4()
+        in_app_id, deleted_endpoint_id, live_id = (uuid.uuid4() for _ in range(3))
+        now = datetime.now(UTC)
+
+        async with maker() as session, session.begin():
+            session.add(
+                NotificationEndpoint(
+                    id=endpoint_id,
+                    organisation_id=org_id,
+                    url="https://hooks.example.com/live",
+                    events=["run_failed"],
+                )
+            )
+            # 1. In-app error alert (alert_dispatcher): status 'in_app', no endpoint.
+            session.add(
+                NotificationDeliveryLog(
+                    id=in_app_id,
+                    organisation_id=org_id,
+                    event_type="error_alert",
+                    endpoint_id=None,
+                    status="in_app",
+                    attempt_count=0,
+                    created_at=now - timedelta(minutes=3),
+                )
+            )
+            # 2. Outbound delivery whose endpoint was since deleted (FK SET NULL).
+            session.add(
+                NotificationDeliveryLog(
+                    id=deleted_endpoint_id,
+                    organisation_id=org_id,
+                    event_type="run_failed",
+                    endpoint_id=None,
+                    status="delivered",
+                    attempt_count=1,
+                    created_at=now - timedelta(minutes=2),
+                )
+            )
+            # 3. Outbound delivery to a live endpoint.
+            session.add(
+                NotificationDeliveryLog(
+                    id=live_id,
+                    organisation_id=org_id,
+                    event_type="run_failed",
+                    endpoint_id=endpoint_id,
+                    status="delivered",
+                    attempt_count=1,
+                    created_at=now - timedelta(minutes=1),
+                )
+            )
+
+        async with maker() as session:
+            principal = TenantPrincipal(
+                username="admin",
+                organisation_id=org_id,
+                account_id=uuid.uuid4(),
+                org_role="admin",
+            )
+            page = await admin_notifications._list_deliveries(
+                cursor=None,
+                limit=50,
+                status_filter=None,
+                event_type_filter=None,
+                endpoint_id_filter=None,
+                date_from=None,
+                date_to=None,
+                session=session,
+                principal=principal,
+            )
+
+        ids = {item.id for item in page.items}
+        # `total` is the count query: it must exclude the in_app row too, or the
+        # page footer contradicts the rows it describes.
+        assert page.total == 2
+        assert ids == {str(deleted_endpoint_id), str(live_id)}
+        assert str(in_app_id) not in ids
+        assert all(item.status != "in_app" for item in page.items)
+
+        # The deleted-endpoint delivery survives, with no URL to show.
+        by_id = {item.id: item for item in page.items}
+        assert by_id[str(deleted_endpoint_id)].endpoint_url == ""
+        assert by_id[str(live_id)].endpoint_url == "https://hooks.example.com/live"
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.parametrize(("exc", "expected"), _DB_ERROR_PARAMS)

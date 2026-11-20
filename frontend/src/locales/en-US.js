@@ -3379,7 +3379,7 @@ export default {
     "AdminNotificationDeliveryLogView": {
       "webhook_deliveries": "Webhook Deliveries",
       "webhook_deliveries_subtitle": "See whether each notification Farna Control sent to your webhooks was delivered, and retry the ones that failed.",
-      "boundary_prefix": "Each row is one outbound delivery attempt to a notification webhook you configured. Inbound trigger webhooks are not shown here; they are recorded on the",
+      "boundary_prefix": "Each row is one outbound delivery attempt to a notification webhook you configured, including webhooks you have since deleted. In-app error alerts are not shown here. Inbound trigger webhooks are recorded on the",
       "boundary_link": "Trigger Event Log",
       "boundary_suffix": "instead.",
       "no_outbound_endpoints_title": "No outbound notification webhooks are configured",
@@ -3392,7 +3392,6 @@ export default {
       "no_deliveries_match_body": "Widen the date range, or clear the event type and status filters.",
       "reset_filters": "Reset filters",
       "dead_lettered_help": "Dead Lettered means the delivery gave up after the final attempt; retrying starts a fresh attempt.",
-      "in_app": "In-App",
       "retry_all_request_failed": "Retry all request failed:",
       "retrying_all": "Retrying All…",
       "run_failed": "Run Failed",
