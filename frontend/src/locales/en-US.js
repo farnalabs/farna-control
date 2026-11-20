@@ -5721,6 +5721,9 @@ export default {
       "available_on_plan": "Available on the {plan} plan",
       "locked_aria": "{label} (Available on the {plan} plan)"
     },
+    "Router": {
+      "chunk_recovery_failed": "Modulo could not load that page after a new version was deployed. Returning you to the dashboard. Please try again."
+    },
     "FeatureGate": {
       "team_feature": "Team Feature",
       "available_on_higher_plan_tier": "Available on higher plan tier",
