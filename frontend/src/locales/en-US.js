@@ -1018,7 +1018,7 @@ export default {
     },
     "SettingsNotificationsView": {
       "title": "Notification Preferences",
-      "subtitle": "Choose which in-app notifications reach you, and at what level of detail.",
+      "subtitle": "Choose which in-app notifications reach you, and the lowest severity your dashboard shows.",
       "categories_heading": "In-app notification categories",
       "categories_help": "Turn a category off to stop receiving those in-app notifications. Changes are saved as you make them.",
       "no_categories": "No notification categories are available.",
@@ -1508,7 +1508,7 @@ export default {
     },
     "AdminNodeCategoriesView": {
       "title": "Node Categories",
-      "subtitle": "Group pipeline nodes into categories, so a large graph is easier to scan.",
+      "subtitle": "Define color-coded categories for classifying pipeline nodes.",
       "add_category": "Add Category",
       "failed_to_load_categories": "Failed to load categories:",
       "not_available_on_current_plan": "Node Categories are not available on your current plan.",
@@ -1996,7 +1996,7 @@ export default {
       "unsaved_changes_continue": "Open version"
     },
     "AdminPluginsView": {
-      "manage_installed_modulo_plugins_and_extensions": "See what each installed plugin adds, and switch it off if it goes wrong.",
+      "manage_installed_modulo_plugins_and_extensions": "See what each installed plugin adds and whether it is healthy.",
       "failed_to_load_plugins": "Failed to load plugins:",
       "disable_plugin": "Disable plugin",
       "expand_plugin_details_1": "Expand plugin details",
@@ -4148,7 +4148,7 @@ export default {
     },
     "SettingsEmailView": {
       "email_settings": "Email Settings",
-      "configure_smtp_provider_for_transactional_emails": "Set up outgoing email so password resets and alerts actually reach people.",
+      "configure_smtp_provider_for_transactional_emails": "Set up outgoing email so review requests, cost reports and health alerts reach your inbox.",
       "smtp_host": "SMTP Host",
       "smtp_host_placeholder": "smtp.example.com",
       "smtp_port": "SMTP Port",
