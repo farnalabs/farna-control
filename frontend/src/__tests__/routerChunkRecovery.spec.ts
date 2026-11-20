@@ -32,6 +32,7 @@ const DESTINATION = '/admin/costs/limits'
 const OTHER_DESTINATION = '/admin/costs/controls'
 const DASHBOARD = '/'
 const RECOVERY_GUARD_KEY = 'modulo.chunk-recovery:/admin/costs/limits'
+const DASHBOARD_RECOVERY_GUARD_KEY = 'modulo.chunk-recovery:/'
 
 async function loadRecovery() {
   vi.resetModules()
@@ -161,6 +162,47 @@ describe('route-chunk recovery (FAR-2594)', () => {
     expect(secondDocument.assign).not.toHaveBeenCalledWith(DESTINATION)
     expect(secondDocument.alert).toHaveBeenCalledTimes(1)
     expect(String(secondDocument.alert.mock.calls[0]?.[0])).toContain('dashboard')
+  })
+
+  it('stops instead of reloading when the dashboard itself is the failing destination', async () => {
+    // First document: the app is at the dashboard and its own chunk is missing.
+    const firstDocument = await loadRecovery()
+    firstDocument.noteNavigationStarted({ fullPath: DASHBOARD })
+    firstDocument.handleRouteChunkError(CHUNK_ERROR, firstDocument.assign) // budget 1: in-app retry
+    firstDocument.handleRouteChunkError(CHUNK_ERROR, firstDocument.assign) // exhausted: one full load
+
+    expect(firstDocument.assign).toHaveBeenCalledTimes(1)
+    expect(firstDocument.assign).toHaveBeenCalledWith(DASHBOARD)
+
+    // Second document: a fresh bundle is still missing the dashboard chunk. The
+    // old code assigned the dashboard again here — and on every document after
+    // it, for ever, with a blocking alert each cycle.
+    const secondDocument = await loadRecovery()
+    secondDocument.noteNavigationStarted({ fullPath: DASHBOARD })
+    secondDocument.handleRouteChunkError(CHUNK_ERROR, secondDocument.assign) // budget 1: in-app retry
+    secondDocument.handleRouteChunkError(CHUNK_ERROR, secondDocument.assign) // guard spent: TERMINAL
+
+    expect(
+      secondDocument.assign,
+      'the dashboard must not be reloaded a second time',
+    ).not.toHaveBeenCalled()
+    // It still tells the user, once, that it could not recover.
+    expect(secondDocument.alert).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops when the dashboard fallback guard is already spent', async () => {
+    const { noteNavigationStarted, handleRouteChunkError, assign, alert } = await loadRecovery()
+    // A previous document already spent both the destination guard and the
+    // dashboard fallback guard, so neither destination is safe to reload.
+    sessionStorage.setItem(RECOVERY_GUARD_KEY, '1')
+    sessionStorage.setItem(DASHBOARD_RECOVERY_GUARD_KEY, '1')
+
+    noteNavigationStarted({ fullPath: DESTINATION })
+    handleRouteChunkError(CHUNK_ERROR, assign) // budget 1: in-app retry
+    handleRouteChunkError(CHUNK_ERROR, assign) // both guards spent: TERMINAL
+
+    expect(assign, 'a spent dashboard fallback must not be reloaded again').not.toHaveBeenCalled()
+    expect(alert).toHaveBeenCalledTimes(1)
   })
 
   it('clears the reload guard once a navigation lands, so a later deploy can recover', async () => {

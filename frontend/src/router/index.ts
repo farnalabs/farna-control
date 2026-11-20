@@ -1275,8 +1275,22 @@ export function handleRouteChunkError(
     // This tab already reloaded for this destination and the freshly loaded
     // bundle is missing the same chunk: assigning again would loop forever.
     // Say so, and send the user to a route that does load.
+    const dashboardPath = router.resolve({ name: DASHBOARD_ROUTE_NAME }).fullPath
     reportChunkRecoveryFailure(target)
-    assign(router.resolve({ name: DASHBOARD_ROUTE_NAME }).fullPath)
+
+    // Terminal state. If the failing destination IS the dashboard, or the
+    // dashboard fallback was already reloaded once and is still missing, there
+    // is no route left that loads: stop rather than re-enter the reload loop
+    // with a blocking alert on every document load.
+    if (dashboardPath === target || chunkRecoveryAlreadyUsed(dashboardPath)) {
+      return
+    }
+
+    // Bound the fallback too: mark the dashboard as spent before reloading it,
+    // so a missing dashboard chunk terminates on the next document instead of
+    // reloading it again.
+    markChunkRecoveryUsed(dashboardPath)
+    assign(dashboardPath)
     return
   }
 
