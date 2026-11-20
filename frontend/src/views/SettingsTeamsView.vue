@@ -119,25 +119,25 @@
               <div v-if="membersByTeam[team.id]?.length === 0" class="py-4 text-center text-sm text-muted-foreground">
                 {{ $t('views.SettingsTeamsView.no_members_yet') }}
               </div>
-              <div v-else class="overflow-x-auto">
+              <div v-else class="table-wrapper">
                 <table class="w-full text-sm">
                 <thead>
-                  <tr class="border-b text-left text-muted-foreground">
-                    <th class="pb-2 font-medium">{{ $t('views.SettingsTeamsView.name') }}</th>
-                    <th class="pb-2 font-medium">{{ $t('views.SettingsTeamsView.email') }}</th>
-                    <th class="pb-2 font-medium">{{ $t('views.SettingsTeamsView.role') }}</th>
-                    <th class="pb-2 font-medium">{{ $t('views.SettingsTeamsView.actions') }}</th>
+                  <tr>
+                    <th class="table-header">{{ $t('views.SettingsTeamsView.name') }}</th>
+                    <th class="table-header">{{ $t('views.SettingsTeamsView.email') }}</th>
+                    <th class="table-header">{{ $t('views.SettingsTeamsView.role') }}</th>
+                    <th class="table-header">{{ $t('views.SettingsTeamsView.actions') }}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody class="divide-y divide-border">
                   <template v-for="member in membersByTeam[team.id]" :key="member.id">
-                  <tr class="border-b last:border-0">
-                    <td class="max-w-0 py-2 sm:max-w-none">
+                  <tr>
+                    <td class="table-cell max-w-0 sm:max-w-none">
                       <span class="block break-words font-medium sm:font-normal">{{ userDisplayName(member.user_id) }}</span>
                       <span class="block break-all text-xs text-muted-foreground sm:hidden">{{ userEmail(member.user_id) }}</span>
                     </td>
-                    <td class="hidden py-2 text-muted-foreground sm:table-cell">{{ userEmail(member.user_id) }}</td>
-                    <td class="py-2">
+                    <td class="table-cell hidden text-muted-foreground sm:table-cell">{{ userEmail(member.user_id) }}</td>
+                    <td class="table-cell">
                       <Select
   :aria-label="$t('views.SettingsTeamsView.aria_label_member_role')"
   v-model="member.role"
@@ -153,12 +153,12 @@
   </template>
 </Select>
                     </td>
-                    <td class="py-2 text-right">
+                    <td class="table-cell-numeric">
                       <TableActions :actions="memberActions(team.id, member)" />
                     </td>
                   </tr>
                   <tr v-if="removeConfirmMemberId === member.id" class="bg-destructive/5">
-                    <td colspan="4" class="px-2 py-3">
+                    <td colspan="4" class="table-cell">
                       <div class="flex items-center gap-3">
                         <span class="text-sm text-destructive-text">{{ $t('views.SettingsTeamsView.remove_member_confirm') }}</span>
                         <button type="button" :disabled="removingMember" data-testid="settings-teams-remove-confirm" class="rounded-lg bg-destructive-fill px-3 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50" @click="removeMember(team.id, member)">

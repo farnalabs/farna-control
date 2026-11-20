@@ -41,21 +41,21 @@
       </div>
 
       <template v-else>
-        <DataCard variant="bordered" padding="none" elevation="sm" card-class="overflow-x-auto">
+        <div class="table-wrapper">
           <table class="w-full text-left text-sm">
-            <thead class="bg-muted/50 text-xs font-medium uppercase text-muted-foreground">
+            <thead>
               <tr>
-                <th class="px-4 py-3">{{ $t('views.SettingsGuardrailsView.name') }}</th>
-                <th class="px-4 py-3">{{ $t('views.SettingsGuardrailsView.action') }}</th>
-                <th class="px-4 py-3">{{ $t('views.SettingsGuardrailsView.detection_type') }}</th>
-                <th class="px-4 py-3">{{ $t('views.SettingsGuardrailsView.field') }}</th>
-                <th class="px-4 py-3">{{ $t('views.SettingsGuardrailsView.pipeline') }}</th>
+                <th class="table-header">{{ $t('views.SettingsGuardrailsView.name') }}</th>
+                <th class="table-header">{{ $t('views.SettingsGuardrailsView.action') }}</th>
+                <th class="table-header">{{ $t('views.SettingsGuardrailsView.detection_type') }}</th>
+                <th class="table-header">{{ $t('views.SettingsGuardrailsView.field') }}</th>
+                <th class="table-header">{{ $t('views.SettingsGuardrailsView.pipeline') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr v-for="g in items" :key="g.id" class="transition-colors hover:bg-muted/30">
-                <td class="px-4 py-3 font-medium">{{ g.name }}</td>
-                <td class="px-4 py-3">
+                <td class="table-cell font-medium">{{ g.name }}</td>
+                <td class="table-cell">
                   <span :class="actionBadgeClass(g)" class="badge capitalize">{{ actionLabel(g) }}</span>
                   <span
                     v-if="isObserveMode(g)"
@@ -67,15 +67,15 @@
                     {{ $t('views.SettingsGuardrailsView.observe_badge') }}
                   </span>
                 </td>
-                <td class="px-4 py-3">
+                <td class="table-cell">
                   <span :class="detectionBadgeClass(g)" class="badge capitalize">{{ detectionLabel(g) }}</span>
                 </td>
-                <td class="px-4 py-3 font-mono text-xs">{{ fieldLabel(g) }}</td>
-                <td class="px-4 py-3">{{ pipelineName(g.pipeline_id) }}</td>
+                <td class="table-cell font-mono text-xs">{{ fieldLabel(g) }}</td>
+                <td class="table-cell">{{ pipelineName(g.pipeline_id) }}</td>
               </tr>
             </tbody>
           </table>
-        </DataCard>
+        </div>
       </template>
 
       <FormDialog
@@ -277,7 +277,6 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
-import DataCard from '../components/ui/DataCard.vue'
 import { usePlanStore } from '../stores/planStore'
 import { shortId } from '../utils/format'
 import Select from '../components/shared/AppSelect.vue'

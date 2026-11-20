@@ -116,24 +116,24 @@
 
       <section class="space-y-3" aria-labelledby="evidence-index-coverage-heading" data-testid="compliance-evidence-index-coverage">
         <h2 id="evidence-index-coverage-heading" class="text-lg font-semibold">{{ $t('views.ComplianceEvidenceIndex.coverage_heading') }}</h2>
-        <DataCard padding="none" elevation="sm" card-class="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-coverage-heading" tabindex="0" data-testid="compliance-evidence-index-coverage-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
+        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-coverage-heading" tabindex="0" data-testid="compliance-evidence-index-coverage-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
           <table class="w-full text-left text-sm">
             <thead>
-              <tr class="border-b bg-muted/50">
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.framework') }}</th>
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.category') }}</th>
-                <th scope="col" class="px-3 py-2 text-right font-medium">{{ $t('views.ComplianceEvidenceIndex.count') }}</th>
+              <tr>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.framework') }}</th>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.category') }}</th>
+                <th scope="col" class="table-header table-cell-numeric">{{ $t('views.ComplianceEvidenceIndex.count') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="row in coverageRows" :key="`${row.framework}-${row.category}`" class="border-b last:border-b-0">
-                <td class="px-3 py-2 font-mono text-xs">{{ row.framework }}</td>
-                <td class="px-3 py-2">{{ row.category }}</td>
-                <td class="px-3 py-2 text-right tabular-nums">{{ row.count }}</td>
+            <tbody class="divide-y divide-border">
+              <tr v-for="row in coverageRows" :key="`${row.framework}-${row.category}`">
+                <td class="table-cell font-mono text-xs">{{ row.framework }}</td>
+                <td class="table-cell">{{ row.category }}</td>
+                <td class="table-cell-numeric">{{ row.count }}</td>
               </tr>
             </tbody>
           </table>
-        </DataCard>
+        </div>
       </section>
 
       <section class="space-y-3" aria-labelledby="evidence-index-artifacts-heading">
@@ -143,24 +143,24 @@
             {{ $t('views.ComplianceEvidenceIndex.artifact_count', { count: indexData.artifacts.length }) }}
           </p>
         </div>
-        <DataCard padding="none" elevation="sm" card-class="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-artifacts-heading" tabindex="0" data-testid="compliance-evidence-index-artifacts-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
+        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-artifacts-heading" tabindex="0" data-testid="compliance-evidence-index-artifacts-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
           <table class="w-full min-w-[1050px] text-left text-sm">
             <thead>
-              <tr class="border-b bg-muted/50">
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.artifact_type') }}</th>
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.status') }}</th>
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.identifier_location') }}</th>
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.provenance') }}</th>
-                <th scope="col" class="px-3 py-2 font-medium">{{ $t('views.ComplianceEvidenceIndex.mapping_rows') }}</th>
+              <tr>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.artifact_type') }}</th>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.status') }}</th>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.identifier_location') }}</th>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.provenance') }}</th>
+                <th scope="col" class="table-header">{{ $t('views.ComplianceEvidenceIndex.mapping_rows') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="artifact in indexData.artifacts" :key="artifact.artifact_type" class="border-b align-top last:border-b-0">
-                <td class="px-3 py-3">
+            <tbody class="divide-y divide-border">
+              <tr v-for="artifact in indexData.artifacts" :key="artifact.artifact_type" class="align-top">
+                <td class="table-cell">
                   <div class="font-mono text-xs">{{ artifact.artifact_type }}</div>
                   <div class="mt-1 max-w-xs text-xs text-muted-foreground">{{ artifact.description }}</div>
                 </td>
-                <td class="px-3 py-3">
+                <td class="table-cell">
                   <span
                     class="inline-flex rounded-full border px-2 py-0.5 text-xs font-medium"
                     :class="statusClass(artifact.status)"
@@ -173,7 +173,7 @@
                     {{ $t('views.ComplianceEvidenceIndex.record_count', { count: artifact.record_count }) }}
                   </p>
                 </td>
-                <td class="max-w-sm px-3 py-3">
+                <td class="table-cell max-w-sm">
                   <div class="break-words">{{ artifact.location }}</div>
                   <ul v-if="artifact.identifiers.length > 0" class="mt-1 space-y-1 text-xs text-muted-foreground">
                     <li v-for="identifier in identifierDisplays(artifact)" :key="identifier.raw">
@@ -210,15 +210,15 @@
                     </li>
                   </ul>
                 </td>
-                <td class="px-3 py-3">{{ provenanceLabel(artifact.provenance) }}</td>
-                <td class="px-3 py-3 font-mono text-xs">
+                <td class="table-cell">{{ provenanceLabel(artifact.provenance) }}</td>
+                <td class="table-cell font-mono text-xs">
                   <span v-if="artifact.mapping_row_ids.length > 0">{{ artifact.mapping_row_ids.join(', ') }}</span>
                   <span v-else class="text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.not_available') }}</span>
                 </td>
               </tr>
             </tbody>
           </table>
-        </DataCard>
+        </div>
       </section>
 
       <section
@@ -240,7 +240,6 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
-import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'

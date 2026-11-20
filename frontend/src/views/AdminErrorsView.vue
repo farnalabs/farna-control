@@ -95,7 +95,7 @@
          focusable content while loading, which axe flags as
          `scrollable-region-focusable`, so hide the subtree from assistive tech
          (same pattern as AdminAuditView / SchemaListView skeletons). -->
-    <div v-if="loading" class="table-wrapper" aria-hidden="true" data-testid="admin-errors-loading">
+    <div v-if="loading" aria-hidden="true" data-testid="admin-errors-loading">
       <DataTable :columns="columns" :rows="[]" :loading="true" :loading-rows="5" :row-clickable="false" />
     </div>
 
@@ -108,7 +108,7 @@
     />
 
     <template v-else>
-      <div class="table-wrapper">
+      <div>
         <DataTable
           :columns="columns"
           :rows="groups"

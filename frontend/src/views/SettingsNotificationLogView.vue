@@ -90,44 +90,44 @@
      </EmptyState>
 
     <template v-else>
-      <DataCard variant="bordered" padding="none" elevation="sm" card-class="overflow-hidden">
+      <div class="table-wrapper">
         <table class="w-full">
           <thead>
-            <tr class="border-b bg-muted/50 text-left text-xs font-medium uppercase text-muted-foreground">
-              <th class="px-4 py-3">{{ $t('views.AdminAuditView.event_type') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsNotificationLogView.destination') }}</th>
-              <th class="px-4 py-3 capitalize">{{ $t('views.SettingsNotificationLogView.status') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsNotificationLogView.attempts') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsNotificationLogView.last_attempt') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsNotificationLogView.error_detail') }}</th>
+            <tr>
+              <th class="table-header">{{ $t('views.AdminAuditView.event_type') }}</th>
+              <th class="table-header">{{ $t('views.SettingsNotificationLogView.destination') }}</th>
+              <th class="table-header capitalize">{{ $t('views.SettingsNotificationLogView.status') }}</th>
+              <th class="table-header">{{ $t('views.SettingsNotificationLogView.attempts') }}</th>
+              <th class="table-header">{{ $t('views.SettingsNotificationLogView.last_attempt') }}</th>
+              <th class="table-header">{{ $t('views.SettingsNotificationLogView.error_detail') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <tr
               v-for="entry in items"
               :key="entry.id"
               class="transition-colors hover:bg-muted/30"
             >
-              <td class="px-4 py-3 text-sm font-medium">{{ entry.event_type }}</td>
-              <td class="max-w-xs truncate px-4 py-3 text-sm text-muted-foreground" :title="entry.endpoint_url ?? undefined">
+              <td class="table-cell font-medium">{{ entry.event_type }}</td>
+              <td class="table-cell max-w-xs truncate text-muted-foreground" :title="entry.endpoint_url ?? undefined">
                 {{ entry.endpoint_url || '—' }}
               </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <span :class="statusBadge(entry.status)" class="capitalize">
                   {{ statusLabel(entry.status) }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-sm text-muted-foreground">{{ entry.attempt_count }}</td>
-              <td class="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
+              <td class="table-cell text-muted-foreground">{{ entry.attempt_count }}</td>
+              <td class="table-cell whitespace-nowrap text-muted-foreground">
                 {{ formatTimestamp(entry.created_at) }}
               </td>
-              <td class="max-w-xs truncate px-4 py-3 text-sm text-muted-foreground" :title="entry.last_error ?? undefined">
+              <td class="table-cell max-w-xs truncate text-muted-foreground" :title="entry.last_error ?? undefined">
                 {{ entry.last_error || '—' }}
               </td>
             </tr>
           </tbody>
         </table>
-      </DataCard>
+      </div>
 
       <div class="flex items-center justify-between">
         <button type="button"

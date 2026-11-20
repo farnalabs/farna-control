@@ -32,7 +32,7 @@
                 <th class="table-header table-cell-numeric">{{ $t('views.AdminPluginsView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <template v-for="plugin in plugins" :key="plugin.PLUGIN_ID">
                 <tr
                   class="hover:bg-muted/30 transition-colors"
@@ -97,7 +97,7 @@
                   </td>
                 </tr>
                 <tr v-if="expanded[plugin.PLUGIN_ID]">
-                  <td colspan="5" class="bg-muted/20 px-4 py-4">
+                  <td colspan="5" class="table-cell bg-muted/20">
                     <div class="space-y-3">
                       <div class="grid grid-cols-2 gap-4">
                         <div>

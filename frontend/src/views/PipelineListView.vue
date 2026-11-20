@@ -89,26 +89,24 @@
           <div class="mb-4" aria-hidden="true">
             <div class="h-6 w-40 bg-muted rounded animate-pulse" />
           </div>
-          <div class="card rounded-lg border border-border overflow-hidden animate-pulse" aria-hidden="true">
-            <div class="overflow-x-auto">
+          <div class="table-wrapper animate-pulse" aria-hidden="true">
               <table class="w-full text-left text-sm">
-                <thead class="bg-muted/50 text-xs font-medium uppercase text-muted-foreground">
+                <thead>
                   <tr>
-                    <th v-for="i in 8" :key="`th-${i}`" class="px-4 py-3">
+                    <th v-for="i in 8" :key="`th-${i}`" class="table-header">
                       <div class="h-4 w-16 bg-muted rounded" />
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody class="divide-y divide-border">
                   <tr v-for="i in 6" :key="`row-${i}`">
-                    <td v-for="j in 8" :key="`cell-${j}`" class="px-4 py-3">
+                    <td v-for="j in 8" :key="`cell-${j}`" class="table-cell">
                       <div class="h-6 bg-muted rounded" :class="j === 1 ? 'w-3/4' : 'w-full'" />
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-          </div>
         </div>
 
         <ErrorAlert v-else-if="error" :message="error" :on-retry="loadPipelines" class="mb-6" />
@@ -170,24 +168,24 @@
             </p>
             <div class="relative">
               <div class="pointer-events-none absolute right-0 top-0 z-10 h-full w-8 bg-gradient-to-l from-background to-transparent sm:hidden" aria-hidden="true" />
-              <div class="overflow-x-auto overscroll-x-contain focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset" tabindex="0" aria-describedby="pipeline-list-table-scroll-instructions">
+              <div class="table-wrapper focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset" tabindex="0" aria-describedby="pipeline-list-table-scroll-instructions">
               <table class="w-full min-w-max text-left text-sm">
-              <thead class="bg-muted/50 text-xs font-medium uppercase text-muted-foreground">
+              <thead>
                 <tr>
-                  <th class="px-4 py-3">{{ $t('views.PipelineListView.name') }}</th>
-                  <th class="px-4 py-3">{{ $t('views.PipelineListView.description') }}</th>
-                  <th class="px-4 py-3">{{ $t('views.PipelineListView.visibility') }}</th>
-                  <th class="px-4 py-3">{{ $t('views.PipelineListView.last_run') }}</th>
-                  <th class="px-4 py-3">{{ $t('views.PipelineListView.trigger') }}</th>
-                  <th scope="col" class="px-4 py-3 text-right">{{ $t('views.PipelineListView.nodes') }}</th>
-                  <th class="px-4 py-3">{{ $t('views.PipelineListView.created') }}</th>
-                  <th class="px-4 py-3 text-right">{{ $t('views.PipelineListView.actions') }}</th>
+                  <th class="table-header">{{ $t('views.PipelineListView.name') }}</th>
+                  <th class="table-header">{{ $t('views.PipelineListView.description') }}</th>
+                  <th class="table-header">{{ $t('views.PipelineListView.visibility') }}</th>
+                  <th class="table-header">{{ $t('views.PipelineListView.last_run') }}</th>
+                  <th class="table-header">{{ $t('views.PipelineListView.trigger') }}</th>
+                  <th scope="col" class="table-header table-cell-numeric">{{ $t('views.PipelineListView.nodes') }}</th>
+                  <th class="table-header">{{ $t('views.PipelineListView.created') }}</th>
+                  <th class="table-header table-cell-numeric">{{ $t('views.PipelineListView.actions') }}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y">
+              <tbody class="divide-y divide-border">
                 <template v-for="(row, i) in treeRows" :key="i">
                   <tr v-if="row.type === 'folder'" class="bg-muted/20 hover:bg-muted/30 transition-colors" data-testid="pipeline-tree-folder-row" @dragover.prevent @drop="onTableFolderDrop((row.data as FolderItem).id, $event)">
-                    <td colspan="8" class="px-4 py-2">
+                    <td colspan="8" class="table-cell">
                       <button
                         type="button"
                         class="flex w-full items-center gap-2 text-sm font-medium text-foreground text-left"
@@ -209,7 +207,7 @@
                   </tr>
 
                   <tr v-else-if="row.type === 'uncategorised-header'" class="bg-muted/20">
-                    <td colspan="8" class="px-4 py-2">
+                    <td colspan="8" class="table-cell">
                       <span class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                         <FolderOpen :size="14" class="shrink-0" aria-hidden="true" />
                         {{ $t('views.PipelineListView.uncategorised') }}
@@ -226,7 +224,7 @@
                     @dragover.prevent
                     @drop="onPipelineDrop(row.data as PipelineItem, $event)"
                   >
-                    <td class="px-4 py-3" :style="{ paddingLeft: `${12 + (row.depth || 0) * 16}px` }">
+                    <td class="table-cell" :style="{ paddingLeft: `${12 + row.depth * 16}px` }">
                       <span class="flex min-w-0 items-center gap-1.5">
                         <router-link
                           :to="`/pipelines/${(row.data as PipelineItem).id}/editor`"
@@ -248,28 +246,28 @@
                         >{{ $t('views.PipelineListView.paused') }}<span class="sr-only"> {{ pausedBadgeHelp(row.data as PipelineItem) }}</span></span>
                       </span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell">
                       <span v-if="(row.data as PipelineItem).description" class="text-muted-foreground truncate block max-w-xs">{{ (row.data as PipelineItem).description }}</span>
                       <span v-else class="text-muted-foreground italic">{{ $t('views.PipelineListView.no_description') }}</span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell">
                       <span class="badge text-xs" :class="(row.data as PipelineItem).visibility === 'org' ? 'badge-context-blue' : 'badge-context-purple'">
                         {{ (row.data as PipelineItem).visibility === 'org' ? $t('views.PipelineListView.visibility_org') : $t('views.PipelineListView.visibility_team') }}
                       </span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell">
                       <span class="text-muted-foreground block truncate max-w-[8rem]">{{ getLastRun((row.data as PipelineItem).id) || '\u2014' }}</span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell">
                       <span class="text-xs text-muted-foreground block truncate max-w-[7rem]">{{ getPipelineTrigger((row.data as PipelineItem).id) || '\u2014' }}</span>
                     </td>
-                    <td class="px-4 py-3 text-right">
+                    <td class="table-cell-numeric">
                       <span class="text-muted-foreground tabular-nums">{{ (row.data as PipelineItem).node_count ?? 0 }}</span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell">
                       <span class="text-muted-foreground">{{ formatDate((row.data as PipelineItem).created_at) }}</span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell">
                       <div class="flex justify-end items-center gap-1">
                         <button type="button" class="rounded p-1 hover:bg-accent" :aria-label="$t('views.PipelineListView.pipeline_actions')" data-testid="pipeline-list-action-menu" @click.stop="openActionMenu($event, row.data as PipelineItem)">
                           <MoreVertical :size="14" aria-hidden="true" />

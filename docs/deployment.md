@@ -5,7 +5,7 @@
 | Requirement | Use |
 |-------------|-----|
 | Server or production deployment, multiple operators, replicas, reverse proxy | **Docker Compose** (this guide's main path) |
-| Workstation or single-machine evaluation on Linux, no Docker installed | **Native install** (`scripts/install.sh`) |
+| Workstation or single-machine evaluation on Linux, no Docker installed | **Native install** (`scripts/install.sh`, or on Ubuntu 22.04/24.04 `sudo apt install ./farna-control_<version>_amd64.deb` from the release page; see [Installing with apt](./system-requirements.md#installing-with-apt-deb-ubuntu-2204--2404)) |
 
 The support split is deliberate: Compose is the server/production path
 (vertical scaling, reverse proxy, observability stack), while the native

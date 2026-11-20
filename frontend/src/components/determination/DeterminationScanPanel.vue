@@ -34,28 +34,28 @@
         <p v-if="scan.samples.length === 0" class="text-sm text-muted-foreground" data-testid="determination-samples-empty">
           {{ $t('views.DeterminationView.samples_empty') }}
         </p>
-        <div v-else class="overflow-x-auto rounded-lg border">
+        <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
-            <thead class="bg-muted/50">
+            <thead>
               <tr>
-                <th class="px-3 py-2 font-medium">{{ $t('views.DeterminationView.sample_type') }}</th>
-                <th class="px-3 py-2 font-medium">{{ $t('views.DeterminationView.sample_resource') }}</th>
-                <th class="px-3 py-2 font-medium">{{ $t('views.DeterminationView.sample_count') }}</th>
-                <th class="px-3 py-2 font-medium">{{ $t('views.DeterminationView.sample_connector') }}</th>
-                <th class="px-3 py-2 font-medium">{{ $t('views.DeterminationView.sample_error') }}</th>
+                <th class="table-header">{{ $t('views.DeterminationView.sample_type') }}</th>
+                <th class="table-header">{{ $t('views.DeterminationView.sample_resource') }}</th>
+                <th class="table-header">{{ $t('views.DeterminationView.sample_count') }}</th>
+                <th class="table-header">{{ $t('views.DeterminationView.sample_connector') }}</th>
+                <th class="table-header">{{ $t('views.DeterminationView.sample_error') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr
                 v-for="sample in scan.samples"
                 :key="`${sample.connector_id}-${sample.resource}`"
                 data-testid="determination-sample-row"
               >
-                <td class="px-3 py-2">{{ sample.connector_type }}</td>
-                <td class="px-3 py-2">{{ sample.resource }}</td>
-                <td class="px-3 py-2 tabular-nums">{{ sample.sample_count }}</td>
-                <td class="px-3 py-2 font-mono text-xs break-all">{{ sample.connector_id }}</td>
-                <td class="px-3 py-2">
+                <td class="table-cell">{{ sample.connector_type }}</td>
+                <td class="table-cell">{{ sample.resource }}</td>
+                <td class="table-cell tabular-nums">{{ sample.sample_count }}</td>
+                <td class="table-cell font-mono text-xs break-all">{{ sample.connector_id }}</td>
+                <td class="table-cell">
                   <span v-if="sample.error" class="text-destructive-text">{{ sample.error }}</span>
                   <span v-else class="text-muted-foreground">{{ $t('views.DeterminationView.sample_no_error') }}</span>
                 </td>

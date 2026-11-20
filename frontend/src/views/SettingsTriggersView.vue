@@ -68,35 +68,35 @@
     </div>
 
     <template v-else>
-      <DataCard variant="bordered" padding="none" elevation="sm" card-class="overflow-x-auto">
+      <div class="table-wrapper">
         <table class="w-full text-left text-sm">
-          <thead class="bg-muted/50 text-xs font-medium uppercase text-muted-foreground">
+          <thead>
             <tr>
               <th
                 v-for="col in TABLE_COLUMNS"
                 :key="col"
-                class="px-4 py-4"
+                class="table-header"
                 :class="col === 'actions' ? 'text-right' : 'text-left'"
               >
                 {{ $t(`views.SettingsTriggersView.${col}`) }}
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <template v-for="t in items" :key="t.id">
               <tr class="transition-colors hover:bg-muted/30">
-                <td class="px-4 py-3 font-medium" data-testid="settings-triggers-name">
+                <td class="table-cell font-medium" data-testid="settings-triggers-name">
                   {{ t.name }}
                 </td>
-                <td class="px-4 py-3 text-muted-foreground">
+                <td class="table-cell text-muted-foreground">
                   {{ pipelineName(t.pipeline_id) }}
                 </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <span :class="typeBadgeClass(t.trigger_type)" class="badge">
                   {{ typeLabel(t.trigger_type) }}
                 </span>
               </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <div class="flex flex-col items-start gap-1">
                   <!-- FAR-1405: rendered for every trigger type the streak
                        engine covers (ongoing AND cron — the mirrored
@@ -156,13 +156,13 @@
                   </p>
                 </div>
               </td>
-              <td class="px-4 py-3 text-muted-foreground">
+              <td class="table-cell text-muted-foreground">
                 {{ formatTimestamp(t.last_fired_at ?? null) }}
               </td>
-              <td class="px-4 py-3 text-muted-foreground">
+              <td class="table-cell text-muted-foreground">
                 {{ formatTimestamp(t.next_fire_at ?? null) }}
               </td>
-              <td class="px-4 py-3 text-right">
+              <td class="table-cell-numeric">
                 <div class="flex items-center justify-end gap-2">
                   <TableActions :actions="triggerActions(t)" />
                   <button
@@ -180,7 +180,7 @@
               </td>
               </tr>
               <tr v-if="expandedOutcomes.has(t.id) && hasOutcomes(t)" :id="`outcomes-${t.id}`" class="bg-muted/20">
-                <td :colspan="TABLE_COLUMNS.length" class="px-4 py-3">
+                <td :colspan="TABLE_COLUMNS.length" class="table-cell">
                   <p class="text-xs font-medium uppercase text-muted-foreground">
                     {{ $t('views.SettingsTriggersView.recent_outcomes') }}
                   </p>
@@ -209,7 +209,7 @@
             </template>
           </tbody>
         </table>
-      </DataCard>
+      </div>
     </template>
 
     <Dialog

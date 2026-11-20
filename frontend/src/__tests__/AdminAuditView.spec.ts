@@ -1416,3 +1416,18 @@ describe('AdminAuditView — system ledger interaction branches', () => {
     expect(ledgerCalls).toHaveLength(1)
   })
 })
+
+describe('AdminAuditView — table spacing (FAR-2584)', () => {
+  it('separates the filter card and the table with the page rhythm', async () => {
+    mockAuditGet([auditEvent('evt-spacing')])
+    const wrapper = mountView()
+    await nextTick()
+
+    // The filter card and the table live inside a tabpanel, so the page-level
+    // `> * + *` rhythm does not reach them; the panel must supply the gap.
+    const panel = wrapper.get('#admin-audit-source-org')
+    expect(panel.classes()).toContain('space-y-4')
+    expect(panel.find('.card').exists()).toBe(true)
+    expect(panel.find('.table-wrapper').exists()).toBe(true)
+  })
+})

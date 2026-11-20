@@ -26,18 +26,18 @@
           :description="$t('views.ParameterSchemasView.no_schemas_hint')"
         />
 
-        <div v-else class="overflow-x-auto rounded-lg border">
+        <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
-            <thead class="bg-muted/50">
+            <thead>
               <tr>
-                <th class="px-4 py-3 font-medium">{{ $t('views.ParameterSchemasView.name') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('views.ParameterSchemasView.description') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('views.ParameterSchemasView.version') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('views.ParameterSchemasView.parameters') }}</th>
-                <th class="px-4 py-3 font-medium text-right">{{ $t('views.ParameterSchemasView.actions') }}</th>
+                <th class="table-header">{{ $t('views.ParameterSchemasView.name') }}</th>
+                <th class="table-header">{{ $t('views.ParameterSchemasView.description') }}</th>
+                <th class="table-header">{{ $t('views.ParameterSchemasView.version') }}</th>
+                <th class="table-header">{{ $t('views.ParameterSchemasView.parameters') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.ParameterSchemasView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr
                 v-for="schema in schemas"
                 :key="schema.id"
@@ -47,11 +47,11 @@
                 @keydown.enter="editSchema(schema)"
                 @keydown.space.prevent="editSchema(schema)"
               >
-                <td class="px-4 py-3 font-medium">{{ schema.name }}</td>
-                <td class="px-4 py-3 text-muted-foreground">{{ schema.description || '—' }}</td>
-                <td class="px-4 py-3">v{{ schema.version }}</td>
-                <td class="px-4 py-3">{{ schema.parameters?.length ?? 0 }}</td>
-                <td class="px-4 py-3 text-right">
+                <td class="table-cell font-medium">{{ schema.name }}</td>
+                <td class="table-cell text-muted-foreground">{{ schema.description || '—' }}</td>
+                <td class="table-cell">v{{ schema.version }}</td>
+                <td class="table-cell">{{ schema.parameters?.length ?? 0 }}</td>
+                <td class="table-cell-numeric">
                   <button
                     type="button"
                     class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"

@@ -39,7 +39,7 @@
     <div v-if="selectedEntities.length === 0" class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
       {{ emptyText }}
     </div>
-    <div v-else class="overflow-hidden rounded-lg border">
+    <div v-else class="table-wrapper">
       <table class="w-full text-left text-sm">
         <thead>
           <tr>
@@ -48,17 +48,17 @@
             <th scope="col" class="sr-only">{{ $t('common.remove') }}</th>
           </tr>
         </thead>
-        <tbody class="divide-y">
+        <tbody class="divide-y divide-border">
           <tr
             v-for="entity in selectedEntities"
             :key="entity.id"
             class="hover:bg-muted/30 transition-colors"
           >
-            <td class="px-3 py-2 font-medium">{{ displayLabel(entity) }}</td>
-            <td v-if="descriptionField" class="px-3 py-2 text-muted-foreground">
+            <td class="table-cell font-medium">{{ displayLabel(entity) }}</td>
+            <td v-if="descriptionField" class="table-cell text-muted-foreground">
               {{ displayDescription(entity) }}
             </td>
-            <td class="px-3 py-2 text-right">
+            <td class="table-cell-numeric">
               <button
                 type="button"
                 class="rounded p-1 text-muted-foreground hover:text-destructive transition-colors"

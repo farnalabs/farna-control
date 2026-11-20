@@ -140,7 +140,7 @@
         data-testid="admin-connectors-empty"
       />
 
-      <div v-else class="table-wrapper overflow-x-auto">
+      <div v-else class="table-wrapper">
         <table class="w-full text-left text-sm">
           <thead>
             <tr>
@@ -151,7 +151,7 @@
               <th class="table-header table-cell-numeric">{{ $t('views.AdminConnectorsView.actions') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <tr
               v-for="connector in nativeConnectors"
               :key="connector.id"
@@ -190,7 +190,7 @@
         <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="connectors-preview-summary">
           {{ $t('views.AdminConnectorsView.preview_connectors_count', { count: previewConnectors.length }, previewConnectors.length) }}
         </summary>
-        <div class="overflow-x-auto border-t">
+        <div class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
               <tr>
@@ -200,7 +200,7 @@
                 <th class="table-header table-cell-numeric">{{ $t('views.AdminConnectorsView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr
                 v-for="connector in previewConnectors"
                 :key="connector.id"

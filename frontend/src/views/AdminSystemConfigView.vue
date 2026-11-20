@@ -22,35 +22,35 @@
       :title="$t('views.AdminSystemConfigView.no_configuration_entries_found')"
     />
 
-    <div v-else class="rounded-lg border">
+    <div v-else class="table-wrapper">
       <table class="w-full">
         <thead>
-          <tr class="border-b text-left text-sm font-medium text-muted-foreground">
-            <th class="px-4 py-3">{{ $t('views.AdminSystemConfigView.key') }}</th>
-            <th class="px-4 py-3">{{ $t('views.AdminSystemConfigView.value') }}</th>
-            <th class="px-4 py-3">{{ $t('views.AdminSystemConfigView.updated') }}</th>
+          <tr>
+            <th class="table-header">{{ $t('views.AdminSystemConfigView.key') }}</th>
+            <th class="table-header">{{ $t('views.AdminSystemConfigView.value') }}</th>
+            <th class="table-header">{{ $t('views.AdminSystemConfigView.updated') }}</th>
           </tr>
         </thead>
-        <tbody v-if="loading">
-          <tr v-for="n in 3" :key="n" class="border-b last:border-0">
-            <td class="px-4 py-3"><div class="h-5 w-24 animate-pulse rounded bg-muted" /></td>
-            <td class="px-4 py-3"><div class="h-16 animate-pulse rounded bg-muted" /></td>
-            <td class="px-4 py-3"><div class="h-4 w-32 animate-pulse rounded bg-muted" /></td>
+        <tbody v-if="loading" class="divide-y divide-border">
+          <tr v-for="n in 3" :key="n">
+            <td class="table-cell"><div class="h-5 w-24 animate-pulse rounded bg-muted" /></td>
+            <td class="table-cell"><div class="h-16 animate-pulse rounded bg-muted" /></td>
+            <td class="table-cell"><div class="h-4 w-32 animate-pulse rounded bg-muted" /></td>
           </tr>
         </tbody>
-        <tbody v-else>
+        <tbody v-else class="divide-y divide-border">
           <tr
             v-for="entry in items"
             :key="entry.key"
-            class="border-b last:border-0 hover:bg-muted/50 transition-colors"
+            class="hover:bg-muted/50 transition-colors"
           >
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <code class="text-sm font-mono">{{ entry.key }}</code>
             </td>
-            <td class="px-4 py-3">
+            <td class="table-cell">
               <JsonViewer :data="entry.value" :show-toolbar="true" :max-height="'20rem'" />
             </td>
-            <td class="px-4 py-3 text-sm text-muted-foreground">
+            <td class="table-cell text-muted-foreground">
               {{ entry.updated_at || '—' }}
             </td>
           </tr>

@@ -65,7 +65,7 @@
         :description="$t('views.RunsListView.empty_state_description')"
       />
 
-      <div v-else class="table-wrapper">
+      <div v-else>
         <DataTable
           :columns="runColumns"
           :rows="runs"
