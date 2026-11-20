@@ -78,20 +78,70 @@
 
 set -euo pipefail
 
+# --- leave the caller's working directory (FAR-2589) -------------------------
+# The installer never needs its cwd, and GNU find (used below) aborts with
+# "Failed to restore initial working directory" when started from a directory
+# the user cannot search - e.g. `sudo -u <user>` run from another user's 0700
+# home. Remember where we were invoked so every relative path the caller
+# supplied still resolves against it - --from-file / --from-bundle, every
+# FARNA_CONTROL_* / MODULO_* path override (install root, bin dir, data dir,
+# legacy roots and shims), XDG_DATA_HOME / XDG_STATE_HOME, HOME and TMPDIR -
+# then move to "/", which every user can search. Nothing here writes into the
+# cwd. Any NEW path override must go through absolute_from_invocation too
+# (backend/tests/unit/scripts/test_install_unreadable_cwd.py enforces it).
+INVOKED_FROM="${PWD:-}"
+if [[ "${INVOKED_FROM}" != /* ]]; then
+  # getcwd fails when a parent directory is unreadable; only a RELATIVE path
+  # argument needs the value, and that case refuses loudly below.
+  INVOKED_FROM="$(pwd 2>/dev/null || true)"
+fi
+
+absolute_from_invocation() {
+  # absolute_from_invocation <path> - an absolute path is returned unchanged;
+  # a relative one is anchored at the directory the installer was invoked from.
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *)
+      if [[ "${INVOKED_FROM}" != /* ]]; then
+        printf 'ERROR: cannot resolve the relative path %s: the current directory is not accessible. Pass an absolute path.\n' "$1" >&2
+        return 1
+      fi
+      printf '%s/%s' "${INVOKED_FROM%/}" "$1"
+      ;;
+  esac
+}
+
+# HOME and TMPDIR feed every default below and mktemp; a relative value meant
+# the invocation directory before the cd, so anchor it there and export it to
+# the children (tee, mktemp, the pre-upgrade dump) too.
+if [[ -n "${HOME:-}" && "${HOME}" != /* ]]; then
+  HOME="$(absolute_from_invocation "${HOME}")"
+  export HOME
+fi
+if [[ -n "${TMPDIR:-}" && "${TMPDIR}" != /* ]]; then
+  TMPDIR="$(absolute_from_invocation "${TMPDIR}")"
+  export TMPDIR
+fi
+
+cd /
+
 REPO="farnalabs/farna-control"
 RELEASES_LATEST_URL="https://github.com/${REPO}/releases/latest"
 RELEASES_DOWNLOAD_URL="https://github.com/${REPO}/releases/download"
 
-INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}}"
-BIN_DIR="${FARNA_CONTROL_BIN_DIR:-${MODULO_BIN_DIR:-${HOME}/.local/bin}}"
+INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}}")"
+BIN_DIR="$(absolute_from_invocation "${FARNA_CONTROL_BIN_DIR:-${MODULO_BIN_DIR:-${HOME}/.local/bin}}")"
 MARKER_FILE="${INSTALL_ROOT}/.farna-control-native-install"
 
 # Pre-rebrand (FAR-2571) locations. A machine that ran the installer before the
 # rename has its bundle under this root and its shim at this path; both are
 # migrated in preflight (see migrate_legacy_install) so an upgrade never leaves
 # a half-migrated install behind.
-LEGACY_INSTALL_ROOT="${FARNA_CONTROL_LEGACY_INSTALL_ROOT:-${HOME}/.local/opt/modulo}"
-LEGACY_USER_SHIM="${FARNA_CONTROL_LEGACY_USER_SHIM:-${BIN_DIR}/modulo}"
+LEGACY_INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_INSTALL_ROOT:-${HOME}/.local/opt/modulo}")"
+LEGACY_USER_SHIM="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_USER_SHIM:-${BIN_DIR}/modulo}")"
+# The pre-native system-wide shim: refused in preflight when unmanaged, renamed
+# aside in finalise. One anchored value serves both (FAR-2589).
+LEGACY_SYSTEM_SHIM="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_SHIM_PATH:-${MODULO_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}")"
 
 FORCE=0
 FROM_FILE=""
@@ -271,7 +321,7 @@ start_logging() {
   # PIDs are known and can be waited on: without that wait the script can exit
   # before tee has flushed, losing exactly the tail that matters.
   SUPPORT_REF="$(support_ref)"
-  STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/farna-control"
+  STATE_DIR="$(absolute_from_invocation "${XDG_STATE_HOME:-${HOME}/.local/state}")/farna-control" || return 0
   if [[ ! -d "${STATE_DIR}" ]]; then
     if ! mkdir -p -- "${STATE_DIR}" 2>/dev/null; then
       printf 'WARNING: cannot create %s — the install transcript will not be saved.\n' "${STATE_DIR}" >&2
@@ -442,7 +492,7 @@ validate_legacy_shim_collision() {
   # Refuse an unmanaged legacy shim BEFORE downloads, extraction, or any install
   # root mutation. A dangling symlink is also a collision and must not be
   # silently replaced.
-  local legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-${MODULO_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}"
+  local legacy_shim="${LEGACY_SYSTEM_SHIM}"
   if [[ -e "${legacy_shim}" || -L "${legacy_shim}" ]] && [[ ! -f "${MARKER_FILE}" ]] && [[ "${FORCE}" -ne 1 ]]; then
     die "found an existing ${legacy_shim} that this installer did not create.\\nRe-run with --force to rename it aside and let the native install take over, or remove it manually."
   fi
@@ -534,12 +584,14 @@ apply_legacy_install_migration() {
 
 # --- upgrade machinery (FAR-672) --------------------------------------------
 
+# A relative override is anchored at the invocation directory: the installer
+# has already left it (FAR-2589).
 if [[ -n "${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR:-}}" ]]; then
-  DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR}}"
+  DATA_DIR="$(absolute_from_invocation "${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR}}")"
 elif [[ "$(uname -s)" = "Darwin" && -z "${XDG_DATA_HOME:-}" ]]; then
   DATA_DIR="${HOME}/Library/Application Support/Modulo/data"
 else
-  DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/modulo/data"
+  DATA_DIR="$(absolute_from_invocation "${XDG_DATA_HOME:-${HOME}/.local/share}")/modulo/data"
 fi
 LOCK_FILE="${DATA_DIR}.lock"
 
@@ -670,12 +722,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --from-file)
       [[ $# -ge 2 ]] || die "--from-file requires a path to farna-control-<version>-linux-<arch>.tar.gz"
-      FROM_FILE="$2"
+      FROM_FILE="$(absolute_from_invocation "$2")"
       shift 2
       ;;
     --from-bundle)
       [[ $# -ge 2 ]] || die "--from-bundle requires the extracted farna-control-<version>-linux-<arch> bundle directory"
-      FROM_BUNDLE="$2"
+      FROM_BUNDLE="$(absolute_from_invocation "$2")"
       shift 2
       ;;
     --skip-backup)
@@ -948,14 +1000,10 @@ if [[ -n "${FROM_BUNDLE}" ]]; then
   cp -- "${adjacent_tarball}" "${tmp}/${tarball_name}"
 elif [[ -n "${FROM_FILE}" ]]; then
   info "Offline install from ${FROM_FILE}"
-  # Resolve the manifest beside the tarball. A bare filename (no '/') - the
-  # exact shape the canary leg passes - leaves `${FROM_FILE%/*}` UNCHANGED,
-  # which would make the tarball itself the manifest's directory. Fall back to
-  # the current directory in that case.
+  # Resolve the manifest beside the tarball. FROM_FILE is absolute (argument
+  # parsing anchors a relative one - including the canary leg's bare filename -
+  # at the invocation directory), so `${FROM_FILE%/*}` is always its directory.
   from_file_dir="${FROM_FILE%/*}"
-  if [[ "${from_file_dir}" = "${FROM_FILE}" ]]; then
-    from_file_dir="."
-  fi
   manifest_file="${from_file_dir}/RELEASE_MANIFEST.json"
   signature_file="${manifest_file}.sig"
   # HARD GATE: the SIGNED manifest is NOT optional. A tarball without a
@@ -1148,7 +1196,7 @@ ensure_runtime_keys
 # This phase only performs the already-authorised rename.
 
 stage "finalise (PATH shim and summary)"
-legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-${MODULO_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}"
+legacy_shim="${LEGACY_SYSTEM_SHIM}"
 if [[ -e "${legacy_shim}" || -L "${legacy_shim}" ]]; then
   if [[ -f "${MARKER_FILE}" ]] || [[ "${FORCE}" -eq 1 ]]; then
     backup="${legacy_shim}.pre-native-$(date +%Y%m%d%H%M%S)"

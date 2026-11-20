@@ -72,3 +72,32 @@ def test_resolve_version_defaults_when_not_installed(
     monkeypatch.setattr("farna.version.version", _missing)
 
     assert _resolve_version() == "0.0.0-dev"
+
+
+def _fake_macos_app(root: Path, stamp: str | None, *, info_plist: bool = True) -> str:
+    """``<App>.app/Contents/Resources/bundle`` - the macOS bundle root (FAR-2589)."""
+    contents = root / "FarnaControl.app" / "Contents"
+    module_file = _fake_bundle(contents / "Resources" / "bundle", stamp, launcher=False)
+    if info_plist:
+        (contents / "Info.plist").write_text("<plist/>\n", encoding="utf-8")
+    return module_file
+
+
+def test_macos_app_bundle_stamp_wins(tmp_path: Path) -> None:
+    module_file = _fake_macos_app(tmp_path, "bundle-v0.3.331\n")
+
+    assert _bundle_version(module_file) == "0.3.331"
+
+
+def test_macos_layout_without_info_plist_is_not_a_bundle(tmp_path: Path) -> None:
+    module_file = _fake_macos_app(tmp_path, "bundle-v0.3.331\n", info_plist=False)
+
+    assert _bundle_version(module_file) is None
+
+
+def test_info_plist_outside_resources_bundle_is_not_a_marker(tmp_path: Path) -> None:
+    """Only ``Contents/Resources/bundle`` counts, not any dir beside an Info.plist."""
+    module_file = _fake_bundle(tmp_path / "Contents" / "bundle", "bundle-v0.3.331\n", launcher=False)
+    (tmp_path / "Contents" / "Info.plist").write_text("<plist/>\n", encoding="utf-8")
+
+    assert _bundle_version(module_file) is None
