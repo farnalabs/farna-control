@@ -181,10 +181,9 @@ const manifestRouteTable: Record<string, ManifestRoute> = isManifest(manifest)
   ? (manifest as Manifest).routes
   : {}
 
-const manifestPathByName = new Map<string, string>()
-for (const [path, entry] of Object.entries(manifestRouteTable)) {
-  if (typeof entry.name === 'string' && entry.name) manifestPathByName.set(entry.name, path)
-}
+const manifestPathByName = new Map<string, string>(
+  Object.entries(manifestRouteTable).map(([path, entry]): [string, string] => [entry.name, path]),
+)
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -194,7 +193,7 @@ function escapeRegExp(value: string): string {
 // concrete URL that carries no manifest route name can still be placed in the
 // ancestry. Specificity is the number of literal segments, so the most
 // specific pattern wins (`/admin/runners/profiles/new` over a `:id` sibling).
-const manifestPathPatterns: CompiledManifestPattern[] = Object.keys(manifestRouteTable).map((path) => {
+function compileManifestPattern(path: string): CompiledManifestPattern {
   let literalSegments = 0
   const segments = path.split('/')
   const translated = segments.map((segment) => {
@@ -202,39 +201,53 @@ const manifestPathPatterns: CompiledManifestPattern[] = Object.keys(manifestRout
     if (segment) literalSegments += 1
     return escapeRegExp(segment)
   })
-  const lastSegment = segments[segments.length - 1] ?? ''
-  const optionalTailRegex = lastSegment.startsWith(':') && segments.length > 1
+  // A key whose final segment is a `:param` also owns its collection path
+  // (`/schemas/editor/:id` owns `/schemas/editor`); the manifest omits
+  // vue-router's optional marker, so the alias drops the trailing param.
+  const lastSegment = path.slice(path.lastIndexOf('/') + 1)
+  const optionalTailRegex = lastSegment.startsWith(':')
     ? new RegExp(`^${translated.slice(0, -1).join('/')}$`)
     : undefined
   return { path, regex: new RegExp(`^${translated.join('/')}$`), optionalTailRegex, literalSegments }
-})
+}
+
+const manifestPathPatterns = Object.keys(manifestRouteTable)
+  .map(compileManifestPattern)
+  .sort((a, b) => b.literalSegments - a.literalSegments)
 
 function matchesPattern(pattern: CompiledManifestPattern, path: string): boolean {
   return pattern.regex.test(path) || Boolean(pattern.optionalTailRegex?.test(path))
 }
 
-function resolveManifestPath(route: NavActiveRoute): string | undefined {
-  if (typeof route.name === 'string') {
-    const byName = manifestPathByName.get(route.name)
-    if (byName) return byName
-  }
-  const matched = route.matched ?? []
-  for (let index = matched.length - 1; index >= 0; index -= 1) {
-    const record = matched[index]
-    if (typeof record.name === 'string') {
-      const byName = manifestPathByName.get(record.name)
-      if (byName) return byName
-    }
+function resolvePatternPath(path: string): string | undefined {
+  return manifestPathPatterns.find((pattern) => matchesPattern(pattern, path))?.path
+}
+
+function manifestPathForName(name: string | symbol | null | undefined): string | undefined {
+  if (typeof name !== 'string') return undefined
+  return manifestPathByName.get(name)
+}
+
+function resolveMatchedPath(matched: NavActiveRoute['matched']): string | undefined {
+  const records = matched ?? []
+  // vue-router orders `matched` parent-first, so walk from the deepest record
+  // back — the most specific manifest route must win.
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index]
+    const byName = manifestPathForName(record.name)
+    if (byName !== undefined) return byName
     if (Object.prototype.hasOwnProperty.call(manifestRouteTable, record.path)) return record.path
   }
-  if (Object.prototype.hasOwnProperty.call(manifestRouteTable, route.path)) return route.path
+  return undefined
+}
 
-  let best: CompiledManifestPattern | undefined
-  for (const pattern of manifestPathPatterns) {
-    if (!matchesPattern(pattern, route.path)) continue
-    if (best === undefined || pattern.literalSegments > best.literalSegments) best = pattern
-  }
-  return best?.path
+function resolveManifestPath(route: NavActiveRoute): string | undefined {
+  const byName = manifestPathForName(route.name)
+  if (byName !== undefined) return byName
+  const fromMatched = resolveMatchedPath(route.matched)
+  if (fromMatched !== undefined) return fromMatched
+  if (Object.prototype.hasOwnProperty.call(manifestRouteTable, route.path)) return route.path
+  return resolvePatternPath(route.path)
 }
 
 function isManifestNavItem(entry: ManifestRoute): boolean {
@@ -242,11 +255,33 @@ function isManifestNavItem(entry: ManifestRoute): boolean {
   // sidebar item only when it carries both a group and an order, and is not a
   // detail page. Keeping the two in step means the resolved owner is always a
   // path that an actual item renders.
-  return (
-    typeof entry.sidebar_group === 'string' &&
-    typeof entry.sidebar_order === 'number' &&
-    entry.type !== 'detail_page'
-  )
+  return isManifestRoute(entry) && entry.type !== 'detail_page'
+}
+
+/**
+ * The sidebar item that owns a manifest route, following the `parent` chain.
+ *
+ * The Dashboard entry (`/`) owns only itself, so a chain that merely passes
+ * through the root yields no owner. A chain that ends before reaching a
+ * sidebar item (a form page, a bare detail route) likewise has no owner.
+ * Parents are authored to always name a real route; a unit test asserts every
+ * parent exists and no chain cycles, so this walk needs no defensive branch.
+ */
+function resolveOwnerForPath(path: string): string | undefined {
+  let current: string | undefined = path
+  while (current !== undefined) {
+    if (current === '/') return path === '/' ? '/' : undefined
+    const entry: ManifestRoute = manifestRouteTable[current]
+    if (isManifestNavItem(entry)) return current
+    current = entry.parent ?? undefined
+  }
+  return undefined
+}
+
+const manifestOwnerPath = new Map<string, string>()
+for (const path of Object.keys(manifestRouteTable)) {
+  const owner = resolveOwnerForPath(path)
+  if (owner !== undefined) manifestOwnerPath.set(path, owner)
 }
 
 /**
@@ -266,18 +301,7 @@ function isManifestNavItem(entry: ManifestRoute): boolean {
 export function resolveActiveNavPath(route: NavActiveRoute): string | undefined {
   const manifestPath = resolveManifestPath(route)
   if (manifestPath === undefined) return undefined
-
-  let current: string | null | undefined = manifestPath
-  const seen = new Set<string>()
-  while (typeof current === 'string' && !seen.has(current)) {
-    seen.add(current)
-    const entry: ManifestRoute | undefined = manifestRouteTable[current]
-    if (!entry) return undefined
-    if (current === '/') return route.path === '/' ? '/' : undefined
-    if (isManifestNavItem(entry)) return current
-    current = entry.parent ?? null
-  }
-  return undefined
+  return manifestOwnerPath.get(manifestPath)
 }
 
 /**

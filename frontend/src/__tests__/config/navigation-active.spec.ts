@@ -232,6 +232,63 @@ describe('FAR-2583 sidebar active state — manifest ancestry', () => {
     expect(resolveActiveNavPath({ path: '/dev/metrics', name: 'dev-metrics' })).toBeUndefined()
   })
 
+  it('has a resolvable, acyclic parent chain for every manifest route', () => {
+    const routes = (manifest as { routes: Record<string, { parent?: string | null }> }).routes
+    for (const path of Object.keys(routes)) {
+      const seen = new Set<string>()
+      let current = routes[path]?.parent ?? null
+      while (typeof current === 'string') {
+        expect(routes[current]).toBeDefined()
+        expect(seen.has(current)).toBe(false)
+        seen.add(current)
+        current = routes[current]?.parent ?? null
+      }
+    }
+  })
+
+  it('resolves a dynamic route with no name or matched records from the path', () => {
+    expect(resolveActiveNavPath({ path: '/runs/run-1' })).toBe('/runs')
+  })
+
+  it('resolves a matched record whose path is in the manifest even without a name', () => {
+    const route = routeFor({ path: '/unknown', matched: [{ path: '/runs' }] })
+    expect(resolveActiveNavPath(route)).toBe('/runs')
+  })
+
+  it('skips matched records that the manifest does not describe', () => {
+    const route = routeFor({
+      path: '/unknown',
+      matched: [{ name: 'not-a-manifest-name', path: '/not-in-manifest' }],
+    })
+    expect(resolveActiveNavPath(route)).toBeUndefined()
+  })
+
+  it('ignores a non-string route name', () => {
+    expect(
+      resolveActiveNavPath({ path: '/dev/metrics', name: Symbol('x'), matched: [] }),
+    ).toBeUndefined()
+  })
+
+  describe('isNavItemActive fallback for routes outside the manifest', () => {
+    const unknown = { path: '/dev/metrics', matched: [] }
+
+    it('matches an item whose target equals the unknown path', () => {
+      expect(isNavItemActive({ to: '/dev/metrics', exact: true }, unknown)).toBe(true)
+    })
+
+    it('keeps prefix matching for a non-exact item', () => {
+      expect(isNavItemActive({ to: '/dev', exact: false }, unknown)).toBe(true)
+    })
+
+    it('does not prefix-match an exact item', () => {
+      expect(isNavItemActive({ to: '/dev', exact: true }, unknown)).toBe(false)
+    })
+
+    it('never prefix-matches the root item', () => {
+      expect(isNavItemActive({ to: '/', exact: false }, unknown)).toBe(false)
+    })
+  })
+
   describe('rendered SidebarLink state', () => {
     it.each(OWNED_CASES)('sets class=active and aria-current on "$owner" for $path', ({ owner, path, name }) => {
       mountAt({ path, name })
