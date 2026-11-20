@@ -316,6 +316,8 @@ routes:
         sidebar_group: improve
         sidebar_order: 3
         type: page
+        query_params:
+          pipeline_id: Open the comparison builder for this pipeline
         <<: *community
         deprecated: false
         exact: true
@@ -7610,8 +7612,17 @@ elements:
       - testid: variant-compare-loading-skeleton
         type: element
         dynamic_testid: false
-      - testid: variant-compare-group-select
-        type: select
+      - testid: variant-compare-filters
+        type: element
+        dynamic_testid: false
+      - testid: variant-compare-groups-table
+        type: element
+        dynamic_testid: false
+      - testid: variant-compare-count
+        type: element
+        dynamic_testid: false
+      - testid: page-header-right
+        type: element
         dynamic_testid: false
       - testid: variant-compare-diff-node
         type: select
@@ -8701,6 +8712,8 @@ features:
             - "[x] Coverage gaps are reported via get_coverage_gaps"
             - "[x] Per-node eval score comparison is shipped: comparison surfaces include eval scores per node, prompt diffs and coverage gaps (variants/variant_groups.feature, docs/product-map/improve/variants.md)"
             - "[x] Per-token breakdown comparison across variants is shipped: each variant's per-node token usage (input/output/total tokens + cost) rides the batch-compare and variant-batch compare surfaces via the persisted node_token_usage union, serialized through the RunResponse bounds (model_cost_raw_usd display clamp + newest-N node truncation), and the /variants/compare/:batchId page renders a per-node token table per expanded variant run (backend/src/farna/api/routes/{variant_batches,variants}.py, VariantBatchCompareView.vue, test_variant_batches.py, test_variants.py, VariantBatchCompareView.spec.ts)"
+            - "[x] /variants/compare lists comparison groups in the shared DataTable (name, pipeline, variants, declared evals, selection strategy, runs, degraded evals, actions) with a pipeline select and a name search; it requests the endpoint's 100-row page ceiling and prints a 'Showing N comparisons' count (plus a capped-list notice at 100) because the endpoint returns a bare array with no total, and it surfaces a pipeline-name read failure instead of silently showing ids. A row selects the comparison IN PLACE (the per-node comparison table and output diff viewer render below it) and never navigates to the batch-detail route; the pipeline_id deep link still opens the builder (VariantCompareView.vue, VariantCompareView.spec.ts, variant-compare-groups.spec.ts)"
+            - "[x] User-visible copy on the variants surface standardises on 'comparison' (table columns, empty state, the inline explainer link to /evals, and the builder title/subtitle) while 'variant group' stays the code and route vocabulary; the declared-eval column is labelled 'Declared evals' with a tooltip because variants[].eval_definition_ids are declarations the UI builder writes empty, NOT the scores a run received (VariantCompareView.vue, VariantGroupBuilder.vue, locales/en-US.js)"
 sidebar_groups:
     build:
         label: BUILD
