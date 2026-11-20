@@ -62,6 +62,7 @@ apt_stanza_problem() {
       Filename) want="${APT_POOL_DIR}/${deb}" ;;
       SHA256) want="${want_sha}" ;;
       Size) want="" ;;
+      *) echo "stanza validation does not know field '${field}'"; return 1 ;;
     esac
     count="$(grep -c "^${field}: " "${stanza}" || true)"
     [[ "${count}" -eq 1 ]] || { echo "stanza has ${count} ${field} fields"; return 1; }
