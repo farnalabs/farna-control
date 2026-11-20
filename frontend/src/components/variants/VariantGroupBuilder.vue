@@ -102,24 +102,24 @@
           </template>
 
           <div class="space-y-4">
-            <div class="overflow-x-auto">
+            <div class="table-wrapper">
               <table class="w-full text-left text-sm">
                 <thead>
-                <tr class="border-b text-xs uppercase text-muted-foreground">
-                  <th class="py-2 pr-3 font-medium">{{ $t('views.variantCreator.label') }}</th>
-                  <th class="py-2 pr-3 font-medium">{{ $t('views.variantCreator.snapshot') }}</th>
-                  <th class="py-2 pr-3 font-medium">{{ $t('views.variantCreator.model_backend') }}</th>
-                  <th class="py-2 pr-3 font-medium">{{ $t('views.variantCreator.prompt_version') }}</th>
-                  <th class="py-2 font-medium text-right">{{ $t('views.variantCreator.actions') }}</th>
+                <tr>
+                  <th class="table-header">{{ $t('views.variantCreator.label') }}</th>
+                  <th class="table-header">{{ $t('views.variantCreator.snapshot') }}</th>
+                  <th class="table-header">{{ $t('views.variantCreator.model_backend') }}</th>
+                  <th class="table-header">{{ $t('views.variantCreator.prompt_version') }}</th>
+                  <th class="table-header table-cell-numeric">{{ $t('views.variantCreator.actions') }}</th>
                 </tr>
                 </thead>
-                <tbody>
+                <tbody class="divide-y divide-border">
                 <tr
                   v-for="(v, i) in variants"
                   :key="v.id"
-                  class="border-b align-top hover:bg-muted/30"
+                  class="align-top hover:bg-muted/30"
                 >
-                  <td class="py-2 pr-3">
+                  <td class="table-cell">
                     <input
                       v-model="v.label"
                       :data-testid="`variant-builder-label-${i}`"
@@ -132,7 +132,7 @@
                       {{ rowError(i) }}
                     </p>
                   </td>
-                  <td class="py-2 pr-3">
+                  <td class="table-cell">
                     <Select
                       v-model="v.snapshotId"
                       :placeholder="$t('views.variantCreator.select_snapshot')"
@@ -148,7 +148,7 @@
                       </template>
                     </Select>
                   </td>
-                  <td class="py-2 pr-3">
+                  <td class="table-cell">
                     <Select
                       v-model="v.modelBackendId"
                       :placeholder="$t('views.variantCreator.select_model')"
@@ -164,7 +164,7 @@
                       </template>
                     </Select>
                   </td>
-                  <td class="py-2 pr-3">
+                  <td class="table-cell">
                     <Select
                       v-model="v.promptVersion"
                       :placeholder="$t('views.variantCreator.select_prompt_version')"
@@ -180,7 +180,7 @@
                       </template>
                     </Select>
                   </td>
-                  <td class="py-2 text-right whitespace-nowrap">
+                  <td class="table-cell-numeric whitespace-nowrap">
                     <button
                       type="button"
                       :data-testid="`variant-builder-duplicate-${i}`"

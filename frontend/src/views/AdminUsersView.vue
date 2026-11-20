@@ -32,7 +32,7 @@
       :description="$t('views.AdminUsersView.empty_state_description')"
     />
 
-    <div v-else class="table-wrapper overflow-x-auto">
+    <div v-else class="table-wrapper">
       <table class="w-full text-sm">
         <thead>
           <tr>
@@ -45,8 +45,8 @@
             <th class="table-header table-cell-numeric">{{ $t('views.AdminUsersView.actions') }}</th>
           </tr>
         </thead>
-        <tbody>
-          <tr v-for="u in users" :key="u.id" class="border-b last:border-0 hover:bg-muted/20 transition-colors">
+        <tbody class="divide-y divide-border">
+          <tr v-for="u in users" :key="u.id" class="hover:bg-muted/20 transition-colors">
             <td class="table-cell">
               <div class="flex items-center gap-2">
                 <div class="avatar-ring" aria-hidden="true">
@@ -146,7 +146,7 @@
         :description="$t('views.AdminUsersView.no_pending_invitations_description')"
         data-testid="admin-invitations-empty"
       />
-      <div v-else class="table-wrapper overflow-x-auto">
+      <div v-else class="table-wrapper">
         <table class="w-full text-sm">
           <thead>
             <tr>
@@ -157,11 +157,11 @@
               <th class="table-header table-cell-numeric">{{ $t('views.AdminUsersView.actions') }}</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody class="divide-y divide-border">
             <tr
               v-for="inv in pendingInvitations"
               :key="inv.id"
-              class="border-b last:border-0 hover:bg-muted/20 transition-colors"
+              class="hover:bg-muted/20 transition-colors"
               data-testid="admin-invitations-row"
             >
               <td class="table-cell">

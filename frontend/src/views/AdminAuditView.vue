@@ -76,6 +76,7 @@
       id="admin-audit-source-org"
       :role="isSystemAdmin ? 'tabpanel' : undefined"
       :aria-labelledby="isSystemAdmin ? 'admin-audit-tab-org' : undefined"
+      class="space-y-4"
     >
     <div v-if="chainResult" class="rounded-lg border px-4 py-3 text-sm" :class="chainResult.valid ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-500 bg-red-50 text-red-800'" aria-live="polite" data-testid="admin-audit-chain-result">
       <strong>{{ chainResult.valid ? $t('views.AdminAuditView.chain_valid') : $t('views.AdminAuditView.chain_broken') }}</strong>
@@ -214,7 +215,7 @@
     />
 
     <template v-else>
-      <div class="table-wrapper overflow-x-auto">
+      <div class="table-wrapper">
         <table class="w-full">
           <thead>
             <tr>
@@ -226,7 +227,7 @@
               <th class="w-8 table-header" />
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <template v-for="event in events" :key="event.id">
             <tr
               class="cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -278,7 +279,7 @@
                  the BOTTOM of the table, so expanding a row near the top
                  flipped the chevron with no visible change on screen. -->
             <tr v-if="expandedId === event.id">
-              <td colspan="6" class="border-t bg-muted p-4">
+              <td colspan="6" class="table-cell bg-muted">
                 <div class="space-y-3">
                   <div v-if="expandedEvent?.payload_json && Object.keys(expandedEvent.payload_json).length > 0">
                     <h4 class="mb-1 text-xs font-semibold uppercase text-muted-foreground">{{ $t('views.AdminAuditView.details') }}</h4>
@@ -425,7 +426,7 @@
       />
 
       <template v-else>
-        <div class="table-wrapper overflow-x-auto">
+        <div class="table-wrapper">
           <table class="w-full">
             <thead>
               <tr>
@@ -437,7 +438,7 @@
                 <th class="w-8 table-header" />
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <template v-for="event in systemEvents" :key="event.id">
               <tr
                 class="cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -481,7 +482,7 @@
                 </td>
               </tr>
               <tr v-if="expandedSystemId === event.id">
-                <td colspan="6" class="border-t bg-muted p-4">
+                <td colspan="6" class="table-cell bg-muted">
                   <div class="space-y-3">
                     <div v-if="expandedSystemEvent?.payload_json && Object.keys(expandedSystemEvent.payload_json).length > 0">
                       <h4 class="mb-1 text-xs font-semibold uppercase text-muted-foreground">{{ $t('views.AdminAuditView.details') }}</h4>

@@ -124,37 +124,39 @@
               :description="$t('views.AdminSpendLimitsView.no_teams_found_description')"
               data-testid="admin-spend-limits-teams-empty"
             />
-            <table v-else class="w-full text-sm">
-              <thead>
-                <tr>
-                  <th class="table-header">{{ $t('views.AdminSpendLimitsView.team') }}</th>
-                  <th class="table-header">{{ $t('views.AdminSpendLimitsView.daily_limit_usd_caps') }}</th>
-                  <th class="table-header" />
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="team in teams" :key="team.id" class="border-b last:border-b-0">
-                  <td class="table-cell font-medium">{{ team.name }}</td>
-                  <td class="table-cell">
-                    <InputText :aria-label="$t('views.AdminSpendLimitsView.team_daily_limit_aria', { team: team.name })"
-                      :model-value="team.editingLimit == null ? '' : String(team.editingLimit)" @update:model-value="v => team.editingLimit = parseNumericInput(v)"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      :placeholder="$t('views.AdminSpendLimitsView.inherit_org_limit')"
-                      class="max-w-40"
-                      :data-testid="'admin-spend-limits-team-limit-' + team.id"
-                    />
-                    <p v-if="team.saveError" class="mt-1 text-xs text-destructive">{{ team.saveError }}</p>
-                  </td>
-                  <td class="table-cell-numeric">
-                    <Button size="small" :disabled="team.saving" :data-testid="'admin-spend-limits-team-save-' + team.id" @click="saveTeamLimit(team)">
-                      {{ team.saving ? $t('views.AdminSpendLimitsView.saving') : $t('views.AdminSpendLimitsView.save') }}
-                    </Button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div v-else class="table-wrapper">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="table-header">{{ $t('views.AdminSpendLimitsView.team') }}</th>
+                    <th class="table-header">{{ $t('views.AdminSpendLimitsView.daily_limit_usd_caps') }}</th>
+                    <th class="table-header" />
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  <tr v-for="team in teams" :key="team.id">
+                    <td class="table-cell font-medium">{{ team.name }}</td>
+                    <td class="table-cell">
+                      <InputText :aria-label="$t('views.AdminSpendLimitsView.team_daily_limit_aria', { team: team.name })"
+                        :model-value="team.editingLimit == null ? '' : String(team.editingLimit)" @update:model-value="v => team.editingLimit = parseNumericInput(v)"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        :placeholder="$t('views.AdminSpendLimitsView.inherit_org_limit')"
+                        class="max-w-40"
+                        :data-testid="'admin-spend-limits-team-limit-' + team.id"
+                      />
+                      <p v-if="team.saveError" class="mt-1 text-xs text-destructive">{{ team.saveError }}</p>
+                    </td>
+                    <td class="table-cell-numeric">
+                      <Button size="small" :disabled="team.saving" :data-testid="'admin-spend-limits-team-save-' + team.id" @click="saveTeamLimit(team)">
+                        {{ team.saving ? $t('views.AdminSpendLimitsView.saving') : $t('views.AdminSpendLimitsView.save') }}
+                      </Button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </template>
         </DataCard>
 

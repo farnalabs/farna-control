@@ -109,25 +109,25 @@
              {{ $t('views.SettingsMcpView.no_api_keys_match_filter') }}
            </div>
 
-           <div v-else class="overflow-x-auto">
+           <div v-else class="table-wrapper">
             <table class="w-full text-sm">
             <thead>
-              <tr class="border-b text-left text-muted-foreground">
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.name') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.key_prefix') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.role') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.account') }}</th>
-                <th class="pb-2 font-medium capitalize">{{ $t('views.SettingsMcpView.status') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SettingsMcpView.last_used') }}</th>
-                <th class="pb-2 font-medium" />
+              <tr>
+                <th class="table-header">{{ $t('views.SettingsMcpView.name') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.key_prefix') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.role') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.account') }}</th>
+                <th class="table-header capitalize">{{ $t('views.SettingsMcpView.status') }}</th>
+                <th class="table-header">{{ $t('views.SettingsMcpView.last_used') }}</th>
+                <th class="table-header" />
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
               <tr v-for="key in filteredApiKeys" :key="key.id" class="transition-colors hover:bg-muted/20">
-                <td class="py-2.5 font-medium">{{ key.name }}</td>
-                <td class="py-2.5 font-mono text-muted-foreground">{{ key.lookup_prefix }}</td>
-                <td class="py-2.5 capitalize">{{ key.role }}</td>
-                <td class="py-2.5">
+                <td class="table-cell font-medium">{{ key.name }}</td>
+                <td class="table-cell font-mono text-muted-foreground">{{ key.lookup_prefix }}</td>
+                <td class="table-cell capitalize">{{ key.role }}</td>
+                <td class="table-cell">
                   <div class="flex items-center gap-2">
                     <Badge
                       :severity="key.account_kind === 'human' ? 'success' : 'info'"
@@ -137,13 +137,13 @@
                     <span v-if="key.account_email" class="text-xs text-muted-foreground">({{ key.account_email }})</span>
                   </div>
                 </td>
-                <td class="py-2.5" data-testid="settings-mcp-key-status">
+                <td class="table-cell" data-testid="settings-mcp-key-status">
                   <Badge :severity="apiKeyStatusMeta(key).severity">{{ apiKeyStatusMeta(key).label }}</Badge>
                 </td>
-                <td class="py-2.5 text-muted-foreground">
+                <td class="table-cell text-muted-foreground">
                   {{ key.last_used_at ? formatDate(key.last_used_at) : $t('views.SettingsMcpView.never') }}
                 </td>
-                <td class="py-2.5 text-right">
+                <td class="table-cell-numeric">
                   <Button v-if="key.is_active" severity="danger" size="small" data-testid="settings-mcp-revoke-key" @click="confirmRevokeKey(key)">
                     {{ $t('views.SettingsMcpView.revoke') }}
                   </Button>

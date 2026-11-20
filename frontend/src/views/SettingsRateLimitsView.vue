@@ -56,20 +56,20 @@
           v-if="rules.length === 0"
           :title="$t('views.SettingsRateLimitsView.no_rate_limit_rules_configured')"
         />
-        <div v-else class="overflow-x-auto">
+        <div v-else class="table-wrapper">
           <table data-testid="rate-limits-table" class="w-full text-sm">
           <thead>
-            <tr class="border-b text-left text-muted-foreground">
-              <th class="pb-2 font-medium">{{ $t('views.SettingsRateLimitsView.path_prefix') }}</th>
-              <th class="pb-2 font-medium">{{ $t('views.SettingsRateLimitsView.max_requests') }}</th>
-              <th class="pb-2 font-medium">{{ $t('views.SettingsRateLimitsView.window_s') }}</th>
+            <tr>
+              <th class="table-header">{{ $t('views.SettingsRateLimitsView.path_prefix') }}</th>
+              <th class="table-header">{{ $t('views.SettingsRateLimitsView.max_requests') }}</th>
+              <th class="table-header">{{ $t('views.SettingsRateLimitsView.window_s') }}</th>
             </tr>
           </thead>
-          <tbody>
-            <tr v-for="rule in rules" :key="rule.path_prefix" class="border-b last:border-b-0">
-              <td class="py-3 font-mono text-xs">{{ rule.path_prefix }}</td>
-              <td class="py-3">{{ rule.max_requests }}</td>
-              <td class="py-3">{{ rule.window_s }}</td>
+          <tbody class="divide-y divide-border">
+            <tr v-for="rule in rules" :key="rule.path_prefix">
+              <td class="table-cell font-mono text-xs">{{ rule.path_prefix }}</td>
+              <td class="table-cell">{{ rule.max_requests }}</td>
+              <td class="table-cell">{{ rule.window_s }}</td>
             </tr>
           </tbody>
         </table>

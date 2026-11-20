@@ -140,24 +140,24 @@
 
       <div v-if="capacity.pending.by_pipeline.length" data-testid="capacity-by-pipeline">
         <h3 class="mb-2 text-sm font-medium">{{ $t('views.AnalyticsView.capacity_by_pipeline_title') }}</h3>
-        <div class="overflow-x-auto">
+        <div class="table-wrapper">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b text-left text-muted-foreground">
-                <th class="pb-2 font-medium">{{ $t('views.AnalyticsView.capacity_col_pipeline') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_pending') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_oldest') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_cap') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_stale') }}</th>
+              <tr>
+                <th class="table-header">{{ $t('views.AnalyticsView.capacity_col_pipeline') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_pending') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_oldest') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_cap') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_stale') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="row in pipelineRows" :key="row.pipeline_id" class="border-b last:border-0">
-                <td class="py-2 font-medium">{{ row.pipeline_name || shortId(row.pipeline_id) }}</td>
-                <td class="py-2 text-right tabular-nums">{{ row.pending_count }}</td>
-                <td class="py-2 text-right tabular-nums">{{ formatDuration(row.oldest_pending_age_seconds) }}</td>
-                <td class="py-2 text-right tabular-nums">{{ row.max_concurrent_runs ?? $t('views.AnalyticsView.capacity_none') }}</td>
-                <td class="py-2 text-right tabular-nums">{{ row.stale_heartbeat_count }}</td>
+            <tbody class="divide-y divide-border">
+              <tr v-for="row in pipelineRows" :key="row.pipeline_id">
+                <td class="table-cell font-medium">{{ row.pipeline_name || shortId(row.pipeline_id) }}</td>
+                <td class="table-cell-numeric">{{ row.pending_count }}</td>
+                <td class="table-cell-numeric">{{ formatDuration(row.oldest_pending_age_seconds) }}</td>
+                <td class="table-cell-numeric">{{ row.max_concurrent_runs ?? $t('views.AnalyticsView.capacity_none') }}</td>
+                <td class="table-cell-numeric">{{ row.stale_heartbeat_count }}</td>
               </tr>
             </tbody>
           </table>
@@ -166,24 +166,24 @@
 
       <div v-if="capacity.series.length" data-testid="capacity-series">
         <h3 class="mb-2 text-sm font-medium">{{ $t('views.AnalyticsView.capacity_series_title') }}</h3>
-        <div class="overflow-x-auto">
+        <div class="table-wrapper">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b text-left text-muted-foreground">
-                <th class="pb-2 font-medium">{{ $t('views.AnalyticsView.capacity_col_interval') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_created') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_started') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_completed') }}</th>
-                <th class="pb-2 text-right font-medium">{{ $t('views.AnalyticsView.capacity_col_depth') }}</th>
+              <tr>
+                <th class="table-header">{{ $t('views.AnalyticsView.capacity_col_interval') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_created') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_started') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_completed') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_depth') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="bucket in capacity.series" :key="bucket.interval_start" class="border-b last:border-0">
-                <td class="py-2 tabular-nums">{{ formatInterval(bucket.interval_start) }}</td>
-                <td class="py-2 text-right tabular-nums">{{ bucket.created }}</td>
-                <td class="py-2 text-right tabular-nums">{{ bucket.started }}</td>
-                <td class="py-2 text-right tabular-nums">{{ bucket.completed }}</td>
-                <td class="py-2 text-right tabular-nums">{{ bucket.pending_depth }}</td>
+            <tbody class="divide-y divide-border">
+              <tr v-for="bucket in capacity.series" :key="bucket.interval_start">
+                <td class="table-cell tabular-nums">{{ formatInterval(bucket.interval_start) }}</td>
+                <td class="table-cell-numeric">{{ bucket.created }}</td>
+                <td class="table-cell-numeric">{{ bucket.started }}</td>
+                <td class="table-cell-numeric">{{ bucket.completed }}</td>
+                <td class="table-cell-numeric">{{ bucket.pending_depth }}</td>
               </tr>
             </tbody>
           </table>

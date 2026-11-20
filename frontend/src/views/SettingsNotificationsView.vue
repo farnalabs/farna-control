@@ -22,7 +22,6 @@
         padding="lg"
         elevation="sm"
         heading-level="h2"
-        card-class="max-w-3xl"
         :title="$t('views.SettingsNotificationsView.categories_heading')"
         :description="$t('views.SettingsNotificationsView.categories_help')"
       >
@@ -68,7 +67,6 @@
         padding="lg"
         elevation="sm"
         heading-level="h2"
-        card-class="max-w-3xl"
         :title="$t('views.SettingsNotificationsView.dashboard_level_heading')"
         :description="$t('views.SettingsNotificationsView.dashboard_level_summary')"
       >

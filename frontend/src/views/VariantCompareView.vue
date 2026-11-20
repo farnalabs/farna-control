@@ -63,15 +63,15 @@
       </div>
 
       <template v-if="selectedGroup">
-        <div class="overflow-x-auto rounded-lg border bg-card">
+        <div class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
-              <tr class="border-b bg-muted/50">
-                <th class="sticky left-0 z-10 bg-muted/50 px-4 py-3 font-semibold">{{ $t('views.variantCompare.node') }}</th>
+              <tr>
+                <th class="table-header sticky left-0 z-10 bg-card">{{ $t('views.variantCompare.node') }}</th>
                 <th
                   v-for="v in variants"
                   :key="v.name"
-                  class="min-w-[160px] px-4 py-3 font-semibold"
+                  class="table-header min-w-[160px]"
                 >
                   <div class="flex flex-col gap-0.5">
                     <span>{{ v.name }}</span>
@@ -80,19 +80,19 @@
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody class="divide-y divide-border">
               <tr
                 v-for="node in nodeNames"
                 :key="node"
-                class="border-b last:border-b-0 hover:bg-muted/30"
+                class="hover:bg-muted/30"
               >
-                <td class="sticky left-0 z-10 bg-card px-4 py-3 font-mono text-xs">
+                <td class="table-cell sticky left-0 z-10 bg-card font-mono text-xs">
                   {{ node }}
                 </td>
                 <td
                   v-for="v in variants"
                   :key="`${node}-${v.name}`"
-                  class="px-4 py-3 align-top"
+                  class="table-cell align-top"
                 >
                   <div class="flex flex-col gap-1.5">
                     <div>
@@ -132,8 +132,8 @@
                   </div>
                 </td>
               </tr>
-              <tr v-if="nodeNames.length === 0" class="border-b last:border-b-0">
-                <td colspan="100" class="px-4 py-8 text-center text-sm text-muted-foreground">
+              <tr v-if="nodeNames.length === 0">
+                <td colspan="100" class="table-cell text-center text-muted-foreground">
                   <template v-if="runEntries.size === 0">
                     {{ $t('views.variantCompare.noRunData') }}
                   </template>
@@ -144,12 +144,12 @@
               </tr>
             </tbody>
             <tfoot v-if="summaryByVariant.length > 0">
-              <tr class="border-t bg-muted/30 font-medium">
-                <td class="sticky left-0 z-10 bg-muted/30 px-4 py-3">{{ $t('views.variantCompare.summary') }}</td>
+              <tr class="border-t bg-muted/30">
+                <td class="table-cell sticky left-0 z-10 bg-card">{{ $t('views.variantCompare.summary') }}</td>
                 <td
                   v-for="s in summaryByVariant"
                   :key="s.name"
-                  class="px-4 py-3"
+                  class="table-cell"
                 >
                   <div class="flex flex-col gap-1 text-xs">
                     <div class="flex items-center gap-1.5">
