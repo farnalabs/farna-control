@@ -5,8 +5,9 @@ The tool is deliberately a thin transport wrapper: it drives the SAME
 inventory read, inference (``discover_draft``) and persistence
 (``SystemMapDiscoveryRepository``) are one implementation. These tests pin:
 
-* the four internal-gate legs (role, grant, developer mode, ``system_maps``
-  feature) each refuse on their own, before any discovery work;
+* the three authoring-gate legs (role, ``system_maps_access`` grant,
+  ``system_maps`` feature) each refuse on their own, before any discovery work;
+  developer mode is NOT a leg since FAR-2595;
 * tenant wiring (the principal the handler receives is the authenticated one);
 * the shared-service proof — the MCP path and the REST path persist the exact
   same draft content for the same organisation inventory.
@@ -149,9 +150,10 @@ def _mcp_auth_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         _ctx_user_id,
     )
 
-    # Developer mode is part of the internal gate; the production default is
-    # OFF, so an authorised scenario must opt in explicitly.
-    monkeypatch.setattr("farna.api.mcp_server.get_settings", lambda: _make_settings())
+    # FAR-2595: developer mode is NOT part of the System Maps authoring gate.
+    # The fixture pins the production default (OFF) so every authorised
+    # scenario proves the non-dev-mode path works.
+    monkeypatch.setattr("farna.api.mcp_server.get_settings", lambda: _make_settings(dev_mode=False))
     _ctx_org_id.set(ORG_ID)
     _ctx_user_id.set(USER_ID)
     _ctx_role.set("operator")
@@ -173,7 +175,7 @@ def _mcp_auth_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.mark.asyncio
 async def test_authorized_caller_gets_unpublished_draft_report() -> None:
-    """Operator + grant + dev mode + feature reaches inference and persistence."""
+    """Operator + grant + feature (dev mode OFF) reaches inference and persistence."""
     session = _discovery_session()
     with (
         patch("farna.api.mcp_server.validate_current_auth", new=AsyncMock(return_value=True)),
@@ -237,20 +239,31 @@ async def test_grant_set_without_system_maps_access_is_refused() -> None:
 
 
 @pytest.mark.asyncio
-async def test_developer_mode_off_is_refused() -> None:
-    """The dev-mode leg refuses even an operator holding the grant."""
+async def test_developer_mode_off_is_allowed() -> None:
+    """FAR-2595: an operator with the grant is allowed with dev mode OFF.
+
+    Mirrors the REST gate: the MCP authoring gate is role + grant only, so a
+    self-hosted Alpha deployment (dev mode off) can dogfood MCP discovery.
+    """
+    session = _discovery_session()
     with (
         patch("farna.api.mcp_server.validate_current_auth", new=AsyncMock(return_value=True)),
         patch("farna.api.mcp_server.get_settings", return_value=_make_settings(dev_mode=False)),
         patch("farna.api.mcp_server._require_plan_feature", new=AsyncMock(return_value=None)) as feature_gate,
-        patch("farna.api.routes.system_maps.discover_system_map", new=AsyncMock()) as rest_handler,
+        patch.object(SystemMapDiscoveryRepository, "get_or_create_draft", new=AsyncMock(return_value=_draft_map())),
+        patch.object(
+            SystemMapDiscoveryRepository,
+            "save_discovery_revision",
+            new=AsyncMock(return_value=(_draft_map(), _REVISION_ID, 1)),
+        ),
+        _patch_discovery_session(session),
     ):
-        result = await discover_system_map()
+        result = await discover_system_map(name="no-dev-mode")
 
-    assert result["error"] == "insufficient_scope"
-    assert "restricted to internal operators" in result["detail"]
-    feature_gate.assert_not_awaited()
-    rest_handler.assert_not_awaited()
+    assert "error" not in result
+    assert result["published"] is False
+    assert result["draft_map_id"] == str(_MAP_ID)
+    feature_gate.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -609,7 +609,12 @@ def _require_mcp_internal_lifecycle_map_access() -> None:
 
 
 def _mcp_internal_system_maps_access() -> bool:
-    """Return whether the MCP caller has the internal system maps grant.
+    """Return whether the MCP caller may author System Maps.
+
+    FAR-2595: this mirrors the REST authoring gate exactly — the operator/admin
+    role floor plus the dedicated ``system_maps_access`` grant. Developer mode
+    is deliberately NOT required, so MCP dogfooding works on a self-hosted
+    Alpha deployment running with dev mode off.
 
     The grant leg goes through ``grants_permit`` — the same live resolver the
     REST gate reaches via ``require_in_dev_operator`` -> ``_enforce_key_grant``
@@ -619,21 +624,18 @@ def _mcp_internal_system_maps_access() -> bool:
     without a second code change. ``grants is None`` (JWTs, legacy keys) does
     not narrow, matching REST.
     """
-    if not getattr(get_settings(), "modulo_dev_mode", True):
-        return False
     role = _ctx_role_val()
     return ORG_ROLE_HIERARCHY.get(role or "", -1) >= ORG_ROLE_HIERARCHY["operator"] and grants_permit(_ctx_key_grants.get(None), SYSTEM_MAPS_ACCESS_PERMISSION)
 
 
 def _require_mcp_internal_system_maps_access() -> None:
-    """Refuse an MCP System Maps call without the REST internal gate's context.
+    """Refuse an MCP System Maps authoring call without the REST gate's context.
 
-    Mirrors ``_require_mcp_internal_lifecycle_map_access``: the boolean leg is
-    the same one ``/api/v1/system-maps`` reaches through
-    ``_require_internal_system_maps_access`` (developer mode + operator/admin
-    role + the dedicated ``system_maps_access`` grant). The role and grant legs
-    are ALSO declared in the shared tool-scope registry, so this call-site check
-    is the dev-mode leg plus defence in depth.
+    The boolean leg is the same one ``/api/v1/system-maps`` reaches through
+    ``_require_internal_system_maps_access``: operator/admin role plus the
+    dedicated ``system_maps_access`` grant, with no developer-mode leg
+    (FAR-2595). The role and grant legs are ALSO declared in the shared
+    tool-scope registry, so this call-site check is defence in depth.
     """
     if not _mcp_internal_system_maps_access():
         raise MCPAuthorizationError("System Maps discovery is restricted to internal operators")
@@ -643,17 +645,16 @@ def _mcp_flag_visible(
     flag_name: str,
     *,
     internal_lifecycle_access: bool,
-    internal_system_maps_access: bool,
 ) -> bool:
     """Return whether the MCP caller may see ``flag_name`` in a flag listing.
 
-    Internal flags are hidden from ordinary callers; each internal namespace
-    has its own gate (System Maps grant vs the retained lifecycle-map grant).
+    Internal flags are hidden from ordinary callers behind the retained
+    lifecycle-map gate. ``system_maps`` is a normal default-OFF flag since
+    FAR-2595, so it is listed for every caller and has no visibility branch
+    here.
     """
     if flag_name not in INTERNAL_FLAGS:
         return True
-    if flag_name == SYSTEM_MAPS_FLAG:
-        return internal_system_maps_access
     return flag_name in RETIRED_INTERNAL_FLAGS and internal_lifecycle_access
 
 
@@ -11162,7 +11163,6 @@ async def list_feature_flags() -> dict[str, Any]:
                     org_overrides = {k: bool(v) for k, v in raw_overrides.items()}
 
         internal_lifecycle_access = _mcp_internal_lifecycle_map_access()
-        internal_system_maps_access = _mcp_internal_system_maps_access()
         return {
             "license": {
                 "tier": registry.current_tier,
@@ -11182,7 +11182,6 @@ async def list_feature_flags() -> dict[str, Any]:
                 if _mcp_flag_visible(
                     f.name,
                     internal_lifecycle_access=internal_lifecycle_access,
-                    internal_system_maps_access=internal_system_maps_access,
                 )
             ],
             "would_activate": [
@@ -11197,7 +11196,6 @@ async def list_feature_flags() -> dict[str, Any]:
                 if _mcp_flag_visible(
                     f.name,
                     internal_lifecycle_access=internal_lifecycle_access,
-                    internal_system_maps_access=internal_system_maps_access,
                 )
             ],
         }
@@ -11287,9 +11285,10 @@ async def _system_maps_discovery_session() -> AsyncGenerator[AsyncSession, None]
     description=(
         "Read the observed health, loop metrics and bottlenecks for a published System Maps "
         "revision (mirrors GET /api/v1/system-maps/{map_id}/overview). Requires the system_maps_read "
-        "feature (system_maps for internal callers) and system_map.overview permission; internal "
-        "callers may select a draft or historical revision, while ordinary callers see published "
-        "revisions only."
+        "feature (system_maps for authoring-capable callers: operator/admin role plus the "
+        "system_maps_access grant, no developer mode) and system_map.overview permission; authoring-"
+        "capable callers may select a draft or historical revision, while ordinary callers see "
+        "published revisions only."
     ),
 )
 @mcp_audited("system_map_overview_read", "system_map", fail_closed=False)
@@ -12513,14 +12512,12 @@ async def get_available_features() -> dict[str, Any]:
 
         current_tier = plan_ctx.tier()
         internal_lifecycle_access = _mcp_internal_lifecycle_map_access()
-        internal_system_maps_access = _mcp_internal_system_maps_access()
         all_flags = [
             flag
             for flag in plan_ctx.list_enabled_features()
             if _mcp_flag_visible(
                 flag.name,
                 internal_lifecycle_access=internal_lifecycle_access,
-                internal_system_maps_access=internal_system_maps_access,
             )
         ]
 

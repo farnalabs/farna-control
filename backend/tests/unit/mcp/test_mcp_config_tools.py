@@ -443,22 +443,35 @@ class TestSystemMapsAccessUsesSharedGrantCheck:
     already-minted grant after the key was marked non-delegable. The shared
     resolver re-reads ``is_delegable`` live on every call — the same leg the
     REST gate reaches via ``require_in_dev_operator`` -> ``assert_grant``.
+    FAR-2595: developer mode is no longer part of this gate.
     """
 
     def _access(self, *, role: str, grants: frozenset[str] | None) -> bool:
         from farna.api.mcp_server import _ctx_key_grants, _ctx_role, _mcp_internal_system_maps_access
 
-        with patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=True)):
-            _ctx_role.set(role)
-            _ctx_key_grants.set(grants)
-            try:
-                return _mcp_internal_system_maps_access()
-            finally:
-                _ctx_role.set(None)
-                _ctx_key_grants.set(None)
+        _ctx_role.set(role)
+        _ctx_key_grants.set(grants)
+        try:
+            return _mcp_internal_system_maps_access()
+        finally:
+            _ctx_role.set(None)
+            _ctx_key_grants.set(None)
 
     def test_granted_operator_is_allowed(self) -> None:
         assert self._access(role="operator", grants=frozenset({"system_maps_access"})) is True
+
+    def test_granted_operator_is_allowed_with_developer_mode_off(self) -> None:
+        """FAR-2595: the MCP gate mirrors REST and does not read dev mode."""
+        from farna.api.mcp_server import _ctx_key_grants, _ctx_role, _mcp_internal_system_maps_access
+
+        with patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=False)):
+            _ctx_role.set("operator")
+            _ctx_key_grants.set(frozenset({"system_maps_access"}))
+            try:
+                assert _mcp_internal_system_maps_access() is True
+            finally:
+                _ctx_role.set(None)
+                _ctx_key_grants.set(None)
 
     def test_grant_bearing_key_without_the_grant_is_denied(self) -> None:
         assert self._access(role="operator", grants=frozenset({"library.search.in_dev"})) is False

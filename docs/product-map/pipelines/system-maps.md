@@ -81,9 +81,9 @@ surface behind the default-OFF, per-organisation `system_maps` feature flag
 developer-mode requirement from that authoring gate so Alpha self-hosters can
 dogfood it; the flag remains OFF until an org admin (or system admin) enables
 it. Both classes are registered in the manifest `features:` registry as
-`feat-system-maps`. MCP discovery keeps its own MCP internal predicate
-(developer mode + operator role + grant), tracked separately from the REST
-authoring gate.
+`feat-system-maps`. MCP discovery applies the same authoring predicate
+(operator/admin role + `system_maps_access` grant, no developer mode) as the
+REST gate (FAR-2595).
 
 The published-read routes sit on their own router
 (`published_router` in `api/routes/system_maps.py`) with
@@ -348,9 +348,9 @@ point in time.
 - [x] MCP flag listings include `system_maps` for every caller since FAR-2595
       removed it from `INTERNAL_FLAGS`; `_mcp_flag_visible` returns it through
       the normal (non-internal) path, and the flag stays default-OFF. The MCP
-      discovery tool retains its own internal predicate
-      (`_mcp_internal_system_maps_access`: developer mode, operator role floor
-      and `grants_permit` over the caller's grant set)
+      authoring predicate mirrors REST: operator/admin role floor plus
+      `grants_permit` over the caller's `system_maps_access` grant, with no
+      developer-mode leg (FAR-2595)
       (`api/mcp_server.py`; `tests/unit/mcp/test_mcp_config_tools.py` -
       `TestSystemMapsInternalFlagMCP` and
       `TestSystemMapsAccessUsesSharedGrantCheck`)
@@ -358,11 +358,12 @@ point in time.
       SAME `POST /api/v1/system-maps/discover` handler the REST surface uses, so
       the inventory read, deterministic inference and persistence stay one
       implementation. It runs the reused handler in a fresh session, re-applies
-      the internal gate server-side (developer mode, operator/admin role floor,
+      the authoring gate server-side (operator/admin role floor,
       `system_maps_access` grant and the `system_maps` feature, each before any
-      inventory read), refuses team- and user-scoped credentials because the
-      scan covers the whole organization, and returns the discovery report as
-      JSON or a branchable error code. It calls the route's undecorated handler
+      inventory read; developer mode is not part of the gate since FAR-2595),
+      refuses team- and user-scoped credentials because the scan covers the
+      whole organization, and returns the discovery report as JSON or a
+      branchable error code. It calls the route's undecorated handler
       and classifies DB failures itself (session contract, lock timeout,
       conflict, migration required, unavailable) instead of inheriting the REST
       wrapper's generic mapping (`api/mcp_server.py::discover_system_map`,
