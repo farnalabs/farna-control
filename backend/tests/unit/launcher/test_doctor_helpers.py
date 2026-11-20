@@ -150,6 +150,22 @@ def test_load_state_readonly_integrity_error(tmp_path: Path, monkeypatch: pytest
     assert "state.json unreadable" in err
 
 
+def test_load_state_readonly_missing_state_file_names_the_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_secrets(tmp_path)
+
+    def _missing(_path: Path, _key: bytes) -> LauncherState:
+        raise FileNotFoundError
+
+    import farna.launcher.state as state_module
+
+    monkeypatch.setattr(state_module, "load_state", _missing)
+    state, err = _load_state_readonly(tmp_path)
+    assert state is None
+    assert err is not None
+    assert "no state.json" in err
+    assert "farna-control start" in err
+
+
 # ---------------------------------------------------------------------------
 # default_probes — every injected probe body, no live services
 # ---------------------------------------------------------------------------

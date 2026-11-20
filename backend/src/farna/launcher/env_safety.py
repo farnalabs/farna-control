@@ -68,7 +68,7 @@ SCRUB_PREFIXES: tuple[str, ...] = ("PG", "DYLD_", "LD_")
 AMBIENT_SERVICE_URL_VARS: tuple[str, ...] = ("DATABASE_URL", "REDIS_URL")
 
 # The launcher-owned public surface (consumed by the slice-2 native entry and
-# modulo.settings integration; vulture's dead-code gate special-cases __all__).
+# farna.settings integration; vulture's dead-code gate special-cases __all__).
 __all__ = [
     "AMBIENT_SERVICE_URL_VARS",
     "SCRUB_EXACT_NAMES",
@@ -177,7 +177,7 @@ def assert_no_ambient_service_urls(
 
 
 def make_first_boot_guard(state_dir: Path, env_file: Path | str | None = None) -> Callable[[], None]:
-    """Build the hook installed into ``modulo.settings.set_first_boot_guard``.
+    """Build the hook installed into ``farna.settings.set_first_boot_guard``.
 
     The hook runs at Settings validation time so ANY process constructing
     Settings through the launcher's pinned configuration fails fast on an

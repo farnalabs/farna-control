@@ -33,7 +33,7 @@ const markWidth = computed(
     xmlns="http://www.w3.org/2000/svg"
     role="img"
     :aria-label="t('components.LogoMark.logo')"
-    :class="transparent ? 'text-foreground' : 'text-white'"
+    :class="transparent ? 'text-foreground' : 'text-ink-50'"
   >
     <rect
       v-if="!transparent"
@@ -43,9 +43,15 @@ const markWidth = computed(
       fill="currentColor"
       class="text-ink-900"
     />
-    <!-- Brand mark geometry, copied verbatim from
-         farna-control-logo-svgs/farna-control-mark-dark-bg.svg and drawn in
-         currentColor so it stays monochrome. -->
+    <!-- FAR-2582: the canonical two-tone mark, geometry copied verbatim from
+         the brand's farna-control-mark-{dark,light}-bg.svg assets.
+         The hexagons are drawn in the foreground ink (currentColor): the
+         theme's --foreground when transparent, the brand dark-bg ink
+         (ink-50, #E8EDF2) on the opaque ink-900 plate. Only the diagonal
+         stroke carries the accent — .logo-mark-accent (style.css) resolves it
+         per theme to the neon dark accent or the deep-teal light accent. The
+         mono-* brand files are fallbacks for media that cannot carry colour;
+         the browser can, so they are not used here. -->
     <g
       transform="translate(-55.14 -88.02) scale(3.24)"
       fill="none"
@@ -59,7 +65,7 @@ const markWidth = computed(
         fill="currentColor"
       />
       <polygon points="88,66.93 80,80.79 64,80.79 56,66.93 64,53.07 80,53.07" />
-      <line x1="52" y1="46.14" x2="79.71" y2="30.14" />
+      <line class="logo-mark-accent" x1="52" y1="46.14" x2="79.71" y2="30.14" />
     </g>
   </svg>
 </template>

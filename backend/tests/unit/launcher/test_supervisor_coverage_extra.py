@@ -1,5 +1,5 @@
 """Extra coverage for the new supervisor FAR-676 surface (logs, runtime
-manifest, degraded record, ``modulo status --json`` enrichment, bundled
+manifest, degraded record, ``farna-control status --json`` enrichment, bundled
 postgres version resolution).
 
 These are pure/read-only helpers; every branch is exercised against a temp

@@ -388,7 +388,12 @@ const { loading, error, mutate: login } = useMutation(async () => {
   // "used last time" tag. Best-effort (storage failures are swallowed).
   loginPrefs.setLastMethod('password')
   lastUsedMethod.value = 'password'
-  router.push('/')
+  // FAR-2582: setAccessToken flips the shell's auth state synchronously, so the
+  // app shell is already mounted while this navigation is still resolving (the
+  // dashboard route chunk). Await it so the mutation only reports success once
+  // the route has settled — AppLayout's content guard suppresses the credential
+  // form for that window.
+  await router.push('/')
   return data
 })
 </script>

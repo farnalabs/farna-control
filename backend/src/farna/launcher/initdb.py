@@ -363,7 +363,7 @@ async def adopt_legacy_owner_role(
                 f"The bundled cluster has BOTH owner roles ({OWNER_ROLE!r} and the pre-FAR-2570 "
                 f"{LEGACY_OWNER_ROLE!r}), but only {LEGACY_OWNER_ROLE!r} accepted the secrets-file "
                 f"password, and {OWNER_ROLE!r} cannot be renamed onto. Reconcile the cluster: either "
-                f"drop the stray {OWNER_ROLE!r} role and re-run `modulo start` (the boot then renames "
+                f"drop the stray {OWNER_ROLE!r} role and re-run `farna-control start` (the boot then renames "
                 f"{LEGACY_OWNER_ROLE!r}), or point the data dir's secrets file at the existing "
                 f"{OWNER_ROLE!r} credential."
             )

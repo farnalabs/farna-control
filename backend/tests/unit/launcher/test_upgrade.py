@@ -447,7 +447,7 @@ def test_dumped_snapshot_restores_end_to_end(tmp_path: Path, monkeypatch: pytest
 
 
 # ---------------------------------------------------------------------------
-# FAR-675 - the full `modulo upgrade` flow walkthrough tests.
+# FAR-675 - the full `farna-control upgrade` flow walkthrough tests.
 # Shared helpers (release fixture, fetch/dump seams, seeds) live in
 # test_launcher_shared and are imported below; boot seams stay local.
 # ---------------------------------------------------------------------------

@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, useRoute } from 'vue-router'
 import { nextTick } from 'vue'
 import { focusRouteContent } from '../../router'
 
 vi.mock('../../lib/api/client', () => ({
   api: { GET: vi.fn().mockResolvedValue({ data: null, error: undefined }) },
   getAccessToken: vi.fn().mockReturnValue('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBtb2R1bG8ucnVuIiwib3JnX3JvbGUiOiJhZG1pbiJ9.fakesignature'),
+  setAccessToken: vi.fn(),
   clearAccessToken: vi.fn(),
   isDemoSession: vi.fn().mockReturnValue(false),
   // useEventStream registers a module-scope re-arm listener on import (FAR-1842).
@@ -49,10 +50,11 @@ afterEach(() => {
 })
 
 import AppLayout from '../../components/AppLayout.vue'
+import AuthCallbackView from '../../views/AuthCallbackView.vue'
 import { usePlanStore } from '../../stores/planStore'
 import { useOnboardingStore } from '../../composables/useOnboarding'
 import { useAssistantStore } from '../../composables/useAssistantStore'
-import { api, getAccessToken } from '../../lib/api/client'
+import { api, getAccessToken, setAccessToken } from '../../lib/api/client'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -484,6 +486,134 @@ describe('AppLayout main-window scrolling (FAR-2365)', () => {
     expect(shell.classList.contains('min-h-screen')).toBe(false)
     expect(main.classes()).toContain('min-h-0')
     expect(main.classes()).toContain('overflow-y-auto')
+    wrapper.unmount()
+  })
+})
+
+describe('AppLayout authenticated content guard (FAR-2582)', () => {
+  // Stands in for <router-view>: it WOULD paint the credential form the user
+  // just submitted, so the moment the guard stops suppressing the routed view
+  // these inputs reappear and the assertions below fail.
+  const credentialRouteStub = {
+    name: 'CredentialRouteStub',
+    template:
+      '<form><input data-testid="login-email" /><input type="password" data-testid="login-password" /></form>',
+  }
+
+  // Stands in for <router-view> on the SSO handoff. The real view consumes the
+  // URL fragment, stores the token and redirects; rendering it INSIDE the
+  // authenticated shell is the whole point of the regression test below.
+  const authCallbackRouteStub = {
+    name: 'AuthCallbackRouteStub',
+    components: { AuthCallbackView },
+    template: '<AuthCallbackView />',
+  }
+
+  // The suite's global vue-router mock (src/__tests__/setup.ts) returns one
+  // shared route object from `useRoute()`. `setAccessToken()` flips the shell's
+  // auth state synchronously, so the shell is mounted while the current route
+  // is still the one being left — pin that route here.
+  const useRouteMock = vi.mocked(useRoute)
+
+  function setCurrentRoute(name: string | null) {
+    useRouteMock.mockReturnValue({
+      path: '/',
+      fullPath: '/',
+      params: {},
+      query: {},
+      hash: '',
+      matched: [],
+      name,
+      redirectedFrom: undefined,
+      meta: {},
+    } as unknown as ReturnType<typeof useRoute>)
+  }
+
+  async function mountShell(routerViewStub: object = credentialRouteStub) {
+    const wrapper = mount(AppLayout, {
+      global: {
+        plugins: [createPinia()],
+        stubs: { LogoMark: true, 'router-view': routerViewStub },
+      },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  afterEach(() => {
+    // Restore the setup mock's neutral (unnamed) route so the next test in this
+    // file is not left on a credential route, and drop any fragment a handoff
+    // test left in the URL.
+    setCurrentRoute(null)
+    history.replaceState(null, '', '/')
+  })
+
+  beforeEach(() => {
+    vi.mocked(setAccessToken).mockClear()
+    history.replaceState(null, '', '/')
+  })
+
+  it.each(['login', 'org-login'])(
+    'renders a neutral placeholder instead of the routed credential view while the shell is authenticated (%s)',
+    async (routeName) => {
+      setCurrentRoute(routeName)
+      const wrapper = await mountShell()
+
+      // The credential inputs never reach the authenticated content region...
+      expect(wrapper.find('[data-testid="login-email"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="login-password"]').exists()).toBe(false)
+      // ...a neutral placeholder stands in for the routed view...
+      expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(true)
+      // ...and the navbar keeps rendering (Duncan's stated expectation).
+      expect(wrapper.find('aside').exists()).toBe(true)
+
+      wrapper.unmount()
+    },
+  )
+
+  it('renders the auth-callback handoff inside an authenticated shell so the fragment is consumed', async () => {
+    // An ALREADY-AUTHENTICATED browser can land on /auth/callback (a stale or
+    // IdP-initiated SSO link). Suppressing the routed view there left it on the
+    // permanent spinner: the callback never mounted, so it never stored the new
+    // token, never stripped the fragment and never redirected. The handoff is
+    // not a credential form, so it must render.
+    setCurrentRoute('auth-callback')
+    history.replaceState(null, '', '/auth/callback#access_token=sso-token')
+
+    const wrapper = await mountShell(authCallbackRouteStub)
+
+    // The routed view rendered — no placeholder stands in for it...
+    expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(false)
+    // ...and the handoff actually RAN: the token was stored and the fragment
+    // was stripped, so the redirect to the dashboard can proceed.
+    expect(setAccessToken).toHaveBeenCalledWith('sso-token')
+    expect(window.location.hash).toBe('')
+    // The shell chrome is still present, as for every authenticated route.
+    expect(wrapper.find('aside').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('renders routed content once the shell is on a private route', async () => {
+    setCurrentRoute('dashboard')
+    const wrapper = await mountShell()
+
+    expect(wrapper.find('[data-testid="login-email"]').exists()).toBe(true)
+    expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('does not suppress a public route that legitimately renders authenticated', async () => {
+    // /oauth/authorize is public so an anonymous visitor can land on it, but a
+    // SIGNED-IN visitor reaches the consent screen inside the shell — blanking
+    // it would break the flow.
+    setCurrentRoute('oauth-authorize')
+    const wrapper = await mountShell()
+
+    expect(wrapper.find('[data-testid="login-email"]').exists()).toBe(true)
+    expect(wrapper.find('[data-shell-content-loading]').exists()).toBe(false)
+
     wrapper.unmount()
   })
 })

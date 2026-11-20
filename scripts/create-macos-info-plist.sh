@@ -38,8 +38,9 @@ cat > "$OUTPUT_PATH" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>run.modulo.app</string>
-<key>CFBundleName</key><string>Modulo</string>
+<key>CFBundleIdentifier</key><string>dev.farna.control</string>
+<key>CFBundleName</key><string>Farna Control</string>
+<key>CFBundleDisplayName</key><string>Farna Control</string>
 <key>CFBundleExecutable</key><string>modulo</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>Modulo.icns</string>

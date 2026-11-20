@@ -51,24 +51,6 @@ const NATIVE_ITEM = {
   updated_at: '2024-01-01T00:00:00Z',
 }
 
-const COMMUNITY_ITEM = {
-  id: 'community-1',
-  organisation_id: 'org-1',
-  source: 'community',
-  primitive_type: 'workflow',
-  name: 'Translate to French',
-  slug: 'translate-to-french',
-  description: null,
-  author: 'community',
-  version: '1.0',
-  tags: [],
-  visibility: 'community',
-  forked_from: null,
-  auto_update: true,
-  created_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-01-01T00:00:00Z',
-}
-
 describe('LibraryView', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -120,8 +102,8 @@ describe('LibraryView', () => {
     expect(previewSection.text()).toContain('Preview Workflow')
   })
 
-  it('renders the Native section by default, excluding community items even if returned mixed', async () => {
-    getMock.mockResolvedValue({ items: [NATIVE_ITEM, COMMUNITY_ITEM], total: 2, page: 1, page_size: 12 })
+  it('renders the Native section by default', async () => {
+    getMock.mockResolvedValue({ items: [NATIVE_ITEM], total: 1, page: 1, page_size: 12 })
     router.push('/library')
     await router.isReady()
     const wrapper = mount(LibraryView, {
@@ -131,27 +113,6 @@ describe('LibraryView', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain('PRD to Requirements')
-    expect(wrapper.text()).not.toContain('Translate to French')
-  })
-
-  it('renders the Community section separately with a non-verified indicator', async () => {
-    getMock.mockResolvedValue({ items: [COMMUNITY_ITEM], total: 1, page: 1, page_size: 12 })
-    await router.push('/library')
-    await router.isReady()
-    const wrapper = mount(LibraryView, {
-      global: { plugins: [router] },
-    })
-    await nextTick()
-
-    await wrapper.get('[data-testid="library-section-community"]').trigger('click')
-    await nextTick()
-    await nextTick()
-
-    expect(wrapper.text()).toContain('Translate to French')
-    expect(wrapper.find('[data-testid="library-community-badge"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="library-community-badge"]').text()).toContain('not verified')
-    expect(wrapper.find('[data-testid="library-community-disclaimer"]').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('PRD to Requirements')
   })
 
   it('sends a combined primitive_types filter when multiple types are selected', async () => {
@@ -417,17 +378,6 @@ describe('LibraryView tab routing (FAR-2260)', () => {
     setRoute({})
   })
 
-  it('deep-links straight into the community section', async () => {
-    getMock.mockResolvedValue({ items: [COMMUNITY_ITEM], total: 1, page: 1, page_size: 12 })
-    const wrapper = await mountAt({ section: 'community' })
-
-    expect(callsWhere((query) => query.source === 'community').length).toBeGreaterThan(0)
-    expect(wrapper.get('[data-testid="library-section-community"]').classes()).toContain('active')
-    expect(wrapper.find('[data-testid="library-community-disclaimer"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Translate to French')
-    wrapper.unmount()
-  })
-
   it('deep-links straight into the collections section', async () => {
     const wrapper = await mountAt({ section: 'collections' })
 
@@ -466,24 +416,7 @@ describe('LibraryView tab routing (FAR-2260)', () => {
     const wrapper = await mountAt({})
 
     expect(wrapper.get('[data-testid="library-section-native"]').classes()).toContain('active')
-    expect(wrapper.get('[data-testid="library-section-community"]').classes()).not.toContain('active')
     expect(wrapper.text()).toContain('PRD to Requirements')
-    wrapper.unmount()
-  })
-
-  it('fetches once when a tab click is followed by its route change', async () => {
-    const wrapper = await mountAt({})
-    getMock.mockClear()
-
-    // The click applies the section and fetches…
-    await wrapper.get('[data-testid="library-section-community"]').trigger('click')
-    await nextTick()
-    // …then the router-link navigation commits the matching query, which must
-    // not trigger a second fetch for the section already on screen.
-    setRoute({ section: 'community' })
-    await nextTick()
-
-    expect(callsWhere((query) => query.source === 'community')).toHaveLength(1)
     wrapper.unmount()
   })
 
@@ -510,26 +443,42 @@ describe('LibraryView tab routing (FAR-2260)', () => {
     wrapper.unmount()
   })
 
+  it('fetches once when a tab click is followed by its route change', async () => {
+    const wrapper = await mountAt({})
+    getMock.mockClear()
+
+    // The click applies the section and fetches…
+    await wrapper.get('[data-testid="library-section-collections"]').trigger('click')
+    await nextTick()
+    // …then the router-link navigation commits the matching query, which must
+    // not trigger a second fetch for the section already on screen.
+    setRoute({ section: 'collections' })
+    await nextTick()
+
+    expect(callsWhere((query) => query.primitive_type === 'library_collection')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('follows browser back and forward, fetching each section once', async () => {
-    const wrapper = await mountAt({ section: 'community' })
-    expect(wrapper.get('[data-testid="library-section-community"]').classes()).toContain('active')
+    const wrapper = await mountAt({ section: 'collections' })
+    expect(wrapper.get('[data-testid="library-section-collections"]').classes()).toContain('active')
 
     // Back to the bare /library URL: the default (native) section is fetched once.
     getMock.mockClear()
     setRoute({})
     await nextTick()
 
-    expect(callsWhere((query) => query.source === 'community')).toHaveLength(0)
-    expect(callsWhere((query) => query.source === undefined)).toHaveLength(1)
+    expect(callsWhere((query) => query.primitive_type === 'library_collection')).toHaveLength(0)
+    expect(callsWhere((query) => query.primitive_type === undefined)).toHaveLength(1)
     expect(wrapper.get('[data-testid="library-section-native"]').classes()).toContain('active')
 
-    // Forward to ?section=community: fetched once, and the tab follows.
+    // Forward to ?section=collections: fetched once, and the tab follows.
     getMock.mockClear()
-    setRoute({ section: 'community' })
+    setRoute({ section: 'collections' })
     await nextTick()
 
-    expect(callsWhere((query) => query.source === 'community')).toHaveLength(1)
-    expect(wrapper.get('[data-testid="library-section-community"]').classes()).toContain('active')
+    expect(callsWhere((query) => query.primitive_type === 'library_collection')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="library-section-collections"]').classes()).toContain('active')
     wrapper.unmount()
   })
 })

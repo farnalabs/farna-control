@@ -1755,7 +1755,7 @@ def test_probe_cloud_sync_hit_stops_at_filesystem_root(tmp_path: Path) -> None:
 # `_CHECKS` is `tuple[Callable[[Path, Any, DoctorProbes], CheckResult], ...]`,
 # so a check may be a callable object with no `__name__`. The crash handler read
 # `check.__name__`, which made the HANDLER raise: the "check crashed" row was
-# lost and the whole `modulo doctor` run aborted with an opaque AttributeError.
+# lost and the whole `farna-control doctor` run aborted with an opaque AttributeError.
 # ---------------------------------------------------------------------------
 
 

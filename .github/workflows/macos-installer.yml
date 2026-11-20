@@ -328,7 +328,7 @@ jobs:
           set -euo pipefail
           rm -rf build
            scripts/macos/build-native-bundle.sh "$VERSION_NUM" "$PWD/build" "$MACOS_ARCH"
-          APP="build/Modulo-${VERSION_NUM}.app"
+          APP="build/FarnaControl.app"
           test -x "$APP/Contents/MacOS/modulo"
           file "$APP/Contents/MacOS/modulo" | grep -E "Mach-O 64-bit executable $MACOS_ARCH"
           otool -L "$APP/Contents/MacOS/modulo"
@@ -1225,7 +1225,7 @@ jobs:
           # shellcheck disable=SC2016
           run_pre_smoke keychain_find_identity security find-identity -v -p codesigning "$KEYCHAIN"
 
-          APP="build/Modulo-${VERSION_NUM}.app"
+          APP="build/FarnaControl.app"
           # Select EVERY Mach-O file under Contents - executables, dylibs, .so
           # extension modules and bundles - by magic bytes, whatever their
           # permission bits. The previous `find -perm -111` selection skipped
@@ -1325,15 +1325,17 @@ jobs:
           tail -n 1 "$DATA/pre-smoke-nested_macho_signature_audit.log"
 
 
-          DMG="build/Modulo-${VERSION_NUM}-macos-${MACOS_ARCH}.dmg"
-          DMG_TEMP="$RUNNER_TEMP/Modulo-${VERSION_NUM}-macos-${MACOS_ARCH}-$$.dmg"
+          DMG="build/FarnaControl-${VERSION_NUM}-macos-${MACOS_ARCH}.dmg"
+          DMG_TEMP="$RUNNER_TEMP/FarnaControl-${VERSION_NUM}-macos-${MACOS_ARCH}-$$.dmg"
           DMG_STAGING="$RUNNER_TEMP/modulo-dmg-staging-$$"
           rm -rf "$DMG_STAGING"
           mkdir -p "$DMG_STAGING"
-          cp -R "$APP" "$DMG_STAGING/"
+          # The build directory is space-free (see build-native-bundle.sh); the
+          # DMG ships the bundle under its display name.
+          cp -R "$APP" "$DMG_STAGING/Farna Control.app"
           ln -s /Applications "$DMG_STAGING/Applications"
           test -L "$DMG_STAGING/Applications"
-          test -d "$DMG_STAGING/Modulo-${VERSION_NUM}.app"
+          test -d "$DMG_STAGING/Farna Control.app"
           # Finder metadata is optional presentation only. The deterministic
           # acceptance contract is the app, /Applications alias and app icon;
           # signing, notarization and Gatekeeper checks below remain hard gates.
@@ -1341,7 +1343,7 @@ jobs:
           finder_layout_output="$DATA/finder-layout.log"
           rm -f "$finder_layout_output"
           set +e
-          osascript - "$DMG_STAGING" "$VERSION_NUM" <<'APPLESCRIPT' >"$finder_layout_output" 2>&1
+          osascript - "$DMG_STAGING" <<'APPLESCRIPT' >"$finder_layout_output" 2>&1
           on run argv
             tell application "Finder"
               set staging to POSIX file (item 1 of argv) as alias
@@ -1352,7 +1354,7 @@ jobs:
               set bounds of dmgWindow to {120, 120, 920, 620}
               set arrangement of icon view options of dmgWindow to not arranged
               set icon size of icon view options of dmgWindow to 128
-              set position of item "Modulo-" & (item 2 of argv) & ".app" of dmgWindow to {220, 260}
+              set position of item "Farna Control.app" of dmgWindow to {220, 260}
               set position of item "Applications" of dmgWindow to {700, 260}
               close dmgWindow
             end tell
@@ -1379,7 +1381,7 @@ jobs:
 
           run_pre_smoke dmg_create bash -c '
             set -euo pipefail
-            hdiutil create -volname "Modulo $1" -srcfolder "$2" -ov -format UDZO "$3"
+            hdiutil create -volname "Farna Control $1" -srcfolder "$2" -ov -format UDZO "$3"
             mv -f "$3" "$4"
           ' bash "$VERSION_NUM" "$DMG_STAGING" "$DMG_TEMP" "$DMG"
           rm -rf "$DMG_STAGING"
@@ -1526,7 +1528,7 @@ jobs:
           # shellcheck disable=SC2016
           run_pre_smoke dmg_verify hdiutil verify "$DMG"
 
-           DMG_WITH_SPACES="$RUNNER_TEMP/Modulo ${VERSION_NUM} macos ${MACOS_ARCH}.dmg"
+           DMG_WITH_SPACES="$RUNNER_TEMP/Farna Control ${VERSION_NUM} macos ${MACOS_ARCH}.dmg"
           # shellcheck disable=SC2016
           run_pre_smoke dmg_copy cp "$DMG" "$DMG_WITH_SPACES"
 
@@ -1535,7 +1537,7 @@ jobs:
           # shellcheck disable=SC2016
           run_pre_smoke dmg_attach hdiutil attach "$DMG" -mountpoint "$MOUNT" -nobrowse -readonly
           MOUNT_ATTACHED=1
-          MOUNTED_APP="$MOUNT/Modulo-${VERSION_NUM}.app"
+          MOUNTED_APP="$MOUNT/Farna Control.app"
           RUNTIME="$MOUNTED_APP/Contents/Resources/bundle/runtime/bin/python3"
           # shellcheck disable=SC2016
           run_pre_smoke mounted_dmg_app bash -c '[[ -d "$1" && ! -L "$1" ]]' bash "$MOUNTED_APP"
@@ -1800,7 +1802,7 @@ jobs:
            ' || exit 1
 
            # Invalid bundled binary negative test
-           INSTALLED_APP="$INSTALL_ROOT/Modulo-${VERSION_NUM}.app"
+           INSTALLED_APP="$INSTALL_ROOT/Farna Control.app"
            run_assertion "invalid_bundled_binary_negative" bash -c '
              if "'"$INSTALLED_APP"'/Contents/MacOS/modulo" start --data-dir "'"$DATA"'/failure" --bin-dir "'"$DATA"'/missing-bin" >"'"$DATA"'/invalid-bin.stderr" 2>&1; then
                exit 1
@@ -1864,7 +1866,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-installer-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
-          path: build/Modulo-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
+          path: build/FarnaControl-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
           if-no-files-found: error
           retention-days: 30
 
@@ -1891,6 +1893,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-installer-submitted-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
-          path: build/Modulo-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
+          path: build/FarnaControl-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
           if-no-files-found: warn
           retention-days: 30

@@ -69,16 +69,16 @@
 #endif
 
 [Setup]
-AppName=Modulo
+AppName=Farna Control
 AppVersion={#VERSION_NUM}
 AppPublisher=Farna Labs Ltd
 AppPublisherURL=https://modulo.run
 AppSupportURL=https://modulo.run/docs
 AppUpdatesURL=https://modulo.run/changelog
-DefaultDirName={autopf}\Modulo
-DefaultGroupName=Modulo
+DefaultDirName={autopf}\Farna Control
+DefaultGroupName=Farna Control
 OutputDir=build/windows
-OutputBaseFilename=modulo-{#VERSION_NUM}-windows-{#BUNDLE_ARCH}
+OutputBaseFilename=farna-control-{#VERSION_NUM}-windows-{#BUNDLE_ARCH}
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -104,7 +104,7 @@ LicenseFile={#SourcePath}\..\..\LICENSE
 InfoBeforeFile={#SourcePath}\INSTALLER-INFO.txt
 Uninstallable=yes
 UninstallDisplayIcon={app}\bin\modulo.exe
-UninstallDisplayName=Modulo {#VERSION_NUM}
+UninstallDisplayName=Farna Control {#VERSION_NUM}
 CloseApplications=yes
 RestartApplications=yes
 
@@ -127,13 +127,13 @@ Source: "{#BUNDLE_DIR}\modulo-runtime.json"; DestDir: "{app}"; Flags: ignorevers
 Source: "{#BUNDLE_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Excludes: "bin\modulo.exe,modulo-runtime.json"
 
 [Icons]
-Name: "{group}\Modulo"; Filename: "{app}\bin\modulo.exe"; WorkingDir: "{app}"
-Name: "{commondesktop}\Modulo"; Filename: "{app}\bin\modulo.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\Farna Control"; Filename: "{app}\bin\modulo.exe"; WorkingDir: "{app}"
+Name: "{commondesktop}\Farna Control"; Filename: "{app}\bin\modulo.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; The only post-install action is opening the local URL. Nothing here touches
 ; the Service Control Manager: no service is registered (see the header).
-Filename: "{#MODULO_URL}"; Description: "Open Modulo in your browser"; Flags: postinstall shellexec unchecked; Check: ShouldOpenModulo
+Filename: "{#MODULO_URL}"; Description: "Open Farna Control in your browser"; Flags: postinstall shellexec unchecked; Check: ShouldOpenModulo
 
 ; No [UninstallRun] section: no Windows service is registered at install time,
 ; so there is no service to stop or delete on uninstall.

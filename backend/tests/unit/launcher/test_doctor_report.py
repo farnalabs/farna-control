@@ -1,4 +1,4 @@
-"""Unit tests for ``modulo doctor --report`` (FAR-676).
+"""Unit tests for ``farna-control doctor --report`` (FAR-676).
 
 The redaction contract is the core of the suite: the zip is seeded with
 REAL-LOOKING generated credentials in the secrets file, those values appear
@@ -102,14 +102,14 @@ def test_redact_text_masks_seeded_values_and_sensitive_kv() -> None:
     )
     redacted = redact_text(text, secret_values)
     assert "pw-super-secret" not in redacted
-    # webhook URLs carry the credential in the path (wholesale redaction, as modulo env does)
+    # webhook URLs carry the credential in the path (wholesale redaction, as farna-control env does)
     assert f"ALERT_WEBHOOK_URL={REDACTED}" in redacted
     assert "PLAIN_VALUE=forty-two" in redacted
 
 
 def test_report_zip_contains_no_secret_value(tmp_path: Path) -> None:
     _seed_data_dir(tmp_path)
-    doctor_output = f"modulo doctor — data dir: <dir>\n  [ok  ] postgres password diagnostic {POSTGRES_PASSWORD}\n  [ok  ] redis {REDIS_PASSWORD}\n"
+    doctor_output = f"farna-control doctor — data dir: <dir>\n  [ok  ] postgres password diagnostic {POSTGRES_PASSWORD}\n  [ok  ] redis {REDIS_PASSWORD}\n"
     out_path = build_report(tmp_path, tmp_path / "report.zip", doctor_output=doctor_output)
     with zipfile.ZipFile(out_path) as archive:
         names = archive.namelist()
