@@ -1,4 +1,4 @@
-"""Seed data for the library service — built-in Modulo primitives.
+"""Seed data for the library service — built-in Farna Control primitives.
 
 Pure data plus the tiny builders used to construct in-memory ``LibraryPrimitive``
 objects. Kept separate from ``__init__`` so the service module holds only runtime
@@ -118,14 +118,14 @@ def _make_modulo(
         content_json,
         tags,
         source="modulo",
-        author="modulo",
+        author="Farna Control",
         verified=None,
         contribution_status=CONTRIBUTION_PUBLISHED if primitive_type == "test_fixture" else None,
     )
 
 
 # ---------------------------------------------------------------------------
-# Built-in Modulo primitives (in-memory, no DB row required)
+# Built-in Farna Control primitives (in-memory, no DB row required)
 # ---------------------------------------------------------------------------
 
 _MODULO_PRIMITIVES: list[LibraryPrimitive] = [
@@ -292,7 +292,7 @@ _MODULO_PRIMITIVES: list[LibraryPrimitive] = [
         name="Simplest Workflow",
         slug="simplest-workflow",
         description=(
-            "The absolute simplest Modulo pipeline — a single agent that reads a "
+            "The absolute simplest Farna Control pipeline — a single agent that reads a "
             "freeform specification (markdown), implements the required changes in "
             "a target code path, runs a test command to validate, and optionally "
             "git-commits the result. No connectors, no cloud services, no setup "
@@ -308,7 +308,7 @@ _MODULO_PRIMITIVES: list[LibraryPrimitive] = [
         tags=["workflow", "simplest-workflow", "day-1", "getting-started"],
     ),
     # -----------------------------------------------------------------------
-    # Modulo example composite primitives
+    # Farna Control example composite primitives
     # -----------------------------------------------------------------------
     _make_modulo(
         pid="00000000-0000-0000-0000-000000000090",

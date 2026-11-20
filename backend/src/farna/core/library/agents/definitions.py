@@ -65,7 +65,7 @@ TICKET_TRIAGER: dict[str, Any] = {
     },
     "tags": ["triage", "canonical", "library", "ticket"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ COMPLIANCE_CHECKER: dict[str, Any] = {
     },
     "tags": ["reviewer", "canonical", "library", "compliance", "security"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ DEPENDENCY_ANALYZER: dict[str, Any] = {
     },
     "tags": ["analyzer", "canonical", "library", "dependencies", "security"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -250,7 +250,7 @@ DOC_GENERATOR: dict[str, Any] = {
     },
     "tags": ["generator", "canonical", "library", "documentation"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -305,7 +305,7 @@ RELEASE_NOTE_GENERATOR: dict[str, Any] = {
     },
     "tags": ["generator", "canonical", "library", "release", "changelog"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -376,7 +376,7 @@ TEST_GENERATOR: dict[str, Any] = {
     },
     "tags": ["generator", "canonical", "library", "testing"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -430,7 +430,7 @@ SCHEMA_INFERRER: dict[str, Any] = {
     },
     "tags": ["inferrer", "canonical", "library", "schema"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -490,7 +490,7 @@ CHANGELOG_WRITER: dict[str, Any] = {
     },
     "tags": ["writer", "canonical", "library", "changelog"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -550,7 +550,7 @@ SECURITY_REVIEWER: dict[str, Any] = {
     },
     "tags": ["reviewer", "canonical", "library", "security", "vulnerability"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -611,7 +611,7 @@ CORRECTION_PROPOSER: dict[str, Any] = {
     },
     "tags": ["proposer", "canonical", "library", "correction", "debugging"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -675,7 +675,7 @@ PROMPT_IMPROVER: dict[str, Any] = {
     },
     "tags": ["improver", "canonical", "library", "prompt", "optimization"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -735,7 +735,7 @@ EVAL_PROPOSAL_WRITER: dict[str, Any] = {
     },
     "tags": ["writer", "canonical", "library", "eval", "testing"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -801,7 +801,7 @@ FEEDBACK_ANALYZER: dict[str, Any] = {
     },
     "tags": ["analyzer", "canonical", "library", "feedback", "sentiment"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -868,7 +868,7 @@ CHANGELOG_AGGREGATOR: dict[str, Any] = {
     },
     "tags": ["aggregator", "canonical", "library", "changelog", "release"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -949,7 +949,7 @@ STATUS_REPORTER: dict[str, Any] = {
     },
     "tags": ["reporter", "canonical", "library", "status", "metrics"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1024,7 +1024,7 @@ MIGRATION_PLANNER: dict[str, Any] = {
     },
     "tags": ["planner", "canonical", "library", "migration", "schema"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1099,7 +1099,7 @@ ROLLBACK_PLANNER: dict[str, Any] = {
     },
     "tags": ["planner", "canonical", "library", "rollback", "deployment"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1158,7 +1158,7 @@ TICKET_WRITER: dict[str, Any] = {
     },
     "tags": ["writer", "canonical", "library", "ticket", "task"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1204,7 +1204,7 @@ PRD_SUMMARIZER: dict[str, Any] = {
     },
     "tags": ["summarizer", "canonical", "library", "prd", "requirements"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1275,7 +1275,7 @@ CODE_REVIEWER: dict[str, Any] = {
     },
     "tags": ["reviewer", "canonical", "library", "code-review", "pr"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1283,7 +1283,7 @@ CODE_REVIEWER: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 TICKET_ESTIMATOR: dict[str, Any] = {
     "name": "Ticket Estimator",
-    "description": ("Estimates story points for tickets based on description and acceptance criteria, using T-shirt sizing conventions (XS/S/M/L/XL) aligned with the Modulo estimation convention."),
+    "description": ("Estimates story points for tickets based on description and acceptance criteria, using T-shirt sizing conventions (XS/S/M/L/XL) aligned with the Farna Control estimation convention."),
     "node_type": "agent",
     "role": "estimator",
     "prompt_template": (
@@ -1340,7 +1340,7 @@ TICKET_ESTIMATOR: dict[str, Any] = {
     },
     "tags": ["estimator", "canonical", "library", "ticket", "planning"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1425,7 +1425,7 @@ SPEC_IMPLEMENTER: dict[str, Any] = {
     },
     "tags": ["implementer", "canonical", "library", "spec", "simplest-workflow"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1508,7 +1508,7 @@ MAIN_REVIEWER: dict[str, Any] = {
     },
     "tags": ["reviewer", "canonical", "library", "code-review", "daily-reviewer", "main"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
 
 # ---------------------------------------------------------------------------
@@ -1585,5 +1585,5 @@ FINDING_GROUPER: dict[str, Any] = {
     },
     "tags": ["analyzer", "canonical", "library", "grouping", "daily-reviewer", "ticket"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }
