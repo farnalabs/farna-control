@@ -210,10 +210,14 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         tier="community",
     ),
     # ── Community tier — System Maps authoring and published read model ────────
+    # FAR-2595: authoring is a clearly-labelled Beta-preview surface, not
+    # dev-mode-only. It stays default-OFF so each organisation opts in, but it
+    # is org-admin settable and visible in the customer-facing plan payload.
     FeatureFlag(
         name="system_maps",
-        description="Beta System Maps authoring (internal operator surface)",
+        description="Beta preview: System Maps authoring (discovery and map editing)",
         tier="community",
+        org_admin_settable=True,
     ),
     FeatureFlag(
         name="system_maps_read",
@@ -294,10 +298,12 @@ RETIRED_INTERNAL_FLAGS: frozenset[str] = frozenset({"lifecycle_map_journeys"})
 # internal operators (system admin + operator role + in-dev grant). These are
 # filtered from customer-facing catalogue and plan responses (see
 # effective_feature_flags, get_available_features MCP tool).
+# FAR-2595: ``system_maps`` deliberately left this set — its authoring surface
+# is a Beta-preview feature released behind the default-OFF ``system_maps``
+# flag, not a dev-mode-only internal surface.
 INTERNAL_FLAGS: frozenset[str] = frozenset(
     {
         "lifecycle_map_journeys",
-        "system_maps",
     }
 )
 

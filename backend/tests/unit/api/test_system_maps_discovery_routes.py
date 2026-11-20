@@ -183,7 +183,12 @@ def test_discovery_denies_without_system_maps_grant() -> None:
         app.dependency_overrides.clear()
 
 
-def test_discovery_denies_without_dev_mode() -> None:
+def test_discovery_allows_operator_without_dev_mode() -> None:
+    """FAR-2595: an operator with the flag on is NOT bounced by dev mode.
+
+    The deployment runs with ``modulo_dev_mode=False`` (a self-hosted Alpha
+    default); discovery must still reach the handler and persist a draft.
+    """
     mock_session = _make_mock_session()
 
     async def override_session() -> AsyncGenerator[AsyncMock, None]:
@@ -212,11 +217,30 @@ def test_discovery_denies_without_dev_mode() -> None:
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
 
+    authz_result = MagicMock(scalar_one_or_none=MagicMock(return_value=True))
+    mock_session.execute.side_effect = [
+        authz_result,
+        MagicMock(scalars=MagicMock(return_value=[])),
+        MagicMock(scalars=MagicMock(return_value=[])),
+        MagicMock(scalars=MagicMock(return_value=[])),
+        MagicMock(scalars=MagicMock(return_value=[])),
+    ]
+
+    draft_map = _DraftMap()
     try:
-        response = TestClient(app).post("/api/v1/system-maps/discover", json={})
-        assert response.status_code == 403
+        with (
+            patch.object(SystemMapDiscoveryRepository, "get_or_create_draft", new=AsyncMock(return_value=draft_map)),
+            patch.object(
+                SystemMapDiscoveryRepository,
+                "save_discovery_revision",
+                new=AsyncMock(return_value=(draft_map, _REVISION_ID, 1)),
+            ),
+        ):
+            response = TestClient(app).post("/api/v1/system-maps/discover", json={"name": "no-dev-mode"})
     finally:
         app.dependency_overrides.clear()
+
+    assert response.status_code == 201
 
 
 @pytest.mark.parametrize(("org_role", "expected_status"), [("viewer", 403), ("operator", 201)])

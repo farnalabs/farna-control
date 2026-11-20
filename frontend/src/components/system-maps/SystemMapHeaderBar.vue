@@ -5,6 +5,7 @@
       <p class="text-xs text-muted-foreground mt-0.5">
         <span class="capitalize">{{ revision?.status ?? $t('views.SystemMapDetailView.draft') }}</span>
         <span v-if="revision"> · {{ $t('views.SystemMapDetailView.revision', { number: revision.revision_number }) }}</span>
+        <span class="ml-2 rounded bg-muted px-1.5 py-0.5" data-testid="system-map-detail-beta-preview">{{ $t('views.SystemMapDetailView.beta_preview') }}</span>
         <span v-if="readOnly" class="ml-2 rounded bg-muted px-1.5 py-0.5">{{ $t('views.SystemMapDetailView.read_only') }}</span>
       </p>
     </div>

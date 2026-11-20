@@ -571,20 +571,31 @@ class TestResolveSsoUnrestrictedProvisioning:
 
 
 class TestSystemMapsFlag:
-    """FAR-2202: system_maps flag scaffolding — default-OFF, internal-only."""
+    """FAR-2202 / FAR-2595: system_maps is a default-OFF Beta-preview flag."""
 
     def test_system_maps_registered_in_known_flags(self) -> None:
         registry = _make_default_off_registry()
         flag = registry.get_flag("system_maps")
         assert flag is not None, "system_maps must be registered in _KNOWN_FLAGS"
         assert flag.tier == "community"
-        assert flag.description == "Beta System Maps authoring (internal operator surface)"
+        assert flag.description == "Beta preview: System Maps authoring (discovery and map editing)"
 
     def test_system_maps_in_default_off_flags(self) -> None:
         from farna.core.feature_flags import DEFAULT_OFF_FLAGS, INTERNAL_FLAGS
 
         assert "system_maps" in DEFAULT_OFF_FLAGS
-        assert "system_maps" in INTERNAL_FLAGS
+        # FAR-2595: authoring is no longer dev-mode-only, so an org admin must
+        # be able to see and toggle it through the normal org-admin path.
+        assert "system_maps" not in INTERNAL_FLAGS
+
+    def test_system_maps_is_org_admin_settable(self) -> None:
+        from farna.core.feature_flags import ORG_ADMIN_SETTABLE_FLAGS
+
+        registry = _make_default_off_registry()
+        flag = registry.get_flag("system_maps")
+        assert flag is not None
+        assert flag.org_admin_settable is True
+        assert "system_maps" in ORG_ADMIN_SETTABLE_FLAGS
 
     def test_system_maps_inactive_on_community_tier(self) -> None:
         registry = _make_default_off_registry("community")
@@ -640,9 +651,9 @@ class TestSystemMapsFlag:
     def test_system_maps_read_is_a_public_entitlement_sibling(self) -> None:
         """FAR-2363: the viewer read model has its own non-internal flag.
 
-        ``system_maps`` stays internal/default-OFF for authoring; the published
-        read model is a separate community entitlement that is not filtered out
-        of customer-facing plan responses.
+        ``system_maps`` is a default-OFF authoring flag and ``system_maps_read``
+        is the published read-model entitlement; both are visible in
+        customer-facing plan responses since FAR-2595.
         """
         from farna.core.feature_flags import (
             DEFAULT_OFF_FLAGS,
@@ -660,14 +671,13 @@ class TestSystemMapsFlag:
 
         names = {f.name for f in effective_feature_flags(CommunityTier())}
         assert "system_maps_read" in names
-        assert "system_maps" not in names
+        assert "system_maps" in names
 
-    def test_system_maps_filtered_from_effective_feature_flags(self) -> None:
-        """system_maps must not appear in customer-facing plan responses."""
+    def test_system_maps_visible_but_default_off_in_effective_feature_flags(self) -> None:
+        """FAR-2595: the authoring flag is served to customers, default OFF."""
         from farna.core.feature_flags import CommunityTier, effective_feature_flags
 
         plan_ctx = CommunityTier()
-        flags = effective_feature_flags(plan_ctx)
-        names = {f.name for f in flags}
-        assert "system_maps" not in names
-        assert "lifecycle_map_journeys" not in names  # also internal
+        by_name = {f.name: f.currently_active for f in effective_feature_flags(plan_ctx)}
+        assert by_name["system_maps"] is False
+        assert "lifecycle_map_journeys" not in by_name  # retired/internal stays hidden

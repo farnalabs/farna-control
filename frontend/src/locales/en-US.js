@@ -2301,6 +2301,7 @@ export default {
     "SystemMapsView": {
       "title": "System Maps",
       "subtitle": "Bounded visual maps of your organization's delivery system.",
+      "beta_preview": "Beta preview",
       "create_map": "Create map",
       "discover_my_system": "Discover My System",
       "discovering": "Discovering…",
@@ -2334,6 +2335,7 @@ export default {
     "SystemMapDetailView": {
       "title": "System Map",
       "loading": "Loading system map…",
+      "beta_preview": "Beta preview",
       "draft": "Draft",
       "revision": "Revision {number}",
       "read_only": "Read only",
@@ -5054,7 +5056,7 @@ export default {
       "archive_revision": "Could not archive revision",
       "discover_map": "Could not discover system map",
       "load_discovered_draft": "Could not load the discovered draft",
-      "feature_flags": "Internal feature flags request failed",
+      "feature_flags": "Could not read System Maps feature flags",
       "load_revision": "Could not load revision",
       "create_draft": "Could not create draft",
       "restore_revision": "Could not restore revision",

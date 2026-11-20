@@ -308,8 +308,10 @@ class TestGetAvailableFeaturesSuccess(AuthContext):
 
 
 class TestSystemMapsInternalFlagMCP:
-    """system_maps is an internal-only flag that must be hidden from ordinary
-    callers and visible only to internal dev-mode operators with the in-dev grant.
+    """FAR-2595: system_maps is a normal default-OFF BETA-preview flag.
+
+    It is no longer in ``INTERNAL_FLAGS``, so the MCP flag catalogue lists it
+    for every caller (it remains default-OFF and org-toggleable).
     """
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
@@ -325,7 +327,7 @@ class TestSystemMapsInternalFlagMCP:
         mock_session: AsyncMock,
         mock_validate_auth: AsyncMock,
     ) -> None:
-        """Ordinary caller (no dev-mode, no in-dev grant) cannot see system_maps."""
+        """FAR-2595: an ordinary caller now sees the (default-OFF) system_maps flag."""
         from farna.api.mcp_server import _ctx_org_id
 
         _ctx_org_id.set(make_session_scope().org_id)
@@ -348,8 +350,8 @@ class TestSystemMapsInternalFlagMCP:
 
         result = await get_available_features()
 
-        assert result["feature_count"] == 3  # mcp_server, webhook_trigger, sso (no system_maps)
-        assert "system_maps" not in result["results"]
+        assert result["feature_count"] == 4  # mcp_server, webhook_trigger, sso, system_maps
+        assert "| system_maps | community | yes |" in result["results"]
         assert "| mcp_server | community | yes |" in result["results"]
         assert "| sso | team | no |" in result["results"]
 
@@ -406,7 +408,7 @@ class TestSystemMapsInternalFlagMCP:
         mock_session: AsyncMock,
         mock_validate_auth: AsyncMock,
     ) -> None:
-        """Dev-mode enabled but no dedicated grant cannot see system_maps."""
+        """FAR-2595: system_maps is visible regardless of dev mode or the grant."""
         from farna.api.mcp_server import _ctx_key_grants, _ctx_org_id
 
         _ctx_org_id.set(make_session_scope().org_id)
@@ -429,8 +431,8 @@ class TestSystemMapsInternalFlagMCP:
         finally:
             _ctx_key_grants.set(None)
 
-        assert result["feature_count"] == 0
-        assert "system_maps" not in result["results"]
+        assert result["feature_count"] == 1
+        assert "| system_maps | community | yes |" in result["results"]
 
 
 class TestSystemMapsAccessUsesSharedGrantCheck:
@@ -521,7 +523,7 @@ class TestListFeatureFlagsVisibility(AuthContext):
     @patch("farna.core.feature_flags.FeatureFlagRegistry.from_db", new_callable=AsyncMock)
     @patch("farna.api.mcp_server.resolve_plan_context", new_callable=AsyncMock)
     @patch("farna.db.crud.organisation.get_organisation", new_callable=AsyncMock)
-    async def test_system_maps_is_visible_only_to_internal_callers(
+    async def test_system_maps_is_visible_to_every_caller(
         self,
         mock_get_org: AsyncMock,
         mock_resolve_plan: AsyncMock,
@@ -577,9 +579,10 @@ class TestListFeatureFlagsVisibility(AuthContext):
         assert "error" not in result
         names = {flag["name"] for flag in result["flags"]}
         assert "schema_version_history" in names
-        assert ("system_maps" in names) is internal_access
+        # FAR-2595: no longer an internal-only flag.
+        assert "system_maps" in names
         gap_names = {flag["name"] for flag in result["would_activate"]}
-        assert ("system_maps" in gap_names) is internal_access
+        assert "system_maps" in gap_names
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,10 @@
 """System Maps REST API (FAR-2236).
 
-Internal preview surface — gated by the `system_maps` feature flag, dev mode,
-operator/admin role, and the `system_maps_access` grant.
+Beta-preview authoring surface — gated by the per-organisation `system_maps`
+feature flag (default OFF), operator/admin role, and the `system_maps_access`
+grant. FAR-2595 removed the developer-mode requirement so a self-hosted Alpha
+deployment can dogfood authoring; the published read model has its own
+viewer-level gate (`system_maps_read` + `system_maps.read`).
 """
 
 import hashlib
@@ -80,7 +83,9 @@ from farna.core.system_maps_ai_discovery import (
     enhance_discovery_with_outcome,
 )
 from farna.core.system_maps_discovery import (
+    MAX_DISCOVERY_SOURCES,
     DiscoverySource,
+    cap_discovery_sources,
     discover_draft,
 )
 from farna.db.models.connector_instance import ConnectorInstance
@@ -2365,38 +2370,48 @@ async def discover_system_map(
     async with session.begin():
         await set_rls_org(session, principal.organisation_id)
         await set_rls_user_context(session, principal.account_id, principal.org_role)
+        # FAR-2595: bound every inventory read. The +1 lets the truncation
+        # warning fire when a single kind overflows the cap; the merged list is
+        # capped again below before it is materialised into a draft.
+        row_limit = MAX_DISCOVERY_SOURCES + 1
         pipelines = list(
             (
                 await session.execute(
-                    select(Pipeline).where(
+                    select(Pipeline)
+                    .where(
                         Pipeline.organisation_id == principal.organisation_id,
                         Pipeline.deleted_at.is_(None),
                         Pipeline.archived_at.is_(None),
                     )
+                    .limit(row_limit)
                 )
             ).scalars()
         )
         triggers = list(
             (
                 await session.execute(
-                    select(Trigger).where(
+                    select(Trigger)
+                    .where(
                         Trigger.organisation_id == principal.organisation_id,
                         Trigger.deleted_at.is_(None),
                     )
+                    .limit(row_limit)
                 )
             ).scalars()
         )
         connectors = list(
             (
                 await session.execute(
-                    select(ConnectorInstance).where(
+                    select(ConnectorInstance)
+                    .where(
                         ConnectorInstance.organisation_id == principal.organisation_id,
                         ConnectorInstance.deleted_at.is_(None),
                     )
+                    .limit(row_limit)
                 )
             ).scalars()
         )
-        folders = list((await session.execute(select(PipelineFolder).where(PipelineFolder.organisation_id == principal.organisation_id))).scalars())
+        folders = list((await session.execute(select(PipelineFolder).where(PipelineFolder.organisation_id == principal.organisation_id).limit(row_limit))).scalars())
         sources = [
             *[
                 DiscoverySource(
@@ -2429,6 +2444,10 @@ async def discover_system_map(
             ],
             *[DiscoverySource(kind="folder", identifier=str(folder.id), name=folder.name) for folder in folders],
         ]
+        # FAR-2595: the draft is built from the capped set; the truncation
+        # warning is added by ``discover_draft`` itself. ``inspected_sources``
+        # mirrors that same capped ordering for the report.
+        inspected_sources, _total_sources = cap_discovery_sources(sources)
         draft = discover_draft(sources)
         deterministic_fingerprint = _fingerprint(draft)
         ai_assisted = False
@@ -2496,7 +2515,7 @@ async def discover_system_map(
         )
 
     return SystemMapDiscoveryReport(
-        sources_inspected=[SystemMapDiscoverySource(kind=source.kind, identifier=source.identifier, name=source.name) for source in sources],
+        sources_inspected=[SystemMapDiscoverySource(kind=source.kind, identifier=source.identifier, name=source.name) for source in inspected_sources],
         node_count=draft.node_count,
         edge_count=draft.edge_count,
         inferred_nodes=list(draft.nodes),

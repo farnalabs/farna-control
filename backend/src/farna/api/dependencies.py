@@ -243,17 +243,19 @@ def _require_internal_system_maps_access(
     principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
     settings: Settings = Depends(get_settings),
 ) -> TenantPrincipal:
-    """Keep the system maps API surface on the internal path only.
+    """Authorize the System Maps authoring surface.
 
-    System Maps deliberately has its own grant, separate from the retained
-    lifecycle-map ``library.search.in_dev`` grant. Legacy JWTs and keys without
-    an explicit grant-set keep the role-based behaviour; grant-bearing keys must
-    carry the dedicated System Maps grant.
+    FAR-2595: this is a Beta-preview authoring surface, not a dev-mode-only
+    internal surface. It is gated by the per-organisation ``system_maps``
+    feature flag (default OFF), the operator/admin role floor, and the
+    dedicated ``system_maps_access`` grant — deliberately NOT by developer
+    mode, so a self-hosted Alpha deployment can dogfood it. The retained
+    lifecycle-map ``library.search.in_dev`` grant keeps its developer-mode
+    semantics; this gate is separate.
     """
     require_in_dev_operator(
         principal,
         SYSTEM_MAPS_ACCESS_PERMISSION,
-        require_dev_mode=True,
         settings=settings,
     )
     return principal

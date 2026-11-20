@@ -6,6 +6,7 @@
         :subtitle="$t('views.SystemMapsView.subtitle')"
       >
         <template #right>
+          <span class="rounded bg-muted px-2 py-1 text-xs font-medium text-muted-foreground" data-testid="system-maps-beta-preview">{{ $t('views.SystemMapsView.beta_preview') }}</span>
           <div v-if="store.hasAccess" class="flex items-center gap-2">
             <button
               type="button"

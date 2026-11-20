@@ -343,9 +343,11 @@ def discovery_denial_grant(request: Any) -> None:
     assert "is not granted to this API key" in request.node._resp.json()["detail"]
 
 
-@then("the discovery denial requires developer mode")
-def discovery_denial_dev_mode(request: Any) -> None:
-    assert "requires developer mode" in request.node._resp.json()["detail"]
+@then("the discovery is allowed without developer mode")
+def discovery_allowed_without_dev_mode(request: Any) -> None:
+    """FAR-2595: dev mode is no longer part of the System Maps authoring gate."""
+    assert request.node._resp.status_code == 201
+    assert request.node._resp.json()["published"] is False
 
 
 @then("the discovery denial names the system_maps feature")

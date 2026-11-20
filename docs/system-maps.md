@@ -1,9 +1,19 @@
 # Delivery System Maps Specification
 
-**Status:** Draft
+**Status:** Beta preview (authoring available in Alpha behind a default-OFF, per-organisation flag)
 **Target Milestone:** Beta
 **Category:** Product & Technical Architecture Specification
 **Related:** `docs/architecture.md`, `docs/core-principles.md`
+
+> **Alpha availability (FAR-2595).** System Maps authoring is enabled as a
+> clearly-labelled Beta-preview surface in Alpha. It is a normal
+> default-OFF community-tier feature flag (`system_maps`), settable per
+> organisation by an org admin, gated by the operator/admin role and the
+> `system_maps_access` grant. It is no longer developer-mode-only. The
+> published read model remains viewer-readable (`system_maps_read` +
+> `system_maps.read`). The Beta milestone below describes the remaining
+> scope (for example improvement-loop sidecars and recommendation surfaces),
+> not a dev-mode gate on the authoring surface.
 
 ---
 
