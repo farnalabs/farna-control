@@ -58,3 +58,19 @@ async def test_vendor_client_unexpected_exception_and_closed_client_recreation(m
     assert code is None
     assert error == "Unexpected: unexpected"
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_vendor_client_sends_x_farna_headers_and_no_x_modulo_headers():
+    client = VendorClient("https://vendor.example", "secret")
+    client._http_client = AsyncMock(is_closed=False)
+    client._http_client.post = AsyncMock(return_value=MagicMock(status_code=200, is_success=True, text="", headers={}))
+    result = await client.post_batch(b"{}", 1.0, 7)
+    assert result == (True, 200, None)
+    headers = client._http_client.post.await_args.kwargs["headers"]
+    assert {"X-Farna-Signature", "X-Farna-Timestamp", "X-Farna-Sequence"} <= set(headers)
+    assert headers["X-Farna-Timestamp"] == "1.0"
+    assert headers["X-Farna-Sequence"] == "7"
+    legacy = [name for name in headers if name.lower().startswith("x-modulo-")]
+    assert len(legacy) == 0
+    await client.close()
