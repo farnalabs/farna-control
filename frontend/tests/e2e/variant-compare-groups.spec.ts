@@ -65,7 +65,7 @@ async function mockVariantGroups(page: Page) {
 }
 
 test.describe('Variant compare — comparison groups table (FAR-2598)', { tag: '@regression' }, () => {
-  test('the table is legible at 390px: low-priority columns hide and the page does not overflow', async ({ page, env }) => {
+  test('the table is legible at 390px: low-priority columns hide and the page does not overflow', { tag: '@regression' }, async ({ page, env }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await loginAsAdmin(page, env)
     // Register after loginAsAdmin so these specific routes win over its
@@ -90,7 +90,7 @@ test.describe('Variant compare — comparison groups table (FAR-2598)', { tag: '
     expect(overflow.docScrollWidth).toBeLessThanOrEqual(overflow.viewport)
   })
 
-  test('a search filters the rows and a row selects the comparison in place', async ({ page, env }) => {
+  test('a search filters the rows and a row selects the comparison in place', { tag: '@regression' }, async ({ page, env }) => {
     await loginAsAdmin(page, env)
     await mockVariantGroups(page)
     await page.goto('/variants/compare')
