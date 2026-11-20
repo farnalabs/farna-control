@@ -1313,6 +1313,49 @@ jobs:
           rm -rf "$marker_dir"
 
   # ---------------------------------------------------------------------------
+  # FAR-2579: refresh the signed apt repository (apt-repo.yml) for the release
+  # this run published after a held staple. A release created with the workflow's
+  # GITHUB_TOKEN raises no `release` event for other workflows, so apt-repo.yml
+  # is dispatched explicitly. Non-fatal by design: the release is already
+  # published, and apt-repo.yml rebuilds the WHOLE index on any later run.
+  # ---------------------------------------------------------------------------
+  dispatch-apt-repo:
+    name: Dispatch the apt repository refresh
+    needs: [resolve-target, publish-stapled]
+    if: >-
+      always() &&
+      needs.resolve-target.outputs.publish_release == 'true' &&
+      needs.publish-stapled.result == 'success' &&
+      needs.publish-stapled.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch apt-repo.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `continue-on-error` is banned by .semgrep/continue-on-error-in-ci.yaml;
+          # retry, then report a non-fatal outcome explicitly.
+          for attempt in 1 2 3; do
+            if gh workflow run apt-repo.yml --repo "$REPO" --ref main; then
+              echo "Dispatched apt-repo.yml (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Dispatch attempt ${attempt} failed."
+            if [ "$attempt" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+          echo "::warning::Could not dispatch apt-repo.yml after 3 attempts - the release is unaffected; run apt-repo.yml by hand to publish it to apt.farna.dev."
+          exit 0
+
+  # ---------------------------------------------------------------------------
   # Re-arm a held publication whose ticket has not propagated yet (FAR-2573)
   #
   # release-unified.yml dispatches the held publisher ONCE. If the ticket is

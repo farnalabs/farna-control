@@ -4,6 +4,12 @@
 #
 # Usage (as root, in a disposable ubuntu:22.04 / ubuntu:24.04 container or VM):
 #   scripts/linux/validate-deb.sh <path/to/farna-control_<version>_amd64.deb>
+#   scripts/linux/validate-deb.sh --installed
+#
+# --installed skips the local `apt-get install ./<deb>` and validates the
+# farna-control package that is ALREADY installed (from the signed apt
+# repository: .github/workflows/apt-repo.yml installs it the documented way
+# first). Everything after the install step is identical.
 #
 # Flow: apt install the .deb -> as a NON-root user `farna-control start
 # --detach` -> /healthz 200 on the api_port from state.json -> GET / serves the
@@ -25,7 +31,11 @@
 
 set -euo pipefail
 
-DEB="${1:?usage: validate-deb.sh <farna-control_<version>_amd64.deb>}"
+DEB="${1:?usage: validate-deb.sh <farna-control_<version>_amd64.deb> | --installed}"
+FROM_INSTALLED=0
+if [[ "${DEB}" = "--installed" ]]; then
+  FROM_INSTALLED=1
+fi
 VALIDATION_USER="${FARNA_DEB_VALIDATION_USER:-fcvalidate}"
 BOOT_TIMEOUT_SECONDS="${FARNA_DEB_BOOT_TIMEOUT:-300}"
 FULL_CHECK="${FARNA_DEB_FULL_CHECK:-0}"
@@ -41,11 +51,13 @@ fail() {
 }
 
 [[ "$(id -u)" -eq 0 ]] || fail "run as root (it installs and removes the package)"
-[[ -f "${DEB}" ]] || fail "no such .deb: ${DEB}"
-case "${DEB}" in
-  /*) : ;;
-  *) DEB="$(pwd)/${DEB}" ;;
-esac
+if [[ "${FROM_INSTALLED}" -eq 0 ]]; then
+  [[ -f "${DEB}" ]] || fail "no such .deb: ${DEB}"
+  case "${DEB}" in
+    /*) : ;;
+    *) DEB="$(pwd)/${DEB}" ;;
+  esac
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -89,11 +101,20 @@ step "distro"
 . /etc/os-release
 printf '%s (%s)\n' "${PRETTY_NAME}" "${VERSION_CODENAME:-?}"
 
-step "apt-get install ./$(basename -- "${DEB}")"
-apt-get update -qq
-# curl + procps (pgrep) are validation tools only, not package dependencies.
-apt-get install -y -qq --no-install-recommends curl procps >/dev/null
-apt-get install -y --no-install-recommends "${DEB}"
+if [[ "${FROM_INSTALLED}" -eq 1 ]]; then
+  step "farna-control already installed (from the apt repository)"
+  dpkg-query -W -f='${Status}
+' farna-control 2>/dev/null | grep -qx 'install ok installed'     || fail "--installed given but the farna-control package is not installed"
+  apt-get update -qq
+  # curl + procps (pgrep) are validation tools only, not package dependencies.
+  apt-get install -y -qq --no-install-recommends curl procps >/dev/null
+else
+  step "apt-get install ./$(basename -- "${DEB}")"
+  apt-get update -qq
+  # curl + procps (pgrep) are validation tools only, not package dependencies.
+  apt-get install -y -qq --no-install-recommends curl procps >/dev/null
+  apt-get install -y --no-install-recommends "${DEB}"
+fi
 dpkg -s farna-control | sed -n '/^Package:/p;/^Version:/p;/^Depends:/p'
 [[ -x /usr/bin/farna-control ]] || fail "/usr/bin/farna-control missing after install"
 [[ -L /opt/farna-control/current ]] || fail "/opt/farna-control/current symlink missing"
