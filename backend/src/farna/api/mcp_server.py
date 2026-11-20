@@ -8011,7 +8011,7 @@ async def review_hitl(
 
 
 @mcp.tool(
-    description=("Copy a library primitive to the org workspace. Community primitives can be copied — this creates an editable copy in your workspace. Note: community primitives are maintained by the Modulo team; your copy diverges from upstream on first edit."),
+    description=("Copy a library primitive to the org workspace. This creates an editable copy in your workspace; your copy diverges from upstream on first edit."),
 )
 @mcp_audited("library_primitive_copied", "library_primitive", fail_closed=False)
 @_RETRY_DB
