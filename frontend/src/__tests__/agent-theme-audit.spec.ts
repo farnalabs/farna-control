@@ -81,7 +81,6 @@ import OnboardingWizard from '../views/OnboardingWizard.vue'
 import PipelineEditorView from '../views/PipelineEditorView.vue'
 import RunDetailView from '../views/RunDetailView.vue'
 import SchemaInferenceView from '../views/SchemaInferenceView.vue'
-import SettingsNotificationLogView from '../views/SettingsNotificationLogView.vue'
 import SettingsObservabilityView from '../views/SettingsObservabilityView.vue'
 import SettingsRateLimitsView from '../views/SettingsRateLimitsView.vue'
 import SettingsRuntimeConfigView from '../views/SettingsRuntimeConfigView.vue'
@@ -106,7 +105,6 @@ const viewModules: Record<string, Component> = {
   PipelineEditorView,
   RunDetailView,
   SchemaInferenceView,
-  SettingsNotificationLogView,
   SettingsObservabilityView,
   SettingsRateLimitsView,
   SettingsRuntimeConfigView,
