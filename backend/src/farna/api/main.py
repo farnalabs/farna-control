@@ -507,29 +507,25 @@ async def _assert_no_owner_rows(settings: Settings) -> None:
 
 
 async def _ensure_default_org(settings: Settings) -> None:
-    """Create a default organisation if none exists."""
-    from sqlalchemy import select
+    """Create a default TENANT organisation if none exists.
 
+    Delegates to the shared :func:`farna.db.seed.ensure_default_organisation`,
+    which ignores the sentinel orgs the baseline migration seeds — a plain
+    "any organisation exists" check always found the orphan org and so never
+    created a real one on a fresh install (FAR-2581).
+    """
     from farna.api.dependencies import get_or_create_engine, get_or_create_session_factory
     from farna.core.seed_data.cost_components import seed_cost_components_for_org
-    from farna.db.models.organisation import Organisation
+    from farna.db.seed import ensure_default_organisation
 
     engine = get_or_create_engine(settings)
     factory = get_or_create_session_factory(engine)
 
     async with factory() as session, session.begin():
-        result = await session.execute(select(Organisation).limit(1))
-        if result.scalar_one_or_none() is not None:
+        org, created = await ensure_default_organisation(session)
+        if not created:
             logger.info("startup.org_exists")
             return
-
-        org = Organisation(
-            name="Default Organisation",
-            slug="default",
-        )
-        session.add(org)
-        await session.flush()
-        logger.info("startup.default_org_created", extra={"org_id": str(org.id)})
 
         # Seed default cost components for the new org in the SAME transaction
         # (idempotent; the per-boot _seed_cost_components also covers it, but a

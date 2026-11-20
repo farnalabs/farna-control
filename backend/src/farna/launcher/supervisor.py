@@ -669,7 +669,15 @@ def _await_lock_release(lock_path: Path, pid: int, timeout: float) -> int:
     return 1
 
 
-def request_stop(data_dir: Path, *, timeout: float = 10.0) -> int:
+# How long `farna-control stop` waits for the launcher's ordered teardown (SAQ
+# drain, API shutdown, postgres fast shutdown) to release the data-dir lock.
+# 10s was shorter than that teardown on a loaded host, so a stop that was
+# still progressing normally was reported as `stop.unconfirmed` (exit 1).
+# The wait polls and returns 0 as soon as the lock is released (FAR-2581).
+STOP_CONFIRM_TIMEOUT_SECONDS = 120.0
+
+
+def request_stop(data_dir: Path, *, timeout: float = STOP_CONFIRM_TIMEOUT_SECONDS) -> int:
     """Ask the launcher holding *data_dir* to stop (the ``farna-control stop`` path).
 
     The recorded holder's start-time identity token is verified BEFORE

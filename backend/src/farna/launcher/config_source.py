@@ -77,6 +77,25 @@ class LauncherConfigError(RuntimeError):
     """Raised when the launcher config source cannot read its inputs."""
 
 
+# The SAQ system worker's web-UI login name on a native install. The system
+# worker FAIL-CLOSES without both SAQ_AUTH_USERNAME and SAQ_AUTH_PASSWORD
+# (``farna.core.saq_worker._assert_system_auth_configured``), exactly as it does
+# in every container posture (compose/helm/fly) — the native launcher must
+# supply them or the saq-system child crash-loops and the supervisor's crash
+# cap tears the whole stack down (FAR-2581).
+NATIVE_SAQ_AUTH_USERNAME = "admin"
+
+# The application-level keys config.env persists. Each one resolves with the
+# installer's precedence: operator environment > the value already persisted
+# in config.env > the launcher-derived value. Never logged.
+_RUNTIME_KEY_NAMES: tuple[str, ...] = ("SECRET_KEY", "FERNET_KEY", "SAQ_AUTH_USERNAME", "SAQ_AUTH_PASSWORD")
+
+
+def _derive(secrets: LauncherSecrets, label: bytes) -> str:
+    raw = hmac.new(secrets.state_hmac_key, label, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(raw).decode("ascii")
+
+
 def _native_settings_keys(secrets: LauncherSecrets) -> tuple[str, str]:
     """Derive stable native Settings keys without adding another secret file.
 
@@ -84,22 +103,30 @@ def _native_settings_keys(secrets: LauncherSecrets) -> tuple[str, str]:
     Domain-separated HMAC derivations keep these values out of plists/logs while
     making existing installs upgrade in place without rotating database keys.
     """
-    secret_key = hmac.new(secrets.state_hmac_key, b"modulo/native/secret-key", hashlib.sha256).digest()
-    fernet_raw = hmac.new(secrets.state_hmac_key, b"modulo/native/fernet-key", hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(secret_key).decode("ascii"), base64.urlsafe_b64encode(fernet_raw).decode("ascii")
+    return _derive(secrets, b"modulo/native/secret-key"), _derive(secrets, b"modulo/native/fernet-key")
 
 
-def _existing_runtime_keys(path: Path) -> tuple[str | None, str | None]:
-    """Read operator-owned application keys without logging their values."""
+def _native_saq_auth_password(secrets: LauncherSecrets) -> str:
+    """Derive the SAQ web-UI password (domain-separated from the app keys).
+
+    Stable for the data directory, so it is generated once in effect and
+    persisted (config.env) on first boot; an existing install that predates
+    FAR-2581 gains it on its next start without any manual step.
+    """
+    return _derive(secrets, b"farna-control/native/saq-auth-password")
+
+
+def _existing_runtime_keys(path: Path) -> dict[str, str]:
+    """Read operator-owned runtime keys from config.env without logging them."""
     try:
         values: dict[str, str] = {}
         for line in path.read_text(encoding="utf-8").splitlines():
             key, separator, value = line.partition("=")
-            if separator and key in {"SECRET_KEY", "FERNET_KEY"} and value:
+            if separator and key in _RUNTIME_KEY_NAMES and value and key not in values:
                 values[key] = value
-        return values.get("SECRET_KEY"), values.get("FERNET_KEY")
+        return values
     except OSError:
-        return None, None
+        return {}
 
 
 def compose_config(state: LauncherState, secrets: LauncherSecrets) -> dict[str, str]:
@@ -143,6 +170,8 @@ def compose_config(state: LauncherState, secrets: LauncherSecrets) -> dict[str, 
     system_url = derive_system_database_url(database_url)
     secret_key, fernet_key = _native_settings_keys(secrets)
     return {
+        "SAQ_AUTH_USERNAME": NATIVE_SAQ_AUTH_USERNAME,
+        "SAQ_AUTH_PASSWORD": _native_saq_auth_password(secrets),
         "DATABASE_URL": database_url,
         "DATABASE_ADMIN_URL": admin_url,
         "REDIS_URL": f"redis://:{secrets.redis_password}@{POSTGRES_HOST}:{state.redis_port}/{_REDIS_DB}",
@@ -169,16 +198,16 @@ def render_env_file(composed: dict[str, str]) -> str:
 
 
 def resolve_pinned_runtime_keys(composed: dict[str, str], path: Path) -> dict[str, str]:
-    """Apply the installer's runtime-key precedence to launcher config."""
-    existing_secret, existing_fernet = _existing_runtime_keys(path)
-    if existing_secret:
-        composed["SECRET_KEY"] = existing_secret
-    if existing_fernet:
-        composed["FERNET_KEY"] = existing_fernet
-    if os.environ.get("SECRET_KEY"):
-        composed["SECRET_KEY"] = os.environ["SECRET_KEY"]
-    if os.environ.get("FERNET_KEY"):
-        composed["FERNET_KEY"] = os.environ["FERNET_KEY"]
+    """Apply the installer's runtime-key precedence to launcher config.
+
+    operator environment > persisted (config.env) > launcher-derived, per key.
+    """
+    persisted = _existing_runtime_keys(path)
+    for key in _RUNTIME_KEY_NAMES:
+        if persisted.get(key):
+            composed[key] = persisted[key]
+        if os.environ.get(key):
+            composed[key] = os.environ[key]
     return composed
 
 

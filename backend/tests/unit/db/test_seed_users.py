@@ -131,10 +131,17 @@ async def test_seed_modulo_users_empty_users_string() -> None:
 
 
 @pytest.mark.anyio
-async def test_seed_modulo_users_no_org() -> None:
+async def test_seed_modulo_users_no_org_creates_default_org(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: with no TENANT org the seeder creates the default org, never skips into a sentinel."""
+    from farna.db.models.organisation import Organisation
+
     session = _mock_session(_result(scalar_one_or_none=None))
+    monkeypatch.setattr("farna.auth.passwords.hash_password", lambda pw: "$2b$12$fakehash")
     await seed_modulo_users(_mock_factory(session), "admin:secret1")
-    assert session.add.call_count == 0
+    created_org = session.add.call_args_list[0].args[0]
+    assert isinstance(created_org, Organisation)
+    assert created_org.slug == "default"
+    assert session.add.call_count == 3  # default org + account + membership
 
 
 @pytest.mark.anyio
@@ -446,3 +453,42 @@ async def test_audit_cancellation_is_never_swallowed(audit_append_spy: AsyncMock
 
     with pytest.raises(asyncio.CancelledError):
         await seed_modulo_user(session, org, "admin:secret1")
+
+
+@pytest.mark.anyio
+async def test_first_tenant_organisation_excludes_sentinel_orgs() -> None:
+    """FAR-2581: the orphan + registry sentinel orgs are never a user's org."""
+    from sqlalchemy.dialects import postgresql
+
+    from farna.db.models.organisation import MODULO_REGISTRY_ORG_ID, SYSTEM_ORG_ID
+    from farna.db.seed import first_tenant_organisation
+
+    captured: list[Any] = []
+
+    async def _execute(stmt: Any) -> Any:
+        captured.append(stmt)
+        return _result(scalar_one_or_none=None)
+
+    session = MagicMock()
+    session.execute = _execute
+    assert await first_tenant_organisation(session) is None
+    sql = str(captured[0].compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert str(SYSTEM_ORG_ID) in sql
+    assert str(MODULO_REGISTRY_ORG_ID) in sql
+    assert "NOT IN" in sql
+    assert "deleted_at IS NULL" in sql
+    # A suspended/archived tenant is never "the" tenant for a new admin; the
+    # predicate is single-sourced with db.crud.organisation.is_login_active_org.
+    assert "'active'" in sql
+
+
+@pytest.mark.anyio
+async def test_ensure_default_organisation_reuses_existing_tenant_org() -> None:
+    from farna.db.seed import ensure_default_organisation
+
+    org = SimpleNamespace(id=uuid.uuid4())
+    session = _mock_session(_result(scalar_one_or_none=org))
+    found, created = await ensure_default_organisation(session)
+    assert found is org
+    assert created is False
+    assert session.add.call_count == 0

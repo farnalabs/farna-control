@@ -1725,6 +1725,27 @@ jobs:
             run_assertion "spa_root_html" \
               spa_root_html_ready "http://127.0.0.1:${API_PORT}/" 60 1 || exit 1
 
+            # FAR-2581: /healthz above passes BEFORE a crash-looping child trips
+            # the supervisor's crash cap (saq-system crash-looped on a missing
+            # SAQ_AUTH_PASSWORD and the cap then tore the whole stack down, so
+            # first login answered 503). Re-assert stability after a >= 180s
+            # settle window with the shared Linux/macOS assertion script: all
+            # five components alive and not degraded, /healthz/ready 200, a
+            # first admin via `users add` outside the orphan org, login 200 and
+            # one authenticated GET 200. The app executable is resolved by glob
+            # so the assertion does not depend on the app/executable names.
+            # shellcheck disable=SC2016
+            run_assertion "native_stack_stability" bash -c '
+              shopt -s nullglob
+              cli=""
+              for candidate in "$1"/*.app/Contents/MacOS/*; do
+                if [[ -f "$candidate" && -x "$candidate" ]]; then cli="$candidate"; break; fi
+              done
+              [[ -n "$cli" ]] || { echo "no installed app executable under $1" >&2; exit 1; }
+              echo "native_stack_stability: cli=$cli"
+              bash scripts/native-stack-assertions.sh "$cli" "$2/native-stack-assertions" "$2"
+            ' bash "$INSTALL_ROOT" "$DATA" || exit 1
+
            # Service PID / binary identity
            # shellcheck disable=SC2016
            run_assertion "service_pid" bash -c '

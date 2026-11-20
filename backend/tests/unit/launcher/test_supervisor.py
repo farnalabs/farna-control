@@ -1409,3 +1409,34 @@ def test_entrypoint_sources_the_policy_constants() -> None:
     assert int(sourced["SLIDING_CRASH_LIMIT"]) == policy_module.SLIDING_CRASH_LIMIT
     assert int(sourced["SLIDING_RESTART_SLEEP_S"]) == int(policy_module.SLIDING_RESTART_SLEEP_SECONDS)
     assert str(policy_module.CRASH_CAP) == sourced["SUPERVISOR_CRASH_CAP"]
+
+
+def test_stop_waits_long_enough_for_a_slow_teardown(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """FAR-2581: a teardown slower than 10s is confirmed, not reported `stop.unconfirmed`."""
+    import farna.launcher.supervisor as supervisor_module
+
+    clock = {"now": 0.0}
+    monkeypatch.setattr(supervisor_module.time, "monotonic", lambda: clock["now"])
+
+    def advance(seconds: float) -> None:
+        clock["now"] += seconds
+
+    monkeypatch.setattr(supervisor_module.time, "sleep", advance)
+    # The lock frees 45s after the signal; the holder process stays alive until then.
+    monkeypatch.setattr(supervisor_module, "_lock_is_free", lambda _path: clock["now"] >= 45.0)
+    monkeypatch.setattr(supervisor_module.os, "kill", lambda _pid, _sig: None)
+
+    assert supervisor_module.STOP_CONFIRM_TIMEOUT_SECONDS >= 60
+    result = supervisor_module._await_lock_release(tmp_path / "lock", 4242, supervisor_module.STOP_CONFIRM_TIMEOUT_SECONDS)
+
+    assert result == 0
+    assert 45.0 <= clock["now"] < 46.0  # returned promptly once the lock freed
+
+
+def test_request_stop_defaults_to_the_realistic_wait() -> None:
+    import inspect
+
+    import farna.launcher.supervisor as supervisor_module
+
+    default = inspect.signature(supervisor_module.request_stop).parameters["timeout"].default
+    assert default == supervisor_module.STOP_CONFIRM_TIMEOUT_SECONDS

@@ -628,14 +628,22 @@ def _load_or_init_state(data_dir: Path, secrets: Any, state_module: Any) -> Any:
 
 
 def _compose_and_pin_config(data_dir: Path, launcher_state: Any, secrets: Any) -> dict[str, str]:
-    """Compose the launcher config, write it (0600) and pin it for Settings."""
-    from farna.launcher.config_source import compose_config, write_pinned_env_file
+    """Compose the launcher config, write it (0600) and pin it for Settings.
+
+    Returns the composition WITH the runtime-key precedence applied (operator
+    env > config.env > derived) — the exact values written to config.env.
+    The SAQ children receive these through their environment, which outranks
+    the pinned dotenv; returning the raw derivation instead handed the workers
+    a different SECRET_KEY/FERNET_KEY from the API whenever install.sh had
+    persisted its own keys (FAR-2581).
+    """
+    from farna.launcher.config_source import compose_config, resolve_pinned_runtime_keys, write_pinned_env_file
     from farna.settings import pin_env_file, set_first_boot_guard
 
     config_path = write_pinned_env_file(data_dir, launcher_state, secrets)
     pin_env_file(str(config_path))
     set_first_boot_guard(env_safety.make_first_boot_guard(data_dir, env_file=config_path))
-    return compose_config(launcher_state, secrets)
+    return resolve_pinned_runtime_keys(compose_config(launcher_state, secrets), config_path)
 
 
 def _prepare_database_env(composed: dict[str, str]) -> None:
@@ -654,6 +662,45 @@ def _build_settings() -> Any:
     return get_settings()
 
 
+# The composed keys every SAQ child receives. SAQ_AUTH_USERNAME/PASSWORD are
+# load-bearing for saq-system: it FAIL-CLOSES without them (FAR-2581); both
+# children get them so the pair never diverges between the two workers.
+_SAQ_CHILD_ENV_KEYS: tuple[str, ...] = (
+    "DATABASE_URL",
+    "DATABASE_ADMIN_URL",
+    "REDIS_URL",
+    "FARNA_CONTROL_SYSTEM_DATABASE_URL",
+    "SECRET_KEY",
+    "FERNET_KEY",
+    "SAQ_AUTH_USERNAME",
+    "SAQ_AUTH_PASSWORD",
+)
+
+
+def _head_check_engine(settings: Any) -> Any:
+    """A PRIVATE, pool-less engine for one migration-head check (FAR-2581).
+
+    The check runs on the supervisor thread under ``asyncio.run`` — a fresh
+    event loop per call that is closed when the call returns. It must never
+    borrow the API's process-global pooled engine: a pooled asyncpg connection
+    is bound to the loop that opened it, so (a) every later check on a new
+    loop drew a dead connection, ``db_is_at_migration_head`` fail-safed to
+    False and the SAQ gate never opened when the FIRST check ran while
+    migrations were still in flight ("Event loop is closed" in launcher.log,
+    zero SAQ workers), and (b) the API's own loop could check out a
+    connection owned by a closed loop. NullPool + dispose per check means no
+    connection outlives its loop.
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from farna.db.url_utils import split_engine_sslmode
+
+    engine_url, ssl_arg = split_engine_sslmode(settings.database_url)
+    connect_args: dict[str, Any] = {"ssl": ssl_arg} if ssl_arg is not None else {}
+    return create_async_engine(engine_url, poolclass=NullPool, connect_args=connect_args)
+
+
 def _add_saq_children(supervisor: Any, settings: Any, composed: dict[str, str]) -> None:
     """Register the SAQ workers; they spawn only at migration-head readiness.
 
@@ -661,28 +708,33 @@ def _add_saq_children(supervisor: Any, settings: Any, composed: dict[str, str]) 
     the first tick can evaluate False (migrations still running in the
     lifespan), and caching that would seal the gate shut forever — the API
     would serve with zero SAQ workers. A False answer is simply re-asked on
-    the next tick.
+    the next tick, each time through a private pool-less engine (see
+    :func:`_head_check_engine`).
     """
-    from farna.api.dependencies import get_or_create_engine
     from farna.db.health_checks import db_is_at_migration_head
     from farna.launcher.supervisor import ChildSpec
 
-    engine = get_or_create_engine(settings)
     head_cache: list[bool] = [False]
-    head_checked: list[bool] = [False]
+
+    async def _check_head() -> bool:
+        engine = _head_check_engine(settings)
+        try:
+            return bool(await db_is_at_migration_head(engine))
+        finally:
+            dispose = getattr(engine, "dispose", None)
+            if dispose is not None:
+                await dispose()
 
     def _head_ready() -> bool:
-        if not head_checked[0]:
+        if not head_cache[0]:
             import asyncio
 
-            if asyncio.run(db_is_at_migration_head(engine)):
-                head_cache[0] = True
-                head_checked[0] = True
+            head_cache[0] = asyncio.run(_check_head())
         return head_cache[0]
 
     def _child_env(base: dict[str, str]) -> dict[str, str]:
         env = dict(base)
-        for key in ("DATABASE_URL", "DATABASE_ADMIN_URL", "REDIS_URL", "FARNA_CONTROL_SYSTEM_DATABASE_URL", "SECRET_KEY", "FERNET_KEY"):
+        for key in _SAQ_CHILD_ENV_KEYS:
             if composed.get(key):
                 env[key] = composed[key]
         return env
@@ -763,6 +815,16 @@ def _redis_server_argv(bin_dir: Path, port: int, password: str, data_dir: Path) 
     ]
 
 
+# Redis's working directory inside the data dir (``dir`` in the per-boot conf).
+REDIS_DIR_NAME = "redis"
+
+
+def _redis_quote(value: str) -> str:
+    """Quote one Redis config argument (spaces, e.g. macOS 'Application Support')."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _write_redis_conf(data_dir: Path, port: int, password: str) -> Path:
     """Write the per-boot 0600 Redis config (requirepass INSIDE the file).
 
@@ -776,11 +838,18 @@ def _write_redis_conf(data_dir: Path, port: int, password: str) -> Path:
     from farna.db.bootstrap import _write_env_file
     from farna.launcher.supervisor import REDIS_CONF_PREFIX
 
+    # FAR-2581: pin Redis's working directory inside the data dir. Without a
+    # ``dir`` directive Redis uses the launching process's cwd for any file it
+    # writes, so `farna-control start` run from an unwritable/unreadable cwd
+    # (another user's home, /) failed to boot the bundled Redis.
+    redis_dir = data_dir / REDIS_DIR_NAME
+    redis_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     content = "\n".join(
         [
             f"port {port}",
             f"bind {POSTGRES_HOST}",
             f"requirepass {password}",
+            f"dir {_redis_quote(str(redis_dir))}",
             'save ""',
             "appendonly no",
             "",

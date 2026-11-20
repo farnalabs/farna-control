@@ -234,18 +234,30 @@ def _engine_and_factory(url: str) -> tuple[AsyncEngine, async_sessionmaker[Async
 
 
 async def _first_org(session: AsyncSession) -> Any:
-    """The oldest organisation — the same convention the boot seeder uses.
+    """The oldest live TENANT organisation, or a loud refusal when none exists.
 
-    Includes soft-deleted orgs: the CLI is an admin tool and must find
-    organisations regardless of their soft-delete status.
+    Sentinel orgs (the orphan / registry rows the baseline migration seeds)
+    are never returned (FAR-2581). Read-only callers use this; ``users add``
+    uses :func:`_tenant_org_for_new_user`, which creates the default org.
     """
-    from farna.db.models.organisation import Organisation
-    from farna.db.soft_delete import include_soft_deleted
+    from farna.db.seed import first_tenant_organisation
 
-    result = await session.execute(include_soft_deleted(select(Organisation).order_by(Organisation.created_at).limit(1)))
-    org = result.scalar_one_or_none()
+    org = await first_tenant_organisation(session)
     if org is None:
         raise UserCliError("no organisation exists in this database — run 'farna-control start' once to bootstrap")
+    return org
+
+
+async def _tenant_org_for_new_user(session: AsyncSession) -> Any:
+    """The org a new user joins: the oldest tenant org, created if none exists.
+
+    The same helper the API boot uses (``ensure_default_organisation``), so a
+    first admin created before (or racing) the API's own default-org seed
+    lands in "Default Organisation", never the orphan org (FAR-2581).
+    """
+    from farna.db.seed import ensure_default_organisation
+
+    org, _created = await ensure_default_organisation(session)
     return org
 
 
@@ -273,10 +285,10 @@ async def _add_user(url: str, email: str, password: str, as_admin: bool) -> str:
     engine, maker = _engine_and_factory(url)
     try:
         async with maker() as session, session.begin():
-            org = await _first_org(session)
             existing = (await session.execute(select(Account).where(Account.email == email))).scalar_one_or_none()
             if existing is not None:
                 raise UserCliError(f"user {email} already exists — nothing changed")
+            org = await _tenant_org_for_new_user(session)
             await seed_modulo_user(session, org, f"{email}:{password}")
             account = (await session.execute(select(Account).where(Account.email == email))).scalar_one()
             membership = (

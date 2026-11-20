@@ -177,6 +177,8 @@ assert argv == [
     "127.0.0.1",
     "-p",
     "18000",
+    "-k",
+    "",
 ], argv
 assert "--host" not in argv and "--port" not in argv, argv
 assert f"--pgdata={pgdata}" not in argv, argv

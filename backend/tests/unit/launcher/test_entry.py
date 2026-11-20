@@ -592,7 +592,6 @@ def test_saq_children_gated_on_migration_head(monkeypatch: pytest.MonkeyPatch, t
         def monitor_thread_alive(self) -> bool:
             return True
 
-    import farna.api.dependencies as deps_module
     import farna.db.health_checks as health_module
     import farna.launcher.supervisor as supervisor_mod
 
@@ -610,6 +609,8 @@ def test_saq_children_gated_on_migration_head(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(supervisor_mod, "Supervisor", RecordingSupervisor)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("FERNET_KEY", raising=False)
     monkeypatch.setattr(supervisor_mod, "knobs_from_env", lambda: supervisor_mod.SupervisorKnobs(tick_seconds=1000.0))
     head_calls = {"n": 0}
 
@@ -618,7 +619,7 @@ def test_saq_children_gated_on_migration_head(monkeypatch: pytest.MonkeyPatch, t
         return True
 
     monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
-    monkeypatch.setattr(deps_module, "get_or_create_engine", lambda settings: object())
+    monkeypatch.setattr(entry_module, "_head_check_engine", lambda settings: object())
 
     _install_boot_mocks(monkeypatch, [], mock_saq=False)
     run_start(tmp_path / "data", serve=lambda host, port, ev: None)
@@ -654,7 +655,6 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
     unconditionally, so on a fresh install (migrations still running in the
     lifespan) the API served forever with zero SAQ workers.
     """
-    import farna.api.dependencies as deps_module
     import farna.db.health_checks as health_module
     from farna.launcher.supervisor import Supervisor, SupervisorKnobs
 
@@ -666,7 +666,7 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
         return migrated["value"]
 
     monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
-    monkeypatch.setattr(deps_module, "get_or_create_engine", lambda settings: object())
+    monkeypatch.setattr(entry_module, "_head_check_engine", lambda settings: object())
 
     clock = _fake_clock()
     spawned: list[list[str]] = []
@@ -689,6 +689,39 @@ def test_saq_gate_reopens_when_the_first_tick_sees_false(monkeypatch: pytest.Mon
     supervisor.tick()  # the gate was RE-ASKED (False not memoized) → now True → spawn
     assert len(spawned) == 2
     assert len(calls) >= 3  # a False answer is re-evaluated, never cached
+
+
+def test_saq_children_receive_saq_web_auth_and_resolved_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: both SAQ children get SAQ_AUTH_* (saq-system fail-closes without them)."""
+    import farna.db.health_checks as health_module
+    from farna.launcher.supervisor import Supervisor, SupervisorKnobs
+
+    async def fake_head(engine: object, alembic_ini: object = None) -> bool:
+        return True
+
+    monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
+    monkeypatch.setattr(entry_module, "_head_check_engine", lambda settings: object())
+    envs: dict[str, dict[str, str]] = {}
+
+    def spawn(argv: list[str], env: dict[str, str] | None) -> object:
+        envs[" ".join(argv)] = dict(env or {})
+        return FakeProc()
+
+    supervisor = Supervisor(
+        SupervisorKnobs(tick_seconds=0.01, restart_backoff_initial=0.01, restart_backoff_max=0.02),
+        spawner=spawn,
+        clock=_fake_clock(),
+        sleep=lambda _s: None,
+    )
+    composed = {"SAQ_AUTH_USERNAME": "admin", "SAQ_AUTH_PASSWORD": "saq-secret", "SECRET_KEY": "persisted-secret"}
+    entry_module._add_saq_children(supervisor, settings=object(), composed=composed)
+    supervisor.tick()
+
+    assert len(envs) == 2
+    for env in envs.values():
+        assert env["SAQ_AUTH_USERNAME"] == "admin"
+        assert env["SAQ_AUTH_PASSWORD"] == "saq-secret"
+        assert env["SECRET_KEY"] == "persisted-secret"
 
 
 def test_run_probe_command_maps_missing_binary_to_unavailable(tmp_path: Path) -> None:
@@ -2159,3 +2192,114 @@ def test_serve_until_shutdown_uses_serve_api_when_no_serve_callable(monkeypatch:
 
     assert code == 0
     assert calls == [(entry_module.POSTGRES_HOST, 18001)]
+
+
+def test_compose_and_pin_config_returns_the_persisted_runtime_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """FAR-2581: the SAQ children must get config.env's keys, not the raw derivation.
+
+    install.sh persists its own SECRET_KEY/FERNET_KEY in config.env; the API
+    reads them via the pinned dotenv while the children's ENVIRONMENT outranks
+    it, so returning the derived keys split the two processes' Fernet keys.
+    """
+    from farna.launcher.config_source import CONFIG_ENV_FILENAME
+    from farna.launcher.secrets_file import LauncherSecrets
+    from farna.launcher.state import LauncherState
+
+    for name in ("SECRET_KEY", "FERNET_KEY", "SAQ_AUTH_PASSWORD", "SAQ_AUTH_USERNAME"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(settings_module, "pin_env_file", lambda path: None)
+    monkeypatch.setattr(settings_module, "set_first_boot_guard", lambda guard: None)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / CONFIG_ENV_FILENAME).write_text(f"SECRET_KEY={SECRET_KEY}\nFERNET_KEY={FERNET_KEY}\n", encoding="utf-8")
+    secrets = LauncherSecrets(postgres_password="pg-pw", redis_password="redis-pw", state_hmac_key=bytes(range(32)))
+    state = LauncherState(postgres_port=15432, redis_port=16379, api_port=18000)
+
+    composed = entry_module._compose_and_pin_config(data_dir, state, secrets)
+
+    assert composed["SECRET_KEY"] == SECRET_KEY
+    assert composed["FERNET_KEY"] == FERNET_KEY
+    assert composed["SAQ_AUTH_PASSWORD"]
+
+
+def test_head_gate_uses_a_fresh_disposed_engine_per_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: never reuse a pooled engine across the per-check asyncio.run loops.
+
+    A pooled connection opened under one asyncio.run loop is dead on the next
+    loop, so a False first answer (migrations still running) poisoned every
+    later check and the SAQ gate never opened.
+    """
+    import farna.db.health_checks as health_module
+    from farna.launcher.supervisor import Supervisor, SupervisorKnobs
+
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.disposed = False
+
+        async def dispose(self) -> None:
+            self.disposed = True
+
+    engines: list[FakeEngine] = []
+
+    def make_engine(settings: object) -> FakeEngine:
+        engines.append(FakeEngine())
+        return engines[-1]
+
+    answers = iter([False, True])
+
+    async def fake_head(engine: object, alembic_ini: object = None) -> bool:
+        return next(answers)
+
+    monkeypatch.setattr(health_module, "db_is_at_migration_head", fake_head)
+    monkeypatch.setattr(entry_module, "_head_check_engine", make_engine)
+    clock = _fake_clock()
+    spawned: list[list[str]] = []
+
+    def spawn(argv: list[str], env: dict[str, str] | None) -> object:
+        spawned.append(argv)
+        return FakeProc()
+
+    supervisor = Supervisor(
+        SupervisorKnobs(tick_seconds=0.01, restart_backoff_initial=0.01, restart_backoff_max=0.02),
+        spawner=spawn,
+        clock=clock,
+        sleep=lambda _s: None,
+    )
+    entry_module._add_saq_children(supervisor, settings=object(), composed={})
+    supervisor.tick()
+    clock.advance(0.02)
+    supervisor.tick()
+
+    assert len(spawned) == 2
+    assert len(engines) == 2  # one private engine per check, never a shared pool
+    assert all(engine.disposed for engine in engines)
+
+
+def test_head_check_engine_is_pool_less() -> None:
+    from sqlalchemy.pool import NullPool
+
+    settings = SimpleNamespace(database_url="postgresql+asyncpg://u:p@127.0.0.1:15432/farna_control")
+    engine = entry_module._head_check_engine(settings)
+
+    assert isinstance(engine.pool, NullPool)
+
+
+def test_redis_conf_pins_its_working_dir_inside_the_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: without `dir`, Redis used the launching cwd (unwritable cwd = no boot)."""
+    data_dir = tmp_path / "Application Support" / "data"
+    data_dir.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    conf_path = entry_module._write_redis_conf(data_dir, 16379, "pw")
+
+    lines = conf_path.read_text(encoding="utf-8").splitlines()
+    redis_dir = data_dir / entry_module.REDIS_DIR_NAME
+    assert entry_module._redis_quote(str(redis_dir)) in [line.removeprefix("dir ") for line in lines if line.startswith("dir ")]
+    assert redis_dir.is_dir()
+
+
+def test_redis_quote_escapes_quotes_and_backslashes() -> None:
+    backslash = chr(92)
+    raw = f'a "b" {backslash}c'
+    expected = '"a ' + backslash + '"b' + backslash + '" ' + backslash * 2 + 'c"'
+    assert entry_module._redis_quote(raw) == expected

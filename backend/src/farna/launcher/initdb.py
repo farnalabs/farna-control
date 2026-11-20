@@ -184,6 +184,19 @@ def postgres_server_argv(pgdata: Path, host: str, port: int, bin_dir: Path) -> l
         host,
         "-p",
         str(port),
+        # NO Unix-domain socket (FAR-2581). The compiled-in default
+        # unix_socket_directories is /tmp, so the postmaster created
+        # /tmp/.s.PGSQL.<port>(.lock) — a path shared by every user on the
+        # host. With the fixed default port, a stale or other-user lock file
+        # there was a FATAL "could not open lock file ... Permission denied"
+        # and the stack never started. Every launcher client (pg_isready
+        # probe, CREATE DATABASE, migrations, the API/SAQ engines, pg_dump in
+        # upgrade/backup) connects over TCP to 127.0.0.1, and initdb runs the
+        # bootstrap backend in single-user mode, so nothing needs the socket:
+        # an empty value disables Unix sockets entirely rather than inventing
+        # a per-data-dir path that must also fit the 107-byte sun_path limit.
+        "-k",
+        "",
     ]
 
 
