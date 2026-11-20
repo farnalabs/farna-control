@@ -64,9 +64,30 @@
 #   * The job's own check run ("Changelog classification") is no longer the
 #     gate verdict — the job stays green when the gate fails so duplicates
 #     cannot pile up red job check runs. The red lives solely on the
-#     changelog-classified row. If the row cannot be created/completed (API
-#     error), the step fails the job: a gate that cannot publish its verdict
-#     fails CLOSED, never silently open.
+#     changelog-classified row. Publishing is deliberately tolerant of a
+#     transient check-run API failure: the row ids are resolved IMMEDIATELY
+#     before the PATCH, a failed PATCH is retried ONCE against a fresh
+#     resolution, and if no PATCH succeeds the step POSTs a NEW completed row
+#     carrying the same verdict (same name, head SHA and summary) instead of
+#     failing closed. Only when NO verdict row can be established (no PATCH
+#     succeeds AND the fallback POST fails) does the step fail the job: a gate
+#     that cannot publish its verdict fails CLOSED, never silently open.
+#
+#     Why this tolerance exists (observed on PR #3253, run 44431819543, job
+#     135250794886): the gate computed `success` with `changelog: feature`
+#     applied, then PATCHed a row it had itself just created and got
+#     `gh: Not Found (HTTP 404)`; the fail-closed branch converted that into a
+#     red `changelog-classified` row whose title said "internal error", which
+#     a later agent read as "fix the PR" and labelled the PR
+#     `modulo-cannot-fix`. The same PATCH to the same id from this step's EXIT
+#     trap succeeded ~1.5 s later with the same token and repo, so the 404 was
+#     transient (a freshly created check run is not immediately readable /
+#     patchable). A 404 can also mean a row that is not patchable by this
+#     identity, and the two cannot be distinguished from here, so the publish
+#     path handles both rather than guessing.
+#   * Publish failures are INFRASTRUCTURE, not classification. The log
+#     messages and the trap's failure row say so explicitly, so a reviewer is
+#     never told to add a label when the gate itself is what broke.
 #   * Label sync now also runs after a gate violation (previously a red gate
 #     step stopped the job first); it is an idempotent reconciliation and is
 #     unaffected by duplicates (it already tolerates concurrent runs).
@@ -250,11 +271,15 @@ jobs:
       # gate fails, so a duplicate run cannot pile up a second red job check
       # run, and a later run's success PATCHES OVER an earlier failure on the
       # same row (last-writer-wins self-healing). The verdict is published by
-      # re-listing every "changelog-classified" row on the SHA at publish
-      # time and PATCHing each one, so a double-POST race converges within
-      # the same run. A failure to create or complete the verdict row fails
-      # the JOB (fail-closed) — a gate that cannot publish its verdict never
-      # passes silently.
+      # resolving every "changelog-classified" row on the SHA immediately
+      # before the PATCH and completing each one, so a double-POST race
+      # converges within the same run. A transient PATCH failure (a freshly
+      # created row 404s until the check-run read path catches up) is retried
+      # once against a fresh resolution, then falls back to POSTing a new
+      # completed verdict row. Only a run that cannot establish ANY verdict
+      # row fails the JOB (fail-closed) — a gate that cannot publish its
+      # verdict never passes silently, and a publish failure is reported as
+      # infrastructure, never as a missing label.
       - name: Require a changelog:* label on user-facing changes
         id: changelog-gate
         shell: bash
@@ -270,6 +295,7 @@ jobs:
           set -euo pipefail
 
           CREATED_IDS=""
+          CLAIM_IDS=""
           COMPLETED="false"
 
           # If this step dies AFTER creating the in_progress slot and BEFORE
@@ -278,6 +304,12 @@ jobs:
           # (the app-leg merge queue's checks_pass polls for all check runs
           # completed and would fail-close on it forever). The trap never
           # masks the original exit status.
+          #
+          # The title and summary name the failure class explicitly: this is
+          # an INFRASTRUCTURE failure (the gate crashed or could not publish
+          # its verdict), NOT a missing changelog label. Without that wording
+          # a red row here reads exactly like a classification failure, and
+          # an agent has already misread one as "fix the PR" (PR #3253).
           # Invoked indirectly via `trap on_exit EXIT` - shellcheck has no
           # call-site for a trap handler, so it reports the body unreachable.
           # shellcheck disable=SC2317
@@ -290,8 +322,8 @@ jobs:
                   status: "completed",
                   conclusion: "failure",
                   output: {
-                    title: "Changelog gate internal error",
-                    summary: "The changelog gate crashed before publishing its verdict; treated as failure (fail-closed). Re-run this workflow or push a commit to re-evaluate."
+                    title: "Changelog gate infrastructure error",
+                    summary: "The changelog gate crashed or could not publish its verdict (infrastructure failure, NOT a missing changelog label). A red row here means the gate itself failed: do not add a label; re-run this workflow or push a commit to re-evaluate."
                   }}')
                 gh api "repos/${GITHUB_REPOSITORY}/check-runs/${id}" \
                   --method PATCH --input - <<< "$BODY" >/dev/null \
@@ -310,6 +342,10 @@ jobs:
           # run), reuse its id(s); otherwise create an in_progress row now.
           # The verdict PATCH at the end updates that row instead of POSTing
           # a new duplicate per run — so N runs produce ONE gate verdict.
+          #
+          # CLAIM_IDS keeps BOTH cases (reused and created) so the publish
+          # path always knows every row this run is responsible for, even if
+          # a later list is momentarily stale or incomplete.
           rc=0
           EXISTING_IDS="$(gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100&filter=all&check_name=${CHECK_NAME}" \
@@ -331,6 +367,9 @@ jobs:
               exit 1
             fi
             CREATED_IDS="$NEW_ID"
+            CLAIM_IDS="$NEW_ID"
+          else
+            CLAIM_IDS="$EXISTING_IDS"
           fi
 
           # Resolve the diff base the same way ci.yml's integration-changed
@@ -402,51 +441,148 @@ jobs:
             fi
           fi
 
-          # FAR-1738: publish the verdict by UPSERT — RE-LIST every
-          # "changelog-classified" row on the head SHA at publish time and
-          # PATCH each one to the computed conclusion. Re-listing here (not
-          # reusing the claim-time EXISTING_IDS) closes the double-POST
-          # race: two near-simultaneous runs that both saw an empty
-          # claim-time list each POST their own row, so each run's
-          # claim-time view holds only its own id — the publish-time
-          # re-list sees BOTH rows and converges them to the same verdict
-          # within the same run. Without it, diverging rows sit on the SHA
-          # until a later same-SHA event reconciles them, and if no event
-          # comes one red row can block the PR. Last-writer-wins still
-          # holds across runs: a later run that sees a freshly-applied
-          # changelog:* label overwrites an earlier failure — a superseded
-          # verdict can no longer block a PR.
-          rc=0
-          VERDICT_IDS="$(gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100&filter=all&check_name=${CHECK_NAME}" \
-            --jq '.check_runs[] | select(.name == "'"${CHECK_NAME}"'") | .id')" || rc=$?
-          if [ "$rc" -ne 0 ]; then
-            echo "::error::changelog-gate: could not re-list '${CHECK_NAME}' check runs on ${HEAD_SHA} at publish time (rc=${rc}); failing closed."
-            exit 1
-          fi
-          # Belt-and-braces: a row this run just POSTed must never be
-          # dropped by a stale re-list response; union it back in.
-          if [ -n "${CREATED_IDS:-}" ]; then
-            VERDICT_IDS="$(printf '%s\n%s\n' "$VERDICT_IDS" "$CREATED_IDS" | sort -u)"
-          fi
-          if [ -z "$VERDICT_IDS" ]; then
-            echo "::error::changelog-gate: no '${CHECK_NAME}' check run found on ${HEAD_SHA} to publish the verdict onto; failing closed."
-            exit 1
-          fi
-          BODY=$(jq -n \
+          # FAR-1738: publish the verdict by UPSERT — RESOLVE every
+          # "changelog-classified" row on the head SHA immediately before the
+          # PATCH and complete each one to the computed conclusion. Resolving
+          # late (rather than reusing the claim-time view) closes the
+          # double-POST race: two near-simultaneous runs that both saw an
+          # empty claim-time list each POST their own row, so each run's
+          # claim-time view holds only its own id — a publish-time resolution
+          # sees BOTH rows and converges them to the same verdict within the
+          # same run. Without it, diverging rows sit on the SHA until a later
+          # same-SHA event reconciles them, and if no event comes one red row
+          # can block the PR. Last-writer-wins still holds across runs: a
+          # later run that sees a freshly-applied changelog:* label
+          # overwrites an earlier failure — a superseded verdict can no
+          # longer block a PR.
+          #
+          # A freshly created check run can 404 on PATCH for a second or two:
+          # GitHub's check-run read path is eventually consistent (observed
+          # on PR #3253 / run 44431819543 — the row this step had just
+          # created returned "gh: Not Found (HTTP 404)" to the PATCH, while
+          # the SAME PATCH to the SAME id from this step's EXIT trap
+          # succeeded ~1.5 s later, same token, same repo). A 404 can also
+          # mean a row genuinely not patchable by this identity, and the code
+          # cannot tell the two apart, so the publish path handles BOTH
+          # instead of guessing:
+          #
+          #   1. Resolve the ids and PATCH every row.
+          #   2. If any PATCH failed, resolve AGAIN (once) and retry — this
+          #      absorbs the eventual-consistency window.
+          #   3. If no PATCH succeeded at all, POST a NEW completed row with
+          #      the same verdict (same name, head SHA and summary), so a
+          #      correctly classified PR still ends with a green verdict
+          #      instead of a red row this workflow itself created.
+          #   4. Only if the POST also fails does the step fail CLOSED — a
+          #      gate that cannot establish ANY verdict row must not pass
+          #      silently.
+          #
+          # Publishing failures are INFRASTRUCTURE, not classification:
+          # every message below, and the trap's failure row, say so
+          # explicitly.
+          PATCH_BODY=$(jq -n \
             --arg conclusion "$VERDICT" \
             --arg title "$TITLE" \
             --arg summary "$SUMMARY" \
             '{status: "completed", conclusion: $conclusion, output: {title: $title, summary: $summary}}')
-          while IFS= read -r id; do
-            [ -n "$id" ] || continue
-            if ! gh api "repos/${GITHUB_REPOSITORY}/check-runs/${id}" \
-                --method PATCH --input - <<< "$BODY" >/dev/null; then
-              echo "::error::changelog-gate: could not publish verdict '${VERDICT}' to check run ${id}; failing closed."
+
+          # Resolve every 'changelog-classified' row on the head SHA, unioned
+          # with the ids this run claimed/created (a stale or partial read
+          # must never drop a row this run knows about). Same query as the
+          # claim step; called immediately before each PATCH batch.
+          resolve_verdict_ids() {
+            local rc=0 ids=""
+            ids="$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/check-runs?per_page=100&filter=all&check_name=${CHECK_NAME}" \
+              --jq '.check_runs[] | select(.name == "'"${CHECK_NAME}"'") | .id')" || rc=$?
+            if [ "$rc" -ne 0 ]; then
+              return "$rc"
+            fi
+            if [ -n "${CLAIM_IDS:-}" ]; then
+              ids="$(printf '%s\n%s\n' "$ids" "$CLAIM_IDS" | sort -u)"
+            fi
+            printf '%s\n' "$ids"
+          }
+
+          PUBLISHED="false"
+          RESOLVED_IDS=""
+          ATTEMPT_FAILED=0
+          for attempt in 1 2; do
+            rc=0
+            RESOLVED_IDS="$(resolve_verdict_ids)" || rc=$?
+            if [ "$rc" -ne 0 ]; then
+              echo "::warning::changelog-gate: could not resolve '${CHECK_NAME}' check runs on ${HEAD_SHA} at publish time (attempt ${attempt}, rc=${rc}); retrying, then falling back to creating a verdict row."
+              RESOLVED_IDS=""
+              if [ "$attempt" = "1" ]; then
+                sleep 2
+              fi
+              continue
+            fi
+            ATTEMPT_FAILED=0
+            while IFS= read -r id; do
+              [ -n "$id" ] || continue
+              # gh prints its own `gh: Not Found (HTTP 404)` to stderr on a
+              # failed PATCH; leaving stderr attached records the raw reason
+              # in the job log immediately before the warning below.
+              if gh api "repos/${GITHUB_REPOSITORY}/check-runs/${id}" \
+                  --method PATCH --input - <<< "$PATCH_BODY" >/dev/null; then
+                echo "changelog-classified check run ${id} -> ${VERDICT} (attempt ${attempt})"
+                PUBLISHED="true"
+              else
+                ATTEMPT_FAILED=$((ATTEMPT_FAILED + 1))
+                echo "::warning::changelog-gate: could not publish verdict '${VERDICT}' to check run ${id} (attempt ${attempt}); this is an infrastructure failure, not a missing changelog label."
+              fi
+            done <<< "$RESOLVED_IDS"
+            if [ "$ATTEMPT_FAILED" -eq 0 ]; then
+              break
+            fi
+            if [ "$attempt" = "1" ]; then
+              sleep 2
+            fi
+          done
+
+          if [ "$PUBLISHED" = "true" ] && [ "$ATTEMPT_FAILED" -gt 0 ]; then
+            echo "::warning::changelog-gate: verdict '${VERDICT}' was published, but at least one '${CHECK_NAME}' row on ${HEAD_SHA} could not be PATCHed (see the warnings above). A stale row on that SHA is an infrastructure problem, not a classification failure; re-run this workflow to reconcile it."
+          fi
+
+          if [ "$PUBLISHED" != "true" ]; then
+            # PATCH could not establish the verdict on any existing row. POST
+            # a fresh COMPLETED row carrying the same verdict so a correct
+            # classification is never reported as a failure. If even this
+            # fails there is no verdict row at all, so fail closed.
+            POST_BODY=$(jq -n \
+              --arg name "$CHECK_NAME" \
+              --arg sha "$HEAD_SHA" \
+              --arg conclusion "$VERDICT" \
+              --arg title "$TITLE" \
+              --arg summary "$SUMMARY" \
+              '{name: $name, head_sha: $sha, status: "completed", conclusion: $conclusion, output: {title: $title, summary: $summary}}')
+            rc=0
+            NEW_ID="$(gh api "repos/${GITHUB_REPOSITORY}/check-runs" \
+              --method POST --input - <<< "$POST_BODY" --jq '.id')" || rc=$?
+            if [ "$rc" -ne 0 ] || [ -z "$NEW_ID" ]; then
+              echo "::error::changelog-gate: could not publish the verdict '${VERDICT}' (infrastructure failure): no existing '${CHECK_NAME}' row could be PATCHed and creating a new one failed (rc=${rc}). This is NOT a changelog classification failure — do not add a label; re-run this workflow. Failing closed."
               exit 1
             fi
-            echo "changelog-classified check run ${id} -> ${VERDICT}"
-          done <<< "$VERDICT_IDS"
+            PUBLISHED="true"
+            echo "::warning::changelog-gate: PATCH publishing failed; created a fresh completed '${CHECK_NAME}' row ${NEW_ID} with conclusion '${VERDICT}' instead (infrastructure fallback, not a classification failure)."
+            # Best-effort: complete the rows this run claimed so the fallback
+            # cannot leave an in_progress claim row behind (checks_pass treats
+            # an in_progress row as failing forever). Never fatal — the
+            # verdict row already exists.
+            while IFS= read -r id; do
+              [ -n "$id" ] || continue
+              if [ "$id" = "$NEW_ID" ]; then
+                continue
+              fi
+              if gh api "repos/${GITHUB_REPOSITORY}/check-runs/${id}" \
+                  --method PATCH --input - <<< "$PATCH_BODY" >/dev/null 2>&1; then
+                echo "changelog-classified check run ${id} -> ${VERDICT} (post-fallback reconciliation)"
+              else
+                echo "::warning::changelog-gate: claim row ${id} could not be completed after the POST fallback; if it is left in_progress a later same-SHA run must reconcile it."
+              fi
+            done < <(printf '%s\n%s\n' "$RESOLVED_IDS" "$CLAIM_IDS" | sort -u)
+          fi
           COMPLETED="true"
 
           if [ "$VERDICT" = "failure" ]; then
