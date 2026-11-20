@@ -77,7 +77,7 @@ describe('LicenceRenewalNotice', () => {
       const wrapper = mountNotice({ licence_state: 'renewal_due', renewal_mode: 'manual' })
 
       const renew = wrapper.get('[data-testid="licence-renewal-renew-link"]')
-      expect(renew.attributes('href')).toBe('https://modulo.run/pricing')
+      expect(renew.attributes('href')).toBe('https://farna.dev/control/pricing/')
 
       await wrapper.get('[data-testid="licence-renewal-install-action"]').trigger('click')
       expect(wrapper.emitted('install-key')).toHaveLength(1)
@@ -142,7 +142,7 @@ describe('LicenceRenewalNotice', () => {
       expect(buy.text()).toBeTruthy()
       expect(install.classes()).toContain('flex-1')
       expect(buy.classes()).toContain('flex-1')
-      expect(buy.attributes('href')).toBe('https://modulo.run/pricing')
+      expect(buy.attributes('href')).toBe('https://farna.dev/control/pricing/')
     })
 
     it('says a key may never have been sent, rather than presuming one exists', () => {

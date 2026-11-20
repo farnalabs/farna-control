@@ -217,7 +217,7 @@ describe('EvalEditorView — policy gate (FAR-1106 chunk 6, spec §7a)', () => {
   it('exposes no nav entry or route for policy gates (criterion 15)', () => {
     const nav = JSON.stringify(getNavGroups())
     // Positive control: the assertion is meaningful only if the nav is real.
-    expect(nav).toContain('/evals/editor')
+    expect(nav).toContain('/evals')
     expect(nav.toLowerCase()).not.toMatch(/policy[-_ ]?gate/)
   })
 

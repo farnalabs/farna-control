@@ -37,7 +37,7 @@
           <p class="mt-2 text-sm text-muted-foreground">
             {{ $t('views.SettingsLicenseView.tier_upgrade_sentence', { currentTier: planStore.getTierLabel(licenseInfo.tier), teamTier: planStore.getTierLabel('team') }) }}
           </p>
-          <Button as="a" href="https://modulo.run/pricing" target="_blank" rel="noopener noreferrer" class="mt-4 border-primary/30 hover:border-primary/60">
+          <Button as="a" href="https://farna.dev/control/pricing/" target="_blank" rel="noopener noreferrer" class="mt-4 border-primary/30 hover:border-primary/60">
             {{ $t('views.SettingsLicenseView.get_team_license') }}
             <ExternalLink class="h-3.5 w-3.5" />
           </Button>

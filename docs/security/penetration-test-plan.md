@@ -73,7 +73,7 @@ Full external penetration tests are conducted **quarterly** (every 3 months). A 
 
 ### 2.3 Rules of Engagement
 
-- Testing is limited to `control.farna.dev`, `*.farna.dev`, `*.modulo.run`, and the Farna Control GitHub organization
+- Testing is limited to `control.farna.dev`, `*.farna.dev`, and the Farna Control GitHub organization
 - No denial-of-service attacks against production without 48-hour written approval
 - No exfiltration of production customer data beyond what is minimally necessary to demonstrate a finding
 - All testing must use a dedicated test organization/tenant with synthetic data
@@ -89,7 +89,7 @@ Testing follows the **OWASP Web Security Testing Guide (WSTG) v5.0** with additi
 
 ### 3.1 Information Gathering (WSTG-INFO)
 
-- DNS enumeration and subdomain discovery across `farna.dev`, `control.farna.dev`, `modulo.run`, and `demo.modulo.run`
+- DNS enumeration and subdomain discovery across `farna.dev` and `control.farna.dev` (the legacy `modulo.run` domain only redirects to `farna.dev` and is out of scope)
 - Technology fingerprinting (HTTP headers, cookie attributes, framework signatures)
 - Endpoint discovery via common API path wordlists (`/api/v1/`, `/mcp/v1/`)
 - Directory listing and exposed `.git`, `.env`, and configuration files

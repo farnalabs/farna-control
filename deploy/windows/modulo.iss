@@ -72,9 +72,9 @@
 AppName=Farna Control
 AppVersion={#VERSION_NUM}
 AppPublisher=Farna Labs Ltd
-AppPublisherURL=https://modulo.run
-AppSupportURL=https://modulo.run/docs
-AppUpdatesURL=https://modulo.run/changelog
+AppPublisherURL=https://farna.dev/control/
+AppSupportURL=https://farna.dev/control/docs/
+AppUpdatesURL=https://github.com/farnalabs/farna-control/releases
 DefaultDirName={autopf}\Farna Control
 DefaultGroupName=Farna Control
 OutputDir=build/windows
