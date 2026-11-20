@@ -241,7 +241,7 @@ class TestCrossOrgIsolationGeneric:
 
 
 # ===========================================================================
-# Scenario 5: Alembic migration on all backends
+# Scenario 5: Alembic migration on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
 
@@ -419,15 +419,18 @@ class TestAdvisoryLockAbstraction:
 
 
 # ===========================================================================
-# Scenario 7: Time functions on all backends
+# Scenario 7: Time functions on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
 
 class TestTimeFunctionsMultiBackend:
-    """Verify func.now() / func.current_timestamp() work on all backends.
+    """Verify func.now() / func.current_timestamp() work on the supported pair.
 
-    The test validates that ORM models using SA-generic time functions are
-    backend-agnostic — no dialect-specific timestamp calls.
+    The supported pair is the SQLite test backend and PostgreSQL; those are the
+    only two dialects reachable at all, since SQLite is test-only and the
+    MySQL/MariaDB family is rejected at startup (ADR 068). The test validates
+    that ORM models using SA-generic time functions are backend-agnostic — no
+    dialect-specific timestamp calls.
     """
 
     def test_model_uses_sa_func_now_not_backend_specific(self) -> None:

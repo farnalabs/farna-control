@@ -279,8 +279,10 @@ PostgreSQL 16 is the only supported runtime database (ADR 068).
 
 SQLite remains in the automated test suite because in-memory `create_all` is
 fast and needs no database server; that is a test harness, not a deployment
-backend. The settings validator still accepts `sqlite`, `mariadb` and `mysql`,
-but those values only reach legacy code paths.
+backend. The settings validator accepts only `postgres` and `sqlite`:
+`mariadb` and `mysql` are rejected outright, and `sqlite` is accepted only when
+the test-only `FARNA_CONTROL_ALLOW_SQLITE=1` opt-in is set alongside a SQLite
+`DATABASE_URL`, so nothing but `postgres` reaches a deployment.
 
 ### PostgreSQL Requirements
 
