@@ -141,17 +141,36 @@ printf 'GET / -> SPA index (%s bytes)\n' "${#index}"
 assert_all_components_alive() {
   # Every component (postgres, redis, api, saq-runs, saq-system) must be alive
   # per `farna-control status --json`; both SAQ workers are named explicitly.
-  local status_json worker
-  as_user farna-control status
-  status_json="$(as_user farna-control status --json)"
-  for worker in saq-runs saq-system postgres redis api; do
-    /opt/farna-control/current/runtime/bin/python3 -I -c '
+  #
+  # The verdict and the printed table come from ONE `status --json` snapshot:
+  # two separate status calls can disagree while a worker is restarting. A
+  # snapshot with a component down is retried for up to 30s (a supervised
+  # restart in flight); a component that never shows alive fails the run.
+  local status_json verdict snapshot_deadline
+  snapshot_deadline=$((SECONDS + 30))
+  while :; do
+    status_json="$(as_user farna-control status --json)"
+    verdict="$(/opt/farna-control/current/runtime/bin/python3 -I -c '
 import json, sys
-payload = json.loads(sys.stdin.read())
-component = payload.get("components", {}).get(sys.argv[1]) or {}
-sys.exit(0 if component.get("alive") is True else 1)
-' "${worker}" <<< "${status_json}" || fail "${worker} is not alive per farna-control status --json"
-    printf '%s alive\n' "${worker}"
+components = json.loads(sys.stdin.read()).get("components", {})
+down = []
+for name in ("postgres", "redis", "api", "saq-runs", "saq-system"):
+    component = components.get(name) or {}
+    alive = component.get("alive") is True
+    pid = str(component.get("pid"))
+    print(f"{name:<12} pid={pid:<8} alive={str(alive).lower()}")
+    if not alive:
+        down.append(name)
+print("DOWN " + " ".join(down) if down else "ALL_ALIVE")
+' <<< "${status_json}")"
+    printf '%s\n' "${verdict}" | sed '$d'
+    if [[ "$(printf '%s\n' "${verdict}" | tail -n 1)" = "ALL_ALIVE" ]]; then
+      echo "all components alive in one status snapshot (incl. saq-runs and saq-system)"
+      return 0
+    fi
+    [[ "${SECONDS}" -lt "${snapshot_deadline}" ]] || fail "not alive per farna-control status --json: $(printf '%s\n' "${verdict}" | tail -n 1)"
+    echo "retrying: $(printf '%s\n' "${verdict}" | tail -n 1)"
+    sleep 3
   done
 }
 

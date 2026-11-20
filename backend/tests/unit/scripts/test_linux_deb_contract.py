@@ -249,7 +249,7 @@ def test_validation_boots_as_non_root_and_keeps_data_through_purge() -> None:
     text = VALIDATE_DEB.read_text(encoding="utf-8")
     assert 'runuser -u "${VALIDATION_USER}"' in text
     assert "as_user farna-control start --detach" in text
-    for marker in ('"${BASE}/healthz"', "saq-runs saq-system", "apt-get remove -y farna-control", "apt-get purge -y farna-control"):
+    for marker in ('"${BASE}/healthz"', '"saq-runs", "saq-system"', "apt-get remove -y farna-control", "apt-get purge -y farna-control"):
         assert marker in text
     purge = text.index("apt-get purge -y farna-control")
     assert '[[ -d "${DATA_DIR}" ]] || fail "user data dir ${DATA_DIR} was deleted by purge"' in text[purge:]
