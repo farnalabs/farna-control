@@ -851,12 +851,12 @@ def _check_instance_identity(
             "Instance identity MISMATCH — refusing to restore.\n"
             f"  Target instance: {target_mac}\n"
             f"  Archive instance: {archive_mac}\n"
-            "The target data dir holds a DIFFERENT populated Modulo instance than the backup. "
+            "The target data dir holds a DIFFERENT populated Farna Control instance than the backup. "
             "Pass --replace-cluster to intentionally replace it (with a confirmation), or restore "
             "onto a clean data dir."
         )
     click.echo(
-        f"REPLACE CLUSTER CONFIRMATION — you are about to OVERWRITE a populated Modulo instance:\n  Target instance (data dir): {target_mac}\n  Archive instance (backup):  {archive_mac}\nAll data in the target data dir's database will be replaced by the archive.",
+        f"REPLACE CLUSTER CONFIRMATION — you are about to OVERWRITE a populated Farna Control instance:\n  Target instance (data dir): {target_mac}\n  Archive instance (backup):  {archive_mac}\nAll data in the target data dir's database will be replaced by the archive.",
         err=True,
     )
     if not _is_interactive_stdin():
@@ -908,7 +908,7 @@ def _check_manifest_version(manifest: dict[str, Any]) -> None:
     if isinstance(raw_version, bool) or not isinstance(raw_version, int):
         raise click.ClickException(f"backup manifest_version is not an integer: {raw_version!r}")
     if raw_version > MANIFEST_VERSION:
-        raise click.ClickException(f"Refusing to restore: the archive's manifest_version {raw_version} is NEWER than this Modulo supports (max {MANIFEST_VERSION}). Upgrade Modulo first, then restore.")
+        raise click.ClickException(f"Refusing to restore: the archive's manifest_version {raw_version} is NEWER than this Farna Control version supports (max {MANIFEST_VERSION}). Upgrade Farna Control first, then restore.")
     if raw_version < 1:
         raise click.ClickException(f"Refusing to restore: invalid manifest_version {raw_version!r}.")
 
@@ -1000,7 +1000,7 @@ def _check_schema_downgrade(manifest: dict[str, Any]) -> None:
         return
     missing = sorted(set(archive_versions) - set(current))
     if missing:
-        raise click.ClickException(f"Refusing to restore: the archive's schema ({', '.join(missing)}) is NEWER than this installation speaks ({', '.join(current)}). Downgrading a database under an older binary corrupts the schema. Upgrade Modulo to the matching newer version first.")
+        raise click.ClickException(f"Refusing to restore: the archive's schema ({', '.join(missing)}) is NEWER than this installation speaks ({', '.join(current)}). Downgrading a database under an older binary corrupts the schema. Upgrade Farna Control to the matching newer version first.")
 
 
 def _db_has_modulo_tables(raw_url: str) -> bool:

@@ -266,7 +266,7 @@ async def test_initialize_and_tools_list_over_real_transport(
 ) -> None:
     """The real FastMCP server completes the MCP handshake and lists real tools."""
     async with _mcp_client_session(mcp_asgi_app, mcp_api_key) as (session, initialize_result):
-        assert initialize_result.serverInfo.name == "Modulo"
+        assert initialize_result.serverInfo.name == "Farna Control"
 
         tools = await session.list_tools()
         names = {tool.name for tool in tools.tools}
