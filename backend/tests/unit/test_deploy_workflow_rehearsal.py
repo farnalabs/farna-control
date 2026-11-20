@@ -3813,6 +3813,7 @@ def test_publish_release_guard_step_exists_and_validates_dependencies() -> None:
     assert env.get("RELEASE_RESULT") == "${{ needs.release.result }}"
     assert env.get("MANIFEST_RESULT") == "${{ needs.final-release-manifest.result }}"
     assert env.get("ATTEST_RESULT") == "${{ needs.attest-artefacts.result }}"
+    assert env.get("LINUX_DEB_RESULT") == "${{ needs.linux-deb.result }}"
     assert env.get("MACOS_RESULT") == "${{ needs.macos-installer.result }}"
     assert env.get("NOTARIZATION_RESULT") == "${{ needs.verify-notarization-tickets.result }}"
 
@@ -3822,6 +3823,7 @@ def test_publish_release_guard_step_exists_and_validates_dependencies() -> None:
         "release",
         "final-release-manifest",
         "attest-artefacts",
+        "linux-deb",
         "macos-installer",
         "verify-notarization-tickets",
     ):
@@ -4041,13 +4043,14 @@ def test_publish_release_guard_covers_exactly_its_needs() -> None:
 
 @pytest.mark.posix_only
 def test_publish_release_guard_all_success_exits_zero(tmp_path: Path) -> None:
-    """Guard script with all four dependencies as 'success' must exit 0."""
+    """Guard script with every dependency as 'success' must exit 0."""
     script = _extract_publish_release_guard_script()
     env = {
         **os.environ,
         "RELEASE_RESULT": "success",
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
+        "LINUX_DEB_RESULT": "success",
         "MACOS_RESULT": "success",
         "NOTARIZATION_RESULT": "success",
     }
@@ -4065,6 +4068,7 @@ def test_publish_release_guard_final_manifest_failure_fails_and_names_it(tmp_pat
         "RELEASE_RESULT": "success",
         "MANIFEST_RESULT": "failure",
         "ATTEST_RESULT": "success",
+        "LINUX_DEB_RESULT": "success",
         "MACOS_RESULT": "success",
         "NOTARIZATION_RESULT": "success",
     }
@@ -4084,6 +4088,7 @@ def test_publish_release_guard_attest_skipped_fails_and_names_it(tmp_path: Path)
         "RELEASE_RESULT": "success",
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "skipped",
+        "LINUX_DEB_RESULT": "success",
         "MACOS_RESULT": "success",
         "NOTARIZATION_RESULT": "success",
     }
