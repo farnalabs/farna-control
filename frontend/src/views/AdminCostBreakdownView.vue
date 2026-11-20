@@ -276,7 +276,19 @@ async function loadAnomalies() {
     if (err) {
       anomaliesError.value = `${t('views.AdminCostBreakdownView.failed_to_load_anomalies')}: ${formatApiError(err)}`
     } else if (data) {
-      anomalies.value = data
+      // The endpoint contract is a BARE ARRAY (`get_anomalies` returns
+      // `list[AnomalyResponse]`). A paged `{ items, total }` envelope — e.g.
+      // from a mis-shaped mock — would make the `activeAnomalies` /
+      // `dismissedAnomalies` computed throw `filter is not a function` and
+      // blank the page. Degrade to an empty list and surface the surprise
+      // rather than crash (FAR-2614).
+      const payload: unknown = data
+      if (Array.isArray(payload)) {
+        anomalies.value = payload as AnomalyResponse[]
+      } else {
+        console.warn('costs anomalies: expected an array response but received', payload)
+        anomalies.value = []
+      }
     }
   } catch (e: unknown) {
     anomaliesError.value = `${t('views.AdminCostBreakdownView.failed_to_load_anomalies')}: ${formatApiError(e)}`

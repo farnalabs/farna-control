@@ -327,6 +327,15 @@ export async function setupLocalMockApi(page: Page) {
         body: JSON.stringify({ sandbox_concurrency_limit: 4, is_default: true }),
       })
     }
+    if (url.includes('/api/v1/admin/costs/anomalies') && method === 'GET') {
+      // `get_anomalies` returns a BARE ARRAY (`list[AnomalyResponse]` — the
+      // generated 200 type is `components["schemas"]["AnomalyResponse"][]`),
+      // not the generic {items,total} envelope. AdminCostBreakdownView calls
+      // `.filter()` on it, so serving the envelope throws
+      // `TypeError: anomalies.value.filter is not a function` (FAR-2614).
+      // Registered BEFORE the generic GET catch-all below so it is reachable.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    }
     if (method === 'GET') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0 }) })
     }
