@@ -110,6 +110,12 @@ test.describe('Table system (FAR-2584)', () => {
     await loginAsAdmin(page, env)
     await page.goto('/')
 
+    // The dashboard summary loads asynchronously, so the table (and its
+    // seeded team row) is not in the DOM immediately after navigation.
+    const scroll = page.locator('[data-scroll="team-breakdown"]')
+    await expect(scroll).toBeVisible()
+    await expect(scroll.locator('tbody tr td').first()).toBeVisible()
+
     const padding = await page.evaluate(() => {
       const header = document.querySelector('[data-scroll="team-breakdown"] thead th') as HTMLElement
       const cell = document.querySelector('[data-scroll="team-breakdown"] tbody tr td') as HTMLElement
@@ -126,6 +132,10 @@ test.describe('Table system (FAR-2584)', () => {
     test.skip(env.name !== 'local', 'needs the mocked notification-preferences response')
     await loginAsAdmin(page, env)
     await page.goto('/settings/notifications')
+
+    // The route component is lazily imported and loads its preferences
+    // asynchronously; the card is not in the DOM immediately after navigation.
+    await expect(page.locator('.page-wide .card').first()).toBeVisible()
 
     const widths = await page.evaluate(() => {
       const pageEl = document.querySelector('.page-wide') as HTMLElement
@@ -144,7 +154,32 @@ test.describe('Table system (FAR-2584)', () => {
   test('Audit Log keeps the page rhythm between the filter card and the table', { tag: '@regression' }, async ({ page, env }) => {
     test.skip(env.name !== 'local', 'needs the mocked audit ledger response')
     await loginAsAdmin(page, env)
+    // The generic local mock returns an empty ledger, which renders the empty
+    // state instead of the table. Seed one event so the table shell exists.
+    await page.route('**/api/v1/admin/audit**', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [{
+          id: 'evt-1',
+          event_type: 'pipeline.created',
+          actor_user_id: '1',
+          created_at: '2026-07-07T09:15:00Z',
+          resource_type: 'pipeline',
+          resource_id: '00000000-0000-0000-0000-000000000001',
+          payload_json: {},
+          request_id: null,
+          previous_hash: null,
+        }],
+        total: 1,
+        next_cursor: null,
+      }),
+    }))
     await page.goto('/admin/audit')
+
+    // The route component is lazily imported and loads its ledger
+    // asynchronously; wait for the table before measuring the gap.
+    await expect(page.locator('#admin-audit-source-org .table-wrapper')).toBeVisible()
 
     const gap = await page.evaluate(() => {
       const panel = document.querySelector('#admin-audit-source-org') as HTMLElement
