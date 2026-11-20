@@ -919,3 +919,72 @@ def test_system_map_overview_is_registered_without_unimplemented_tools() -> None
 
     assert "get_system_map_overview" in mcp._tool_manager._tools
     assert TOOL_SCOPE_REQUIREMENTS["get_system_map_overview"] == "system_map.overview"
+
+
+# ---------------------------------------------------------------------------
+# FAR-2595: the MCP feature gate must apply the org feature override
+# ---------------------------------------------------------------------------
+
+
+def _patched_plan_gate(plan_enabled: bool, overrides: dict[str, bool] | None) -> Any:
+    """Patch the org read + plan resolution ``_require_plan_feature`` performs."""
+    from contextlib import asynccontextmanager
+
+    org = SimpleNamespace(settings_json={"feature_overrides": overrides} if overrides is not None else {})
+    plan_ctx = MagicMock()
+    plan_ctx.feature_enabled.return_value = plan_enabled
+
+    @asynccontextmanager
+    async def _cm(_org_id: uuid.UUID) -> AsyncGenerator[AsyncMock, None]:
+        yield AsyncMock()
+
+    return (
+        plan_ctx,
+        patch("farna.api.mcp_server._session", _cm),
+        patch("farna.db.crud.organisation.get_organisation", new=AsyncMock(return_value=org)),
+        patch("farna.core.feature_flags.resolve_plan_context", new=AsyncMock(return_value=plan_ctx)),
+    )
+
+
+@pytest.mark.asyncio
+async def test_plan_feature_gate_applies_an_org_override() -> None:
+    """A default-OFF flag enabled by the org is allowed over MCP too."""
+    from farna.api.mcp_server import _require_plan_feature
+
+    _, session_patch, org_patch, plan_patch = _patched_plan_gate(
+        plan_enabled=False,
+        overrides={"system_maps": True},
+    )
+    with session_patch, org_patch, plan_patch:
+        result = await _require_plan_feature(ORG_ID, MagicMock(), "system_maps")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_plan_feature_gate_refuses_without_an_org_override() -> None:
+    """No override leaves the DEFAULT-OFF plan default in force."""
+    from farna.api.mcp_server import _require_plan_feature
+
+    _, session_patch, org_patch, plan_patch = _patched_plan_gate(plan_enabled=False, overrides=None)
+    with session_patch, org_patch, plan_patch:
+        result = await _require_plan_feature(ORG_ID, MagicMock(), "system_maps")
+
+    assert result is not None
+    assert result["error"] == "feature_required"
+
+
+@pytest.mark.asyncio
+async def test_plan_feature_gate_org_override_false_wins_over_the_plan_default() -> None:
+    """Precedence matches GET /api/v1/plan: explicit override beats the default."""
+    from farna.api.mcp_server import _require_plan_feature
+
+    _, session_patch, org_patch, plan_patch = _patched_plan_gate(
+        plan_enabled=True,
+        overrides={"system_maps": False},
+    )
+    with session_patch, org_patch, plan_patch:
+        result = await _require_plan_feature(ORG_ID, MagicMock(), "system_maps")
+
+    assert result is not None
+    assert result["error"] == "feature_required"

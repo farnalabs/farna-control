@@ -648,14 +648,14 @@ def _mcp_flag_visible(
 ) -> bool:
     """Return whether the MCP caller may see ``flag_name`` in a flag listing.
 
-    Internal flags are hidden from ordinary callers behind the retained
-    lifecycle-map gate. ``system_maps`` is a normal default-OFF flag since
-    FAR-2595, so it is listed for every caller and has no visibility branch
-    here.
+    Retired internal flags need the retained lifecycle-map gate; any other
+    internal-only flag is hidden from ordinary callers; everything else
+    (including ``system_maps``, a normal default-OFF flag since FAR-2595) is
+    listed for every caller.
     """
-    if flag_name not in INTERNAL_FLAGS:
-        return True
-    return flag_name in RETIRED_INTERNAL_FLAGS and internal_lifecycle_access
+    if flag_name in RETIRED_INTERNAL_FLAGS:
+        return internal_lifecycle_access
+    return flag_name not in INTERNAL_FLAGS
 
 
 def _ctx_team_id_val() -> uuid.UUID | None:
@@ -3833,22 +3833,30 @@ def _analytics_deep_link(result: dict[str, Any], params: AnalyticsParams) -> str
 
 
 async def _require_plan_feature(org_id: uuid.UUID, settings: Any, feature_name: str) -> dict[str, Any] | None:
-    """REST-parity plan-feature gate for an MCP tool (mirrors ``require_feature``).
+    """Org-aware plan-feature gate for an MCP tool.
 
-    Returns the standard ``feature_required`` error dict when the org's plan
-    does not enable ``feature_name``, else ``None``.
+    Returns the standard ``feature_required`` error dict when the org does not
+    enable ``feature_name``, else ``None``.
+
+    FAR-2595: this applies the org's ``settings_json.feature_overrides`` on top
+    of the tier/licence default, with the same precedence as ``GET
+    /api/v1/plan``. Without that overlay a default-OFF, org-toggleable flag
+    (``system_maps``) would stay refused forever even after an admin enabled
+    it: ``resolve_plan_context`` alone never reads org overrides.
     """
-    from farna.core.feature_flags import resolve_plan_context
+    from farna.core.feature_flags import feature_overrides_from_settings, resolve_plan_context
     from farna.db.crud.organisation import get_organisation
 
     async with _session(org_id) as s:
         org = await get_organisation(s, org_id)
     async with _session(org_id) as s:
         plan_ctx = await resolve_plan_context(settings, s, org)
-    if not plan_ctx.feature_enabled(feature_name):
+    override = feature_overrides_from_settings(getattr(org, "settings_json", None)).get(feature_name)
+    enabled = plan_ctx.feature_enabled(feature_name) if override is None else override
+    if not enabled:
         return {
             "error": "feature_required",
-            "detail": f"{feature_name} is not available on your plan",
+            "detail": f"{feature_name} is not enabled for this organisation",
         }
     return None
 

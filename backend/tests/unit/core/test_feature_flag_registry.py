@@ -346,6 +346,18 @@ class TestDbCatalogTeamTierFlags:
 
 
 class TestRetiredInternalFlags:
+    def test_retired_and_internal_flags_are_disjoint(self) -> None:
+        """FAR-2595: no flag is classified both retired and internal.
+
+        The two sets used to both contain ``lifecycle_map_journeys``, which
+        forced every reader to union them and made the classification
+        ambiguous. Retired flags live in ``RETIRED_INTERNAL_FLAGS``;
+        ``INTERNAL_FLAGS`` is for a future non-retired internal-only flag.
+        """
+        from farna.core.feature_flags import INTERNAL_FLAGS, RETIRED_INTERNAL_FLAGS
+
+        assert RETIRED_INTERNAL_FLAGS.isdisjoint(INTERNAL_FLAGS)
+
     def test_lifecycle_map_journeys_is_retained_for_compatibility_but_not_customer_configurable(self) -> None:
         registry = FeatureFlagRegistry()
         assert {"lifecycle_map_journeys"} == RETIRED_INTERNAL_FLAGS

@@ -30,6 +30,7 @@ from farna.api.dependencies import (
     get_or_create_engine,
     get_or_create_session_factory,
     require_feature,
+    require_org_feature,
     require_permission,
 )
 from farna.api.schemas.system_maps import (
@@ -171,7 +172,11 @@ OVERVIEW_WINDOW_MAX_DAYS = 90
 _UNHEALTHY_FAILURE_RATE_THRESHOLD = 0.5
 
 _INTERNAL_SYSTEM_MAP_PERMISSION = SYSTEM_MAPS_ACCESS_PERMISSION
-_require_system_maps_feature = require_feature("system_maps")
+# FAR-2595: the authoring flag is default-OFF and org-toggleable, so it MUST
+# be resolved with the org's ``feature_overrides`` applied. Plain
+# ``require_feature`` only reads the tier/licence default, which is always OFF
+# for this flag, so an admin enabling it in the UI would still get 402 here.
+_require_system_maps_feature = require_org_feature("system_maps")
 _require_system_maps_read_feature = require_feature("system_maps_read")
 
 _log = logging.getLogger(__name__)

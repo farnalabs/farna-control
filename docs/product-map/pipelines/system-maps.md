@@ -43,6 +43,7 @@ unit-tests:
   - backend/tests/unit/db/test_system_map_repository.py
   - backend/tests/unit/db/test_system_map_models.py
   - backend/tests/unit/cli/apply/test_system_map_apply.py
+  - backend/tests/integration/test_system_maps_authoring_flag.py
   - backend/tests/integration/test_system_maps_discovery.py
   - backend/tests/integration/test_system_maps_version_aware.py
   - backend/tests/integration/test_system_maps_overview_metrics.py
@@ -77,7 +78,9 @@ the manifest as `public` and gated on `required_permissions:
 [system_maps.read]`), while authoring (discovery, create, update, delete,
 publish, archive, restore-as-new and apply) is a clearly-labelled Beta-preview
 surface behind the default-OFF, per-organisation `system_maps` feature flag
-(operator/admin role + `system_maps_access` grant). FAR-2595 removed the
+(resolved with the organisation's `feature_overrides` applied, so an admin
+toggle really unlocks the API) plus the operator/admin role and
+`system_maps_access` grant. FAR-2595 removed the
 developer-mode requirement from that authoring gate so Alpha self-hosters can
 dogfood it; the flag remains OFF until an org admin (or system admin) enables
 it. Both classes are registered in the manifest `features:` registry as
@@ -120,9 +123,12 @@ point in time.
 - [x] Every System Maps request passes three gates and fails closed: the
       router-level `_require_internal_system_maps_access`, which enforces the
       operator role floor through `require_in_dev_operator` (developer mode is
-      NOT required since FAR-2595), the `require_feature("system_maps")`
-      entitlement gate (disabled -> 402), and the handler's
-      `require_permission(...)` role floor, all before any inventory read. The
+      NOT required since FAR-2595), the org-aware
+      `require_org_feature("system_maps")` entitlement gate (disabled -> 402;
+      it applies `settings_json.feature_overrides` on top of the plan default,
+      because plain `require_feature` never reads overrides and this flag is
+      DEFAULT-OFF), and the handler's `require_permission(...)` role floor, all
+      before any inventory read. The
       dedicated `system_maps_access` grant is an additional leg that binds only
       grant-bearing API keys: `_enforce_key_grant` treats `key_grants is None`
       as a no-op because `grants_permit(None, ...)` returns `True`, so a legacy
@@ -142,7 +148,13 @@ point in time.
       `viewer`) can list/get published maps, the current/published revision,
       by-time, history, overview and diff. Drafts and unpublished maps are
       filtered in the repository (`published_only=True`) and re-checked in the
-      route (404), never merely hidden in the UI. The authoring gate is
+      route (404), never merely hidden in the UI. The internal draft-read probe
+      (`_system_maps_internal_access`) is deliberately role + `system_maps_access`
+      grant only and does NOT consult the authoring flag: an operator who can
+      author keeps read access to the org's existing unpublished drafts when the
+      org switches authoring off, so a feature toggle cannot hide or strand
+      saved data from the operators responsible for it (deliberate decision,
+      FAR-2595). The authoring gate is
       `system_maps_access` (operator role, `system_maps` flag; no developer
       mode since FAR-2595) and still guards create/update/delete, revision
       create/publish/archive/delete, restore-as-new, attribution bindings,

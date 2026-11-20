@@ -24,6 +24,24 @@ from tests.unit.api.mock_session import configure_mock_session
 
 _VALID_32 = "a" * 32
 _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+@pytest.fixture(autouse=True)
+def _no_org_feature_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the org-aware feature gate off the mocked session queue.
+
+    ``require_org_feature`` reads the org row to apply ``feature_overrides``.
+    These tests pin the plan default with a stubbed ``get_plan_context`` and
+    already script ``session.execute`` for the inventory reads, so the org read
+    is stubbed to "no overrides" rather than consuming one of those results.
+    """
+
+    async def _none(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("farna.db.crud.organisation.get_organisation", _none)
+
+
 _USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 _MAP_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 _REVISION_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")

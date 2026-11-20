@@ -298,14 +298,14 @@ RETIRED_INTERNAL_FLAGS: frozenset[str] = frozenset({"lifecycle_map_journeys"})
 # internal operators (system admin + operator role + in-dev grant). These are
 # filtered from customer-facing catalogue and plan responses (see
 # effective_feature_flags, get_available_features MCP tool).
-# FAR-2595: ``system_maps`` deliberately left this set — its authoring surface
-# is a Beta-preview feature released behind the default-OFF ``system_maps``
-# flag, not a dev-mode-only internal surface.
-INTERNAL_FLAGS: frozenset[str] = frozenset(
-    {
-        "lifecycle_map_journeys",
-    }
-)
+#
+# FAR-2595: the set is currently empty. ``system_maps`` left it (its authoring
+# surface is a Beta-preview feature behind the default-OFF ``system_maps``
+# flag, not a dev-mode-only internal surface), and the retained
+# ``lifecycle_map_journeys`` lives in ``RETIRED_INTERNAL_FLAGS``. Keeping the
+# two sets disjoint avoids every reader having to union/duplicate them; a
+# future internal-only flag that is NOT retired belongs here.
+INTERNAL_FLAGS: frozenset[str] = frozenset()
 
 
 DEFAULT_OFF_FLAGS: frozenset[str] = frozenset(

@@ -71,9 +71,16 @@ def cap_discovery_sources(
     return ordered[:max_sources], len(ordered)
 
 
-def discovery_truncation_warning(total: int, max_sources: int) -> str:
-    """Visible warning for a scan that hit the source cap."""
-    return f"Discovery is capped at {max_sources} sources; {total - max_sources} of {total} organisation sources were not scanned"
+def discovery_truncation_warning(max_sources: int) -> str:
+    """Visible warning for a scan that hit the source cap.
+
+    States only what was measured: the cap and the fact that further sources
+    were not scanned. It deliberately does NOT report an "N of M" total, because
+    the inventory queries are bounded per kind before the merge, so a total
+    derived from those rows would understate a large tenant's real inventory and
+    put a false number in user-facing copy.
+    """
+    return f"Discovery is capped at {max_sources} sources; additional organisation sources beyond the cap were not scanned"
 
 
 def _relationship(
@@ -216,7 +223,7 @@ def discover_draft(
     skipped.extend(_improvement_loop_skips(pipelines))
 
     if total_sources > max_sources:
-        warnings.append(discovery_truncation_warning(total_sources, max_sources))
+        warnings.append(discovery_truncation_warning(max_sources))
     if not nodes:
         warnings.append("No supported organisation sources were available for discovery")
     if skipped:
