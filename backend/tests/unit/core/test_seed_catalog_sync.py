@@ -59,7 +59,6 @@ class TestFar114SyncedFlags:
             "error_tracking",
             "runtime_config",
             "rate_limits",
-            "email_config",
             "scim",
             "pipeline_delete",
         }
