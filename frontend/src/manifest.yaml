@@ -4578,12 +4578,6 @@ elements:
       - testid: library-section-native
         type: button
         dynamic_testid: false
-      - testid: library-section-community
-        type: button
-        dynamic_testid: false
-      - testid: library-community-disclaimer
-        type: element
-        dynamic_testid: false
       - testid: library-error
         type: element
         dynamic_testid: false
@@ -4593,10 +4587,6 @@ elements:
       - testid: library-previous-page
         type: button
         dynamic_testid: false
-      - testid: library-community-badge
-        type: element
-        dynamic_testid: false
-
       - testid: library-create-pipeline
         type: button
         dynamic_testid: false
@@ -8163,11 +8153,11 @@ features:
         description: Reusable pipeline templates and the template library
         status: covered
         behaviours:
-            - "[x] The library lists native and community primitives with search and type filtering"
+            - "[x] The library lists native primitives with search and type filtering"
             - "[x] Library items can be copied into the org with the CopyToAdaptWizard"
             - "[x] Library collections authoring and publishing ship behind the library_collection feature flag: a collection is created as a draft, its manifest pins are updated while draft, and it is published — invalid/duplicate pins, an empty manifest and more than MAX_COLLECTION_PINS are rejected 422, a duplicate slug is 409, and every collection endpoint 404s when the flag is off (docs/product-map/library/library.md, backend/tests/unit/api/test_library_collection.py)"
             - "[x] Workflow bundle export writes a .modulo.zip / signed YAML bundle with org-private fields (owner_team_id, visibility, credentials/ciphertexts, env secrets) stripped, and workflow import runs a two-phase REST contract — /import/analyse resolves connector/schema(abstract_name)/model-backend references and detects pipeline-name conflicts with a disambiguation suffix, /import/confirm materialises the pipeline (200 imported); a tampered non-JSON bundle is rejected 400 without creating entities (backend/tests/bdd/features/workflows/import.feature, workflows/export.feature, steps/test_workflows.py)"
-            - "[x] Composite library-primitive content is masked on every read surface (FAR-1380): the shared LibraryPrimitiveResponse._mask_composite_graph_credentials validator masks credential-bearing node fields inside a composite primitive's content_json for the library list/get/create/patch/delete/restore/adapt responses, community contribute + contributions list + admin publish responses, the community install response and the fixture contributions list, and the MCP modulo://library/{type}/{slug} resource masks composite nodes before rendering; non-composite primitives pass through byte-identical. The FAR-1374 sentinel rule applies on write: POST /api/v1/libraries, PATCH /api/v1/libraries/{id} and POST /api/v1/libraries/community/contribute resolve a submitted mask echo against the stored sub-graph (resolve_and_reject_mask_sentinels) and refuse an unmappable sentinel with 422 COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL, and a masked-read -> patch round-trip preserves the stored secret (backend/tests/unit/api/test_library_primitive_masking.py, api/routes/library.py, api/mcp_server.py; control statement docs/deployment-security.md 2.6)"
+            - "[x] Composite library-primitive content is masked on every read surface (FAR-1380): the shared LibraryPrimitiveResponse._mask_composite_graph_credentials validator masks credential-bearing node fields inside a composite primitive's content_json for the library list/get/create/patch/delete/restore/adapt responses, the fixture contributions list, and the MCP modulo://library/{type}/{slug} resource masks composite nodes before rendering; non-composite primitives pass through byte-identical. The FAR-1374 sentinel rule applies on write: POST /api/v1/libraries, PATCH /api/v1/libraries/{id} resolve a submitted mask echo against the stored sub-graph (resolve_and_reject_mask_sentinels) and refuse an unmappable sentinel with 422 COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL, and a masked-read -> patch round-trip preserves the stored secret (backend/tests/unit/api/test_library_primitive_masking.py, api/routes/library.py, api/mcp_server.py; control statement docs/deployment-security.md 2.6)"
         deferrals:
             - "Collections authoring is gated behind the default-off library_collection feature flag per org (FAR-760); collection install/uninstall + community trust gates are tracked under feat-library-collections"
     feat-library-collections:

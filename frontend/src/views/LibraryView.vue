@@ -72,13 +72,8 @@
         </button>
       </div>
       <!-- The shared PageTabs receives these stable tab test IDs from libraryTabs:
-           :data-testid="'library-section-native'", :data-testid="'library-section-community'",
-           and :data-testid="'library-section-collections'". -->
+           :data-testid="'library-section-native'" and :data-testid="'library-section-collections'". -->
       <PageTabs :tabs="libraryTabs" @tab-click="onLibraryTabClick" />
-
-      <p v-if="section === 'community'" class="text-sm text-muted-foreground" data-testid="library-community-disclaimer">
-        {{ $t('views.LibraryView.community_disclaimer') }}
-      </p>
 
       <div
         v-if="(loading && section !== 'collections') || (collectionsLoading && section === 'collections')"
@@ -109,10 +104,6 @@
         data-testid="library-collections-error"
       />
 
-      <EmptyState
-        v-else-if="section === 'community' && communityPrimitives.length === 0"
-        :title="$t('views.LibraryView.no_primitives_found')"
-      />
       <EmptyState
         v-else-if="section === 'native' && nativePrimitives.length === 0 && previewPrimitives.length === 0"
         :title="$t('views.LibraryView.no_primitives_found')"
@@ -152,20 +143,6 @@
           />
         </div>
       </details>
-
-      <div v-if="section === 'community' && communityPrimitives.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <LibraryPrimitiveCard
-          v-for="prim in communityPrimitives"
-          :key="prim.id"
-          :prim="prim"
-          badge="community"
-          :adapting="adapting"
-          @create-pipeline="createPipeline"
-
-          @view-details="viewPrimitive"
-          @toggle-auto-update="toggleAutoUpdate"
-        />
-      </div>
 
       <div v-if="section === 'collections'" class="space-y-4">
         <div class="flex justify-end">
@@ -291,9 +268,9 @@ function removeType(value: string) {
   onFilterChange()
 }
 
-type LibrarySection = 'native' | 'community' | 'collections'
+type LibrarySection = 'native' | 'collections'
 function routeSection(value: unknown): LibrarySection {
-  return value === 'community' || value === 'collections' ? value : 'native'
+  return value === 'collections' ? value : 'native'
 }
 
 const section = ref<LibrarySection>(routeSection(route.query.section))
@@ -303,7 +280,6 @@ const libraryTabs = computed(() => [
   // `defaultQuery` marks the state `/library` falls back to when `section` is
   // absent from the URL, so the Native tab is active on a bare `/library`.
   { label: t('views.LibraryView.native_library'), to: '/library?section=native', dataTestId: 'library-section-native', defaultQuery: true },
-  { label: t('views.LibraryView.community_tab'), to: '/library?section=community', dataTestId: 'library-section-community' },
   { label: t('views.LibraryView.collections_tab'), to: '/library?section=collections', dataTestId: 'library-section-collections' },
 ])
 
@@ -322,7 +298,6 @@ const { loading, error, data: loadResp, load: loadPrimitives } = useDataFetch<Li
       page: number
       page_size: number
       search?: string
-      source?: string
       primitive_type?: string
       primitive_types?: string
     } = {
@@ -330,7 +305,6 @@ const { loading, error, data: loadResp, load: loadPrimitives } = useDataFetch<Li
       page_size: pageSize.value,
     }
     if (search.value) query.search = search.value
-    if (section.value === 'community') query.source = 'community'
     if (selectedTypes.value.length === 1) query.primitive_type = selectedTypes.value[0]
     if (selectedTypes.value.length > 1) query.primitive_types = selectedTypes.value.join(',')
 
@@ -352,7 +326,7 @@ function isAlphaPrimitive(primitive: LibraryPrimitive): boolean {
 watch([loadResp, section], ([d]) => {
   if (d) {
     const visibleItems = d.items.filter(isAlphaPrimitive)
-    primitives.value = section.value === 'native' ? visibleItems.filter(p => p.source !== 'community') : visibleItems
+    primitives.value = visibleItems
     total.value = d.total
   }
 }, { immediate: true })
@@ -387,7 +361,6 @@ function applyTypeFilter(items: LibraryPrimitive[]): LibraryPrimitive[] {
 
 const nativePrimitives = computed(() => applyTypeFilter(primitives.value.filter(p => (p.tier ?? 'native') !== 'preview' && (p.tier ?? 'native') !== 'in_dev')))
 const previewPrimitives = computed(() => applyTypeFilter(primitives.value.filter(p => p.tier === 'preview')))
-const communityPrimitives = computed(() => applyTypeFilter(primitives.value.filter(p => p.source === 'community')))
 
 const collectionPrimitives = ref<LibraryPrimitive[]>([])
 const collectionsTotal = ref(0)
