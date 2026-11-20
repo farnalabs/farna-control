@@ -1280,8 +1280,8 @@ class GitHubConnector(ConnectorBase):
         return ref
 
     def _require_commit_message(self, data: dict[str, Any], resource: str) -> str:
-        """Get the commit message for a batch commit (default 'Update via Modulo')."""
-        message = data.get("message", "Update via Modulo")
+        """Get the commit message for a batch commit (default 'Update via Farna Control')."""
+        message = data.get("message", "Update via Farna Control")
         if not isinstance(message, str) or not message:
             raise ValueError(f"GitHub resource {resource!r} requires a non-empty 'message'")
         return message
@@ -1386,7 +1386,7 @@ class GitHubConnector(ConnectorBase):
         owner_repo = self._require_write_filter(payload.data, "repo", "file")
         path = _validate_path(self._require_write_filter(payload.data, "path", "file"), "file")
         body: dict[str, Any] = {
-            "message": payload.data.get("message", "Update via Modulo"),
+            "message": payload.data.get("message", "Update via Farna Control"),
             "content": _encode_write_content(payload.data, "file"),
         }
         if "sha" in payload.data:

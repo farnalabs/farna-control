@@ -47,7 +47,7 @@ def test_backup_is_registered_and_help_survives() -> None:
 def test_restore_is_registered_and_help_survives() -> None:
     result = CliRunner().invoke(cli_main.cli, ["restore", "--help"])
     assert result.exit_code == 0
-    assert "Restore a Modulo database" in result.output
+    assert "Restore a Farna Control database" in result.output
 
 
 def test_apply_is_registered_and_help_survives() -> None:

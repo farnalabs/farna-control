@@ -468,7 +468,7 @@ async def test_forwarder(
         organisation_id=org_id,
         fingerprint=test_group.fingerprint,
         level="error",
-        message="Test error from Modulo forwarder configuration",
+        message="Test error from Farna Control forwarder configuration",
         source="modulo-test",
         environment="test",
     )

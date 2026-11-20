@@ -749,7 +749,7 @@ async def test_query_tree_missing_project(connector):
 @respx.mock
 async def test_write_files_batch_commit(connector):
     """Batch file ops go through the Commits API as one atomic commit."""
-    commit_response = {"id": "abc123", "short_id": "abc123", "title": "Update via Modulo"}
+    commit_response = {"id": "abc123", "short_id": "abc123", "title": "Update via Farna Control"}
     route = respx.post(f"{_API}/projects/group%2Fproject/repository/commits").mock(return_value=httpx.Response(201, json=commit_response))
     result = await connector.write(
         ConnectorPayload(
@@ -767,7 +767,7 @@ async def test_write_files_batch_commit(connector):
     assert result["id"] == "abc123"
     body = json.loads(route.calls.last.request.content)
     assert body["branch"] == "main"
-    assert body["commit_message"] == "Update via Modulo"
+    assert body["commit_message"] == "Update via Farna Control"
     assert body["actions"] == [
         {"action": "create", "file_path": "src/a.py", "content": "print(1)"},
         {"action": "update", "file_path": "src/b.py", "content": "print(2)"},

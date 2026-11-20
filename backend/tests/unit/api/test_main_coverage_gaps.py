@@ -504,7 +504,7 @@ async def test_lifespan_full_boot_and_teardown(monkeypatch: pytest.MonkeyPatch) 
     _patch_lifespan_seams(monkeypatch, settings)
     async with main._lifespan(main.app):
         pass
-    assert main.app.title == "Modulo"
+    assert main.app.title == "Farna Control"
 
 
 @pytest.mark.anyio
@@ -514,7 +514,7 @@ async def test_lifespan_seeds_demo_orgs_when_enabled(monkeypatch: pytest.MonkeyP
     seed_demo_orgs = AsyncMock()
     monkeypatch.setattr("farna.core.seed_data.demo_data.seed_demo_orgs", seed_demo_orgs)
     async with main._lifespan(main.app):
-        assert main.app.title == "Modulo"
+        assert main.app.title == "Farna Control"
     assert seed_demo_orgs.await_count == 1
 
 
