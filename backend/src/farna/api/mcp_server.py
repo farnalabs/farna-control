@@ -43,7 +43,7 @@ from jwt import InvalidTokenError as JWTError
 # (coverage 7.16.2), which can delete `pydantic.root_model` while leaving a
 # dangling `RootModel` attribute, crashing that specialization. See the
 # "pydantic.root_model residency guard" note in backend/tests/conftest.py
-# (the dedicated regression test was removed with the community library).
+# (the dedicated regression test was removed with the library sync package).
 import pydantic.root_model  # noqa: F401  # isort: skip
 
 from mcp.server.fastmcp import FastMCP

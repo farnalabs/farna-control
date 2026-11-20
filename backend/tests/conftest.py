@@ -52,7 +52,7 @@ os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 # inside product code would NOT work: product modules first execute inside the
 # rollback block, so their import is deleted again. (The dedicated regression
 # test, ``tests/unit/library_sync/test_coverage_source_import_guard.py``, was
-# removed with the community library; this import is kept as the defence.)
+# removed along with its subject; this import is kept as the defence.)
 import sys
 from pathlib import Path
 

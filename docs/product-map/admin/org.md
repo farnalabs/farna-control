@@ -131,7 +131,7 @@ behavior is covered by the citations above.
   closed the lingering `ui/org_settings.feature` gap. Archived the five
   never-executing UI-journey drafts (verified: 0/11 referenced testids exist in
   `frontend/src`; `/admin/org` ships a different surface - org profile, data
-  export, product-analytics + community-objects toggles, with no active-org
+  export, product-analytics toggle, with no active-org
   delete control because the self-service API refuses deletion (FAR-2225))
   and re-anchored `feat-org` to the real org-management coverage: self-service
   org profile read/rename + admin role gate (unit, `test_admin.py`),
@@ -145,7 +145,7 @@ behavior is covered by the citations above.
 - 2026-09-27: **Improve Architecture product-map walk** -
   reconciled the stale "org settings UI not yet built" Known Gap: the
   `/admin/org` UI ships (`AdminOrgSettingsView.vue`, org profile, data export,
-  product-analytics / community-objects toggles, and no active-org delete
+  product-analytics toggle, and no active-org delete
   control because self-service deletion is refused (FAR-2225)) and its surface
   is guarded in the manifest; the remaining gap was re-scoped to the
   `@awaiting-implementation` UI-journey BDD scenarios, which describe frontend

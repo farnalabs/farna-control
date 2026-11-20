@@ -42,8 +42,8 @@ rules:
         # multi-host endpoints. They are excluded so this gate stays green
         # while they remain un-migrated, but they are documented residual —
         # NOT accepted raw egress. A new raw construction anywhere else in the
-        # tree is still caught - including core/library_sync/**,
-        # core/product_analytics/** and core/notifier/**, which now build
+        # tree is still caught - including core/product_analytics/**
+        # and core/notifier/**, which now build
         # through the pinned factory and are deliberately NOT excluded.
         - "**/backend/src/farna/core/error_tracking/**"
         - "**/backend/src/farna/core/watchdog/**"

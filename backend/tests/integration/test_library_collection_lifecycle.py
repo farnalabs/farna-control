@@ -187,10 +187,12 @@ async def _seed_collection(
                 "INSERT INTO library_primitives "
                 "(id, organisation_id, source, primitive_type, name, slug, "
                 "author, version, tags, content_json, visibility, tier, "
-                "status, manifest_pins, version_group_id) "
+                "status, manifest_pins, version_group_id, "
+                "source_url, checksum, verified, download_count) "
                 "VALUES (:id, :oid, :source, 'library_collection', :name, :slug, "
                 "'test', :version, '[]'::json, '{}'::json, 'org', 'native', "
-                ":status, :pins, :vgid)"
+                ":status, :pins, :vgid, "
+                ":source_url, :checksum, :verified, :download_count)"
             ),
             {
                 "id": str(prim_id),
@@ -202,6 +204,12 @@ async def _seed_collection(
                 "status": status,
                 "pins": __import__("json").dumps(manifest_pins),
                 "vgid": str(version_group_id) if version_group_id else None,
+                # ck_library_primitives_source_fields: registry rows carry
+                # download provenance, every other source must leave it NULL.
+                "source_url": "https://registry.example.test/collection" if source == "registry" else None,
+                "checksum": "0" * 64 if source == "registry" else None,
+                "verified": False if source == "registry" else None,
+                "download_count": 0 if source == "registry" else None,
             },
         )
     return prim_id
@@ -775,18 +783,18 @@ async def test_reinstall_same_version_idempotent(
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Grant on community-sourced collection
+# Test 4: Grant on registry-sourced collection
 # ---------------------------------------------------------------------------
 
 
-async def test_grant_community_collection_agents(
+async def test_grant_registry_collection_agents(
     db_engine: AsyncEngine,
     db_session: AsyncSession,
     org: uuid.UUID,
     user: uuid.UUID,
     model_backend: uuid.UUID,
 ) -> None:
-    """Install a community-sourced collection → grant → verify agents_granted."""
+    """Install a registry-sourced collection → grant → verify agents_granted."""
     await _seed_schema(db_engine, org, "input-schema", name="Input Schema")
     await _seed_agent(db_engine, org, "test-agent", name="Test Agent")
     pins = [
@@ -797,13 +805,13 @@ async def test_grant_community_collection_agents(
         db_engine,
         org,
         pins,
-        source="community",
+        source="registry",
     )
 
     install = await install_collection(db_session, org, user, collection_id)
     await db_session.commit()
 
-    assert install.community_sourced is True
+    assert install.registry_sourced is True
     assert install.agents_granted is False
 
     # Grant
@@ -848,7 +856,7 @@ async def test_install_shipped_github_pr_reviewer_collection(
 
     assert install.status == "installed"
     assert install.organisation_id == org
-    assert install.community_sourced is False
+    assert install.registry_sourced is False
     install_id = install.install_id
 
     # Entity round trip: 1 schema, 5 agents (1 standalone + 4 template), 1 pipeline

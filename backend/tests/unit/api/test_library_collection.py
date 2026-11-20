@@ -1303,7 +1303,7 @@ class TestInstallCollectionService:
         assert install is not None
         assert install.status == "installed"
         assert install.organisation_id == _ORG_ID
-        assert install.community_sourced is False
+        assert install.registry_sourced is False
         assert install.resolved_manifest == {
             "schemas": {},
             "agents": {},
@@ -1476,14 +1476,14 @@ class TestUninstallCollectionService:
 # Grant service + endpoint tests (FAR-764) — merged from deliver/FAR-765
 # ---------------------------------------------------------------------------
 class TestGrantCollectionAgents:
-    def test_grant_community_sourced(self) -> None:
+    def test_grant_registry_sourced(self) -> None:
         from farna.core.library_service.grant import grant_collection_agents
 
         async def run() -> None:
             mock_session = AsyncMock()
             mock_install = MagicMock()
             mock_install.organisation_id = _ORG_ID
-            mock_install.community_sourced = True
+            mock_install.registry_sourced = True
             mock_install.agents_granted = False
             mock_install.deleted_at = None
             mock_session.get = AsyncMock(return_value=mock_install)
@@ -1499,7 +1499,7 @@ class TestGrantCollectionAgents:
             mock_session = AsyncMock()
             mock_install = MagicMock()
             mock_install.organisation_id = _ORG_ID
-            mock_install.community_sourced = True
+            mock_install.registry_sourced = True
             mock_install.agents_granted = True
             mock_install.deleted_at = None
             mock_session.get = AsyncMock(return_value=mock_install)
@@ -1508,20 +1508,20 @@ class TestGrantCollectionAgents:
 
         asyncio.run(run())
 
-    def test_grant_not_community_sourced(self) -> None:
-        from farna.core.library_service.grant import NotCommunitySourcedError, grant_collection_agents
+    def test_grant_not_registry_sourced(self) -> None:
+        from farna.core.library_service.grant import NotRegistrySourcedError, grant_collection_agents
 
         async def run() -> None:
             mock_session = AsyncMock()
             mock_install = MagicMock()
             mock_install.organisation_id = _ORG_ID
-            mock_install.community_sourced = False
+            mock_install.registry_sourced = False
             mock_install.agents_granted = False
             mock_install.deleted_at = None
             mock_session.get = AsyncMock(return_value=mock_install)
             await grant_collection_agents(mock_session, _ORG_ID, mock_install.install_id)
 
-        with pytest.raises(NotCommunitySourcedError):
+        with pytest.raises(NotRegistrySourcedError):
             asyncio.run(run())
 
     def test_grant_install_not_found(self) -> None:
@@ -1544,7 +1544,7 @@ class TestGrantCollectionAgents:
             mock_session = AsyncMock()
             mock_install = MagicMock()
             mock_install.organisation_id = _ORG_ID
-            mock_install.community_sourced = True
+            mock_install.registry_sourced = True
             mock_install.agents_granted = False
             mock_install.deleted_at = _NOW
             mock_session.get = AsyncMock(return_value=mock_install)
@@ -1574,11 +1574,11 @@ class TestGrantCollectionAgents:
 def _make_install_record_with_grant(
     *,
     install_id: uuid.UUID | None = None,
-    community_sourced: bool = True,
+    registry_sourced: bool = True,
     agents_granted: bool = False,
 ) -> MagicMock:
     rec = _make_install_record(install_id=install_id)
-    rec.community_sourced = community_sourced
+    rec.registry_sourced = registry_sourced
     rec.agents_granted = agents_granted
     return rec
 
@@ -1606,7 +1606,7 @@ class TestGrantCollectionAgentsEndpoint:
             )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["community_sourced"] is True
+        assert data["registry_sourced"] is True
         assert data["agents_granted"] is True
 
     def test_grant_not_found(self, client: TestClient) -> None:
@@ -1624,15 +1624,15 @@ class TestGrantCollectionAgentsEndpoint:
             )
         assert resp.status_code == 404
 
-    def test_grant_not_community(self, client: TestClient) -> None:
-        from farna.core.library_service.grant import NotCommunitySourcedError
+    def test_grant_not_registry(self, client: TestClient) -> None:
+        from farna.core.library_service.grant import NotRegistrySourcedError
 
         coll_id = uuid.uuid4()
         install_id = uuid.uuid4()
         with patch(
             "farna.api.routes.library.grant_collection_agents",
             new_callable=AsyncMock,
-            side_effect=NotCommunitySourcedError("not community"),
+            side_effect=NotRegistrySourcedError("not registry"),
         ):
             resp = client.post(
                 f"/api/v1/libraries/collections/{coll_id}/installs/{install_id}/grant",
@@ -1666,7 +1666,7 @@ class TestGrantCollectionAgentsEndpoint:
         assert resp.status_code == 503
 
     def test_install_response_includes_grant_fields(self, client: TestClient) -> None:
-        mock_install = _make_install_record_with_grant(community_sourced=True, agents_granted=True)
+        mock_install = _make_install_record_with_grant(registry_sourced=True, agents_granted=True)
         with (
             patch(
                 "farna.api.routes.library.install_collection",
@@ -1685,9 +1685,9 @@ class TestGrantCollectionAgentsEndpoint:
             )
         assert resp.status_code == 201
         data = resp.json()
-        assert "community_sourced" in data
+        assert "registry_sourced" in data
         assert "agents_granted" in data
-        assert data["community_sourced"] is True
+        assert data["registry_sourced"] is True
         assert data["agents_granted"] is True
 
 
