@@ -71,8 +71,8 @@ snapshot; migrations run through the new bundle's boot lifespan. On macOS, insta
 
 | Mac | Native artifact | Rosetta |
 |-----|-----------------|---------|
-| Apple Silicon | `Modulo-<version>-macos-arm64.dmg` | Not required |
-| Intel | `Modulo-<version>-macos-x86_64.dmg` | Not required |
+| Apple Silicon | `FarnaControl-<version>-macos-arm64.dmg` | Not required |
+| Intel | `FarnaControl-<version>-macos-x86_64.dmg` | Not required |
 
 These are separate native bundles, not a universal artifact. The installer validates the mounted app's launcher architecture as well as the host architecture, so renaming a DMG cannot bypass the check. The Linux installer verifies the signed release manifest/checksum
 chain before copying the app; the macOS installer does not read the release

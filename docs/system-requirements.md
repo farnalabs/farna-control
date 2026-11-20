@@ -24,8 +24,8 @@ below).
 | Server host platform | v1 status |
 |----------------------|-----------|
 | **Linux** | Supported (native single-install and container paths) |
-| **macOS arm64** | Supported native single-install host (`Modulo-<version>-macos-arm64.dmg`, signed/notarized, macos-15 validation; Rosetta not required) |
-| **macOS x86_64 (Intel)** | Supported native single-install host (`Modulo-<version>-macos-x86_64.dmg`, signed/notarized, macos-15-intel validation; Rosetta not required) |
+| **macOS arm64** | Supported native single-install host (`FarnaControl-<version>-macos-arm64.dmg`, signed/notarized, macos-15 validation; Rosetta not required) |
+| **macOS x86_64 (Intel)** | Supported native single-install host (`FarnaControl-<version>-macos-x86_64.dmg`, signed/notarized, macos-15-intel validation; Rosetta not required) |
 | **Windows** | Beta scope, opt-in only: native installer built, signed (Azure Trusted Signing) and attested by the release pipeline when the Beta-only `include_windows` input is enabled (FAR-2337 / FAR-2338). Publication depends on a release run (no signed installer published yet); real-host validation (FAR-2250) is outstanding |
 
 Docker Desktop (see Development / Evaluation below) is a developer
@@ -83,8 +83,8 @@ actually ship - do not widen these rows until the packaging tickets land):
 | Ubuntu 22.04 LTS+ | 2.35+ | Supported |
 | Debian 12+ | 2.36+ | Supported |
 | Ubuntu 20.04 and earlier | 2.31 and below | Not supported (below the bundled service-binary floor) |
-| macOS arm64 | Apple Silicon | Supported native `Modulo-<version>-macos-arm64.dmg`; Rosetta not required |
-| macOS x86_64 | Intel | Supported native `Modulo-<version>-macos-x86_64.dmg`; Rosetta not required |
+| macOS arm64 | Apple Silicon | Supported native `FarnaControl-<version>-macos-arm64.dmg`; Rosetta not required |
+| macOS x86_64 | Intel | Supported native `FarnaControl-<version>-macos-x86_64.dmg`; Rosetta not required |
 | Windows | - | Beta scope, opt-in only; native installer built, signed and attested by the release pipeline when the Beta-only `include_windows` input is enabled (FAR-2337 / FAR-2338), published only by a release run (no installer published yet); real-host validation outstanding (FAR-2250) |
 
 The hard requirement is **glibc 2.35 or newer**. The bundle is assembled on an
@@ -103,8 +103,8 @@ supported native-install targets.
 |--------------|--------|
 | linux-amd64 (x86_64) | Supported |
 | linux-arm64 | Planned (pins exist; no artifact published yet) |
-| macOS arm64 | Supported native artifact; Apple Silicon (`Modulo-<version>-macos-arm64.dmg`) |
-| macOS x86_64 | Supported native artifact; Intel (`Modulo-<version>-macos-x86_64.dmg`) |
+| macOS arm64 | Supported native artifact; Apple Silicon (`FarnaControl-<version>-macos-arm64.dmg`) |
+| macOS x86_64 | Supported native artifact; Intel (`FarnaControl-<version>-macos-x86_64.dmg`) |
 
 `linux-arm64` is not installable yet: the bundle build matrix carries only
 `amd64`, so no `linux-arm64` tarball is published even though the arm64 pins

@@ -231,7 +231,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $output | Out-Null
           & ISCC "/DVERSION_NUM=$env:VERSION_NUM" '/DBUNDLE_ARCH=amd64' "/DBUNDLE_DIR=$env:BUNDLE_DIR" "/O$output" 'deploy/windows/modulo.iss'
           if ($LASTEXITCODE -ne 0) { throw "installer compilation exited $LASTEXITCODE" }
-          if (-not (Test-Path -LiteralPath (Join-Path $output "modulo-$env:VERSION_NUM-windows-amd64.exe") -PathType Leaf)) {
+          if (-not (Test-Path -LiteralPath (Join-Path $output "farna-control-$env:VERSION_NUM-windows-amd64.exe") -PathType Leaf)) {
             throw 'compiled Windows installer is missing'
           }
       - name: Upload unsigned Windows installer
@@ -303,16 +303,16 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          installer="release-artefacts/modulo-${VERSION}-windows-amd64.exe"
+          installer="release-artefacts/farna-control-${VERSION}-windows-amd64.exe"
           test -s "$installer"
           sha256sum "$installer"
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: release-artefacts/modulo-*-windows-amd64.exe
+          subject-path: release-artefacts/farna-control-*-windows-amd64.exe
       - name: Upload attested Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-installer-${{ inputs.version }}
-          path: release-artefacts/modulo-*-windows-amd64.exe
+          path: release-artefacts/farna-control-*-windows-amd64.exe
           if-no-files-found: error
           retention-days: 30

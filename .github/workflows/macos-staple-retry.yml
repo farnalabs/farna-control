@@ -201,8 +201,8 @@ jobs:
           recorded = {artefact.get("name"): artefact for artefact in (marker.get("artifacts") or [])}
 
           expected = [
-              f"Modulo-{version}-macos-arm64.dmg",
-              f"Modulo-{version}-macos-x86_64.dmg",
+              f"FarnaControl-{version}-macos-arm64.dmg",
+              f"FarnaControl-{version}-macos-x86_64.dmg",
           ]
           stale = []
           for name in expected:
@@ -508,7 +508,7 @@ jobs:
 
           read -r -a arches <<<"$ARCHITECTURES"
           for arch in "${arches[@]}"; do
-            dmg_name="Modulo-${VERSION}-macos-${arch}.dmg"
+            dmg_name="FarnaControl-${VERSION}-macos-${arch}.dmg"
             rm -rf incoming
             mkdir -p incoming
             if [[ -n "$RUN_ID" ]]; then
@@ -735,7 +735,7 @@ jobs:
           fi
           # Both native DMGs are mandatory release inputs; confirm the DGL still
           # covers the full Alpha scope after replacement.
-          for name in "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg"; do
+          for name in "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg"; do
             test -s "release-assets/${name}"
           done
 
@@ -792,12 +792,12 @@ jobs:
           version = os.environ["VERSION"]
           required = [
               f"farna-control-{version}-linux-amd64.tar.gz",
-              f"Modulo-{version}-macos-arm64.dmg",
-              f"Modulo-{version}-macos-x86_64.dmg",
+              f"FarnaControl-{version}-macos-arm64.dmg",
+              f"FarnaControl-{version}-macos-x86_64.dmg",
           ]
-          if (root / f"modulo-{version}-windows-amd64.exe").is_file():
-              required.append(f"modulo-{version}-windows-amd64.exe")
-          required.append(f"modulo-{version}-compose.tar.gz")
+          if (root / f"farna-control-{version}-windows-amd64.exe").is_file():
+              required.append(f"farna-control-{version}-windows-amd64.exe")
+          required.append(f"farna-control-{version}-compose.tar.gz")
 
           problems: list[str] = []
           actual: dict[str, str] = {}
@@ -872,10 +872,10 @@ jobs:
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required to republish a stapled DMG'; exit 1; }
 
           cd release-assets
-          if [ -f "modulo-${VERSION}-windows-amd64.exe" ]; then
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-windows-amd64.exe" "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
+          if [ -f "farna-control-${VERSION}-windows-amd64.exe" ]; then
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-windows-amd64.exe" "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
           else
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
           fi
           cd ..
 
@@ -891,17 +891,17 @@ jobs:
 
           root = Path("release-assets")
           version = os.environ["VERSION"]
-          include_windows = (root / f"modulo-{version}-windows-amd64.exe").is_file()
+          include_windows = (root / f"farna-control-{version}-windows-amd64.exe").is_file()
           names = [
               f"farna-control-{version}-linux-amd64.tar.gz",
-              f"Modulo-{version}-macos-arm64.dmg",
-              f"Modulo-{version}-macos-x86_64.dmg",
+              f"FarnaControl-{version}-macos-arm64.dmg",
+              f"FarnaControl-{version}-macos-x86_64.dmg",
           ]
           components = {"linux": "amd64", "macos": "native"}
           if include_windows:
-              names.append(f"modulo-{version}-windows-amd64.exe")
+              names.append(f"farna-control-{version}-windows-amd64.exe")
               components["windows"] = "amd64"
-          names.append(f"modulo-{version}-compose.tar.gz")
+          names.append(f"farna-control-{version}-compose.tar.gz")
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="multi-platform",
@@ -940,7 +940,7 @@ jobs:
         if: success() && needs.staple.outputs.changed == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: release-assets/Modulo-*-macos-*.dmg
+          subject-path: release-assets/FarnaControl-*-macos-*.dmg
 
       - name: Publish the stapled DMG(s) and refreshed manifest
         id: publish
@@ -969,7 +969,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          dmgs=(release-assets/Modulo-"${VERSION}"-macos-*.dmg)
+          dmgs=(release-assets/FarnaControl-"${VERSION}"-macos-*.dmg)
           if [[ "${#dmgs[@]}" -eq 0 ]]; then
             echo "::error::no macOS DMG to publish"
             exit 1
@@ -1007,7 +1007,7 @@ jobs:
                   exit 1
                   ;;
               esac
-              dmg_path="release-assets/Modulo-${VERSION}-macos-${arch}.dmg"
+              dmg_path="release-assets/FarnaControl-${VERSION}-macos-${arch}.dmg"
               actual_digest="$(sha256sum "$dmg_path" | awk '{print $1}')"
               if [[ -z "$verified_digest" || "$verified_digest" != "$actual_digest" ]]; then
                 echo "::error::refusing to publish ${RELEASE_TAG}: ${dmg_path} is not the artefact a notarization ticket was verified on (verified='${verified_digest}', publishing='${actual_digest}')."
@@ -1016,17 +1016,17 @@ jobs:
               echo "${dmg_path}: publishing the exact bytes staple-verified (${actual_digest})"
             done
             ASSETS=(
-              "release-assets/modulo-${VERSION}-linux-amd64.tar.gz"
-              "release-assets/Modulo-${VERSION}-macos-arm64.dmg"
-              "release-assets/Modulo-${VERSION}-macos-x86_64.dmg"
-              "release-assets/modulo-${VERSION}-compose.tar.gz"
+              "release-assets/farna-control-${VERSION}-linux-amd64.tar.gz"
+              "release-assets/FarnaControl-${VERSION}-macos-arm64.dmg"
+              "release-assets/FarnaControl-${VERSION}-macos-x86_64.dmg"
+              "release-assets/farna-control-${VERSION}-compose.tar.gz"
               "release-assets/SHA256SUMS"
               "release-assets/RELEASE_MANIFEST.json"
               "release-assets/RELEASE_MANIFEST.json.sig"
               "release-assets/openapi.json"
             )
-            if [[ -f "release-assets/modulo-${VERSION}-windows-amd64.exe" ]]; then
-              ASSETS+=("release-assets/modulo-${VERSION}-windows-amd64.exe")
+            if [[ -f "release-assets/farna-control-${VERSION}-windows-amd64.exe" ]]; then
+              ASSETS+=("release-assets/farna-control-${VERSION}-windows-amd64.exe")
             fi
             for asset in "${ASSETS[@]}"; do
               if [[ ! -s "$asset" ]]; then
@@ -1261,7 +1261,7 @@ jobs:
 
           artefacts = []
           for arch in ("arm64", "x86_64"):
-              name = f"Modulo-{version}-macos-{arch}.dmg"
+              name = f"FarnaControl-{version}-macos-{arch}.dmg"
               data = (root / name).read_bytes()
               digest = hashlib.sha256(data).hexdigest()
               if arch in verified:

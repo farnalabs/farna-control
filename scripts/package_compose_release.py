@@ -9,7 +9,7 @@ Bundles:
 - SHA256SUMS (checksums over the packaged files)
 
 Produces:
-- modulo-<VERSION>-compose.tar.gz
+- farna-control-<VERSION>-compose.tar.gz
 """
 
 from __future__ import annotations
@@ -340,7 +340,7 @@ def build_compose_release(
     # Target output archive
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    tarball_name = f"modulo-{clean_version}-compose.tar.gz"
+    tarball_name = f"farna-control-{clean_version}-compose.tar.gz"
     tarball_path = out_dir / tarball_name
 
     # Create deterministic tar.gz
