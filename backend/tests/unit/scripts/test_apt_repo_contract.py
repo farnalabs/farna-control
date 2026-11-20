@@ -10,7 +10,10 @@ depends on, so a refactor cannot silently:
 * stop signing the Release file (InRelease clearsigned + detached Release.gpg);
 * point the pool redirects anywhere but the GitHub release download URL;
 * inline a secret, drop the reviewed-key fingerprint check, or unpin an action;
-* stop dispatching the refresh after a GITHUB_TOKEN-created release.
+* stop dispatching the refresh after a GITHUB_TOKEN-created release;
+* (FAR-2590) re-download every released .deb on each run, or reuse a live
+  index stanza that the reviewed key's signature and the release's SHA256SUMS
+  do not both confirm.
 
 Where the tools exist (Linux CI with gnupg, apt-utils and dpkg) the builder is
 also EXECUTED end to end against a throwaway key.
@@ -323,3 +326,189 @@ def test_builder_refuses_a_key_that_is_not_the_reviewed_one(tmp_path: Path) -> N
     result = _run(["bash", str(BUILDER), str(tmp_path / "site"), str(manifest)], env=env)
     assert result.returncode != 0
     assert "does not match the reviewed public key" in result.stderr
+
+
+# --- FAR-2590: incremental refresh (reuse the live index) -------------------
+
+PLANNER = REPO_ROOT / "scripts" / "linux" / "plan-apt-repo.sh"
+LIB = REPO_ROOT / "scripts" / "linux" / "apt-repo-lib.sh"
+VERSIONS = ("0.3.300", "0.3.310", "0.3.320")
+
+
+def test_workflow_plans_reuse_and_downloads_only_the_plan() -> None:
+    collect = next(step for step in _workflow()["jobs"]["build"]["steps"] if step.get("id") == "collect")
+    script = collect["run"]
+    assert collect["env"]["APT_REPO_PUBLIC_KEY_FILE"] == "deploy/apt/farna-control-archive-keyring.asc"
+    assert '"${APT_REPO_PUBLIC_URL}" "${APT_REPO_PAGES_URL}"' in script
+    assert '"${base}/dists/stable/InRelease"' in script
+    assert '"${base}/dists/stable/main/binary-amd64/Packages"' in script
+    assert "bash scripts/linux/plan-apt-repo.sh candidates.tsv previous plan" in script
+    # The only .deb download loop reads the plan, never the full release list.
+    deb_downloads = [line for line in script.splitlines() if '-o "${dir}/${deb}"' in line]
+    assert len(deb_downloads) == 1
+    assert "done < plan/download.tsv" in script
+    assert "bash scripts/linux/build-apt-repo.sh site manifest.tsv plan/reuse.tsv" in _workflow_text()
+
+
+def test_planner_and_builder_share_the_stanza_rules() -> None:
+    source_line = 'source "$(dirname -- "${BASH_SOURCE[0]}")/apt-repo-lib.sh"'
+    assert source_line in _builder()
+    assert source_line in PLANNER.read_text(encoding="utf-8")
+    lib = LIB.read_text(encoding="utf-8")
+    assert "apt_stanza_problem()" in lib
+    assert "apt_sums_entry()" in lib
+
+
+def test_planner_verifies_the_live_index_before_reusing_it() -> None:
+    text = PLANNER.read_text(encoding="utf-8")
+    assert 'gpgv --keyring "${WORK}/keyring.gpg" --output "${signed}" "${PREVIOUS}/InRelease"' in text
+    assert "is not the one InRelease signs" in text
+    assert 'apt_stanza_problem "${stanza_file}" "${deb}" "${want_sha}"' in text
+
+
+def _sums(root: Path, tag: str, deb: Path, sha: str | None = None) -> Path:
+    sums = root / "sums" / tag / "SHA256SUMS"
+    sums.parent.mkdir(parents=True, exist_ok=True)
+    digest = sha or hashlib.sha256(deb.read_bytes()).hexdigest()
+    sums.write_text(f"{'0' * 64}  farna-control-other.tar.gz\n{digest}  {deb.name}\n", encoding="utf-8")
+    return sums
+
+
+def _build(site: Path, manifest: Path, env: dict[str, str], reuse: Path | None = None) -> subprocess.CompletedProcess[str]:
+    cmd = ["bash", str(BUILDER), str(site), str(manifest)]
+    if reuse is not None:
+        cmd.append(str(reuse))
+    return _run(cmd, env=env)
+
+
+def _plan(candidates: Path, previous: Path, out: Path, public: Path) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "APT_REPO_PUBLIC_KEY_FILE": str(public)}
+    return _run(["bash", str(PLANNER), str(candidates), str(previous), str(out)], env=env)
+
+
+def _published(tmp_path: Path) -> dict:
+    """A live repository listing 0.3.300 and 0.3.310; release 0.3.320 is new."""
+    debs = {version: _dummy_deb(tmp_path, version) for version in VERSIONS}
+    private, public = _throwaway_key(tmp_path)
+    env = {**os.environ, "APT_REPO_GPG_PRIVATE_KEY": private, "APT_REPO_PUBLIC_KEY_FILE": str(public)}
+    manifest = tmp_path / "manifest-live.tsv"
+    manifest.write_text("".join(f"bundle-v{v}\t{debs[v]}\n" for v in VERSIONS[:2]), encoding="utf-8")
+    live = tmp_path / "live"
+    result = _build(live, manifest, env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    previous = tmp_path / "previous"
+    previous.mkdir()
+    shutil.copy(live / "dists/stable/InRelease", previous / "InRelease")
+    shutil.copy(live / "dists/stable/main/binary-amd64/Packages", previous / "Packages")
+    return {"debs": debs, "env": env, "public": public, "previous": previous}
+
+
+def _candidates(tmp_path: Path, debs: dict[str, Path], shas: dict[str, str] | None = None) -> Path:
+    candidates = tmp_path / "candidates.tsv"
+    lines = []
+    for version in reversed(VERSIONS):  # the releases API lists newest first
+        sums = _sums(tmp_path, f"bundle-v{version}", debs[version], (shas or {}).get(version))
+        lines.append(f"bundle-v{version}\t{debs[version].name}\t{sums}\n")
+    candidates.write_text("".join(lines), encoding="utf-8")
+    return candidates
+
+
+def _tags(path: Path) -> list[str]:
+    return [line.split("\t")[0] for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def test_incremental_refresh_reuses_indexed_versions_and_downloads_only_new_ones(tmp_path: Path) -> None:
+    _require_tools()
+    live = _published(tmp_path)
+    debs = live["debs"]
+    plan = tmp_path / "plan"
+    result = _plan(_candidates(tmp_path, debs), live["previous"], plan, live["public"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (plan / "download.tsv").read_text(encoding="utf-8") == "bundle-v0.3.320\tfarna-control_0.3.320_amd64.deb\n"
+    assert _tags(plan / "reuse.tsv") == ["bundle-v0.3.310", "bundle-v0.3.300"]
+
+    # The reused .debs are not needed any more: only the new one is on disk.
+    debs["0.3.300"].unlink()
+    debs["0.3.310"].unlink()
+    manifest = tmp_path / "manifest.tsv"
+    manifest.write_text(f"bundle-v0.3.320\t{debs['0.3.320']}\n", encoding="utf-8")
+    site = tmp_path / "site"
+    result = _build(site, manifest, live["env"], plan / "reuse.tsv")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    packages = (site / "dists/stable/main/binary-amd64/Packages").read_text(encoding="utf-8")
+    assert re.findall(r"^Version: (.+)$", packages, re.MULTILINE) == ["0.3.320", "0.3.310", "0.3.300"]
+    assert f"SHA256: {hashlib.sha256(debs['0.3.320'].read_bytes()).hexdigest()}" in packages
+    for stanza in (live["previous"] / "Packages").read_text(encoding="utf-8").strip().split("\n\n"):
+        assert stanza in packages  # reused byte for byte
+    redirects = (site / "_redirects").read_text(encoding="utf-8")
+    for version in VERSIONS:
+        deb = f"farna-control_{version}_amd64.deb"
+        assert f"/pool/main/f/farna-control/{deb} {RELEASE_DOWNLOAD_BASE}/bundle-v{version}/{deb} 302" in redirects
+    keyring = site / "farna-control-archive-keyring.gpg"
+    assert _run(["gpgv", "--keyring", str(keyring), str(site / "dists/stable/InRelease")]).returncode == 0
+
+
+def test_incremental_refresh_discards_a_stanza_the_release_sha256sums_does_not_confirm(tmp_path: Path) -> None:
+    _require_tools()
+    live = _published(tmp_path)
+    plan = tmp_path / "plan"
+    candidates = _candidates(tmp_path, live["debs"], {"0.3.300": "f" * 64})
+    result = _plan(candidates, live["previous"], plan, live["public"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _tags(plan / "download.tsv") == ["bundle-v0.3.320", "bundle-v0.3.300"]
+    assert _tags(plan / "reuse.tsv") == ["bundle-v0.3.310"]
+    assert "indexed stanza discarded: stanza SHA256 is" in result.stdout
+
+
+def test_incremental_refresh_first_run_downloads_everything(tmp_path: Path) -> None:
+    _require_tools()
+    debs = {version: _dummy_deb(tmp_path, version) for version in VERSIONS}
+    _, public = _throwaway_key(tmp_path)
+    empty = tmp_path / "previous"
+    empty.mkdir()
+    plan = tmp_path / "plan"
+    result = _plan(_candidates(tmp_path, debs), empty, plan, public)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _tags(plan / "download.tsv") == [f"bundle-v{v}" for v in reversed(VERSIONS)]
+    assert (plan / "reuse.tsv").stat().st_size == 0
+
+
+def test_incremental_refresh_ignores_a_live_index_that_does_not_verify(tmp_path: Path) -> None:
+    _require_tools()
+    live = _published(tmp_path)
+    packages = live["previous"] / "Packages"
+    packages.write_text(packages.read_text(encoding="utf-8").replace("Description: test", "Description: tampered"), encoding="utf-8")
+    plan = tmp_path / "plan"
+    result = _plan(_candidates(tmp_path, live["debs"]), live["previous"], plan, live["public"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _tags(plan / "download.tsv") == [f"bundle-v{v}" for v in reversed(VERSIONS)]
+    assert "ignoring the previous index (full rebuild)" in result.stderr
+
+
+def test_incremental_refresh_ignores_a_live_index_signed_by_another_key(tmp_path: Path) -> None:
+    _require_tools()
+    live = _published(tmp_path)
+    plan = tmp_path / "plan"
+    result = _plan(_candidates(tmp_path, live["debs"]), live["previous"], plan, PUBLIC_KEY)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _tags(plan / "download.tsv") == [f"bundle-v{v}" for v in reversed(VERSIONS)]
+    assert "does not verify against the reviewed key" in result.stderr
+
+
+def test_builder_refuses_a_reused_stanza_the_release_sha256sums_does_not_confirm(tmp_path: Path) -> None:
+    _require_tools()
+    live = _published(tmp_path)
+    first = (live["previous"] / "Packages").read_text(encoding="utf-8").strip().split("\n\n")[0]
+    stanza = tmp_path / "old.stanza"
+    stanza.write_text(first + "\n", encoding="utf-8")
+    deb_name = first.split("Filename: pool/main/f/farna-control/", 1)[1].split("\n", 1)[0]
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text(f"{'e' * 64}  {deb_name}\n", encoding="utf-8")
+    reuse = tmp_path / "reuse.tsv"
+    reuse.write_text(f"bundle-v0\t{stanza}\t{sums}\n", encoding="utf-8")
+    manifest = tmp_path / "manifest.tsv"
+    manifest.write_text("# every version reused\n", encoding="utf-8")
+    result = _build(tmp_path / "site", manifest, live["env"], reuse)
+    assert result.returncode != 0
+    assert f"refusing the stanza for {deb_name}: stanza SHA256 is" in result.stderr
