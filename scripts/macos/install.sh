@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install a signed, notarized Modulo native .dmg for the current macOS user.
+# Install a signed, notarized Farna Control native .dmg for the current macOS user.
 # The app bundle owns the service contract; this script only verifies/copies it.
 set -euo pipefail
 
@@ -57,7 +57,7 @@ hdiutil verify "$DMG" >/dev/null
 codesign --verify --verbose=2 "$DMG"
 hdiutil attach "$DMG" -mountpoint "$MOUNT" -nobrowse -readonly >/dev/null
 MOUNT_ATTACHED=1
-# The mounted volume ships Modulo-<version>.app, but the DMG itself may be
+# The mounted volume ships "Farna Control.app", but the DMG itself may be
 # renamed (the installer accepts any DMG path, including one with spaces), so
 # derive APP from the bundle actually present on the volume rather than from
 # the DMG filename.
@@ -115,4 +115,4 @@ plist_path.write_text(render_launchd_plist(app / 'Contents/MacOS/modulo', data_d
 PY
 launchctl unload -w "$PLIST" >/dev/null 2>&1 || true
 launchctl load -w "$PLIST"
-printf 'Modulo installed at %s\n' "$TARGET"
+printf 'Farna Control installed at %s\n' "$TARGET"

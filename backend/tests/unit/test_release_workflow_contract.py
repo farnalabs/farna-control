@@ -726,8 +726,8 @@ def _completion_branch(script: str) -> str:
 def _write_release_dmgs(tmp_path: Path, version: str, arm64: bytes, x86_64: bytes) -> None:
     root = tmp_path / "release-assets"
     root.mkdir(exist_ok=True)
-    (root / f"Modulo-{version}-macos-arm64.dmg").write_bytes(arm64)
-    (root / f"Modulo-{version}-macos-x86_64.dmg").write_bytes(x86_64)
+    (root / f"FarnaControl-{version}-macos-arm64.dmg").write_bytes(arm64)
+    (root / f"FarnaControl-{version}-macos-x86_64.dmg").write_bytes(x86_64)
 
 
 def _record_marker(
@@ -766,8 +766,8 @@ def test_macos_staple_marker_records_only_the_architectures_this_run_verified(tm
     payload = _record_marker(tmp_path, version, "arm64", prior=None)
 
     by_name = {artefact["name"]: artefact for artefact in payload["artifacts"]}
-    arm = by_name[f"Modulo-{version}-macos-arm64.dmg"]
-    x86 = by_name[f"Modulo-{version}-macos-x86_64.dmg"]
+    arm = by_name[f"FarnaControl-{version}-macos-arm64.dmg"]
+    x86 = by_name[f"FarnaControl-{version}-macos-x86_64.dmg"]
     assert arm["staple_verified"] is True
     assert x86["staple_verified"] is False, "a single-architecture run must never record the other DMG as staple-verified"
     assert arm["sha256"] == hashlib.sha256(arm_bytes).hexdigest()
@@ -785,14 +785,14 @@ def test_macos_staple_marker_carries_forward_a_prior_verification_only_for_uncha
     # bytes are unchanged, so the prior verification still applies.
     second = _record_marker(tmp_path, version, "x86_64", prior=first)
     by_name = {artefact["name"]: artefact for artefact in second["artifacts"]}
-    assert by_name[f"Modulo-{version}-macos-arm64.dmg"]["staple_verified"] is True
-    assert by_name[f"Modulo-{version}-macos-x86_64.dmg"]["staple_verified"] is True
+    assert by_name[f"FarnaControl-{version}-macos-arm64.dmg"]["staple_verified"] is True
+    assert by_name[f"FarnaControl-{version}-macos-x86_64.dmg"]["staple_verified"] is True
 
     # A prior claim about DIFFERENT bytes no longer applies to the rebuilt DMG.
     _write_release_dmgs(tmp_path, version, b"rebuilt-arm64-bytes", b"x86_64-bytes")
     third = _record_marker(tmp_path, version, "x86_64", prior=second)
     by_name = {artefact["name"]: artefact for artefact in third["artifacts"]}
-    assert by_name[f"Modulo-{version}-macos-arm64.dmg"]["staple_verified"] is False
+    assert by_name[f"FarnaControl-{version}-macos-arm64.dmg"]["staple_verified"] is False
 
 
 def _resolve_marker_state(
@@ -822,8 +822,8 @@ def _resolve_marker_state(
 
 def test_macos_staple_short_circuit_requires_every_artefact_to_be_verified(tmp_path: Path) -> None:
     version = "0.1.0"
-    arm_name = f"Modulo-{version}-macos-arm64.dmg"
-    x86_name = f"Modulo-{version}-macos-x86_64.dmg"
+    arm_name = f"FarnaControl-{version}-macos-arm64.dmg"
+    x86_name = f"FarnaControl-{version}-macos-x86_64.dmg"
     arm_bytes, x86_bytes = b"arm64-bytes", b"x86_64-bytes"
     arm_sha = hashlib.sha256(arm_bytes).hexdigest()
     x86_sha = hashlib.sha256(x86_bytes).hexdigest()
@@ -1248,9 +1248,9 @@ def _run_staple_sums(tmp_path: Path, *, with_deb: bool) -> list[str]:
     assets.mkdir()
     names = [
         "farna-control-9.9.9-linux-amd64.tar.gz",
-        "Modulo-9.9.9-macos-arm64.dmg",
-        "Modulo-9.9.9-macos-x86_64.dmg",
-        "modulo-9.9.9-compose.tar.gz",
+        "FarnaControl-9.9.9-macos-arm64.dmg",
+        "FarnaControl-9.9.9-macos-x86_64.dmg",
+        "farna-control-9.9.9-compose.tar.gz",
     ]
     if with_deb:
         names.append("farna-control_9.9.9_amd64.deb")
@@ -1331,8 +1331,8 @@ def _ticket_gate_env(tmp_path: Path, version: str) -> dict[str, str]:
     artefacts = tmp_path / "release-artefacts"
     artefacts.mkdir(exist_ok=True)
     arm, x86 = b"arm64-dmg-bytes", b"x86_64-dmg-bytes"
-    (artefacts / f"Modulo-{version}-macos-arm64.dmg").write_bytes(arm)
-    (artefacts / f"Modulo-{version}-macos-x86_64.dmg").write_bytes(x86)
+    (artefacts / f"FarnaControl-{version}-macos-arm64.dmg").write_bytes(arm)
+    (artefacts / f"FarnaControl-{version}-macos-x86_64.dmg").write_bytes(x86)
     return {
         "VERSION": version,
         "VERIFIED_ARM64_SHA256": hashlib.sha256(arm).hexdigest(),
@@ -1386,7 +1386,7 @@ def test_publish_release_gates_creation_on_the_ticket_and_holds_rather_than_publ
     assert "spctl --assess" in verify_script
     # Both native DMGs are checked - a release cannot ship one verified ticket
     # and one deferred staple.
-    assert "Modulo-${VERSION}-macos-${arch}.dmg" in verify_script
+    assert "FarnaControl-${VERSION}-macos-${arch}.dmg" in verify_script
     assert "for arch in arm64 x86_64" in verify_script
 
     # Nothing is created or pushed unless the gate said publish.

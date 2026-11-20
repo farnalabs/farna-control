@@ -2369,8 +2369,8 @@ jobs:
             --version "$VERSION" \
             --tag "$RC_TAG" \
             --output-dir release-artefacts
-          test -s "release-artefacts/modulo-${VERSION}-compose.tar.gz"
-          tar -tzf "release-artefacts/modulo-${VERSION}-compose.tar.gz"
+          test -s "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
+          tar -tzf "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
       # Windows is Beta scope (FAR-2338) and included only via the Beta-only
       # opt-in: the signed installer is included in SHA256SUMS and the manifest
       # `names`/`components` only when include_windows is explicitly true. The
@@ -2386,13 +2386,13 @@ jobs:
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
-            if [ ! -f "modulo-${VERSION}-windows-amd64.exe" ]; then
+            if [ ! -f "farna-control-${VERSION}-windows-amd64.exe" ]; then
               echo "::error::include_windows=true but windows-installer-${VERSION} artifact is missing"
               exit 1
             fi
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-windows-amd64.exe" "modulo-${VERSION}-compose.tar.gz" "farna-control_${VERSION}_amd64.deb" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-windows-amd64.exe" "farna-control-${VERSION}-compose.tar.gz" "farna-control_${VERSION}_amd64.deb" > SHA256SUMS
           else
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "Modulo-${VERSION}-macos-arm64.dmg" "Modulo-${VERSION}-macos-x86_64.dmg" "modulo-${VERSION}-compose.tar.gz" "farna-control_${VERSION}_amd64.deb" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-compose.tar.gz" "farna-control_${VERSION}_amd64.deb" > SHA256SUMS
           fi
           cd ..
           uv run --no-project --no-sync --no-build python - <<'PY'
@@ -2403,14 +2403,14 @@ jobs:
           root = Path("release-artefacts")
           version = os.environ["VERSION"]
           include_windows = os.environ["INCLUDE_WINDOWS"] == "true"
-          names = [f"farna-control-{version}-linux-amd64.tar.gz", f"Modulo-{version}-macos-arm64.dmg", f"Modulo-{version}-macos-x86_64.dmg"]
+          names = [f"farna-control-{version}-linux-amd64.tar.gz", f"FarnaControl-{version}-macos-arm64.dmg", f"FarnaControl-{version}-macos-x86_64.dmg"]
           components = {"linux": "amd64", "macos": "native"}
           if include_windows:
-            names.append(f"modulo-{version}-windows-amd64.exe")
+            names.append(f"farna-control-{version}-windows-amd64.exe")
             components["windows"] = "amd64"
           # FAR-2345: the self-hosted compose stack is packaged on every release,
           # so it is always covered by the manifest.
-          names.append(f"modulo-{version}-compose.tar.gz")
+          names.append(f"farna-control-{version}-compose.tar.gz")
           # FAR-2579: the validated apt package is a mandatory release artefact.
           names.append(f"farna-control_{version}_amd64.deb")
           def digest(path: Path) -> str:
@@ -2512,7 +2512,7 @@ jobs:
           arm64_sha256=""
           x86_64_sha256=""
           for arch in arm64 x86_64; do
-            dmg="release-artefacts/Modulo-${VERSION}-macos-${arch}.dmg"
+            dmg="release-artefacts/FarnaControl-${VERSION}-macos-${arch}.dmg"
             if [ ! -s "$dmg" ]; then
               echo "::error::expected release artefact ${dmg} is missing - cannot verify a notarization ticket"
               exit 1
@@ -2634,9 +2634,9 @@ jobs:
           # Apple Silicon DMG present.
           for artifact in \
             "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz" \
-            "release-artefacts/Modulo-${VERSION}-macos-arm64.dmg" \
-            "release-artefacts/Modulo-${VERSION}-macos-x86_64.dmg" \
-            "release-artefacts/modulo-${VERSION}-compose.tar.gz" \
+            "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg" \
+            "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg" \
+            "release-artefacts/farna-control-${VERSION}-compose.tar.gz" \
             "release-artefacts/farna-control_${VERSION}_amd64.deb" \
             release-artefacts/SHA256SUMS \
             release-artefacts/RELEASE_MANIFEST.json \
@@ -2644,7 +2644,7 @@ jobs:
             test -s "$artifact"
           done
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
-            test -s "release-artefacts/modulo-${VERSION}-windows-amd64.exe"
+            test -s "release-artefacts/farna-control-${VERSION}-windows-amd64.exe"
           fi
           (cd release-artefacts && sha256sum --check SHA256SUMS)
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
@@ -2676,7 +2676,7 @@ jobs:
           set -euo pipefail
 
           for arch in arm64 x86_64; do
-            dmg="release-artefacts/Modulo-${VERSION}-macos-${arch}.dmg"
+            dmg="release-artefacts/FarnaControl-${VERSION}-macos-${arch}.dmg"
             test -s "$dmg"
             case "$arch" in
               arm64) verified="${VERIFIED_ARM64_SHA256}" ;;
@@ -2803,9 +2803,9 @@ jobs:
 
           ASSETS=(
               "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz"
-             "release-artefacts/Modulo-${VERSION}-macos-arm64.dmg"
-             "release-artefacts/Modulo-${VERSION}-macos-x86_64.dmg"
-             "release-artefacts/modulo-${VERSION}-compose.tar.gz"
+             "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg"
+             "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg"
+             "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/farna-control_${VERSION}_amd64.deb"
             "release-artefacts/SHA256SUMS"
             "release-artefacts/RELEASE_MANIFEST.json"
@@ -2815,7 +2815,7 @@ jobs:
           # RELEASE_MANIFEST.json + .sig are required by native-release-smoke.yml
           # (canary workflow) which verifies the signed manifest against the tarball.
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
-            ASSETS+=("release-artefacts/modulo-${VERSION}-windows-amd64.exe")
+            ASSETS+=("release-artefacts/farna-control-${VERSION}-windows-amd64.exe")
           fi
           for asset in "${ASSETS[@]}"; do
             if [ ! -f "$asset" ]; then
@@ -3237,8 +3237,8 @@ jobs:
             --version "$VERSION" \
             --tag "$GA_TAG" \
             --output-dir release-artefacts
-          test -s "release-artefacts/modulo-${VERSION}-compose.tar.gz"
-          tar -tzf "release-artefacts/modulo-${VERSION}-compose.tar.gz"
+          test -s "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
+          tar -tzf "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
 
       - name: Generate SHA256SUMS and sign the final GA manifest
         env:
@@ -3248,7 +3248,7 @@ jobs:
           set -euo pipefail
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
-          sha256sum "modulo-${VERSION}-compose.tar.gz" > SHA256SUMS
+          sha256sum "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
           cd ..
           uv run --no-project --no-sync --no-build python - <<'PY'
           import hashlib, json, os, sys
@@ -3258,7 +3258,7 @@ jobs:
 
           root = Path("release-artefacts")
           version = os.environ["VERSION"]
-          name = f"modulo-{version}-compose.tar.gz"
+          name = f"farna-control-{version}-compose.tar.gz"
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="compose",
@@ -3293,7 +3293,7 @@ jobs:
           set -euo pipefail
           TAG="v${VERSION}"
           ASSETS=(
-            "release-artefacts/modulo-${VERSION}-compose.tar.gz"
+            "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/SHA256SUMS"
             "release-artefacts/RELEASE_MANIFEST.json"
             "release-artefacts/RELEASE_MANIFEST.json.sig"
@@ -3496,8 +3496,8 @@ jobs:
         run: |
           set -euo pipefail
            for DMG in \
-             "release-artefacts/Modulo-${VERSION}-macos-arm64.dmg" \
-             "release-artefacts/Modulo-${VERSION}-macos-x86_64.dmg"; do
+             "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg" \
+             "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg"; do
              test -s "$DMG"
              printf 'Attestation subject: %s\n' "$DMG"
            done
@@ -3509,7 +3509,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          EXE="release-artefacts/modulo-${VERSION}-windows-amd64.exe"
+          EXE="release-artefacts/farna-control-${VERSION}-windows-amd64.exe"
           test -s "$EXE"
           printf 'Attestation subject: %s\n' "$EXE"
 

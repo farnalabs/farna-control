@@ -144,12 +144,14 @@ def test_macos_dmg_contract_structurally_verifies_staging_and_post_mount_gates()
     assert icon_path.is_file()
     assert icon_path.stat().st_size > 0
     assert "CFBundleIconFile</key><string>Modulo.icns" in plist_script
+    assert "CFBundleIdentifier</key><string>dev.farna.control<" in plist_script
+    assert "CFBundleDisplayName</key><string>Farna Control<" in plist_script
     assert "iconutil --convert icns" in bundle_script
 
     staging_start = next(index for index, line in enumerate(lines) if 'mkdir -p "$DMG_STAGING"' in line)
     dmg_create = next(index for index, line in enumerate(lines) if "run_pre_smoke dmg_create" in line)
     hard_staging_checks = {
-        "app": 'test -d "$DMG_STAGING/Modulo-${VERSION_NUM}.app"',
+        "app": 'test -d "$DMG_STAGING/Farna Control.app"',
         "alias": 'test -L "$DMG_STAGING/Applications"',
     }
     for check in hard_staging_checks.values():
@@ -805,15 +807,15 @@ fake_codesign_calls=0
 codesign() {
   fake_codesign_calls=$((fake_codesign_calls + 1))
   if [[ "$fake_codesign_calls" -le "${FAKE_CODESIGN_FAILURES:-0}" ]]; then
-    printf 'build/Modulo.app/Contents/MacOS/modulo: %s\\n' "${FAKE_CODESIGN_MESSAGE:-}" >&2
+    printf 'build/FarnaControl.app/Contents/MacOS/modulo: %s\\n' "${FAKE_CODESIGN_MESSAGE:-}" >&2
     return "${FAKE_CODESIGN_STATUS:-1}"
   fi
-  printf 'build/Modulo.app/Contents/MacOS/modulo: replacing existing signature\\n' >&2
+  printf 'build/FarnaControl.app/Contents/MacOS/modulo: replacing existing signature\\n' >&2
   return 0
 }
 
 status=0
-codesign_with_timestamp_retry fixture --force --timestamp --sign "Developer ID Application: Fixture (AAAAAAAAAA)" build/Modulo.app || status=$?
+codesign_with_timestamp_retry fixture --force --timestamp --sign "Developer ID Application: Fixture (AAAAAAAAAA)" build/FarnaControl.app || status=$?
 printf 'fake_codesign_calls=%d\\n' "$fake_codesign_calls"
 exit "$status"
 """,
@@ -1546,7 +1548,7 @@ def _run_tool(
 
 
 def _notary_dmg(tmp_path: Path) -> Path:
-    dmg = tmp_path / "Modulo-0.3.328-macos-arm64.dmg"
+    dmg = tmp_path / "FarnaControl-0.3.328-macos-arm64.dmg"
     dmg.write_bytes(b"fixture disk image bytes")
     return dmg
 
@@ -1616,7 +1618,7 @@ def test_macos_notarization_fails_loudly_on_a_non_accepted_status(tmp_path: Path
                     "issues": [
                         {
                             "severity": "error",
-                            "path": "Modulo-0.3.328.app/Contents/MacOS/modulo",
+                            "path": "Farna Control.app/Contents/MacOS/modulo",
                             "message": "The binary is not signed with a valid Developer ID certificate.",
                         }
                     ],
@@ -1797,7 +1799,7 @@ def test_macos_upload_step_follows_the_notarizing_step_and_the_contract_checks_t
     assert names.index("Sign, notarize and smoke-test native installer") < names.index("Upload real macOS installer")
 
     upload = steps[names.index("Upload real macOS installer")]
-    assert upload["with"]["path"] == "build/Modulo-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg"
+    assert upload["with"]["path"] == "build/FarnaControl-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg"
 
     contract = next(step["run"] for step in steps if step.get("name") == "Validate workflow contract")
     assert "shellcheck scripts/macos/notarize-and-verify.sh" in contract
@@ -1845,7 +1847,7 @@ exit 0
 
 def _macho_app(tmp_path: Path) -> Path:
     """An app tree mirroring the bundled runtime layout Apple rejected."""
-    app = tmp_path / "Modulo-0.3.328.app"
+    app = tmp_path / "Farna Control.app"
     contents = app / "Contents"
     runtime = contents / "Resources" / "bundle" / "runtime"
     lib = runtime / "lib"

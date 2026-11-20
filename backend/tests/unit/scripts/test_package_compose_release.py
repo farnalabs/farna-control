@@ -174,7 +174,7 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
     )
 
     assert tarball_path.is_file()
-    assert tarball_path.name == "modulo-0.4.0-compose.tar.gz"
+    assert tarball_path.name == "farna-control-0.4.0-compose.tar.gz"
 
     extracted_dir = tmp_path / "extracted"
     extracted_dir.mkdir()
@@ -250,7 +250,7 @@ def test_build_compose_release_derives_tag_from_version(tmp_path: Path):
         version="0.5.1",
         output_dir=tmp_path,
     )
-    assert tarball_path.name == "modulo-0.5.1-compose.tar.gz"
+    assert tarball_path.name == "farna-control-0.5.1-compose.tar.gz"
 
     with tarfile.open(tarball_path, "r:gz") as tar:
         f = tar.extractfile("docker-compose.prod.yml")

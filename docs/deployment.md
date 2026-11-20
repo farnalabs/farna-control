@@ -482,7 +482,7 @@ yourself from source (for example as a continuity plan), see
 [Continuity and Escrow](continuity-and-escrow.md).
 
 Each release also publishes the stack as a downloadable asset,
-`modulo-<version>-compose.tar.gz`. It contains `docker-compose.prod.yml` with
+`farna-control-<version>-compose.tar.gz`. It contains `docker-compose.prod.yml` with
 the image hard-pinned to that release's immutable tag, a copy named
 `docker-compose.yml`, a working `.env.example`, `init-env.sh` (copies the
 example env file into place), `quickstart.md` and `SHA256SUMS`; the bundle is
