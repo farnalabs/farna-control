@@ -1,6 +1,6 @@
 Feature: Dogfooding Pipeline
-  The dogfooding pipeline is a pre-built canonical workflow where Modulo
-  builds Modulo — reading a GitHub issue, generating a code diff via LLM,
+  The dogfooding pipeline is a pre-built canonical workflow where Farna Control
+  builds Farna Control — reading a GitHub issue, generating a code diff via LLM,
   validating with tests, passing through a human review gate, and creating a PR.
 
   Background:

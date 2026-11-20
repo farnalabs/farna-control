@@ -12,7 +12,7 @@ const PRIMITIVE = {
   primitive_type: 'pipeline_template',
   name: 'E2E Code Review Template',
   description: 'Reviews pull requests',
-  author: 'Modulo Team',
+  author: 'Farna Control Team',
   version: '1.0.0',
   tags: ['review'],
   visibility: 'public',
