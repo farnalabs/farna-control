@@ -66,6 +66,20 @@ by the `variant_batch_compare` feature flag.
       reports `partial` (`test_variant_batches.py` `TestComputeBatchStatus`) –
       a HITL rejection lowers a batch's completion ratio rather than raising a
       batch-level `failed`
+- [x] `/variants/compare` lists comparison groups in the shared `DataTable`
+      (name, pipeline, variants, evals scored, selection strategy, runs,
+      degraded evals, actions) with a pipeline select and a name search. A row
+      selects the comparison IN PLACE — the per-node comparison table and output
+      diff viewer render below it — and never navigates to the batch-detail
+      route; the `pipeline_id` deep link still opens the builder, and the page
+      selects the first visible row so it never lands empty-handed
+      (`VariantCompareView.vue`, `VariantCompareView.spec.ts`,
+      `variant-compare-groups.spec.ts`)
+- [x] User-visible copy on the variants surface standardises on "comparison"
+      (table columns, empty state, the inline explainer linking to `/evals`, the
+      builder title/subtitle) while "variant group" stays the code and route
+      vocabulary (`VariantCompareView.vue`, `VariantGroupBuilder.vue`,
+      `locales/en-US.js`)
 
 ## Known Gaps
 
@@ -76,6 +90,13 @@ the per-token breakdown comparison the manifest previously parked as the lone
 
 ## QA History
 
+- 2026-11-20: **FAR-2598**: replaced the unlabelled group dropdown on
+  `/variants/compare` with a comparison-groups `DataTable` (pipeline filter +
+  name search, row selection in place, first-row default) so the list reads as
+  comparisons rather than evals, and ran a copy pass standardising user-visible
+  terminology on "comparison" with an inline explainer linking to `/evals`.
+  Covered by `VariantCompareView.spec.ts` and `variant-compare-groups.spec.ts`
+  (390px column hiding + in-place selection).
 - 2026-09-25: **Improve Architecture product-map walk**: closed the last
   `feat-variants` partial: per-token breakdown comparison now ships end to end.
   `_run_to_variant_run` (`api/routes/variant_batches.py`) and `get_batch_compare`

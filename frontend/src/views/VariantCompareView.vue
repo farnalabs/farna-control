@@ -17,7 +17,35 @@
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadGroups" />
     <template v-else>
-      <PageHeader :title="$t('views.variantCompare.title')" :subtitle="$t('views.variantCompare.subtitle')" />
+      <PageHeader :title="$t('views.variantCompare.title')" :subtitle="$t('views.variantCompare.subtitle')">
+        <template #right>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button :disabled="!selectedGroupId || runningVariants.size > 0" data-testid="variant-compare-run-variants" @click="runVariants">
+              <span v-if="runningVariants.size > 0" class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              {{ runningVariants.size > 0 ? $t('views.variantCompare.running') : $t('views.variantCompare.runVariants') }}
+            </Button>
+
+            <Button
+              severity="secondary"
+              outlined
+              data-testid="variant-compare-new-group"
+              @click="showBuilder = true"
+            >
+              {{ $t('views.variantCompare.newComparison') }}
+            </Button>
+          </div>
+        </template>
+      </PageHeader>
+
+      <!-- FAR-2598: one line naming what a comparison is and where evals live.
+           The old unlabelled dropdown read as a list of evals; this states the
+           relationship up front and links to the full eval list. -->
+      <p class="mt-2 text-sm text-muted-foreground">
+        {{ $t('views.variantCompare.explainer') }}
+        <router-link to="/evals" class="font-medium text-primary hover:underline">
+          {{ $t('views.variantCompare.explainerEvalsLink') }}
+        </router-link>
+      </p>
 
       <VariantGroupBuilder
         v-if="showBuilder"
@@ -26,43 +54,78 @@
       />
 
       <template v-else>
-      <div class="flex flex-wrap items-center gap-4">
-        <Select
-  :aria-label="$t('views.variantCompare.compareGroupLabel')"
-  v-model="selectedGroupId"
-  :placeholder="$t('views.variantCompare.selectGroup')"
-  data-testid="variant-compare-group-select"
-  class="min-w-[280px]"
-  :options="groups.map(g => ({ value: g.id, label: g.name }))"
-  option-label="label"
-  option-value="value"
->
-  <template #option="{ option }">
-    <span :data-value="option.value">{{ option.label }}</span>
-  </template>
-</Select>
+      <div class="mt-6 space-y-4">
+        <FilterBar
+          data-testid="variant-compare-filters"
+          :search="{ placeholder: $t('views.variantCompare.searchPlaceholder') }"
+          :search-value="filterSearch"
+          :filters="pipelineFilterOptions"
+          :filter-values="{ pipeline_id: filterPipelineId }"
+          @update:search="filterSearch = $event"
+          @update:filter="handleFilterUpdate"
+        />
 
-        <Button :disabled="!selectedGroupId || runningVariants.size > 0" data-testid="variant-compare-run-variants" @click="runVariants">
-          <span v-if="runningVariants.size > 0" class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          {{ runningVariants.size > 0 ? $t('views.variantCompare.running') : $t('views.variantCompare.runVariants') }}
-        </Button>
-
-        <Button
-          severity="secondary"
-          outlined
-          data-testid="variant-compare-new-group"
-          @click="showBuilder = true"
+        <EmptyState
+          v-if="groups.length === 0"
+          :title="$t('views.variantCompare.emptyGroupsTitle')"
+          :description="$t('views.variantCompare.emptyGroupsDescription')"
         >
-          {{ $t('views.variantCompare.newComparison') }}
-        </Button>
+          <Button data-testid="variant-compare-empty-create" @click="showBuilder = true">
+            {{ $t('views.variantCompare.newComparison') }}
+          </Button>
+        </EmptyState>
 
-        <span v-if="selectedGroup" class="text-xs text-muted-foreground">
-          {{ $t('views.variantCompare.runs', { count: selectedGroup.run_count ?? 0 }) }} ·
-          {{ selectedGroup.selection_strategy || '—' }}
-        </span>
-      </div>
+        <template v-else>
+          <DataTable
+            data-testid="variant-compare-groups-table"
+            :columns="groupColumns"
+            :rows="groupRows"
+            :row-clickable="true"
+            fit
+            @row-click="selectGroupRow"
+          >
+            <template #cell-name="{ row }">
+              <span class="font-medium">{{ row.name }}</span>
+            </template>
+            <template #cell-pipeline="{ row }">
+              <span class="text-muted-foreground">{{ row.pipeline }}</span>
+            </template>
+            <template #cell-variants_count="{ row }">
+              <span class="tabular-nums">{{ row.variants_count }}</span>
+            </template>
+            <template #cell-evals_count="{ row }">
+              <span class="tabular-nums">{{ row.evals_count }}</span>
+            </template>
+            <template #cell-strategy="{ row }">
+              <span class="text-muted-foreground">{{ row.strategy }}</span>
+            </template>
+            <template #cell-run_count="{ row }">
+              <span class="tabular-nums">{{ $t('views.variantCompare.runs', { count: Number(row.run_count ?? 0) }) }}</span>
+            </template>
+            <template #cell-degraded="{ row }">
+              <span v-if="row.degraded" class="badge badge-status-warning">
+                {{ $t('views.variantCompare.degradedBadge') }}
+              </span>
+              <span v-else class="text-xs text-muted-foreground">—</span>
+            </template>
+            <template #cell-actions="{ row }">
+              <Button
+                size="small"
+                severity="secondary"
+                outlined
+                :data-testid="`variant-compare-select-${row.id}`"
+                @click.stop="selectGroupRow(row)"
+              >
+                {{ selectedGroupId === row.id ? $t('views.variantCompare.viewing') : $t('views.variantCompare.view') }}
+              </Button>
+            </template>
+            <template #empty>
+              {{ $t('views.variantCompare.noMatchingComparisons') }}
+            </template>
+          </DataTable>
 
-      <template v-if="selectedGroup">
+      <div v-if="selectedGroup" class="space-y-4">
+        <h2 class="text-base font-semibold">{{ selectedGroup.name }}</h2>
         <div class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
@@ -246,23 +309,15 @@
             </div>
           </div>
         </div>
-      </template>
-
-      <EmptyState
-        v-else-if="!loading && groups.length === 0"
-        :title="$t('views.variantCompare.emptyGroupsTitle')"
-        :description="$t('views.variantCompare.emptyGroupsDescription')"
-      >
-        <Button data-testid="variant-compare-empty-create" @click="showBuilder = true">
-          {{ $t('views.variantCompare.newComparison') }}
-        </Button>
-      </EmptyState>
+      </div>
 
       <div
         v-else
         class="rounded-lg border bg-card p-8 text-center text-muted-foreground"
       >
         {{ $t('views.variantCompare.selectGroupFirst') }}
+      </div>
+        </template>
       </div>
       </template>
     </template>
@@ -283,8 +338,10 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import { formatApiError } from '../lib/api/formatError'
 import Button from 'primevue/button'
 import EmptyState from '../components/shared/EmptyState.vue'
+import FilterBar from '../components/shared/FilterBar.vue'
 import Select from '../components/shared/AppSelect.vue'
 import VariantGroupBuilder from '../components/variants/VariantGroupBuilder.vue'
+import { DataTable, type Column, type DataTableRow } from '../components/ui/data-table'
 import { formatMoney } from '../lib/money'
 import { useOrgCurrency } from '../composables/useOrgCurrency'
 import { TERMINAL_STATUSES } from '../constants/runStatuses'
@@ -294,6 +351,7 @@ const { currencyCode, loadCurrency } = useOrgCurrency()
 const route = useRoute()
 
 type VariantGroup = components['schemas']['VariantGroupResponse']
+type PipelineResponse = components['schemas']['PipelineResponse']
 type RunResponse = components['schemas']['RunResponse']
 type RunIOResponse = components['schemas']['RunIOResponse']
 interface RunEvalItem {
@@ -330,6 +388,103 @@ const groups = computed(() => {
   const raw = groupsResp.value
   return (Array.isArray(raw) ? raw : (raw as any)?.items ?? []) as VariantGroup[]
 })
+
+// FAR-2598: the groups list is a comparison-groups table now, so the pipeline
+// column needs the pipeline's display name. A group whose pipeline is not in
+// this list (or whose fetch failed) still renders its id rather than a blank.
+const { data: pipelinesResp } = useDataFetch(
+  () => api.GET('/api/v1/pipelines'),
+  { initialValue: null as unknown as { items: PipelineResponse[] } },
+)
+
+const pipelines = computed<PipelineResponse[]>(() => {
+  const raw = pipelinesResp.value as unknown as
+    | { items?: PipelineResponse[] }
+    | PipelineResponse[]
+    | null
+  if (Array.isArray(raw)) return raw
+  return raw?.items ?? []
+})
+
+const filterSearch = ref('')
+const filterPipelineId = ref('')
+
+const pipelineOptions = computed(() => {
+  const names = new Map<string, string>()
+  for (const pipeline of pipelines.value) {
+    if (pipeline?.id) names.set(pipeline.id, pipeline.name ?? pipeline.id)
+  }
+  // A group can reference a pipeline the caller cannot list (deleted or
+  // team-scoped); keep it filterable by id rather than dropping the row.
+  for (const group of groups.value) {
+    if (group.pipeline_id && !names.has(group.pipeline_id)) {
+      names.set(group.pipeline_id, group.pipeline_id)
+    }
+  }
+  return Array.from(names, ([value, label]) => ({ value, label }))
+})
+
+const pipelineFilterOptions = computed(() => [
+  {
+    key: 'pipeline_id',
+    label: t('views.variantCompare.pipelineFilter'),
+    options: pipelineOptions.value,
+  },
+])
+
+function handleFilterUpdate(key: string, value: string) {
+  if (key === 'pipeline_id') filterPipelineId.value = value
+}
+
+/** Distinct eval ids across a group's variants — what the group is scored with. */
+function distinctEvalCount(group: VariantGroup): number {
+  const ids = new Set<string>()
+  for (const variant of group.variants ?? []) {
+    const list = (variant as { eval_definition_ids?: unknown }).eval_definition_ids
+    if (!Array.isArray(list)) continue
+    for (const id of list) {
+      if (typeof id === 'string' && id) ids.add(id)
+    }
+  }
+  return ids.size
+}
+
+const groupRows = computed<DataTableRow[]>(() => {
+  const nameById = new Map(pipelines.value.map(pipeline => [pipeline.id, pipeline.name]))
+  const search = filterSearch.value.trim().toLowerCase()
+  return groups.value
+    .filter(group => !filterPipelineId.value || group.pipeline_id === filterPipelineId.value)
+    .filter(group => !search || (group.name ?? '').toLowerCase().includes(search))
+    .map(group => ({
+      id: group.id,
+      name: group.name,
+      pipeline: nameById.get(group.pipeline_id) ?? group.pipeline_id,
+      variants_count: (group.variants ?? []).length,
+      evals_count: distinctEvalCount(group),
+      strategy: group.selection_strategy || '—',
+      run_count: group.run_count ?? 0,
+      degraded: Boolean(group.degraded_evals),
+    }))
+})
+
+// Percentages sum to 100 so the `fit` table (fixed layout from `lg` up)
+// compresses instead of pushing the actions column off-screen; low-priority
+// columns drop out on narrower screens while the table keeps its horizontal
+// scroll below `lg`.
+const groupColumns = computed<Column[]>(() => [
+  { key: 'name', label: t('views.variantCompare.columnName'), sortable: true, width: '22%' },
+  { key: 'pipeline', label: t('views.variantCompare.columnPipeline'), sortable: true, width: '18%', hideBelow: 'md' },
+  { key: 'variants_count', label: t('views.variantCompare.columnVariants'), numeric: true, sortable: true, width: '8%' },
+  { key: 'evals_count', label: t('views.variantCompare.columnEvals'), numeric: true, sortable: true, width: '8%', hideBelow: 'sm' },
+  { key: 'strategy', label: t('views.variantCompare.columnStrategy'), width: '12%', hideBelow: 'xl' },
+  { key: 'run_count', label: t('views.variantCompare.columnRuns'), numeric: true, sortable: true, width: '9%', hideBelow: 'sm' },
+  { key: 'degraded', label: t('views.variantCompare.columnDegraded'), width: '9%', hideBelow: 'md' },
+  { key: 'actions', label: '', width: '14%' },
+])
+
+function selectGroupRow(row: DataTableRow) {
+  if (typeof row.id === 'string' && row.id) selectedGroupId.value = row.id
+}
 
 const selectedGroupId = ref<string | null>(null)
 const selectedGroup = ref<VariantGroup | null>(null)
@@ -502,6 +657,19 @@ watch(groups, (list) => {
     selectedGroupId.value = list[0].id
   }
 }, { immediate: true })
+
+// The table can never land empty-handed: when a filter empties the current
+// selection out of the visible rows (or the selection is still unset), select
+// the first visible comparison so the detail panel below always matches a row.
+watch(groupRows, (rows) => {
+  if (rows.length === 0) return
+  const current = selectedGroupId.value
+  const stillVisible = current !== null && rows.some(row => row.id === current)
+  if (!stillVisible) {
+    const first = rows[0].id
+    if (typeof first === 'string') selectedGroupId.value = first
+  }
+})
 
 interface FiredRun {
   run_id: string

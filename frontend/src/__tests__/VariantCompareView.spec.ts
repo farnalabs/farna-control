@@ -86,7 +86,7 @@ describe('VariantCompareView', () => {
       },
     })
     await vi.waitFor(() => {
-      expect(wrapper.find('[data-testid="variant-compare-group-select"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="variant-compare-filters"]').exists()).toBe(true)
     })
     expect(wrapper.findComponent(PageTabs).exists()).toBe(false)
   })
@@ -507,7 +507,7 @@ describe('VariantCompareView', () => {
     await vi.waitFor(() => {
       expect(wrapper.find('[data-testid="error-alert-retry"]').exists()).toBe(false)
     })
-    expect(wrapper.find('[data-testid="variant-compare-group-select"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="variant-compare-groups-table"]').exists()).toBe(true)
   })
 
   it('renders the selected-group summary with the run-count and strategy fallbacks', async () => {
@@ -682,5 +682,159 @@ describe('VariantCompareView', () => {
     expect(runCalls).toBe(2)
     expect(vm.runEntries.get('var-a').runStatus).toBe('complete')
     vi.useRealTimers()
+  })
+
+  // FAR-2598: the comparison-groups table replaces the unlabelled dropdown.
+  const twoGroups = [
+    {
+      ...groupWithVariants,
+      id: 'g1',
+      name: 'Group 1',
+      pipeline_id: 'p1',
+      run_count: 4,
+      variants: [
+        { name: 'var-a', weight: 0.5, eval_definition_ids: ['e1', 'e2'] },
+        { name: 'var-b', weight: 0.5, eval_definition_ids: ['e2', 'e3'] },
+      ],
+      degraded_evals: true,
+    },
+    {
+      ...groupWithVariants,
+      id: 'g2',
+      name: 'Group 2',
+      pipeline_id: 'p2',
+      run_count: 0,
+      variants: [
+        { name: 'var-a', weight: 1, eval_definition_ids: ['e1'] },
+      ],
+      degraded_evals: false,
+    },
+  ]
+
+  function mockGroupsAndPipelines() {
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: twoGroups, error: undefined })
+      }
+      if (url === '/api/v1/pipelines') {
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 'p1', name: 'Alpha pipeline' },
+              { id: 'p2', name: 'Beta pipeline' },
+            ],
+          },
+          error: undefined,
+        })
+      }
+      if (url === '/api/v1/variant-groups/{group_id}') {
+        return Promise.resolve({ data: twoGroups[0], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+  }
+
+  it('renders each comparison as a table row with its pipeline, counts and degraded badge', async () => {
+    mockGroupsAndPipelines()
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Alpha pipeline')
+    })
+
+    const table = wrapper.find('[data-testid="variant-compare-groups-table"]')
+    expect(table.exists()).toBe(true)
+    const text = table.text()
+    expect(text).toContain('Group 1')
+    expect(text).toContain('Beta pipeline')
+    expect(text).toContain('views.variantCompare.columnPipeline')
+    expect(text).toContain('views.variantCompare.columnEvals')
+    expect(text).toContain('views.variantCompare.degradedBadge')
+
+    const rows = (wrapper.vm as any).groupRows as Array<Record<string, unknown>>
+    // Evals scored counts DISTINCT eval ids across the variants (e1, e2, e3).
+    expect(rows[0].evals_count).toBe(3)
+    expect(rows[0].variants_count).toBe(2)
+    expect(rows[0].pipeline).toBe('Alpha pipeline')
+    expect(rows[1].degraded).toBe(false)
+  })
+
+  it('filters the comparison table by pipeline and by name, keeping a valid selection', async () => {
+    mockGroupsAndPipelines()
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Alpha pipeline')
+    })
+
+    const vm = wrapper.vm as any
+    vm.filterPipelineId = 'p2'
+    await nextTick()
+    expect((vm.groupRows as Array<Record<string, unknown>>).map(row => row.name)).toEqual(['Group 2'])
+    expect(vm.selectedGroupId).toBe('g2')
+
+    vm.filterSearch = 'no such comparison'
+    await nextTick()
+    expect(vm.groupRows).toHaveLength(0)
+    expect(wrapper.text()).toContain('views.variantCompare.noMatchingComparisons')
+  })
+
+  it('selects a comparison in place from its row action without navigating', async () => {
+    mockGroupsAndPipelines()
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="variant-compare-select-g2"]').exists()).toBe(true)
+    })
+
+    await wrapper.find('[data-testid="variant-compare-select-g2"]').trigger('click')
+    await nextTick()
+
+    const vm = wrapper.vm as any
+    expect(vm.selectedGroupId).toBe('g2')
+    // Still on the list page: selection is in place, not a batch-detail route.
+    expect(hoisted.route.params).toEqual({})
+  })
+
+  it('offers the New comparison CTA in the empty state and opens the builder', async () => {
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="variant-compare-empty-create"]').exists()).toBe(true)
+    })
+    expect(wrapper.text()).toContain('views.variantCompare.emptyGroupsTitle')
+    expect(wrapper.text()).toContain('views.variantCompare.explainerEvalsLink')
+
+    await wrapper.find('[data-testid="variant-compare-empty-create"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="variant-group-builder"]').exists()).toBe(true)
   })
 })
