@@ -786,6 +786,8 @@ async def list_library_primitives_endpoint(
     primitive_type: str | None = None,
     primitive_types: str | None = None,
     search: str | None = None,
+    # ``source`` stays accepted for compatibility; ``community`` is retired
+    # (legacy rows are soft-deleted) and resolves to an empty result (FAR-2592).
     source: str | None = None,
     include_in_dev: bool = Query(default=False, description="Include in_dev tier items (default excludes them)"),
     session: AsyncSession = Depends(get_db_session),

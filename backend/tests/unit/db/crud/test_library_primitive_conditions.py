@@ -66,7 +66,16 @@ def test_build_list_conditions_defaults_to_excluding_in_dev_tier() -> None:
         excluded_tiers=None,
     )
 
-    assert len(conditions) == 2
+    # deleted_at IS NULL, source != 'community' (retired), tier NOT IN ('in_dev').
+    assert len(conditions) == 3
+    assert "library_primitives.source != 'community'" in _compile(
+        org_id=None,
+        primitive_type=None,
+        primitive_types=None,
+        search=None,
+        source=None,
+        excluded_tiers=None,
+    )
     assert "library_primitives.tier NOT IN ('in_dev')" in _compile(
         org_id=None,
         primitive_type=None,
