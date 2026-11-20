@@ -304,8 +304,8 @@ routes:
         parent: /
         product_map: [feat-evals]
         required_permissions: [eval.list, gate.create, gate.edit]
-        sidebar_group: improve
-        sidebar_order: 2
+        sidebar_group:
+        sidebar_order:
         type: form_page
         <<: *community
         deprecated: false
@@ -315,8 +315,8 @@ routes:
         breadcrumb: Eval Proposals
         parent: /
         product_map: [feat-evals]
-        sidebar_group: improve
-        sidebar_order: 3
+        sidebar_group:
+        sidebar_order:
         type: list_page
         <<: *community
         deprecated: false

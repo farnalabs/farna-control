@@ -26,10 +26,19 @@
 
       <!-- Skeleton rows (STATE-3): the shared DataTable renders pulse
            placeholders, so a slow fetch never shows an unqualified spinner.
-           Decorative only — the scroll region has no focusable content while
-           loading, which axe flags as `scrollable-region-focusable`. -->
-      <div v-if="loading" aria-hidden="true" data-testid="evals-list-loading">
-        <DataTable :columns="columns" :rows="[]" :loading="true" :loading-rows="5" :row-clickable="false" />
+           The region announces the pending load; the skeleton table itself is
+           decorative (its scroll region has no focusable content yet). -->
+      <div
+        v-if="loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        data-testid="evals-list-loading"
+      >
+        <span class="sr-only">{{ $t('views.EvalsListView.loading') }}</span>
+        <div aria-hidden="true">
+          <DataTable :columns="columns" :rows="[]" :loading="true" :loading-rows="5" :row-clickable="false" />
+        </div>
       </div>
 
       <ErrorAlert v-else-if="error" :message="error" :on-retry="loadEvals" />
@@ -74,7 +83,7 @@
           :columns="columns"
           :rows="rows"
           row-testid="evals-list-row"
-          @row-click="row => openEditor(row.pipeline_id as string)"
+          @row-click="row => openEditor(row.pipeline_id as string, row.id as string)"
         >
           <template #cell-pipeline="{ row }">
             <span class="min-w-0 truncate">{{ pipelineLabel(row.pipeline_id as string) }}</span>
@@ -209,12 +218,16 @@ const columns = computed<Column[]>(() => [
 const filterDefs = computed(() => [
   {
     key: 'pipeline_id',
-    label: t('views.EvalsListView.column_pipeline'),
+    // FilterBar renders a filter's label verbatim as the closed/reset option
+    // when it already starts with "All " (otherwise it prefixes "All " to the
+    // key, which read as "All pipeline_id"). The label is also the column
+    // header for this filter, so it names the whole set.
+    label: t('views.EvalsListView.filter_pipelines'),
     options: pipelines.value.map(p => ({ value: p.id, label: p.name })),
   },
   {
     key: 'eval_type',
-    label: t('views.EvalsListView.column_type'),
+    label: t('views.EvalsListView.filter_types'),
     options: EVAL_TYPES.map(option => ({ value: option.value, label: t(option.labelKey) })),
   },
 ])
@@ -249,7 +262,11 @@ function formatThreshold(value: number | null | undefined): string {
 
 async function loadPipelines(): Promise<void> {
   try {
-    const { data } = await api.GET('/api/v1/pipelines')
+    // The API defaults to page_size 20: without this a pipeline past the first
+    // page cannot be filtered to, its evals show a raw id instead of a name,
+    // and a valid editor deep link would be rejected. 100 is the house
+    // convention for an "all of them" selector read (AdminRunRetentionView).
+    const { data } = await api.GET('/api/v1/pipelines', { params: { query: { page_size: 100 } } })
     pipelines.value = (data?.items ?? []) as PipelineItem[]
   } catch (e) {
     // Best-effort join: the eval list still renders with short pipeline ids,
@@ -307,10 +324,15 @@ function nextPage(): void {
   void loadEvals()
 }
 
-function openEditor(pipelineId?: string): void {
-  void router.push(pipelineId
-    ? { path: '/evals/editor', query: { pipeline_id: pipelineId } }
-    : { path: '/evals/editor' })
+function openEditor(pipelineId?: string, evalId?: string): void {
+  if (!pipelineId) {
+    void router.push({ path: '/evals/editor' })
+    return
+  }
+  void router.push({
+    path: '/evals/editor',
+    query: evalId ? { pipeline_id: pipelineId, eval_id: evalId } : { pipeline_id: pipelineId },
+  })
 }
 
 // A filter change re-queries from the first page — page 3 of the unfiltered

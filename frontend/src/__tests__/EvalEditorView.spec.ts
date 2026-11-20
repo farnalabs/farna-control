@@ -222,7 +222,9 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
     const wrapper = mountView()
     await flush()
 
-    expect(apiGET).toHaveBeenCalledWith('/api/v1/pipelines')
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/pipelines', {
+      params: { query: { page_size: 100 } },
+    })
     const save = wrapper.find('[data-testid="eval-editor-save"]')
     expect(save.attributes('disabled')).toBeDefined()
 
@@ -624,5 +626,57 @@ describe('EvalEditorView — ?pipeline_id= deep link (FAR-2597)', () => {
     await vm.onPipelineChange()
     await flush()
     expect((routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query.pipeline_id).toBeUndefined()
+  })
+
+  it('preselects the eval named by ?eval_id= once its pipeline has loaded', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-1'
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; form: { name: string } }
+    expect(vm.editingEvalId).toBe('eval-1')
+    expect(vm.form.name).toBe('Existing Eval')
+  })
+
+  it('ignores an eval id that is no longer in the pipeline, keeping the pipeline open', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-deleted'
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; selectedPipelineId: string }
+    expect(vm.selectedPipelineId).toBe('p1')
+    expect(vm.editingEvalId).toBeNull()
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+  })
+
+  it('treats a failed pipeline read as a load error, not as a missing pipeline', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    let pipelineAttempts = 0
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        pipelineAttempts += 1
+        if (pipelineAttempts === 1) return { data: undefined, error: { detail: 'pipelines unavailable' } }
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') return { data: { nodes: [] } }
+      if (url === '/api/v1/evals') return { data: { items: [evalItem()], total: 1 } }
+      return { data: { items: [] } }
+    })
+    const wrapper = mountView()
+    await flush()
+
+    // A failed read is surfaced as a retryable load error…
+    expect(wrapper.find('[data-testid="error-alert-retry"]').exists()).toBe(true)
+    // …never as "this pipeline does not exist".
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="error-alert-retry"]').trigger('click')
+    await flush()
+
+    const vm = wrapper.vm as unknown as { selectedPipelineId: string }
+    expect(vm.selectedPipelineId).toBe('p1')
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/evals', { params: { query: { pipeline_id: 'p1' } } })
   })
 })

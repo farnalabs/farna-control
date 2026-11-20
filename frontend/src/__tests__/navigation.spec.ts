@@ -24,8 +24,8 @@ const mockManifest = vi.hoisted(() => ({
 
     '/runs/diff': { name: 'runs-diff', breadcrumb: 'Output Diff', sidebar_group: 'monitor', sidebar_order: 2, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
     '/evals': { name: 'evals-list', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 18, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null, exact: true },
-    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Eval Editor', sidebar_group: 'monitor', sidebar_order: 3, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
-    '/evals/proposals': { name: 'eval-proposals-queue', breadcrumb: 'Eval Proposals', sidebar_group: 'monitor', sidebar_order: 4, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Eval Editor', sidebar_group: null, sidebar_order: null, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/evals/proposals': { name: 'eval-proposals-queue', breadcrumb: 'Eval Proposals', sidebar_group: null, sidebar_order: null, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
     '/variants/compare': { name: 'variant-compare', breadcrumb: 'Variants', sidebar_group: 'monitor', sidebar_order: 5, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
     '/settings/observability': { name: 'settings-observability', breadcrumb: 'Observability', sidebar_group: 'monitor', sidebar_order: 7, type: 'form_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null },
     '/settings/monitoring': { name: 'settings-monitoring', breadcrumb: 'Browser Monitoring', sidebar_group: 'monitor', sidebar_order: 8, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
@@ -370,17 +370,21 @@ describe('navigation.ts', () => {
     expect(list.icon).toBe('CheckSquare')
   })
 
-  it('gives the eval editor its own label now that Evals names the list (FAR-2597)', () => {
+  it('keeps the tab-fed eval pages out of the sidebar (FAR-2597)', () => {
+    // Costs precedent: /evals is the one sidebar entry; the editor and the
+    // proposals queue are reached through the eval-surface tab strip, so they
+    // must not also appear as sidebar items.
     const all = navGroups.flatMap((group) => group.items)
-    const editor = all.find((item) => item.to === '/evals/editor')!
-    expect(editor.labelKey).toBe('components.SidebarNav.item_eval_editor')
+    expect(all.some((item) => item.to === '/evals')).toBe(true)
+    expect(all.some((item) => item.to === '/evals/editor')).toBe(false)
+    expect(all.some((item) => item.to === '/evals/proposals')).toBe(false)
   })
 
   it('monitor has evals, diff, observability, etc', () => {
     const monitor = navGroups.find((g) => g.id === 'monitor')!
     expect(monitor.items.length).toBeGreaterThanOrEqual(3)
     expect(monitor.items.some(i => i.to === '/runs/diff')).toBe(true)
-    expect(monitor.items.some(i => i.to === '/evals/editor')).toBe(true)
+    expect(monitor.items.some(i => i.to === '/evals')).toBe(true)
   })
 
   it('places Notifications first in the monitor group, above Error Dashboard (FAR-656)', () => {

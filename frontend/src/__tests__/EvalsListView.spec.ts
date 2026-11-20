@@ -172,7 +172,9 @@ describe('EvalsListView', () => {
     await flush()
 
     expect(lastEvalsQuery()).toEqual({ page: 1, page_size: 25 })
-    expect(apiGet).toHaveBeenCalledWith('/api/v1/pipelines')
+    // page_size 100, not the API default of 20: a truncated pipeline list would
+    // silently hide pipelines 21+ from the filter and the editor deep link.
+    expect(apiGet).toHaveBeenCalledWith('/api/v1/pipelines', { params: { query: { page_size: 100 } } })
   })
 
   it('sends the pipeline filter and returns to page one', async () => {
@@ -260,8 +262,8 @@ describe('EvalsListView', () => {
     wrapper.unmount()
   })
 
-  it('opens the editor for the clicked row pipeline', async () => {
-    mockApi({ evals: { items: [evalItem({ pipeline_id: 'p2' })], total: 1 } })
+  it('opens the editor on the clicked eval, not just its pipeline', async () => {
+    mockApi({ evals: { items: [evalItem({ id: 'eval-7', pipeline_id: 'p2' })], total: 1 } })
     const wrapper = mountView()
     await flush()
 
@@ -269,8 +271,44 @@ describe('EvalsListView', () => {
 
     expect(routerMocks.push).toHaveBeenCalledWith({
       path: '/evals/editor',
-      query: { pipeline_id: 'p2' },
+      query: { pipeline_id: 'p2', eval_id: 'eval-7' },
     })
+    wrapper.unmount()
+  })
+
+  it('labels its filters as whole sets so the reset option reads correctly', async () => {
+    const wrapper = mountView()
+    await flush()
+
+    const filters = filterBar(wrapper).props('filters') as Array<{ key: string; label: string }>
+    expect(filters.find(f => f.key === 'pipeline_id')?.label).toBe('All pipelines')
+    expect(filters.find(f => f.key === 'eval_type')?.label).toBe('All types')
+    wrapper.unmount()
+  })
+
+  it('announces the pending load as a busy status region', async () => {
+    let release: (() => void) | undefined
+    apiGet.mockImplementation(async (path: string) => {
+      if (path === '/api/v1/pipelines') return { data: { items: PIPELINES }, error: undefined }
+      if (path === '/api/v1/evals') {
+        await new Promise<void>((resolve) => { release = resolve })
+        return { data: { items: [], total: 0 }, error: undefined }
+      }
+      return { data: { items: [], total: 0 }, error: undefined }
+    })
+    const wrapper = mountView()
+    await nextTick()
+
+    const region = wrapper.find('[data-testid="evals-list-loading"]')
+    expect(region.exists()).toBe(true)
+    expect(region.attributes('role')).toBe('status')
+    expect(region.attributes('aria-busy')).toBe('true')
+    expect(region.attributes('aria-live')).toBe('polite')
+    expect(region.text()).toContain('Loading evals')
+
+    release?.()
+    await flush()
+    expect(wrapper.find('[data-testid="evals-list-loading"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
