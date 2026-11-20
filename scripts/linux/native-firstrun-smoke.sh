@@ -31,6 +31,10 @@
 #                          HOME, install root and data dir all live under it
 #   SMOKE_SETTLE_SECONDS   settle window before asserting (default 180, min 180)
 #   SMOKE_KEEP_RUNNING=1   skip the final stop (debugging only)
+#   SMOKE_START_CWD        run `start --detach` from this directory (e.g. one
+#                          the smoke user can enter but neither read nor
+#                          write) — proves the launcher never depends on its
+#                          cwd (Redis used to write into it)
 
 set -euo pipefail
 
@@ -78,6 +82,9 @@ SETTLE="${SMOKE_SETTLE_SECONDS:-${MIN_SETTLE_SECONDS}}"
 
 WORKDIR="${SMOKE_WORKDIR:-$(mktemp -d)}"
 mkdir -p -- "${WORKDIR}"
+# Everything this script does itself runs from the work dir; only `start`
+# runs from SMOKE_START_CWD when given.
+cd -- "${WORKDIR}"
 # A FRESH home: install root, bin dir and data dir all derive from it, so no
 # earlier install, config.env or data dir on this machine can leak in.
 export HOME="${WORKDIR}/home"
@@ -112,7 +119,12 @@ bash "${installer}" --from-file "${TARBALL}" || fail "install.sh --from-file exi
 
 # --- 2. start -------------------------------------------------------------------
 log "step 2: farna-control start --detach"
-"${CLI}" start --detach || fail "start --detach exited non-zero"
+if [[ -n "${SMOKE_START_CWD:-}" ]]; then
+  log "  starting from cwd ${SMOKE_START_CWD}"
+  ( cd -- "${SMOKE_START_CWD}" && "${CLI}" start --detach ) || fail "start --detach (cwd ${SMOKE_START_CWD}) exited non-zero"
+else
+  "${CLI}" start --detach || fail "start --detach exited non-zero"
+fi
 STARTED=1
 
 # --- 3-7. shared post-start stability assertions -------------------------------
