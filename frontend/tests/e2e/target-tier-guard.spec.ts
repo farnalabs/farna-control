@@ -62,17 +62,18 @@ async function run(
 
 test.describe('Team-tier navigation guard', { tag: '@regression' }, () => {
   test('community staging skips a team route without navigating', { tag: '@regression' }, async () => {
-    const result = await run(staging, '/admin/connectors', 'community')
+    const result = await run(staging, '/admin/errors', 'community')
     expect(result.threw).toBe(true)
     expect(result.skips).toHaveLength(1)
-    expect(result.skips[0]).toContain('/admin/connectors')
-    expect(result.calls).not.toContain('goto:/admin/connectors')
+    expect(result.skips[0]).toContain('/admin/errors')
+    expect(result.calls).not.toContain('goto:/admin/errors')
   })
 
-  test('community staging skips a legacy alias of a team route', { tag: '@regression' }, async () => {
+  test('community staging navigates a legacy alias whose target is now community', { tag: '@regression' }, async () => {
     const result = await run(staging, '/admin/sandbox-concurrency', 'community')
-    expect(result.threw).toBe(true)
-    expect(result.calls).not.toContain('goto:/admin/sandbox-concurrency')
+    expect(result.threw).toBe(false)
+    expect(result.skips).toHaveLength(0)
+    expect(result.calls).toContain('goto:/admin/sandbox-concurrency')
   })
 
   test('community staging still navigates a community route', { tag: '@regression' }, async () => {
@@ -89,9 +90,9 @@ test.describe('Team-tier navigation guard', { tag: '@regression' }, () => {
   })
 
   test('a spec-owned plan mock disables the guard', { tag: '@regression' }, async () => {
-    const result = await run(staging, '/admin/notification-delivery', 'community', true)
+    const result = await run(staging, '/admin/errors', 'community', true)
     expect(result.threw).toBe(false)
-    expect(result.calls).toContain('goto:/admin/notification-delivery')
+    expect(result.calls).toContain('goto:/admin/errors')
   })
 
   test('the production target is never guarded', { tag: '@regression' }, async () => {
