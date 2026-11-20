@@ -1,7 +1,7 @@
 Feature: Multi-Backend Database Support
   As a Farna Control operator
-  I want tenant isolation, migrations, locks, and time functions to work consistently on SQLite (test-only) and Postgres
-  So that the automated test suite and the supported PostgreSQL runtime both behave correctly
+  I want tenant isolation, migrations, and locks to behave correctly on SQLite (test-only) and Postgres
+  So that the automated test suite exercises the same repository abstractions as the supported PostgreSQL runtime
 
   Scenario: SQLite tenant filtering via GenericRepository
     Given a GenericRepository connected to SQLite
@@ -35,8 +35,7 @@ Feature: Multi-Backend Database Support
     When a lock is acquired for the same key
     Then an asyncio.Lock is used instead
 
-  Scenario: Time functions work on supported backends
-    Given a model with created_at using func.now()
-    When the model is persisted to SQLite
-    Then the timestamp is set to the current time
-    And the same behaviour holds for Postgres
+  Scenario: SQLite assigns created_at from the current_timestamp server default
+    Given a table whose created_at defaults to current_timestamp
+    When a row is inserted into an in-memory SQLite database
+    Then the stored created_at is set and within the last minute

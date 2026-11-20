@@ -600,6 +600,10 @@ def _make_settings(**overrides: object) -> Settings:
         "watchdog_enabled": False,
     }
     values.update(overrides)
+    # SQLite is test-only: Settings refuses it unless BOTH the ``modulo_db``
+    # knob and the test-only opt-in agree (ADR 068).
+    if values.get("modulo_db") == "sqlite":
+        values.setdefault("allow_sqlite", True)
     return Settings(**values)  # type: ignore[arg-type]
 
 

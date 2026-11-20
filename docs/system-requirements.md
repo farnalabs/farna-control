@@ -259,9 +259,9 @@ grows with run history.
 | Database | Version | Status | Production Ready | Notes |
 |----------|---------|--------|-----------------|-------|
 | **PostgreSQL** | 16+ | **Supported** | **Yes** | The only supported runtime and production database |
-| **SQLite** | 3.x | Test-only | **No** | Used by the automated test suite (in-memory `create_all`); not deployable |
-| **MySQL** | 8+ | Not supported | **No** | Legacy `FARNA_CONTROL_DB=mysql` value is accepted by the validator; there is no production path |
-| **MariaDB** | 11+ | Not supported | **No** | Legacy `FARNA_CONTROL_DB=mariadb` value is accepted by the validator; there is no production path |
+| **SQLite** | 3.x | Test-only | **No** | Used by the automated test suite (in-memory `create_all`), behind the test-only `FARNA_CONTROL_ALLOW_SQLITE=1` opt-in; not deployable |
+| **MySQL** | 8+ | Not supported | **No** | `FARNA_CONTROL_DB=mysql` is rejected at startup; there is no production path |
+| **MariaDB** | 11+ | Not supported | **No** | `FARNA_CONTROL_DB=mariadb` is rejected at startup; there is no production path |
 
 ### Why only PostgreSQL
 

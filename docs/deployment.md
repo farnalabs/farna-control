@@ -397,7 +397,8 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `SECRET_KEY` | **Yes** | – | 32+ byte random string for JWT signing |
 | `FERNET_KEY` | **Yes** | – | 44-char base64 Fernet key for credential encryption |
 | `FARNA_CONTROL_USERS` | No (but needed for a first login) | – | Comma-separated `email:password` pairs for initial user seed (plaintext is bcrypt-hashed at seed time; `admin` gets the admin role). Without it - and without `farna-control users add` - no account exists and login returns `401`; see *Docker Compose* step 1 |
-| `FARNA_CONTROL_DB` | No | `postgres` | Supported: `postgres`. Legacy values `sqlite`, `mariadb` and `mysql` are accepted by the validator but are not supported deployment backends (SQLite is test-only; MariaDB/MySQL are unsupported). |
+| `FARNA_CONTROL_DB` | No | `postgres` | Supported: `postgres` only. `sqlite` is refused unless the test-only `FARNA_CONTROL_ALLOW_SQLITE=1` opt-in is also set (never an operator option, never a deployment backend). `mariadb` and `mysql` are rejected at startup. |
+| `FARNA_CONTROL_ALLOW_SQLITE` | No | `false` | **TEST-ONLY escape hatch, not an operator option.** Permits `FARNA_CONTROL_DB=sqlite` for the automated test suite, and only together with a SQLite `DATABASE_URL`. Never set it in a deployment. |
 | `REDIS_URL` | **Yes** | `redis://localhost:6379/0` | Redis URL for the SAQ broker, scheduling, event coordination, and rate limiting. The API refuses to boot when this is explicitly empty. |
 | `FARNA_CONTROL_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed CORS origins |
@@ -432,8 +433,10 @@ native install for a Linux workstation (see
 [`docs/system-requirements.md`](./system-requirements.md#native-single-install-bundle-linux)),
 or Fly.io for a managed host (see
 [`docs/deployment-journey.md`](./deployment-journey.md)). `FARNA_CONTROL_DB`
-still accepts the legacy values `sqlite`, `mariadb` and `mysql`, but they have no
-supported production path (ADR 068).
+accepts only `postgres` in a deployment: `mariadb` and `mysql` are rejected at
+startup, and `sqlite` is refused unless the test-only
+`FARNA_CONTROL_ALLOW_SQLITE=1` escape hatch is set, which no deployment should
+ever do (ADR 068).
 
 ### Docker Compose (single-server, multi-user)
 

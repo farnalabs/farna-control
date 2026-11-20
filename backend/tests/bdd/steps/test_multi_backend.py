@@ -3,13 +3,23 @@
 import asyncio
 import contextlib
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
-from sqlalchemy import Select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Integer,
+    MetaData,
+    Select,
+    Table,
+    func,
+    select,
+)
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from farna.db.repositories.generic import GenericRepository
 from farna.db.repositories.locks import (
@@ -300,33 +310,53 @@ def acquire_lock_same_key(ctx) -> None:
 
 
 # ===========================================================================
-# Scenario 7: Time functions on all backends
+# Scenario 7: current_timestamp server default on the SQLite (test-only) backend
 # ===========================================================================
 
-
-@given("a model with created_at using func.now()")
-def model_with_func_now(ctx) -> None:
-    from datetime import datetime
-
-    model = MagicMock()
-    now = datetime.now(UTC)
-    model.created_at = now
-    ctx["model_now"] = model
-    ctx["reference_now"] = now
-
-
-@when("the model is persisted to SQLite")
-def persist_to_sqlite(ctx) -> None:
-    ctx["backend"] = "sqlite"
-    ctx["persisted"] = True
+_CLOCK_TABLE = Table(
+    "multi_backend_clock_probe",
+    MetaData(),
+    Column("id", Integer, primary_key=True),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    ),
+)
 
 
-@then("the timestamp is set to the current time")
-def check_timestamp_set(ctx) -> None:
-    assert ctx["model_now"].created_at is not None
-    assert ctx["persisted"] is True
+@given("a table whose created_at defaults to current_timestamp")
+def table_with_current_timestamp(ctx) -> None:
+    ctx["clock_table"] = _CLOCK_TABLE
 
 
-@then("the same behaviour holds for Postgres")
-def check_all_backends_time(ctx) -> None:
-    assert ctx["model_now"].created_at is not None
+@when("a row is inserted into an in-memory SQLite database")
+def insert_row_into_sqlite(ctx) -> None:
+    table = ctx["clock_table"]
+
+    async def _insert_and_read_back() -> Any:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(table.metadata.create_all)
+                await conn.execute(table.insert().values(id=1))
+            async with engine.connect() as conn:
+                result = await conn.execute(select(table.c.created_at).where(table.c.id == 1))
+                return result.scalar_one()
+        finally:
+            await engine.dispose()
+
+    ctx["read_back_at"] = asyncio.run(_insert_and_read_back())
+
+
+@then("the stored created_at is set and within the last minute")
+def check_timestamp_set_and_recent(ctx) -> None:
+    value = ctx["read_back_at"]
+    assert value is not None, "created_at was not assigned by the current_timestamp server default"
+    # SQLite has no timezone-aware storage, so a DateTime(timezone=True)
+    # column round-trips as naive UTC.
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    drift_seconds = abs((datetime.now(UTC) - value).total_seconds())
+    assert drift_seconds < 60, f"created_at {value!r} is not recent (drift {drift_seconds:.1f}s)"

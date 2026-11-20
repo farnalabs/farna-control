@@ -54,9 +54,16 @@ BASE_SETTINGS: dict[str, object] = {
 
 
 def make_settings(**overrides: object) -> Settings:
-    """Build a Settings instance, overriding any field via keyword args."""
+    """Build a Settings instance, overriding any field via keyword args.
+
+    A ``modulo_db="sqlite"`` override also opts into the test-only SQLite mode
+    (``allow_sqlite=True``), because Settings refuses SQLite unless both halves
+    agree (ADR 068). An explicit ``allow_sqlite`` override still wins.
+    """
     base = dict(BASE_SETTINGS)
     base.update(overrides)
+    if base.get("modulo_db") == "sqlite":
+        base.setdefault("allow_sqlite", True)
     return Settings(**base)
 
 
