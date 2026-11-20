@@ -1582,7 +1582,7 @@ def _restore_data_dir(opts: _RestoreOptions, manifest: dict[str, Any]) -> None:
 
 @click.group()
 def cli() -> None:
-    """Modulo backup and restore operations."""
+    """Farna Control backup and restore operations."""
 
 
 @cli.command()
@@ -1612,7 +1612,7 @@ def cli() -> None:
     help=("Include the 0600 launcher secrets file and the credential-bearing conf profile in the archive. LOUD WARNING: the archive then carries the generated service passwords."),
 )
 def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, include_secrets: bool) -> None:
-    """Create a full backup of the Modulo database.
+    """Create a full backup of the Farna Control database.
 
     Creates a timestamped directory with a pg_dump SQL file, checkpoint_blobs
     JSON export, credentials references, and a versioned backup-info.json
@@ -1803,7 +1803,7 @@ def restore(
     replace_cluster: bool,
     no_safety_dump: bool,
 ) -> None:
-    """Restore a Modulo database from a backup directory.
+    """Restore a Farna Control database from a backup directory.
 
     Verifies BEFORE it wipes (manifest shape + version, instance identity,
     database-emptiness probe for fresh targets, schema downgrade guard, disk
