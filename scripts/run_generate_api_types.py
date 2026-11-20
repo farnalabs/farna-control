@@ -59,6 +59,11 @@ TYPESCRIPT_VERSION = "6.0.2"
 
 _TEMPLATE_ENV = {
     "DATABASE_URL": "sqlite+aiosqlite:///TEMPLATE_DB",
+    # SQLite is the test/tooling backend only (ADR 068). Both halves of the
+    # test-only escape hatch are required: Settings rejects a SQLite DSN unless
+    # FARNA_CONTROL_DB also says sqlite AND FARNA_CONTROL_ALLOW_SQLITE=1.
+    "FARNA_CONTROL_DB": "sqlite",
+    "FARNA_CONTROL_ALLOW_SQLITE": "1",
     "SECRET_KEY": "a" * 32,
     "FERNET_KEY": "b" * 32,
     "FARNA_CONTROL_CSRF_ENABLED": "false",
@@ -135,6 +140,8 @@ def _generate_schema(tempdir: str) -> tuple[int, str]:
         "import os, json, sys\n"
         "sys.tracebacklimit = 0\n"
         f'os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///{db_path.replace(os.sep, "/")}"\n'
+        f'os.environ["FARNA_CONTROL_DB"] = "{_TEMPLATE_ENV["FARNA_CONTROL_DB"]}"\n'
+        f'os.environ["FARNA_CONTROL_ALLOW_SQLITE"] = "{_TEMPLATE_ENV["FARNA_CONTROL_ALLOW_SQLITE"]}"\n'
         f'os.environ["SECRET_KEY"] = "{_TEMPLATE_ENV["SECRET_KEY"]}"\n'
         f'os.environ["FERNET_KEY"] = "{_TEMPLATE_ENV["FERNET_KEY"]}"\n'
         f'os.environ["FARNA_CONTROL_CSRF_ENABLED"] = "{_TEMPLATE_ENV["FARNA_CONTROL_CSRF_ENABLED"]}"\n'

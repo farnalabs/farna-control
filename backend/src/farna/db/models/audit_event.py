@@ -42,7 +42,7 @@ class AuditEvent(OrgScoped):
     resource_type: Mapped[str | None] = mapped_column(String(100))
     resource_id: Mapped[uuid.UUID | None] = mapped_column(Uuid())
     # DB stores JSONB (0147_json_to_jsonb_standardize); JSONB_COL keeps
-    # SQLite/MariaDB parity via generic JSON (the run.py cost_breakdown precedent).
+    # SQLite (test-only) parity via generic JSON (the run.py cost_breakdown precedent).
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSONB_COL, nullable=False, default=dict)
     request_id: Mapped[str | None] = mapped_column(String(255))
     previous_hash: Mapped[str | None] = mapped_column(Text)
@@ -57,7 +57,7 @@ class AuditChainHead(Base):
     # ``tests/integration/test_initial_migration.py::_MIGRATION_OWNED_CHECKS``),
     # so it stays out of the ORM rather than being declared twice. The server
     # default (``event_count`` is NOT NULL) is kept here for create_all'd
-    # SQLite/MariaDB schemas; 0292 sets the Postgres-side default.
+    # SQLite (test-only) schemas; 0292 sets the Postgres-side default.
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
     organisation_id: Mapped[uuid.UUID] = mapped_column(

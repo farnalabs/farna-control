@@ -1053,8 +1053,8 @@ async def _delete_run_id_rows(session: AsyncSession, run_ids: list[Any]) -> None
     if not run_ids:
         return
     # These are ORM-mapped, so RLS (Postgres) and the generic tenant filter
-    # (SQLite/MariaDB) stay in play — an org-admin can never match another org's
-    # rows even when the run_id list accidentally overlaps.
+    # (SQLite, test-only) stay in play — an org-admin can never match another
+    # org's rows even when the run_id list accidentally overlaps.
     await session.execute(delete(NotificationDeliveryLog).where(NotificationDeliveryLog.run_id.in_(run_ids)))
     await session.execute(delete(TriggerEvent).where(TriggerEvent.run_id.in_(run_ids)))
 

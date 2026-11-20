@@ -17,9 +17,10 @@ async def _dialect_insert(session: AsyncSession) -> Any:
 
     Postgres is the production backend; SQLite keeps the atomic upsert
     exercisable from the SQLite-backed unit suite (the same ``pg_insert`` /
-    ``sqlite_insert`` split as ``crud.run_node_outputs``). MariaDB is
-    deliberately refused: its ``INSERT ... ON DUPLICATE KEY UPDATE`` has
-    different semantics, so it must not silently take the Postgres path.
+    ``sqlite_insert`` split as ``crud.run_node_outputs``). The MySQL/MariaDB
+    family is unsupported (ADR 068) and deliberately refused: its
+    ``INSERT ... ON DUPLICATE KEY UPDATE`` has different semantics, so it must
+    not silently take the Postgres path.
 
     The dialect is read through the shared await-tolerant ``get_dialect_name``
     helper: ``AsyncSession.get_bind`` is sync on a real session, but a test

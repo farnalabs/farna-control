@@ -21,7 +21,7 @@ Feature: Multi-Backend Database Support
     And a SELECT query is executed through GenericRepository
     Then only records for org "othercorp" are returned
 
-  Scenario: Alembic migration runs on SQLite and Postgres
+  Scenario: Alembic env.py configures a driver and URL per backend
     Given a SQLite and Postgres database URL
     When the migration env.py configures the backend
     Then render_as_batch is enabled for SQLite

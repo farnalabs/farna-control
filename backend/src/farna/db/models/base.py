@@ -20,8 +20,8 @@ FK_ACCOUNTS_ID: Final[str] = "accounts.id"
 # Column type for a JSON column whose physical Postgres type is ``jsonb``: use
 # it for the columns migration ``0147_json_to_jsonb_standardize`` promoted and
 # for every column a migration created ``jsonb`` directly. Generic ``JSON``
-# keeps SQLite and MariaDB working; the ``postgresql`` variant makes the ORM
-# declare what the database actually holds.
+# keeps the SQLite (test-only) backend working; the ``postgresql`` variant makes
+# the ORM declare what the database actually holds.
 #
 # This matters beyond cosmetics: a column declared bare ``JSON`` over a physical
 # ``jsonb`` column binds equality/containment predicates as ``$1::JSON`` and

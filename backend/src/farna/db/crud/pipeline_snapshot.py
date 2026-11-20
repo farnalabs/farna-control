@@ -214,8 +214,8 @@ def _build_lock_engine(bind: AsyncEngine) -> AsyncEngine:
     """
     connect_args: dict[str, Any] = {"timeout": 10}
     if str(bind.url.drivername).startswith("postgres"):
-        # ssl is None exactly when settings is not a Postgres URL (SQLite/MySQL
-        # deployments), whose drivers take none of these knobs.
+        # ssl is None exactly when settings is not a Postgres URL (a SQLite
+        # test-only deployment), whose driver takes none of these knobs.
         _, ssl = split_engine_sslmode(get_settings().database_url)
         if ssl is not None:
             connect_args["ssl"] = ssl

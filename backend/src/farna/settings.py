@@ -6,6 +6,7 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Final
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -16,6 +17,54 @@ _log = logging.getLogger(__name__)
 
 _MIN_KEY_LEN = 32
 _POSTGRES_ASYNC_PREFIX = "postgresql+asyncpg://"
+_SQLITE_SCHEME_PREFIX = "sqlite"
+
+
+def _dsn_backend(url: str, *, setting: str) -> str:
+    """Classify a boot DSN by its SCHEME, rejecting every non-Postgres-non-SQLite family.
+
+    The Settings guard must inspect the DSN itself, not only the
+    ``FARNA_CONTROL_DB`` knob. A ``DATABASE_URL=sqlite+aiosqlite:///...`` with
+    the default ``FARNA_CONTROL_DB=postgres`` selects the Postgres repository
+    (which injects no tenant filter) against a SQLite engine, while
+    ``register_tenant_filter`` keys off ``modulo_db`` and returns early — so the
+    SAQ worker would run jobs with no tenant scoping. That is the posture
+    ADR 068 forbids, so a scheme/knob mismatch must fail at boot.
+
+    Returns ``"postgres"`` or ``"sqlite"``; raises for anything else
+    (MySQL/MariaDB included).
+    """
+    scheme = urlsplit(url).scheme.lower()
+    if scheme.startswith("postgres"):
+        return "postgres"
+    if scheme.startswith(_SQLITE_SCHEME_PREFIX):
+        return "sqlite"
+    raise ValueError(f"{setting} uses the unsupported database scheme {scheme!r}. PostgreSQL 16 is the only supported runtime database (ADR 068); SQLite is test-only behind FARNA_CONTROL_ALLOW_SQLITE=1, and the MySQL/MariaDB family is no longer supported.")
+
+
+def _validate_boot_dsn(*, url: str, setting: str, modulo_db: str, allow_sqlite: bool) -> None:
+    """Fail closed unless a boot DSN is PostgreSQL, or SQLite in TEST MODE.
+
+    SQLite is admissible only when BOTH halves of the test-only escape hatch
+    agree: ``FARNA_CONTROL_DB=sqlite`` AND ``FARNA_CONTROL_ALLOW_SQLITE=1``. A
+    SQLite DSN with the default ``modulo_db`` is refused, and so is
+    ``modulo_db=sqlite`` without the opt-in — either alone yields the unscoped
+    backend/knob mismatch described in :func:`_dsn_backend`.
+    """
+    if modulo_db == "sqlite" and not allow_sqlite:
+        raise ValueError("FARNA_CONTROL_DB=sqlite is test-only. Set FARNA_CONTROL_ALLOW_SQLITE=1 only in the test suite, or use PostgreSQL / the native installer.")
+    if _dsn_backend(url, setting=setting) == "postgres":
+        return
+    if allow_sqlite and modulo_db == "sqlite":
+        return
+    raise ValueError(
+        f"{setting} points at SQLite but the test-only SQLite mode is not fully enabled "
+        f"(FARNA_CONTROL_DB={modulo_db!r}, FARNA_CONTROL_ALLOW_SQLITE={allow_sqlite!r}). "
+        "SQLite is test-only (ADR 068): set BOTH FARNA_CONTROL_DB=sqlite and "
+        "FARNA_CONTROL_ALLOW_SQLITE=1 in the test suite, or use PostgreSQL / the native installer."
+    )
+
+
 # Minimum length for each operator secret (FARNA_CONTROL_BREAK_GLASS_SECRET /
 # _STANDBY_SECRET). Validated unconditionally when set (break-glass plan §3).
 _MIN_BREAK_GLASS_SECRET_LEN = 24
@@ -1282,10 +1331,30 @@ class Settings(BaseSettings):
         PostgreSQL 16 is the only supported runtime database (ADR 068). SQLite
         remains available for the automated test suite, but only behind an
         explicit ``FARNA_CONTROL_ALLOW_SQLITE=1`` opt-in — never as an operator
-        option. This runs BEFORE ``_apply_sqlite_mode`` (declaration order).
+        option.
+
+        The guard inspects the DSNs, not only ``FARNA_CONTROL_DB``: a SQLite
+        ``DATABASE_URL`` (or ``FARNA_CONTROL_SYSTEM_DATABASE_URL``) reaching a
+        ``modulo_db=postgres`` runtime would pick the Postgres repository while
+        the engine is SQLite and the tenant filter is skipped. Runs BEFORE
+        ``_apply_sqlite_mode`` (declaration order), so the historical
+        ``modulo_db=sqlite`` + Postgres-URL path is still validated here and
+        then rewritten there.
         """
-        if self.modulo_db == "sqlite" and not self.allow_sqlite:
-            raise ValueError("FARNA_CONTROL_DB=sqlite is test-only. Set FARNA_CONTROL_ALLOW_SQLITE=1 only in the test suite, or use PostgreSQL / the native installer.")
+        _validate_boot_dsn(
+            url=self.database_url,
+            setting="DATABASE_URL",
+            modulo_db=self.modulo_db,
+            allow_sqlite=self.allow_sqlite,
+        )
+        system_url = self.modulo_system_database_url.strip()
+        if system_url:
+            _validate_boot_dsn(
+                url=system_url,
+                setting="FARNA_CONTROL_SYSTEM_DATABASE_URL",
+                modulo_db=self.modulo_db,
+                allow_sqlite=self.allow_sqlite,
+            )
         return self
 
     @model_validator(mode="after")

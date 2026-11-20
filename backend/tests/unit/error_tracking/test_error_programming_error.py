@@ -23,6 +23,10 @@ def _reset_error_state(monkeypatch: pytest.MonkeyPatch):
     from farna.api.routes import errors as errors_module
 
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    # SQLite is test-only (ADR 068) and the Settings guard inspects the DSN:
+    # both halves of the opt-in are required alongside the SQLite URL.
+    monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
     monkeypatch.setenv("SECRET_KEY", "unit-test-secret-key-that-is-long-enough")
     monkeypatch.setenv("FERNET_KEY", "unit-test-fernet-key-that-is-long-enough")
     monkeypatch.setenv("REDIS_URL", "")

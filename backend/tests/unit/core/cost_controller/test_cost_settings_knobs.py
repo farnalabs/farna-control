@@ -11,6 +11,10 @@ from farna.settings import Settings
 
 _REQUIRED = {
     "DATABASE_URL": "sqlite+aiosqlite:///./settings-test.db",
+    # SQLite is test-only (ADR 068) and the Settings guard inspects the DSN;
+    # both halves of the escape hatch are required.
+    "FARNA_CONTROL_DB": "sqlite",
+    "FARNA_CONTROL_ALLOW_SQLITE": "1",
     "SECRET_KEY": "s" * 40,
     "FERNET_KEY": "f" * 44,
 }
