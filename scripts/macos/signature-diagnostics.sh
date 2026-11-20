@@ -165,6 +165,77 @@ for dirpath, dirnames, filenames in os.walk(sys.argv[1]):
         seen[key] = rel
 PY
 
+section "main executable signature and entitlements"
+codesign -dvvv "$app" 2>&1 | grep -Ev '^(Authority|Signed Time|Timestamp)=' | head -n 30
+codesign -d --entitlements - "$app" 2>&1 | head -n 30
+
+# Re-derive resource validation independently of the Security framework:
+# every sealed hash in CodeResources is compared against the file on disk,
+# and every regular file under Contents must be sealed, nested or omitted.
+section "independent CodeResources seal check"
+python3 -I - "$app" <<'PY'
+import hashlib
+import os
+import plistlib
+import re
+import sys
+
+app = sys.argv[1]
+contents = os.path.join(app, "Contents")
+seal_path = os.path.join(contents, "_CodeSignature", "CodeResources")
+with open(seal_path, "rb") as handle:
+    seal = plistlib.load(handle)
+files2 = seal.get("files2", {})
+rules2 = seal.get("rules2", {})
+omit = [re.compile(pattern) for pattern, rule in rules2.items() if isinstance(rule, dict) and rule.get("omit")]
+problems = 0
+for rel, entry in sorted(files2.items()):
+    path = os.path.join(contents, rel)
+    if isinstance(entry, dict) and "symlink" in entry:
+        if not os.path.islink(path) or os.readlink(path) != entry["symlink"]:
+            print(f"seal_symlink_mismatch {rel} sealed={entry['symlink']!r}")
+            problems += 1
+        continue
+    if isinstance(entry, dict) and ("cdhash" in entry or "requirement" in entry):
+        if not os.path.exists(path):
+            print(f"seal_nested_missing {rel}")
+            problems += 1
+        continue
+    expected = entry.get("hash2") if isinstance(entry, dict) else None
+    if not os.path.isfile(path) or os.path.islink(path):
+        print(f"seal_missing {rel}")
+        problems += 1
+        continue
+    if expected is None:
+        continue
+    with open(path, "rb") as handle:
+        actual = hashlib.sha256(handle.read()).digest()
+    if actual != bytes(expected):
+        print(f"seal_hash_mismatch {rel}")
+        problems += 1
+sealed = set(files2)
+for dirpath, _dirnames, filenames in os.walk(contents):
+    for name in filenames:
+        rel = os.path.relpath(os.path.join(dirpath, name), contents).replace(os.sep, "/")
+        if rel in sealed or rel.startswith("_CodeSignature/") or rel in ("MacOS/modulo", "Info.plist", "PkgInfo"):
+            continue
+        if any(pattern.search(rel) for pattern in omit):
+            continue
+        print(f"seal_unsealed {rel}")
+        problems += 1
+print(f"seal_entries={len(files2)} seal_problems={problems}")
+PY
+
+section "hard links and multi-architecture Mach-O"
+find "$app" -type f -links +1 -print 2>/dev/null | head -n 40
+find "$app/Contents" -type f -print0 2>/dev/null | while IFS= read -r -d '' candidate; do
+  archs="$(lipo -archs "$candidate" 2>/dev/null)" || continue
+  case "$archs" in
+    arm64|x86_64) ;;
+    *) printf 'macho_archs %s: %s\n' "$candidate" "$archs" ;;
+  esac
+done | head -n 60
+
 section "files carrying extended attributes"
 find "$app" -print0 2>/dev/null | xargs -0 xattr 2>/dev/null | grep -v 'com.apple.cs.Code' | head -n 80
 

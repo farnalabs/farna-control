@@ -2546,12 +2546,99 @@ def test_macos_gatekeeper_rejection_prints_signature_diagnostics_before_failing(
     """FAR-2593: a mounted-app spctl rejection names the offending file instead
     of only "a sealed resource is missing or invalid"."""
     _step, build_run = _native_installer_step()
-    start = build_run.index("run_pre_smoke mounted_app_spctl spctl --assess --type execute")
-    failure_branch = build_run[start : build_run.index("run_pre_smoke mounted_app_help")]
+    block = _extract_marked_bash(build_run, "mounted_app_spctl_with_retry")
 
-    assert 'if ! run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"; then' in build_run
-    assert 'bash scripts/macos/signature-diagnostics.sh mounted_app "$MOUNTED_APP" "$APP"' in failure_branch
-    assert re.search(r"signature-diagnostics\.sh mounted_app[^\n]*\n[^\n]*endgroup[^\n]*\n\s+exit 1\n", failure_branch)
+    assert 'run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"' in block
+    assert 'bash scripts/macos/signature-diagnostics.sh mounted_app "$MOUNTED_APP" "$APP"' in block
+    assert re.search(r"signature-diagnostics\.sh mounted_app[^\n]*\n[^\n]*endgroup[^\n]*\n\s+exit 1\n", block)
+    # The retry block is the only Gatekeeper assessment of the mounted app.
+    assert build_run.count("run_pre_smoke mounted_app_spctl spctl --assess --type execute") == 1
+
+
+def _spctl_retry_harness(block: str) -> str:
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            'DATA="$(mktemp -d)"',
+            "MOUNTED_APP=/mnt/app",
+            "APP=build/app",
+            'VERDICTS="$1"',
+            # Stub the pause and the diagnostics helper so the harness only
+            # observes what the retry block asks for.
+            "sleep() { printf 'SLEPT %s\\n' \"$1\"; }",
+            "bash() { printf 'DIAGNOSTICS %s\\n' \"$*\"; }",
+            "run_pre_smoke() {",
+            '  local name="$1" verdict',
+            '  verdict="${VERDICTS%%,*}"',
+            '  if [[ "$VERDICTS" == *,* ]]; then VERDICTS="${VERDICTS#*,}"; else VERDICTS=""; fi',
+            "  printf 'CALL %s\\n' \"$name\"",
+            '  case "$verdict" in',
+            "    ok) printf 'accepted\\n' >\"$DATA/pre-smoke-$name.log\"; return 0 ;;",
+            '    sealed) printf \'%s: a sealed resource is missing or invalid\\n\' "$MOUNTED_APP" >"$DATA/pre-smoke-$name.log"; return 1 ;;',
+            '    unnotarized) printf \'%s: rejected\\nsource=Unnotarized Developer ID\\n\' "$MOUNTED_APP" >"$DATA/pre-smoke-$name.log"; return 3 ;;',
+            "    *) printf 'harness: no verdict left\\n' >&2; return 99 ;;",
+            "  esac",
+            "}",
+            block,
+            "printf 'REACHED_AFTER_GATE\\n'",
+            "",
+        ]
+    )
+
+
+def _run_spctl_retry(flavour: str, verdicts: str) -> subprocess.CompletedProcess[str]:
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "mounted_app_spctl_with_retry")
+    return _run_bash_stdin(flavour, _spctl_retry_harness(block), [verdicts])
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_retries_the_sealed_resource_flake_then_passes(flavour: str) -> None:
+    """FAR-2593: the Intel first-assessment flake (run 44735390410) is re-assessed and the gate passes."""
+    result = _run_spctl_retry(flavour, "sealed,ok")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 2
+    assert "mounted_app_spctl: attempt=2/3 verdict=accepted" in result.stdout
+    assert "attempt=1/3 verdict=sealed-resource rejection" in result.stderr
+    assert "SLEPT 10" in result.stdout
+    assert "DIAGNOSTICS" not in result.stdout
+    assert "REACHED_AFTER_GATE" in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_accepts_on_the_first_attempt_without_pausing(flavour: str) -> None:
+    result = _run_spctl_retry(flavour, "ok")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 1
+    assert "mounted_app_spctl: attempt=1/3 verdict=accepted" in result.stdout
+    assert "SLEPT" not in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_still_fails_hard_when_every_attempt_is_rejected(flavour: str) -> None:
+    """The retry is bounded: three sealed-resource verdicts fail the job, and a fourth is never requested."""
+    result = _run_spctl_retry(flavour, "sealed,sealed,sealed,ok")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 3
+    assert result.stdout.count("SLEPT 10") == 2
+    assert "DIAGNOSTICS scripts/macos/signature-diagnostics.sh mounted_app /mnt/app build/app" in result.stdout
+    assert "REACHED_AFTER_GATE" not in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_never_retries_any_other_rejection(flavour: str) -> None:
+    """Only the known sealed-resource verdict is re-assessed; an unnotarized verdict fails at once."""
+    result = _run_spctl_retry(flavour, "unnotarized,ok")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 1
+    assert "not the known sealed-resource flake; not retried" in result.stderr
+    assert "SLEPT" not in result.stdout
+    assert "DIAGNOSTICS" in result.stdout
+    assert "REACHED_AFTER_GATE" not in result.stdout
 
 
 def test_macos_signed_bundle_is_diagnosed_before_it_is_staged() -> None:

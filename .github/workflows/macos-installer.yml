@@ -1592,16 +1592,47 @@ jobs:
             echo '::warning::Mounted-app Gatekeeper assessment deferred because the DMG notarization ticket was unavailable from Apple CloudKit; mounted-app codesign remains a hard gate.'
           else
             # shellcheck disable=SC2016
-            # FAR-2593: a rejection here must name the offending file, so on
-            # failure print the full signature diagnostics (compared with the
-            # bundle as signed) before failing the job.
-            # shellcheck disable=SC2016
-            if ! run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"; then
+            # FAR-2593: bounded retry for an Intel-runner Gatekeeper flake, NOT
+            # a relaxation of the gate. On the macos-15 Intel runner the FIRST
+            # syspolicyd assessment of this bundle intermittently returns
+            # "a sealed resource is missing or invalid" (MacOS error -67054)
+            # while the identical, unchanged bundle passes the next assessment
+            # (run 44735390410: attempt 1 -67054, attempts 2 and 3 the normal
+            # verdict; codesign --deep --strict and syspolicy_check find no
+            # defect; arm64 never shows it). Only that exact verdict is re-assessed, at most
+            # three times with a short pause; every verdict is logged, any
+            # other rejection fails at once, and three sealed-resource
+            # verdicts in a row still fail the job hard after printing the
+            # signature diagnostics.
+            # BEGIN mounted_app_spctl_with_retry (extracted verbatim by test_macos_installer_normalize)
+            mounted_app_spctl_attempts=3
+            mounted_app_spctl_attempt=1
+            mounted_app_spctl_passed=0
+            while :; do
+              # shellcheck disable=SC2016
+              if run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"; then
+                mounted_app_spctl_passed=1
+                printf 'mounted_app_spctl: attempt=%d/%d verdict=accepted\n' "$mounted_app_spctl_attempt" "$mounted_app_spctl_attempts"
+                break
+              fi
+              if ! grep -Fq 'a sealed resource is missing or invalid' "$DATA/pre-smoke-mounted_app_spctl.log"; then
+                printf 'mounted_app_spctl: attempt=%d/%d verdict=rejected (not the known sealed-resource flake; not retried)\n' "$mounted_app_spctl_attempt" "$mounted_app_spctl_attempts" >&2
+                break
+              fi
+              printf 'mounted_app_spctl: attempt=%d/%d verdict=sealed-resource rejection\n' "$mounted_app_spctl_attempt" "$mounted_app_spctl_attempts" >&2
+              if [[ "$mounted_app_spctl_attempt" -ge "$mounted_app_spctl_attempts" ]]; then
+                break
+              fi
+              mounted_app_spctl_attempt=$((mounted_app_spctl_attempt + 1))
+              sleep 10
+            done
+            if [[ "$mounted_app_spctl_passed" -ne 1 ]]; then
               echo '::group::signature diagnostics (mounted app, Gatekeeper rejected)'
               bash scripts/macos/signature-diagnostics.sh mounted_app "$MOUNTED_APP" "$APP"
               echo '::endgroup::'
               exit 1
             fi
+            # END mounted_app_spctl_with_retry
           fi
           # shellcheck disable=SC2016
           run_pre_smoke mounted_app_help "$MOUNTED_APP/Contents/MacOS/modulo" --help
