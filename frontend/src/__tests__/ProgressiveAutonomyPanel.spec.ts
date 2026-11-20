@@ -35,6 +35,20 @@ function mountPanel(props: PanelProps = {}): VueWrapper {
   })
 }
 
+// The promote/demote target is the design-system AppSelect (PrimeVue Select),
+// not a native <select>: read its declared option list and choose a level by
+// emitting `update:modelValue` on the inner Select.
+function targetSelect(wrapper: VueWrapper) {
+  const found = wrapper.findAllComponents({ name: 'Select' }).at(0)
+  expect(found, 'expected the target-level AppSelect').toBeDefined()
+  return found!
+}
+
+async function chooseTarget(wrapper: VueWrapper, level: string): Promise<void> {
+  targetSelect(wrapper).vm.$emit('update:modelValue', level)
+  await wrapper.vm.$nextTick()
+}
+
 function successBody(level: string, previousLevel: string) {
   return {
     pipeline_id: 'pipe-1',
@@ -81,7 +95,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-reason"]').setValue('incident 42 review')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
@@ -110,7 +124,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('fully_autonomous')
+    await chooseTarget(wrapper, 'fully_autonomous')
     await wrapper.find('[data-testid="progressive-autonomy-promote"]').trigger('click')
     await flushPromises()
 
@@ -130,19 +144,22 @@ describe('ProgressiveAutonomyPanel', () => {
   it('never offers a target above the ceiling', async () => {
     const wrapper = mountPanel({ earnedLevel: 'manual_approval', maxLevel: 'notify_on_complete' })
 
-    const target = wrapper.find('[data-testid="progressive-autonomy-target"]')
-    const options = target.findAll('option')
-    const ceilingOption = options.find((o) => o.element.value === 'fully_autonomous')
+    const options = targetSelect(wrapper).props('options') as Array<{
+      value: string
+      label: string
+      disabled: boolean
+    }>
+    const ceilingOption = options.find((o) => o.value === 'fully_autonomous')
 
     expect(ceilingOption).toBeDefined()
-    expect(ceilingOption!.attributes('disabled')).toBeDefined()
+    expect(ceilingOption!.disabled).toBe(true)
 
     // A legal target still enables promote; the above-ceiling one never does.
-    await target.setValue('notify_on_complete')
+    await chooseTarget(wrapper, 'notify_on_complete')
     expect(
       wrapper.find('[data-testid="progressive-autonomy-promote"]').attributes('disabled'),
     ).toBeUndefined()
-    await target.setValue('fully_autonomous')
+    await chooseTarget(wrapper, 'fully_autonomous')
     expect(
       wrapper.find('[data-testid="progressive-autonomy-promote"]').attributes('disabled'),
     ).toBeDefined()
@@ -155,7 +172,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
 
@@ -181,7 +198,7 @@ describe('ProgressiveAutonomyPanel', () => {
     // but the server refuses — e.g. the ceiling moved after the panel loaded.
     const wrapper = mountPanel({ maxLevel: 'fully_autonomous', earnedLevel: 'notify_on_complete' })
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('fully_autonomous')
+    await chooseTarget(wrapper, 'fully_autonomous')
     expect(
       wrapper.find('[data-testid="progressive-autonomy-promote"]').attributes('disabled'),
     ).toBeUndefined()
@@ -210,7 +227,7 @@ describe('ProgressiveAutonomyPanel', () => {
     apiMocks.post.mockRejectedValue(new TypeError('Failed to fetch'))
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
 
@@ -236,7 +253,7 @@ describe('ProgressiveAutonomyPanel', () => {
     expect(demote.attributes('disabled')).toBeDefined()
 
     // A legal upward target within the ceiling re-enables promote only.
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('notify_on_complete')
+    await chooseTarget(wrapper, 'notify_on_complete')
     expect(promote.attributes('disabled')).toBeUndefined()
     expect(demote.attributes('disabled')).toBeDefined()
 
@@ -253,7 +270,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
     // Local override: manual_approval, stamped by the response at 2026-09-02.
@@ -353,7 +370,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
 
@@ -375,7 +392,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
 
@@ -394,7 +411,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('manual_approval')
+    await chooseTarget(wrapper, 'manual_approval')
     await wrapper.find('[data-testid="progressive-autonomy-demote"]').trigger('click')
     await flushPromises()
 
@@ -445,7 +462,7 @@ describe('ProgressiveAutonomyPanel', () => {
     })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('fully_autonomous')
+    await chooseTarget(wrapper, 'fully_autonomous')
     await wrapper.find('[data-testid="progressive-autonomy-promote"]').trigger('click')
     await flushPromises()
 
@@ -458,7 +475,7 @@ describe('ProgressiveAutonomyPanel', () => {
     apiMocks.post.mockResolvedValue({ error: { detail: 'plain failure' }, response: undefined })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('fully_autonomous')
+    await chooseTarget(wrapper, 'fully_autonomous')
     await wrapper.find('[data-testid="progressive-autonomy-promote"]').trigger('click')
     await flushPromises()
 
@@ -471,7 +488,7 @@ describe('ProgressiveAutonomyPanel', () => {
     apiMocks.post.mockResolvedValue({ data: null, error: undefined, response: { status: 200 } })
     const wrapper = mountPanel()
 
-    await wrapper.find('[data-testid="progressive-autonomy-target"]').setValue('fully_autonomous')
+    await chooseTarget(wrapper, 'fully_autonomous')
     await wrapper.find('[data-testid="progressive-autonomy-promote"]').trigger('click')
     await flushPromises()
 

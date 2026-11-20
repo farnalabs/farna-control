@@ -89,17 +89,21 @@
             <label class="block text-xs text-muted-foreground" :for="confidenceId(element.id)">
               {{ $t('views.DeterminationView.review_derived_confidence') }}
             </label>
-            <select
+            <AppSelect
               :id="confidenceId(element.id)"
               v-model="drafts[element.id].confidence"
-              class="rounded border px-2 py-1 text-sm disabled:opacity-60"
+              class="min-w-32"
+              :options="confidenceOptions"
+              option-label="label"
+              option-value="value"
+              :label="$t('views.DeterminationView.review_derived_confidence')"
               :disabled="isRemoved(element.id)"
               :data-testid="`determination-review-confidence-${element.id}`"
             >
-              <option v-for="confidence in CONFIDENCE_CHOICES" :key="confidence" :value="confidence">
-                {{ $t('views.DeterminationView.confidence_' + confidence) }}
-              </option>
-            </select>
+              <template #option="{ option }">
+                <span :data-value="option.value">{{ option.label }}</span>
+              </template>
+            </AppSelect>
           </div>
         </li>
       </ul>
@@ -207,6 +211,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import AppSelect from '../shared/AppSelect.vue'
 import { formatDateShortWithTime } from '../../lib/formatDate'
 import { isUnsettledConfidence } from './confidencePresentation'
 import type {
@@ -218,6 +224,17 @@ import type {
 } from '../../composables/useDetermination'
 
 const CONFIDENCE_CHOICES: ProposalConfidence[] = ['high', 'medium', 'low', 'unknown']
+
+const { t } = useI18n()
+
+// AppSelect option list for the per-element confidence control (was a native
+// <select>).
+const confidenceOptions = computed(() =>
+  CONFIDENCE_CHOICES.map((confidence) => ({
+    value: confidence,
+    label: t(`views.DeterminationView.confidence_${confidence}`),
+  })),
+)
 const reasonId = 'determination-review-reason-input'
 
 const props = defineProps<{

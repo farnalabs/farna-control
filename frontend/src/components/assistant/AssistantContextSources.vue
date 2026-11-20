@@ -46,17 +46,22 @@
               {{ source.description || '—' }}
             </p>
           </div>
-          <select
-            class="assistant-cs-select"
+          <AppSelect
+            class="assistant-cs-select min-w-[100px]"
+            size="small"
             aria-label="Knowledge source mode"
-            :value="source.source_mode"
+            :model-value="source.source_mode"
+            :options="modeOptions"
+            option-label="label"
+            option-value="value"
+            label="Knowledge source mode"
             :disabled="savingKey === source.key"
-            @change="updateSource(source.key, ($event.target as HTMLSelectElement).value as ContextSourceMode)"
+            @update:model-value="onModeChange(source.key, $event)"
           >
-            <option value="always_on">{{ $t('components.assistant.AssistantContextSources.always_on') }}</option>
-            <option value="tool">{{ $t('components.assistant.AssistantContextSources.tool') }}</option>
-            <option value="off">{{ $t('components.assistant.AssistantContextSources.off') }}</option>
-          </select>
+            <template #option="{ option }">
+              <span :data-value="option.value">{{ option.label }}</span>
+            </template>
+          </AppSelect>
           <span
             v-if="!source.is_overridden"
             class="text-xs text-muted-foreground italic"
@@ -87,11 +92,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
+import { useI18n } from "vue-i18n";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
 import Button from 'primevue/button'
+import AppSelect from "../shared/AppSelect.vue";
 import type { ContextSourceItem, ContextSourceMode, ContextSourceUpdate } from "@/types/assistant";
+
+const { t } = useI18n();
+
+// AppSelect option list for the per-source mode control (was a native
+// <select> with three hand-written <option>s).
+const modeOptions = computed(() => [
+  { value: "always_on", label: t("components.assistant.AssistantContextSources.always_on") },
+  { value: "tool", label: t("components.assistant.AssistantContextSources.tool") },
+  { value: "off", label: t("components.assistant.AssistantContextSources.off") },
+]);
 
 const sources = ref<ContextSourceItem[]>([]);
 const loading = ref(false);
@@ -114,6 +131,10 @@ async function fetchSources() {
   } finally {
     loading.value = false;
   }
+}
+
+function onModeChange(key: string, value: unknown) {
+  void updateSource(key, value as ContextSourceMode);
 }
 
 async function updateSource(key: string, mode: ContextSourceMode) {
@@ -177,19 +198,7 @@ onMounted(() => {
 <style scoped>
 @reference "../../style.css";
 .assistant-cs-select {
-  @apply rounded-lg px-2 py-1.5 text-xs outline-none;
-  background-color: hsl(var(--background));
-  border: 1px solid hsl(var(--input));
-  color: hsl(var(--foreground));
-  min-width: 100px;
-}
-.assistant-cs-select:focus {
-  border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 1px hsla(var(--ring) / 0.3);
-}
-.assistant-cs-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  @apply text-xs;
 }
 .assistant-cs-row {
   transition: background-color 150ms ease;

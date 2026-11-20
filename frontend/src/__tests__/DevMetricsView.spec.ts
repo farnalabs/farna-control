@@ -74,6 +74,17 @@ describe('DevMetricsView', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('days=7'))
   })
 
+  it('reloads metrics for the chosen time range', async () => {
+    const wrapper = mount(DevMetricsView)
+    await flushPromises()
+    mockGet.mockClear()
+
+    wrapper.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 30)
+    await flushPromises()
+
+    expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('days=30'))
+  })
+
   it('shows loading spinner on initial load', async () => {
     // Hold the API call open
     mockGet.mockReturnValue(new Promise(() => {}))
@@ -417,15 +428,20 @@ describe('DevMetricsView', () => {
     // The header's right-hand container must render (PageHeader injects it via #right)
     const headerRight = wrapper.find('[data-testid="page-header-right"]')
     expect(headerRight.exists()).toBe(true)
-    // The time-range <select> must be rendered inside the header's right slot
+    // The time-range control must be the design-system AppSelect, rendered
+    // inside the header's right slot, never a native <select>
     const select = headerRight.find('[data-testid="dev-metrics-time-range"]')
     expect(select.exists()).toBe(true)
+    expect(headerRight.findComponent({ name: 'Select' }).exists()).toBe(true)
+    expect(wrapper.findAll('select')).toHaveLength(0)
     // All three day options must be present
-    const options = select.findAll('option')
+    const options = headerRight
+      .findComponent({ name: 'Select' })
+      .props('options') as Array<{ value: number; label: string }>
     expect(options).toHaveLength(3)
-    expect(options[0].text()).toBe('Last 7 days')
-    expect(options[1].text()).toBe('Last 30 days')
-    expect(options[2].text()).toBe('Last 90 days')
+    expect(options[0].label).toBe('Last 7 days')
+    expect(options[1].label).toBe('Last 30 days')
+    expect(options[2].label).toBe('Last 90 days')
     // The Refresh button must be rendered inside the header's right slot,
     // scoped by data-testid so it does not depend on DOM order
     const refreshBtn = headerRight.find('[data-testid="dev-metrics-refresh"]')

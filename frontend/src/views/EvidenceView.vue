@@ -28,18 +28,21 @@
           <label for="evidence-recent-run" class="mb-1 block text-sm font-medium">
             {{ $t('views.EvidenceView.recent_run') }}
           </label>
-          <select
+          <AppSelect
             id="evidence-recent-run"
             v-model="runId"
             data-testid="evidence-recent-run"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            class="w-full"
+            :options="recentRunOptions"
+            option-label="label"
+            option-value="value"
+            :label="$t('views.EvidenceView.recent_run')"
             :disabled="recentRunsLoading || recentRuns.length === 0"
           >
-            <option value="">{{ recentRunsLoading ? $t('views.EvidenceView.recent_runs_loading') : $t('views.EvidenceView.choose_recent_run') }}</option>
-            <option v-for="run in filteredRecentRuns" :key="run.run_id" :value="run.run_id">
-              {{ runLabel(run) }}
-            </option>
-          </select>
+            <template #option="{ option }">
+              <span :data-value="option.value">{{ option.label }}</span>
+            </template>
+          </AppSelect>
         </div>
       </div>
       <ErrorAlert
@@ -167,6 +170,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import AppSelect from '../components/shared/AppSelect.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { fetchRuns, type RunListItem } from '../lib/api/runs'
@@ -211,6 +215,19 @@ function runLabel(run: RunListItem): string {
   const created = run.created_at ? new Date(run.created_at).toLocaleString() : t('views.EvidenceView.unknown_time')
   return `${pipeline} · ${run.status} · ${created} · ${run.run_id}`
 }
+
+// AppSelect option list for the recent-run picker. The empty entry mirrors the
+// native control's `<option value="">` placeholder: it reflects the loading /
+// "choose a run" state and keeps clearing the picker meaningful.
+const recentRunOptions = computed(() => [
+  {
+    value: '',
+    label: recentRunsLoading.value
+      ? t('views.EvidenceView.recent_runs_loading')
+      : t('views.EvidenceView.choose_recent_run'),
+  },
+  ...filteredRecentRuns.value.map((run) => ({ value: run.run_id, label: runLabel(run) })),
+])
 
 async function loadRecentRuns(): Promise<void> {
   recentRunsLoading.value = true

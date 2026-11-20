@@ -134,8 +134,27 @@ function environmentProfilePatchBodies(): unknown[] {
     .filter((body) => body !== undefined && 'environment_profile_id' in body)
 }
 
+// The profile picker is the design-system AppSelect (PrimeVue Select), not a
+// native <select>: options are declared through props and a choice is an
+// `update:modelValue` emit on the inner Select.
+function profileSelect(wrapper: Awaited<ReturnType<typeof mountEditor>>) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === 'pipeline-environment-profile')
+  expect(found, 'expected the environment-profile AppSelect').toBeDefined()
+  return found!
+}
+
+async function chooseProfile(
+  wrapper: Awaited<ReturnType<typeof mountEditor>>,
+  value: string,
+): Promise<void> {
+  profileSelect(wrapper).vm.$emit('update:modelValue', value)
+  await flushPromises()
+}
+
 function optionsOf(wrapper: Awaited<ReturnType<typeof mountEditor>>) {
-  return wrapper.find(SELECT).findAll('option')
+  return profileSelect(wrapper).props('options') as Array<{ value: string; label: string }>
 }
 
 beforeEach(async () => {
@@ -166,7 +185,11 @@ describe('PipelineEditorView - environment profile selector', () => {
     const label = wrapper.find(LABEL)
     expect(label.exists()).toBe(true)
     expect(label.text()).toBe(`${MESSAGES.views.PipelineEditorView.environment_profile_label}:`)
-    expect(wrapper.find(SELECT).attributes('aria-describedby')).toBe('pipeline-environment-profile-help')
+    // PrimeVue forwards fallthrough attrs to its wrapper div, so the hint is
+    // routed to the focusable combobox through pt.label instead.
+    expect(profileSelect(wrapper).props('pt')).toMatchObject({
+      label: { 'aria-describedby': 'pipeline-environment-profile-help' },
+    })
     expect(wrapper.find('#pipeline-environment-profile-help').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -178,11 +201,11 @@ describe('PipelineEditorView - environment profile selector', () => {
     expect(state.profileListFetches).toBe(1)
     const options = optionsOf(wrapper)
     expect(options).toHaveLength(3)
-    expect(options[0].text()).toBe(MESSAGES.views.PipelineEditorView.environment_profile_none)
-    expect(options[1].text()).toBe(
+    expect(options[0].label).toBe(MESSAGES.views.PipelineEditorView.environment_profile_none)
+    expect(options[1].label).toBe(
       `Staging Docker — ${MESSAGES.components.RunnerTier.bundled_docker}`,
     )
-    expect(options[2].text()).toBe(`Cloud Sandbox — ${MESSAGES.components.RunnerTier.external_e2b}`)
+    expect(options[2].label).toBe(`Cloud Sandbox — ${MESSAGES.components.RunnerTier.external_e2b}`)
     wrapper.unmount()
   })
 
@@ -191,7 +214,7 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = PROFILES
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    expect((wrapper.find(SELECT).element as HTMLSelectElement).value).toBe('prof-e2b')
+    expect(profileSelect(wrapper).props('modelValue')).toBe('prof-e2b')
     wrapper.unmount()
   })
 
@@ -199,7 +222,7 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = PROFILES
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    await wrapper.find(SELECT).setValue('prof-docker')
+    await chooseProfile(wrapper, 'prof-docker')
     await flushPromises()
 
     expect(environmentProfilePatchBodies()).toEqual([{ environment_profile_id: 'prof-docker' }])
@@ -220,7 +243,7 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = PROFILES
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    await wrapper.find(SELECT).setValue('')
+    await chooseProfile(wrapper, '')
     await flushPromises()
 
     expect(environmentProfilePatchBodies()).toEqual([{ environment_profile_id: null }])
@@ -253,14 +276,14 @@ describe('PipelineEditorView - environment profile selector', () => {
     )
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    await wrapper.find(SELECT).setValue('prof-e2b')
+    await chooseProfile(wrapper, 'prof-e2b')
     await flushPromises()
 
     const error = wrapper.find(ERROR)
     expect(error.exists()).toBe(true)
     expect(error.attributes('role')).toBe('alert')
     expect(error.text()).toContain('environment_profile_binding_team_mismatch')
-    expect((wrapper.find(SELECT).element as HTMLSelectElement).value).toBe('prof-docker')
+    expect(profileSelect(wrapper).props('modelValue')).toBe('prof-docker')
     expect(wrapper.find(STATUS).exists()).toBe(false)
     wrapper.unmount()
   })
@@ -270,13 +293,10 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = PROFILES
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    const select = wrapper.find(SELECT)
-    expect((select.element as HTMLSelectElement).value).toBe('prof-foreign')
-    const foreign = optionsOf(wrapper).find(
-      (o) => (o.element as HTMLOptionElement).value === 'prof-foreign',
-    )
+    expect(profileSelect(wrapper).props('modelValue')).toBe('prof-foreign')
+    const foreign = optionsOf(wrapper).find((o) => o.value === 'prof-foreign')
     expect(foreign).toBeDefined()
-    expect(foreign?.text()).toBe(MESSAGES.views.PipelineEditorView.environment_profile_unavailable)
+    expect(foreign?.label).toBe(MESSAGES.views.PipelineEditorView.environment_profile_unavailable)
     wrapper.unmount()
   })
 
@@ -284,11 +304,9 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = [{ id: 'prof-plain', name: 'Plain Profile', provider_type: 'mystery_provider' }]
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    const plain = optionsOf(wrapper).find(
-      (o) => (o.element as HTMLOptionElement).value === 'prof-plain',
-    )
+    const plain = optionsOf(wrapper).find((o) => o.value === 'prof-plain')
     expect(plain).toBeDefined()
-    expect(plain?.text()).toBe('Plain Profile')
+    expect(plain?.label).toBe('Plain Profile')
     wrapper.unmount()
   })
 
@@ -308,7 +326,7 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = PROFILES
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    await wrapper.find(SELECT).setValue('prof-foreign')
+    await chooseProfile(wrapper, 'prof-foreign')
     await flushPromises()
 
     expect(environmentProfilePatchBodies()).toEqual([{ environment_profile_id: 'prof-foreign' }])
@@ -323,7 +341,7 @@ describe('PipelineEditorView - environment profile selector', () => {
     state.profiles = PROFILES
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    await wrapper.find(SELECT).setValue('prof-docker')
+    await chooseProfile(wrapper, 'prof-docker')
     await flushPromises()
 
     expect(environmentProfilePatchBodies()).toEqual([{ environment_profile_id: 'prof-docker' }])
@@ -339,14 +357,14 @@ describe('PipelineEditorView - environment profile selector', () => {
     vi.mocked(api.PATCH).mockImplementationOnce(() => Promise.reject(new Error('network down')))
     const wrapper = await mountEditor({ featureEnabled: true })
 
-    await wrapper.find(SELECT).setValue('prof-e2b')
+    await chooseProfile(wrapper, 'prof-e2b')
     await flushPromises()
 
     const error = wrapper.find(ERROR)
     expect(error.exists()).toBe(true)
     expect(error.attributes('role')).toBe('alert')
     expect(error.text()).toContain('network down')
-    expect((wrapper.find(SELECT).element as HTMLSelectElement).value).toBe('prof-docker')
+    expect(profileSelect(wrapper).props('modelValue')).toBe('prof-docker')
     wrapper.unmount()
   })
 })

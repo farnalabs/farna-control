@@ -71,6 +71,24 @@ function mountView() {
   return mount(EvidenceView)
 }
 
+type EvidenceViewWrapper = ReturnType<typeof mountView>
+type RecentRunOption = { value: string; label: string }
+
+// The recent-run picker is the design-system AppSelect (PrimeVue Select), not a
+// native <select>: its options are declared through props and a selection is an
+// `update:modelValue` emit on the inner Select.
+function recentRunSelect(wrapper: EvidenceViewWrapper) {
+  const select = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === 'evidence-recent-run')
+  expect(select, 'expected the recent-run AppSelect').toBeDefined()
+  return select!
+}
+
+function recentRunOptions(wrapper: EvidenceViewWrapper): RecentRunOption[] {
+  return recentRunSelect(wrapper).props('options') as RecentRunOption[]
+}
+
 describe('EvidenceView', () => {
   beforeEach(() => {
     routeState.query = {}
@@ -115,10 +133,11 @@ describe('EvidenceView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const select = wrapper.find('[data-testid="evidence-recent-run"]')
-    expect(select.text()).toContain('Compliance Pipeline')
+    const labels = recentRunOptions(wrapper).map((option) => option.label)
+    expect(labels.some((label) => label.includes('Compliance Pipeline'))).toBe(true)
 
-    await select.setValue('run-recent-1')
+    recentRunSelect(wrapper).vm.$emit('update:modelValue', 'run-recent-1')
+    await nextTick()
     expect((wrapper.find('[data-testid="evidence-run-id"]').element as HTMLInputElement).value).toBe('run-recent-1')
   })
 
@@ -151,9 +170,9 @@ describe('EvidenceView', () => {
     await wrapper.find('[data-testid="evidence-run-search"]').setValue('Security')
     await nextTick()
 
-    const options = wrapper.findAll('[data-testid="evidence-recent-run"] option')
-    expect(options.some((opt) => opt.text().includes('Security Scanner'))).toBe(true)
-    expect(options.some((opt) => opt.text().includes('Compliance Pipeline'))).toBe(false)
+    const labels = recentRunOptions(wrapper).map((option) => option.label)
+    expect(labels.some((label) => label.includes('Security Scanner'))).toBe(true)
+    expect(labels.some((label) => label.includes('Compliance Pipeline'))).toBe(false)
   })
 
   it('surfaces an error when loading recent runs fails', async () => {
@@ -204,8 +223,8 @@ describe('EvidenceView', () => {
 
     expect(mockFetchRuns).toHaveBeenCalledTimes(2)
     expect(wrapper.find('[data-testid="evidence-recent-runs-error"]').exists()).toBe(false)
-    const options = wrapper.findAll('[data-testid="evidence-recent-run"] option')
-    expect(options.some((opt) => opt.text().includes('Pipeline 1'))).toBe(true)
+    const labels = recentRunOptions(wrapper).map((option) => option.label)
+    expect(labels.some((label) => label.includes('Pipeline 1'))).toBe(true)
   })
 
   it('falls back to the unknown-pipeline label and filters a run whose pipeline name is null', async () => {
@@ -228,17 +247,17 @@ describe('EvidenceView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const options = wrapper.findAll('[data-testid="evidence-recent-run"] option')
-    expect(options.some((opt) => opt.text().includes('Unknown pipeline'))).toBe(true)
+    const labels = recentRunOptions(wrapper).map((option) => option.label)
+    expect(labels.some((label) => label.includes('Unknown pipeline'))).toBe(true)
 
     // A query matching neither the run id nor the (absent) pipeline name keeps
     // the run out of the list rather than throwing on a null pipeline name.
     await wrapper.find('[data-testid="evidence-run-search"]').setValue('nothing-matches')
     await nextTick()
 
-    const filtered = wrapper.findAll('[data-testid="evidence-recent-run"] option')
+    const filtered = recentRunOptions(wrapper)
     expect(filtered).toHaveLength(1)
-    expect(filtered[0].text()).toContain('Select a run')
+    expect(filtered[0].label).toContain('Select a run')
   })
 
   it('rejects a submit with no run id before calling the API', async () => {

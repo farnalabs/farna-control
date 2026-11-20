@@ -248,10 +248,19 @@ describe('RestConnectorConfigForm', () => {
   it('renders the three on_unknown options and their help text', async () => {
     const { wrapper } = mountForm()
     await wrapper.vm.$nextTick()
-    const select = wrapper.find('[data-testid="rest-connector-on-unknown"]')
-    const options = select.findAll('option').map(o => o.text())
+    // The dropdown is the design-system AppSelect: its options are declared
+    // through props, and the help text is routed to the focusable combobox
+    // through pt.label (PrimeVue forwards fallthrough attrs to its wrapper div).
+    const select = wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component) => component.props('inputId') === 'restconn-connector-on-unknown')
+    expect(select, 'expected the on_unknown AppSelect').toBeDefined()
+    const options = (select!.props('options') as Array<{ label: string }>).map((o) => o.label)
     expect(options).toEqual(['fail_open', 'fail_closed', 'off'])
-    expect(select.element.getAttribute('aria-describedby')).toContain('restconn-on-unknown-help')
+    // AppSelect merges its own pt sections in, so assert the label section only.
+    expect(select!.props('pt')).toMatchObject({
+      label: { 'aria-describedby': 'restconn-on-unknown-help' },
+    })
     // on_unknown is the per-operation duplicate-write policy (the
     // connector-write idempotency gate) — NOT records extraction. The label and
     // help copy must describe that semantic (FAR-466 QA fix 1).

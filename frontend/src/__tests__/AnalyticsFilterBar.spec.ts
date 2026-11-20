@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
@@ -31,16 +32,38 @@ function mountBar(
   })
 }
 
-function dimensionOptions(wrapper: ReturnType<typeof mountBar>) {
-  const select = wrapper.find('[data-testid="analytics-filter-dimension"]')
-  expect(select.exists()).toBe(true)
-  return select.findAll('option')
+type FilterBar = ReturnType<typeof mountBar>
+type PickerOption = { value: string; label: string }
+
+// The filter dropdowns are design-system AppSelects (PrimeVue Select), not
+// native <select> elements, so an interaction is an `update:modelValue` emit on
+// the inner Select rather than a DOM `change` on a select element. Locate a
+// picker by the id it maps to `inputId` and read its declared option list.
+function picker(wrapper: FilterBar, inputId: string) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === inputId)
+  expect(found, `expected an AppSelect with id "${inputId}"`).toBeDefined()
+  return found!
+}
+
+function pickerOptions(wrapper: FilterBar, inputId: string): PickerOption[] {
+  return picker(wrapper, inputId).props('options') as PickerOption[]
+}
+
+async function choose(wrapper: FilterBar, inputId: string, value: string): Promise<void> {
+  picker(wrapper, inputId).vm.$emit('update:modelValue', value)
+  await nextTick()
+}
+
+function dimensionOptions(wrapper: FilterBar): PickerOption[] {
+  return pickerOptions(wrapper, 'analytics-filter-dimension')
 }
 
 describe('AnalyticsFilterBar dimension picker (FAR-1141)', () => {
   it('offers execution_origin alongside every existing dimension', () => {
     const options = dimensionOptions(mountBar())
-    const values = options.map((o) => o.attributes('value'))
+    const values = options.map((o) => o.value)
 
     // additive: every dimension that was offered before is still offered
     expect(values).toContain('trigger_type')
@@ -54,10 +77,10 @@ describe('AnalyticsFilterBar dimension picker (FAR-1141)', () => {
 
   it('labels execution_origin from i18n, never hardcoded English', () => {
     const options = dimensionOptions(mountBar())
-    const origin = options.find((o) => o.attributes('value') === 'execution_origin')
+    const origin = options.find((o) => o.value === 'execution_origin')
 
     expect(origin).toBeDefined()
-    const label = origin!.text()
+    const label = origin!.label
     const messages = enUS as Record<string, any>
     expect(label).toBe(messages.views.AnalyticsView.dimension_execution_origin)
     // the resolved label is real copy, not the raw key leaking through
@@ -66,7 +89,7 @@ describe('AnalyticsFilterBar dimension picker (FAR-1141)', () => {
 
   it('emits the chosen dimension so the aggregate view is actually reachable', async () => {
     const wrapper = mountBar()
-    await wrapper.find('[data-testid="analytics-filter-dimension"]').setValue('execution_origin')
+    await choose(wrapper, 'analytics-filter-dimension', 'execution_origin')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -77,7 +100,7 @@ describe('AnalyticsFilterBar dimension picker (FAR-1141)', () => {
 
 describe('AnalyticsFilterBar dimension picker (FAR-1567: trigger_id)', () => {
   it('offers trigger_id as a selectable dimension', () => {
-    const values = dimensionOptions(mountBar()).map((o) => o.attributes('value'))
+    const values = dimensionOptions(mountBar()).map((o) => o.value)
 
     expect(values).toContain('trigger_id')
     expect(values).toContain('trigger_type')
@@ -85,10 +108,10 @@ describe('AnalyticsFilterBar dimension picker (FAR-1567: trigger_id)', () => {
 
   it('labels trigger_id from i18n, never hardcoded English', () => {
     const options = dimensionOptions(mountBar())
-    const triggerId = options.find((o) => o.attributes('value') === 'trigger_id')
+    const triggerId = options.find((o) => o.value === 'trigger_id')
 
     expect(triggerId).toBeDefined()
-    const label = triggerId!.text()
+    const label = triggerId!.label
     const messages = enUS as Record<string, any>
     expect(label).toBe(messages.views.AnalyticsView.dimension_trigger_id)
     expect(label).not.toContain('dimension_trigger_id')
@@ -96,7 +119,7 @@ describe('AnalyticsFilterBar dimension picker (FAR-1567: trigger_id)', () => {
 
   it('emits trigger_id when it is chosen', async () => {
     const wrapper = mountBar()
-    await wrapper.find('[data-testid="analytics-filter-dimension"]').setValue('trigger_id')
+    await choose(wrapper, 'analytics-filter-dimension', 'trigger_id')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -115,8 +138,8 @@ describe('AnalyticsFilterBar dimension picker (FAR-1567: trigger_id)', () => {
     expect(applied).toBe(true)
     expect(filters.dimension).toBe('trigger_id')
 
-    const select = mountBar(filters).find('[data-testid="analytics-filter-dimension"]')
-    expect((select.element as HTMLSelectElement).value).toBe('trigger_id')
+    const select = picker(mountBar(filters), 'analytics-filter-dimension')
+    expect(select.props('modelValue')).toBe('trigger_id')
   })
 })
 
@@ -228,10 +251,7 @@ describe('AnalyticsFilterBar measure buttons', () => {
 describe('AnalyticsFilterBar filter select handlers', () => {
   it('emits update:filters when dimension select changes', async () => {
     const wrapper = mountBar()
-    const select = wrapper.find('[data-testid="analytics-filter-dimension"]')
-    const el = select.element as HTMLSelectElement
-    el.value = 'status'
-    await select.trigger('change')
+    await choose(wrapper, 'analytics-filter-dimension', 'status')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -241,10 +261,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
 
   it('emits update:filters with null when dimension is cleared', async () => {
     const wrapper = mountBar({ dimension: 'status' })
-    const select = wrapper.find('[data-testid="analytics-filter-dimension"]')
-    const el = select.element as HTMLSelectElement
-    el.value = ''
-    await select.trigger('change')
+    await choose(wrapper, 'analytics-filter-dimension', '')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -254,7 +271,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
 
   it('emits update:filters when folder select changes', async () => {
     const wrapper = mountBar({}, { folders: [{ id: 'f1', name: 'Folder 1' }] })
-    await wrapper.find('[data-testid="analytics-filter-folder"]').setValue('f1')
+    await choose(wrapper, 'analytics-filter-folder', 'f1')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -264,7 +281,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
 
   it('emits update:filters with null when folder is cleared', async () => {
     const wrapper = mountBar({ folderId: 'f1' }, { folders: [{ id: 'f1', name: 'Folder 1' }] })
-    await wrapper.find('[data-testid="analytics-filter-folder"]').setValue('')
+    await choose(wrapper, 'analytics-filter-folder', '')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -274,7 +291,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
 
   it('emits update:filters when pipeline select changes', async () => {
     const wrapper = mountBar({}, { pipelines: [{ id: 'p1', name: 'Pipeline 1' }] })
-    await wrapper.find('[data-testid="analytics-filter-pipeline"]').setValue('p1')
+    await choose(wrapper, 'analytics-filter-pipeline', 'p1')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -284,7 +301,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
 
   it('emits update:filters when trigger type select changes', async () => {
     const wrapper = mountBar()
-    await wrapper.find('[data-testid="analytics-filter-trigger-type"]').setValue('cron')
+    await choose(wrapper, 'analytics-filter-trigger-type', 'cron')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -294,7 +311,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
 
   it('emits update:filters when status select changes', async () => {
     const wrapper = mountBar()
-    await wrapper.find('[data-testid="analytics-filter-status"]').setValue('failed')
+    await choose(wrapper, 'analytics-filter-status', 'failed')
 
     const emitted = wrapper.emitted('update:filters')
     expect(emitted).toBeTruthy()
@@ -349,7 +366,7 @@ describe('AnalyticsFilterBar filter select handlers', () => {
       status: 'failed',
       errorCode: 'some_error',
     })
-    await wrapper.find('[data-testid="analytics-filter-status"]').setValue('complete')
+    await choose(wrapper, 'analytics-filter-status', 'complete')
 
     const emitted = wrapper.emitted('update:filters')
     const last = emitted![emitted!.length - 1][0] as unknown as Record<string, unknown>
@@ -359,6 +376,49 @@ describe('AnalyticsFilterBar filter select handlers', () => {
     expect(last.pipelineId).toBe('p1')
     expect(last.triggerType).toBe('manual')
     expect(last.errorCode).toBe('some_error')
+  })
+})
+
+describe('AnalyticsFilterBar AppSelect edge handling', () => {
+  it('sorts folder options case-insensitively by name', () => {
+    const wrapper = mountBar({}, {
+      folders: [
+        { id: 'f2', name: 'beta' },
+        { id: 'f1', name: 'Alpha' },
+      ],
+    })
+    // '' is the "All" entry; the two folders follow, sorted by name.
+    expect(pickerOptions(wrapper, 'analytics-filter-folder').map((o) => o.value)).toEqual(['', 'f1', 'f2'])
+  })
+
+  it('clears the pipeline, trigger-type, and status filters to null', async () => {
+    const wrapper = mountBar()
+
+    const lastEmitted = () => {
+      const emitted = wrapper.emitted('update:filters')!
+      return emitted[emitted.length - 1][0] as unknown as Record<string, unknown>
+    }
+
+    await choose(wrapper, 'analytics-filter-pipeline', '')
+    expect(lastEmitted().pipelineId).toBeNull()
+
+    await choose(wrapper, 'analytics-filter-trigger-type', '')
+    expect(lastEmitted().triggerType).toBeNull()
+
+    await choose(wrapper, 'analytics-filter-status', '')
+    expect(lastEmitted().status).toBeNull()
+  })
+
+  it('treats a non-string AppSelect value as cleared', async () => {
+    const wrapper = mountBar({ dimension: 'status' })
+    // A clear can arrive as null rather than the '' sentinel; selectValue must
+    // narrow it to '' so the filter clears instead of leaking the value.
+    picker(wrapper, 'analytics-filter-dimension').vm.$emit('update:modelValue', null)
+    await nextTick()
+
+    const emitted = wrapper.emitted('update:filters')!
+    const last = emitted[emitted.length - 1][0] as { dimension?: string | null }
+    expect(last.dimension).toBeNull()
   })
 })
 
@@ -383,19 +443,29 @@ describe('AnalyticsFilterBar i18n labels', () => {
 
   it('uses i18n for dimension option labels', () => {
     const wrapper = mountBar()
-    const select = wrapper.find('[data-testid="analytics-filter-dimension"]')
-    const options = select.findAll('option')
-    for (const opt of options) {
-      const label = opt.text()
-      expect(label).not.toContain('dimension_')
+    for (const opt of dimensionOptions(wrapper)) {
+      expect(opt.label).not.toContain('dimension_')
     }
   })
 
   it('uses i18n for folder option "All"', () => {
     const wrapper = mountBar({}, { folders: [{ id: 'f1', name: 'Folder 1' }] })
-    const select = wrapper.find('[data-testid="analytics-filter-folder"]')
-    const allOption = select.find('option[value=""]')
-    expect(allOption.exists()).toBe(true)
-    expect(allOption.text()).toBe('All')
+    const allOption = pickerOptions(wrapper, 'analytics-filter-folder').find((o) => o.value === '')
+    expect(allOption).toBeDefined()
+    expect(allOption!.label).toBe('All')
+  })
+
+  it('renders every filter dropdown as the design-system AppSelect, not a native select', () => {
+    const wrapper = mountBar({}, { folders: [{ id: 'f1', name: 'Folder 1' }] })
+    for (const id of [
+      'analytics-filter-dimension',
+      'analytics-filter-folder',
+      'analytics-filter-pipeline',
+      'analytics-filter-trigger-type',
+      'analytics-filter-status',
+    ]) {
+      expect(picker(wrapper, id).exists()).toBe(true)
+    }
+    expect(wrapper.findAll('select')).toHaveLength(0)
   })
 })

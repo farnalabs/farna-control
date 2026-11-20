@@ -28,17 +28,19 @@
           <p class="text-sm text-muted-foreground">{{ $t('views.SystemMapDetailView.ai_gate_explanation') }}</p>
           <div>
             <label for="discovery-backend" class="block text-sm font-medium">{{ $t('views.SystemMapDetailView.model_backend_label') }}</label>
-            <select id="discovery-backend" v-model="backendId" class="mt-1 w-full rounded border bg-background px-3 py-2" :disabled="loading || failed || submitting" data-testid="system-map-discovery-backend">
-              <option value="">{{ $t('views.SystemMapDetailView.select_model_backend') }}</option>
-              <option v-for="backend in backends" :key="backend.id" :value="backend.id">{{ backend.display_name }} ({{ backend.provider }})</option>
-            </select>
+            <AppSelect id="discovery-backend" v-model="backendId" class="mt-1 w-full" :options="backendOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.model_backend_label')" :disabled="loading || failed || submitting" data-testid="system-map-discovery-backend">
+              <template #option="{ option }">
+                <span :data-value="option.value">{{ option.label }}</span>
+              </template>
+            </AppSelect>
           </div>
           <div>
             <label for="discovery-eval" class="block text-sm font-medium">{{ $t('views.SystemMapDetailView.eval_judge_label') }}</label>
-            <select id="discovery-eval" v-model="evalId" class="mt-1 w-full rounded border bg-background px-3 py-2" :disabled="loading || failed || submitting" data-testid="system-map-discovery-eval">
-              <option value="">{{ $t('views.SystemMapDetailView.select_eval_judge') }}</option>
-              <option v-for="evaluation in evals" :key="evaluation.id" :value="evaluation.id">{{ evaluation.name }} (v{{ evaluation.version }})</option>
-            </select>
+            <AppSelect id="discovery-eval" v-model="evalId" class="mt-1 w-full" :options="evalOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.eval_judge_label')" :disabled="loading || failed || submitting" data-testid="system-map-discovery-eval">
+              <template #option="{ option }">
+                <span :data-value="option.value">{{ option.label }}</span>
+              </template>
+            </AppSelect>
           </div>
           <p v-if="loading" class="text-sm text-muted-foreground" aria-live="polite">{{ $t('views.SystemMapDetailView.loading_ai_options') }}</p>
           <p v-if="failed" class="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive">{{ failedMessage }}</p>
@@ -61,6 +63,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../../lib/api/client'
 import type { components } from '../../lib/api/schema'
 import type { DiscoveryMode } from '../../stores/systemMaps'
+import AppSelect from '../shared/AppSelect.vue'
 
 type Backend = components['schemas']['ModelBackendResponse']
 type Evaluation = components['schemas']['EvalDefinitionResponse']
@@ -82,6 +85,23 @@ const loading = ref(false)
 const failed = ref(false)
 const failedMessage = ref('')
 const accessProbePositive = ref(false)
+
+// AppSelect option lists for the AI-assisted controls (both were native
+// <select> elements). The leading empty entry is the "not selected" placeholder.
+const backendOptions = computed(() => [
+  { value: '', label: $t('views.SystemMapDetailView.select_model_backend') },
+  ...backends.value.map((backend) => ({
+    value: backend.id,
+    label: `${backend.display_name} (${backend.provider})`,
+  })),
+])
+const evalOptions = computed(() => [
+  { value: '', label: $t('views.SystemMapDetailView.select_eval_judge') },
+  ...evals.value.map((evaluation) => ({
+    value: evaluation.id,
+    label: `${evaluation.name} (v${evaluation.version})`,
+  })),
+])
 
 const canSubmit = computed(() => mode.value === 'deterministic' || (props.canUseAi && !loading.value && !failed.value && accessProbePositive.value && Boolean(backendId.value) && Boolean(evalId.value)))
 

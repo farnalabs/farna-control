@@ -187,6 +187,22 @@ function mountEditor(attachTo?: HTMLElement) {
   })
 }
 
+// The autonomy-ceiling control is the design-system AppSelect (PrimeVue
+// Select), not a native <select>: read its declared model value and choose a
+// value by emitting `update:modelValue` on the inner Select.
+function ceilingSelect(wrapper: ReturnType<typeof mountEditor>) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === 'pipeline-max-autonomy')
+  expect(found, 'expected the autonomy-ceiling AppSelect').toBeDefined()
+  return found!
+}
+
+async function chooseCeiling(wrapper: ReturnType<typeof mountEditor>, value: string): Promise<void> {
+  ceilingSelect(wrapper).vm.$emit('update:modelValue', value)
+  await nextTick()
+}
+
 async function mountEditorLoaded() {
   const wrapper = mountEditor()
   await flushPromises()
@@ -1688,12 +1704,12 @@ describe('PipelineEditorView — run dialog', () => {
     await flushPromises()
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
+    const select = ceilingSelect(wrapper)
     expect(select.exists()).toBe(true)
-    expect((select.element as HTMLSelectElement).value).toBe('notify_on_complete')
+    expect(select.props('modelValue')).toBe('notify_on_complete')
 
     // setValue on a SELECT sets the value and dispatches change — the handler runs here.
-    await select.setValue('fully_autonomous')
+    await chooseCeiling(wrapper, 'fully_autonomous')
     await flushPromises()
 
     const patch = vi.mocked(api.PATCH).mock.calls.find((c) => 'max_autonomy_level' in ((c[1] as any).body ?? {}))
@@ -1717,8 +1733,8 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = 'manual_approval'
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
-    expect((select.element as HTMLSelectElement).value).toBe('manual_approval')
+    const select = ceilingSelect(wrapper)
+    expect(select.props('modelValue')).toBe('manual_approval')
 
     // Reset first: earlier tests in this describe queue once-implementations
     // on api.PATCH that would otherwise consume this one (same hygiene as the
@@ -1730,11 +1746,11 @@ describe('PipelineEditorView — run dialog', () => {
       Promise.resolve({ data: null, error: { detail: 'ceiling below default' }, response: { status: 422 } }))
 
     // setValue on a SELECT sets the value and dispatches change — the handler runs here.
-    await select.setValue('fully_autonomous')
+    await chooseCeiling(wrapper, 'fully_autonomous')
     await flushPromises()
     await nextTick()
 
-    expect((select.element as HTMLSelectElement).value).toBe('manual_approval')
+    expect(select.props('modelValue')).toBe('manual_approval')
     expect(vm.pipeline.max_autonomy_level).toBe('manual_approval')
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain(
       'Autonomy ceiling cannot be below the pipeline default level',
@@ -1742,11 +1758,11 @@ describe('PipelineEditorView — run dialog', () => {
 
     // rejection — timeout / network failure: the catch path reverts too.
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockImplementationOnce(() => Promise.reject(new Error('network_down')))
-    await select.setValue('notify_on_complete')
+    await chooseCeiling(wrapper, 'notify_on_complete')
     await flushPromises()
     await nextTick()
 
-    expect((select.element as HTMLSelectElement).value).toBe('manual_approval')
+    expect(select.props('modelValue')).toBe('manual_approval')
     expect(vm.pipeline.max_autonomy_level).toBe('manual_approval')
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain('network_down')
     wrapper.unmount()
@@ -1762,12 +1778,11 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = 'notify_on_complete'
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
 
     // '' is the inherit option — it must send null, never the literal ''.
-    await select.setValue('')
+    await chooseCeiling(wrapper, '')
     await flushPromises()
     await nextTick()
 
@@ -1791,18 +1806,17 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = null
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
       Promise.resolve({ data: null, error: { detail: 'server exploded' }, response: { status: 500 } }))
 
-    await select.setValue('fully_autonomous')
+    await chooseCeiling(wrapper, 'fully_autonomous')
     await flushPromises()
     await nextTick()
 
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain('server exploded')
-    expect((select.element as HTMLSelectElement).value).toBe('')
+    expect(ceilingSelect(wrapper).props('modelValue')).toBe('')
     expect(vm.maxAutonomyInput).toBeNull()
     wrapper.unmount()
   })
@@ -1817,11 +1831,10 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = null
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
 
-    await select.setValue('notify_on_complete')
+    await chooseCeiling(wrapper, 'notify_on_complete')
     await flushPromises()
     await nextTick()
 
@@ -1840,17 +1853,16 @@ describe('PipelineEditorView — run dialog', () => {
     vm.maxAutonomyInput = null
     await nextTick()
 
-    const select = wrapper.find('[data-testid="pipeline-editor-max-autonomy"]')
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockReset()
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockResolvedValue({ data: {}, error: undefined })
     ;(api.PATCH as ReturnType<typeof vi.fn>).mockImplementationOnce(() => Promise.reject(new Error('network_down_2')))
 
-    await select.setValue('notify_on_complete')
+    await chooseCeiling(wrapper, 'notify_on_complete')
     await flushPromises()
     await nextTick()
 
     expect(wrapper.find('[data-testid="pipeline-editor-save-error"]').text()).toContain('network_down_2')
-    expect((select.element as HTMLSelectElement).value).toBe('')
+    expect(ceilingSelect(wrapper).props('modelValue')).toBe('')
     expect(vm.maxAutonomyInput).toBeNull()
     wrapper.unmount()
   })
@@ -3070,6 +3082,119 @@ describe('PipelineEditorView — coverage: loading / error / edge cases', () => 
     vm.onParamSetChange()
     await nextTick()
     expect(vm.selectedNodeOverrides).toEqual({})
+    wrapper.unmount()
+  })
+
+  it('renders every node-override AppSelect and maps the null/undefined sentinels', async () => {
+    router.push('/pipelines/test-pipeline-id/editor')
+    await router.isReady()
+    const wrapper = mountEditor()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.agents = [{ id: 'agent-1', parameter_schema_id: 'pschema-1' }]
+    vm.paramSchemas = [{
+      id: 'pschema-1',
+      name: 'Param Schema',
+      parameters: [
+        { name: 'flag', type: 'boolean', label: 'Flag' },
+        { name: 'choice', type: 'select', options: ['a', 'b'] },
+        { name: 'choice_empty', type: 'select' },
+        { name: 'mb', type: 'model_backend_ref' },
+        { name: 'out', type: 'schema_ref' },
+      ],
+    }]
+    vm.paramSets = [{ id: 'set-1', name: 'Set One', parameter_schema_id: 'pschema-1', values: {} }]
+    // Three backends cover display_name, name, and the shortId fallback.
+    vm.modelBackends = [
+      { id: 'mb-display', display_name: 'Display Name' },
+      { id: 'mb-name', name: 'Named Backend' },
+      { id: 'mb-shortid' },
+    ]
+    // Two schemas cover the name and shortId fallback.
+    vm.schemas = [
+      { id: 'schema-named', name: 'Named Schema' },
+      { id: 'schema-shortonly' },
+    ]
+
+    vm.rawNodes = [{
+      id: 'node-1',
+      node_type: 'agent',
+      agent_id: 'agent-1',
+      label: 'Agent',
+      description: '',
+      position: { x: 0, y: 0 },
+      parameter_set_id: 'set-1',
+      parameter_overrides: { flag: true, choice: 'a', choice_empty: 'b', mb: 'mb-display', out: 'schema-named' },
+    }]
+    vm.flowNodes = [{ id: 'node-1', type: 'agent', data: { label: 'Agent', description: '' } }]
+    vm.onNodeClick({ node: { id: 'node-1' } })
+    await nextTick()
+
+    const overrideSelect = (key: string) => wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component: any) => component.props('inputId') === `pipelineeditorview-override-${key}`)
+
+    for (const key of ['flag', 'choice', 'choice_empty', 'mb', 'out']) {
+      expect(overrideSelect(key), `expected an override AppSelect for "${key}"`).toBeDefined()
+    }
+
+    // The option lists exercise the ref fallbacks: display_name, name, shortId;
+    // schema name vs shortId; and select options present vs absent.
+    const mbOptions = overrideSelect('mb')!.props('options') as Array<{ value: string; label: string }>
+    expect(mbOptions.map((o) => o.label)).toEqual(expect.arrayContaining(['Display Name', 'Named Backend']))
+    expect(mbOptions.find((o) => o.value === 'mb-shortid')!.label).toBeTruthy()
+    const outOptions = overrideSelect('out')!.props('options') as Array<{ value: string; label: string }>
+    expect(outOptions.map((o) => o.label)).toContain('Named Schema')
+    expect(outOptions.find((o) => o.value === 'schema-shortonly')!.label).toBeTruthy()
+    expect((overrideSelect('choice')!.props('options') as unknown[])).toHaveLength(3)
+    expect((overrideSelect('choice_empty')!.props('options') as unknown[])).toHaveLength(1)
+
+    // A null selection from the control is the "no override" sentinel: it maps
+    // back to undefined in the node payload shape, and a real value passes through.
+    overrideSelect('flag')!.vm.$emit('update:modelValue', null)
+    await nextTick()
+    expect(vm.selectedNodeOverrides.flag).toBeUndefined()
+    overrideSelect('flag')!.vm.$emit('update:modelValue', true)
+    await nextTick()
+    expect(vm.selectedNodeOverrides.flag).toBe(true)
+
+    // A real value from each remaining control type passes through unchanged
+    // (this also executes each control's update handler).
+    overrideSelect('choice')!.vm.$emit('update:modelValue', 'a')
+    await nextTick()
+    expect(vm.selectedNodeOverrides.choice).toBe('a')
+    overrideSelect('mb')!.vm.$emit('update:modelValue', 'mb-name')
+    await nextTick()
+    expect(vm.selectedNodeOverrides.mb).toBe('mb-name')
+    overrideSelect('out')!.vm.$emit('update:modelValue', 'schema-named')
+    await nextTick()
+    expect(vm.selectedNodeOverrides.out).toBe('schema-named')
+
+    // Re-render with nullish override values so each `?? null` binding takes its
+    // right-hand arm as well as the non-null left arm exercised above.
+    vm.selectedNodeOverrides = { flag: undefined, choice: undefined, choice_empty: undefined, mb: undefined, out: undefined }
+    await nextTick()
+    expect(overrideSelect('flag')!.props('modelValue')).toBeNull()
+
+    // The editor-chrome controls also narrow a cleared (null) selection to ''.
+    await vm.updateMaxAutonomyLevel(null)
+    await vm.updateMaxAutonomyLevel('manual_approval')
+    await vm.updateOwnerTeam(null)
+    await vm.updateOwnerTeam('team-1')
+    await vm.updateEnvironmentProfile(null)
+    await vm.updateEnvironmentProfile('profile-1')
+
+    // onParamSetChange: an omitted argument keeps the current selection, null
+    // clears it, and a set id selects it.
+    vm.selectedNodeParamSetId = 'set-1'
+    vm.onParamSetChange(undefined)
+    expect(vm.selectedNodeParamSetId).toBe('set-1')
+    vm.onParamSetChange(null)
+    expect(vm.selectedNodeParamSetId).toBeUndefined()
+    vm.onParamSetChange('set-1')
+    expect(vm.selectedNodeParamSetId).toBe('set-1')
+
     wrapper.unmount()
   })
 

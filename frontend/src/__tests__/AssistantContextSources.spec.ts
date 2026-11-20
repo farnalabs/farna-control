@@ -46,6 +46,22 @@ function mountSources() {
   })
 }
 
+type SourcesWrapper = ReturnType<typeof mountSources>
+
+// The per-source mode control is the design-system AppSelect (PrimeVue Select),
+// not a native <select>: read its declared model value and simulate a choice by
+// emitting `update:modelValue` on the inner Select.
+function modeSelect(wrapper: SourcesWrapper, index = 0) {
+  const found = wrapper.findAllComponents({ name: 'Select' }).at(index)
+  expect(found, `expected AppSelect #${index}`).toBeDefined()
+  return found!
+}
+
+async function chooseMode(wrapper: SourcesWrapper, mode: string, index = 0): Promise<void> {
+  modeSelect(wrapper, index).vm.$emit('update:modelValue', mode)
+  await flushPromises()
+}
+
 describe('AssistantContextSources', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -151,8 +167,7 @@ describe('AssistantContextSources', () => {
     const wrapper = mountSources()
     await flushPromises()
 
-    const select = wrapper.find('.assistant-cs-select')
-    expect((select.element as HTMLSelectElement).value).toBe('tool')
+    expect(modeSelect(wrapper).props('modelValue')).toBe('tool')
   })
 
   it('updates source mode optimistically and on success', async () => {
@@ -163,9 +178,7 @@ describe('AssistantContextSources', () => {
     const wrapper = mountSources()
     await flushPromises()
 
-    const select = wrapper.find('.assistant-cs-select')
-    await select.setValue('off')
-    await flushPromises()
+    await chooseMode(wrapper, 'off')
 
     expect(apiPut).toHaveBeenCalledWith('/api/v1/me/assistant/context-sources/{source_key}', {
       params: { path: { source_key: 'web' } },
@@ -182,12 +195,10 @@ describe('AssistantContextSources', () => {
     const wrapper = mountSources()
     await flushPromises()
 
-    const select = wrapper.find('.assistant-cs-select')
-    await select.setValue('off')
-    await flushPromises()
+    await chooseMode(wrapper, 'off')
 
     // Mode reverted to original
-    expect((select.element as HTMLSelectElement).value).toBe('always_on')
+    expect(modeSelect(wrapper).props('modelValue')).toBe('always_on')
     expect(wrapper.text()).toContain('Failed to update source')
   })
 
@@ -198,11 +209,9 @@ describe('AssistantContextSources', () => {
     const wrapper = mountSources()
     await flushPromises()
 
-    const select = wrapper.find('.assistant-cs-select')
-    await select.setValue('off')
-    await flushPromises()
+    await chooseMode(wrapper, 'off')
 
-    expect((select.element as HTMLSelectElement).value).toBe('tool')
+    expect(modeSelect(wrapper).props('modelValue')).toBe('tool')
     expect(wrapper.text()).toContain('Connection lost')
   })
 
@@ -213,11 +222,9 @@ describe('AssistantContextSources', () => {
     const wrapper = mountSources()
     await flushPromises()
 
-    const select = wrapper.find('.assistant-cs-select')
-    await select.setValue('off')
-    await flushPromises()
+    await chooseMode(wrapper, 'off')
 
-    expect((select.element as HTMLSelectElement).disabled).toBe(true)
+    expect(modeSelect(wrapper).props('disabled')).toBe(true)
   })
 
   it('replaces the source list when PUT returns data', async () => {
@@ -231,9 +238,7 @@ describe('AssistantContextSources', () => {
     const wrapper = mountSources()
     await flushPromises()
 
-    const select = wrapper.find('.assistant-cs-select')
-    await select.setValue('tool')
-    await flushPromises()
+    await chooseMode(wrapper, 'tool')
 
     // PUT returned 2 sources, so the list now has 2 rows
     expect(wrapper.findAll('.assistant-cs-row')).toHaveLength(2)
@@ -247,7 +252,7 @@ describe('AssistantContextSources', () => {
     await flushPromises()
 
     // Initial source is "off"
-    expect((wrapper.find('.assistant-cs-select').element as HTMLSelectElement).value).toBe('off')
+    expect(modeSelect(wrapper).props('modelValue')).toBe('off')
 
     await wrapper.find('button').trigger('click')
     await flushPromises()

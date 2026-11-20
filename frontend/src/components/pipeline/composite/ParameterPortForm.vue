@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import AppSelect from "../../shared/AppSelect.vue";
 import type { ParameterPort } from "../../../types/pipeline";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   port: ParameterPort;
@@ -35,10 +39,16 @@ function onNumberChange(event: Event) {
   localValue.value = target.valueAsNumber;
 }
 
-function onSelectChange(event: Event) {
-  const target = event.target as HTMLSelectElement;
-  localValue.value = target.value;
+function onSelectChange(value: unknown) {
+  localValue.value = value as string;
 }
+
+// AppSelect option list for a `select`-typed port (was a native <select>). The
+// empty entry is the "not chosen" state the native placeholder option provided.
+const selectOptions = computed(() => [
+  { value: "", label: t("components.pipeline.composite.ParameterPortForm.select") },
+  ...(props.port.options ?? []).map((opt) => ({ value: opt.value, label: opt.label })),
+]);
 
 function onBooleanChange(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -97,18 +107,20 @@ function onBooleanChange(event: Event) {
       <span class="text-sm">{{ localValue ? "Enabled" : "Disabled" }}</span>
     </label>
 
-    <select
+    <AppSelect
       v-else-if="port.type === 'select'"
-      :value="localValue"
-      aria-label="Select value"
-      class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-      @change="onSelectChange"
+      :model-value="localValue as string"
+      class="w-full"
+      :options="selectOptions"
+      option-label="label"
+      option-value="value"
+      :label="port.label || $t('components.pipeline.composite.ParameterPortForm.select')"
+      @update:model-value="onSelectChange"
     >
-      <option value="">{{ $t('components.pipeline.composite.ParameterPortForm.select') }}</option>
-      <option v-for="opt in port.options" :key="opt.value" :value="opt.value">
-        {{ opt.label }}
-      </option>
-    </select>
+      <template #option="{ option }">
+        <span :data-value="option.value">{{ option.label }}</span>
+      </template>
+    </AppSelect>
 
     <div
       v-else-if="

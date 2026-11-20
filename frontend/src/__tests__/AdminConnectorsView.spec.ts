@@ -48,6 +48,16 @@ function mountView() {
   })
 }
 
+// The REST form's dropdowns are design-system AppSelects (PrimeVue Select), so
+// the current value is the declared modelValue prop, not a DOM select value.
+function restSelectValue(wrapper: ReturnType<typeof mountView>, testid: string): unknown {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => (component.element.closest('[data-testid]') as HTMLElement | null)?.dataset.testid === testid)
+  expect(found, `expected an AppSelect for "${testid}"`).toBeDefined()
+  return found!.props('modelValue')
+}
+
 async function openEdit(wrapper: Awaited<ReturnType<typeof mountView>>, connectorId: string) {
   const row = wrapper.find(`[data-testid="connector-row-${connectorId}"]`)
   // TableActions renders Edit first, then Delete.
@@ -374,8 +384,7 @@ describe('AdminConnectorsView', () => {
     await nextTick()
 
     await openEdit(wrapper, 'rest-1')
-    const select = wrapper.find('[data-testid="rest-connector-on-unknown"]')
-    expect((select.element as HTMLSelectElement).value).toBe('fail_closed')
+    expect(restSelectValue(wrapper, 'rest-connector-on-unknown')).toBe('fail_closed')
     await wrapper.find('form').trigger('submit')
     await nextTick()
 
@@ -1260,7 +1269,7 @@ describe('AdminConnectorsView — FAR-617 add/delete/error-state coverage', () =
     await openEdit(wrapper, 'rest-null')
 
     expect((wrapper.find('[data-testid="rest-connector-base-url"]').element as HTMLInputElement).value).toBe('')
-    expect((wrapper.find('[data-testid="rest-connector-method"]').element as HTMLSelectElement).value).toBe('GET')
+    expect(restSelectValue(wrapper, 'rest-connector-method')).toBe('GET')
     expect((wrapper.find('[data-testid="rest-connector-timeout"]').element as HTMLInputElement).value).toBe('30')
   })
 

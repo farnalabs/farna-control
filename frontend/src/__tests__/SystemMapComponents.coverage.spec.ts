@@ -452,6 +452,20 @@ describe('SystemMapGraphEditor coverage', () => {
     return mount(SystemMapGraphEditor, { props: { ...emptyProps, ...overrides } as never, global: { plugins: [i18n] } })
   }
 
+  // The relationship controls are the design-system AppSelect, so a choice is an
+  // `update:modelValue` emit on the inner Select rather than a native change.
+  async function chooseRelationship(
+    wrapper: ReturnType<typeof mountEditor>,
+    field: 'source' | 'type' | 'target',
+    value: string,
+  ): Promise<void> {
+    wrapper
+      .findAllComponents({ name: 'Select' })
+      .at(field === 'source' ? 0 : field === 'type' ? 1 : 2)!
+      .vm.$emit('update:modelValue', value)
+    await wrapper.vm.$nextTick()
+  }
+
   it('adds node types that contain an underscore', async () => {
     const wrapper = mountEditor()
 
@@ -488,7 +502,13 @@ describe('SystemMapGraphEditor coverage', () => {
       relationships: [relationship({ target_node_key: 'missing-node' })],
     })
 
-    expect(wrapper.find('svg').exists()).toBe(false)
+    // PrimeVue's Select renders its own chevron <svg>, so assert the edge layer
+    // itself is absent (the <svg> that only renders when edgeLines is non-empty)
+    // rather than that the document has no svg at all.
+    expect(wrapper.findAll('line')).toHaveLength(0)
+    expect(
+      wrapper.findAll('svg').some((svg) => svg.classes().includes('pointer-events-none')),
+    ).toBe(false)
   })
 
   it('removes a relationship', async () => {
@@ -507,7 +527,7 @@ describe('SystemMapGraphEditor coverage', () => {
       nodes: [node(), node({ id: 'n2', node_key: 'connector-2', node_type: 'connector', display_name: 'Connector 2' })],
     })
 
-    await wrapper.get('[data-testid="system-map-relationship-target"]').setValue('pipeline-1')
+    await chooseRelationship(wrapper, 'target', 'pipeline-1')
     expect(wrapper.get('[data-testid="system-map-add-relationship"]').attributes('disabled')).toBeDefined()
 
     const vm = wrapper.vm as unknown as { addRelationship: () => void }

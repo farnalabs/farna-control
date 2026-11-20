@@ -93,6 +93,28 @@ async function mountView() {
   return wrapper
 }
 
+type RiskView = Awaited<ReturnType<typeof mountView>>
+
+// The facet dropdowns are design-system AppSelects (PrimeVue Select), so the
+// option list comes from props and a choice is an `update:modelValue` emit on
+// the inner Select rather than a native <select> change.
+function facetSelect(wrapper: RiskView, testid: string) {
+  const found = wrapper
+    .findAllComponents({ name: 'Select' })
+    .find((component) => component.props('inputId') === testid)
+  expect(found, `expected an AppSelect with id "${testid}"`).toBeDefined()
+  return found!
+}
+
+async function chooseFacet(wrapper: RiskView, testid: string, value: string): Promise<void> {
+  facetSelect(wrapper, testid).vm.$emit('update:modelValue', value)
+  await flushPromises()
+}
+
+function facetOptions(wrapper: RiskView, testid: string): Array<{ value: string; label: string }> {
+  return facetSelect(wrapper, testid).props('options') as Array<{ value: string; label: string }>
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
 })
@@ -208,7 +230,7 @@ describe('RiskAssessmentView', () => {
     const wrapper = await mountView()
 
     await wrapper.find('[data-testid="risk-assessment-key-prefix"]').setValue('risk.')
-    await wrapper.find('[data-testid="risk-assessment-action"]').setValue('warn')
+    await chooseFacet(wrapper, 'risk-assessment-action', 'warn')
     await wrapper.find('[data-testid="risk-assessment-apply"]').trigger('click')
     await flushPromises()
 
@@ -227,9 +249,7 @@ describe('RiskAssessmentView', () => {
     await flushPromises()
 
     expect(routerState.query).toEqual({ days: '7' })
-    expect(
-      (wrapper.find('[data-testid="risk-assessment-action"]').element as HTMLSelectElement).value,
-    ).toBe('')
+    expect(facetSelect(wrapper, 'risk-assessment-action').props('modelValue')).toBe('')
   })
 
   it('renders the error alert and retries via the shared apply path', async () => {
@@ -385,10 +405,7 @@ describe('RiskAssessmentView', () => {
     expect(mockGet).toHaveBeenCalledWith('/api/v1/pipelines', {
       params: { query: { page: 2, page_size: 100 } },
     })
-    const options = wrapper
-      .find('[data-testid="risk-assessment-pipeline"]')
-      .findAll('option')
-      .map((option) => option.text())
+    const options = facetOptions(wrapper, 'risk-assessment-pipeline').map((option) => option.label)
     expect(options).toEqual(['All pipelines', 'Alpha', 'Beta'])
   })
 
@@ -424,10 +441,7 @@ describe('RiskAssessmentView', () => {
     expect(wrapper.find('[data-testid="risk-assessment-pipelines-error-message"]').text()).toBe(
       'Could not load the pipeline list. Try again.',
     )
-    const options = wrapper
-      .find('[data-testid="risk-assessment-pipeline"]')
-      .findAll('option')
-      .map((option) => option.text())
+    const options = facetOptions(wrapper, 'risk-assessment-pipeline').map((option) => option.label)
     expect(options).toEqual(['All pipelines'])
   })
 
@@ -455,10 +469,7 @@ describe('RiskAssessmentView', () => {
     expect(wrapper.find('[data-testid="risk-assessment-pipelines-error-message"]').text()).toBe(
       'The pipeline list is too large to load in full; some pipelines may not be selectable. Narrow the run history or retry.',
     )
-    const options = wrapper
-      .find('[data-testid="risk-assessment-pipeline"]')
-      .findAll('option')
-      .map((option) => option.text())
+    const options = facetOptions(wrapper, 'risk-assessment-pipeline').map((option) => option.label)
     // All 20 pages (the bound) were collected before the truncation label.
     expect(options).toHaveLength(21)
     expect(options[20]).toBe('Pipeline 20')
@@ -470,10 +481,7 @@ describe('RiskAssessmentView', () => {
 
     const wrapper = await mountView()
 
-    const values = wrapper
-      .find('[data-testid="risk-assessment-action"]')
-      .findAll('option')
-      .map((o) => o.attributes('value'))
+    const values = facetOptions(wrapper, 'risk-assessment-action').map((o) => o.value)
     expect(values).toEqual(['', ...RISK_ACTIONS])
   })
 })

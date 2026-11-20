@@ -1297,10 +1297,14 @@ describe('AnalyticsView', () => {
     setupMocks()
     const wrapper = mount(AnalyticsView)
     await flushPromises()
-    const statusSelect = wrapper.find('[data-testid="analytics-filter-status"]')
-    expect(statusSelect.exists()).toBe(true)
+    // The filter bar's dropdowns are design-system AppSelects, so a choice is an
+    // `update:modelValue` emit on the inner Select rather than a native change.
+    const statusSelect = wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component) => component.props('inputId') === 'analytics-filter-status')
+    expect(statusSelect, 'expected the status AppSelect').toBeDefined()
 
-    await statusSelect.setValue('failed')
+    statusSelect!.vm.$emit('update:modelValue', 'failed')
     await flushPromises()
 
     const queryCalls = mockGet.mock.calls.filter((c) => c[0] === '/api/v1/analytics/query')
