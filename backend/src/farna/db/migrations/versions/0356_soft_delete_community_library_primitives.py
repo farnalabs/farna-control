@@ -12,6 +12,13 @@ preserved for audit and a later purge) and does NOT rewrite provenance to
 ``'local'``. The ``deleted_at IS NULL`` predicate keeps the upgrade idempotent:
 re-running it soft-deletes nothing further.
 
+The statement is deliberately dialect-portable: it references the table
+unqualified (no ``public.`` schema prefix) and stamps ``CURRENT_TIMESTAMP``
+(the same spelling the baseline schema uses for its column defaults) instead of
+the Postgres-only ``now()``. ``env.py`` also targets SQLite (``render_as_batch``
+is enabled for that dialect), and either of those Postgres-only forms would fail
+the upgrade there.
+
 The ``ck_library_primitives_source`` / ``ck_library_primitives_source_fields``
 CHECK constraints are intentionally left untouched in this change: narrowing
 them while the soft-deleted community rows still exist would make those rows
@@ -42,8 +49,8 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         """
-UPDATE public.library_primitives
-SET deleted_at = now()
+UPDATE library_primitives
+SET deleted_at = CURRENT_TIMESTAMP
 WHERE source = 'community'
   AND deleted_at IS NULL
 """
