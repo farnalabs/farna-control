@@ -40,9 +40,20 @@ section "codesign --verify --deep --strict --verbose=4"
 codesign --verify --deep --strict --verbose=4 "$app" 2>&1 | tail -n 60
 printf 'codesign_verify_exit=%s\n' "${PIPESTATUS[0]}"
 
-section "spctl -a -vvv -t exec"
-spctl -a -vvv -t exec "$app" 2>&1 | tail -n 40
-printf 'spctl_exit=%s\n' "${PIPESTATUS[0]}"
+# Repeat the assessment: a verdict that changes between identical calls
+# points at the assessment service, not at the bundle contents.
+assessment_started="$(date '+%Y-%m-%d %H:%M:%S')"
+for attempt in 1 2 3; do
+  section "spctl -a -vvv -t exec (attempt $attempt)"
+  spctl -a -vvv -t exec "$app" 2>&1 | tail -n 40
+  printf 'spctl_exit=%s\n' "${PIPESTATUS[0]}"
+done
+
+if command -v syspolicy_check >/dev/null 2>&1; then
+  section "syspolicy_check distribution"
+  syspolicy_check distribution "$app" --verbose 2>&1 | tail -n 80
+  printf 'syspolicy_check_exit=%s\n' "${PIPESTATUS[0]}"
+fi
 
 # Reproduce Gatekeeper's validation flags one at a time. Raw values are the
 # public SecCSFlags constants from <Security/CSCommon.h>.
@@ -101,10 +112,10 @@ else
 fi
 rm -rf "$probe_dir"
 
-section "syspolicyd log (last 3 minutes)"
-log show --last 3m --style compact \
-  --predicate 'process == "syspolicyd" OR process == "spctl" OR subsystem == "com.apple.securityd"' 2>/dev/null \
-  | grep -Ei 'sealed|resource|symlink|invalid|-670[0-9][0-9]|file://' | tail -n 120
+section "syspolicyd log since the first assessment (info + debug)"
+log show --info --debug --style compact --start "$assessment_started" \
+  --predicate 'process == "syspolicyd" OR process == "spctl" OR subsystem == "com.apple.syspolicy"' 2>/dev/null \
+  | grep -v 'CSSMERR_CSP_INVALID_KEYATTR_MASK' | tail -n 250
 
 section "symbolic links (absolute or escaping the bundle are flagged)"
 python3 -I - "$app" <<'PY'

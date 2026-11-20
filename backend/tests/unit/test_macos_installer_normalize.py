@@ -2540,3 +2540,55 @@ def test_macos_bash_scanner_flags_the_run_44680480922_expansion() -> None:
     """The scanner must catch the exact expansion that masked the crash."""
     assert _unguarded_array_expansions('run_assertion "install_sh" "${INSTALL_ENV[@]}" bash -c true') == ["INSTALL_ENV"]
     assert _BASH4_ONLY["mapfile/readarray"].search("mapfile -t LINES < file")
+
+
+def test_macos_gatekeeper_rejection_prints_signature_diagnostics_before_failing() -> None:
+    """FAR-2593: a mounted-app spctl rejection names the offending file instead
+    of only "a sealed resource is missing or invalid"."""
+    _step, build_run = _native_installer_step()
+    start = build_run.index("run_pre_smoke mounted_app_spctl spctl --assess --type execute")
+    failure_branch = build_run[start : build_run.index("run_pre_smoke mounted_app_help")]
+
+    assert 'if ! run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"; then' in build_run
+    assert 'bash scripts/macos/signature-diagnostics.sh mounted_app "$MOUNTED_APP" "$APP"' in failure_branch
+    assert re.search(r"signature-diagnostics\.sh mounted_app[^\n]*\n[^\n]*endgroup[^\n]*\n\s+exit 1\n", failure_branch)
+
+
+def test_macos_signed_bundle_is_diagnosed_before_it_is_staged() -> None:
+    _step, build_run = _native_installer_step()
+
+    order = [
+        'run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"',
+        'bash scripts/macos/signature-diagnostics.sh pre_dmg "$APP"',
+        "run_pre_smoke dmg_create bash -c",
+    ]
+    positions = [build_run.index(command) for command in order]
+    assert positions == sorted(positions)
+
+
+def test_macos_mounted_app_codesign_agrees_with_gatekeeper_strictness() -> None:
+    _step, build_run = _native_installer_step()
+
+    assert 'run_pre_smoke mounted_app_codesign codesign --verify --deep --strict "$MOUNTED_APP"' in build_run
+    assert 'run_pre_smoke app_codesign_verify codesign --verify --deep --strict --verbose=2 "$APP"' in build_run
+
+
+def test_macos_signature_diagnostics_helper_never_fails_its_caller() -> None:
+    helper = (REPO_ROOT / "scripts" / "macos" / "signature-diagnostics.sh").read_text(encoding="utf-8")
+    code = _code_only(helper)
+
+    assert "set -e" not in code.replace("set -uo pipefail", "")
+    assert code.rstrip().endswith("exit 0")
+    assert "codesign --verify --deep --strict --verbose=4" in code
+    assert "spctl -a -vvv -t exec" in code
+    assert "SecStaticCodeCheckValidityWithErrors" in code
+
+
+def test_macos_contract_gates_the_signature_diagnostics_helper() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build"]["steps"]
+    contract = next(step["run"] for step in steps if step.get("name") == "Validate workflow contract")
+
+    assert "test -x scripts/macos/signature-diagnostics.sh" in contract
+    assert "shellcheck scripts/macos/signature-diagnostics.sh" in contract
+    assert "bash -n scripts/macos/signature-diagnostics.sh" in contract

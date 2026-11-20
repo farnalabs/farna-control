@@ -268,6 +268,10 @@ jobs:
           bash -n scripts/macos/macho-inventory.sh
           grep -q 'nested_binary_discovery bash scripts/macos/macho-inventory.sh discover' .github/workflows/macos-installer.yml
           grep -q 'nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit' .github/workflows/macos-installer.yml
+          # A Gatekeeper rejection must name the offending file (FAR-2593).
+          test -x scripts/macos/signature-diagnostics.sh
+          shellcheck scripts/macos/signature-diagnostics.sh
+          bash -n scripts/macos/signature-diagnostics.sh
           grep -q 'notarytool submit' scripts/macos/notarize-and-verify.sh
           grep -q -- '--output-format json' scripts/macos/notarize-and-verify.sh
           grep -q 'dmg_notary_submit bash scripts/macos/notarize-and-verify.sh' .github/workflows/macos-installer.yml
