@@ -2670,3 +2670,69 @@ def test_macos_macho_assertion_logs_its_line_and_fails_on_an_architecture_mismat
     assert result.returncode != 0, result.stdout
     assert "assertion: service_binary_macho=FAILED (exit=1)" in result.stdout
     assert "REACHED_AFTER_MACHO_ASSERTION" not in result.stdout
+
+
+# --- FAR-2589 review: a command word glued to its quoted argument ------------
+#
+# `file"${APP_ROOT}/Contents/MacOS/modulo"` (a lost separator) is ONE valid
+# word, so bash -n and shellcheck both accept it; on the macOS runner it runs a
+# command named `file/.../modulo` and the build dies at its final check. Only a
+# lexical scan catches the class before a runner does.
+
+_HEREDOC_OPENER = re.compile(r"""<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1""")
+_GLUED_COMMAND_WORD = re.compile(r"""^\s*([A-Za-z_][A-Za-z0-9_.-]+)["']""")
+
+
+def _bash_code_lines(text: str) -> list[str]:
+    """Non-comment shell lines, with heredoc bodies (C, Python, plist) skipped."""
+    lines: list[str] = []
+    terminator: str | None = None
+    for line in text.splitlines():
+        if terminator is not None:
+            if line.strip() == terminator:
+                terminator = None
+            continue
+        if line.lstrip().startswith("#"):
+            continue
+        opener = _HEREDOC_OPENER.search(line)
+        if opener:
+            terminator = opener.group(2)
+        lines.append(line)
+    return lines
+
+
+def _glued_command_words(text: str) -> list[str]:
+    return [line.strip() for line in _bash_code_lines(text) if _GLUED_COMMAND_WORD.match(line)]
+
+
+def test_installer_bash_never_glues_a_command_word_to_its_quoted_argument() -> None:
+    sources = _macos_bash_sources()
+    for relative in ("scripts/install.sh", "scripts/linux/native-firstrun-smoke.sh"):
+        sources[relative] = (REPO_ROOT / relative).read_text(encoding="utf-8")
+
+    offenders = [f"{label}: {line}" for label, text in sources.items() for line in _glued_command_words(text)]
+
+    assert not offenders, offenders
+
+
+def test_glued_command_word_scan_flags_the_reviewed_build_script_typo() -> None:
+    """Negative control: the exact PR #3291 line is caught; heredoc bodies are not."""
+    script = _bundle_build_script()
+    typo = script.replace('file "${APP_ROOT}/Contents/MacOS/modulo"', 'file"${APP_ROOT}/Contents/MacOS/modulo"')
+    assert typo != script
+
+    assert _glued_command_words(typo) == ['file"${APP_ROOT}/Contents/MacOS/modulo"']
+    assert _glued_command_words("cat <<'PY'\nprint\"x\"\nPY\n") == []
+
+
+def test_macos_bundle_build_ends_with_the_launcher_identity_checks() -> None:
+    """The build's last checks run right after the version stamp, verbatim."""
+    script = _bundle_build_script()
+    tail = script[script.index("# END bundle_version_stamp") :].splitlines()[1:5]
+
+    assert tail == [
+        'file "${APP_ROOT}/Contents/MacOS/modulo"',
+        '"${BUNDLE_ROOT}/pg/bin/postgres" --version',
+        '"${BUNDLE_ROOT}/redis/redis-server" --version',
+        '"${APP_ROOT}/Contents/MacOS/modulo" --help >/dev/null',
+    ]

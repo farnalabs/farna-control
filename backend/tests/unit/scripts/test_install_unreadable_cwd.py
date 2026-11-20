@@ -115,7 +115,7 @@ def _add_file(archive: tarfile.TarFile, name: str, payload: bytes, mode: int) ->
 
 def _signed_tarball(artifacts: Path, trust_key: Ed25519PrivateKey) -> Path:
     """A real ``farna-control-<v>-linux-<arch>.tar.gz`` plus its signed manifest."""
-    artifacts.mkdir(parents=True)
+    artifacts.mkdir(parents=True, exist_ok=True)
     tarball = artifacts / f"farna-control-{_VERSION_NUM}-linux-{_host_arch()}.tar.gz"
     top = tarball.name.removesuffix(".tar.gz")
     files = {"VERSION": (f"{_RELEASE_TAG}\n".encode(), 0o644), "launcher": (b"#!/bin/sh\nexit 0\n", 0o755)}
@@ -173,20 +173,38 @@ def _install_env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
-def _run_install(tmp_path: Path, *, cwd_mode: int, relative: bool, leave_cwd: bool = True) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+def _invocation_dir(tmp_path: Path) -> Path:
+    """The directory the installer is started from (pre-create it to seed files)."""
+    return tmp_path / "artifacts" / "locked"
+
+
+def _run_install(
+    tmp_path: Path,
+    *,
+    cwd_mode: int,
+    relative: bool,
+    leave_cwd: bool = True,
+    env_overrides: dict[str, str | None] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
     """Run the installer from ``artifacts/locked`` after chmod-ing it to ``cwd_mode``.
 
     The wrapper enters the directory BEFORE dropping its permissions (a cwd of
     mode 0000 cannot be entered afterwards), then execs the installer, which
     inherits that cwd exactly as a `sudo -u` from a private directory does.
+    ``env_overrides`` sets (or, with ``None``, removes) environment variables.
     """
     _require_preconditions()
     trust_key = Ed25519PrivateKey.generate()
     tarball = _signed_tarball(tmp_path / "artifacts", trust_key)
     script = _installer(tmp_path, trust_key, leave_cwd=leave_cwd)
     env = _install_env(tmp_path)
-    locked = tmp_path / "artifacts" / "locked"
-    locked.mkdir()
+    for key, value in (env_overrides or {}).items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+    locked = _invocation_dir(tmp_path)
+    locked.mkdir(exist_ok=True)
     tarball_arg = f"../{tarball.name}" if relative else str(tarball)
     wrapper = 'cd -- "$1" && chmod "$2" . && shift 2 && exec "$@"'
     try:
@@ -239,3 +257,74 @@ def test_relative_from_file_resolves_against_the_invocation_directory(tmp_path: 
     result, env = _run_install(tmp_path, cwd_mode=0o311, relative=True)
 
     _assert_installed(result, env)
+
+
+# --- every path override is anchored at the invocation directory -------------
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"FARNA_CONTROL_DATA_DIR": "relative-data"},
+        {"FARNA_CONTROL_DATA_DIR": None, "MODULO_DATA_DIR": "relative-data"},
+    ],
+    ids=["farna_control", "legacy_modulo_alias"],
+)
+def test_relative_data_dir_override_is_anchored_at_the_invocation_directory(tmp_path: Path, overrides: dict[str, str | None]) -> None:
+    """The installer writes config.env into the data dir AFTER leaving its cwd,
+    so a relative override must still land beside where it was run, not under /."""
+    result, env = _run_install(tmp_path, cwd_mode=0o755, relative=False, env_overrides=overrides)
+
+    _assert_installed(result, env)
+    assert (_invocation_dir(tmp_path) / "relative-data" / "config.env").is_file(), _diagnose(result)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"FARNA_CONTROL_LEGACY_SHIM_PATH": "relative-shim/modulo"},
+        {"FARNA_CONTROL_LEGACY_SHIM_PATH": None, "MODULO_LEGACY_SHIM_PATH": "relative-shim/modulo"},
+    ],
+    ids=["farna_control", "legacy_modulo_alias"],
+)
+def test_relative_legacy_shim_override_is_anchored_at_the_invocation_directory(tmp_path: Path, overrides: dict[str, str | None]) -> None:
+    """An unmanaged legacy shim named by a relative override must still be found
+    (and refused without --force); resolved against / it would be missed."""
+    shim = _invocation_dir(tmp_path) / "relative-shim" / "modulo"
+    shim.parent.mkdir(parents=True)
+    shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+    result, _env = _run_install(tmp_path, cwd_mode=0o755, relative=False, env_overrides=overrides)
+
+    assert result.returncode != 0, _diagnose(result)
+    assert f"found an existing {shim} that this installer did not create" in result.stderr, _diagnose(result)
+    assert shim.is_file()
+
+
+#: An assignment whose value comes straight from a path-override variable. Every
+#: such override must go through absolute_from_invocation instead. (HOME and
+#: TMPDIR are anchored once, before the installer leaves its cwd, so values
+#: derived from them are already absolute.)
+_UNANCHORED_OVERRIDE = re.compile(
+    r"""^\s*(?:local\s+)?[A-Za-z_][A-Za-z0-9_]*="\$\{(?:(?:FARNA_CONTROL|MODULO)_[A-Z0-9_]*(?:DIR|ROOT|SHIM|PATH)|XDG_[A-Z]+_HOME)\b""",
+    re.MULTILINE,
+)
+
+
+def test_install_sh_anchors_every_path_override() -> None:
+    """Static guard for the class: a NEW raw override would resolve against /."""
+    offenders = [line.strip() for line in _UNANCHORED_OVERRIDE.findall(_INSTALL_SH.read_text(encoding="utf-8"))]
+    assert not offenders, offenders
+
+
+@pytest.mark.parametrize(
+    "historical",
+    [
+        '  local legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-${MODULO_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}"',
+        '  DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR}}"',
+        '  STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/farna-control"',
+    ],
+)
+def test_unanchored_override_guard_flags_the_reviewed_lines(historical: str) -> None:
+    """Negative control: the guard catches the exact lines the review flagged."""
+    assert _UNANCHORED_OVERRIDE.findall(historical)

@@ -402,7 +402,7 @@ if [[ "${BUNDLED_REPORTED_VERSION}" != "${VERSION}" ]]; then
 fi
 echo "bundle version stamp: ${BUNDLED_REPORTED_VERSION}"
 # END bundle_version_stamp
-file"${APP_ROOT}/Contents/MacOS/modulo"
+file "${APP_ROOT}/Contents/MacOS/modulo"
 "${BUNDLE_ROOT}/pg/bin/postgres" --version
 "${BUNDLE_ROOT}/redis/redis-server" --version
 "${APP_ROOT}/Contents/MacOS/modulo" --help >/dev/null
