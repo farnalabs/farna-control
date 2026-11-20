@@ -638,6 +638,18 @@ jobs:
       BUNDLE_MANIFEST_SIGNING_KEY: ${{ secrets.BUNDLE_MANIFEST_SIGNING_KEY }}
       GH_TOKEN: ${{ github.token }}
 
+  # FAR-2579: a dry-run also packages the rehearsal bundle as the .deb and runs
+  # the Ubuntu 22.04 + 24.04 install/boot/remove/purge validation, so the apt
+  # artefact is exercised before any cut. Nothing is published.
+  dry-run-linux-deb:
+    name: Rehearse .deb package + validation (no publish)
+    needs: [dry-run-bundle]
+    if: inputs.mode == 'dry-run'
+    uses: ./.github/workflows/linux-deb.yml
+    with:
+      version: ${{ inputs.version }}
+      bundle_artifact: bundle-artefacts-amd64
+
   # ---------------------------------------------------------------------------
   # Cut / Recut / Promote: main release logic
   # ---------------------------------------------------------------------------
@@ -2169,6 +2181,22 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
   # ---------------------------------------------------------------------------
+  # Package the release bundle as farna-control_<version>_amd64.deb and validate
+  # it on Ubuntu 22.04 + 24.04 (FAR-2579). The .deb is a mandatory release
+  # input: final-release-manifest folds it into SHA256SUMS and the signed
+  # manifest, attest-artefacts attests it (it rides in final-release-artefacts),
+  # and publish-release attaches it.
+  # ---------------------------------------------------------------------------
+  linux-deb:
+    name: Build and validate the .deb
+    needs: [release, bundle]
+    if: (inputs.mode == 'cut' || inputs.mode == 'recut') && needs.bundle.result == 'success'
+    uses: ./.github/workflows/linux-deb.yml
+    with:
+      version: ${{ inputs.version }}
+      bundle_artifact: bundle-artefacts-amd64
+
+  # ---------------------------------------------------------------------------
   # Build the native Windows payload used by the installer (cut and recut).
   # ---------------------------------------------------------------------------
   windows-native-artifacts:
@@ -2244,7 +2272,7 @@ jobs:
   # ---------------------------------------------------------------------------
   final-release-manifest:
     name: Generate final release manifest
-    needs: [release, bundle, macos-installer, windows-installer]
+    needs: [release, bundle, linux-deb, macos-installer, windows-installer]
     # `windows-installer` is intentionally skipped on the default Alpha path.
     # `always()` makes that skipped need visible to this condition, while every
     # required job remains explicitly fail-closed: release, bundle and macOS
@@ -2255,6 +2283,7 @@ jobs:
       (inputs.mode == 'cut' || inputs.mode == 'recut') &&
       needs.release.result == 'success' &&
       needs.bundle.result == 'success' &&
+      needs.linux-deb.result == 'success' &&
       needs.macos-installer.result == 'success' &&
       ((inputs.include_windows && needs.windows-installer.result == 'success') ||
        (!inputs.include_windows && needs.windows-installer.result == 'skipped'))
@@ -2292,6 +2321,22 @@ jobs:
         with:
           name: windows-installer-${{ inputs.version }}
           path: release-artefacts
+      # FAR-2579 - the validated .deb. Downloaded beside (not into)
+      # release-artefacts so only the package itself joins the release set; its
+      # own .sha256 is checked here and the release SHA256SUMS below covers it.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.linux-deb.outputs.deb_artifact }}
+          path: deb-artefacts
+      - name: Stage the validated .deb into the release set
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          deb="farna-control_${VERSION}_amd64.deb"
+          (cd deb-artefacts && sha256sum --check --strict "${deb}.sha256")
+          cp -- "deb-artefacts/${deb}" "release-artefacts/${deb}"
+          test -s "release-artefacts/${deb}"
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
           python-version: "3.12"
@@ -2345,9 +2390,9 @@ jobs:
               echo "::error::include_windows=true but windows-installer-${VERSION} artifact is missing"
               exit 1
             fi
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-windows-amd64.exe" "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-windows-amd64.exe" "farna-control-${VERSION}-compose.tar.gz" "farna-control_${VERSION}_amd64.deb" > SHA256SUMS
           else
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-compose.tar.gz" "farna-control_${VERSION}_amd64.deb" > SHA256SUMS
           fi
           cd ..
           uv run --no-project --no-sync --no-build python - <<'PY'
@@ -2366,6 +2411,8 @@ jobs:
           # FAR-2345: the self-hosted compose stack is packaged on every release,
           # so it is always covered by the manifest.
           names.append(f"farna-control-{version}-compose.tar.gz")
+          # FAR-2579: the validated apt package is a mandatory release artefact.
+          names.append(f"farna-control_{version}_amd64.deb")
           def digest(path: Path) -> str:
               # Stream the hash instead of reading each ~400 MB DMG into memory:
               # hashing every artefact one at a time keeps peak memory bounded to
@@ -2505,7 +2552,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-release:
     name: Create GitHub Release
-    needs: [release, final-release-manifest, attest-artefacts, macos-installer, verify-notarization-tickets]
+    needs: [release, final-release-manifest, attest-artefacts, linux-deb, macos-installer, verify-notarization-tickets]
     # FAR-2573: the ticket gate above is a hard need. If it could not run to a
     # conclusion the publication state is UNKNOWN, so the job fails closed in
     # its dependency guard; if it ran and found no ticket, publication is HELD
@@ -2541,6 +2588,7 @@ jobs:
           RELEASE_RESULT: ${{ needs.release.result }}
           MANIFEST_RESULT: ${{ needs.final-release-manifest.result }}
           ATTEST_RESULT: ${{ needs.attest-artefacts.result }}
+          LINUX_DEB_RESULT: ${{ needs.linux-deb.result }}
           MACOS_RESULT: ${{ needs.macos-installer.result }}
           NOTARIZATION_RESULT: ${{ needs.verify-notarization-tickets.result }}
         shell: bash
@@ -2554,7 +2602,7 @@ jobs:
           # not report a verdict, the ticket state is UNKNOWN and publishing
           # unverified bytes is exactly the FAR-2573 defect. A missing ticket is
           # a *reported* 'false' from that job, never a failed result.
-          for job in "release=$RELEASE_RESULT" "final-release-manifest=$MANIFEST_RESULT" "attest-artefacts=$ATTEST_RESULT" "macos-installer=$MACOS_RESULT" "verify-notarization-tickets=$NOTARIZATION_RESULT"; do
+          for job in "release=$RELEASE_RESULT" "final-release-manifest=$MANIFEST_RESULT" "attest-artefacts=$ATTEST_RESULT" "linux-deb=$LINUX_DEB_RESULT" "macos-installer=$MACOS_RESULT" "verify-notarization-tickets=$NOTARIZATION_RESULT"; do
             name="${job%%=*}"
             result="${job#*=}"
             if [ "$result" != "success" ]; then
@@ -2589,6 +2637,7 @@ jobs:
             "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg" \
             "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg" \
             "release-artefacts/farna-control-${VERSION}-compose.tar.gz" \
+            "release-artefacts/farna-control_${VERSION}_amd64.deb" \
             release-artefacts/SHA256SUMS \
             release-artefacts/RELEASE_MANIFEST.json \
             release-artefacts/RELEASE_MANIFEST.json.sig; do
@@ -2757,6 +2806,7 @@ jobs:
              "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg"
              "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg"
              "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
+            "release-artefacts/farna-control_${VERSION}_amd64.deb"
             "release-artefacts/SHA256SUMS"
             "release-artefacts/RELEASE_MANIFEST.json"
             "release-artefacts/RELEASE_MANIFEST.json.sig"
@@ -3560,7 +3610,7 @@ jobs:
   # ---------------------------------------------------------------------------
   freeze-cleanup:
     name: Clear release freeze after a failed cut or recut
-    needs: [preflight, release, bundle, windows-installer, macos-installer, final-release-manifest, attest-artefacts, publish-release]
+    needs: [preflight, release, bundle, linux-deb, windows-installer, macos-installer, final-release-manifest, attest-artefacts, publish-release]
     # `always()` lets this run after a failed publication chain; `failure()`
     # keeps it out of a successful release (where the freeze is deliberate).
     # `needs.preflight.result == 'success'` keeps it out of a run whose
