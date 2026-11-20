@@ -28,6 +28,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { isNavItemActive } from "../config/navigation";
 import SvgIcon from "./SvgIcon.vue";
 
 const props = defineProps<{
@@ -51,10 +52,10 @@ const labelText = computed(() => (props.labelKey ? t(props.labelKey) : props.lab
 
 const route = useRoute();
 
-const isActive = computed(() =>
-  route.path === props.to ||
-  (!props.exact && props.to !== "/" && route.path.startsWith(props.to + "/"))
-);
+// FAR-2583: derive the active item from the current route's manifest ancestry
+// (detail pages and child surfaces own their parent item), not from a path
+// prefix — `/schemas/infer` must not require a shared prefix with `/schemas`.
+const isActive = computed(() => isNavItemActive({ to: props.to, exact: props.exact }, route));
 </script>
 
 <style scoped>

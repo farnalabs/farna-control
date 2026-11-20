@@ -102,6 +102,10 @@ const groupLabelKeyMap: Record<string, string> = {
 interface ManifestRoute {
   name: string
   breadcrumb: string
+  // FAR-2583: the manifest ancestry chain. A sidebar item owns every route
+  // whose chain reaches it, which is what keeps the owning item active on
+  // child/detail pages that share no path prefix with it.
+  parent?: string | null
   sidebar_group?: string | null
   sidebar_order?: number | null
   type?: string
@@ -150,6 +154,173 @@ function resolveSystemAdminOnly(
 ): true | undefined {
   if (route.system_admin_only || group.system_admin_only) return true
   return undefined
+}
+
+/**
+ * The minimal shape of a resolved route needed to place it in the manifest
+ * ancestry. Structurally satisfied by vue-router's `RouteLocationNormalized`,
+ * and by the partial route objects unit tests drive the components with.
+ */
+export interface NavActiveRoute {
+  path: string
+  name?: string | symbol | null
+  matched?: Array<{ name?: string | symbol | null; path: string }>
+}
+
+interface CompiledManifestPattern {
+  path: string
+  regex: RegExp
+  // A pattern whose final segment is `:param` also matches the path without
+  // that segment — vue-router declares such params optional on the routes that
+  // allow it (e.g. `/schemas/editor/:id?`), and the manifest key omits the `?`.
+  optionalTailRegex?: RegExp
+  literalSegments: number
+}
+
+const manifestRouteTable: Record<string, ManifestRoute> = isManifest(manifest)
+  ? (manifest as Manifest).routes
+  : {}
+
+const manifestPathByName = new Map<string, string>(
+  Object.entries(manifestRouteTable).map(([path, entry]): [string, string] => [entry.name, path]),
+)
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Compile each manifest key (static routes and `:param` patterns) once, so a
+// concrete URL that carries no manifest route name can still be placed in the
+// ancestry. Specificity is the number of literal segments, so the most
+// specific pattern wins (`/admin/runners/profiles/new` over a `:id` sibling).
+function compileManifestPattern(path: string): CompiledManifestPattern {
+  let literalSegments = 0
+  const segments = path.split('/')
+  const translated = segments.map((segment) => {
+    if (segment.startsWith(':')) return '[^/]+'
+    if (segment) literalSegments += 1
+    return escapeRegExp(segment)
+  })
+  // A key whose final segment is a `:param` also owns its collection path
+  // (`/schemas/editor/:id` owns `/schemas/editor`); the manifest omits
+  // vue-router's optional marker, so the alias drops the trailing param.
+  const lastSegment = path.slice(path.lastIndexOf('/') + 1)
+  const optionalTailRegex = lastSegment.startsWith(':')
+    ? new RegExp(`^${translated.slice(0, -1).join('/')}$`)
+    : undefined
+  return { path, regex: new RegExp(`^${translated.join('/')}$`), optionalTailRegex, literalSegments }
+}
+
+const manifestPathPatterns = Object.keys(manifestRouteTable)
+  .map(compileManifestPattern)
+  .sort((a, b) => b.literalSegments - a.literalSegments)
+
+function matchesPattern(pattern: CompiledManifestPattern, path: string): boolean {
+  return pattern.regex.test(path) || Boolean(pattern.optionalTailRegex?.test(path))
+}
+
+function resolvePatternPath(path: string): string | undefined {
+  return manifestPathPatterns.find((pattern) => matchesPattern(pattern, path))?.path
+}
+
+function manifestPathForName(name: string | symbol | null | undefined): string | undefined {
+  if (typeof name !== 'string') return undefined
+  return manifestPathByName.get(name)
+}
+
+function resolveMatchedPath(matched: NavActiveRoute['matched']): string | undefined {
+  const records = matched ?? []
+  // vue-router orders `matched` parent-first, so walk from the deepest record
+  // back — the most specific manifest route must win.
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index]
+    const byName = manifestPathForName(record.name)
+    if (byName !== undefined) return byName
+    if (Object.prototype.hasOwnProperty.call(manifestRouteTable, record.path)) return record.path
+  }
+  return undefined
+}
+
+function resolveManifestPath(route: NavActiveRoute): string | undefined {
+  const byName = manifestPathForName(route.name)
+  if (byName !== undefined) return byName
+  const fromMatched = resolveMatchedPath(route.matched)
+  if (fromMatched !== undefined) return fromMatched
+  if (Object.prototype.hasOwnProperty.call(manifestRouteTable, route.path)) return route.path
+  return resolvePatternPath(route.path)
+}
+
+function isManifestNavItem(entry: ManifestRoute): boolean {
+  // Mirrors the filter in buildSidebarGroups exactly: a route becomes a
+  // sidebar item only when it carries both a group and an order, and is not a
+  // detail page. Keeping the two in step means the resolved owner is always a
+  // path that an actual item renders.
+  return isManifestRoute(entry) && entry.type !== 'detail_page'
+}
+
+/**
+ * The sidebar item that owns a manifest route, following the `parent` chain.
+ *
+ * The Dashboard entry (`/`) owns only itself, so a chain that merely passes
+ * through the root yields no owner. A chain that ends before reaching a
+ * sidebar item (a form page, a bare detail route) likewise has no owner.
+ * Parents are authored to always name a real route; a unit test asserts every
+ * parent exists and no chain cycles, so this walk needs no defensive branch.
+ */
+function resolveOwnerForPath(path: string): string | undefined {
+  let current: string | undefined = path
+  while (current !== undefined) {
+    if (current === '/') return path === '/' ? '/' : undefined
+    const entry: ManifestRoute = manifestRouteTable[current]
+    if (isManifestNavItem(entry)) return current
+    current = entry.parent ?? undefined
+  }
+  return undefined
+}
+
+const manifestOwnerPath = new Map<string, string>()
+for (const path of Object.keys(manifestRouteTable)) {
+  const owner = resolveOwnerForPath(path)
+  if (owner !== undefined) manifestOwnerPath.set(path, owner)
+}
+
+/**
+ * FAR-2583: the manifest path of the sidebar item that owns `route`.
+ *
+ * Walks the current route's manifest ancestry (the same `parent` chain the
+ * router hydrates into `meta.parent`) and returns the nearest ancestor that is
+ * a sidebar item. A detail page such as `/runs/:id` therefore reports `/runs`,
+ * and a child surface such as `/schemas/infer` reports `/schemas` — even
+ * though neither shares a path prefix with the item.
+ *
+ * The Dashboard entry owns only `/` itself: a chain that merely passes through
+ * the root must never activate it. When the route cannot be placed in the
+ * manifest (`/dev/metrics`, a redirect target, a unit-test fixture route) this
+ * returns `undefined` and callers fall back to the historic prefix rules.
+ */
+export function resolveActiveNavPath(route: NavActiveRoute): string | undefined {
+  const manifestPath = resolveManifestPath(route)
+  if (manifestPath === undefined) return undefined
+  return manifestOwnerPath.get(manifestPath)
+}
+
+/**
+ * Whether a sidebar item is the active one for `route`.
+ *
+ * Exactly one item can be active per route because activation is an equality
+ * check against the resolved owner path. Routes the manifest does not describe
+ * keep the historic path/prefix semantics (the root item is always exact-only).
+ */
+export function isNavItemActive(
+  item: Pick<NavItem, 'to' | 'exact'>,
+  route: NavActiveRoute,
+): boolean {
+  const ownerPath = resolveActiveNavPath(route)
+  if (ownerPath !== undefined) return item.to === ownerPath
+  return (
+    route.path === item.to ||
+    (!item.exact && item.to !== '/' && route.path.startsWith(item.to + '/'))
+  )
 }
 
 function buildSidebarGroups(): NavGroup[] {
