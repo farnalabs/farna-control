@@ -1,22 +1,26 @@
 """FAR-2589 — ``scripts/install.sh`` must not depend on its working directory.
 
-Run from a directory the user can enter but not read (a common shape for a
-shared or locked-down parent directory), the installer aborted in the extract
+Run from a directory the user cannot search (``sudo -u <user>`` from another
+user's 0700 home is the common shape), the installer aborted in the extract
 stage::
 
     find: Failed to restore initial working directory: Permission denied
 
-because GNU ``find`` opens ``.`` to restore it afterwards. The fix records the
-invocation directory, resolves every caller-supplied relative path against it,
-and moves to ``/`` before doing any work.
+because GNU ``find`` saves and restores its starting directory. Measured with
+findutils 4.8 (Ubuntu 22.04) and 4.9 (Debian 12): a cwd of mode 0000 (or
+another user's 0700 directory) triggers it; an enter-only 0311/0111 cwd does
+NOT. The fix records the invocation directory, anchors every caller-supplied
+relative path at it, and moves to ``/`` before doing any work.
 
 This suite drives the REAL ``--from-file`` path (a genuine tarball, a signed
 manifest checked against a test trust key substituted into a temporary copy of
-the installer) from an unreadable cwd, passing the tarball as a RELATIVE path
-so the "relative --from-file still resolves against where you ran it" contract
-is pinned too. A negative control re-runs the install with the ``cd /`` line
-removed and asserts the historical failure comes back, so the suite detects the
-class rather than pinning today's bytes.
+the installer):
+
+* from a mode-0000 cwd (absolute tarball path) - the failing field shape;
+* the same with the ``cd /`` line removed - a negative control proving the
+  suite reproduces the historical failure rather than pinning today's bytes;
+* from an enter-only cwd with a RELATIVE ``../<tarball>`` path - pinning that
+  relative ``--from-file`` still resolves against where the installer was run.
 """
 
 from __future__ import annotations
@@ -168,7 +172,13 @@ def _install_env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
-def _run_from_unreadable_cwd(tmp_path: Path, *, leave_cwd: bool) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+def _run_install(tmp_path: Path, *, cwd_mode: int, relative: bool, leave_cwd: bool = True) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+    """Run the installer from ``artifacts/locked`` after chmod-ing it to ``cwd_mode``.
+
+    The wrapper enters the directory BEFORE dropping its permissions (a cwd of
+    mode 0000 cannot be entered afterwards), then execs the installer, which
+    inherits that cwd exactly as a `sudo -u` from a private directory does.
+    """
     _require_preconditions()
     trust_key = Ed25519PrivateKey.generate()
     tarball = _signed_tarball(tmp_path / "artifacts", trust_key)
@@ -176,12 +186,11 @@ def _run_from_unreadable_cwd(tmp_path: Path, *, leave_cwd: bool) -> tuple[subpro
     env = _install_env(tmp_path)
     locked = tmp_path / "artifacts" / "locked"
     locked.mkdir()
-    # Enter (x) but not list (r): exactly the cwd the field report ran from.
-    locked.chmod(0o311)
+    tarball_arg = f"../{tarball.name}" if relative else str(tarball)
+    wrapper = 'cd -- "$1" && chmod "$2" . && shift 2 && exec "$@"'
     try:
         result = subprocess.run(  # noqa: S603 - resolved bash and test-owned paths
-            [_bash(), str(script), "--from-file", f"../{tarball.name}"],
-            cwd=locked,
+            [_bash(), "-c", wrapper, "wrapper", str(locked), f"{cwd_mode:04o}", _bash(), str(script), "--from-file", tarball_arg],
             capture_output=True,
             text=True,
             env=env,
@@ -197,9 +206,7 @@ def _diagnose(result: subprocess.CompletedProcess[str]) -> str:
     return f"exit {result.returncode}\n--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
 
 
-def test_install_from_an_unreadable_cwd_with_a_relative_from_file(tmp_path: Path) -> None:
-    result, env = _run_from_unreadable_cwd(tmp_path, leave_cwd=True)
-
+def _assert_installed(result: subprocess.CompletedProcess[str], env: dict[str, str]) -> None:
     assert result.returncode == 0, _diagnose(result)
     assert _FIND_CWD_ERROR not in result.stderr
     shim = Path(env["HOME"]) / ".local" / "bin" / "farna-control"
@@ -208,9 +215,22 @@ def test_install_from_an_unreadable_cwd_with_a_relative_from_file(tmp_path: Path
     assert (current / "VERSION").read_text(encoding="utf-8") == f"{_RELEASE_TAG}\n"
 
 
-def test_negative_control_the_unfixed_installer_fails_from_an_unreadable_cwd(tmp_path: Path) -> None:
+def test_install_from_a_cwd_without_search_permission(tmp_path: Path) -> None:
+    result, env = _run_install(tmp_path, cwd_mode=0o000, relative=False)
+
+    _assert_installed(result, env)
+
+
+def test_negative_control_the_unfixed_installer_fails_from_that_cwd(tmp_path: Path) -> None:
     """Without the `cd /`, the same install reproduces the field failure."""
-    result, _env = _run_from_unreadable_cwd(tmp_path, leave_cwd=False)
+    result, _env = _run_install(tmp_path, cwd_mode=0o000, relative=False, leave_cwd=False)
 
     assert result.returncode != 0, _diagnose(result)
     assert _FIND_CWD_ERROR in result.stderr, _diagnose(result)
+
+
+def test_relative_from_file_resolves_against_the_invocation_directory(tmp_path: Path) -> None:
+    """An enter-only cwd keeps `..` resolvable; the relative tarball must still install."""
+    result, env = _run_install(tmp_path, cwd_mode=0o311, relative=True)
+
+    _assert_installed(result, env)

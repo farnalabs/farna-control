@@ -81,13 +81,16 @@ set -euo pipefail
 # --- leave the caller's working directory (FAR-2589) -------------------------
 # The installer never needs its cwd, and GNU find (used below) aborts with
 # "Failed to restore initial working directory" when started from a directory
-# the user can enter but not read. Remember where we were invoked so every
-# relative path the caller supplied (--from-file / --from-bundle and the
-# *_ROOT / *_DIR overrides) still resolves against it, then move to "/", which
-# is always readable. Nothing here writes into the cwd.
+# the user cannot search - e.g. `sudo -u <user>` run from another user's 0700
+# home. Remember where we were invoked so every relative path the caller
+# supplied (--from-file / --from-bundle and the *_ROOT / *_DIR overrides) still
+# resolves against it, then move to "/", which every user can search. Nothing
+# here writes into the cwd.
 INVOKED_FROM="${PWD:-}"
 if [[ "${INVOKED_FROM}" != /* ]]; then
-  INVOKED_FROM="$(pwd)"
+  # getcwd fails when a parent directory is unreadable; only a RELATIVE path
+  # argument needs the value, and that case refuses loudly below.
+  INVOKED_FROM="$(pwd 2>/dev/null || true)"
 fi
 
 absolute_from_invocation() {
@@ -95,7 +98,13 @@ absolute_from_invocation() {
   # a relative one is anchored at the directory the installer was invoked from.
   case "$1" in
     /*) printf '%s' "$1" ;;
-    *) printf '%s/%s' "${INVOKED_FROM%/}" "$1" ;;
+    *)
+      if [[ "${INVOKED_FROM}" != /* ]]; then
+        printf 'ERROR: cannot resolve the relative path %s: the current directory is not accessible. Pass an absolute path.\n' "$1" >&2
+        return 1
+      fi
+      printf '%s/%s' "${INVOKED_FROM%/}" "$1"
+      ;;
   esac
 }
 
@@ -971,14 +980,10 @@ if [[ -n "${FROM_BUNDLE}" ]]; then
   cp -- "${adjacent_tarball}" "${tmp}/${tarball_name}"
 elif [[ -n "${FROM_FILE}" ]]; then
   info "Offline install from ${FROM_FILE}"
-  # Resolve the manifest beside the tarball. A bare filename (no '/') - the
-  # exact shape the canary leg passes - leaves `${FROM_FILE%/*}` UNCHANGED,
-  # which would make the tarball itself the manifest's directory. Fall back to
-  # the current directory in that case.
+  # Resolve the manifest beside the tarball. FROM_FILE is absolute (argument
+  # parsing anchors a relative one - including the canary leg's bare filename -
+  # at the invocation directory), so `${FROM_FILE%/*}` is always its directory.
   from_file_dir="${FROM_FILE%/*}"
-  if [[ "${from_file_dir}" = "${FROM_FILE}" ]]; then
-    from_file_dir="."
-  fi
   manifest_file="${from_file_dir}/RELEASE_MANIFEST.json"
   signature_file="${manifest_file}.sig"
   # HARD GATE: the SIGNED manifest is NOT optional. A tarball without a

@@ -10,8 +10,8 @@
 #
 # What it proves, in order (each step fails the run loudly):
 #   1. install.sh --from-file installs the bundle into a FRESH home, run from
-#      a cwd the smoke user can enter but NOT read (FAR-2589: GNU find used to
-#      abort with "Failed to restore initial working directory" there)
+#      a cwd the smoke user cannot search (FAR-2589: GNU find used to abort
+#      with "Failed to restore initial working directory" there)
 #   2. `farna-control start --detach` boots
 #   3-7 run scripts/native-stack-assertions.sh (shared with the macOS smoke):
 #   3. after a >= SMOKE_SETTLE_SECONDS (default 180) settle window, `status
@@ -85,7 +85,7 @@ SETTLE="${SMOKE_SETTLE_SECONDS:-${MIN_SETTLE_SECONDS}}"
 WORKDIR="${SMOKE_WORKDIR:-$(mktemp -d)}"
 mkdir -p -- "${WORKDIR}"
 # Everything this script does itself runs from the work dir; only the
-# installer (an unreadable cwd, see step 1) and `start` (SMOKE_START_CWD when
+# installer (an inaccessible cwd, see step 1) and `start` (SMOKE_START_CWD when
 # given) run elsewhere.
 cd -- "${WORKDIR}"
 # A FRESH home: install root, bin dir and data dir all derive from it, so no
@@ -117,15 +117,19 @@ mkdir -p -- "${install_dir}"
 tar -xzf "${TARBALL}" -C "${install_dir}" --wildcards '*/install.sh'
 installer="$(find "${install_dir}" -name install.sh -type f | head -n 1)"
 [[ -n "${installer}" ]] || fail "the tarball does not ship install.sh"
-# Run the installer from a directory the user can enter but not list: the
-# installer must not depend on its cwd (FAR-2589).
-install_cwd="${WORKDIR}/unreadable-install-cwd"
+# Run the installer from a cwd the user cannot search (mode 0000, entered
+# before the chmod - the shape of `sudo -u` from another user's 0700 home):
+# GNU find aborted there with "Failed to restore initial working directory"
+# until the installer stopped depending on its cwd (FAR-2589). An enter-only
+# (0311) cwd does not reproduce it.
+install_cwd="${WORKDIR}/inaccessible-install-cwd"
 mkdir -p -- "${install_cwd}"
-chmod 0311 -- "${install_cwd}"
-log "  running install.sh from unreadable cwd ${install_cwd}"
-( cd -- "${install_cwd}" && bash "${installer}" --from-file "${TARBALL}" ) || \
-  fail "install.sh --from-file (cwd ${install_cwd}, not readable) exited non-zero"
+log "  running install.sh from inaccessible (mode 0000) cwd ${install_cwd}"
+install_rc=0
+( cd -- "${install_cwd}" && chmod 0000 . && bash "${installer}" --from-file "${TARBALL}" ) || install_rc=$?
 chmod 0755 -- "${install_cwd}"
+[[ "${install_rc}" -eq 0 ]] || \
+  fail "install.sh --from-file (cwd ${install_cwd}, mode 0000) exited ${install_rc}"
 [[ -x "${CLI}" ]] || fail "install did not create the shim ${CLI}"
 
 # --- 2. start -------------------------------------------------------------------
