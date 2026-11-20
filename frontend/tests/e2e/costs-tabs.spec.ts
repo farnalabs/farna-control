@@ -35,8 +35,8 @@ const TABS: CostsTab[] = [
 const START_TAB = TABS[0]
 const FORWARD_TABS = TABS.slice(1)
 
-test.describe('Costs tabs navigate on click', () => {
-  test('every Costs tab click renders its own page', { tag: '@smoke' }, async ({ page, env }) => {
+test.describe('Costs tabs navigate on click', { tag: '@regression' }, () => {
+  test('every Costs tab click renders its own page', { tag: ['@smoke', '@regression'] }, async ({ page, env }) => {
     await loginAsAdmin(page, env)
 
     // A goto (not a click) is the entry point, and is also what the
@@ -65,12 +65,20 @@ test.describe('Costs tabs navigate on click', () => {
   })
 })
 
-test.describe('Costs tabs recover from a stale bundle', { tag: '@regression' }, () => {
-  test('a route chunk that no longer exists reloads into the destination instead of doing nothing', { tag: '@regression' }, async ({ page, env }) => {
-    // Fault injection needs the dev server's module graph; production-rendered
-    // chunk names are hashed and change every deploy.
-    test.skip(env.name !== 'local', 'chunk fault injection is a local-target test')
-
+/**
+ * Runs on the `app` (production) target as part of the deploy workflow's
+ * `@smoke` suite, which is the only target that could ever execute it: staging
+ * is Community-tier, so `setup/target-tier.ts` skips every Costs route, and the
+ * per-PR CI job only runs the visual slice against `local`. It also runs on
+ * `local` whenever this file is run directly. The tag is deliberately `@smoke`
+ * rather than `@regression` so the test does not sit in a suite no target runs.
+ *
+ * Fault injection aborts only this spec's own request for the destination's
+ * lazy chunk; it never touches a second request once the document reload has
+ * started, so the recovery it exercises is the real one.
+ */
+test.describe('Costs tabs recover from a stale bundle', { tag: '@smoke' }, () => {
+  test('a route chunk that no longer exists reloads into the destination instead of doing nothing', { tag: '@smoke' }, async ({ page, env }) => {
     await loginAsAdmin(page, env)
     await page.goto('/admin/costs')
     await expect(
@@ -89,11 +97,18 @@ test.describe('Costs tabs recover from a stale bundle', { tag: '@regression' }, 
         documentReloaded = true
       }
     })
-    await page.route('**/src/views/AdminSpendLimitsView.vue*', (route) => {
+    // The dev server serves the view as a module path; a built bundle serves it
+    // as a hashed asset named after the same source file (`AdminSpendLimitsView-
+    // <hash>.js`, verified against the production bundle). If Vite ever changes
+    // that naming this test fails loudly on `abortedRequests` rather than
+    // silently skipping the recovery check.
+    const abortDestinationChunk = (route: Parameters<Parameters<typeof page.route>[1]>[0]) => {
       if (documentReloaded) return route.continue()
       abortedRequests += 1
       return route.abort()
-    })
+    }
+    await page.route('**/src/views/AdminSpendLimitsView.vue*', abortDestinationChunk)
+    await page.route('**/assets/AdminSpendLimitsView-*.js', abortDestinationChunk)
 
     await page.getByRole('tab', { name: /^Spend Limits$/ }).click()
 

@@ -3,6 +3,7 @@ import { decodeJwtPayload } from '../lib/jwt'
 import { createRouter, createWebHistory, type RouteMeta } from 'vue-router'
 import { getAccessToken } from '../lib/api/client'
 import { usePlanStore } from '../stores/planStore'
+import i18n from '../i18n'
 import manifest from '@/manifest.yaml'
 import LoginView from '../views/LoginView.vue'
 import OrgLoginView from '../views/OrgLoginView.vue'
@@ -1164,7 +1165,57 @@ const CHUNK_LOAD_ERROR =
 /** In-app retries before falling back to a hard document load. */
 const CHUNK_RETRY_LIMIT = 1
 
+/**
+ * FAR-2594: the retry budget above is module state, so it is wiped by every
+ * document load. If the destination's chunk is missing in the NEW bundle too
+ * (a broken deploy, a CDN outage), each new document would boot at the
+ * destination, retry once and assign again — an unbounded reload loop. One
+ * marker per destination, in `sessionStorage` (it survives a same-tab document
+ * load and dies with the tab), bounds that to a single reload.
+ */
+const CHUNK_RECOVERY_STORAGE_PREFIX = 'modulo.chunk-recovery:'
+const DASHBOARD_ROUTE_NAME = 'dashboard'
+
 let _chunkRetryCount = 0
+
+/** True when this tab already spent its one document reload for *target*. */
+export function chunkRecoveryAlreadyUsed(target: string): boolean {
+  try {
+    return sessionStorage.getItem(CHUNK_RECOVERY_STORAGE_PREFIX + target) === '1'
+  } catch (err) {
+    // Storage can be unavailable (sandboxed frame, storage disabled). This is
+    // a best-effort storm guard, so fail open with a log rather than block the
+    // recovery: the alternative is no recovery at all.
+    console.warn('[router] chunk-recovery guard unavailable', err)
+    return false
+  }
+}
+
+function markChunkRecoveryUsed(target: string): void {
+  try {
+    sessionStorage.setItem(CHUNK_RECOVERY_STORAGE_PREFIX + target, '1')
+  } catch (err) {
+    console.warn('[router] could not record the chunk-recovery guard', err)
+  }
+}
+
+/**
+ * Drop every guard for this tab. A navigation that actually landed proves the
+ * chunk map is usable again, so a later, unrelated deploy must be able to
+ * recover instead of inheriting a spent marker.
+ */
+function clearChunkRecoveryGuards(): void {
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+      const key = sessionStorage.key(i)
+      if (key?.startsWith(CHUNK_RECOVERY_STORAGE_PREFIX)) {
+        sessionStorage.removeItem(key)
+      }
+    }
+  } catch (err) {
+    console.warn('[router] could not clear the chunk-recovery guard', err)
+  }
+}
 
 /**
  * A navigation that actually LANDED proves the chunks are healthy again, so
@@ -1174,6 +1225,18 @@ let _chunkRetryCount = 0
 export function noteNavigationSettled(failure?: unknown): void {
   if (!failure) {
     _chunkRetryCount = 0
+    clearChunkRecoveryGuards()
+  }
+}
+
+/** Tell the user, visibly, that the safe dashboard fallback is being taken. */
+function reportChunkRecoveryFailure(target: string): void {
+  const message = i18n.global.t('components.Router.chunk_recovery_failed')
+  console.error(`[router] ${message}`, { target })
+  try {
+    window.alert(message)
+  } catch (err) {
+    console.warn('[router] could not show the chunk-recovery message', err)
   }
 }
 
@@ -1184,10 +1247,9 @@ export function noteNavigationSettled(failure?: unknown): void {
  * navigation-based test would have to mount the whole app graph to reach it.
  *
  * `assign` is the handler's single side-effecting boundary (a full document
- * navigation to the destination) and is injectable because jsdom's
- * `window.location` is non-configurable, so a test cannot observe it
- * otherwise. Production never passes it: the default IS
- * `window.location.assign`.
+ * navigation) and is injectable because jsdom's `window.location` is
+ * non-configurable, so a test cannot observe it otherwise. Production never
+ * passes it: the default IS `window.location.assign`.
  */
 export function handleRouteChunkError(
   err: unknown,
@@ -1196,8 +1258,9 @@ export function handleRouteChunkError(
   console.error('[router] navigation error:', err)
   if (!CHUNK_LOAD_ERROR.test(formatApiError(err))) return
 
-  // No target means the failure did not come from a navigation (e.g. an
-  // optimistic preload); there is nothing to recover.
+  // No target means no navigation has started yet (the module is still
+  // initialising, or the error came from outside a navigation); there is
+  // nothing to retry.
   const target = _chunkRetryTarget
   if (!target) return
 
@@ -1208,9 +1271,19 @@ export function handleRouteChunkError(
     return
   }
 
+  if (chunkRecoveryAlreadyUsed(target)) {
+    // This tab already reloaded for this destination and the freshly loaded
+    // bundle is missing the same chunk: assigning again would loop forever.
+    // Say so, and send the user to a route that does load.
+    reportChunkRecoveryFailure(target)
+    assign(router.resolve({ name: DASHBOARD_ROUTE_NAME }).fullPath)
+    return
+  }
+
   // Budget exhausted: this document's chunk map is stale. Only a full load
   // picks up the current index.html and its chunk filenames; `reload()` would
   // drop the user back on the page they are already stuck on.
+  markChunkRecoveryUsed(target)
   assign(target)
 }
 
