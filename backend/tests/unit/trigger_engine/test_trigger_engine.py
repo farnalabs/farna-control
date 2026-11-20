@@ -556,13 +556,6 @@ class TestIsUniqueViolation:
         err = Exception("UNIQUE constraint failed: webhook_dedup_hash.key")
         assert _is_unique_violation(self._integrity(err)) is True
 
-    def test_mariadb_duplicate_entry_1062(self) -> None:
-        class _MySQLError(Exception):
-            def __init__(self) -> None:
-                super().__init__(1062, "Duplicate entry 'abc' for key 'PRIMARY'")
-
-        assert _is_unique_violation(self._integrity(_MySQLError())) is True
-
     def test_other_integrity_error(self) -> None:
         assert _is_unique_violation(self._integrity(Exception("some other error"))) is False
 

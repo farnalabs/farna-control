@@ -16,6 +16,9 @@ os.environ.setdefault("REDIS_URL", "")
 os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 os.environ.setdefault("FARNA_CONTROL_DB", "sqlite")
+# SQLite is the automated test suite's backend only (ADR 068): the Settings
+# guard requires this TEST-ONLY opt-in.
+os.environ.setdefault("FARNA_CONTROL_ALLOW_SQLITE", "1")
 os.environ.setdefault("SECRET_KEY", "a" * 32)
 os.environ.setdefault("FERNET_KEY", "b" * 32)
 # FAR-2200 withdrew Lifecycle Maps from Alpha-facing surfaces: the routes and

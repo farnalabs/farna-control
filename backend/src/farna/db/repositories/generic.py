@@ -1,4 +1,4 @@
-"""Generic repository for MariaDB / SQLite — explicit tenant filtering."""
+"""Generic repository for SQLite (test-only) — explicit tenant filtering."""
 
 import uuid
 from typing import Any
@@ -11,7 +11,7 @@ _TENANT_COLUMN = "organisation_id"
 
 
 class GenericRepository(BaseRepository):
-    """Repository for backends without RLS support (MariaDB, SQLite).
+    """Repository for backends without RLS support (SQLite, test-only).
 
     Since these databases lack row-level security, tenant filtering is
     applied explicitly by injecting a ``WHERE organisation_id = :org_id``

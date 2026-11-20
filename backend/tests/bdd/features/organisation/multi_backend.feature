@@ -1,16 +1,10 @@
 Feature: Multi-Backend Database Support
-  As a Modulo operator
-  I want tenant isolation, migrations, locks, and time functions to work consistently across Postgres, MariaDB, and SQLite
-  So that the application behaves correctly regardless of the chosen database backend
+  As a Farna Control operator
+  I want tenant isolation, migrations, locks, and time functions to work consistently on SQLite (test-only) and Postgres
+  So that the automated test suite and the supported PostgreSQL runtime both behave correctly
 
   Scenario: SQLite tenant filtering via GenericRepository
     Given a GenericRepository connected to SQLite
-    When set_org_context is called with org "acme"
-    Then the session stores org_id in session.info
-    And apply_tenant_filter injects WHERE organisation_id = :org_id
-
-  Scenario: MariaDB tenant filtering via GenericRepository
-    Given a GenericRepository connected to MariaDB
     When set_org_context is called with org "acme"
     Then the session stores org_id in session.info
     And apply_tenant_filter injects WHERE organisation_id = :org_id
@@ -27,8 +21,8 @@ Feature: Multi-Backend Database Support
     And a SELECT query is executed through GenericRepository
     Then only records for org "othercorp" are returned
 
-  Scenario: Alembic migration runs on all backends
-    Given a SQLite, MariaDB, and Postgres database URL
+  Scenario: Alembic migration runs on SQLite and Postgres
+    Given a SQLite and Postgres database URL
     When the migration env.py configures the backend
     Then render_as_batch is enabled for SQLite
     And the async-to-sync driver conversion succeeds for each backend
@@ -41,8 +35,8 @@ Feature: Multi-Backend Database Support
     When a lock is acquired for the same key
     Then an asyncio.Lock is used instead
 
-  Scenario: Time functions work on all backends
+  Scenario: Time functions work on supported backends
     Given a model with created_at using func.now()
     When the model is persisted to SQLite
     Then the timestamp is set to the current time
-    And the same behaviour holds for MariaDB and Postgres
+    And the same behaviour holds for Postgres

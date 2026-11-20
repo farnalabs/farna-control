@@ -282,10 +282,11 @@ class TestExpiredWebhookDedupPurgeCron:
         ):
             await sw.expired_webhook_dedup_purge({})
 
-    @pytest.mark.parametrize("non_pg_db", ["sqlite", "mariadb", "mysql"])
-    async def test_non_postgres_uses_plain_factory(self, non_pg_db: str) -> None:
-        """On non-PostgreSQL backends (no RLS, no farna_control_system role) the job
-        must drain on the PLAIN factory and never touch the system engine."""
+    async def test_non_postgres_uses_plain_factory(self) -> None:
+        """On the non-PostgreSQL backend (SQLite, test-only: no RLS, no
+        farna_control_system role) the job must drain on the PLAIN factory and
+        never touch the system engine."""
+        non_pg_db = "sqlite"
         factory, _ = _make_factory_with_session()
 
         with (

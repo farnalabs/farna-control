@@ -198,11 +198,10 @@ def check_only_other_org_returned(ctx) -> None:
 # ===========================================================================
 
 
-@given("a SQLite, MariaDB, and Postgres database URL")
+@given("a SQLite and Postgres database URL")
 def database_urls(ctx) -> None:
     ctx["urls"] = {
         "sqlite": "sqlite:///test.db",
-        "mariadb": "mysql+aiomysql://user:pass@localhost/test",
         "postgres": "postgresql+asyncpg://user:pass@localhost/test",
     }
 
@@ -221,8 +220,6 @@ def configure_migration_backend(ctx) -> None:
         converted = url
         if converted.startswith("postgresql+asyncpg://"):
             converted = converted.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
-        elif converted.startswith("mysql+aiomysql://"):
-            converted = converted.replace("mysql+aiomysql://", "mysql+pymysql://", 1)
         conversions[name] = converted
     ctx["conversions"] = conversions
 
@@ -330,7 +327,6 @@ def check_timestamp_set(ctx) -> None:
     assert ctx["persisted"] is True
 
 
-@then("the same behaviour holds for MariaDB and Postgres")
+@then("the same behaviour holds for Postgres")
 def check_all_backends_time(ctx) -> None:
-    for backend in ("sqlite", "mariadb", "postgresql"):
-        assert ctx["model_now"].created_at is not None
+    assert ctx["model_now"].created_at is not None

@@ -103,7 +103,7 @@ _generic_dict_lock = asyncio.Lock()
 
 
 class GenericLock(BaseLockService):
-    """In-memory lock for single-process backends (SQLite, MariaDB).
+    """In-memory lock for single-process backends (SQLite, test-only).
 
     Uses an ``asyncio.Lock`` per key (shared across all instances),
     tracking ownership by task ID so that timeout / error paths cannot
