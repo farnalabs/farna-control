@@ -149,6 +149,15 @@ def test_version_flag_and_subcommand() -> None:
     assert subcommand.output.startswith("farna-control ")
 
 
+def test_package_version_prefers_bundle_stamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A native bundle's own VERSION stamp outranks the bundled dist-info (FAR-2581)."""
+    monkeypatch.setattr("farna.version._bundle_version", lambda: "0.3.329")
+
+    assert cli_main._package_version() == "0.3.329"
+
+
 def test_env_redacts_every_credential(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SECRET_KEY", SECRET_KEY)
     monkeypatch.setenv("FERNET_KEY", FERNET_KEY)
