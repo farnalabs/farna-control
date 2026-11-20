@@ -4099,6 +4099,46 @@ def test_publish_release_guard_attest_skipped_fails_and_names_it(tmp_path: Path)
     assert "refusing to publish" in result.stdout + result.stderr
 
 
+@pytest.mark.posix_only
+def test_publish_release_guard_linux_deb_failure_fails_and_names_it(tmp_path: Path) -> None:
+    """Guard script with linux-deb=failure must exit non-zero and name it."""
+    script = _extract_publish_release_guard_script()
+    env = {
+        **os.environ,
+        "RELEASE_RESULT": "success",
+        "MANIFEST_RESULT": "success",
+        "ATTEST_RESULT": "success",
+        "LINUX_DEB_RESULT": "failure",
+        "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
+    }
+    result = _run_bash(script, cwd=tmp_path, env=env)
+    assert result.returncode != 0, "failure must exit non-zero"
+    assert "linux-deb" in result.stdout + result.stderr
+    assert "failure" in result.stdout + result.stderr
+    assert "refusing to publish" in result.stdout + result.stderr
+
+
+@pytest.mark.posix_only
+def test_publish_release_guard_linux_deb_skipped_fails_and_names_it(tmp_path: Path) -> None:
+    """Guard script with linux-deb=skipped must exit non-zero and name it."""
+    script = _extract_publish_release_guard_script()
+    env = {
+        **os.environ,
+        "RELEASE_RESULT": "success",
+        "MANIFEST_RESULT": "success",
+        "ATTEST_RESULT": "success",
+        "LINUX_DEB_RESULT": "skipped",
+        "MACOS_RESULT": "success",
+        "NOTARIZATION_RESULT": "success",
+    }
+    result = _run_bash(script, cwd=tmp_path, env=env)
+    assert result.returncode != 0, "skipped must exit non-zero"
+    assert "linux-deb" in result.stdout + result.stderr
+    assert "skipped" in result.stdout + result.stderr
+    assert "refusing to publish" in result.stdout + result.stderr
+
+
 # ---------------------------------------------------------------------------
 # Terminal post-condition: the run must not go green without publishing
 # ---------------------------------------------------------------------------
