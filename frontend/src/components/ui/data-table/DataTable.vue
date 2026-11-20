@@ -149,7 +149,14 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
         :aria-label="t('components.DataTable.scroll_region_label')"
         :aria-describedby="scrollInstructionsId"
       >
-        <table v-if="!showEmpty" :class="cn('w-full min-w-max', props.fit && 'table-auto lg:min-w-0 lg:table-fixed')">
+        <!-- FAR-2584: the table (and its column headers) renders even when
+             there are no rows. Hiding it left an empty scroll region - a
+             zero-height, focusable landmark carrying scroll instructions with
+             no table in it - and dropped the headers the user needs to read the
+             empty state against. The empty message itself stays OUTSIDE this
+             scroll region (FAR-2539); the always-present headers are what make
+             the region meaningful when there is nothing to scroll. -->
+        <table :class="cn('w-full min-w-max', props.fit && 'table-auto lg:min-w-0 lg:table-fixed')">
       <thead>
         <tr>
           <th
@@ -197,7 +204,6 @@ function onRowKeydown(event: KeyboardEvent, row: DataTableRow) {
           </td>
         </tr>
       </tbody>
-      <tbody v-else-if="rows.length === 0" />
       <tbody v-else class="divide-y divide-border">
         <tr
           v-for="(row, index) in sortedRows"

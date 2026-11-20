@@ -199,6 +199,25 @@ describe('DataTable empty state placement (FAR-2539)', () => {
     expect(scrollRegion.classes()).toContain('overflow-x-auto')
   })
 
+  it('keeps the column headers inside the scroll region when the table is empty (FAR-2584)', () => {
+    const wrapper = mountEmpty()
+    const scrollRegion = wrapper.get('div.overflow-x-auto')
+
+    // The contract: an empty table is still a table. Every declared column has
+    // a header inside the scroll region, so the region is never a dead
+    // zero-content landmark and the empty message is readable against its
+    // columns.
+    expect(scrollRegion.find('table').exists()).toBe(true)
+    const headers = scrollRegion.findAll('thead th')
+    expect(headers.map((th) => th.text().trim())).toEqual(columns.map((col) => col.label))
+
+    // The empty message stays outside that region (FAR-2539), even though the
+    // table itself now renders.
+    const empty = wrapper.get('[data-table-part="empty"]')
+    expect(empty.text()).toBe('Nothing here')
+    expect(empty.element.closest('.overflow-x-auto')).toBeNull()
+  })
+
   it('does not render the scroll-edge fade mask over an empty table', () => {
     const wrapper = mountEmpty()
     expect(wrapper.find('[data-table-part="scroll-fade"]').exists()).toBe(false)
