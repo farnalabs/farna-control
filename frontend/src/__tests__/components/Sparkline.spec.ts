@@ -63,17 +63,28 @@ describe('Sparkline', () => {
     ys.forEach(y => expect(y).toBe(30)) // height / 2 (default height 60)
   })
 
-  it('shows a no-data placeholder instead of a misleading line for empty data', () => {
+  it('renders the no-data state as HTML outside the svg, not as stretched svg text', () => {
     const wrapper = mount(Sparkline, { props: { data: [] } })
     expect(wrapper.find('polyline').exists()).toBe(false)
-    expect(wrapper.find('.sparkline-no-data').exists()).toBe(true)
-    expect(wrapper.text()).toContain('No data')
+    // No svg at all: any <text> inside it would be squashed by the
+    // non-uniform preserveAspectRatio="none" scale.
+    expect(wrapper.find('svg').exists()).toBe(false)
+    expect(wrapper.find('text').exists()).toBe(false)
+    // The old dashed placeholder line inside the svg is gone too.
+    expect(wrapper.findAll('line')).toHaveLength(0)
+    const empty = wrapper.get('[data-testid="sparkline-no-data"]')
+    expect(empty.text()).toContain('No data')
+    // Plain HTML element, not an SVG element and not nested inside one.
+    expect(empty.element.tagName).toBe('DIV')
+    expect(empty.element.closest('svg')).toBeNull()
   })
 
-  it('shows a no-data placeholder for a single data point', () => {
+  it('shows the HTML no-data state for a single data point', () => {
     const wrapper = mount(Sparkline, { props: { data: [3] } })
     expect(wrapper.find('polyline').exists()).toBe(false)
-    expect(wrapper.find('.sparkline-no-data').exists()).toBe(true)
+    expect(wrapper.find('svg').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sparkline-no-data"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('No data')
   })
 
   it('exposes an accessible aria-label describing the series', () => {
@@ -85,9 +96,11 @@ describe('Sparkline', () => {
     expect(svg.attributes('aria-label')).toContain('3 runs')
   })
 
-  it('uses the localized no-data string as the aria-label when empty', () => {
+  it('exposes the localized no-data string to assistive tech when empty', () => {
     const wrapper = mount(Sparkline, { props: { data: [] } })
-    expect(wrapper.find('svg').attributes('aria-label')).toBe('No data')
+    const empty = wrapper.get('[data-testid="sparkline-no-data"]')
+    expect(empty.attributes('role')).toBe('img')
+    expect(empty.attributes('aria-label')).toBe('No data')
   })
 
   it('shows a tooltip with label, value and unit on pointermove', async () => {
@@ -325,7 +338,7 @@ describe('Sparkline', () => {
     })
     expect(wrapper.findAll('polyline')).toHaveLength(0)
     expect(wrapper.find('[data-testid="sparkline-endpoint"]').exists()).toBe(true)
-    expect(wrapper.find('.sparkline-no-data').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sparkline-no-data"]').exists()).toBe(false)
   })
 
   it('does not turn sparse observations into a flat full-width line', () => {
@@ -366,12 +379,13 @@ describe('Sparkline', () => {
     expect(tooltip.text()).toContain('100')
   })
 
-  it('renders the no-data placeholder when every value is null', () => {
+  it('renders the HTML no-data state when every value is null', () => {
     const wrapper = mount(Sparkline, {
       props: { data: [null, null, null], missingData: 'carry-forward' },
     })
     expect(wrapper.find('polyline').exists()).toBe(false)
-    expect(wrapper.find('.sparkline-no-data').exists()).toBe(true)
+    expect(wrapper.find('svg').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sparkline-no-data"]').exists()).toBe(true)
   })
 
   it('renders a uniform scaling-independent endpoint dot', () => {
