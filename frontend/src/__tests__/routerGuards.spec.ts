@@ -98,7 +98,7 @@ describe('route content focus', () => {
   })
 })
 
-it('keeps organisation email settings reachable for a team org admin', async () => {
+it('keeps organisation email settings reachable for a community org admin', async () => {
   decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
   const resolved = router.resolve('/settings/email')
   const route = {
@@ -114,7 +114,7 @@ it('keeps organisation email settings reachable for a team org admin', async () 
   expect(route.path).toBe('/settings/email')
   expect(route.meta.requiresSystemAdmin).toBeUndefined()
   expect(route.meta.requiredRoles).toEqual(['admin'])
-  expect(route.meta.requiredTier).toBe('team')
+  expect(route.meta.requiredTier).toBe('community')
   await expect(enforceRoleTierVisibility(route as never, adminToken())).resolves.toBe(true)
 })
 
