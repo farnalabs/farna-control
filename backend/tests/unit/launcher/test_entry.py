@@ -609,6 +609,8 @@ def test_saq_children_gated_on_migration_head(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(supervisor_mod, "Supervisor", RecordingSupervisor)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("FERNET_KEY", raising=False)
     monkeypatch.setattr(supervisor_mod, "knobs_from_env", lambda: supervisor_mod.SupervisorKnobs(tick_seconds=1000.0))
     head_calls = {"n": 0}
 
