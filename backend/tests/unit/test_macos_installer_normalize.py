@@ -2540,3 +2540,133 @@ def test_macos_bash_scanner_flags_the_run_44680480922_expansion() -> None:
     """The scanner must catch the exact expansion that masked the crash."""
     assert _unguarded_array_expansions('run_assertion "install_sh" "${INSTALL_ENV[@]}" bash -c true') == ["INSTALL_ENV"]
     assert _BASH4_ONLY["mapfile/readarray"].search("mapfile -t LINES < file")
+
+
+# --- FAR-2589: the macOS app reports its build version ------------------------
+
+
+def _fake_macos_app(tmp_path: Path, *, info_plist: bool = True) -> Path:
+    """A macOS app layout holding the real farna.version, returning its bundle root.
+
+    The stub interpreter stands in for the bundled runtime + its relative .pth:
+    the gate strips PYTHONPATH, and the stub points the import path at the
+    bundle's own backend/src copy, which is what the .pth does in the app.
+    """
+    contents = tmp_path / "FarnaControl.app" / "Contents"
+    bundle_root = contents / "Resources" / "bundle"
+    package = bundle_root / "backend" / "src" / "farna"
+    package.mkdir(parents=True)
+    for name in ("__init__.py", "version.py"):
+        shutil.copyfile(REPO_ROOT / "backend" / "src" / "farna" / name, package / name)
+    if info_plist:
+        (contents / "Info.plist").write_text("<plist/>\n", encoding="utf-8")
+    _write_executable(
+        bundle_root / "runtime" / "bin" / "python3",
+        "#!/usr/bin/env bash\n" + f'export PYTHONPATH="{(bundle_root / "backend" / "src").as_posix()}"\n' + f'exec "{Path(sys.executable).as_posix()}" "$@"\n',
+    )
+    return bundle_root
+
+
+def _run_version_stamp(tmp_path: Path, bundle_root: Path, version: str) -> subprocess.CompletedProcess[str]:
+    block = _extract_marked_bash(_bundle_build_script(), "bundle_version_stamp")
+    driver = tmp_path / "version_stamp_driver.sh"
+    driver.write_text('#!/usr/bin/env bash\nset -euo pipefail\nVERSION="$1"\nBUNDLE_ROOT="$2"\n' + block + "\n", encoding="utf-8")
+    return _run_bash_file(driver, [version, bundle_root.as_posix()], cwd=tmp_path)
+
+
+def test_macos_bundle_version_stamp_is_what_the_bundled_app_reports(tmp_path: Path) -> None:
+    """FAR-2589: the stamp the build writes is the one farna.version resolves
+    inside the app layout, so /healthz/ready reports the build version."""
+    bundle_root = _fake_macos_app(tmp_path)
+
+    result = _run_version_stamp(tmp_path, bundle_root, "9.8.7")
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "bundle version stamp: 9.8.7" in result.stdout
+    assert (bundle_root / "VERSION").read_text(encoding="utf-8") == "bundle-v9.8.7\n"
+
+
+def test_macos_bundle_version_gate_fails_when_the_app_cannot_resolve_the_stamp(tmp_path: Path) -> None:
+    """Without the app marker the stamp is ignored; the build gate must fail
+    rather than ship an app that reports another version."""
+    bundle_root = _fake_macos_app(tmp_path, info_plist=False)
+
+    result = _run_version_stamp(tmp_path, bundle_root, "9.8.7")
+
+    assert result.returncode != 0, result.stdout
+    assert "expected the build version '9.8.7'" in result.stderr
+
+
+def test_macos_smoke_asserts_the_running_app_reports_the_build_version() -> None:
+    _step, build_run = _native_installer_step()
+
+    assert 'SMOKE_EXPECTED_VERSION="$3" bash scripts/native-stack-assertions.sh' in build_run
+    assert '\' bash "$INSTALL_ROOT" "$DATA" "$VERSION_NUM" || exit 1' in build_run
+    assertions = (REPO_ROOT / "scripts" / "native-stack-assertions.sh").read_text(encoding="utf-8")
+    assert '[[ "${reported_version}" == "${SMOKE_EXPECTED_VERSION}" ]]' in assertions
+
+
+# --- FAR-2589: every smoke assertion's own line reaches the log ---------------
+
+_PIPED_RUN_ASSERTION = re.compile(r"^\s*run_assertion\b[^'\n]*\|", re.MULTILINE)
+
+
+def _logical_lines(script: str) -> str:
+    return script.replace("\\n", " ")
+
+
+def test_macos_smoke_never_pipes_run_assertion_output_away() -> None:
+    """Piping run_assertion into grep hides its `assertion:` line from the log."""
+    _step, build_run = _native_installer_step()
+
+    assert not _PIPED_RUN_ASSERTION.findall(_logical_lines(build_run))
+    historical = 'run_assertion "service_binary_macho" \\n  file "$SERVICE_BINARY" | grep -E "Mach-O" || exit 1\n'
+    assert _PIPED_RUN_ASSERTION.findall(_logical_lines(historical))
+
+
+def _macho_harness(run_assertion_block: str, macho_block: str) -> str:
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            'stub="$(mktemp -d)"',
+            'DATA="$(mktemp -d)"',
+            "cat > \"$stub/file\" <<'STUB'",
+            "#!/bin/sh",
+            'echo "$1: Mach-O 64-bit executable arm64"',
+            "STUB",
+            'chmod +x "$stub/file"',
+            'PATH="$stub:$PATH"',
+            "redact_pre_smoke_output() { cat; }",
+            run_assertion_block,
+            'SERVICE_BINARY="/opt/Farna Control.app/Contents/Resources/bundle/runtime/bin/python3"',
+            'MACOS_ARCH="$1"',
+            macho_block,
+            "echo REACHED_AFTER_MACHO_ASSERTION",
+            "",
+        ]
+    )
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_macho_assertion_logs_its_line_and_passes_on_a_match(flavour: str) -> None:
+    _step, build_run = _native_installer_step()
+    harness = _macho_harness(_extract_marked_bash(build_run, "run_assertion"), _extract_marked_bash(build_run, "service_binary_macho_assertion"))
+
+    result = _run_bash_stdin(flavour, harness, ["arm64"])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "assertion: service_binary_macho=ok (exit=0)" in result.stdout
+    assert "Mach-O 64-bit executable arm64" in result.stdout
+    assert "REACHED_AFTER_MACHO_ASSERTION" in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_macho_assertion_logs_its_line_and_fails_on_an_architecture_mismatch(flavour: str) -> None:
+    _step, build_run = _native_installer_step()
+    harness = _macho_harness(_extract_marked_bash(build_run, "run_assertion"), _extract_marked_bash(build_run, "service_binary_macho_assertion"))
+
+    result = _run_bash_stdin(flavour, harness, ["x86_64"])
+
+    assert result.returncode != 0, result.stdout
+    assert "assertion: service_binary_macho=FAILED (exit=1)" in result.stdout
+    assert "REACHED_AFTER_MACHO_ASSERTION" not in result.stdout

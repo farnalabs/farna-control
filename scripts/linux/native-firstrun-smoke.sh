@@ -9,14 +9,16 @@
 # signature verification included.
 #
 # What it proves, in order (each step fails the run loudly):
-#   1. install.sh --from-file installs the bundle into a FRESH home
+#   1. install.sh --from-file installs the bundle into a FRESH home, run from
+#      a cwd the smoke user can enter but NOT read (FAR-2589: GNU find used to
+#      abort with "Failed to restore initial working directory" there)
 #   2. `farna-control start --detach` boots
 #   3-7 run scripts/native-stack-assertions.sh (shared with the macOS smoke):
 #   3. after a >= SMOKE_SETTLE_SECONDS (default 180) settle window, `status
 #      --json` shows api, postgres, redis, saq-runs and saq-system alive and
 #      the stack is NOT degraded (a crash-looping child trips the crash cap
 #      and degrades the stack well inside that window)
-#   4. GET /healthz/ready answers 200
+#   4. GET /healthz/ready answers 200 and reports the bundle's version
 #   5. `farna-control users add` creates an admin, and the admin's org is
 #      not the orphan "Orphan (unattributed errors)" sentinel org
 #   6. POST /api/v1/auth/login answers 200 with an access token whose org_id
@@ -82,8 +84,9 @@ SETTLE="${SMOKE_SETTLE_SECONDS:-${MIN_SETTLE_SECONDS}}"
 
 WORKDIR="${SMOKE_WORKDIR:-$(mktemp -d)}"
 mkdir -p -- "${WORKDIR}"
-# Everything this script does itself runs from the work dir; only `start`
-# runs from SMOKE_START_CWD when given.
+# Everything this script does itself runs from the work dir; only the
+# installer (an unreadable cwd, see step 1) and `start` (SMOKE_START_CWD when
+# given) run elsewhere.
 cd -- "${WORKDIR}"
 # A FRESH home: install root, bin dir and data dir all derive from it, so no
 # earlier install, config.env or data dir on this machine can leak in.
@@ -114,7 +117,15 @@ mkdir -p -- "${install_dir}"
 tar -xzf "${TARBALL}" -C "${install_dir}" --wildcards '*/install.sh'
 installer="$(find "${install_dir}" -name install.sh -type f | head -n 1)"
 [[ -n "${installer}" ]] || fail "the tarball does not ship install.sh"
-bash "${installer}" --from-file "${TARBALL}" || fail "install.sh --from-file exited non-zero"
+# Run the installer from a directory the user can enter but not list: the
+# installer must not depend on its cwd (FAR-2589).
+install_cwd="${WORKDIR}/unreadable-install-cwd"
+mkdir -p -- "${install_cwd}"
+chmod 0311 -- "${install_cwd}"
+log "  running install.sh from unreadable cwd ${install_cwd}"
+( cd -- "${install_cwd}" && bash "${installer}" --from-file "${TARBALL}" ) || \
+  fail "install.sh --from-file (cwd ${install_cwd}, not readable) exited non-zero"
+chmod 0755 -- "${install_cwd}"
 [[ -x "${CLI}" ]] || fail "install did not create the shim ${CLI}"
 
 # --- 2. start -------------------------------------------------------------------
@@ -132,11 +143,12 @@ STARTED=1
 # users add (not the orphan org), login 200 (token org != orphan), an
 # authenticated GET 200. Shared with the macOS installer smoke.
 log "steps 3-7: scripts/native-stack-assertions.sh"
-SMOKE_SETTLE_SECONDS="${SETTLE}" bash "${ASSERTIONS}" "${CLI}" "${WORKDIR}/assertions" || fail "post-start assertions failed"
+expected_version="$(basename -- "${TARBALL}" | sed -nE 's/^farna-control-([0-9]+\.[0-9]+\.[0-9]+)-linux-[a-z0-9]+\.tar\.gz$/\1/p')"
+SMOKE_SETTLE_SECONDS="${SETTLE}" SMOKE_EXPECTED_VERSION="${expected_version}" \
+  bash "${ASSERTIONS}" "${CLI}" "${WORKDIR}/assertions" || fail "post-start assertions failed"
 
 # --- 8. version ------------------------------------------------------------------
 log "step 8: farna-control --version"
-expected_version="$(basename -- "${TARBALL}" | sed -nE 's/^farna-control-([0-9]+\.[0-9]+\.[0-9]+)-linux-[a-z0-9]+\.tar\.gz$/\1/p')"
 version_out="$("${CLI}" --version)" || fail "--version exited non-zero"
 log "  ${version_out}"
 [[ "${version_out}" == "farna-control ${expected_version}" ]] || \

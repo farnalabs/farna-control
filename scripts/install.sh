@@ -78,20 +78,43 @@
 
 set -euo pipefail
 
+# --- leave the caller's working directory (FAR-2589) -------------------------
+# The installer never needs its cwd, and GNU find (used below) aborts with
+# "Failed to restore initial working directory" when started from a directory
+# the user can enter but not read. Remember where we were invoked so every
+# relative path the caller supplied (--from-file / --from-bundle and the
+# *_ROOT / *_DIR overrides) still resolves against it, then move to "/", which
+# is always readable. Nothing here writes into the cwd.
+INVOKED_FROM="${PWD:-}"
+if [[ "${INVOKED_FROM}" != /* ]]; then
+  INVOKED_FROM="$(pwd)"
+fi
+
+absolute_from_invocation() {
+  # absolute_from_invocation <path> - an absolute path is returned unchanged;
+  # a relative one is anchored at the directory the installer was invoked from.
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *) printf '%s/%s' "${INVOKED_FROM%/}" "$1" ;;
+  esac
+}
+
+cd /
+
 REPO="farnalabs/farna-control"
 RELEASES_LATEST_URL="https://github.com/${REPO}/releases/latest"
 RELEASES_DOWNLOAD_URL="https://github.com/${REPO}/releases/download"
 
-INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}}"
-BIN_DIR="${FARNA_CONTROL_BIN_DIR:-${MODULO_BIN_DIR:-${HOME}/.local/bin}}"
+INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}}")"
+BIN_DIR="$(absolute_from_invocation "${FARNA_CONTROL_BIN_DIR:-${MODULO_BIN_DIR:-${HOME}/.local/bin}}")"
 MARKER_FILE="${INSTALL_ROOT}/.farna-control-native-install"
 
 # Pre-rebrand (FAR-2571) locations. A machine that ran the installer before the
 # rename has its bundle under this root and its shim at this path; both are
 # migrated in preflight (see migrate_legacy_install) so an upgrade never leaves
 # a half-migrated install behind.
-LEGACY_INSTALL_ROOT="${FARNA_CONTROL_LEGACY_INSTALL_ROOT:-${HOME}/.local/opt/modulo}"
-LEGACY_USER_SHIM="${FARNA_CONTROL_LEGACY_USER_SHIM:-${BIN_DIR}/modulo}"
+LEGACY_INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_INSTALL_ROOT:-${HOME}/.local/opt/modulo}")"
+LEGACY_USER_SHIM="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_USER_SHIM:-${BIN_DIR}/modulo}")"
 
 FORCE=0
 FROM_FILE=""
@@ -670,12 +693,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --from-file)
       [[ $# -ge 2 ]] || die "--from-file requires a path to farna-control-<version>-linux-<arch>.tar.gz"
-      FROM_FILE="$2"
+      FROM_FILE="$(absolute_from_invocation "$2")"
       shift 2
       ;;
     --from-bundle)
       [[ $# -ge 2 ]] || die "--from-bundle requires the extracted farna-control-<version>-linux-<arch> bundle directory"
-      FROM_BUNDLE="$2"
+      FROM_BUNDLE="$(absolute_from_invocation "$2")"
       shift 2
       ;;
     --skip-backup)

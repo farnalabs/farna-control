@@ -386,8 +386,23 @@ PY
   "${ROOT_DIR}/scripts/create-macos-info-plist.sh" "${VERSION}" "Info.plist" "${MACOS_ARCH}"
 )
 
-echo "${VERSION}" > "${BUNDLE_ROOT}/VERSION"
-file "${APP_ROOT}/Contents/MacOS/modulo"
+# Release identity stamp (FAR-2589). farna.version reads <bundle>/VERSION
+# ("bundle-v<X.Y.Z>", the same format bundle-release.yml writes for the Linux
+# bundle) once the app's Contents/Info.plist marks this as a macOS bundle. The
+# bundled venv is synced with --no-install-project, so without this stamp the
+# installed app's /healthz/ready reported "0.0.0-dev". The gate imports the
+# bundled farna.version through the bundled interpreter (the .pth above, no
+# inherited PYTHONPATH) and fails THIS BUILD unless it reports VERSION.
+# BEGIN bundle_version_stamp
+printf 'bundle-v%s\n' "${VERSION}" > "${BUNDLE_ROOT}/VERSION"
+BUNDLED_REPORTED_VERSION="$(env -u PYTHONPATH -u PYTHONHOME "${BUNDLE_ROOT}/runtime/bin/python3" -c 'from farna.version import get_version; print(get_version())')"
+if [[ "${BUNDLED_REPORTED_VERSION}" != "${VERSION}" ]]; then
+  echo "::error::the bundled farna.version reports '${BUNDLED_REPORTED_VERSION}', expected the build version '${VERSION}' (stamp ${BUNDLE_ROOT}/VERSION)" >&2
+  exit 1
+fi
+echo "bundle version stamp: ${BUNDLED_REPORTED_VERSION}"
+# END bundle_version_stamp
+file"${APP_ROOT}/Contents/MacOS/modulo"
 "${BUNDLE_ROOT}/pg/bin/postgres" --version
 "${BUNDLE_ROOT}/redis/redis-server" --version
 "${APP_ROOT}/Contents/MacOS/modulo" --help >/dev/null
