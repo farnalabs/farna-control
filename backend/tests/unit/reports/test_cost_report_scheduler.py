@@ -109,7 +109,7 @@ def test_format_cost_report_json_emits_json_array() -> None:
     )
     assert "Acme" in payload["body_text"]
     assert '"entity_name": "Acme"' in payload["body_text"]
-    assert "Modulo monthly cost report by org" in payload["subject"]
+    assert "Farna Control monthly cost report by org" in payload["subject"]
     assert payload["body_html"].startswith("<html>")
 
 

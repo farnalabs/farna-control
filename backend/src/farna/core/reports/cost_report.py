@@ -77,7 +77,7 @@ def format_cost_report(report: dict[str, Any]) -> dict[str, str]:
 
     period = str(report.get("period", ""))
     group_by = str(report.get("group_by", ""))
-    subject = f"Modulo {period} cost report by {group_by}"
+    subject = f"Farna Control {period} cost report by {group_by}"
     return {
         "subject": subject,
         "body_text": body,

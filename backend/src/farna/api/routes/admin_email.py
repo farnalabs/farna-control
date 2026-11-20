@@ -336,7 +336,7 @@ async def _send_test_email(temp_settings: Any, recipient: str) -> dict[str, Any]
             send_email,
             temp_settings,
             [recipient],
-            "Modulo Test Email",
+            "Farna Control Test Email",
             "<html><body><h1>Test Email</h1><p>If you receive this, your SMTP configuration is working.</p></body></html>",
             "If you receive this, your SMTP configuration is working.",
         )
