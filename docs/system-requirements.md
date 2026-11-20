@@ -103,18 +103,67 @@ The same linux-amd64 bundle also ships as a Debian package,
 `farna-control_<version>_amd64.deb`, built and validated on Ubuntu 22.04 and
 24.04 by `.github/workflows/linux-deb.yml` on every release (and rehearsed on
 every dry-run). The release `SHA256SUMS`, the signed `RELEASE_MANIFEST.json`
-and the build-provenance attestation all cover it. Phase 1 is a download from
-the GitHub release page and a local install; a signed apt repository (so
-`apt upgrade` picks up new releases) is coming next.
+and the build-provenance attestation all cover it.
+
+The recommended way to install it is the signed apt repository at
+`https://apt.farna.dev`, so `apt upgrade` picks up new releases:
 
 ```bash
-# download farna-control_<version>_amd64.deb and SHA256SUMS from the release page, then:
-grep " farna-control_<version>_amd64.deb$" SHA256SUMS | sha256sum --check -
-sudo apt install ./farna-control_<version>_amd64.deb
+sudo apt-get install -y ca-certificates curl
+curl -fsSL https://apt.farna.dev/farna-control-archive-keyring.gpg   | sudo tee /usr/share/keyrings/farna-control-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/farna-control-archive-keyring.gpg] https://apt.farna.dev stable main"   | sudo tee /etc/apt/sources.list.d/farna-control.list
+sudo apt update
+sudo apt install farna-control
 
 # then, as your normal (non-root) user:
 farna-control start --detach
 farna-control status
+```
+
+The repository is signed with the Farna Control archive key, fingerprint
+`CD1B AC68 5400 EAF6 D27C  4D82 5FF1 C9A5 156D 71E1`
+(`Farna Control Archive Signing Key <packages@farna.dev>`). The same public key
+is committed in the source repository at
+`deploy/apt/farna-control-archive-keyring.asc`; you can check the downloaded
+keyring with
+`gpg --show-keys /usr/share/keyrings/farna-control-archive-keyring.gpg`. The
+`signed-by` option limits that key to this one repository, and `apt update`
+refuses the repository if its `InRelease` signature does not verify. The
+package files themselves are the GitHub release assets: the repository index
+records their sizes and hashes, and apt fetches them from the release.
+
+**Upgrading.** Stop the stack first (`farna-control stop`), then:
+
+```bash
+sudo apt update
+sudo apt upgrade            # or: sudo apt install --only-upgrade farna-control
+```
+
+**Pinning a version.** The repository keeps every released version, so you
+can stay on one or go back:
+
+```bash
+apt list -a farna-control                       # every published version
+sudo apt install farna-control=<version>        # add --allow-downgrades to go back
+sudo apt-mark hold farna-control                # apt upgrade leaves it alone
+sudo apt-mark unhold farna-control              # follow new releases again
+```
+
+To follow only one release line instead of holding, add an apt preference,
+for example `/etc/apt/preferences.d/farna-control`:
+
+```text
+Package: farna-control
+Pin: version 0.3.*
+Pin-Priority: 1001
+```
+
+**Without the repository** (air-gapped hosts, or to install one release by
+hand), download the `.deb` and `SHA256SUMS` from the release page instead:
+
+```bash
+grep " farna-control_<version>_amd64.deb$" SHA256SUMS | sha256sum --check -
+sudo apt install ./farna-control_<version>_amd64.deb
 ```
 
 What the package does and does not do:
@@ -134,9 +183,10 @@ What the package does and does not do:
   program only. They never touch any user's data dir; delete
   `~/.local/share/modulo/data` yourself if you want the data gone. Stop the
   stack (`farna-control stop`) before removing or upgrading the package.
-- Upgrade by installing the newer `.deb` the same way. The in-app
-  `farna-control upgrade` command is disabled for the package install (it would
-  rewrite files apt owns) and tells you to use apt instead.
+- Upgrade with apt (`sudo apt upgrade` from the repository, or by installing
+  the newer `.deb` by hand). The in-app `farna-control upgrade` command is
+  disabled for the package install (it would rewrite files apt owns) and tells
+  you to use apt instead.
 
 **If you also have the tarball install** (`scripts/install.sh`): the two
 coexist without overwriting each other (`~/.local/opt/farna-control` +

@@ -1,0 +1,277 @@
+name: "Linux: signed apt repository (FAR-2579)"
+
+# FAR-2579 phase 2: publish the signed apt repository at https://apt.farna.dev
+# so `sudo apt install farna-control` works and `apt upgrade` picks up new
+# releases.
+#
+# The site (signed index + keyring + install page) is static and deployed to
+# the Cloudflare Pages project `farna-control-apt`. The .deb files are NOT
+# uploaded (Pages caps a file at 25 MiB): the site's _redirects sends each
+# /pool/... path with a 302 to the GitHub release asset, and the Packages index
+# records the size and hashes of exactly those bytes.
+#
+# Triggers: a release published by a person or a PAT (`release: published`),
+# and workflow_dispatch - which release-unified.yml and macos-staple-retry.yml
+# use after they publish, because a release created with a workflow's
+# GITHUB_TOKEN raises no `release` event for other workflows.
+#
+# Every published release that carries a farna-control_<version>_amd64.deb is
+# rebuilt into the index on each run, so all versions stay installable and
+# pinnable. Each .deb is verified against its release's SHA256SUMS first.
+#
+# Secrets: APT_REPO_GPG_PRIVATE_KEY (armored; its fingerprint must match the
+# reviewed public key deploy/apt/farna-control-archive-keyring.asc),
+# optional APT_REPO_GPG_PASSPHRASE, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      verify_url:
+        description: "Repo URL the post-deploy check installs from (empty: the public URL, or the pages.dev URL while the public hostname does not serve the repo yet)"
+        type: string
+        required: false
+        default: ""
+
+concurrency:
+  # One publish at a time; every run rebuilds the full index, so a queued run
+  # always publishes a superset of the one before it.
+  group: apt-repo
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+env:
+  # The one public base URL setting: docs, the install page and the
+  # post-deploy check all use it.
+  APT_REPO_PUBLIC_URL: https://apt.farna.dev
+  # The Pages project's own hostname: used by the post-deploy check while the
+  # public hostname does not serve the repository yet (DNS pending).
+  APT_REPO_PAGES_URL: https://farna-control-apt.pages.dev
+  PAGES_PROJECT: farna-control-apt
+
+jobs:
+  build:
+    name: Build and sign the repository site
+    runs-on: ubuntu-24.04
+    container: ubuntu:24.04
+    timeout-minutes: 60
+    outputs:
+      has_debs: ${{ steps.collect.outputs.has_debs }}
+      newest_version: ${{ steps.collect.outputs.newest_version }}
+    steps:
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends apt-utils ca-certificates curl git gnupg jq >/dev/null
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download every released .deb and verify it against SHA256SUMS
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${REPO}/releases"
+          download_base="https://github.com/${REPO}/releases/download"
+          mkdir -p debs
+          : > releases.tsv
+          page=1
+          while :; do
+            body="$(curl --proto '=https' -fsSL --retry 3 \
+              -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' \
+              "${api}?per_page=100&page=${page}")"
+            count="$(jq 'length' <<< "${body}")"
+            [ "${count}" -gt 0 ] || break
+            # Published (non-draft, non-prerelease) releases only, with the
+            # asset names they carry.
+            jq -r '.[] | select(.draft == false and .prerelease == false)
+                   | [.tag_name, ([.assets[].name] | join(" "))] | @tsv' <<< "${body}" >> releases.tsv
+            page=$((page + 1))
+          done
+          : > manifest.tsv
+          while IFS=$'\t' read -r tag assets; do
+            deb="$(tr ' ' '\n' <<< "${assets}" | grep -E '^farna-control_[0-9]+\.[0-9]+\.[0-9]+_amd64\.deb$' || true)"
+            [ -n "${deb}" ] || continue
+            [ "$(wc -l <<< "${deb}")" -eq 1 ] || { echo "::error::${tag} carries more than one .deb asset"; exit 1; }
+            if grep -qF "/${deb}" manifest.tsv; then
+              echo "::warning::${deb} is attached to more than one release; keeping the newest one"
+              continue
+            fi
+            tr ' ' '\n' <<< "${assets}" | grep -qx SHA256SUMS || { echo "::error::${tag} has ${deb} but no SHA256SUMS asset"; exit 1; }
+            dir="debs/${tag}"
+            mkdir -p "${dir}"
+            # The exact public URL the repository redirects apt to.
+            curl --proto '=https' -fsSL --retry 3 -o "${dir}/${deb}" "${download_base}/${tag}/${deb}"
+            curl --proto '=https' -fsSL --retry 3 -o "${dir}/SHA256SUMS" "${download_base}/${tag}/SHA256SUMS"
+            (cd "${dir}" && grep -E "^[0-9a-f]{64}  ${deb}\$" SHA256SUMS | sha256sum --check --strict -) \
+              || { echo "::error::${tag}/${deb} does not match the release SHA256SUMS"; exit 1; }
+            printf '%s\t%s\n' "${tag}" "${PWD}/${dir}/${deb}" >> manifest.tsv
+          done < releases.tsv
+          if [ ! -s manifest.tsv ]; then
+            echo "::warning::no published release carries a farna-control .deb yet; nothing to publish"
+            echo "has_debs=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cat manifest.tsv
+          newest="$(sed -E 's/.*farna-control_([0-9.]+)_amd64\.deb$/\1/' manifest.tsv | sort -rV | head -n 1)"
+          echo "has_debs=true" >> "$GITHUB_OUTPUT"
+          echo "newest_version=${newest}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and sign the site
+        if: steps.collect.outputs.has_debs == 'true'
+        env:
+          APT_REPO_GPG_PRIVATE_KEY: ${{ secrets.APT_REPO_GPG_PRIVATE_KEY }}
+          APT_REPO_GPG_PASSPHRASE: ${{ secrets.APT_REPO_GPG_PASSPHRASE }}
+          APT_REPO_PUBLIC_KEY_FILE: deploy/apt/farna-control-archive-keyring.asc
+          APT_REPO_RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download
+        run: |
+          set -euo pipefail
+          bash scripts/linux/build-apt-repo.sh site manifest.tsv
+
+      - name: Upload the site
+        if: steps.collect.outputs.has_debs == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: apt-repo-site
+          path: site
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: build
+    if: needs.build.outputs.has_debs == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: apt-repo-site
+          path: site
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+
+      # Install wrangler explicitly at a pinned version instead of fetching it
+      # on demand with `npx`: an on-demand fetch executes the package's
+      # lifecycle scripts straight from the registry (Sonar S6505), and the
+      # pin belongs in one visible place. `--ignore-scripts` is safe here -
+      # wrangler ships no postinstall and workerd resolves its platform
+      # binary from an optional dependency.
+      - name: Install wrangler
+        env:
+          WRANGLER_VERSION: "4.157.0"
+        run: |
+          set -euo pipefail
+          npm install --global --ignore-scripts "wrangler@${WRANGLER_VERSION}"
+
+      - name: wrangler pages deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -s site/dists/stable/InRelease
+          test -s site/_redirects
+          wrangler pages deploy site \
+            --project-name "${PAGES_PROJECT}" --branch main --commit-dirty=true
+
+  verify:
+    name: Install from the repository on ${{ matrix.image }}
+    needs: [build, deploy]
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:22.04
+          - ubuntu:24.04
+    env:
+      NEWEST: ${{ needs.build.outputs.newest_version }}
+      VERIFY_URL_INPUT: ${{ inputs.verify_url }}
+    steps:
+      - name: Install checkout prerequisites
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends ca-certificates curl git >/dev/null
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pick the repository URL and wait for the new index
+        run: |
+          set -euo pipefail
+          # The new index must be live (Packages lists the newest version);
+          # Pages propagation is usually seconds.
+          serves_newest() {
+            curl --proto '=https' -fsS --max-time 20 "$1/dists/stable/main/binary-amd64/Packages" 2>/dev/null \
+              | grep -qx "Version: ${NEWEST}"
+          }
+          if [ -n "${VERIFY_URL_INPUT}" ]; then
+            candidates=("${VERIFY_URL_INPUT}")
+          else
+            candidates=("${APT_REPO_PUBLIC_URL}" "${APT_REPO_PAGES_URL}")
+          fi
+          for _ in $(seq 1 30); do
+            for url in "${candidates[@]}"; do
+              if serves_newest "${url}"; then
+                if [ "${url}" != "${APT_REPO_PUBLIC_URL}" ] && [ -z "${VERIFY_URL_INPUT}" ]; then
+                  echo "::warning::${APT_REPO_PUBLIC_URL} does not serve the repository yet; verifying through ${url}"
+                fi
+                echo "REPO_URL=${url}" >> "$GITHUB_ENV"
+                echo "verifying through ${url}"
+                exit 0
+              fi
+            done
+            sleep 10
+          done
+          echo "::error::none of ${candidates[*]} served Packages with Version ${NEWEST} within 5 minutes"
+          exit 1
+
+      - name: Add the repository exactly as documented, apt update, apt install
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          curl -fsSL "${REPO_URL}/farna-control-archive-keyring.gpg" \
+            | tee /usr/share/keyrings/farna-control-archive-keyring.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/farna-control-archive-keyring.gpg] ${REPO_URL} stable main" \
+            | tee /etc/apt/sources.list.d/farna-control.list
+          # apt refuses an unsigned or badly signed repository, so a clean
+          # update proves the InRelease signature verified against the keyring.
+          apt-get update 2>&1 | tee apt-update.log
+          if grep -Eq '^(W|E): .*(farna|GPG|signature|NO_PUBKEY)' apt-update.log; then
+            echo "::error::apt-get update reported a signature problem"; exit 1
+          fi
+          apt-cache policy farna-control
+          apt-get install -y farna-control
+          installed="$(dpkg-query -W -f='${Version}' farna-control)"
+          [ "${installed}" = "${NEWEST}" ] || { echo "::error::installed ${installed}, expected ${NEWEST}"; exit 1; }
+          version_out="$(farna-control --version)"
+          echo "farna-control --version: ${version_out}"
+          case "${version_out}" in
+            *"${NEWEST}"*) ;;
+            *) echo "::error::farna-control --version does not report ${NEWEST}"; exit 1 ;;
+          esac
+
+      - name: Boot as a non-root user, stop, remove, purge
+        run: bash scripts/linux/validate-deb.sh --installed

@@ -147,7 +147,8 @@ for arg in "$@"; do
     upgrade)
       echo "farna-control: this install is managed by apt (the farna-control .deb)." >&2
       echo "Upgrade it with the package manager instead, e.g.:" >&2
-      echo "  sudo apt install ./farna-control_<version>_amd64.deb" >&2
+      echo "  sudo apt update && sudo apt install --only-upgrade farna-control" >&2
+      echo "(without the apt.farna.dev repository: sudo apt install ./farna-control_<version>_amd64.deb)" >&2
       exit 2
       ;;
     *) break ;;
