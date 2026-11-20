@@ -68,6 +68,7 @@ describe('AdminPluginsView', () => {
     expect(wrapper.text()).toContain('XYZ Connector')
     expect(wrapper.text()).toContain('1.0.0')
     expect(wrapper.text()).toContain('connector')
+    expect(wrapper.find('.table-wrapper').exists()).toBe(true)
   })
 
   it('is read-only — no plugin enable/disable lifecycle control', async () => {
@@ -182,5 +183,9 @@ describe('AdminPluginsView', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain('No plugins installed')
+    // The empty state must not leave an empty table shell on the page: an
+    // empty `.table-wrapper` is a scroll region with no focusable content,
+    // which axe flags as `scrollable-region-focusable` (mobile-layout sweep).
+    expect(wrapper.find('.table-wrapper').exists()).toBe(false)
   })
 })
