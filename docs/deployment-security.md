@@ -192,9 +192,9 @@ The application sets `app.organisation_id` at connection pool checkout via
 - [ ] Every table has a policy: `CREATE POLICY org_isolation ON <name> USING (organisation_id = current_setting('app.organisation_id')::uuid);`
 - [ ] Run the RLS test suite (from `backend/`): `uv run pytest tests/unit/db/test_rls.py -v`
 
-**SQLite note:** RLS is not available in SQLite. `WHERE-clause` filtering is
-used instead, which is application-level only – do not rely on it for
-multi-tenant isolation.
+**SQLite is not a deployment backend.** It is used only by the automated test
+suite. Row-level security is the production tenant boundary, so a deployment
+that skipped PostgreSQL would have no database-enforced isolation.
 
 ### 3.2 Connection Encryption
 

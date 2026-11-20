@@ -22,17 +22,14 @@ The application refuses to start if any required variable is absent or invalid.
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | **Yes** | – | `postgresql+asyncpg://user:pass@host:port/db` |
 | `DATABASE_ADMIN_URL` | No | – | Privileged owner-role connection string read directly by Alembic from the process environment, the launcher-pinned config, or the `.env` file in `backend/` (not a `Settings` field). When set it wins over `DATABASE_URL` for migrations, so `uv run alembic upgrade heads` runs as the table owner rather than the RLS-bound app role. It is also the privileged connection for the role bootstrap (`python -m farna.db.bootstrap_role` requires it) and the URL `farna-control restore --db-url` points at. If neither it nor `DATABASE_URL` is set, migrations refuse to run instead of defaulting to a local database (FAR-2183). |
-| `FARNA_CONTROL_DB` | No | `postgres` | Database backend: `postgres`, `sqlite`, `mariadb`, or `mysql` |
-| `FARNA_CONTROL_SYSTEM_DATABASE_URL` | No | `""` | Dedicated connection string for cross-org system cron jobs (`farna_control_system` role). The system worker's cross-org crons (including `dispatcher_reconcile`, which gates `/healthz/ready`) **require** a value and fail closed without one: there is no silent fallback to the RLS-bound `DATABASE_URL`, which would read zero rows. The shipped compose files and the native launcher supply it; a plain-process deployment must set it explicitly (in SQLite dev mode, point it at the same SQLite file). |
+| `FARNA_CONTROL_DB` | No | `postgres` | Supported: `postgres`. Legacy values `sqlite`, `mariadb` and `mysql` are accepted by the validator but are not supported deployment backends (SQLite is test-only; MariaDB/MySQL are unsupported). |
+| `FARNA_CONTROL_SYSTEM_DATABASE_URL` | No | `""` | Dedicated connection string for cross-org system cron jobs (`farna_control_system` role). The system worker's cross-org crons (including `dispatcher_reconcile`, which gates `/healthz/ready`) **require** a value and fail closed without one: there is no silent fallback to the RLS-bound `DATABASE_URL`, which would read zero rows. The shipped compose files and the native launcher supply it; a plain-process deployment must set it explicitly (in the test suite, point it at the same in-memory database). |
 
-`FARNA_CONTROL_DB=sqlite` switches to SQLite for local development (no RLS, no advisory locks, no flood protection).
-`FARNA_CONTROL_DB=mariadb` or `mysql` uses the aiomysql driver. Both values are accepted by
-the settings validator but are **not** production-ready: the per-node output
-store (`db/crud/run_node_outputs.py::dialect_insert`) raises `NotImplementedError`
-on any dialect other than `postgresql` / `sqlite`, and MariaDB has been deprecated
-since 2026-07-11. Use Postgres in production, SQLite for local development. See
-[`docs/system-requirements.md`](./system-requirements.md) for the full backend
-matrix.
+PostgreSQL 16 is the only supported database. The tenant boundary is PostgreSQL
+row-level security, and the Alembic migration chain is PostgreSQL-only, so no
+other backend can stand in for it. SQLite is used only by the automated test
+suite. See [`docs/system-requirements.md`](./system-requirements.md) for the
+supported-database details.
 
 ### DB Capacity Monitor
 
