@@ -224,7 +224,7 @@
                     @dragover.prevent
                     @drop="onPipelineDrop(row.data as PipelineItem, $event)"
                   >
-                    <td class="table-cell" :style="{ paddingLeft: `${12 + (row.depth || 0) * 16}px` }">
+                    <td class="table-cell" :style="{ paddingLeft: `${12 + row.depth * 16}px` }">
                       <span class="flex min-w-0 items-center gap-1.5">
                         <router-link
                           :to="`/pipelines/${(row.data as PipelineItem).id}/editor`"

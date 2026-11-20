@@ -702,6 +702,40 @@ describe('DashboardView branches — teams', () => {
     expect(wrapper.text()).not.toContain('Team Breakdown')
     wrapper.unmount()
   })
+
+  it('falls back to zero when a team has no run_counts_by_status', async () => {
+    const { usePlanStore } = await import('../stores/planStore')
+    setActivePinia(createPinia())
+    usePlanStore().currentTier = 'team'
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') {
+        return Promise.resolve({
+          data: {
+            ...mockSummaryData,
+            teams: [{
+              id: 'team-no-counts',
+              name: 'No Counts Team',
+              total_runs: 4,
+            }],
+          },
+          error: undefined,
+        })
+      }
+      if (url === '/api/v1/plan') return Promise.resolve({ data: mockPlanData, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+    const row = wrapper.find('[data-testid="dashboard-team-row-team-no-counts"]')
+    expect(row.exists()).toBe(true)
+    const cells = row.findAll('td')
+    // completed, running and failed all fall back to 0 for a team row that
+    // carries no run_counts_by_status breakdown.
+    expect(cells[2].text()).toBe('0')
+    expect(cells[3].text()).toBe('0')
+    expect(cells[4].text()).toBe('0')
+    wrapper.unmount()
+  })
 })
 
 // ── Team row expansion/collapse ─────────────────────────────────────────
