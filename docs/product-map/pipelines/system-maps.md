@@ -43,7 +43,6 @@ unit-tests:
   - backend/tests/unit/db/test_system_map_repository.py
   - backend/tests/unit/db/test_system_map_models.py
   - backend/tests/unit/cli/apply/test_system_map_apply.py
-  - backend/tests/unit/mcp/test_mcp_system_map_discovery.py
   - backend/tests/integration/test_system_maps_discovery.py
   - backend/tests/integration/test_system_maps_version_aware.py
   - backend/tests/integration/test_system_maps_overview_metrics.py
@@ -190,7 +189,7 @@ point in time.
       `(system_map_id, revision_number)` pair, composite tenant foreign keys,
       and a partial unique live-name index on `(organisation_id, name)` where
       `deleted_at IS NULL` (`db/models/system_map.py`;
-      `0350_baseline_schema.py`; `test_system_maps_version_aware.py`)
+      `0350_baseline_schema.py`; `test_system_map_models.py`)
 - [x] `POST /api/v1/system-maps/discover` inspects only the caller's
       organization: live pipelines (`deleted_at IS NULL`,
       `archived_at IS NULL`), live triggers, live connector instances and

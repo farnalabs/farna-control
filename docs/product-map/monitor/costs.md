@@ -11,7 +11,7 @@ code:
   - backend/src/farna/db/crud/scheduled_report.py
   - backend/src/farna/db/crud/spend_anomaly.py
   - backend/src/farna/db/models/spend_anomaly.py
-  - backend/src/farna/db/migrations/versions/0201_spend_anomaly_unique_org_date.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
 unit-tests:
   - backend/tests/unit/api/test_costs.py
   - backend/tests/unit/api/test_cost_controls_bdd.py

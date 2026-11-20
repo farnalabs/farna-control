@@ -23,7 +23,6 @@ unit-tests:
   - backend/tests/unit/db/crud/test_pipeline_graph_updated_audit.py
   - backend/tests/unit/api/test_pipeline_snapshot_gating.py
   - backend/tests/unit/api/test_snapshot_path_scoping_and_residual_gates.py
-  - backend/tests/integration/db/test_migration_0317_drop_retired_pipeline_diff_rollback_flag.py
   - frontend/src/__tests__/PipelineEditorHistoricVersion.spec.ts
   - frontend/src/__tests__/PipelineEditorCompare.spec.ts
   - frontend/src/__tests__/components/PipelineSnapshotTimeline.spec.ts
