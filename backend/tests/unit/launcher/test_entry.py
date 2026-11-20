@@ -2280,3 +2280,24 @@ def test_head_check_engine_is_pool_less() -> None:
     engine = entry_module._head_check_engine(settings)
 
     assert isinstance(engine.pool, NullPool)
+
+
+def test_redis_conf_pins_its_working_dir_inside_the_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2581: without `dir`, Redis used the launching cwd (unwritable cwd = no boot)."""
+    data_dir = tmp_path / "Application Support" / "data"
+    data_dir.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    conf_path = entry_module._write_redis_conf(data_dir, 16379, "pw")
+
+    lines = conf_path.read_text(encoding="utf-8").splitlines()
+    redis_dir = data_dir / entry_module.REDIS_DIR_NAME
+    assert entry_module._redis_quote(str(redis_dir)) in [line.removeprefix("dir ") for line in lines if line.startswith("dir ")]
+    assert redis_dir.is_dir()
+
+
+def test_redis_quote_escapes_quotes_and_backslashes() -> None:
+    backslash = chr(92)
+    raw = f'a "b" {backslash}c'
+    expected = '"a ' + backslash + '"b' + backslash + '" ' + backslash * 2 + 'c"'
+    assert entry_module._redis_quote(raw) == expected

@@ -815,6 +815,16 @@ def _redis_server_argv(bin_dir: Path, port: int, password: str, data_dir: Path) 
     ]
 
 
+# Redis's working directory inside the data dir (``dir`` in the per-boot conf).
+REDIS_DIR_NAME = "redis"
+
+
+def _redis_quote(value: str) -> str:
+    """Quote one Redis config argument (spaces, e.g. macOS 'Application Support')."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _write_redis_conf(data_dir: Path, port: int, password: str) -> Path:
     """Write the per-boot 0600 Redis config (requirepass INSIDE the file).
 
@@ -828,11 +838,18 @@ def _write_redis_conf(data_dir: Path, port: int, password: str) -> Path:
     from farna.db.bootstrap import _write_env_file
     from farna.launcher.supervisor import REDIS_CONF_PREFIX
 
+    # FAR-2581: pin Redis's working directory inside the data dir. Without a
+    # ``dir`` directive Redis uses the launching process's cwd for any file it
+    # writes, so `farna-control start` run from an unwritable/unreadable cwd
+    # (another user's home, /) failed to boot the bundled Redis.
+    redis_dir = data_dir / REDIS_DIR_NAME
+    redis_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     content = "\n".join(
         [
             f"port {port}",
             f"bind {POSTGRES_HOST}",
             f"requirepass {password}",
+            f"dir {_redis_quote(str(redis_dir))}",
             'save ""',
             "appendonly no",
             "",

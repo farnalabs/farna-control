@@ -135,24 +135,9 @@ if [[ "${SMOKE_KEEP_RUNNING:-0}" == "1" ]]; then
   log "step 9: skipped (SMOKE_KEEP_RUNNING=1)"
 else
   log "step 9: farna-control stop"
-  # `stop` waits only 10s for the data-dir lock to be released, which is
-  # shorter than the launcher's own ordered teardown (SAQ drain, postgres fast
-  # shutdown) on a loaded host; it then reports `stop.unconfirmed` and exits 1
-  # while the teardown is still progressing. The gate's contract is that the
-  # stack STOPS, so an unconfirmed stop is followed by a bounded wait for the
-  # launcher to be gone, and only a launcher still alive after that fails.
-  if ! "${CLI}" stop; then
-    log "  stop unconfirmed within its own 10s window; waiting up to 120s for the launcher to exit"
-    stopped=0
-    for _ in $(seq 1 60); do
-      if "${CLI}" status --json 2>/dev/null | python3 -c 'import json,sys; launcher=(json.load(sys.stdin).get("launcher") or {}); sys.exit(0 if not launcher.get("alive") else 1)'; then
-        stopped=1
-        break
-      fi
-      sleep 2
-    done
-    [[ "${stopped}" -eq 1 ]] || fail "the launcher is still alive 120s after stop"
-  fi
+  # `stop` itself polls (up to 120s) for the ordered teardown to release the
+  # data-dir lock and exits 0 only once the launcher is gone (FAR-2581).
+  "${CLI}" stop || fail "stop could not confirm the launcher stopped"
   log "  launcher stopped"
   STARTED=0
 fi
