@@ -55,8 +55,12 @@ def _org(overrides: dict[str, bool]) -> SimpleNamespace:
 
 
 async def test_org_override_enables_a_default_off_flag() -> None:
-    with patch("farna.db.crud.organisation.get_organisation", AsyncMock(return_value=_org({"system_maps": True}))):
-        await _check()(_Plan(False), _principal(), _session())
+    lookup = AsyncMock(return_value=_org({"system_maps": True}))
+    with patch("farna.db.crud.organisation.get_organisation", lookup):
+        result = await _check()(_Plan(False), _principal(), _session())
+
+    lookup.assert_awaited_once()
+    assert result is None
 
 
 async def test_org_override_disables_a_plan_enabled_flag() -> None:
@@ -82,5 +86,9 @@ async def test_override_read_failure_fails_closed_even_when_the_plan_is_enabled(
 
 
 async def test_principal_without_an_org_uses_the_plan_default() -> None:
-    with patch("farna.db.crud.organisation.get_organisation", AsyncMock(side_effect=AssertionError("should not read"))):
-        await _check()(_Plan(True), _principal(org_id=None), _session())
+    lookup = AsyncMock(side_effect=AssertionError("should not read"))
+    with patch("farna.db.crud.organisation.get_organisation", lookup):
+        result = await _check()(_Plan(True), _principal(org_id=None), _session())
+
+    lookup.assert_not_awaited()
+    assert result is None
