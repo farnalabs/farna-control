@@ -828,8 +828,8 @@ def _feature_required_detail(feature_name: str, current_tier: str) -> str:
     genuine plan-tier restriction names the licence scope an operator must
     install. But naming a licence for a feature that is merely switched off is
     a falsehood the operator cannot act on (a community-tier flag like
-    ``system_maps`` is default-off in ``DEFAULT_OFF_FLAGS`` / ``INTERNAL_FLAGS``;
-    no licence would enable it). The declared tier is therefore read from the
+    ``system_maps`` is default-off in ``DEFAULT_OFF_FLAGS``; no licence would
+    enable it). The declared tier is therefore read from the
     flag catalog first:
 
     * declared tier ABOVE the caller's tier -> the feature genuinely needs a

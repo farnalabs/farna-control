@@ -845,10 +845,53 @@ async def test_system_map_overview_delegates_to_rest_handler() -> None:
     assert result == {"revision_id": str(_REVISION_ID), "nodes": []}
     feature_gate.assert_awaited_once()
     assert feature_gate.await_args.args[0] == ORG_ID
-    assert feature_gate.await_args.args[2] == "system_maps"
+    assert feature_gate.await_args.args[2] == "system_maps_read"
     rest_handler.assert_awaited_once()
     assert rest_handler.await_args.kwargs["repository"] is repository
     assert rest_handler.await_args.kwargs["window_days"] == 14
+    assert rest_handler.await_args.kwargs["internal_access"] is True
+
+
+@pytest.mark.asyncio
+async def test_system_map_overview_gates_on_read_flag_regardless_of_authoring_access() -> None:
+    """FAR-2595: overview gates on ``system_maps_read`` for EVERY caller.
+
+    A non-authoring caller (no operator role, no ``system_maps_access`` grant)
+    must still pass the published-overview gate on ``system_maps_read`` — the
+    regression was gating the flag on authoring access, which refused published
+    overviews whenever the org's default-OFF ``system_maps`` flag was off.
+    """
+    from farna.api.mcp_server import (
+        _ctx_key_grants,
+        _ctx_role,
+        get_system_map_overview,
+    )
+
+    overview = SimpleNamespace(model_dump=MagicMock(return_value={"revision_id": str(_REVISION_ID)}))
+    rest_handler = AsyncMock(return_value=overview)
+    repository = object()
+
+    @asynccontextmanager
+    async def session_cm() -> AsyncGenerator[AsyncMock, None]:
+        yield AsyncMock()
+
+    _ctx_role.set("viewer")
+    _ctx_key_grants.set(frozenset())
+    with (
+        patch("farna.api.mcp_server.validate_current_auth", new=AsyncMock(return_value=True)),
+        patch("farna.api.mcp_server._require_plan_feature", new=AsyncMock(return_value=None)) as feature_gate,
+        patch("farna.api.mcp_server._system_maps_discovery_session", return_value=session_cm()),
+        patch("farna.api.mcp_server._check_agent_tool_scope"),
+        patch("farna.api.routes.system_maps.get_system_map_overview_endpoint", new=rest_handler),
+        patch("farna.api.routes.system_maps.get_repo", new=AsyncMock(return_value=repository)),
+    ):
+        result = await get_system_map_overview(map_id=_MAP_ID)
+
+    assert result == {"revision_id": str(_REVISION_ID)}
+    feature_gate.assert_awaited_once()
+    assert feature_gate.await_args.args[2] == "system_maps_read"
+    rest_handler.assert_awaited_once()
+    assert rest_handler.await_args.kwargs["internal_access"] is False
 
 
 @pytest.mark.asyncio

@@ -638,7 +638,7 @@ def _require_mcp_internal_system_maps_access() -> None:
     tool-scope registry, so this call-site check is defence in depth.
     """
     if not _mcp_internal_system_maps_access():
-        raise MCPAuthorizationError("System Maps discovery is restricted to internal operators")
+        raise MCPAuthorizationError("System Maps authoring is restricted to operators with the system_maps_access grant")
 
 
 def _mcp_flag_visible(
@@ -11293,10 +11293,9 @@ async def _system_maps_discovery_session() -> AsyncGenerator[AsyncSession, None]
     description=(
         "Read the observed health, loop metrics and bottlenecks for a published System Maps "
         "revision (mirrors GET /api/v1/system-maps/{map_id}/overview). Requires the system_maps_read "
-        "feature (system_maps for authoring-capable callers: operator/admin role plus the "
-        "system_maps_access grant, no developer mode) and system_map.overview permission; authoring-"
-        "capable callers may select a draft or historical revision, while ordinary callers see "
-        "published revisions only."
+        "feature and system_map.overview permission; callers with authoring access (operator/admin "
+        "role plus the system_maps_access grant) may select a draft or historical revision, while "
+        "ordinary callers see published revisions only."
     ),
 )
 @mcp_audited("system_map_overview_read", "system_map", fail_closed=False)
@@ -11317,8 +11316,12 @@ async def get_system_map_overview(
         user_id = _ctx_user_id_val()
         role = _ctx_role_val() or ""
         internal_access = _mcp_internal_system_maps_access()
-        feature_name = "system_maps" if internal_access else "system_maps_read"
-        feature_error = await _require_plan_feature(org_id, get_settings(), feature_name)
+        # FAR-2595: mirror the REST published router, which always gates the
+        # overview on ``system_maps_read`` and uses ``internal_access`` ONLY to
+        # widen revision selection (draft/historical). Gating the flag itself on
+        # authoring access would refuse an operator the published overview
+        # whenever the org's default-OFF authoring flag is off.
+        feature_error = await _require_plan_feature(org_id, get_settings(), "system_maps_read")
         if feature_error is not None:
             return feature_error
 
@@ -11383,13 +11386,13 @@ async def get_system_map_overview(
 @mcp.tool(
     name="discover_system_map",
     description=(
-        "Internal preview. Inspect the organisation and persist an unpublished System Maps "
+        "Inspect the organisation and persist an unpublished System Maps "
         "discovery draft, returning the discovery report (draft map/revision ids, inferred "
         "nodes/edges, warnings, skipped sources, published=false; mirrors "
-        "POST /api/v1/system-maps/discover). Requires the system_maps feature, developer "
-        "mode, an operator/admin role, the system_maps_access grant and an org-scoped "
-        "credential — team-scoped and user-scoped credentials are refused because the scan "
-        "covers the whole organisation; ordinary callers are refused."
+        "POST /api/v1/system-maps/discover). Requires the org-toggleable system_maps "
+        "feature, an operator/admin role and the system_maps_access grant, plus an "
+        "org-scoped credential — team-scoped and user-scoped credentials are refused "
+        "because the scan covers the whole organisation; ordinary callers are refused."
     ),
 )
 @mcp_audited("system_map_discovery_drafted", "system_map", fail_closed=False)
