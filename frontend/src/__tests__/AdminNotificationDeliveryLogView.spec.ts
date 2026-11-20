@@ -122,7 +122,7 @@ describe('AdminNotificationDeliveryLogView', () => {
 
     // Inbound webhooks are not on this page — the explainer points at the
     // Trigger Event Log, the surface that actually records them.
-    const link = boundary.find('a')
+    const link = wrapper.find('[data-testid="admin-notification-log-trigger-events-link"]')
     expect(link.exists()).toBe(true)
     expect(link.attributes('href')).toBe('/admin/trigger-events')
     expect(link.text()).toBe('Trigger Event Log')

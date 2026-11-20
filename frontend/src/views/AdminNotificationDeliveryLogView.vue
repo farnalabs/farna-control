@@ -4,7 +4,7 @@
     <PageHeader :title="$t('views.AdminNotificationDeliveryLogView.webhook_deliveries')" :subtitle="$t('views.AdminNotificationDeliveryLogView.webhook_deliveries_subtitle')" data-testid="admin-notification-log-title">
       <p data-testid="admin-notification-log-boundary" class="text-sm text-muted-foreground">
         {{ $t('views.AdminNotificationDeliveryLogView.boundary_prefix') }}
-        <RouterLink to="/admin/trigger-events" class="font-medium text-primary-text underline hover:no-underline">{{ $t('views.AdminNotificationDeliveryLogView.boundary_link') }}</RouterLink>{{ $t('views.AdminNotificationDeliveryLogView.boundary_suffix') }}
+        <RouterLink to="/admin/trigger-events" data-testid="admin-notification-log-trigger-events-link" class="font-medium text-primary-text underline hover:no-underline">{{ $t('views.AdminNotificationDeliveryLogView.boundary_link') }}</RouterLink>{{ $t('views.AdminNotificationDeliveryLogView.boundary_suffix') }}
       </p>
     </PageHeader>
 

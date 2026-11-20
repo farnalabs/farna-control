@@ -2407,6 +2407,9 @@ elements:
       - testid: admin-notification-log-boundary
         type: element
         dynamic_testid: false
+      - testid: admin-notification-log-trigger-events-link
+        type: element
+        dynamic_testid: false
       - testid: admin-notification-log-no-endpoints
         type: element
         dynamic_testid: false
