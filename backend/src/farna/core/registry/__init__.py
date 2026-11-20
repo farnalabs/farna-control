@@ -599,7 +599,7 @@ _publishers: dict[str, Publisher] = {
         name="Modulo Team",
         fingerprint=_registry_fingerprint,
         status=PUBLISHER_TRUST_VERIFIED,
-        website="https://modulo.ai",
+        website="https://modulo.run",
     ),
 }
 

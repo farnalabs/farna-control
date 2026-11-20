@@ -335,7 +335,7 @@ async def _persist_collection_row(
     try:
         org_row = await session.get(Organisation, MODULO_ORG_ID)
         if org_row is None:
-            raise CollectionInstallError("The Modulo sentinel organisation is missing from the database. It is created by migration 0232_seed_modulo_sentinel_organisation — run `alembic upgrade head` and retry the install.")
+            raise CollectionInstallError("The Farna Control sentinel organisation is missing from the database. It is created by migration 0232_seed_modulo_sentinel_organisation — run `alembic upgrade head` and retry the install.")
         existing = (
             await session.execute(
                 select(LibraryPrimitive).where(

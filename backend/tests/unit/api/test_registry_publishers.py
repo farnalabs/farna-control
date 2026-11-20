@@ -94,7 +94,7 @@ class TestVerifyWithTrustTier:
     def test_verify_with_pubkey_returns_trust_tier(self, client: TestClient) -> None:
         mock_pub = MagicMock()
         mock_pub.trust_tier = "green"
-        mock_pub.name = "Modulo Team"
+        mock_pub.name = "Farna Control Team"
 
         with (
             patch("farna.api.routes.registry.get_registry_primitive", return_value=_make_entry()),
@@ -107,7 +107,7 @@ class TestVerifyWithTrustTier:
         assert resp.status_code == 200
         data = resp.json()
         assert data["trust_tier"] == "green"
-        assert data["publisher_name"] == "Modulo Team"
+        assert data["publisher_name"] == "Farna Control Team"
         assert data["verified"] is True
 
     def test_verify_without_pubkey_returns_no_trust_tier(self, client: TestClient) -> None:

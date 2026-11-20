@@ -1,4 +1,4 @@
-"""Canonical library primitives shipped with Modulo.
+"""Canonical library primitives shipped with Farna Control.
 
 Each module defines the content_json for a LibraryPrimitive entry,
 including prompts, schemas, and metadata needed to instantiate the
