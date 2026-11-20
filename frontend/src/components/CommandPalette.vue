@@ -75,6 +75,25 @@ const selectedIndex = ref(0)
 const inputRef = ref<HTMLInputElement | null>(null)
 const dialogRef = ref<HTMLDialogElement | null>(null)
 
+// Sections are the manifest's sidebar-group labels (FAR-2605: pipelines,
+// controls, runs, configuration, administration, system), so a result never
+// advertises a group the sidebar no longer has. The pinned Dashboard sits above
+// the groups and borrows the closest one; /evals, /settings and /admin/system
+// are parent landing paths, labelled by the group their children live in.
+const paletteExtras: SearchItem[] = [
+  { label: 'Dashboard', path: '/', icon: 'LayoutDashboard', section: 'PIPELINES' },
+  { label: 'Pipelines', path: '/pipelines', icon: 'GitFork', section: 'PIPELINES' },
+  { label: 'Library', path: '/library', icon: 'BookOpen', section: 'PIPELINES' },
+  { label: 'Runs', path: '/runs', icon: 'CirclePlay', section: 'RUNS' },
+  { label: 'Evals', path: '/evals', icon: 'CheckSquare', section: 'CONTROLS' },
+  { label: 'Schemas', path: '/schemas', icon: 'Database', section: 'PIPELINES' },
+  { label: 'Connectors', path: '/admin/connectors', icon: 'Plug', section: 'CONFIGURATION' },
+  { label: 'Settings', path: '/settings', icon: 'Settings', section: 'ADMINISTRATION' },
+  { label: 'Organization', path: '/admin/org', icon: 'Building', section: 'ADMINISTRATION' },
+  { label: 'System', path: '/admin/system', icon: 'Settings', section: 'SYSTEM' },
+  { label: 'Cost Management', path: '/admin/costs', icon: 'DollarSign', section: 'RUNS' },
+]
+
 const searchItems = computed<SearchItem[]>(() => {
   const seen = new Set<string>()
   const items: SearchItem[] = []
@@ -100,19 +119,7 @@ const searchItems = computed<SearchItem[]>(() => {
   // (group-level systemAdminOnly + item-level gates already applied),
   // otherwise it stays hidden. Parent routes with no manifest entry are
   // landing pages and are always shown.
-  const extras: SearchItem[] = [
-    { label: 'Dashboard', path: '/', icon: 'LayoutDashboard', section: 'BUILD' },
-    { label: 'Pipelines', path: '/pipelines', icon: 'GitFork', section: 'BUILD' },
-    { label: 'Library', path: '/library', icon: 'BookOpen', section: 'BUILD' },
-    { label: 'Runs', path: '/runs', icon: 'CirclePlay', section: 'BUILD' },
-    { label: 'Evals', path: '/evals', icon: 'CheckSquare', section: 'MONITOR' },
-    { label: 'Schemas', path: '/schemas', icon: 'Database', section: 'CONFIGURE' },
-    { label: 'Connectors', path: '/admin/connectors', icon: 'Plug', section: 'ADMIN' },
-    { label: 'Settings', path: '/settings', icon: 'Settings', section: 'ADMIN' },
-    { label: 'Organization', path: '/admin/org', icon: 'Building', section: 'ADMIN' },
-    { label: 'System', path: '/admin/system', icon: 'Settings', section: 'ADMIN' },
-    { label: 'Cost Management', path: '/admin/costs', icon: 'DollarSign', section: 'ADMIN' },
-  ]
+  const extras: SearchItem[] = paletteExtras
   const rawItems = getNavGroups().flatMap((g) => g.items)
   for (const extra of extras) {
     if (seen.has(extra.path)) continue
@@ -177,7 +184,9 @@ function onBackdropClick(event: MouseEvent) {
   if (event.target === event.currentTarget) close()
 }
 
-defineExpose({ open })
+// `paletteExtras` is exposed so the spec can assert every curated section
+// label against the manifest's current sidebar groups (FAR-2605).
+defineExpose({ open, paletteExtras })
 
 function navigate() {
   const items = filteredItems.value
