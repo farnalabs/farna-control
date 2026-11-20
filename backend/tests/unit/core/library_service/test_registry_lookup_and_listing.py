@@ -4,8 +4,9 @@ Removing the community library must not remove the in-code modulo registry:
 ``get_primitive`` / ``get_primitive_by_slug`` / ``_re_read_primitive`` still
 fall back to it on a DB miss, and ``list_primitives`` still serves it on the
 ``source="modulo"`` and default (merged) paths, while every other ``source``
-value (local / registry / community) reaches the SQL filter with an exact
-COUNT.
+value (local / registry) reaches the SQL filter with an exact COUNT. The
+``community`` source is retired (migration 0356), so it is no longer a live
+DB-only source and is not exercised here.
 """
 
 import asyncio
@@ -202,8 +203,10 @@ async def _list(lister: AsyncMock, registry: list[object] | None = None, **kwarg
 
 
 class TestListPrimitivesSourceFilter:
-    @pytest.mark.parametrize("source", ["community", "registry"])
-    async def test_db_only_source_reaches_sql_filter_with_exact_total(self, source: str) -> None:
+    async def test_db_only_source_reaches_sql_filter_with_exact_total(self) -> None:
+        # ``registry`` is the only live DB-only source now that the legacy
+        # ``community`` source is retired (migration 0356).
+        source = "registry"
         row = _prim()
         lister = AsyncMock(return_value=_org_page([row], total=7))
         result = await _list(lister, source=source)
