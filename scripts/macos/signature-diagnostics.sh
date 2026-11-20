@@ -115,7 +115,8 @@ rm -rf "$probe_dir"
 section "syspolicyd log since the first assessment (info + debug)"
 log show --info --debug --style compact --start "$assessment_started" \
   --predicate 'process == "syspolicyd" OR process == "spctl" OR subsystem == "com.apple.syspolicy"' 2>/dev/null \
-  | grep -v 'CSSMERR_CSP_INVALID_KEYATTR_MASK' | tail -n 250
+  | grep -Ev 'CSSMERR_CSP_INVALID_KEYATTR_MASK|SecKeyVerifySignature|SecTrustEvaluate|SecCertificate|SecTrustCopy|SecPolicyCreate' \
+  | tail -n 250
 
 section "symbolic links (absolute or escaping the bundle are flagged)"
 python3 -I - "$app" <<'PY'
