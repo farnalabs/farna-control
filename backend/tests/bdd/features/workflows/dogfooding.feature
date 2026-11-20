@@ -10,7 +10,7 @@ Feature: Dogfooding Pipeline
     When the dogfooding pipeline definition is inspected
     Then its name is "Dogfooding Pipeline"
     And its version is "1.0.0"
-    And its author is "Modulo"
+    And its author is "Farna Control"
 
   Scenario: Dogfooding pipeline has the expected five steps
     When the dogfooding pipeline steps are inspected
