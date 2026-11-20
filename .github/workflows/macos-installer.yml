@@ -593,14 +593,14 @@ jobs:
             done
             [[ "${#owned[@]}" -gt 0 ]] || return 0
 
-            for pid in "${owned[@]}"; do
+            for pid in ${owned[@]+"${owned[@]}"}; do
               owned_pid_is_alive "$pid" || continue
               signal_owned_process "$pid" TERM
             done
             attempt=0
             while [[ "$attempt" -lt "$grace_seconds" ]]; do
               survivors=0
-              for pid in "${owned[@]}"; do
+              for pid in ${owned[@]+"${owned[@]}"}; do
                 owned_pid_is_alive "$pid" && survivors=1
               done
               [[ "$survivors" -eq 0 ]] && break
@@ -610,7 +610,7 @@ jobs:
             # Escalate: Postgres' SIGTERM shutdown is "smart" and can wait for an
             # open client forever, so anything still alive after the grace window
             # is SIGKILLed (its owned session first, when it is the leader).
-            for pid in "${owned[@]}"; do
+            for pid in ${owned[@]+"${owned[@]}"}; do
               owned_pid_is_alive "$pid" || continue
               printf 'stop_owned_processes: escalating to SIGKILL pid=%s\n' "$pid" >&2
               signal_owned_process "$pid" KILL
@@ -618,7 +618,7 @@ jobs:
             attempt=0
             while [[ "$attempt" -lt 5 ]]; do
               survivors=0
-              for pid in "${owned[@]}"; do
+              for pid in ${owned[@]+"${owned[@]}"}; do
                 owned_pid_is_alive "$pid" && survivors=1
               done
               [[ "$survivors" -eq 0 ]] && break
@@ -626,7 +626,7 @@ jobs:
               attempt=$((attempt + 1))
             done
             survivors=0
-            for pid in "${owned[@]}"; do
+            for pid in ${owned[@]+"${owned[@]}"}; do
               if owned_pid_is_alive "$pid"; then
                 printf '::error::stop_owned_processes could not stop owned PID %s (data_dir=%s)\n' "$pid" "$data_dir" >&2
                 survivors=$((survivors + 1))
@@ -636,9 +636,33 @@ jobs:
           }
           # END stop_owned_processes
 
-          cleanup() {
+          # BEGIN smoke_effective_exit_status (extracted verbatim by test_macos_installer_normalize)
+          # FAR-2588: macOS /bin/bash 3.2 aborts a `set -u` script on an
+          # expansion error (e.g. "${EMPTY[@]}": unbound variable) but hands
+          # the EXIT trap a $? of 0. Run 44680480922 crashed before the first
+          # post-install assertion and the trap still reported
+          # original_status=0, so the job went green without ever installing.
+          # The body therefore sets SMOKE_BODY_COMPLETED=1 as its very last
+          # statement, and any exit that arrives before that line is a failure
+          # no matter what $? says.
+          SMOKE_BODY_COMPLETED=0
+          smoke_effective_exit_status() {
+            local reported_status="${1:-0}"
+            if [[ "$reported_status" -eq 0 && "${SMOKE_BODY_COMPLETED:-0}" != 1 ]]; then
+              printf '::error::smoke body exited before completing every gate (reported exit status 0); failing the job instead of masking the early exit\n' >&2
+              printf '%s\n' 1
+              return 0
+            fi
+            printf '%s\n' "$reported_status"
+          }
+          # END smoke_effective_exit_status
 
-            local original_status="${1:-0}"
+          cleanup() {
+            # $? is captured by the trap itself ('cleanup "$?"') before any
+            # other command can overwrite it.
+            local reported_status="${1:-0}"
+            local original_status
+            original_status="$(smoke_effective_exit_status "$reported_status")"
             local final_status="$original_status"
             set +e
             cleanup_result() {
@@ -817,7 +841,7 @@ jobs:
                else
                  cleanup_overall=failed
                fi
-               printf 'cleanup result: overall=%s original_status=%s final_status=%s\n' "$cleanup_overall" "$original_status" "$final_status"
+               printf 'cleanup result: overall=%s reported_status=%s original_status=%s body_completed=%s final_status=%s\n' "$cleanup_overall" "$reported_status" "$original_status" "$SMOKE_BODY_COMPLETED" "$final_status"
                exit "$final_status"
              }
 
@@ -1279,7 +1303,8 @@ jobs:
           cat "$DATA/pre-smoke-nested_binary_discovery.log"
           echo '::endgroup::'
           binary_index=0
-          for binary in "${NESTED_BINARIES[@]}"; do
+          # FAR-2588: bash 3.2 + set -u treats an empty "${ARR[@]}" as unbound.
+          for binary in ${NESTED_BINARIES[@]+"${NESTED_BINARIES[@]}"}; do
             [[ -n "$binary" ]] || continue
             # Classify and sign each existing executable. A bundled runtime may
             # legitimately ship shell-script wrappers (e.g. python-build-standalone's
@@ -1585,6 +1610,10 @@ jobs:
           run_pre_smoke mount_attached_transition bash -c '[[ "$1" -eq 0 ]]' bash "$MOUNT_ATTACHED"
           echo "pre-install: detached mount: $MOUNT"
           INSTALL_ROOT="$RUNNER_TEMP/modulo install"
+          # BEGIN install_sh_assertion (extracted verbatim by test_macos_installer_normalize)
+          # FAR-2588: INSTALL_ENV is empty on the normal (stapled) path, and
+          # macOS bash 3.2 + set -u rejects an empty "${INSTALL_ENV[@]}" as an
+          # unbound variable. Always expand it with the ${X[@]+"${X[@]}"} guard.
           INSTALL_ENV=()
           if [[ "$dmg_staple_ticket_unavailable" -eq 1 ]]; then
             INSTALL_ENV=(
@@ -1598,9 +1627,10 @@ jobs:
           # Post-install smoke assertions with diagnostic capture
           # shellcheck disable=SC2016
           run_assertion "install_sh" \
-            "${INSTALL_ENV[@]}" \
+            ${INSTALL_ENV[@]+"${INSTALL_ENV[@]}"} \
             bash -c 'MODULO_INSTALL_ROOT="$1" MODULO_DATA_DIR="$2" scripts/macos/install.sh "$3"' \
             bash "$INSTALL_ROOT" "$DATA" "$DMG_WITH_SPACES" || exit 1
+          # END install_sh_assertion
 
           # The spaces-path copy exists only to prove the installer tolerates a
           # DMG path containing spaces. Once installed it is dead weight, and the
@@ -1881,6 +1911,10 @@ jobs:
               --expected "$DATA/notarization-identity.env" \
               --path "$DMG" \
               $dmg_identity_after_staple_arg || exit 1
+
+            # FAR-2588: must stay the LAST statement of this step. The EXIT
+            # trap treats any exit before this line as a failure.
+            SMOKE_BODY_COMPLETED=1
 
       - name: Upload real macOS installer
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}

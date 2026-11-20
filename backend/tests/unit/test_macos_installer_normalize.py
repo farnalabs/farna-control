@@ -2271,3 +2271,272 @@ def test_macos_workflow_preserves_the_submission_whatever_the_verdict() -> None:
     native = names.index("Sign, notarize and smoke-test native installer")
     assert native < names.index("Upload the notarization submission record")
     assert native < names.index("Preserve the submitted DMG after an unsuccessful run")
+
+
+# ---------------------------------------------------------------------------
+# FAR-2588: macOS ships /bin/bash 3.2. Under `set -u` it rejects an EMPTY
+# "${ARR[@]}" as an unbound variable AND exits 0 (the EXIT trap also sees
+# $? == 0). Run 44680480922 died that way right after
+# "pre-install: detached mount", skipped every post-install assertion, and
+# reported success. These tests run the extracted blocks under the host bash
+# and, when Docker is available, under the real bash 3.2.57 (official
+# `bash:3.2` image).
+# ---------------------------------------------------------------------------
+
+_BASH32_IMAGE = "bash:3.2"
+
+
+def _bash32_available() -> bool:
+    docker = shutil.which("docker")
+    if docker is None:
+        return False
+    for args in (["image", "inspect", _BASH32_IMAGE], ["pull", "-q", _BASH32_IMAGE]):
+        try:
+            result = subprocess.run(  # noqa: S603 - fixed docker CLI and pinned public image
+                [docker, *args], capture_output=True, text=True, timeout=180, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if result.returncode == 0:
+            return True
+    return False
+
+
+def _run_bash_stdin(flavour: str, script: str, args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run ``script`` from stdin under the host bash or the real bash 3.2."""
+    if flavour == "host":
+        command = [_bash_executable(), "--noprofile", "--norc", "-s", "--", *args]
+    else:
+        if not _bash32_available():
+            pytest.skip("docker with the bash:3.2 image is required for the bash 3.2 variant")
+        docker = shutil.which("docker")
+        assert docker is not None
+        command = [docker, "run", "--rm", "-i", _BASH32_IMAGE, "bash", "--noprofile", "--norc", "-s", "--", *args]
+    # Bytes, not text mode: on Windows text mode turns every newline into CRLF
+    # and bash then reads "pipefail\r" as an option name.
+    raw = subprocess.run(  # noqa: S603 - fixed interpreter and repository-owned workflow text
+        command,
+        input=script.encode("utf-8"),
+        capture_output=True,
+        timeout=180,
+        check=False,
+    )
+    return subprocess.CompletedProcess(
+        raw.args,
+        raw.returncode,
+        raw.stdout.decode("utf-8", "replace").replace("\r\n", "\n"),
+        raw.stderr.decode("utf-8", "replace").replace("\r\n", "\n"),
+    )
+
+
+_BASH_FLAVOURS = ["host", "bash-3.2"]
+
+
+def _install_sh_harness(block: str) -> str:
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            'dmg_staple_ticket_unavailable="$1"',
+            "dmg_ticket_deferral_reason=apple_cloudkit_ticket_unavailable",
+            'INSTALL_ROOT="/tmp/modulo install"',
+            "DATA=/tmp/modulo-native-smoke-data",
+            'DMG_WITH_SPACES="/tmp/Farna Control 0.0.0 macos arm64.dmg"',
+            "run_assertion() { printf 'argv:%s\\n' \"$@\"; }",
+            block,
+            "echo REACHED_AFTER_INSTALL_ASSERTION",
+            "",
+        ]
+    )
+
+
+def _argv_lines(stdout: str) -> list[str]:
+    return [line.removeprefix("argv:") for line in stdout.splitlines() if line.startswith("argv:")]
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_install_sh_assertion_runs_with_an_empty_install_env(flavour: str) -> None:
+    """FAR-2588: the stapled (normal) path leaves INSTALL_ENV empty; the install
+    assertion must still run instead of dying on an unbound-variable error."""
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "install_sh_assertion")
+
+    result = _run_bash_stdin(flavour, _install_sh_harness(block), ["0"])
+
+    assert result.returncode == 0, result.stderr
+    assert "unbound variable" not in result.stderr
+    assert "REACHED_AFTER_INSTALL_ASSERTION" in result.stdout
+    argv = _argv_lines(result.stdout)
+    assert argv[:3] == ["install_sh", "bash", "-c"]
+    assert argv[-3:] == ["/tmp/modulo install", "/tmp/modulo-native-smoke-data", "/tmp/Farna Control 0.0.0 macos arm64.dmg"]
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_install_sh_assertion_passes_the_deferral_env_when_the_ticket_is_unavailable(flavour: str) -> None:
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "install_sh_assertion")
+
+    result = _run_bash_stdin(flavour, _install_sh_harness(block), ["1"])
+
+    assert result.returncode == 0, result.stderr
+    argv = _argv_lines(result.stdout)
+    assert argv[:4] == [
+        "install_sh",
+        "env",
+        "MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1",
+        "MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON=apple_cloudkit_ticket_unavailable",
+    ]
+    assert argv[4] == "bash"
+
+
+def test_macos_install_sh_harness_detects_the_unguarded_expansion_under_bash32() -> None:
+    """Negative control: the pre-FAR-2588 unguarded expansion really is fatal
+    under bash 3.2, so the harness above would have caught run 44680480922."""
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "install_sh_assertion")
+    unguarded = block.replace('${INSTALL_ENV[@]+"${INSTALL_ENV[@]}"}', '"${INSTALL_ENV[@]}"')
+    assert unguarded != block
+
+    result = _run_bash_stdin("bash-3.2", _install_sh_harness(unguarded), ["0"])
+
+    assert "INSTALL_ENV[@]: unbound variable" in result.stderr
+    assert "REACHED_AFTER_INSTALL_ASSERTION" not in result.stdout
+
+
+def _exit_status_harness(block: str) -> str:
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            block,
+            "cleanup() {",
+            '  local reported_status="${1:-0}" original_status',
+            '  original_status="$(smoke_effective_exit_status "$reported_status")"',
+            '  printf \'cleanup result: reported_status=%s original_status=%s\\n\' "$reported_status" "$original_status"',
+            '  exit "$original_status"',
+            "}",
+            "trap 'cleanup \"$?\"' EXIT",
+            "EMPTY=()",
+            'case "$1" in',
+            # bash 3.2 aborts on the empty array (and exits 0); bash 4.4+
+            # accepts it and aborts on the unset variable instead.
+            '  crash) printf \'%s\\n\' "${EMPTY[@]}" "$UNSET_SMOKE_VARIABLE" ;;',
+            "  early_exit) exit 0 ;;",
+            "  fail) false ;;",
+            "  ok) : ;;",
+            "esac",
+            "SMOKE_BODY_COMPLETED=1",
+            "",
+        ]
+    )
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+@pytest.mark.parametrize("mode", ["crash", "fail", "early_exit"])
+def test_macos_smoke_trap_fails_when_the_body_dies_before_cleanup(flavour: str, mode: str) -> None:
+    """FAR-2588: an exit before the body's last statement turns the job red,
+    including bash 3.2's unbound-variable abort that reports status 0."""
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "smoke_effective_exit_status")
+
+    result = _run_bash_stdin(flavour, _exit_status_harness(block), [mode])
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "original_status=0" not in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_smoke_trap_succeeds_when_the_body_completes(flavour: str) -> None:
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "smoke_effective_exit_status")
+
+    result = _run_bash_stdin(flavour, _exit_status_harness(block), ["ok"])
+
+    assert result.returncode == 0, result.stderr
+    assert "original_status=0" in result.stdout
+
+
+def _shell_statements(script: str) -> list[str]:
+    return [line.strip() for line in script.splitlines() if line.strip() and not line.strip().startswith("#")]
+
+
+def test_macos_smoke_cleanup_derives_its_status_from_the_completion_sentinel() -> None:
+    """FAR-2588: the real cleanup trap captures $? first, routes it through the
+    sentinel check, and the sentinel is set only by the step's last statement."""
+    _step, build_run = _native_installer_step()
+
+    assert "trap 'cleanup \"$?\"' EXIT" in build_run
+    cleanup_statements = _shell_statements(build_run[build_run.index("cleanup() {") :])
+    assert cleanup_statements[1] == 'local reported_status="${1:-0}"'
+    assert 'original_status="$(smoke_effective_exit_status "$reported_status")"' in cleanup_statements[:5]
+    assert _shell_statements(build_run)[-1] == "SMOKE_BODY_COMPLETED=1"
+    assert _shell_statements(build_run).count("SMOKE_BODY_COMPLETED=1") == 1
+    assert build_run.index("SMOKE_BODY_COMPLETED=0") < build_run.index("trap 'cleanup \"$?\"' EXIT")
+
+
+def _macos_bash_sources() -> dict[str, str]:
+    """Every bash text that runs under macOS /bin/bash 3.2: each run block of
+    the macOS build job plus the repository scripts those blocks execute."""
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    sources: dict[str, str] = {}
+    for step in workflow["jobs"]["build"]["steps"]:
+        run = step.get("run")
+        if isinstance(run, str):
+            sources[f"macos-installer.yml::{step.get('name')}"] = run
+    scripts = sorted((REPO_ROOT / "scripts" / "macos").glob("*.sh"))
+    scripts += [REPO_ROOT / "scripts" / "native-stack-assertions.sh", REPO_ROOT / "scripts" / "create-macos-info-plist.sh"]
+    for path in scripts:
+        sources[path.relative_to(REPO_ROOT).as_posix()] = path.read_text(encoding="utf-8")
+    return sources
+
+
+_GUARDED_ARRAY = re.compile(r'\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)\[@\]\+"\$\{(?P=name)\[@\]\}"\}')
+_ANY_ARRAY_EXPANSION = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)\[[@*]\]\}")
+
+#: Constructs that do not exist (or behave differently) in bash 3.2.
+_BASH4_ONLY = {
+    "mapfile/readarray": re.compile(r"\b(mapfile|readarray)\b"),
+    "case-modification expansion": re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)\}"),
+    "associative array": re.compile(r"\b(declare|local|typeset)\s+-[a-zA-Z]*A"),
+    "nameref": re.compile(r"\b(declare|local|typeset)\s+-[a-zA-Z]*n\b"),
+    "append-both redirection &>>": re.compile(r"&>>"),
+    "pipe-stderr |&": re.compile(r"\|&"),
+    "wait -n": re.compile(r"\bwait\s+-n\b"),
+    "[[ -v ]] test": re.compile(r"\[\[\s+-v\s"),
+    "transformation expansion ${x@Q}": re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*@[QEPAaKk]\}"),
+    "negative array index": re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}"),
+    "case fallthrough ;& / ;;&": re.compile(r";;&|;&\s*$", re.MULTILINE),
+    "coproc": re.compile(r"\bcoproc\b"),
+    "globstar": re.compile(r"\bglobstar\b"),
+    "dynamic fd {var}>": re.compile(r"\bexec\s+\{[A-Za-z_]+\}[<>]"),
+    "EPOCHSECONDS/EPOCHREALTIME": re.compile(r"\bEPOCH(SECONDS|REALTIME)\b"),
+}
+
+
+def _code_only(text: str) -> str:
+    """Drop whole-line comments so prose that names a construct is not flagged."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def _unguarded_array_expansions(text: str) -> list[str]:
+    code = _GUARDED_ARRAY.sub("<guarded>", _code_only(text))
+    return [match.group("name") for match in _ANY_ARRAY_EXPANSION.finditer(code)]
+
+
+def test_macos_bash_never_expands_a_possibly_empty_array_unguarded() -> None:
+    """FAR-2588: under bash 3.2 + set -u an empty "${X[@]}" aborts the script
+    with exit 0. Every element expansion must use ${X[@]+"${X[@]}"}."""
+    offenders = [f"{label}: {name}" for label, text in _macos_bash_sources().items() for name in _unguarded_array_expansions(text)]
+    assert not offenders, offenders
+
+
+def test_macos_bash_uses_no_bash4_only_constructs() -> None:
+    offenders: list[str] = []
+    for label, text in _macos_bash_sources().items():
+        code = _code_only(text)
+        offenders.extend(f"{label}: {construct}" for construct, pattern in _BASH4_ONLY.items() if pattern.search(code))
+    assert not offenders, offenders
+
+
+def test_macos_bash_scanner_flags_the_run_44680480922_expansion() -> None:
+    """The scanner must catch the exact expansion that masked the crash."""
+    assert _unguarded_array_expansions('run_assertion "install_sh" "${INSTALL_ENV[@]}" bash -c true') == ["INSTALL_ENV"]
+    assert _BASH4_ONLY["mapfile/readarray"].search("mapfile -t LINES < file")
