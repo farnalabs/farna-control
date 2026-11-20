@@ -101,13 +101,15 @@ supported native-install targets.
 
 The same linux-amd64 bundle also ships as a Debian package,
 `farna-control_<version>_amd64.deb`, built and validated on Ubuntu 22.04 and
-24.04 by `.github/workflows/linux-deb.yml`. Phase 1 is a download from the
-GitHub release page and a local install; a signed apt repository (so
+24.04 by `.github/workflows/linux-deb.yml` on every release (and rehearsed on
+every dry-run). The release `SHA256SUMS`, the signed `RELEASE_MANIFEST.json`
+and the build-provenance attestation all cover it. Phase 1 is a download from
+the GitHub release page and a local install; a signed apt repository (so
 `apt upgrade` picks up new releases) is coming next.
 
 ```bash
-# download farna-control_<version>_amd64.deb (+ .sha256) from the release page, then:
-sha256sum --check farna-control_<version>_amd64.deb.sha256
+# download farna-control_<version>_amd64.deb and SHA256SUMS from the release page, then:
+grep " farna-control_<version>_amd64.deb$" SHA256SUMS | sha256sum --check -
 sudo apt install ./farna-control_<version>_amd64.deb
 
 # then, as your normal (non-root) user:
