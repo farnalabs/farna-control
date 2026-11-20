@@ -1006,15 +1006,7 @@ export default {
       "save_failed": "Failed to save profile"
     },
     "SettingsNotificationLogView": {
-      "error_detail": "Error Detail",
-      "delivery_history_for_all_webhook_notifications": "Delivery history for all webhook notifications",
-      "last_attempt": "Last Attempt",
-      "status": "Status",
-      "delivered": "Delivered",
-      "failed": "Failed",
-      "from": "From",
-      "destination": "Destination",
-      "attempts": "Attempts"
+      "error_detail": "Error Detail"
     },
     "SettingsNotificationsView": {
       "title": "Notification Preferences",
