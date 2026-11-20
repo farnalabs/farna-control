@@ -180,7 +180,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const pricingUrl = 'https://modulo.run/pricing'
+const pricingUrl = 'https://farna.dev/control/pricing/'
 const graceDialogOpen = ref(false)
 
 const state = computed(() => props.status.licence_state)

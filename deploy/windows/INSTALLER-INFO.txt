@@ -8,4 +8,4 @@ The native runtime bundle is built separately. The installer intentionally refus
 
 After installation, you can choose to open the local Modulo URL in your browser. The URL defaults to http://127.0.0.1:8000 and can be changed at compile time with /D MODULO_URL="http://127.0.0.1:8000".
 
-For setup and operating guidance, see the project documentation at https://modulo.run/docs. The license page in the installer displays the repository's authoritative LICENSE file.
+For setup and operating guidance, see the project documentation at https://farna.dev/control/docs/. The license page in the installer displays the repository's authoritative LICENSE file.

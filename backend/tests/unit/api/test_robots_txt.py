@@ -6,7 +6,7 @@ These tests pin the *contract* those blocks must uphold so the behaviour is
 regression-tested without a live nginx instance:
 
 - ``staging-control.farna.dev`` must receive a ``Disallow: /`` body.
-- ``control.farna.dev`` / ``demo.modulo.run`` receive the static allow-all file
+- ``control.farna.dev`` (including its ``/demo`` route) receives the static allow-all file
   (frontend/public/robots.txt), which Vite copies into the built dist.
 """
 
