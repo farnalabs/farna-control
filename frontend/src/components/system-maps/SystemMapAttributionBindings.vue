@@ -33,6 +33,7 @@
           id="system-map-binding-node"
           v-model="nodeKey"
           :options="nodeOptions"
+          :placeholder="$t('views.SystemMapDetailView.select_node')"
           option-label="label"
           option-value="value"
           option-disabled="disabled"
@@ -50,6 +51,7 @@
           id="system-map-binding-pipeline"
           v-model="pipelineId"
           :options="pipelineOptions"
+          :placeholder="$t('views.SystemMapDetailView.select_pipeline')"
           option-label="label"
           option-value="value"
           option-disabled="disabled"
@@ -67,6 +69,7 @@
           id="system-map-binding-trigger"
           v-model="triggerId"
           :options="triggerOptions"
+          :placeholder="$t('views.SystemMapDetailView.select_trigger')"
           option-label="label"
           option-value="value"
           option-disabled="disabled"
@@ -124,8 +127,11 @@ const readOnly = computed(() => props.readOnly === true)
 const eligibleNodes = computed(() => props.nodes.filter((node) => node.node_type === (bindingKind.value === 'trigger' ? 'pipeline' : 'improvement_loop')))
 
 // AppSelect option lists for the create form's dropdowns (they were native
-// <select> elements). Each keeps its disabled placeholder entry so an
-// unselected control reads "Select node/pipeline/trigger" rather than blank.
+// <select> elements). Each keeps its disabled empty entry so the prompt is not
+// a selectable value, and each control ALSO passes that same string as its
+// explicit `placeholder`: PrimeVue does not treat a disabled option as a valid
+// selection, so without the placeholder the closed control renders blank and
+// the prompt appears only inside the opened option list.
 const kindOptions = computed(() => [
   { value: 'trigger', label: t('views.SystemMapDetailView.trigger_binding') },
   { value: 'action_pipeline', label: t('views.SystemMapDetailView.action_pipeline_binding') },

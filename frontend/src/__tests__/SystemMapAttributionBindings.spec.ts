@@ -113,6 +113,30 @@ describe('SystemMapAttributionBindings', () => {
     expect(wrapper.find('[data-testid="system-map-binding-trigger"]').exists()).toBe(false)
   })
 
+  it('shows the "Select …" prompt in each closed control while no real choice is made', async () => {
+    mockGet.mockResolvedValue(pipelinesResponse())
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    // A disabled '' sentinel is NOT a valid PrimeVue selection, so without an
+    // explicit placeholder the closed control renders blank and the prompt is
+    // only visible inside the opened option list.
+    for (const [testid, prompt] of [
+      ['system-map-binding-node', 'Select a node'],
+      ['system-map-binding-pipeline', 'Select a pipeline'],
+      ['system-map-binding-trigger', 'Select a trigger'],
+    ]) {
+      expect(bindingSelect(wrapper, testid).props('modelValue')).toBe('')
+      expect(wrapper.get(`[data-testid="${testid}"] .p-select-label`).text()).toBe(prompt)
+    }
+
+    // Choosing a real option replaces the prompt; the '' sentinel stays out of
+    // the selectable set.
+    await choose(wrapper, 'system-map-binding-node', 'pipeline-1')
+    expect(wrapper.get('[data-testid="system-map-binding-node"] .p-select-label').text()).toBe('Pipeline 1')
+  })
+
   it('loads triggers for the selected pipeline and clears them when the selection changes', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path === '/api/v1/pipelines') return Promise.resolve(pipelinesResponse())
