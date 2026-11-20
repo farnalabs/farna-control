@@ -12,8 +12,7 @@ code:
   - backend/src/farna/api/routes/pipelines.py
   - backend/src/farna/core/workflow_import_export/__init__.py
   - backend/src/farna/db/models/run.py
-  - backend/src/farna/db/migrations/versions/0150_add_router_no_match_status.py
-  - backend/src/farna/db/migrations/versions/0284_add_rejected_run_status.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - frontend/src/views/PipelineEditorView.vue
   - frontend/src/constants/runStatuses.ts
 unit-tests:
@@ -64,12 +63,12 @@ registry (`feat-router`).
       NOT classified as `failed`
 - [x] `router_no_match` is a terminal, non-failure run status in
       `TERMINAL_STATUSES` (`run.py`) and in the `ck_runs_status` DB CHECK
-      constraint (migration `0150_add_router_no_match_status`), echoed in
+      constraint (baseline schema, `0350_baseline_schema.py`), echoed in
       `frontend/src/constants/runStatuses.ts` and analyzable via the analytics
       status filter
 - [x] `rejected` (FAR-1487) joins the same closed run-status vocabulary as a
-      terminal, non-failure status (HITL reject with no reject route; migration
-      `0284_add_rejected_run_status` widens `ck_runs_status` and the
+      terminal, non-failure status (HITL reject with no reject route; the
+      baseline schema widens `ck_runs_status` and the
       workspace-drift sweep partial index): classified `excluded`, never
       advances a lifecycle journey, excluded from failure analytics
 - [x] Router rule targets are excluded from pipeline entry-point resolution

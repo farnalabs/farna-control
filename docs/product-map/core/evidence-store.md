@@ -4,7 +4,8 @@ prd: N/A
 adr: []
 code:
   - backend/src/farna/db/models/evidence.py
-  - backend/src/farna/db/migrations/versions/0263_evidence_layer.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
+  - backend/src/farna/db/migrations/versions/0351_baseline_rls.py
   - backend/src/farna/core/eval_engine/evidence_layer.py
   - backend/src/farna/core/eval_engine/author_warnings.py
   - backend/src/farna/core/evidence_retention.py
@@ -48,7 +49,8 @@ the manifest registry.
       `producer_type` is CHECK-constrained to the five-value vocabulary
       `eval` / `policy_gate` / `run` / `system_state` / `derived`
       (`db/models/evidence.py`)
-- [x] RLS org-isolation is enforced by migration `0263_evidence_layer`; the ORM
+- [x] RLS org-isolation is enforced by the baseline RLS migration
+      (`0351_baseline_rls.py`, with the table in `0350_baseline_schema.py`); the ORM
       exposes no `update()` / `delete()`, and DELETE from the table is forbidden
       except through the sanctioned retention sweep - the E1 append-only gate is
       pinned by `tests/architecture/test_evidence_deletion_carveout.py`
@@ -155,7 +157,8 @@ the manifest registry.
   append-only evidence store, the retention policy + purge sweep and the
   advisory author warnings shipped in `e64ddac0e` without a product-map home -
   invisible to Assistant's `search_documentation` indexer and the feature graph.
-  Behaviors verified against `db/models/evidence.py`, migration 0263,
+  Behaviors verified against `db/models/evidence.py`, the baseline schema/RLS
+  migrations,
   `core/eval_engine/evidence_layer.py`, `core/eval_engine/author_warnings.py`,
   `core/evidence_retention.py`, `api/routes/admin_evidence_retention.py` and the
   retention / author-warning / deletion-carveout unit + integration suites.

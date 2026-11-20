@@ -9,7 +9,6 @@ code:
   - backend/src/farna/db/models/environment_profile.py
   - backend/src/farna/db/crud/pipeline_snapshot.py
   - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
-  - backend/src/farna/db/migrations/versions/0338_environment_profile_max_node_seconds.py
   - backend/src/farna/core/graph_validator/__init__.py
   - backend/src/farna/core/runtime_provider
   - backend/src/farna/core/team_visibility.py
@@ -83,7 +82,8 @@ into the Runners page as redirects.)
       (`backend/tests/unit/graph_validator/test_environment_capabilities.py`)
 - [x] A profile carries a provider wall-clock capability (FAR-1359):
       `max_node_seconds` (default 3300, wire-bounded 60..604800) is persisted on
-      the profile (migration 0338) and exposed read-only in the create/edit form
+      the profile (baseline schema, `0350_baseline_schema.py`) and exposed
+      read-only in the create/edit form
       (`envprofile-form-max-node-seconds`); the GraphValidator refuses a profile
       whose capability exceeds the run transport ceiling
       (`ENV_PROFILE_WALL_CLOCK_EXCEEDS_RUN_CEILING`) and refuses any

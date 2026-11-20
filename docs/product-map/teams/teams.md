@@ -10,7 +10,7 @@ code:
   - backend/src/farna/api/routes/viewmodel.py
   - backend/src/farna/db/crud/team_scope.py
   - backend/src/farna/db/models/team.py
-  - backend/src/farna/db/migrations/versions/0287_team_rls_lifecycle_evals.py
+  - backend/src/farna/db/migrations/versions/0351_baseline_rls.py
 unit-tests:
   - backend/tests/unit/api/test_teams.py
   - backend/tests/unit/api/test_teams_routes_coverage.py
@@ -108,9 +108,9 @@ org profile, and is the product-map home for user roles.
       `backend/tests/unit/api/test_triggers_routes_coverage.py`)
 - [x] DB team RLS covers every team-scoped table (FAR-1514):
       `lifecycle_maps`, `eval_datasets` and `eval_suites` joined the five 0124
-      tables - migration `0287_team_rls_lifecycle_evals` drops their org-only
-      `rls_org_isolation` policy and creates the shared `rls_team_isolation`
-      policy carrying the full visibility matrix (org AND - `visibility='org'`
+      tables, and the baseline RLS migration `0351_baseline_rls.py` applies the
+      shared `rls_team_isolation` policy carrying the full visibility matrix
+      (org AND - `visibility='org'`
       / NULL / no owner team / `owner_team_id IN my team_memberships` /
       org admin / `app.execution_context='true'`). Postgres ORs permissive
       policies, so a lone org policy beside a team policy made the team policy
