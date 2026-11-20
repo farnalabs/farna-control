@@ -1618,14 +1618,46 @@ function captureDeepLink() {
 }
 
 /**
+ * Resolve an eval id named by a deep link to its definition.
+ *
+ * The pipeline's eval list is paged by the API (default page_size 20), so an
+ * eval outside that first page is absent from `evals.value` even though it
+ * still exists. Reading it directly keeps the row action faithful no matter how
+ * many evals a pipeline has. The single-eval read is unscoped by pipeline (and
+ * includes soft-deleted rows for historical lookups), so the pipeline guard the
+ * list lookup applied is kept here: an eval that belongs to another pipeline is
+ * not preselected.
+ */
+async function resolveLinkedEval(
+  evalId: string,
+  pipelineId: string,
+): Promise<EvalDefinition | null> {
+  const inList = evals.value.find(e => e.id === evalId)
+  if (inList) return inList
+  try {
+    const { data } = await api.GET('/api/v1/evals/{eval_id}', {
+      params: { path: { eval_id: evalId } },
+    })
+    // openapi-fetch resolves a non-2xx as `{ data: undefined, error }` — it
+    // never throws — so a missing eval simply has no data and is treated as
+    // "nothing to preselect".
+    const fetched = (data ?? null) as EvalDefinition | null
+    if (fetched && fetched.pipeline_id === pipelineId) return fetched
+  } catch {
+    // Network-level failure only — treat as "no such eval".
+  }
+  return null
+}
+
+/**
  * Resolve the `?pipeline_id=` / `?eval_id=` deep link from the evals list.
  *
  * - list not loaded yet (a read is in flight, or it failed): keep the link
  *   pending — the page already shows the load error with a retry, and a failed
  *   read is not evidence that the pipeline is missing;
  * - id resolves: select that pipeline, load its nodes and evals, then open the
- *   requested eval (if it is still in that pipeline) so a row click lands on
- *   the eval it named;
+ *   requested eval so a row click lands on the eval it named. The eval is
+ *   fetched directly when it falls outside the pipeline's paged eval list;
  * - id genuinely absent from a LOADED list: fall back to the all-pipelines
  *   state with a visible notice — never a blank editor — and drop the stale id
  *   from the URL so a reload does not repeat the message.
@@ -1641,7 +1673,7 @@ async function applyPipelineDeepLink() {
     const linkedEvalId = pendingEvalDeepLink.value
     pendingEvalDeepLink.value = null
     if (linkedEvalId) {
-      const evalItem = evals.value.find(e => e.id === linkedEvalId)
+      const evalItem = await resolveLinkedEval(linkedEvalId, linkedPipelineId)
       // An eval that no longer exists in this pipeline is not an error: the
       // editor simply opens on the pipeline with nothing preselected.
       if (evalItem) void startEdit(evalItem)

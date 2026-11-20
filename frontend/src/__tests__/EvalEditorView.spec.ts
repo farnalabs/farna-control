@@ -578,6 +578,7 @@ describe('EvalEditorView — ?pipeline_id= deep link (FAR-2597)', () => {
         return { data: { nodes: [{ id: 'n1', node_type: 'agent', label: 'Writer', agent_id: null, position: { x: 0, y: 0 } }] } }
       }
       if (url === '/api/v1/evals') return { data: { items: [evalItem()], total: 1 } }
+      if (url === '/api/v1/evals/{eval_id}') return { data: undefined, error: { detail: 'Eval not found' } }
       return { data: { items: [] } }
     })
   })
@@ -669,6 +670,59 @@ describe('EvalEditorView — ?pipeline_id= deep link (FAR-2597)', () => {
     const vm = wrapper.vm as unknown as { editingEvalId: string | null; form: { name: string } }
     expect(vm.editingEvalId).toBe('eval-1')
     expect(vm.form.name).toBe('Existing Eval')
+  })
+
+  it('preselects an eval outside the paged list by reading it directly', async () => {
+    // The pipeline list endpoint pages at 20 by default, so a pipeline with 21+
+    // evals returns a first page that does not contain the linked eval. The deep
+    // link must still open it rather than silently drop the selection.
+    const pagedEvals = Array.from({ length: 21 }, (_, i) =>
+      evalItem({ id: `eval-page-${i}`, name: `Paged eval ${i}` }),
+    )
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') return { data: { nodes: [] } }
+      if (url === '/api/v1/evals') return { data: { items: pagedEvals, total: 21 } }
+      if (url === '/api/v1/evals/{eval_id}') {
+        return { data: evalItem({ id: 'eval-off-page', name: 'Off-page eval' }) }
+      }
+      return { data: { items: [] } }
+    })
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-off-page'
+    const wrapper = mountView()
+    await flush()
+
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/evals/{eval_id}', {
+      params: { path: { eval_id: 'eval-off-page' } },
+    })
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; form: { name: string } }
+    expect(vm.editingEvalId).toBe('eval-off-page')
+    expect(vm.form.name).toBe('Off-page eval')
+  })
+
+  it('does not preselect a directly-fetched eval that belongs to another pipeline', async () => {
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') return { data: { nodes: [] } }
+      if (url === '/api/v1/evals') return { data: { items: [], total: 0 } }
+      if (url === '/api/v1/evals/{eval_id}') {
+        return { data: evalItem({ id: 'eval-other', pipeline_id: 'p2' }) }
+      }
+      return { data: { items: [] } }
+    })
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-other'
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; selectedPipelineId: string }
+    expect(vm.selectedPipelineId).toBe('p1')
+    expect(vm.editingEvalId).toBeNull()
   })
 
   it('ignores an eval id that is no longer in the pipeline, keeping the pipeline open', async () => {

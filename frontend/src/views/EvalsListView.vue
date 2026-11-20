@@ -266,7 +266,13 @@ async function loadPipelines(): Promise<void> {
     // page cannot be filtered to, its evals show a raw id instead of a name,
     // and a valid editor deep link would be rejected. 100 is the house
     // convention for an "all of them" selector read (AdminRunRetentionView).
-    const { data } = await api.GET('/api/v1/pipelines', { params: { query: { page_size: 100 } } })
+    const { data, error: apiError } = await api.GET('/api/v1/pipelines', {
+      params: { query: { page_size: 100 } },
+    })
+    // openapi-fetch resolves an API-level failure as `{ error }` without
+    // throwing, so an envelope error must be surfaced here or it is silently
+    // swallowed into the outer catch's "network only" assumption.
+    if (apiError) throw apiError
     pipelines.value = (data?.items ?? []) as PipelineItem[]
   } catch (e) {
     // Best-effort join: the eval list still renders with short pipeline ids,
