@@ -72,19 +72,20 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
     expect(orgRoute.required_roles).toContain('admin')
   })
 
-  it('/admin/errors and /admin/errors/:id are community-tier and admit viewers as well as admins (FAR-2356/FAR-2604)', () => {
+  it('/admin/errors and /admin/errors/:id keep the team tier and admit viewers as well as admins (FAR-2356)', () => {
     // FAR-2356 relaxes the error dashboard from `<<: *team` (admin-only) to
-    // `<<: *team_viewer` so a demo-org viewer can reach it. FAR-2604 makes the
-    // dashboard community-tier (core observability, not in the ratified Team
-    // bundle). Pin the gate on the REAL manifest: the tier is `community` and
-    // the role list must admit `viewer` WITHOUT dropping `admin` (the router
-    // role gate is ANY-of, so a regression that replaces the list with [viewer]
-    // would lock admins out). An access-control relaxation without a pinning
-    // test can silently regress.
+    // `<<: *team_viewer` so a demo-org viewer can reach it. The dashboard stays
+    // team-tier in FAR-2604 — it is a Beta observability surface, and its
+    // `error_tracking` capability gate is team-tier too, so a lower route tier
+    // would show a Community admin a page whose backend 402s. Pin the gate on
+    // the REAL manifest: the tier is `team` and the role list must admit
+    // `viewer` WITHOUT dropping `admin` (the router role gate is ANY-of, so a
+    // regression that replaces the list with [viewer] would lock admins out).
+    // An access-control relaxation without a pinning test can silently regress.
     for (const path of ['/admin/errors', '/admin/errors/:id']) {
       const route = routes[path]
       expect(route, `${path} must exist`).toBeDefined()
-      expect(route.required_tier, `${path} required_tier`).toBe('community')
+      expect(route.required_tier, `${path} required_tier`).toBe('team')
       expect(route.required_roles, `${path} required_roles`).toContain('viewer')
       expect(route.required_roles, `${path} required_roles`).toContain('admin')
     }

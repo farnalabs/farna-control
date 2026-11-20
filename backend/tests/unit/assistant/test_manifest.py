@@ -200,15 +200,6 @@ class TestManifestLoad:
             "/system-maps": "system_maps.read",
             "/system-maps/:id": "system_maps.read",
         }
-        # FAR-2604: the error dashboard moved from team to community tier (core
-        # observability, not in the ratified Team bundle) while KEEPING the
-        # FAR-2356 [admin, viewer] role split, so the demo-org viewer still
-        # reaches it. It is NOT public and carries no read permission — the
-        # exception is exactly these two routes and exactly this role set.
-        viewer_visible_community_routes = {
-            "/admin/errors": ["admin", "viewer"],
-            "/admin/errors/:id": ["admin", "viewer"],
-        }
         manifest = load_manifest()
         for path, route in manifest["routes"].items():
             if route["required_tier"] != "community" or route["required_roles"] is None:
@@ -220,10 +211,6 @@ class TestManifestLoad:
                 assert route.get("visibility") == "public", f"Viewer-readable community route {path} must be public"
                 assert "viewer" in route["required_roles"], f"Viewer-readable community route {path} must include the viewer role"
                 assert route.get("required_permissions") == [read_permission], f"Viewer-readable community route {path} must require only {read_permission}"
-                continue
-            if path in viewer_visible_community_routes:
-                assert route["required_roles"] == viewer_visible_community_routes[path], f"Community viewer-readable route {path} must require exactly {viewer_visible_community_routes[path]}"
-                assert route.get("visibility") != "public", f"Community viewer-readable route {path} must not be public"
                 continue
             visibility = route.get("visibility")
             assert visibility in dev_gate_permissions, f"Community route {path} may only widen roles to ['operator', 'admin'] behind a dev-only visibility gate (in_dev or private_preview)"

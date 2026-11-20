@@ -83,6 +83,23 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         description="OpenTelemetry export and LangSmith integration settings",
         tier="community",
     ),
+    # FAR-2604: these two are Community, not Team. A self-hosted Community
+    # install cannot operate without them — the runners page manages the
+    # environment profiles every sandbox_agent dispatch resolves, and the
+    # email settings are the organisation SMTP configuration that HITL email
+    # alerts and readiness alerts send through. Gating either to Team left a
+    # Community operator with a page they could reach but a feature they
+    # could not use (a "Team Feature" lock plus 402s on every call).
+    FeatureFlag(
+        name="email_config",
+        description="SMTP email configuration for notifications",
+        tier="community",
+    ),
+    FeatureFlag(
+        name="environment_profiles",
+        description="Sandbox environment profiles for code execution",
+        tier="community",
+    ),
     # ── Team tier ──────────────────────────────────────────────────────
     FeatureFlag(
         name="sso",
@@ -110,11 +127,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         tier="team",
     ),
     FeatureFlag(
-        name="email_config",
-        description="SMTP email configuration for notifications",
-        tier="team",
-    ),
-    FeatureFlag(
         name="error_tracking",
         description="External error tracking and alerting integrations",
         tier="team",
@@ -122,11 +134,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="scim",
         description="SCIM 2.0 user and group provisioning",
-        tier="team",
-    ),
-    FeatureFlag(
-        name="environment_profiles",
-        description="Sandbox environment profiles for code execution",
         tier="team",
     ),
     FeatureFlag(

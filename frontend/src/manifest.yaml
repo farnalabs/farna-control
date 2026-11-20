@@ -484,7 +484,6 @@ routes:
         deprecated: false
 
         <<: *team
-        required_tier: community
     /settings/rate-limits:
         name: settings-rate-limits
         breadcrumb: Rate Limits
@@ -497,7 +496,6 @@ routes:
         deprecated: false
 
         <<: *team
-        required_tier: community
     /settings/hitl-review:
         name: settings-hitl-review
         breadcrumb: HITL Review
@@ -534,7 +532,6 @@ routes:
         deprecated: false
 
         <<: *team
-        required_tier: community
     /settings/notifications:
         name: settings-notifications
         breadcrumb: Notification Preferences
@@ -817,7 +814,6 @@ routes:
         sidebar_order: 1
         type: list_page
         <<: *team_viewer
-        required_tier: community
         deprecated: false
 
     /admin/errors/:id:
@@ -832,7 +828,6 @@ routes:
         dynamic_params:
           - id
         <<: *team_viewer
-        required_tier: community
         deprecated: false
 
     /admin/notification-delivery:
@@ -912,7 +907,6 @@ routes:
         sidebar_order: 4
         type: list_page
         <<: *team
-        required_tier: community
         visibility: private_preview
         deprecated: false
 
