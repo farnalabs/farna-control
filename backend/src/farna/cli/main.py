@@ -78,19 +78,13 @@ def _package_version() -> str:
 
     The bundled venv's dist-info carries the pyproject version of the built
     commit, which for a dry-run bundle is the PREVIOUS release; the bundle's
-    ``VERSION`` file is the release identity (see ``farna.version``).
+    ``VERSION`` file is the release identity. Delegates to ``farna.version``
+    so the bundle-stamp > package-metadata > ``0.0.0-dev`` precedence has a
+    single implementation and cannot drift between the CLI and the package.
     """
-    from farna.version import _bundle_version
+    from farna.version import _resolve_version
 
-    bundled = _bundle_version()
-    if bundled is not None:
-        return bundled
-    try:
-        from importlib.metadata import version
-
-        return version(_PACKAGE_NAME)
-    except Exception:
-        return "unknown"
+    return _resolve_version()
 
 
 def _print_version() -> None:

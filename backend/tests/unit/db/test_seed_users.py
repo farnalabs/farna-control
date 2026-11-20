@@ -477,6 +477,9 @@ async def test_first_tenant_organisation_excludes_sentinel_orgs() -> None:
     assert str(MODULO_REGISTRY_ORG_ID) in sql
     assert "NOT IN" in sql
     assert "deleted_at IS NULL" in sql
+    # A suspended/archived tenant is never "the" tenant for a new admin; the
+    # predicate is single-sourced with db.crud.organisation.is_login_active_org.
+    assert "'active'" in sql
 
 
 @pytest.mark.anyio

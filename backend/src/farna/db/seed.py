@@ -184,13 +184,15 @@ async def first_tenant_organisation(session: Any) -> Any:
     seeded there are RLS-partitioned away from every tenant and the login
     tenant resolver ignores the org entirely.
     """
-    from farna.db.models.organisation import MODULO_REGISTRY_ORG_ID, SYSTEM_ORG_ID, Organisation
+    from farna.db.crud.organisation import _SENTINEL_ORG_IDS
+    from farna.db.models.organisation import Organisation
 
     result = await session.execute(
         select(Organisation)
         .where(
-            Organisation.id.notin_((SYSTEM_ORG_ID, MODULO_REGISTRY_ORG_ID)),
+            Organisation.status == "active",
             Organisation.deleted_at.is_(None),
+            Organisation.id.notin_(_SENTINEL_ORG_IDS),
         )
         .order_by(Organisation.created_at)
         .limit(1)

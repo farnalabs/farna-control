@@ -58,12 +58,15 @@ def test_env_settings_unavailable(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_package_version_exception(monkeypatch: pytest.MonkeyPatch):
-    """Test _package_version fallback when importlib.metadata.version fails."""
+    """_package_version delegates to farna.version for its not-installed default."""
+    from importlib.metadata import PackageNotFoundError
+
+    monkeypatch.setattr("farna.version._bundle_version", lambda: None)
     monkeypatch.setattr(
-        "importlib.metadata.version",
-        lambda _: (_ for _ in ()).throw(Exception("version not found")),
+        "farna.version.version",
+        lambda _: (_ for _ in ()).throw(PackageNotFoundError("farna-control")),
     )
-    assert cli_main._package_version() == "unknown"
+    assert cli_main._package_version() == "0.0.0-dev"
 
 
 def test_resolve_data_dir_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
