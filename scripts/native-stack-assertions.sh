@@ -19,7 +19,9 @@
 # stack a little later. Asserting after >= 180s catches that.
 #
 # Asserts, in order:
-#   a. after SMOKE_SETTLE_SECONDS (default 180, min 180): `status --json` shows
+#   0. first boot reports /healthz/ready 200 within SMOKE_READY_TIMEOUT_SECONDS
+#      (default 900; first boot runs initdb + all migrations)
+#   a. SMOKE_SETTLE_SECONDS after that (default 180, min 180): `status --json` shows
 #      api, postgres, redis, saq-runs and saq-system alive, stack not degraded
 #   b. GET /healthz/ready answers 200
 #   c. `users add <admin> --admin` succeeds and does not land in the orphan org
@@ -57,8 +59,34 @@ fail() {
   exit 1
 }
 
+# --- 0. first boot finishes: /healthz/ready answers 200 -------------------------
+# First boot runs initdb + every migration before the SAQ workers may start
+# (they are gated on migration head), and /healthz/ready only answers 200 once
+# the SAQ system worker's reconcile has run. On a slow host that takes
+# minutes, so the settle window below starts AFTER the stack first reports
+# ready: the crash-cap check is "still healthy >= SETTLE seconds after it came
+# up", not "healthy SETTLE seconds after start". A stack that never becomes
+# ready (the FAR-2581 saq-system crash loop) fails here.
+READY_TIMEOUT="${SMOKE_READY_TIMEOUT_SECONDS:-900}"
+[[ "${READY_TIMEOUT}" =~ ^[0-9]+$ ]] || { printf 'SMOKE_READY_TIMEOUT_SECONDS must be an integer\n' >&2; exit 2; }
+log "0: waiting up to ${READY_TIMEOUT}s for first boot to report /healthz/ready 200"
+ready_deadline=$(( $(date +%s) + READY_TIMEOUT ))
+first_ready=""
+while (( $(date +%s) < ready_deadline )); do
+  boot_port="$("${CLI}" status ${DATA_DIR_ARGS[@]+"${DATA_DIR_ARGS[@]}"} --json 2>/dev/null \
+    | python3 -c 'import json,sys; print((json.load(sys.stdin).get("components", {}).get("api") or {}).get("port") or "")' 2>/dev/null || true)"
+  if [[ "${boot_port}" =~ ^[0-9]+$ ]] && \
+    [[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://127.0.0.1:${boot_port}/healthz/ready" 2>/dev/null || true)" == "200" ]]; then
+    first_ready="$(date -u +%H:%M:%S)"
+    break
+  fi
+  sleep 5
+done
+[[ -n "${first_ready}" ]] || fail "the stack never reported /healthz/ready 200 within ${READY_TIMEOUT}s"
+log "  first /healthz/ready 200 at ${first_ready}"
+
 # --- a. settle, then every component alive and not degraded -------------------
-log "a: settling ${SETTLE}s before asserting component health"
+log "a: settling ${SETTLE}s after first readiness before asserting component health"
 sleep "${SETTLE}"
 "${CLI}" status ${DATA_DIR_ARGS[@]+"${DATA_DIR_ARGS[@]}"} --json > "${SCRATCH}/status.json" || fail "status --json exited non-zero"
 python3 - "${SCRATCH}/status.json" <<'PY' || fail "component health assertion failed (see above)"
