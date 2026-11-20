@@ -605,7 +605,7 @@ class TestDriftPredicateDialects:
         assert "datetime(" in sql
 
     def test_unknown_dialect_falls_back_to_generic_json(self) -> None:
-        stmt = _drift_predicate("mariadb")
+        stmt = _drift_predicate("oracle")
         sql = str(stmt.compile(dialect=sqlite.dialect()))
         assert "json_each" in sql
 

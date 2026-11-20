@@ -365,7 +365,7 @@ def _probe_database() -> None:
     from sqlalchemy import create_engine, text
 
     settings = get_settings()
-    sync_url = str(settings.database_url).replace("+asyncpg", "+psycopg").replace("+aiomysql", "+pymysql")
+    sync_url = str(settings.database_url).replace("+asyncpg", "+psycopg")
     engine = None
     try:
         engine = create_engine(sync_url, connect_args={"connect_timeout": 5}, pool_pre_ping=True)
@@ -1046,8 +1046,8 @@ async def execute_suite_run(ctx: dict[str, Any], *, suite_run_id: str, org_id: s
             # ``rolbypassrls = false``), so on PostgreSQL ``session.get`` IS
             # org-scoped by the ``rls_org_isolation`` policy via the org
             # context set above — a cross-org row would already be invisible.
-            # The explicit predicate is defense-in-depth for non-RLS backends
-            # (SQLite/MariaDB, where the get is NOT org-scoped): verify the
+            # The explicit predicate is defense-in-depth for the non-RLS
+            # backend (SQLite, test-only, where the get is NOT org-scoped): verify the
             # loaded run belongs to the job's org before executing it — a
             # cross-org suite_run_id must never be executed.
             if run.organisation_id != oid:
@@ -2576,7 +2576,7 @@ def _cleanup_session_factory() -> Any:
     system session factory (farna_control_system role, LOGIN, BYPASSRLS — FAR-523):
     the plain ``farna_control_app`` factory is NOBYPASSRLS and a batch without
     ``app.organisation_id`` silently matches zero rows. Do NOT swap back on
-    PostgreSQL. On non-PostgreSQL backends (SQLite/MariaDB/MySQL) there is no
+    PostgreSQL. On the non-PostgreSQL backend (SQLite, test-only) there is no
     RLS and no farna_control_system role, so the plain factory is both correct and
     the only option — the cross-org purge is exactly right there.
 

@@ -300,9 +300,9 @@ class TestAttemptKeyRule:
 
 
 class TestDialectGuard:
-    def test_mariadb_is_guarded_out(self) -> None:
+    def test_unsupported_dialect_is_guarded_out(self) -> None:
         with pytest.raises(NotImplementedError):
-            dialect_insert("mysql")
+            dialect_insert("oracle")
 
 
 class TestRoundTripMatrix:

@@ -287,8 +287,9 @@ async def backfill_facts(session: Any, day: date) -> int:
         (Run.run_classification["value"].as_string() == "benign", True),
         else_=sa.null(),
     )
-    # ``graph_json`` is ``json`` on SQLite/MariaDB and promoted to ``jsonb`` on
-    # Postgres by migration 0147 — but the promotion is non-blocking and the ORM
+    # ``graph_json`` is ``json`` on the SQLite (test-only) backend and promoted
+    # to ``jsonb`` on Postgres by migration 0147 — but the promotion is
+    # non-blocking and the ORM
     # model keeps the generic ``JSON`` type, so the column type is not guaranteed
     # to be ``jsonb`` in every environment. ``json_array_length`` / ``json_array_elements``
     # only accept ``json``, not ``jsonb`` (and ``jsonb_array_length`` only accepts
@@ -683,8 +684,8 @@ async def run_maintenance(factory: Any) -> dict[str, Any]:
     """Run the daily facts maintenance pass — backfill, reconcile, retention.
 
     Non-Postgres backends no-op (counter + log) — the anti-join and
-    ``ON CONFLICT`` constructs are Postgres-idiomatic and SQLite/MariaDB get
-    nothing.
+    ``ON CONFLICT`` constructs are Postgres-idiomatic and the SQLite (test-only)
+    backend gets nothing.
     """
     # ``factory`` is built the way saq_worker does (``autobegin=False``), so the
     # dialect probe via ``session.connection()`` MUST run inside an explicit

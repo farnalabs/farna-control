@@ -223,9 +223,10 @@ async def pipeline_team_scope_team_blind(
 
     dialect = await _ensure_active_transaction(session)
     if dialect != "postgresql":
-        # Only Postgres carries the team-isolation policy; on SQLite/MariaDB
-        # team filtering does not exist, so the plain org-scoped read IS the
-        # team-blind view there. session.info carries no effective GUC.
+        # Only Postgres carries the team-isolation policy; on the SQLite
+        # (test-only) backend team filtering does not exist, so the plain
+        # org-scoped read IS the team-blind view there. session.info carries no
+        # effective GUC.
         stmt = select(Pipeline.owner_team_id, Pipeline.visibility).where(
             Pipeline.id == pipeline_id,
             Pipeline.deleted_at.is_(None),

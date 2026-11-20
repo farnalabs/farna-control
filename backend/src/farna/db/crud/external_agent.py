@@ -2,7 +2,7 @@
 
 Every query carries an explicit ``organisation_id`` predicate so a cross-org
 call is refused by the query layer itself, not only by Postgres RLS (which does
-not exist on the SQLite/MariaDB generic backends and is what the unit tests
+not exist on the SQLite (test-only) generic backend and is what the unit tests
 exercise). All functions require the caller to have set the RLS org context.
 """
 

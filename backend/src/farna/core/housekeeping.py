@@ -973,8 +973,9 @@ def _lifecycle_map_has_no_stages(session: AsyncSession) -> ColumnElement[bool]:
         )
     else:
         # Fail loud on any other dialect rather than falling through to the
-        # SQLite branch: ``json_type``/``json_array_length`` are invalid on e.g.
-        # MySQL/MariaDB, where they would raise. ``scan_all`` catches the raise
+        # SQLite branch: ``json_type``/``json_array_length`` are invalid on the
+        # removed MySQL/MariaDB family (unsupported since ADR 068), where they
+        # would raise. ``scan_all`` catches the raise
         # and still reports the category empty, but logs it at ERROR with the
         # scanner's category, the exception class and the traceback — so the
         # empty category is attributable to a scanner FAILURE, never silently

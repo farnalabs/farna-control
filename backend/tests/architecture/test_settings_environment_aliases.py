@@ -78,6 +78,7 @@ def test_bare_modulo_field_name_is_still_read_via_the_field_name(monkeypatch: py
     """
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
     monkeypatch.setenv("MODULO_DB", "sqlite")
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
 
     assert Settings.model_config["populate_by_name"] is True
     settings = Settings(
