@@ -64,9 +64,21 @@ events into typed notification payloads; and in-app notifications stream over SS
       `X-Modulo-Signature` / `X-Modulo-Timestamp`, and a receiver can verify the signature
       (`signing.feature`)
 - [x] Delivery attempts are recorded against `NotificationDeliveryLog` and are
-      manageable from `/admin/notification-delivery` (status/event filters, retry of
-      failed deliveries) (`api/routes/admin_notifications.py`,
-      `test_admin_notifications_webhooks.py`)
+      manageable from `/admin/notification-delivery` — titled **Webhook
+      Deliveries** — (status/event filters, retry of failed deliveries)
+      (`api/routes/admin_notifications.py`, `test_admin_notifications_webhooks.py`).
+      The page explains its own scope (FAR-2596): each row is one outbound
+      delivery attempt, and inbound trigger webhooks are linked out to the
+      Trigger Event Log; event types and statuses render their human labels; a
+      "Dead Lettered" line says the delivery gave up after the final attempt and
+      that a retry starts a fresh attempt; the empty state distinguishes "no
+      deliveries yet" from "no deliveries match these filters"; and a banner
+      warns when `GET /api/v1/notifications` reports zero endpoints, with an
+      "Add a webhook endpoint" link to `/settings/teams` (omitted when
+      `team_rbac` is inactive). The endpoint signal is read from the endpoint
+      list, never inferred from the delivery log — a soft-deleted endpoint
+      leaves its historical deliveries behind — and the fetch fails open, so an
+      error or unexpected body renders no banner.
 - [x] In-app notifications stream over SSE with a dashboard panel, per-user filters and a
       dismiss flow (`in_app_notifications/*.feature`, `test_in_app_notifications.py`)
 - [x] Email delivery settings and message sending are configured under `/settings/email`
@@ -199,6 +211,17 @@ coverage gate is satisfied by that test rather than by deleting the branch.
       version negotiation.
 
 ## QA History
+- 2026-11-20: **FAR-2596 delivery page comprehension pass** – the product
+  owner opened `/admin/notification-delivery` against production, saw an empty
+  page and could not tell what it was for. The page now states its boundary
+  (outbound deliveries only, inbound trigger webhooks linked to the Trigger
+  Event Log), warns when no outbound endpoints exist with a CTA to
+  `/settings/teams`, splits the two empty states, and renders event types and
+  statuses through the existing locale labels. The "zero endpoints" condition
+  is read from `GET /api/v1/notifications` and fails open — it is never inferred
+  from the delivery log, because a soft-deleted endpoint leaves historical
+  deliveries behind. Retitled from "Webhook Notifications" to "Webhook
+  Deliveries" across the page, the sidebar label and the manifest.
 - 2026-09-30: **Improve Architecture product-map walk** – reconciled this
   tracker with the shipped `hitl_deadline_warning` surface (FAR-1295,
   merged 2026-09-29): the manifest `feat-notifications` registry tracked the
