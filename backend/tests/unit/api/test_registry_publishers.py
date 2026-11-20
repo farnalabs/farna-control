@@ -12,6 +12,7 @@ from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
+from farna.core.registry import list_verified_publishers
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_rls_preamble
 
@@ -88,6 +89,28 @@ def client() -> Generator[TestClient, None, None]:
 
 
 VERIFY_URL = "/api/v1/registry/verify/modulo/prd-input-schema"
+
+
+class TestBuiltinPublisherRebrand:
+    """Prove the rebrand on the real default publisher, not a mocked fixture.
+
+    ``test_verify_with_pubkey_returns_trust_tier`` mocks the DB publisher, so it
+    cannot detect whether production still ships the old name. These tests read
+    the actual built-in publisher via ``list_verified_publishers()`` and the
+    customer-visible ``GET /api/v1/registry/publishers`` route.
+    """
+
+    def test_list_verified_publishers_rebrands_default(self) -> None:
+        names = {p.name for p in list_verified_publishers()}
+        assert "Farna Control Team" in names
+        assert "Modulo Team" not in names
+
+    def test_list_publishers_endpoint_returns_rebranded_name(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/registry/publishers")
+        assert resp.status_code == 200
+        names = {p["name"] for p in resp.json()}
+        assert "Farna Control Team" in names
+        assert "Modulo Team" not in names
 
 
 class TestVerifyWithTrustTier:
