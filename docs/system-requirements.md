@@ -97,6 +97,59 @@ currently-supported Ubuntu LTS releases (22.04 and 24.04) and Debian 12 or
 newer. Ubuntu 20.04 (glibc 2.31) and older are below the floor and are not
 supported native-install targets.
 
+### Installing with apt (.deb, Ubuntu 22.04 / 24.04)
+
+The same linux-amd64 bundle also ships as a Debian package,
+`farna-control_<version>_amd64.deb`, built and validated on Ubuntu 22.04 and
+24.04 by `.github/workflows/linux-deb.yml` on every release (and rehearsed on
+every dry-run). The release `SHA256SUMS`, the signed `RELEASE_MANIFEST.json`
+and the build-provenance attestation all cover it. Phase 1 is a download from
+the GitHub release page and a local install; a signed apt repository (so
+`apt upgrade` picks up new releases) is coming next.
+
+```bash
+# download farna-control_<version>_amd64.deb and SHA256SUMS from the release page, then:
+grep " farna-control_<version>_amd64.deb$" SHA256SUMS | sha256sum --check -
+sudo apt install ./farna-control_<version>_amd64.deb
+
+# then, as your normal (non-root) user:
+farna-control start --detach
+farna-control status
+```
+
+What the package does and does not do:
+
+- It installs the bundle under `/opt/farna-control/versions/<version>/` with a
+  `/opt/farna-control/current` symlink, and the `farna-control` command at
+  `/usr/bin/farna-control`. Its dependencies are computed at build time from
+  the system libraries the bundled binaries actually link, plus
+  `ca-certificates` and `openssl`; for 0.3.329 that is `libc6 (>= 2.34)`,
+  `libcrypt1`, `libgcc-s1`, `libstdc++6`, `zlib1g`, `ca-certificates` and
+  `openssl`, all present on a stock Ubuntu 22.04 / 24.04.
+- It starts **no** system service and runs nothing as root. Each user runs
+  `farna-control start` for themselves, exactly like the tarball install. The
+  data dir (`~/.local/share/modulo/data`) and its runtime keys are created on
+  that user's first start.
+- `sudo apt remove farna-control` and `sudo apt purge farna-control` remove the
+  program only. They never touch any user's data dir; delete
+  `~/.local/share/modulo/data` yourself if you want the data gone. Stop the
+  stack (`farna-control stop`) before removing or upgrading the package.
+- Upgrade by installing the newer `.deb` the same way. The in-app
+  `farna-control upgrade` command is disabled for the package install (it would
+  rewrite files apt owns) and tells you to use apt instead.
+
+**If you also have the tarball install** (`scripts/install.sh`): the two
+coexist without overwriting each other (`~/.local/opt/farna-control` +
+`~/.local/bin/farna-control` vs `/opt/farna-control` + `/usr/bin/farna-control`),
+and they share the same per-user data dir; the data-dir lock stops both running
+at once. Ubuntu puts `~/.local/bin` ahead of `/usr/bin` on `PATH`, so a plain
+`farna-control` keeps running the **tarball** install for that user. To switch
+to the package, stop the stack, then remove `~/.local/bin/farna-control` (and,
+once you no longer need it, `~/.local/opt/farna-control`), or call
+`/usr/bin/farna-control` explicitly. The packaged command always uses its own
+install root, even if the tarball install's `env.sh` is sourced, and prints a
+note on `start` when a tarball install is also present.
+
 ### Supported architectures
 
 | Architecture | Status |

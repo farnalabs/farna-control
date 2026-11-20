@@ -798,6 +798,10 @@ jobs:
           if (root / f"farna-control-{version}-windows-amd64.exe").is_file():
               required.append(f"farna-control-{version}-windows-amd64.exe")
           required.append(f"farna-control-{version}-compose.tar.gz")
+          # FAR-2579: releases cut since the .deb landed carry it in SHA256SUMS
+          # and the signed manifest; older releases have none.
+          if (root / f"farna-control_{version}_amd64.deb").is_file():
+              required.append(f"farna-control_{version}_amd64.deb")
 
           problems: list[str] = []
           actual: dict[str, str] = {}
@@ -872,10 +876,15 @@ jobs:
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required to republish a stapled DMG'; exit 1; }
 
           cd release-assets
+          # FAR-2579: the .deb is covered whenever the release carries it.
+          deb_asset=()
+          if [ -f "farna-control_${VERSION}_amd64.deb" ]; then
+            deb_asset=("farna-control_${VERSION}_amd64.deb")
+          fi
           if [ -f "farna-control-${VERSION}-windows-amd64.exe" ]; then
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-windows-amd64.exe" "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-windows-amd64.exe" "farna-control-${VERSION}-compose.tar.gz" "${deb_asset[@]}" > SHA256SUMS
           else
-            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
+            sha256sum "farna-control-${VERSION}-linux-amd64.tar.gz" "FarnaControl-${VERSION}-macos-arm64.dmg" "FarnaControl-${VERSION}-macos-x86_64.dmg" "farna-control-${VERSION}-compose.tar.gz" "${deb_asset[@]}" > SHA256SUMS
           fi
           cd ..
 
@@ -902,6 +911,8 @@ jobs:
               names.append(f"farna-control-{version}-windows-amd64.exe")
               components["windows"] = "amd64"
           names.append(f"farna-control-{version}-compose.tar.gz")
+          if (root / f"farna-control_{version}_amd64.deb").is_file():
+              names.append(f"farna-control_{version}_amd64.deb")
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="multi-platform",
@@ -1027,6 +1038,10 @@ jobs:
             )
             if [[ -f "release-assets/farna-control-${VERSION}-windows-amd64.exe" ]]; then
               ASSETS+=("release-assets/farna-control-${VERSION}-windows-amd64.exe")
+            fi
+            # FAR-2579: the validated .deb rides in the same release set.
+            if [[ -f "release-assets/farna-control_${VERSION}_amd64.deb" ]]; then
+              ASSETS+=("release-assets/farna-control_${VERSION}_amd64.deb")
             fi
             for asset in "${ASSETS[@]}"; do
               if [[ ! -s "$asset" ]]; then

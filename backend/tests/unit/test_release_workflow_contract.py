@@ -1012,6 +1012,7 @@ def test_publish_release_refuses_when_a_dependency_did_not_succeed(
         "RELEASE_RESULT": "success",
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
+        "LINUX_DEB_RESULT": "success",
         "MACOS_RESULT": "success",
         "NOTARIZATION_RESULT": "success",
     }
@@ -1034,9 +1035,22 @@ def test_publish_release_refuses_when_a_dependency_did_not_succeed(
         ("MANIFEST_RESULT", "final-release-manifest", "failure"),
         ("RELEASE_RESULT", "release", "failure"),
         ("ATTEST_RESULT", "attest-artefacts", "skipped"),
+        ("LINUX_DEB_RESULT", "linux-deb", "failure"),
+        ("LINUX_DEB_RESULT", "linux-deb", "skipped"),
         ("MACOS_RESULT", "macos-installer", "cancelled"),
         ("NOTARIZATION_RESULT", "verify-notarization-tickets", "failure"),
         ("NOTARIZATION_RESULT", "verify-notarization-tickets", "skipped"),
+    ],
+    ids=[
+        "manifest-cancelled",
+        "manifest-failure",
+        "release-failure",
+        "attest-skipped",
+        "linux-deb-failure",
+        "linux-deb-skipped",
+        "macos-cancelled",
+        "notarization-failure",
+        "notarization-skipped",
     ],
 )
 def test_publish_release_blocks_publication_for_every_unsuccessful_dependency(
@@ -1055,6 +1069,7 @@ def test_publish_release_blocks_publication_for_every_unsuccessful_dependency(
         "RELEASE_RESULT": "success",
         "MANIFEST_RESULT": "success",
         "ATTEST_RESULT": "success",
+        "LINUX_DEB_RESULT": "success",
         "MACOS_RESULT": "success",
         "NOTARIZATION_RESULT": "success",
         env_var: result,
@@ -1098,6 +1113,186 @@ def test_release_unified_keeps_macos_hard_gates_while_consume_retry() -> None:
     assert "mounted_app_spctl spctl --assess" in installer
     assert "dmg_verify hdiutil verify" in installer
     assert "dmg_staple_validate xcrun stapler validate" in installer
+
+
+# ---------------------------------------------------------------------------
+# FAR-2579: the .deb is built from the release bundle, validated on Ubuntu
+# 22.04 + 24.04, folded into SHA256SUMS + the signed manifest (and so the
+# attestation, which covers final-release-artefacts), and attached to the
+# release. A dry-run rehearses the package + validation without publishing.
+# ---------------------------------------------------------------------------
+
+_DEB_NAME = "farna-control_${VERSION}_amd64.deb"
+
+
+def test_release_builds_the_deb_from_the_release_bundle() -> None:
+    workflow = _release_workflow()
+    job = workflow["jobs"]["linux-deb"]
+    assert job["uses"] == "./.github/workflows/linux-deb.yml"
+    assert set(job["needs"]) == {"release", "bundle"}
+    condition = " ".join(str(job["if"]).split())
+    assert "inputs.mode == 'cut' || inputs.mode == 'recut'" in condition
+    assert "needs.bundle.result == 'success'" in condition
+    assert job["with"] == {"version": "${{ inputs.version }}", "bundle_artifact": "bundle-artefacts-amd64"}
+
+
+def test_dry_run_rehearses_the_deb_without_publishing() -> None:
+    workflow = _release_workflow()
+    job = workflow["jobs"]["dry-run-linux-deb"]
+    assert job["uses"] == "./.github/workflows/linux-deb.yml"
+    assert job["needs"] == ["dry-run-bundle"]
+    assert job["if"] == "inputs.mode == 'dry-run'"
+    assert job["with"]["bundle_artifact"] == "bundle-artefacts-amd64"
+    publishers = ("final-release-manifest", "attest-artefacts", "publish-release")
+    for publisher in publishers:
+        assert "dry-run-linux-deb" not in workflow["jobs"][publisher]["needs"]
+
+
+def test_deb_artifact_name_matches_what_bundle_release_uploads() -> None:
+    bundle = (REPO_ROOT / ".github" / "workflows" / "bundle-release.yml").read_text(encoding="utf-8")
+    assert "name: bundle-artefacts-${{ matrix.arch }}" in bundle
+    linux_deb = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "linux-deb.yml").read_text(encoding="utf-8"))
+    assert linux_deb[True]["workflow_call"]["outputs"]["deb_artifact"]["value"] == "${{ jobs.build-deb.outputs.deb_artifact }}"
+
+
+def test_final_manifest_requires_and_covers_the_deb() -> None:
+    workflow = _release_workflow()
+    job = workflow["jobs"]["final-release-manifest"]
+    assert "linux-deb" in job["needs"]
+    assert "needs.linux-deb.result == 'success'" in " ".join(str(job["if"]).split())
+    downloads = [step for step in job["steps"] if str(step.get("uses", "")).startswith("actions/download-artifact@")]
+    deb_downloads = [step for step in downloads if step["with"]["name"] == "${{ needs.linux-deb.outputs.deb_artifact }}"]
+    assert len(deb_downloads) == 1
+    assert deb_downloads[0]["with"]["path"] == "deb-artefacts"
+    script = _step(workflow, "final-release-manifest", "Build final signed manifest after every platform artifact")["run"]
+    sums_lines = [line for line in script.splitlines() if "> SHA256SUMS" in line]
+    assert len(sums_lines) == 2
+    for line in sums_lines:
+        assert f'"{_DEB_NAME}"' in line
+    assert 'names.append(f"farna-control_{version}_amd64.deb")' in script
+
+
+def _run_stage_step(tmp_path: Path, deb_bytes: bytes, sha_bytes: bytes) -> subprocess.CompletedProcess[str]:
+    workflow = _release_workflow()
+    script = _step(workflow, "final-release-manifest", "Stage the validated .deb into the release set")["run"]
+    (tmp_path / "deb-artefacts").mkdir()
+    (tmp_path / "release-artefacts").mkdir()
+    (tmp_path / "deb-artefacts" / "farna-control_9.9.9_amd64.deb").write_bytes(deb_bytes)
+    (tmp_path / "deb-artefacts" / "farna-control_9.9.9_amd64.deb.sha256").write_bytes(sha_bytes)
+    script_path = tmp_path / "stage.sh"
+    script_path.write_text(script, encoding="utf-8", newline="\n")
+    return subprocess.run(  # noqa: S603 - fixed interpreter running repository-owned workflow text
+        [_bash_executable(), str(script_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+        env={**os.environ, "VERSION": "9.9.9"},
+    )
+
+
+def test_stage_step_copies_only_a_checksum_verified_deb(tmp_path: Path) -> None:
+    payload = b"debian package bytes"
+    digest = hashlib.sha256(payload).hexdigest()
+    completed = _run_stage_step(tmp_path, payload, f"{digest}  farna-control_9.9.9_amd64.deb\n".encode())
+    assert completed.returncode == 0, completed.stderr
+    staged = sorted(path.name for path in (tmp_path / "release-artefacts").iterdir())
+    assert staged == ["farna-control_9.9.9_amd64.deb"]
+
+
+def test_stage_step_refuses_a_deb_that_fails_its_checksum(tmp_path: Path) -> None:
+    wrong = hashlib.sha256(b"other bytes").hexdigest()
+    completed = _run_stage_step(tmp_path, b"tampered", f"{wrong}  farna-control_9.9.9_amd64.deb\n".encode())
+    assert completed.returncode != 0
+    assert not (tmp_path / "release-artefacts" / "farna-control_9.9.9_amd64.deb").exists()
+
+
+def test_publish_release_requires_and_attaches_the_deb() -> None:
+    workflow = _release_workflow()
+    publish = workflow["jobs"]["publish-release"]
+    assert "linux-deb" in publish["needs"]
+    guard = _step(workflow, "publish-release", "Validate publication dependencies")
+    assert guard["env"]["LINUX_DEB_RESULT"] == "${{ needs.linux-deb.result }}"
+    inventory = _step(workflow, "publish-release", "Verify portable release artefacts")["run"]
+    assert f'"release-artefacts/{_DEB_NAME}"' in inventory
+    create = _step(workflow, "publish-release", "Create GitHub Release with assets")["run"]
+    assets = create[create.index("ASSETS=(") : create.index(")", create.index("ASSETS=("))]
+    assert f'"release-artefacts/{_DEB_NAME}"' in assets
+
+
+def test_attestation_covers_the_final_release_set_that_carries_the_deb() -> None:
+    workflow = _release_workflow()
+    attest = workflow["jobs"]["attest-artefacts"]
+    assert "final-release-manifest" in attest["needs"]
+    names = [step.get("with", {}).get("name") for step in attest["steps"]]
+    assert "final-release-artefacts-${{ inputs.version }}" in names
+    subjects = [step["with"]["subject-path"] for step in attest["steps"] if "subject-path" in step.get("with", {})]
+    assert "release-artefacts/*" in subjects
+
+
+def test_freeze_cleanup_runs_after_a_failed_deb_build() -> None:
+    assert "linux-deb" in _release_workflow()["jobs"]["freeze-cleanup"]["needs"]
+
+
+def _staple_regenerate_sums_section() -> str:
+    """The bash half of the staple retry's regeneration step (SHA256SUMS only)."""
+    script = _step(_staple_retry_workflow(), "publish-stapled", "Regenerate SHA256SUMS and the signed release manifest")["run"]
+    start = script.index("cd release-assets")
+    end = script.index("cd ..", start)
+    return "set -euo pipefail\n" + script[start:end]
+
+
+def _run_staple_sums(tmp_path: Path, *, with_deb: bool) -> list[str]:
+    assets = tmp_path / "release-assets"
+    assets.mkdir()
+    names = [
+        "farna-control-9.9.9-linux-amd64.tar.gz",
+        "FarnaControl-9.9.9-macos-arm64.dmg",
+        "FarnaControl-9.9.9-macos-x86_64.dmg",
+        "farna-control-9.9.9-compose.tar.gz",
+    ]
+    if with_deb:
+        names.append("farna-control_9.9.9_amd64.deb")
+    for name in names:
+        (assets / name).write_bytes(name.encode())
+    script_path = tmp_path / "sums.sh"
+    script_path.write_text(_staple_regenerate_sums_section(), encoding="utf-8", newline="\n")
+    completed = subprocess.run(  # noqa: S603 - fixed interpreter running repository-owned workflow text
+        [_bash_executable(), str(script_path)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+        env={**os.environ, "VERSION": "9.9.9"},
+    )
+    assert completed.returncode == 0, completed.stderr
+    # Git-for-Windows sha256sum marks binary mode with a leading "*"; GNU on the
+    # Linux runner writes two spaces. Normalise both to the bare file name.
+    return sorted(line.split(None, 1)[1].strip().lstrip("*") for line in (assets / "SHA256SUMS").read_text(encoding="utf-8").splitlines())
+
+
+def test_staple_retry_republish_keeps_the_deb_in_sha256sums(tmp_path: Path) -> None:
+    covered = _run_staple_sums(tmp_path, with_deb=True)
+    assert "farna-control_9.9.9_amd64.deb" in covered
+    assert len(covered) == 5
+
+
+def test_staple_retry_republish_of_a_pre_deb_release_needs_no_deb(tmp_path: Path) -> None:
+    covered = _run_staple_sums(tmp_path, with_deb=False)
+    assert "farna-control_9.9.9_amd64.deb" not in covered
+    assert len(covered) == 4
+
+
+def test_staple_retry_consistency_and_manifest_track_the_deb() -> None:
+    workflow = _staple_retry_workflow()
+    consistency = _step(workflow, "publish-stapled", "Detect whether the release metadata matches its artefacts")["run"]
+    assert 'required.append(f"farna-control_{version}_amd64.deb")' in consistency
+    regenerate = _step(workflow, "publish-stapled", "Regenerate SHA256SUMS and the signed release manifest")["run"]
+    assert 'names.append(f"farna-control_{version}_amd64.deb")' in regenerate
+    held = STAPLE_RETRY_WORKFLOW.read_text(encoding="utf-8")
+    assert 'ASSETS+=("release-assets/farna-control_${VERSION}_amd64.deb")' in held
 
 
 # ---------------------------------------------------------------------------
