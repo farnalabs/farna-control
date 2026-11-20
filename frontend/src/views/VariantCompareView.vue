@@ -76,6 +76,10 @@
         </EmptyState>
 
         <template v-else>
+          <p v-if="pipelinesError" role="alert" class="text-sm text-destructive">
+            {{ $t('views.variantCompare.pipelinesLoadFailed', { error: pipelinesError }) }}
+          </p>
+
           <DataTable
             data-testid="variant-compare-groups-table"
             :columns="groupColumns"
@@ -93,8 +97,11 @@
             <template #cell-variants_count="{ row }">
               <span class="tabular-nums">{{ row.variants_count }}</span>
             </template>
-            <template #cell-evals_count="{ row }">
-              <span class="tabular-nums">{{ row.evals_count }}</span>
+            <template #cell-declared_evals_count="{ row }">
+              <span
+                class="tabular-nums"
+                :title="$t('views.variantCompare.declaredEvalsTooltip')"
+              >{{ row.declared_evals_count }}</span>
             </template>
             <template #cell-strategy="{ row }">
               <span class="text-muted-foreground">{{ row.strategy }}</span>
@@ -114,6 +121,9 @@
                 severity="secondary"
                 outlined
                 :data-testid="`variant-compare-select-${row.id}`"
+                :aria-label="selectedGroupId === row.id
+                  ? $t('views.variantCompare.viewingComparison', { name: String(row.name) })
+                  : $t('views.variantCompare.viewComparison', { name: String(row.name) })"
                 @click.stop="selectGroupRow(row)"
               >
                 {{ selectedGroupId === row.id ? $t('views.variantCompare.viewing') : $t('views.variantCompare.view') }}
@@ -123,6 +133,17 @@
               {{ $t('views.variantCompare.noMatchingComparisons') }}
             </template>
           </DataTable>
+
+          <!-- FAR-2598: the list endpoint returns a bare array capped at
+               `page_size` (no total), so state the count outright and say so
+               when the load may have been capped rather than implying the
+               table is the complete inventory. -->
+          <p class="text-xs text-muted-foreground" data-testid="variant-compare-count">
+            {{ shownCountLabel }}
+          </p>
+          <p v-if="groupsCapped" class="text-xs text-muted-foreground">
+            {{ $t('views.variantCompare.cappedComparisons', { count: GROUP_PAGE_SIZE }) }}
+          </p>
 
       <div v-if="selectedGroup" class="space-y-4">
         <h2 class="text-base font-semibold">{{ selectedGroup.name }}</h2>
@@ -379,8 +400,13 @@ interface RunEntry {
   evalResults: RunEvalItem[]
 }
 
+// The endpoint returns a bare array and defaults to page_size=20, so the list
+// would silently truncate at 20. Ask for the endpoint's maximum page and tell
+// the user when the load may have been capped (there is no total to compare).
+const GROUP_PAGE_SIZE = 100
+
 const { loading, error, data: groupsResp, load: loadGroups } = useDataFetch(
-  () => api.GET('/api/v1/variant-groups'),
+  () => api.GET('/api/v1/variant-groups', { params: { query: { page_size: GROUP_PAGE_SIZE } } }),
   { initialValue: [] as VariantGroup[] },
 )
 
@@ -390,10 +416,11 @@ const groups = computed(() => {
 })
 
 // FAR-2598: the groups list is a comparison-groups table now, so the pipeline
-// column needs the pipeline's display name. A group whose pipeline is not in
-// this list (or whose fetch failed) still renders its id rather than a blank.
-const { data: pipelinesResp } = useDataFetch(
-  () => api.GET('/api/v1/pipelines'),
+// column needs the pipeline's display name. The pipeline read uses the same
+// page-size ceiling as the groups read and its failure is surfaced (a silent
+// failure would leave raw UUIDs in the table with no explanation).
+const { data: pipelinesResp, error: pipelinesError } = useDataFetch(
+  () => api.GET('/api/v1/pipelines', { params: { query: { page_size: GROUP_PAGE_SIZE } } }),
   { initialValue: null as unknown as { items: PipelineResponse[] } },
 )
 
@@ -436,8 +463,13 @@ function handleFilterUpdate(key: string, value: string) {
   if (key === 'pipeline_id') filterPipelineId.value = value
 }
 
-/** Distinct eval ids across a group's variants — what the group is scored with. */
-function distinctEvalCount(group: VariantGroup): number {
+/**
+ * Distinct eval ids DECLARED on a group's variants. These are declarations
+ * only: nothing uses them to score a run, and the UI builder writes them as an
+ * empty list, so this is deliberately labelled "Declared evals" rather than a
+ * score count. Real per-run scores live on the run/batch surfaces.
+ */
+function declaredEvalCount(group: VariantGroup): number {
   const ids = new Set<string>()
   for (const variant of group.variants ?? []) {
     const list = (variant as { eval_definition_ids?: unknown }).eval_definition_ids
@@ -460,7 +492,7 @@ const groupRows = computed<DataTableRow[]>(() => {
       name: group.name,
       pipeline: nameById.get(group.pipeline_id) ?? group.pipeline_id,
       variants_count: (group.variants ?? []).length,
-      evals_count: distinctEvalCount(group),
+      declared_evals_count: declaredEvalCount(group),
       strategy: group.selection_strategy || '—',
       run_count: group.run_count ?? 0,
       degraded: Boolean(group.degraded_evals),
@@ -475,12 +507,20 @@ const groupColumns = computed<Column[]>(() => [
   { key: 'name', label: t('views.variantCompare.columnName'), sortable: true, width: '22%' },
   { key: 'pipeline', label: t('views.variantCompare.columnPipeline'), sortable: true, width: '18%', hideBelow: 'md' },
   { key: 'variants_count', label: t('views.variantCompare.columnVariants'), numeric: true, sortable: true, width: '8%' },
-  { key: 'evals_count', label: t('views.variantCompare.columnEvals'), numeric: true, sortable: true, width: '8%', hideBelow: 'sm' },
+  { key: 'declared_evals_count', label: t('views.variantCompare.columnDeclaredEvals'), numeric: true, sortable: true, width: '8%', hideBelow: 'sm' },
   { key: 'strategy', label: t('views.variantCompare.columnStrategy'), width: '12%', hideBelow: 'xl' },
   { key: 'run_count', label: t('views.variantCompare.columnRuns'), numeric: true, sortable: true, width: '9%', hideBelow: 'sm' },
   { key: 'degraded', label: t('views.variantCompare.columnDegraded'), width: '9%', hideBelow: 'md' },
   { key: 'actions', label: '', width: '14%' },
 ])
+
+const groupsCapped = computed(() => groups.value.length >= GROUP_PAGE_SIZE)
+
+const shownCountLabel = computed(() =>
+  groupRows.value.length === 1
+    ? t('views.variantCompare.showingOneComparison')
+    : t('views.variantCompare.showingComparisons', { count: groupRows.value.length }),
+)
 
 function selectGroupRow(row: DataTableRow) {
   if (typeof row.id === 'string' && row.id) selectedGroupId.value = row.id
@@ -662,7 +702,13 @@ watch(groups, (list) => {
 // selection out of the visible rows (or the selection is still unset), select
 // the first visible comparison so the detail panel below always matches a row.
 watch(groupRows, (rows) => {
-  if (rows.length === 0) return
+  // A filter that hides everything must also clear the detail panel — never
+  // render a comparison underneath a table that says nothing matches.
+  if (rows.length === 0) {
+    selectedGroup.value = null
+    selectedGroupId.value = null
+    return
+  }
   const current = selectedGroupId.value
   const stillVisible = current !== null && rows.some(row => row.id === current)
   if (!stillVisible) {

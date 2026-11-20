@@ -67,18 +67,25 @@ by the `variant_batch_compare` feature flag.
       a HITL rejection lowers a batch's completion ratio rather than raising a
       batch-level `failed`
 - [x] `/variants/compare` lists comparison groups in the shared `DataTable`
-      (name, pipeline, variants, evals scored, selection strategy, runs,
-      degraded evals, actions) with a pipeline select and a name search. A row
-      selects the comparison IN PLACE — the per-node comparison table and output
-      diff viewer render below it — and never navigates to the batch-detail
-      route; the `pipeline_id` deep link still opens the builder, and the page
-      selects the first visible row so it never lands empty-handed
+      (name, pipeline, variants, declared evals, selection strategy, runs,
+      degraded evals, actions) with a pipeline select and a name search. It
+      requests the endpoint's 100-row page ceiling and prints "Showing N
+      comparisons" (plus a capped-list notice at 100) because the endpoint
+      returns a bare array with no total; a pipeline-name read failure is
+      surfaced rather than silently degrading to ids. A row selects the
+      comparison IN PLACE — the per-node comparison table and output diff viewer
+      render below it — and never navigates to the batch-detail route; the
+      `pipeline_id` deep link still opens the builder, and the page selects the
+      first visible row so it never lands empty-handed
       (`VariantCompareView.vue`, `VariantCompareView.spec.ts`,
       `variant-compare-groups.spec.ts`)
 - [x] User-visible copy on the variants surface standardises on "comparison"
       (table columns, empty state, the inline explainer linking to `/evals`, the
       builder title/subtitle) while "variant group" stays the code and route
-      vocabulary (`VariantCompareView.vue`, `VariantGroupBuilder.vue`,
+      vocabulary. The declared-eval column is labelled "Declared evals" with a
+      tooltip: `variants[].eval_definition_ids` are declarations (the UI builder
+      writes them empty and nothing scores with them), not the scores a run
+      received (`VariantCompareView.vue`, `VariantGroupBuilder.vue`,
       `locales/en-US.js`)
 
 ## Known Gaps
@@ -95,8 +102,11 @@ the per-token breakdown comparison the manifest previously parked as the lone
   name search, row selection in place, first-row default) so the list reads as
   comparisons rather than evals, and ran a copy pass standardising user-visible
   terminology on "comparison" with an inline explainer linking to `/evals`.
-  Covered by `VariantCompareView.spec.ts` and `variant-compare-groups.spec.ts`
-  (390px column hiding + in-place selection).
+  Pre-PR QA then corrected two honesty defects: the "Evals scored" column became
+  "Declared evals" (the ids are declarations, never scores) and the list asks
+  for the 100-row page ceiling with a "Showing N comparisons" count and a
+  capped-list notice. Covered by `VariantCompareView.spec.ts` and
+  `variant-compare-groups.spec.ts` (390px column hiding + in-place selection).
 - 2026-09-25: **Improve Architecture product-map walk**: closed the last
   `feat-variants` partial: per-token breakdown comparison now ships end to end.
   `_run_to_variant_run` (`api/routes/variant_batches.py`) and `get_batch_compare`

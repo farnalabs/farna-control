@@ -754,12 +754,14 @@ describe('VariantCompareView', () => {
     expect(text).toContain('Group 1')
     expect(text).toContain('Beta pipeline')
     expect(text).toContain('views.variantCompare.columnPipeline')
-    expect(text).toContain('views.variantCompare.columnEvals')
+    expect(text).toContain('views.variantCompare.columnDeclaredEvals')
     expect(text).toContain('views.variantCompare.degradedBadge')
 
     const rows = (wrapper.vm as any).groupRows as Array<Record<string, unknown>>
-    // Evals scored counts DISTINCT eval ids across the variants (e1, e2, e3).
-    expect(rows[0].evals_count).toBe(3)
+    // Declared evals counts DISTINCT declared eval ids (e1, e2, e3). It is
+    // explicitly not a score count: the tooltip says so on every cell.
+    expect(rows[0].declared_evals_count).toBe(3)
+    expect(wrapper.find('[title="views.variantCompare.declaredEvalsTooltip"]').exists()).toBe(true)
     expect(rows[0].variants_count).toBe(2)
     expect(rows[0].pipeline).toBe('Alpha pipeline')
     expect(rows[1].degraded).toBe(false)
@@ -788,6 +790,9 @@ describe('VariantCompareView', () => {
     await nextTick()
     expect(vm.groupRows).toHaveLength(0)
     expect(wrapper.text()).toContain('views.variantCompare.noMatchingComparisons')
+    // The detail panel must not keep rendering a comparison the table excluded.
+    expect(vm.selectedGroup).toBeNull()
+    expect(wrapper.text()).toContain('views.variantCompare.selectGroupFirst')
   })
 
   it('selects a comparison in place from its row action without navigating', async () => {
@@ -810,6 +815,107 @@ describe('VariantCompareView', () => {
     expect(vm.selectedGroupId).toBe('g2')
     // Still on the list page: selection is in place, not a batch-detail route.
     expect(hoisted.route.params).toEqual({})
+    // Each row action names its own comparison for assistive tech.
+    expect(wrapper.find('[data-testid="variant-compare-select-g2"]').attributes('aria-label'))
+      .toBe('views.variantCompare.viewingComparison')
+    expect(wrapper.find('[data-testid="variant-compare-select-g1"]').attributes('aria-label'))
+      .toBe('views.variantCompare.viewComparison')
+  })
+
+  it('asks for the 100-row page ceiling and reports the loaded count truthfully', async () => {
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: twoGroups, error: undefined })
+      }
+      if (url === '/api/v1/pipelines') {
+        return Promise.resolve({ data: { items: [{ id: 'p1', name: 'Alpha pipeline' }] }, error: undefined })
+      }
+      if (url === '/api/v1/variant-groups/{group_id}') {
+        return Promise.resolve({ data: twoGroups[0], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="variant-compare-groups-table"]').exists()).toBe(true)
+    })
+
+    // Both list reads ask for the endpoint's maximum page — the server default
+    // of 20 silently truncated the comparison inventory.
+    expect(api.GET).toHaveBeenCalledWith('/api/v1/variant-groups', { params: { query: { page_size: 100 } } })
+    expect(api.GET).toHaveBeenCalledWith('/api/v1/pipelines', { params: { query: { page_size: 100 } } })
+
+    const count = wrapper.find('[data-testid="variant-compare-count"]')
+    expect(count.exists()).toBe(true)
+    expect(count.text()).toBe('views.variantCompare.showingComparisons')
+    // Fewer than the page ceiling: no capped-list warning.
+    expect(wrapper.text()).not.toContain('views.variantCompare.cappedComparisons')
+  })
+
+  it('warns that the list may be capped when a full page comes back', async () => {
+    const fullPage = Array.from({ length: 100 }, (_, index) => ({
+      ...groupWithVariants,
+      id: `g-${index}`,
+      name: `Comparison ${index}`,
+      pipeline_id: 'p1',
+      run_count: 0,
+    }))
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: fullPage, error: undefined })
+      }
+      if (url === '/api/v1/pipelines') {
+        return Promise.resolve({ data: { items: [{ id: 'p1', name: 'Alpha pipeline' }] }, error: undefined })
+      }
+      if (url === '/api/v1/variant-groups/{group_id}') {
+        return Promise.resolve({ data: fullPage[0], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('views.variantCompare.cappedComparisons')
+    })
+  })
+
+  it('surfaces a pipeline-name read failure instead of silently showing ids', async () => {
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: twoGroups, error: undefined })
+      }
+      if (url === '/api/v1/pipelines') {
+        return Promise.reject(new Error('pipelines backend down'))
+      }
+      if (url === '/api/v1/variant-groups/{group_id}') {
+        return Promise.resolve({ data: twoGroups[0], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(wrapper.find('[role="alert"]').text()).toContain('views.variantCompare.pipelinesLoadFailed')
+    })
+    // The table still renders, with ids as the degraded fallback.
+    expect(wrapper.find('[data-testid="variant-compare-groups-table"]').exists()).toBe(true)
   })
 
   it('offers the New comparison CTA in the empty state and opens the builder', async () => {
