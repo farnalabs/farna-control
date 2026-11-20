@@ -198,6 +198,117 @@ describe('route-chunk recovery (FAR-2594)', () => {
     expect(replace).not.toHaveBeenCalled()
     expect(assign).not.toHaveBeenCalled()
   })
+
+  it('ignores a chunk error before any navigation has started', async () => {
+    const { handleRouteChunkError, replace, assign } = await loadRecovery()
+
+    // Meanwhile the module is still initialising, or the error came from
+    // outside a navigation: there is no destination to retry.
+    handleRouteChunkError(CHUNK_ERROR, assign)
+
+    expect(replace).not.toHaveBeenCalled()
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('still reloads the destination when the recovery guard cannot be READ', async () => {
+    const { noteNavigationStarted, handleRouteChunkError, assign } = await loadRecovery()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // A sandboxed frame / disabled storage throws on read. The guard is a
+    // best-effort storm bound, so recovery must fail open with a log.
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled')
+    })
+
+    noteNavigationStarted({ fullPath: DESTINATION })
+    handleRouteChunkError(CHUNK_ERROR, assign) // budget 1: in-app retry
+    handleRouteChunkError(CHUNK_ERROR, assign) // exhausted: guard read throws, still reload
+
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith(DESTINATION)
+    expect(warn).toHaveBeenCalledWith('[router] chunk-recovery guard unavailable', expect.any(Error))
+  })
+
+  it('still reloads the destination when the recovery guard cannot be RECORDED', async () => {
+    const { noteNavigationStarted, handleRouteChunkError, assign } = await loadRecovery()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
+
+    noteNavigationStarted({ fullPath: DESTINATION })
+    handleRouteChunkError(CHUNK_ERROR, assign) // budget 1: in-app retry
+    handleRouteChunkError(CHUNK_ERROR, assign) // exhausted: guard write throws, still reload
+
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith(DESTINATION)
+    expect(warn).toHaveBeenCalledWith(
+      '[router] could not record the chunk-recovery guard',
+      expect.any(Error),
+    )
+  })
+
+  it('still refills the retry budget when the guards cannot be CLEARED', async () => {
+    const { noteNavigationStarted, noteNavigationSettled, handleRouteChunkError, replace, assign } =
+      await loadRecovery()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    sessionStorage.setItem('modulo.chunk-recovery:/somewhere', '1')
+    vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new Error('storage unavailable')
+    })
+
+    noteNavigationStarted({ fullPath: DESTINATION })
+    handleRouteChunkError(CHUNK_ERROR, assign) // budget 1: in-app retry
+    noteNavigationSettled(undefined) // landed: clearing throws, budget still refills
+    handleRouteChunkError(CHUNK_ERROR, assign) // refilled: in-app retry again
+
+    expect(replace).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledWith(
+      '[router] could not clear the chunk-recovery guard',
+      expect.any(Error),
+    )
+  })
+
+  it('still falls back to the dashboard when the fallback message cannot be shown', async () => {
+    const { noteNavigationStarted, handleRouteChunkError, assign } = await loadRecovery()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    sessionStorage.setItem(RECOVERY_GUARD_KEY, '1')
+    vi.spyOn(window, 'alert').mockImplementation(() => {
+      throw new Error('alert blocked')
+    })
+
+    noteNavigationStarted({ fullPath: DESTINATION })
+    handleRouteChunkError(CHUNK_ERROR, assign) // budget 1: in-app retry
+    handleRouteChunkError(CHUNK_ERROR, assign) // guard spent: dashboard, alert throws
+
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith(DASHBOARD)
+    expect(warn).toHaveBeenCalledWith(
+      '[router] could not show the chunk-recovery message',
+      expect.any(Error),
+    )
+  })
+
+  it('navigates the document through window.location.assign by default', async () => {
+    const { noteNavigationStarted, handleRouteChunkError } = await loadRecovery()
+    const targets: string[] = []
+    const originalLocation = window.location
+    // Production omits the injectable boundary. jsdom cannot spy on the real
+    // `Location.assign`, so replace the whole (configurable) location object.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign: (target: string) => targets.push(target) },
+    })
+
+    try {
+      noteNavigationStarted({ fullPath: DESTINATION })
+      handleRouteChunkError(CHUNK_ERROR) // budget 1: in-app retry
+      handleRouteChunkError(CHUNK_ERROR) // exhausted: full document navigation
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
+    }
+
+    expect(targets).toEqual([DESTINATION])
+  })
 })
 
 describe('route-chunk recovery wiring (FAR-2594)', () => {
