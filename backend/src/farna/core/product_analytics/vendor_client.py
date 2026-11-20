@@ -120,9 +120,9 @@ class VendorClient:
                 content=payload,
                 headers={
                     "Content-Type": "application/json",
-                    "X-Modulo-Signature": signature,
-                    "X-Modulo-Timestamp": str(timestamp),
-                    "X-Modulo-Sequence": str(sequence),
+                    "X-Farna-Signature": signature,
+                    "X-Farna-Timestamp": str(timestamp),
+                    "X-Farna-Sequence": str(sequence),
                     "User-Agent": "Modulo-MetricsDump/1.0",
                 },
             ),

@@ -13,16 +13,17 @@
  *
  * The arithmetic the ratified shape rests on:
  *
- * - 48 rendered grouped rows (the 49 nav rows of the ticket minus the pinned
- *   Dashboard),
+ * - 47 rendered grouped rows (the 49 nav rows of the ticket minus the pinned
+ *   Dashboard, then the merged FAR-2597 change folds the separate Eval Editor
+ *   and Eval Proposals rows into the single `/evals` list row),
  * - + 3 detail routes that must keep a `sidebar_group` so the manifest
  *   validators resolve (`/runs/:id`, `/admin/errors/:id`,
  *   `/variants/compare/:batchId`) — they are skipped from rendering by
  *   `type: detail_page`,
- * - = 51 routes carrying a `sidebar_group`,
- * - + 1 pinned route (`/`) = 52 accounted routes,
- * - of which 48 + 1 pinned = 49 are rendered rows: the 51 live rows the nav
- *   had before FAR-2605 minus the 2 removals below.
+ * - = 50 routes carrying a `sidebar_group`,
+ * - + 1 pinned route (`/`) = 51 accounted routes,
+ * - of which 47 + 1 pinned = 48 are rendered rows: the 51 live rows the nav
+ *   had before FAR-2605 minus the 2 removals below, adjusted for FAR-2597.
  */
 import { describe, it, expect } from 'vitest'
 import manifest from '../manifest.yaml'
@@ -45,7 +46,7 @@ const routes = (manifest as { routes: Record<string, ManifestRouteEntry> }).rout
 const groups = (manifest as { sidebar_groups: Record<string, ManifestGroupEntry> }).sidebar_groups
 
 /**
- * The rendered rows of each group, in `sidebar_order` order. 48 paths.
+ * The rendered rows of each group, in `sidebar_order` order. 47 paths.
  * Rendered order is asserted because the ticket ratifies "most-used first".
  */
 const EXPECTED_GROUPED_ROWS: Record<string, string[]> = {
@@ -62,8 +63,7 @@ const EXPECTED_GROUPED_ROWS: Record<string, string[]> = {
   controls: [
     '/governance',
     '/settings/guardrails',
-    '/evals/editor',
-    '/evals/proposals',
+    '/evals',
   ],
   runs: [
     '/runs',
@@ -122,7 +122,7 @@ const EXPECTED_DETAIL_GROUP_ROUTES: Record<string, string[]> = {
   runs: ['/admin/errors/:id', '/variants/compare/:batchId'],
 }
 
-/** Every route path carrying a `sidebar_group` — 48 rendered + 3 detail. */
+/** Every route path carrying a `sidebar_group` — 47 rendered + 3 detail. */
 const EXPECTED_GROUPED_PATHS = Object.keys(EXPECTED_GROUPED_ROWS).reduce<string[]>(
   (paths, group) => paths.concat(EXPECTED_GROUPED_ROWS[group], EXPECTED_DETAIL_GROUP_ROUTES[group] ?? []),
   [],
@@ -146,7 +146,7 @@ function detailRoutesInGroup(group: string): string[] {
 }
 
 describe('manifest nav membership (FAR-2605)', () => {
-  it('renders exactly the ratified 48 rows, in order, across the 6 groups', () => {
+  it('renders exactly the ratified 47 rows, in order, across the 6 groups', () => {
     for (const [group, expected] of Object.entries(EXPECTED_GROUPED_ROWS)) {
       expect(routesInGroup(group), `rendered rows of sidebar group '${group}'`).toEqual(expected)
     }
@@ -158,17 +158,17 @@ describe('manifest nav membership (FAR-2605)', () => {
     }
   })
 
-  it('carries a sidebar_group on exactly the expected 51 routes', () => {
+  it('carries a sidebar_group on exactly the expected 50 routes', () => {
     const actual = Object.entries(routes)
       .filter(([, route]) => Boolean(route.sidebar_group))
       .map(([path]) => path)
       .sort()
 
     expect(actual).toEqual([...EXPECTED_GROUPED_PATHS].sort())
-    // 48 rendered rows + 3 detail references = 51; a future regroup that drops
+    // 47 rendered rows + 3 detail references = 50; a future regroup that drops
     // a shipped page fails here rather than silently leaving the sidebar.
-    expect(actual).toHaveLength(51)
-    expect(EXPECTED_GROUPED_PATHS).toHaveLength(51)
+    expect(actual).toHaveLength(50)
+    expect(EXPECTED_GROUPED_PATHS).toHaveLength(50)
   })
 
   it('pins exactly the Dashboard, and nothing else', () => {
@@ -213,14 +213,15 @@ describe('manifest nav membership (FAR-2605)', () => {
     expect(unresolved).toEqual([])
   })
 
-  it('accounts for every nav row: 48 grouped + 1 pinned = 49 rows, next to 51 group-carrying routes', () => {
+  it('accounts for every nav row: 47 grouped + 1 pinned = 48 rows, next to 50 group-carrying routes', () => {
     const renderedGroupedRows = Object.values(EXPECTED_GROUPED_ROWS).reduce((sum, rows) => sum + rows.length, 0)
     const detailGroupRoutes = Object.values(EXPECTED_DETAIL_GROUP_ROUTES).reduce((sum, rows) => sum + rows.length, 0)
     const pinnedRows = Object.entries(routes).filter(([, route]) => route.sidebar_pinned === true).length
 
-    // The ticket's 51 live rows before FAR-2605, minus the 2 removals.
-    expect(renderedGroupedRows + pinnedRows).toBe(49)
-    // 48 rendered + 3 detail references = the 51 routes carrying a group.
-    expect(renderedGroupedRows + detailGroupRoutes).toBe(51)
+    // The ticket's 51 live rows before FAR-2605, minus the 2 removals, then
+    // FAR-2597 folded the two eval rows into the single `/evals` row.
+    expect(renderedGroupedRows + pinnedRows).toBe(48)
+    // 47 rendered + 3 detail references = the 50 routes carrying a group.
+    expect(renderedGroupedRows + detailGroupRoutes).toBe(50)
   })
 })

@@ -2,7 +2,11 @@
   <FeatureGate feature-name="eval_system" required-tier="community" show-disabled>
 
     <div class="page-wide">
-    <PageHeader :title="$t('views.EvalProposalsQueueView.title')" :subtitle="$t('views.EvalProposalsQueueView.subtitle')" />
+    <PageHeader
+      :title="$t('views.EvalProposalsQueueView.title')"
+      :subtitle="$t('views.EvalProposalsQueueView.subtitle')"
+      :tabs="evalPageTabs"
+    />
 
     <div v-if="loading" class="space-y-4" aria-busy="true">
       <div v-for="i in 3" :key="i" class="card p-5 animate-pulse">
@@ -257,6 +261,14 @@ interface ProposalsResponse {
 }
 
 const { t } = useI18n()
+
+// Route-per-tab navigation across the eval surface (costs-style): the list,
+// the editor and this queue are three destinations, not query states.
+const evalPageTabs = computed(() => [
+  { label: t('views.EvalsListView.tabs_all'), to: '/evals' },
+  { label: t('views.EvalsListView.tabs_editor'), to: '/evals/editor' },
+  { label: t('views.EvalsListView.tabs_proposals'), to: '/evals/proposals' },
+])
 
 const { loading, error: pageError, data: proposalsResp, load: loadProposals } = useDataFetch<ProposalsResponse>(
   async () => {

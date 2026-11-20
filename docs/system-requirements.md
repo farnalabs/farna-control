@@ -268,7 +268,7 @@ grows with run history.
 PostgreSQL 16 is the only supported runtime database (ADR 068).
 
 - **The tenant boundary is PostgreSQL row-level security.** RLS is what isolates
-  one organisation's rows from another's. SQLite and MySQL have no equivalent, so
+  one organisation's rows from another's. SQLite (test-only) has no equivalent, so
   a non-Postgres deployment could only offer weaker application-level filtering.
 - **The Alembic migration chain is PostgreSQL-only.** The `0350` baseline is
   PostgreSQL DDL, so a fresh SQLite `alembic upgrade heads` fails at the first

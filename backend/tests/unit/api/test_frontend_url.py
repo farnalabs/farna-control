@@ -55,7 +55,7 @@ class TestResolveFrontendUrl:
         settings = _base_settings(
             modulo_frontend_url="",
             modulo_public_url="https://app.example.com",
-            cors_origins="https://modulo.run,https://app.example.com,http://localhost:5173",
+            cors_origins="https://farna.dev,https://app.example.com,http://localhost:5173",
         )
         assert resolve_frontend_url(settings) == "https://app.example.com"
 
@@ -87,7 +87,7 @@ class TestSsoFrontendUrlDelegate:
         settings = _base_settings(
             modulo_frontend_url="",
             modulo_public_url="https://control.farna.dev",
-            cors_origins="https://modulo.run,https://control.farna.dev,http://localhost:5173",
+            cors_origins="https://farna.dev,https://control.farna.dev,http://localhost:5173",
         )
         assert _frontend_url(settings) == "https://control.farna.dev"
 
@@ -132,7 +132,7 @@ class TestSsoFrontendUrlDelegate:
         settings = _base_settings(
             modulo_frontend_url="",
             modulo_public_url="https://control.farna.dev",
-            cors_origins="https://modulo.run,https://control.farna.dev",
+            cors_origins="https://farna.dev,https://control.farna.dev",
         )
         tokens = {"access_token": "tok", "refresh_token": "ref"}
         resp = _redirect_to_frontend(tokens, settings)
