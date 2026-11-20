@@ -5,9 +5,13 @@ test.describe('i18n Keys & SvgIcon Regression', () => {
     await loginAsAdmin(page, env)
     await page.goto('/admin/runners/profiles')
 
-    // CONFIGURE group button - click to expand if collapsed
+    // CONFIGURE group header. FAR-2602 auto-reveals the active route's group,
+    // so on this route it is normally already expanded — clicking it then
+    // would collapse it and hide the Runners link this test asserts on.
     const configureGroup = page.locator('button.sidebar-group-header', { hasText: 'CONFIGURE' }).first()
-    await configureGroup.click()
+    if ((await configureGroup.getAttribute('aria-expanded')) === 'false') {
+      await configureGroup.click()
+    }
 
     // Check that the sidebar link is "Runners" not "nav.admin-runners-profiles"
     const runnersLink = page.locator('a.sidebar-link', { hasText: 'Runners' }).first()
