@@ -53,7 +53,7 @@ def test_has_required_keys(name: str) -> None:
 def test_metadata_fields(name: str) -> None:
     integration = _integration(name)
     assert integration["version"] == "1.0.0"
-    assert integration["author"] == "Modulo"
+    assert integration["author"] == "Farna Control"
     assert integration["description"]
     assert "canonical" in integration["tags"]
     assert integration["connector_type"]

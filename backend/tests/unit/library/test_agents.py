@@ -98,7 +98,7 @@ def test_agent_slugs_are_unique() -> None:
 def test_metadata_fields(name: str) -> None:
     agent = _agent(name)
     assert agent["version"] == "1.0.0"
-    assert agent["author"] == "Modulo"
+    assert agent["author"] == "Farna Control"
     assert agent["description"]
     assert "canonical" in agent["tags"]
     assert "library" in agent["tags"]

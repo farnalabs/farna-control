@@ -50,7 +50,7 @@ def test_metadata_fields(name: str) -> None:
     assert isinstance(workflow["description"], str)
     assert workflow["description"]
     assert workflow["version"] == "1.0.0"
-    assert workflow["author"] == "Modulo"
+    assert workflow["author"] == "Farna Control"
     assert isinstance(workflow["tags"], list)
     assert "canonical" in workflow["tags"]
     assert isinstance(workflow["default_config"], dict)
