@@ -124,6 +124,7 @@ Fresh entries for these features are added to the graph below as behavior tracke
 - **feat-plugins** - Plugin registry (deferred from the MVP nav – hidden via private_preview; see FAR-544). Supports connector, model-backend, eval, and schema-type entry point groups via `farna.connectors`, `farna.model_backends`, `modulo.evals`, and `modulo.schema_types` - routes: `/admin/plugins`
 - **feat-audit** - Audit trail and audit log - routes: `/admin/audit`
 - **feat-feedback** - Feedback inbox - routes: `/feedback/inbox`
+- **feat-support** - Canonical support references and redacted, bounded support bundles - routes: `/runs/:id`, `/admin/errors`, `/admin/errors/:id`
 
 ### System
 - **feat-license** - Feature licensing and plan tiers - routes: `/settings/license`
@@ -1303,6 +1304,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 
 ### Infra
 - [feat-infra-health](infra/health-checks.md) => PRD N/A
+- [feat-support](infra/support-diagnostics.md) => PRD N/A
 
 ### Library
 - [feat-library](library/library.md) => PRD N/A
