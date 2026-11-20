@@ -2388,6 +2388,7 @@ async def discover_system_map(
                         Pipeline.deleted_at.is_(None),
                         Pipeline.archived_at.is_(None),
                     )
+                    .order_by(Pipeline.id)
                     .limit(row_limit)
                 )
             ).scalars()
@@ -2400,6 +2401,7 @@ async def discover_system_map(
                         Trigger.organisation_id == principal.organisation_id,
                         Trigger.deleted_at.is_(None),
                     )
+                    .order_by(Trigger.id)
                     .limit(row_limit)
                 )
             ).scalars()
@@ -2412,11 +2414,12 @@ async def discover_system_map(
                         ConnectorInstance.organisation_id == principal.organisation_id,
                         ConnectorInstance.deleted_at.is_(None),
                     )
+                    .order_by(ConnectorInstance.id)
                     .limit(row_limit)
                 )
             ).scalars()
         )
-        folders = list((await session.execute(select(PipelineFolder).where(PipelineFolder.organisation_id == principal.organisation_id).limit(row_limit))).scalars())
+        folders = list((await session.execute(select(PipelineFolder).where(PipelineFolder.organisation_id == principal.organisation_id).order_by(PipelineFolder.id).limit(row_limit))).scalars())
         sources = [
             *[
                 DiscoverySource(

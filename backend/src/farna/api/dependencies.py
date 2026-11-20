@@ -956,9 +956,11 @@ def require_org_feature(feature_name: str) -> DependsParameter:
 
     This gate applies the SAME overlay, with the plan bootstrap's precedence:
     an explicit org override wins, otherwise the plan default applies. An
-    override-read failure falls back to the plan default (fail closed for a
-    default-OFF flag) and is logged rather than surfacing as a 500 from a
-    feature check.
+    override-read failure DENIES (``enabled = False``) and is logged rather
+    than surfacing as a 500 from a feature check: a gate is a security control,
+    so an unreadable override must fail closed. Falling back to the plan
+    default would silently fail OPEN for a future default-ON, org-toggleable
+    flag even though the org may have disabled it.
     """
 
     async def _check(
@@ -977,12 +979,16 @@ def require_org_feature(feature_name: str) -> DependsParameter:
                 override = feature_overrides_from_settings(getattr(org, "settings_json", None)).get(feature_name)
                 if override is not None:
                     enabled = override
-            except Exception:
+            except SQLAlchemyError:
+                # Fail closed: the override is unreadable, so the plan default
+                # cannot be trusted as an authorisation decision (a future
+                # default-ON, org-toggleable flag would otherwise fail open).
                 logger.warning(
                     "feature_gate.org_override_read_failed",
                     extra={"feature": feature_name},
                     exc_info=True,
                 )
+                enabled = False
         if not enabled:
             raise ProblemException(
                 ProblemType.FEATURE_REQUIRED,

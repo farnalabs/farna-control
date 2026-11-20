@@ -462,6 +462,9 @@ def test_discovery_tenant_scoping_queries_filter_and_set_rls(
     inventory_selects = [s for s in selects if any(table in str(s) for table in inventory_tables)]
     assert len(inventory_selects) == 4
     assert all("organisation_id" in str(statement) for statement in inventory_selects)
+    # FAR-2595: a bounded per-kind read must also be ORDERED, otherwise the
+    # capped subset is arbitrary and discovery stops being deterministic.
+    assert all("ORDER BY" in str(statement) for statement in inventory_selects)
 
 
 def test_discovery_route_fingerprint_is_stable() -> None:

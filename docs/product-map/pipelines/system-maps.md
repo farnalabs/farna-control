@@ -219,6 +219,17 @@ point in time.
       warnings, draft map/revision ids, revision number, `published=false`)
       (`api/routes/system_maps.py`, `api/schemas/system_maps.py`;
       `test_system_maps_discovery_routes.py`)
+- [x] Discovery is bounded, not an unbounded tenant scan: every per-kind
+      inventory query is ordered by `id` and capped at
+      `MAX_DISCOVERY_SOURCES + 1` rows, so Postgres returns a stable subset
+      rather than an arbitrary one; the merged source list is deterministically
+      sorted then truncated to `MAX_DISCOVERY_SOURCES` (1000), and a visible
+      truncation warning is returned when the inventory exceeds the cap. The
+      warning states the cap and that further sources were not scanned; it
+      deliberately reports no "N of M" total because the per-kind reads are
+      already bounded (`core/system_maps_discovery.py`,
+      `api/routes/system_maps.py`; `test_system_maps_discovery.py`,
+      `test_system_maps_discovery_routes.py`)
 - [x] Discovery is deterministic and explainable: sources are sorted by
       `(kind, identifier, name)`; nodes are built only for the supported kinds
       (pipeline, trigger, connector, folder); edges are emitted only for
