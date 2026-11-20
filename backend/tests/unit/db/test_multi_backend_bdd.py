@@ -8,11 +8,11 @@ PostgreSQL (the only supported runtime database, ADR 068) and SQLite
 
 import logging
 import uuid
-from collections.abc import Mapping
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import Select, Table
+from sqlalchemy import Select
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.repositories import RepositoryHub
@@ -423,20 +423,11 @@ class TestAdvisoryLockAbstraction:
 # Scenario 7: Timestamp defaults on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
-# The one timestamp SQL form both supported dialects render identically.
+# The timestamp SQL form the shared mixin declares, rendered identically by
+# every supported dialect.
 _PORTABLE_TIMESTAMP_SQL = "current_timestamp"
 
-# Columns that predate the current_timestamp convention and still declare
-# ``func.now()``. Pinned so the sweep below fails when a NEW use is introduced,
-# and fails when one of these is migrated (a stale exemption must be removed,
-# not left behind). This set may only shrink.
-_LEGACY_FUNC_NOW_COLUMNS = frozenset(
-    {
-        "collection_install.created_at",
-        "evidence.observed_at",
-        "policy_gates.enabled_at",
-    }
-)
+_SQLITE_DIALECT = sqlite.dialect()
 
 
 def _registered_model_classes() -> list[type]:
@@ -459,27 +450,38 @@ def _default_arg_name(default: object) -> str | None:
     return getattr(arg, "name", None)
 
 
-def _func_now_columns(tables: Mapping[str, Table]) -> set[str]:
-    """``table.column`` for every default/onupdate that renders the ``now`` function."""
-    found: set[str] = set()
-    for table_name, table in tables.items():
-        for column in table.c:
-            for default in (column.server_default, column.onupdate):
-                if _default_arg_name(default) == "now":
-                    found.add(f"{table_name}.{column.name}")
-    return found
+def _render_default_on_sqlite(default: object) -> str:
+    """Render a column default as SQLite's DDL would receive it.
+
+    A plain-string default is already SQL and is returned verbatim; every other
+    form (a SQL function, a ``text()`` clause) is compiled with the SQLite
+    dialect.
+    """
+    arg = getattr(default, "arg", default)
+    compile_sql = getattr(arg, "compile", None)
+    if compile_sql is None:
+        return str(arg)
+    return str(compile_sql(dialect=_SQLITE_DIALECT))
 
 
 class TestTimestampDefaultsMultiBackend:
-    """Timestamp defaults declare the SQL-standard form on the supported pair.
+    """Model timestamp defaults must stay valid on every supported dialect.
 
     The supported pair is SQLite (test-only, ``create_all``) and PostgreSQL (the
-    only runtime database, ADR 068). Both accept ``CURRENT_TIMESTAMP``, so the
-    shared ``TimestampMixin`` declares ``func.current_timestamp()`` and the
-    generated DDL is the same on both. ``func.now()`` still *works* on both
-    (SQLAlchemy renders it as ``CURRENT_TIMESTAMP`` on SQLite and ``now()`` on
-    PostgreSQL), so this is a one-schema invariant rather than a portability
-    one: a single declared form, one DDL, nothing to reconcile.
+    only runtime database, ADR 068). Two spellings are portable and both are
+    accepted here:
+
+    * ``func.current_timestamp()`` - the SQL-standard form, which the shared
+      ``TimestampMixin`` declares and which both dialects render as
+      ``CURRENT_TIMESTAMP``.
+    * ``func.now()`` - SQLAlchemy renders it as ``CURRENT_TIMESTAMP`` on SQLite
+      and ``now()`` on PostgreSQL, so it is portable too.
+
+    What is *not* portable is hard-coding the PostgreSQL spelling as raw SQL:
+    ``text("now()")`` renders ``DEFAULT (now())`` on SQLite, which parses but
+    then fails every insert with ``unknown function: now()``. So the invariant
+    pinned below is about the rendered SQLite DDL, not about which SQLAlchemy
+    construct was chosen.
 
     These tests inspect real model metadata; they do not compile SQLAlchemy
     primitives, which would only prove what SQLAlchemy itself does.
@@ -517,15 +519,33 @@ class TestTimestampDefaultsMultiBackend:
         # pass without inspecting a single column.
         assert checked >= 20
 
-    def test_no_model_introduces_the_now_function(self) -> None:
+    def test_no_model_server_default_renders_raw_now_on_sqlite(self) -> None:
+        """No model default may render PostgreSQL-only ``now()`` in SQLite DDL.
+
+        ``server_default`` and ``onupdate`` are walked for every mapped table and
+        each expression is compiled with the SQLite dialect, i.e. rendered
+        exactly as SQLite would receive it. ``func.now()`` and
+        ``func.current_timestamp()`` both render ``CURRENT_TIMESTAMP`` and pass;
+        ``text("now()")`` renders ``now()`` and fails.
+        """
         from farna.db.models.base import Base
 
-        observed = _func_now_columns(Base.metadata.tables)
-        unexpected = observed - _LEGACY_FUNC_NOW_COLUMNS
-        stale = _LEGACY_FUNC_NOW_COLUMNS - observed
+        offenders: list[str] = []
+        checked = 0
+        for table_name, table in Base.metadata.tables.items():
+            for column in table.c:
+                for kind, default in (("server_default", column.server_default), ("onupdate", column.onupdate)):
+                    if default is None:
+                        continue
+                    checked += 1
+                    rendered = _render_default_on_sqlite(default)
+                    if "now()" in rendered.lower():
+                        offenders.append(f"{table_name}.{column.name} ({kind}) -> {rendered}")
 
-        assert not unexpected, f"new func.now() timestamp default(s): {sorted(unexpected)}"
-        assert not stale, f"func.now() exemption(s) no longer needed: {sorted(stale)}"
+        # Guard against an unpopulated registry: an empty sweep would pass
+        # without rendering a single default.
+        assert checked >= 50, f"only {checked} column defaults inspected; the model registry looks empty"
+        assert not offenders, "SQLite-unsafe timestamp default(s): " + ", ".join(sorted(offenders))
 
 
 # ===========================================================================
