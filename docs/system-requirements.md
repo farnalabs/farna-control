@@ -65,7 +65,9 @@ Windows binaries.
 | **Self-hosted (bare metal / VM)** | Production-ready | [Self-hosted administration](./operations/self-hosted-admin.md) |
 | **Fly.io** | Production-ready | [Deployment journey](./deployment-journey.md) |
 | **Railway** | Production-ready | [Deployment journey](./deployment-journey.md) |
-| **SQLite (standalone)** | Development only | [Quickstart](./quickstart.md) |
+| **Native install (Linux, macOS)** | Workstation / evaluation (ADR 031) | [Native single-install bundle](#native-single-install-bundle-linux) |
+
+SQLite is not an install path: it is used only by the automated test suite.
 
 ---
 
@@ -256,29 +258,29 @@ grows with run history.
 
 | Database | Version | Status | Production Ready | Notes |
 |----------|---------|--------|-----------------|-------|
-| **PostgreSQL** | 16+ | **Supported** | **Yes** | Primary production database |
-| **SQLite** | 3.x | Compatible | **No** | Dev-only: no RLS, no advisory locks |
-| **MySQL** | 8+ | Partial | **No** | `FARNA_CONTROL_DB=mysql` is accepted (`aiomysql` driver) but the per-node output store is postgres/sqlite-only - see below |
-| **MariaDB** | 11+ | Deprecated | **No** | `FARNA_CONTROL_DB=mariadb` accepted; deprecated since 2026-07-11, and blocked on the same write path as MySQL |
+| **PostgreSQL** | 16+ | **Supported** | **Yes** | The only supported runtime and production database |
+| **SQLite** | 3.x | Test-only | **No** | Used by the automated test suite (in-memory `create_all`); not deployable |
+| **MySQL** | 8+ | Not supported | **No** | Legacy `FARNA_CONTROL_DB=mysql` value is accepted by the validator; there is no production path |
+| **MariaDB** | 11+ | Not supported | **No** | Legacy `FARNA_CONTROL_DB=mariadb` value is accepted by the validator; there is no production path |
 
-MySQL and MariaDB are configured through `FARNA_CONTROL_DB` (`settings.py` accepts
-`postgres`, `sqlite`, `mariadb`, `mysql`) and `aiomysql` is a declared
-dependency, but they are **not** production-conformant:
+### Why only PostgreSQL
 
-* `db/crud/run_node_outputs.py::dialect_insert` raises
-  `NotImplementedError` for any SQLAlchemy dialect other than `postgresql` /
-  `sqlite` (note the dialect name is `postgresql`, not the `FARNA_CONTROL_DB` value
-  `postgres`). That
-  module is the chokepoint for every `run_node_outputs` read and write (FAR-583),
-  so a run cannot store its node outputs, telemetry, markers, or artifacts on
-  either backend.
-* The repository hub dispatches only `postgres` to `PostgresRepository`; any
-  other backend falls back to `GenericRepository` with a warning, so tenant
-  isolation relies on injected ORM filters instead of database RLS.
-* MariaDB is additionally called out as deprecated and untested in the code
-  itself, and has no `ON CONFLICT` support.
+PostgreSQL 16 is the only supported runtime database (ADR 068).
 
-Treat the two MySQL-family rows as configuration surface only.
+- **The tenant boundary is PostgreSQL row-level security.** RLS is what isolates
+  one organisation's rows from another's. SQLite and MySQL have no equivalent, so
+  a non-Postgres deployment could only offer weaker application-level filtering.
+- **The Alembic migration chain is PostgreSQL-only.** The `0350` baseline is
+  PostgreSQL DDL, so a fresh SQLite `alembic upgrade heads` fails at the first
+  migration with a SQL syntax error. Migrations are only ever exercised against
+  Postgres.
+- **The native installer bundles PostgreSQL 16**, so a separate database server is
+  not a packaging reason to offer SQLite (ADR 031).
+
+SQLite remains in the automated test suite because in-memory `create_all` is
+fast and needs no database server; that is a test harness, not a deployment
+backend. The settings validator still accepts `sqlite`, `mariadb` and `mysql`,
+but those values only reach legacy code paths.
 
 ### PostgreSQL Requirements
 
@@ -290,19 +292,6 @@ Treat the two MySQL-family rows as configuration surface only.
   `require`, `verify-ca`, `verify-full`; `prefer`/`allow` are rejected at
   startup (they silently downgrade to plaintext). No `sslmode` = plaintext.
 - **Schema**: Alembic-managed migrations run on startup
-
-### SQLite Limitations (Dev Only)
-
-SQLite mode skips these PostgreSQL-specific features:
-
-- Row-Level Security (RLS)
-- Advisory locks (`pg_try_advisory_lock`)
-- `SELECT FOR UPDATE SKIP LOCKED` (flood protection)
-- Distributed rate limiting
-
-A startup warning (structured log key `startup.sqlite_mode`) is logged when running in SQLite mode.
-
-See [`docs/troubleshooting.md`](./troubleshooting.md) §8 for known limitations.
 
 ---
 
