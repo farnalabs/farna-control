@@ -104,7 +104,7 @@ Farna Control connects to existing agents without requiring any agent rewrite:
 - Run history, evaluation, cost controls, and observability integrations
 - Role-based access controls, audit trails, single sign-on (SSO), and feature licensing
 - Extensible model backends, connectors, Model Context Protocol (MCP) tools, and runtime providers
-- PostgreSQL 16 as the primary database, with conformance support for SQLite and MariaDB/MySQL
+- PostgreSQL 16 as the supported runtime and production database; SQLite is used only by the automated test suite
 
 ## Quick start (five-minute demo)
 

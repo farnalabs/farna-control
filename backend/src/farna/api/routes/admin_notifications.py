@@ -1064,7 +1064,7 @@ async def test_webhook(
         {
             "event": "test",
             "timestamp": datetime.now(UTC).isoformat(),
-            "payload": {"type": "ping", "message": "Modulo notification test"},
+            "payload": {"type": "ping", "message": "Farna Control notification test"},
         }
     ).encode()
 

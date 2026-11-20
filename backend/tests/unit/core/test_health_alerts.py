@@ -542,7 +542,7 @@ async def test_sustained_real_advisory_failure_alerts_once_then_recovers() -> No
     alert = sender.sent[0]
     # The reported status is derived, not the raw aggregate: "degraded", and
     # the body says the same.
-    assert alert["subject"] == "[Modulo] Readiness degraded"
+    assert alert["subject"] == "[Farna Control] Readiness degraded"
     assert "Readiness is now <strong>degraded</strong>" in alert["html"]
     # The failing sweep is named WITH its detail.
     assert "runner_marker_sweep: degraded (no sweep in 22m)" in alert["html"]
@@ -728,7 +728,7 @@ async def test_severe_event_loop_lag_stall_alerts_and_names_itself_then_recovers
     assert second["action"] == "alert"
     assert len(sender.sent) == 1
     alert = sender.sent[0]
-    assert alert["subject"] == "[Modulo] Readiness degraded"
+    assert alert["subject"] == "[Farna Control] Readiness degraded"
     assert severe_bullet in alert["html"]
     assert severe_bullet in alert["text"]
 
@@ -1099,7 +1099,7 @@ async def test_gating_check_degraded_still_alerts() -> None:
 
     assert result["action"] == "alert"
     assert len(sender.sent) == 1
-    assert sender.sent[0]["subject"] == "[Modulo] Readiness degraded"
+    assert sender.sent[0]["subject"] == "[Farna Control] Readiness degraded"
     assert "database: degraded (dead-tuple ratio 0.18)" in sender.sent[0]["html"]
 
 
@@ -1126,7 +1126,7 @@ async def test_real_failure_alongside_benign_advisory_alerts_and_names_only_the_
     assert result["action"] == "alert"
     assert len(sender.sent) == 1
     alert = sender.sent[0]
-    assert alert["subject"] == "[Modulo] Readiness degraded"
+    assert alert["subject"] == "[Farna Control] Readiness degraded"
     # The real failure is named (it is the reason the alert fired)...
     assert "runner_marker_sweep: degraded (no sweep in 22m)" in alert["html"]
     assert "runner_marker_sweep: degraded (no sweep in 22m)" in alert["text"]
@@ -1224,7 +1224,7 @@ async def test_unavailable_aggregate_with_real_advisory_reports_unavailable_once
     result = await _tick(observer, sender, store, settings, clock)
     assert result["action"] == "alert"
     assert len(sender.sent) == 1
-    assert sender.sent[0]["subject"] == "[Modulo] Readiness unavailable"
+    assert sender.sent[0]["subject"] == "[Farna Control] Readiness unavailable"
 
     for _ in range(3):
         await _tick(observer, sender, store, settings, clock)
