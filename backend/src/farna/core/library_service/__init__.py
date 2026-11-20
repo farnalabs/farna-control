@@ -845,10 +845,14 @@ async def list_primitives(
     ``source`` (when given) restricts the result to exactly that source
     value — e.g. ``source="modulo"`` returns only Native library built-ins,
     ``source="local"`` returns only the org's own saved primitives, and
-    ``source="registry"`` / ``source="community"`` return only the org's DB
-    rows carrying that source. When omitted, all sources are merged. The
-    filter is applied in SQL alongside the COUNT, so ``total`` and
-    ``has_more`` stay exact on the ``?source=`` path.
+    ``source="registry"`` returns only the org's DB rows carrying that source.
+    ``source="community"`` is retired (FAR-2592): the parameter is still
+    accepted for compatibility but always returns no rows, and
+    community-sourced rows are excluded from the merged listing (the legacy
+    rows were soft-deleted and the list predicate excludes the source). When
+    omitted, every live source is merged. The filter is applied in SQL
+    alongside the COUNT, so ``total`` and ``has_more`` stay exact on the
+    ``?source=`` path.
 
     ``primitive_types`` (when given) restricts the result to any of the
     listed primitive types, e.g. ``["workflow", "agent"]``. It takes

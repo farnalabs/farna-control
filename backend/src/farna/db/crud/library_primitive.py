@@ -7,7 +7,7 @@ import logging
 import uuid
 from typing import Any, Required, TypedDict, Unpack
 
-from sqlalchemy import func, select, update
+from sqlalchemy import false, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -116,7 +116,21 @@ def _build_list_conditions(
         term = f"%{search.strip()}%"
         conditions.append(LibraryPrimitive.name.ilike(term))
 
-    if source is not None:
+    if source == "community":
+        # Community-sourced primitives are retired (FAR-2592): the community
+        # library surface was removed and migration 0356 soft-deleted every
+        # live row. The parameter stays accepted for compatibility but resolves
+        # to no rows, including any legacy row still live in a not-yet-migrated
+        # database. A literal false predicate keeps the COUNT, the row page and
+        # the cursor path on the same (empty) universe.
+        conditions.append(false())
+    elif source is None:
+        # Excluding the retired source from the merged listing keeps a legacy
+        # row (or one written by a stale process) from surfacing as an
+        # unlabelled native item. Applied in SQL, not as a Python post-filter,
+        # so ``total`` stays exact.
+        conditions.append(LibraryPrimitive.source != "community")
+    else:
         # Pushed into the shared ``conditions`` so the COUNT, the row page and
         # the cursor path all narrow to the same source-filtered universe — a
         # Python-side post-filter cannot make ``total`` exact.
