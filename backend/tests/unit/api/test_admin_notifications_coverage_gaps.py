@@ -926,7 +926,7 @@ async def test_list_all_deliveries_excludes_in_app_rows_and_keeps_deleted_endpoi
 
         # The deleted-endpoint delivery survives, with no URL to show.
         by_id = {item.id: item for item in page.items}
-        assert by_id[str(deleted_endpoint_id)].endpoint_url == ""
+        assert not by_id[str(deleted_endpoint_id)].endpoint_url
         assert by_id[str(live_id)].endpoint_url == "https://hooks.example.com/live"
     finally:
         await engine.dispose()

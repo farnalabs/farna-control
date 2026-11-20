@@ -245,6 +245,53 @@ describe('AdminNotificationDeliveryLogView', () => {
     expect(row.text()).toContain('—')
   })
 
+  it('offers the endpoint CTA in the retained-history notice when team_rbac is active (FAR-2596)', async () => {
+    // With retained history the quiet notice replaces the banner, but it must
+    // still offer the same route to configuring a new webhook when the org can.
+    mockGet().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/notifications/available-events') {
+        return Promise.resolve({ data: mockAvailableEvents, error: undefined })
+      }
+      if (url === '/api/v1/notifications') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({
+        data: {
+          items: [
+            {
+              id: '1',
+              event_type: 'run_failed',
+              status: 'delivered',
+              attempt_count: 1,
+              response_code: 200,
+              last_error: null,
+              response_body: null,
+              endpoint_url: null,
+              endpoint_id: null,
+              created_at: '2025-06-30T12:00:00Z',
+            },
+          ],
+          total: 1,
+          next_cursor: null,
+        },
+        error: undefined,
+      })
+    })
+    usePlanStore().features['team_rbac'] = true
+
+    const wrapper = mountView()
+    await flushPromises()
+    await nextTick()
+
+    const notice = wrapper.find('[data-testid="admin-notification-log-no-endpoints-history"]')
+    expect(notice.exists()).toBe(true)
+    const cta = notice.find('[data-testid="admin-notification-log-add-endpoint"]')
+    expect(cta.exists()).toBe(true)
+    expect(cta.attributes('href')).toBe('/settings/teams')
+    expect(cta.text()).toBe('Add a webhook endpoint')
+    expect(notice.text()).toContain('webhooks belong to a team')
+  })
+
   it('links the banner CTA to /settings/teams when team_rbac is active (FAR-2596)', async () => {
     withEndpoints([])
     usePlanStore().features['team_rbac'] = true
