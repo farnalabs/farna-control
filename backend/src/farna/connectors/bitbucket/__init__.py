@@ -206,7 +206,7 @@ class BitbucketConnector(ConnectorBase):
                     repo = payload.data["repo"]
                     path = payload.data["path"]
                     body: dict[str, Any] = {
-                        "message": payload.data.get("message", "Update via Modulo"),
+                        "message": payload.data.get("message", "Update via Farna Control"),
                         "branch": payload.data.get("branch", "main"),
                         path: payload.data["content"],
                     }

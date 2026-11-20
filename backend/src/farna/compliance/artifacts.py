@@ -160,7 +160,7 @@ ARTIFACT_TYPES: Final[dict[str, ArtifactTypeSpec]] = {
     ),
     ARTIFACT_CUSTOMER_RECORDS: ArtifactTypeSpec(
         artifact_type=ARTIFACT_CUSTOMER_RECORDS,
-        description=("Records the customer produces and retains outside Modulo: policies, risk assessments, internal-audit reports, vulnerability-management records, incident and restore-test records."),
+        description=("Records the customer produces and retains outside Farna Control: policies, risk assessments, internal-audit reports, vulnerability-management records, incident and restore-test records."),
         indexed=False,
         instance_observable=False,
         provenance=PROVENANCE_CUSTOMER_SUPPLIED,

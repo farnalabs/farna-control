@@ -555,7 +555,7 @@ def step_github_write_file(resource, content, path, ctx):
             "repo": "owner/repo",
             "path": path,
             "content": content,
-            "message": "Update via Modulo",
+            "message": "Update via Farna Control",
         },
     )
     import asyncio
@@ -1052,7 +1052,7 @@ def step_github_write_files_batch(repo, ctx):
         resource="commit",
         data={
             "repo": repo,
-            "message": "Batch update via Modulo",
+            "message": "Batch update via Farna Control",
             "actions": [
                 {"action": "create", "path": "src/a.py", "content": "print(1)"},
                 {"action": "update", "path": "src/b.py", "content": "print(2)"},
@@ -3007,7 +3007,7 @@ def step_gitlab_connector(ctx):
                         raise ValueError(f"GitLab resource 'files': path traversal blocked: {previous!r}")
                 if not actions:
                     raise ValueError("GitLab resource 'files' requires a non-empty 'actions' list")
-                return {"id": "abc123", "short_id": "abc123", "title": payload.data.get("message", "Update via Modulo")}
+                return {"id": "abc123", "short_id": "abc123", "title": payload.data.get("message", "Update via Farna Control")}
             case "mr_approval_request":
                 if not payload.data.get("user_ids") and not payload.data.get("user_emails"):
                     raise ValueError(

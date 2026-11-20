@@ -1,5 +1,6 @@
 """Tests for the admin org management API."""
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -8,6 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.requests import Request
 
 from farna.api.dependencies import get_db_session, get_plan_context, resolve_audit_principal
@@ -20,6 +22,7 @@ from farna.core.license import (
     REASON_MALFORMED,
     REASON_SIGNATURE_MISMATCH,
 )
+from farna.db.models.base import Base
 from farna.db.models.organisation import SYSTEM_ORG_ID, Organisation
 from farna.settings import get_settings
 from tests.unit.api.mock_session import configure_rls_preamble
@@ -657,6 +660,113 @@ class TestOrgLicenseAtomicPatch:
         exit_idx = min(e for e in exits if e > last_begin)
         writes = [i for i, e in enumerate(events) if e.startswith("patch_delete(")]
         assert writes == [exit_idx - 1], f"write not inside the transaction: {events}"
+
+
+# ── GET /{org_id}/license reads inside an explicit transaction ─────────────
+
+
+class TestOrgLicenseReadInsideTransaction:
+    """The GET licence read must run inside an explicit transaction.
+
+    The REST DI session factory is ``autobegin=False`` (``get_db_session``
+    leaves transaction management to the route), so a query issued without
+    ``session.begin()`` raises ``InvalidRequestError``. The route's
+    ``except SQLAlchemyError`` arm classifies that as a 500 session-contract
+    violation — which is exactly what production returned on
+    ``GET /api/v1/admin/orgs/{org_id}/license`` while the sibling PUT/DELETE
+    handlers (each opening their own transaction) worked.
+
+    These tests drive the route THROUGH the app with a REAL
+    ``autobegin=False`` session. A MagicMock session cannot raise the
+    contract error, so the existing mocked route tests never exercised it.
+    """
+
+    @pytest.fixture
+    async def autobegin_session(self) -> AsyncGenerator[AsyncSession, None]:
+        engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn, tables=[Organisation.__table__]))
+        maker = async_sessionmaker(engine, expire_on_commit=False, autobegin=False)
+        try:
+            async with maker() as session:
+                yield session
+        finally:
+            # Close the session BEFORE disposing the engine: disposing while a
+            # session still holds a connection from a failed request hangs the
+            # aiosqlite worker thread.
+            await engine.dispose()
+
+    @staticmethod
+    async def _seed_org(session: AsyncSession) -> None:
+        async with session.begin():
+            session.add(
+                Organisation(
+                    id=ORG_ID,
+                    name="Licence Read Org",
+                    slug="licence-read-org",
+                    status="active",
+                    settings_json={},
+                )
+            )
+            await session.flush()
+
+    @staticmethod
+    def _build_client(session: AsyncSession) -> AsyncClient:
+        async def override_session() -> AsyncGenerator[AsyncSession, None]:
+            yield session
+
+        mock_plan = MagicMock()
+        mock_plan.feature_enabled.return_value = True
+        app.dependency_overrides[get_plan_context] = lambda: mock_plan
+        app.dependency_overrides[get_db_session] = override_session
+        app.dependency_overrides[get_current_user] = lambda: ADMIN_PRINCIPAL
+        return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+    @staticmethod
+    def _stub_live_role(monkeypatch: pytest.MonkeyPatch) -> None:
+        """Admit the admin principal without a membership lookup."""
+        monkeypatch.setattr("farna.api.dependencies._resolve_live_org_role", AsyncMock(return_value="admin"))
+        monkeypatch.setattr("farna.api.dependencies.resolve_authz_enforce", AsyncMock(return_value=False))
+
+    @pytest.mark.anyio
+    async def test_get_license_reads_org_inside_a_transaction(
+        self,
+        autobegin_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        await self._seed_org(autobegin_session)
+        self._stub_live_role(monkeypatch)
+        # Deterministic licence resolution: the seeded org carries no org key
+        # and no system licence is installed in the test process.
+        monkeypatch.setattr("farna.core.license.get_license", lambda: None)
+
+        client = self._build_client(autobegin_session)
+        try:
+            resp = await client.get(f"/api/v1/admin/orgs/{ORG_ID}/license")
+        finally:
+            await client.aclose()
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.json()["has_license"] is False
+
+    @pytest.mark.anyio
+    async def test_get_license_missing_org_returns_404(
+        self,
+        autobegin_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._stub_live_role(monkeypatch)
+        monkeypatch.setattr("farna.core.license.get_license", lambda: None)
+
+        client = self._build_client(autobegin_session)
+        try:
+            resp = await client.get(f"/api/v1/admin/orgs/{ORG_ID}/license")
+        finally:
+            await client.aclose()
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 404, f"Expected 404, got {resp.status_code}: {resp.text}"
 
 
 class TestResolveAuditPrincipal:

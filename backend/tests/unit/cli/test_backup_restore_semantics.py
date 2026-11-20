@@ -355,7 +355,7 @@ def test_restore_refuses_newer_manifest_version(tmp_path: Path) -> None:
         _enter_restore_patches(stack, lock=MagicMock())
         result = CliRunner().invoke(cli, ["restore", str(archive), "--yes"])
     assert result.exit_code != 0
-    assert "NEWER than this Modulo supports" in result.output
+    assert "NEWER than this Farna Control version supports" in result.output
 
 
 def test_restore_accepts_supported_manifest_version(tmp_path: Path) -> None:
