@@ -149,7 +149,7 @@ kill_timeout = 180
   # REQUIRED: Upstash Redis instance. Create with:
   #   fly redis create --name modulo-staging-redis -r lhr,ams --enable-eviction
   # Then store its connection string with `fly secrets set REDIS_URL=...`.
-  CORS_ORIGINS = "https://staging-control.farna.dev,http://localhost:5173"
+  CORS_ORIGINS = "https://farna.dev,https://staging-control.farna.dev,http://localhost:5173"
 
 # App process-group LIVENESS check (FAR-1193 / ADR 043 Decision 4), parity with
 # fly.toml. Top-level [checks], NOT a service check: observability only, it does
