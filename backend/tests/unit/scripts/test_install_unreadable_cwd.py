@@ -1,8 +1,8 @@
 """FAR-2589 — ``scripts/install.sh`` must not depend on its working directory.
 
 Run from a directory the user cannot search (``sudo -u <user>`` from another
-user's 0700 home is the common shape), the installer aborted in the extract
-stage::
+user's 0700 home is the common shape), the installer's extract stage
+reported::
 
     find: Failed to restore initial working directory: Permission denied
 
@@ -18,7 +18,8 @@ the installer):
 
 * from a mode-0000 cwd (absolute tarball path) - the failing field shape;
 * the same with the ``cd /`` line removed - a negative control proving the
-  suite reproduces the historical failure rather than pinning today's bytes;
+  suite reproduces the historical find error rather than pinning today's
+  bytes;
 * from an enter-only cwd with a RELATIVE ``../<tarball>`` path - pinning that
   relative ``--from-file`` still resolves against where the installer was run.
 """
@@ -221,11 +222,15 @@ def test_install_from_a_cwd_without_search_permission(tmp_path: Path) -> None:
     _assert_installed(result, env)
 
 
-def test_negative_control_the_unfixed_installer_fails_from_that_cwd(tmp_path: Path) -> None:
-    """Without the `cd /`, the same install reproduces the field failure."""
+def test_negative_control_the_unfixed_installer_hits_the_find_error_from_that_cwd(tmp_path: Path) -> None:
+    """Without the `cd /`, the same install emits the field-reported find error.
+
+    Only the message is pinned: the extract-stage find feeds a process
+    substitution, whose exit status bash ignores, so this minimal harness
+    still completes the install after the error (observed on Debian 12).
+    """
     result, _env = _run_install(tmp_path, cwd_mode=0o000, relative=False, leave_cwd=False)
 
-    assert result.returncode != 0, _diagnose(result)
     assert _FIND_CWD_ERROR in result.stderr, _diagnose(result)
 
 
