@@ -2722,7 +2722,7 @@ def test_glued_command_word_scan_flags_the_reviewed_build_script_typo() -> None:
     assert typo != script
 
     assert _glued_command_words(typo) == ['file"${APP_ROOT}/Contents/MacOS/modulo"']
-    assert _glued_command_words("cat <<'PY'\nprint\"x\"\nPY\n") == []
+    assert not _glued_command_words("cat <<'PY'\nprint\"x\"\nPY\n")
 
 
 def test_macos_bundle_build_ends_with_the_launcher_identity_checks() -> None:
