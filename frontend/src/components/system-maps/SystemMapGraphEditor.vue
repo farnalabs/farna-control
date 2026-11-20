@@ -21,6 +21,7 @@
         option-label="label"
         option-value="value"
         :label="$t('views.SystemMapDetailView.relationship_source')"
+        :placeholder="$t('views.SystemMapDetailView.relationship_source')"
         :disabled="readOnly"
         data-testid="system-map-relationship-source"
       >
@@ -29,7 +30,7 @@
         </template>
       </AppSelect>
       <label class="sr-only" :for="`${uid}-rel-type`">{{ $t('views.SystemMapDetailView.relationship_types') }}</label>
-      <AppSelect :id="`${uid}-rel-type`" v-model="relationshipType" size="small" :options="typeOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.relationship_type_label')" :disabled="readOnly" data-testid="system-map-relationship-type">
+      <AppSelect :id="`${uid}-rel-type`" v-model="relationshipType" size="small" :options="typeOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.relationship_type_label')" :placeholder="$t('views.SystemMapDetailView.relationship_type_label')" :disabled="readOnly" data-testid="system-map-relationship-type">
         <template #option="{ option }">
           <span :data-value="option.value">{{ option.label }}</span>
         </template>
@@ -43,6 +44,7 @@
         option-label="label"
         option-value="value"
         :label="$t('views.SystemMapDetailView.relationship_target')"
+        :placeholder="$t('views.SystemMapDetailView.relationship_target')"
         :disabled="readOnly"
         data-testid="system-map-relationship-target"
       >

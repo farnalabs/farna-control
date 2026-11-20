@@ -204,10 +204,10 @@ describe('PageTabs', () => {
   it('activates only the tab matching the current query section', () => {
     const tabs = [
       { label: 'Native', to: '/library?section=native' },
-      { label: 'Community', to: '/library?section=community' },
       { label: 'Collections', to: '/library?section=collections' },
+      { label: 'Evals', to: '/evals/editor' },
     ]
-    const wrapper = createWrapper(tabs, '/library', { section: 'community' })
+    const wrapper = createWrapper(tabs, '/library', { section: 'collections' })
     const links = wrapper.findAll('[data-testid="router-link-stub"]')
     expect(links[0].classes()).not.toContain('active')
     expect(links[1].classes()).toContain('active')
@@ -310,7 +310,7 @@ describe('PageTabs', () => {
     it('activates a default tab when its query keys are absent from the route', () => {
       const tabs = [
         { label: 'Native', to: '/library?section=native', defaultQuery: true },
-        { label: 'Community', to: '/library?section=community' },
+        { label: 'Collections', to: '/library?section=collections' },
       ]
       const wrapper = createWrapper(tabs, '/library', {})
       const links = wrapper.findAll('.page-tab')
@@ -321,9 +321,9 @@ describe('PageTabs', () => {
     it('hands the default tab over as soon as its key is present on the route', () => {
       const tabs = [
         { label: 'Native', to: '/library?section=native', defaultQuery: true },
-        { label: 'Community', to: '/library?section=community' },
+        { label: 'Collections', to: '/library?section=collections' },
       ]
-      const wrapper = createWrapper(tabs, '/library', { section: 'community' })
+      const wrapper = createWrapper(tabs, '/library', { section: 'collections' })
       const links = wrapper.findAll('.page-tab')
       expect(links[0].classes()).not.toContain('active')
       expect(links[1].classes()).toContain('active')
@@ -332,9 +332,9 @@ describe('PageTabs', () => {
     it('ignores a hash fragment when matching a tab destination', () => {
       const tabs = [
         { label: 'Native', to: '/library?section=native#top', defaultQuery: true },
-        { label: 'Community', to: '/library?section=community#top' },
+        { label: 'Collections', to: '/library?section=collections#top' },
       ]
-      const wrapper = createWrapper(tabs, '/library', { section: 'community' })
+      const wrapper = createWrapper(tabs, '/library', { section: 'collections' })
       const links = wrapper.findAll('.page-tab')
       expect(links[0].classes()).not.toContain('active')
       expect(links[1].classes()).toContain('active')
