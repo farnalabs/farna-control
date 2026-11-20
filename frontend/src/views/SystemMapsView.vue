@@ -58,18 +58,18 @@
           <EmptyState v-if="maps.length === 0" :title="$t('views.SystemMapsView.no_maps')" :description="$t('views.SystemMapsView.empty_hint')" />
 
           <template v-else>
-            <div class="overflow-x-auto rounded-lg border">
+            <div class="table-wrapper">
               <table class="w-full text-left text-sm">
-                <thead class="bg-muted/50">
+                <thead>
                   <tr>
-                    <th class="px-4 py-3 font-medium">{{ $t('views.SystemMapsView.name') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ $t('views.SystemMapsView.description') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ $t('views.SystemMapsView.status') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ $t('views.SystemMapsView.last_updated') }}</th>
-                    <th v-if="store.hasAccess" class="px-4 py-3 font-medium text-right">{{ $t('views.SystemMapsView.actions_header') }}</th>
+                    <th class="table-header">{{ $t('views.SystemMapsView.name') }}</th>
+                    <th class="table-header">{{ $t('views.SystemMapsView.description') }}</th>
+                    <th class="table-header">{{ $t('views.SystemMapsView.status') }}</th>
+                    <th class="table-header">{{ $t('views.SystemMapsView.last_updated') }}</th>
+                    <th v-if="store.hasAccess" class="table-header table-cell-numeric">{{ $t('views.SystemMapsView.actions_header') }}</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody class="divide-y divide-border">
                   <tr
                     v-for="map in maps"
                     :key="map.id"
@@ -80,16 +80,16 @@
                     @keydown.space.prevent="openMap(map)"
                     :data-testid="`system-map-row-${map.id}`"
                   >
-                    <td class="px-4 py-3 font-medium">{{ map.name }}</td>
-                    <td class="px-4 py-3 text-muted-foreground">{{ map.description ?? '—' }}</td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell font-medium">{{ map.name }}</td>
+                    <td class="table-cell text-muted-foreground">{{ map.description ?? '—' }}</td>
+                    <td class="table-cell">
                       <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" :class="map.published_revision_id ? 'bg-success/10 text-success-text' : 'bg-warning/10 text-warning-text'">
                         <span class="h-1.5 w-1.5 rounded-full" :class="map.published_revision_id ? 'bg-success' : 'bg-warning'" aria-hidden="true" />
                         {{ $t('views.SystemMapsView.' + (map.published_revision_id ? 'published' : 'draft')) }}
                       </span>
                     </td>
-                    <td class="px-4 py-3 text-muted-foreground">{{ formatDate(map.updated_at) }}</td>
-                    <td v-if="store.hasAccess" class="px-4 py-3 text-right">
+                    <td class="table-cell text-muted-foreground">{{ formatDate(map.updated_at) }}</td>
+                    <td v-if="store.hasAccess" class="table-cell-numeric">
                       <button
                         type="button"
                         class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"

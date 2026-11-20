@@ -233,7 +233,7 @@
           :description="$t('views.AdminModelBackendsView.no_backends_description')"
         />
 
-        <div v-else class="table-wrapper overflow-x-auto">
+        <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
               <tr>
@@ -246,7 +246,7 @@
                 <th class="table-header table-cell-numeric">{{ $t('views.AdminModelBackendsView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <template v-for="backend in nativeBackends" :key="backend.id">
                 <tr
                   class="hover:bg-muted/30 transition-colors"
@@ -281,7 +281,7 @@
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="7" class="p-0">
+                  <td colspan="7" class="table-cell p-0">
                     <details
                       :data-testid="`admin-model-backends-refs-expand-${backend.id}`"
                       @toggle="toggleRefsExpand(backend.id, $event)"
@@ -314,7 +314,7 @@
                                   <th class="table-header">{{ $t('views.AdminModelBackendsView.reference_type') }}</th>
                                 </tr>
                               </thead>
-                              <tbody class="divide-y">
+                              <tbody class="divide-y divide-border">
                                 <tr v-for="ref in refsState[backend.id]?.data?.items ?? []" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
                                   <td class="table-cell font-medium">{{ ref.pipeline_name }}</td>
                                   <td class="table-cell text-muted-foreground">{{ ref.agent_name || '\u2014' }}</td>
@@ -363,7 +363,7 @@
           <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="model-backends-preview-summary">
             {{ $t('views.AdminModelBackendsView.preview_model_backends_count', { count: previewBackends.length }, previewBackends.length) }}
           </summary>
-          <div class="overflow-x-auto border-t">
+          <div class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
               <tr>
@@ -374,7 +374,7 @@
                 <th class="table-header table-cell-numeric">{{ $t('views.AdminModelBackendsView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr
                 v-for="backend in previewBackends"
                 :key="backend.id"

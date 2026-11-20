@@ -15,27 +15,27 @@
       :description="$t('views.UserAssistantSkillsView.no_skills_description')"
     />
     <template v-else>
-      <div class="overflow-hidden rounded-lg border bg-card shadow-sm">
+      <div class="table-wrapper">
         <table class="w-full text-left text-sm">
-          <thead class="bg-muted/50 text-xs font-medium uppercase text-muted-foreground">
+          <thead>
             <tr>
-              <th class="px-4 py-3">{{ $t('views.UserAssistantSkillsView.name') }}</th>
-              <th class="px-4 py-3">{{ $t('views.UserAssistantSkillsView.description') }}</th>
-              <th class="px-4 py-3">{{ $t('views.UserAssistantSkillsView.triggers') }}</th>
-              <th class="px-4 py-3">{{ $t('common.active') }}</th>
-              <th class="px-4 py-3 text-right">{{ $t('views.UserAssistantSkillsView.actions') }}</th>
+              <th class="table-header">{{ $t('views.UserAssistantSkillsView.name') }}</th>
+              <th class="table-header">{{ $t('views.UserAssistantSkillsView.description') }}</th>
+              <th class="table-header">{{ $t('views.UserAssistantSkillsView.triggers') }}</th>
+              <th class="table-header">{{ $t('common.active') }}</th>
+              <th class="table-header table-cell-numeric">{{ $t('views.UserAssistantSkillsView.actions') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <tr
               v-for="skill in skills"
               :key="skill.id"
               :data-testid="`assistant-user-skill-row-${skill.id}`"
               class="transition-colors hover:bg-muted/30"
             >
-              <td class="px-4 py-3 font-medium">{{ skill.name }}</td>
-              <td class="px-4 py-3 text-muted-foreground max-w-xs truncate" v-tooltip.top="skill.description || $t('views.UserAssistantSkillsView.empty_value')">{{ skill.description || $t('views.UserAssistantSkillsView.empty_value') }}</td>
-              <td class="px-4 py-3">
+              <td class="table-cell font-medium">{{ skill.name }}</td>
+              <td class="table-cell text-muted-foreground max-w-xs truncate" v-tooltip.top="skill.description || $t('views.UserAssistantSkillsView.empty_value')">{{ skill.description || $t('views.UserAssistantSkillsView.empty_value') }}</td>
+              <td class="table-cell">
                 <div class="flex flex-wrap gap-1">
                   <span
                     v-for="trigger in (skill.triggers || [])"
@@ -47,7 +47,7 @@
                   <span v-if="!skill.triggers?.length" class="text-xs text-muted-foreground">{{ $t('views.UserAssistantSkillsView.empty_value') }}</span>
                 </div>
               </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <button
                   type="button"
                   :data-testid="`assistant-user-skill-toggle-${skill.id}`"
@@ -64,7 +64,7 @@
                   {{ skillToggling[skill.id] ? $t('views.UserAssistantSkillsView.loading') : (skill.active ? $t('views.UserAssistantSkillsView.active') : $t('views.UserAssistantSkillsView.inactive')) }}
                 </button>
               </td>
-              <td class="px-4 py-3 text-right">
+              <td class="table-cell-numeric">
                 <div class="flex items-center justify-end gap-1">
                   <button
                     type="button"

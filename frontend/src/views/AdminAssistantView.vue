@@ -335,7 +335,7 @@
                 <th class="table-header table-cell-numeric">{{ $t('views.AdminAssistantView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr
                 v-for="skill in skills"
                 :key="skill.id"
@@ -422,7 +422,7 @@
                 <th class="table-header table-cell-numeric">{{ $t('views.AdminAssistantView.tokens') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr v-for="src in contextSourceDefs" :key="src.key" class="hover:bg-muted/30 transition-colors">
                 <td class="table-cell">
                   <span class="font-medium cursor-help" v-tooltip.top="$t(src.labelKey)">{{ $t(src.labelKey) }}</span>
@@ -468,7 +468,7 @@
                 <th class="table-header">{{ $t('views.AdminAssistantView.mode') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr v-for="skill in skills" :key="skill.id" class="hover:bg-muted/30 transition-colors">
                 <td class="table-cell font-medium">{{ skill.name }}</td>
                 <td class="table-cell">

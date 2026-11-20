@@ -118,39 +118,39 @@
     <template v-else>
       <!-- FAR-2226: the pipeline column makes the table wider than a narrow
            viewport, so the card must scroll horizontally rather than clip. -->
-      <DataCard variant="bordered" padding="none" elevation="sm" card-class="overflow-x-auto">
+      <div class="table-wrapper">
         <table class="w-full">
           <thead>
-            <tr class="border-b bg-muted/50 text-left text-xs font-medium uppercase text-muted-foreground">
-              <th class="px-4 py-3">{{ $t('views.SettingsTriggerEventLogView.type') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsTriggerEventLogView.result') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsTriggerEventLogView.timestamp') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsTriggerEventLogView.run') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsTriggerEventLogView.pipeline') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsNotificationLogView.error_detail') }}</th>
-              <th class="px-4 py-3">{{ $t('views.SettingsTriggerEventLogView.trigger_id') }}</th>
+            <tr>
+              <th class="table-header">{{ $t('views.SettingsTriggerEventLogView.type') }}</th>
+              <th class="table-header">{{ $t('views.SettingsTriggerEventLogView.result') }}</th>
+              <th class="table-header">{{ $t('views.SettingsTriggerEventLogView.timestamp') }}</th>
+              <th class="table-header">{{ $t('views.SettingsTriggerEventLogView.run') }}</th>
+              <th class="table-header">{{ $t('views.SettingsTriggerEventLogView.pipeline') }}</th>
+              <th class="table-header">{{ $t('views.SettingsNotificationLogView.error_detail') }}</th>
+              <th class="table-header">{{ $t('views.SettingsTriggerEventLogView.trigger_id') }}</th>
             </tr>
           </thead>
-          <tbody class="divide-y">
+          <tbody class="divide-y divide-border">
             <tr
               v-for="event in items"
               :key="event.id"
               class="transition-colors hover:bg-muted/30"
             >
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <span :class="typeBadge(event.trigger_type)">
                   {{ event.trigger_type }}
                 </span>
               </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                 <span :class="resultBadge(event.validation_result)">
                   {{ event.validation_result }}
                 </span>
               </td>
-              <td class="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
+              <td class="table-cell whitespace-nowrap text-muted-foreground">
                 {{ formatTimestamp(event.received_at) }}
               </td>
-              <td class="px-4 py-3 text-sm">
+              <td class="table-cell">
                 <router-link
                   v-if="event.run_id"
                   :to="`/runs/${event.run_id}`"
@@ -164,7 +164,7 @@
               <!-- FAR-2226: this cell must stay in the same column as the
                    "Pipeline" header above. A deleted/archived pipeline keeps
                    its name (history) but loses the editor link. -->
-              <td class="max-w-xs truncate px-4 py-3 text-sm text-muted-foreground" :title="event.pipeline_name ?? undefined">
+              <td class="table-cell max-w-xs truncate text-muted-foreground" :title="event.pipeline_name ?? undefined">
                 <router-link
                   v-if="event.pipeline_id && event.pipeline_name && !event.pipeline_deleted"
                   :to="`/pipelines/${event.pipeline_id}/editor`"
@@ -181,16 +181,16 @@
                 </span>
                 <span v-else class="text-muted-foreground">&mdash;</span>
               </td>
-              <td class="max-w-xs truncate px-4 py-3 text-sm text-muted-foreground" :title="event.error_detail ?? undefined">
+              <td class="table-cell max-w-xs truncate text-muted-foreground" :title="event.error_detail ?? undefined">
                 {{ event.error_detail || '—' }}
               </td>
-              <td class="px-4 py-3 font-mono text-xs text-muted-foreground">
+              <td class="table-cell font-mono text-xs text-muted-foreground">
                 {{ shortId(event.trigger_id) }}
               </td>
             </tr>
           </tbody>
         </table>
-      </DataCard>
+      </div>
 
       <div class="flex items-center justify-between">
         <button type="button"

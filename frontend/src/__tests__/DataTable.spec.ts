@@ -199,6 +199,25 @@ describe('DataTable empty state placement (FAR-2539)', () => {
     expect(scrollRegion.classes()).toContain('overflow-x-auto')
   })
 
+  it('keeps the column headers inside the scroll region when the table is empty (FAR-2584)', () => {
+    const wrapper = mountEmpty()
+    const scrollRegion = wrapper.get('div.overflow-x-auto')
+
+    // The contract: an empty table is still a table. Every declared column has
+    // a header inside the scroll region, so the region is never a dead
+    // zero-content landmark and the empty message is readable against its
+    // columns.
+    expect(scrollRegion.find('table').exists()).toBe(true)
+    const headers = scrollRegion.findAll('thead th')
+    expect(headers.map((th) => th.text().trim())).toEqual(columns.map((col) => col.label))
+
+    // The empty message stays outside that region (FAR-2539), even though the
+    // table itself now renders.
+    const empty = wrapper.get('[data-table-part="empty"]')
+    expect(empty.text()).toBe('Nothing here')
+    expect(empty.element.closest('.overflow-x-auto')).toBeNull()
+  })
+
   it('does not render the scroll-edge fade mask over an empty table', () => {
     const wrapper = mountEmpty()
     expect(wrapper.find('[data-table-part="scroll-fade"]').exists()).toBe(false)
@@ -222,5 +241,37 @@ describe('DataTable empty state placement (FAR-2539)', () => {
     const empty = wrapper.get('[data-table-part="empty"]')
     expect(empty.text()).toBe('No data available.')
     expect(wrapper.find('div.overflow-x-auto [data-table-part="empty"]').exists()).toBe(false)
+  })
+})
+
+describe('DataTable canonical shell (FAR-2584)', () => {
+  it('renders inside the shared .table-wrapper shell', () => {
+    const wrapper = mountTable()
+    const shell = wrapper.get('.table-wrapper')
+    expect(shell.find('table').exists()).toBe(true)
+    // the shell is the scroll container's parent, so border + radius + scroll
+    // come from one place
+    expect(wrapper.find('.table-wrapper > div.overflow-x-auto').exists()).toBe(true)
+  })
+
+  it('contains only horizontal overscroll so the page still scrolls vertically', () => {
+    const wrapper = mountTable()
+    const scrollRegion = wrapper.get('div.overflow-x-auto')
+
+    // `overscroll-contain` is the both-axes shorthand and trapped the vertical
+    // wheel when the pointer was over a horizontally scrolling table.
+    expect(scrollRegion.classes()).not.toContain('overscroll-contain')
+    expect(scrollRegion.classes()).toContain('overscroll-x-contain')
+  })
+
+  it('uses the shared header/cell classes rather than local padding utilities', () => {
+    const wrapper = mountTable()
+    expect(headerCells(wrapper)[0].classes()).toContain('table-header')
+    expect(wrapper.findAll('tbody td')[0].classes()).toContain('table-cell')
+  })
+
+  it('renders the empty state inside the shell', () => {
+    const wrapper = mount(DataTable, { props: { columns, rows: [] } })
+    expect(wrapper.get('.table-wrapper [data-table-part="empty"]').classes()).toContain('table-empty')
   })
 })

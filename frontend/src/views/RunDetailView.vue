@@ -569,29 +569,29 @@
           {{ $t('views.RunDetailView.no_node_data_failed') }}
         </div>
 
-        <div v-else class="overflow-x-auto">
+        <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
           <thead>
-            <tr class="border-b text-xs uppercase text-muted-foreground">
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.node') }}</th>
-              <th class="pb-2 pr-4 font-medium capitalize">{{ $t('views.RunDetailView.status') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.duration') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.input_tokens') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.output_tokens') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.model_cost') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.trace_id') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.io') }}</th>
-              <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.logs') }}</th>
-              <th class="pb-2 font-medium">{{ $t('views.RunDetailView.prompt') }}</th>
+            <tr>
+              <th class="table-header">{{ $t('views.RunDetailView.node') }}</th>
+              <th class="table-header capitalize">{{ $t('views.RunDetailView.status') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.duration') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.input_tokens') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.output_tokens') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.model_cost') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.trace_id') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.io') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.logs') }}</th>
+              <th class="table-header">{{ $t('views.RunDetailView.prompt') }}</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody class="divide-y divide-border">
             <tr
               v-for="node in nodeEntries"
               :key="node.name"
-              class="border-b last:border-b-0 hover:bg-muted/30"
+              class="hover:bg-muted/30"
             >
-              <td class="py-3 pr-4 font-medium" :title="node.name">
+              <td class="table-cell font-medium" :title="node.name">
                 <span class="select-all">{{ nodeLabel(node.name) }}</span>
                 <button
                   type="button"
@@ -603,7 +603,7 @@
                   <Copy aria-hidden="true" class="h-3 w-3" />
                 </button>
               </td>
-              <td class="py-3 pr-4">
+              <td class="table-cell">
                 <span :class="[nodeStatusBadgeClass(node), 'capitalize']">{{ node.status }}</span>
                 <span
                   v-if="node.stallReason"
@@ -614,10 +614,10 @@
                   {{ $t('views.RunDetailView.agent_stalled', { reason: node.stallReason }) }}
                 </span>
               </td>
-              <td class="py-3 pr-4 tabular-nums text-muted-foreground">{{ node.duration }}</td>
-              <td class="py-3 pr-4 tabular-nums">{{ node.inputTokens ?? '—' }}</td>
-              <td class="py-3 pr-4 tabular-nums">{{ node.outputTokens ?? '—' }}</td>
-              <td class="py-3 pr-4 tabular-nums">
+              <td class="table-cell tabular-nums text-muted-foreground">{{ node.duration }}</td>
+              <td class="table-cell tabular-nums">{{ node.inputTokens ?? '—' }}</td>
+              <td class="table-cell tabular-nums">{{ node.outputTokens ?? '—' }}</td>
+              <td class="table-cell tabular-nums">
                 <template v-if="node.cost != null">
                   {{ formatMoney(node.cost, currencyCode, 6) }}
                   <span
@@ -629,7 +629,7 @@
                 </template>
                 <template v-else>—</template>
               </td>
-              <td class="py-3 pr-4">
+              <td class="table-cell">
                 <button
                   v-if="node.traceId"
                   type="button"
@@ -643,7 +643,7 @@
                 >{{ shortId(node.traceId) }}…</button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
-              <td class="py-3">
+              <td class="table-cell">
                 <button
                   v-if="node.io"
                   type="button"
@@ -655,7 +655,7 @@
                 </button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
-              <td class="py-3">
+              <td class="table-cell">
                 <button
                   v-if="node.hasLogs || node.telemetry"
                   type="button"
@@ -667,7 +667,7 @@
                 </button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
-              <td class="py-3">
+              <td class="table-cell">
                 <button
                   type="button"
                   data-testid="run-detail-show-prompt"
@@ -687,7 +687,7 @@
               v-show="expandedNodes.has(node.name)"
               data-testid="run-detail-io-row"
             >
-              <td colspan="10" class="space-y-3 px-0 pb-4 pt-1">
+              <td colspan="10" class="table-cell space-y-3">
                 <div class="rounded-lg border bg-muted p-4">
                   <h4 class="mb-2 text-xs font-semibold text-muted-foreground">{{ $t('views.RunDetailView.input') }}</h4>
                   <JsonViewer v-if="node.io?.input != null" :data="node.io.input" :show-toolbar="false" :max-height="'16rem'" />
@@ -708,7 +708,7 @@
               v-show="expandedLogs.has(node.name)"
               data-testid="run-detail-log-row"
             >
-              <td colspan="10" class="space-y-3 px-0 pb-4 pt-1">
+              <td colspan="10" class="table-cell space-y-3">
                 <div
                   v-if="!isTerminal && liveOutput[node.name]"
                   class="rounded-lg border border-primary/40 bg-muted p-4"
@@ -882,23 +882,23 @@
           <p v-if="breakdownTotalClamped" class="mt-4 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-warning-text" data-testid="run-detail-cost-clamped">
             {{ $t('views.RunDetailView.total_clamped_to_column_capacity') }}
           </p>
-          <div v-if="breakdownEntries.length > 0" class="mt-4 overflow-x-auto">
+          <div v-if="breakdownEntries.length > 0" class="table-wrapper mt-4">
             <table class="w-full text-left text-sm">
               <thead>
-                <tr class="border-b text-xs uppercase text-muted-foreground">
-                  <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.component') }}</th>
-                  <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.amount') }}</th>
-                  <th class="pb-2 pr-4 font-medium">{{ $t('views.RunDetailView.source') }}</th>
-                  <th class="pb-2 font-medium">{{ $t('views.RunDetailView.basis') }}</th>
+                <tr>
+                  <th class="table-header">{{ $t('views.RunDetailView.component') }}</th>
+                  <th class="table-header">{{ $t('views.RunDetailView.amount') }}</th>
+                  <th class="table-header">{{ $t('views.RunDetailView.source') }}</th>
+                  <th class="table-header">{{ $t('views.RunDetailView.basis') }}</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr v-for="entry in breakdownEntries" :key="entry.component" class="border-b last:border-b-0">
-                  <td class="py-2 pr-4 font-medium">
+              <tbody class="divide-y divide-border">
+                <tr v-for="entry in breakdownEntries" :key="entry.component">
+                  <td class="table-cell font-medium">
                     {{ entry.display_name || entry.component }}
                     <span v-if="entry.error" class="ml-1 inline-flex items-center rounded-full bg-warning/10 px-1.5 py-0.5 text-xs text-warning-text">{{ $t('views.RunDetailView.eval_error_badge') }}</span>
                   </td>
-                  <td class="py-2 pr-4 tabular-nums">
+                  <td class="table-cell tabular-nums">
                     <template v-if="!entry.missing_self_report">
                       {{ formatMoney(Number(entry.amountUsd), currencyCode, 6) }}
                       <span
@@ -910,7 +910,7 @@
                     </template>
                     <template v-else>—</template>
                   </td>
-                  <td class="py-2 pr-4">
+                  <td class="table-cell">
                     <template v-if="entry.missing_self_report">
                       <!-- FAR-1305/FAR-1308: a refused report ($0.00 or
                            sub-floor) is NOT "not reported" — the agent did
@@ -937,14 +937,14 @@
                       </span>
                     </template>
                   </td>
-                  <td class="py-2 text-xs text-muted-foreground">{{ entry.basisLine }}</td>
+                  <td class="table-cell text-xs text-muted-foreground">{{ entry.basisLine }}</td>
                 </tr>
               </tbody>
               <tfoot>
-                <tr class="border-t font-medium">
-                  <td class="py-2 pr-4">{{ $t('views.RunDetailView.sum_of_components') }}</td>
-                  <td class="py-2 pr-4 tabular-nums">{{ formatMoney(Number(breakdownTotal), currencyCode, 6) }}</td>
-                  <td colspan="2" class="py-2 text-xs text-muted-foreground">{{ $t('views.RunDetailView.breakdown_sum_not_total') }}</td>
+                <tr>
+                  <td class="table-cell">{{ $t('views.RunDetailView.sum_of_components') }}</td>
+                  <td class="table-cell tabular-nums">{{ formatMoney(Number(breakdownTotal), currencyCode, 6) }}</td>
+                  <td colspan="2" class="table-cell text-xs text-muted-foreground">{{ $t('views.RunDetailView.breakdown_sum_not_total') }}</td>
                 </tr>
               </tfoot>
             </table>

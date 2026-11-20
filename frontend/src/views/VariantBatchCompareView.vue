@@ -54,44 +54,44 @@
           {{ $t('views.variantBatch.batchFailed') }}
         </output>
 
-        <div class="overflow-x-auto rounded-lg border bg-card">
+        <div class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
-              <tr class="border-b bg-muted/50">
-                <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.label') }}</th>
-                <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.input') }}</th>
-                <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.statusHeader') }}</th>
-                <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.passRate') }}</th>
-                <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.cost') }}</th>
-                <th class="px-4 py-3 font-semibold"></th>
+              <tr>
+                <th class="table-header">{{ $t('views.variantBatch.label') }}</th>
+                <th class="table-header">{{ $t('views.variantBatch.input') }}</th>
+                <th class="table-header">{{ $t('views.variantBatch.statusHeader') }}</th>
+                <th class="table-header">{{ $t('views.variantBatch.passRate') }}</th>
+                <th class="table-header">{{ $t('views.variantBatch.cost') }}</th>
+                <th class="table-header"></th>
               </tr>
             </thead>
-            <tbody>
-              <tr v-for="run in rankedRuns" :key="run.run_id" class="border-b last:border-b-0 hover:bg-muted/30">
-                <td class="px-4 py-3 font-mono text-xs">{{ run.variant_name }}</td>
-                <td class="px-4 py-3 text-xs text-muted-foreground">
+            <tbody class="divide-y divide-border">
+              <tr v-for="run in rankedRuns" :key="run.run_id" class="hover:bg-muted/30">
+                <td class="table-cell font-mono text-xs">{{ run.variant_name }}</td>
+                <td class="table-cell text-xs text-muted-foreground">
                   <div v-if="run.snapshot_label || run.input_label" class="space-y-0.5">
                     <div v-if="run.snapshot_label" class="font-medium">{{ run.snapshot_label }}</div>
                     <div v-if="run.input_label">{{ run.input_label }}</div>
                   </div>
                   <span v-else>&mdash;</span>
                 </td>
-                <td class="px-4 py-3">
+                <td class="table-cell">
                   <span :class="statusBadgeClass(run)" data-testid="variant-batch-status-badge">
                     {{ statusLabel(run) }}
                   </span>
                 </td>
-                <td class="px-4 py-3">
+                <td class="table-cell">
                   <span v-if="run.pass_rate !== null" :class="passRateClass(run.pass_rate)" data-testid="variant-batch-pass-rate">
                     {{ run.pass_rate.toFixed(0) }}%
                   </span>
                   <span v-else class="text-muted-foreground">&mdash;</span>
                 </td>
-                <td class="px-4 py-3 font-mono text-xs tabular-nums">
+                <td class="table-cell font-mono text-xs tabular-nums">
                   <span v-if="run.total_cost_usd != null">{{ formatMoney(Number(run.total_cost_usd), currencyCode, 6) }}</span>
                   <span v-else class="text-muted-foreground">&mdash;</span>
                 </td>
-                <td class="px-4 py-3 text-right">
+                <td class="table-cell-numeric">
                   <button
                     type="button"
                     class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -106,7 +106,7 @@
                 </td>
               </tr>
               <tr v-if="rankedRuns.length === 0">
-                <td colspan="6" class="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td colspan="6" class="table-cell text-center text-muted-foreground">
                   {{ $t('views.variantBatch.noRuns') }}
                 </td>
               </tr>
@@ -197,30 +197,30 @@
       <div v-if="comparisons.length === 0" class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
         {{ $t('views.variantBatch.noComparisons') }}
       </div>
-      <div v-else class="overflow-x-auto rounded-lg border bg-card">
+      <div v-else class="table-wrapper">
         <table class="w-full text-left text-sm">
           <thead>
-            <tr class="border-b bg-muted/50">
-              <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.name') }}</th>
-              <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.statusHeader') }}</th>
-              <th class="px-4 py-3 font-semibold">{{ $t('views.variantBatch.runs') }}</th>
-              <th class="px-4 py-3 font-semibold"></th>
+            <tr>
+              <th class="table-header">{{ $t('views.variantBatch.name') }}</th>
+              <th class="table-header">{{ $t('views.variantBatch.statusHeader') }}</th>
+              <th class="table-header">{{ $t('views.variantBatch.runs') }}</th>
+              <th class="table-header"></th>
             </tr>
           </thead>
-          <tbody>
-            <tr v-for="cmp in comparisons" :key="cmp.batch_id" class="border-b last:border-b-0 hover:bg-muted/30">
-              <td class="px-4 py-3">
+          <tbody class="divide-y divide-border">
+            <tr v-for="cmp in comparisons" :key="cmp.batch_id" class="hover:bg-muted/30">
+              <td class="table-cell">
                 <router-link :to="`/variants/compare/${cmp.batch_id}`" class="font-medium text-primary-text hover:underline" :data-testid="`variant-batch-link-${cmp.batch_id}`">
                   {{ cmp.name }}
                 </router-link>
               </td>
-              <td class="px-4 py-3">
+              <td class="table-cell">
                   <span :class="batchStatusBadgeClass(cmp.status)">
                     {{ batchStatusLabel(cmp.status) }}
                   </span>
               </td>
-              <td class="px-4 py-3 tabular-nums text-muted-foreground">{{ cmp.run_count }}</td>
-              <td class="px-4 py-3 text-right">
+              <td class="table-cell tabular-nums text-muted-foreground">{{ cmp.run_count }}</td>
+              <td class="table-cell-numeric">
                 <button
                   type="button"
                   class="text-xs text-destructive hover:underline disabled:opacity-50"

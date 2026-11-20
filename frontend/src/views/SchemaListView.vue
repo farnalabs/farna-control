@@ -53,22 +53,22 @@
           role="alert"
         />
 
-        <div v-if="loading" aria-hidden="true" class="overflow-x-auto rounded-lg border">
+        <div v-if="loading" aria-hidden="true" class="table-wrapper">
           <table class="w-full text-left text-sm">
-            <thead class="bg-muted/50">
+            <thead>
               <tr>
-                <th class="px-4 py-3 font-medium">{{ $t('views.SchemaListView.name') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('views.SchemaListView.description') }}</th>
-                <th class="px-4 py-3 font-medium capitalize">{{ $t('views.SchemaListView.status') }}</th>
-                <th class="px-4 py-3 font-medium text-right">{{ $t('views.SchemaListView.actions') }}</th>
+                <th class="table-header">{{ $t('views.SchemaListView.name') }}</th>
+                <th class="table-header">{{ $t('views.SchemaListView.description') }}</th>
+                <th class="table-header capitalize">{{ $t('views.SchemaListView.status') }}</th>
+                <th class="table-header table-cell-numeric">{{ $t('views.SchemaListView.actions') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody class="divide-y divide-border">
               <tr v-for="row in 6" :key="row">
-                <td class="px-4 py-3"><div class="h-4 w-32 rounded bg-muted/50" /></td>
-                <td class="px-4 py-3"><div class="h-4 w-full max-w-md rounded bg-muted/50" /></td>
-                <td class="px-4 py-3"><div class="h-4 w-16 rounded bg-muted/50" /></td>
-                <td class="px-4 py-3"><div class="ml-auto h-4 w-8 rounded bg-muted/50" /></td>
+                <td class="table-cell"><div class="h-4 w-32 rounded bg-muted/50" /></td>
+                <td class="table-cell"><div class="h-4 w-full max-w-md rounded bg-muted/50" /></td>
+                <td class="table-cell"><div class="h-4 w-16 rounded bg-muted/50" /></td>
+                <td class="table-cell"><div class="ml-auto h-4 w-8 rounded bg-muted/50" /></td>
               </tr>
             </tbody>
           </table>
@@ -114,17 +114,17 @@
           />
 
           <template v-else>
-            <div class="overflow-x-auto rounded-lg border">
+            <div class="table-wrapper">
               <table class="w-full text-left text-sm">
-                <thead class="bg-muted/50">
+                <thead>
                   <tr>
-                    <th class="px-4 py-3 font-medium">{{ $t('views.SchemaListView.name') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ $t('views.SchemaListView.description') }}</th>
-                    <th class="px-4 py-3 font-medium capitalize">{{ $t('views.SchemaListView.status') }}</th>
-                    <th class="px-4 py-3 font-medium text-right">{{ $t('views.SchemaListView.actions') }}</th>
+                    <th class="table-header">{{ $t('views.SchemaListView.name') }}</th>
+                    <th class="table-header">{{ $t('views.SchemaListView.description') }}</th>
+                    <th class="table-header capitalize">{{ $t('views.SchemaListView.status') }}</th>
+                    <th class="table-header table-cell-numeric">{{ $t('views.SchemaListView.actions') }}</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody class="divide-y divide-border">
                   <tr
                     v-for="schema in schemas"
                     :key="schema.id"
@@ -138,9 +138,9 @@
                     @dragstart="onSchemaDragStart(schema, $event)"
                     @dragover.prevent
                   >
-                    <td class="px-4 py-3 font-medium">{{ schema.name }}</td>
-                    <td class="px-4 py-3 text-muted-foreground">{{ schema.description ?? '—' }}</td>
-                    <td class="px-4 py-3">
+                    <td class="table-cell font-medium">{{ schema.name }}</td>
+                    <td class="table-cell text-muted-foreground">{{ schema.description ?? '—' }}</td>
+                    <td class="table-cell">
                       <span
                         v-if="schema.deprecated"
                         class="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive-text"
@@ -156,7 +156,7 @@
                         {{ $t('views.SchemaListView.active') }}
                       </span>
                     </td>
-                    <td class="px-4 py-3 text-right">
+                    <td class="table-cell-numeric">
                       <button
                         type="button"
                         class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
