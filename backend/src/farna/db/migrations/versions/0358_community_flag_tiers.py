@@ -26,15 +26,15 @@ Idempotency and safety:
 Downgrade: the exact reverse UPDATE, guarded on ``tier_id = 'community'`` so it
 is idempotent in the same way.
 
-Revision ID: 0357_community_flag_tiers
-Revises: 0356_soft_delete_community_library_primitives
+Revision ID: 0358_community_flag_tiers
+Revises: 0357_rebrand_library_seed_copy
 Create Date: 2026-11-20
 """
 
 from alembic import op
 
-revision: str = "0357_community_flag_tiers"
-down_revision: str | None = "0356_soft_delete_community_library_primitives"
+revision: str = "0358_community_flag_tiers"
+down_revision: str | None = "0357_rebrand_library_seed_copy"
 branch_labels = None
 depends_on = None
 

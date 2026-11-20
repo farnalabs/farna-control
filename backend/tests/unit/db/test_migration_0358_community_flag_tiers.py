@@ -1,9 +1,9 @@
-"""The 0357 migration moves ONLY the email/environment-profile catalog rows to community (FAR-2604).
+"""The 0358 migration moves ONLY the email/environment-profile catalog rows to community (FAR-2604).
 
 FAR-2604 lowered ``email_config`` and ``environment_profiles`` to the community
 tier in ``core.feature_flags._KNOWN_FLAGS``, but that code change is inert on an
 existing install: the boot seed inserts catalog rows with
-``ON CONFLICT DO NOTHING`` and the DB rows win. Migration 0357 rewrites the two
+``ON CONFLICT DO NOTHING`` and the DB rows win. Migration 0358 rewrites the two
 existing rows once.
 
 These tests pin the exact predicates the migration executes, and EXECUTE its own
@@ -24,7 +24,7 @@ from types import ModuleType
 import pytest
 from alembic import op
 
-_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0357_community_flag_tiers.py"
+_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0358_community_flag_tiers.py"
 
 _SQLITE_DDL = """
 CREATE TABLE feature_flag_catalog (
@@ -40,7 +40,7 @@ _OTHER_COMMUNITY = "observability"
 
 
 def _load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0357_community_flag_tiers", _MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_0358_community_flag_tiers", _MIGRATION_PATH)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -84,8 +84,8 @@ def _seed(connection: sqlite3.Connection, tiers: dict[str, str]) -> None:
 def test_revision_continues_the_current_single_head() -> None:
     module = _load_migration()
 
-    assert module.revision == "0357_community_flag_tiers"
-    assert module.down_revision == "0356_soft_delete_community_library_primitives"
+    assert module.revision == "0358_community_flag_tiers"
+    assert module.down_revision == "0357_rebrand_library_seed_copy"
 
 
 def test_upgrade_statement_is_scoped_to_the_two_flags_and_the_team_tier(monkeypatch: pytest.MonkeyPatch) -> None:
