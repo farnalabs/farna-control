@@ -3,9 +3,9 @@
 ``farna.db.url_utils`` is the SINGLE implementation of the boot URL contract
 (container bootstrap, Settings validator, native launcher). These tests lock:
 
-* ``fix_database_url`` semantics — legacy prefix rewrites, ``sslmode``
-  PRESERVED on Postgres-family URLs (an operator's TLS setting is honoured,
-  FAR-1440) and stripped from MySQL-family URLs (aiomysql rejects it);
+* ``fix_database_url`` semantics — the legacy ``postgres://`` prefix rewrite,
+  with ``sslmode`` PRESERVED on Postgres-family URLs (an operator's TLS
+  setting is honoured, FAR-1440);
 * ``split_postgres_sslmode`` — the sslmode→asyncpg ``ssl`` translation with
   a fail-closed posture (require/verify-* kept, prefer/allow rejected,
   absent/disable → explicit plaintext ``False``);
@@ -83,22 +83,6 @@ POSTGRES_PRESERVE_CASES = [
 
 @pytest.mark.parametrize(("url", "expected"), POSTGRES_PRESERVE_CASES)
 def test_fix_database_url_preserves_postgres_sslmode(url: str, expected: str) -> None:
-    assert fix_database_url(url) == expected
-
-
-MYSQL_STRIP_CASES = [
-    ("mysql+asyncmy://modulo:modulo@localhost:3306/modulo", "mysql+aiomysql://modulo:modulo@localhost:3306/modulo"),
-    # aiomysql rejects sslmode — stripped, with the known wart when first
-    ("mysql+aiomysql://u:p@h:3306/db?sslmode=require&charset=utf8", "mysql+aiomysql://u:p@h:3306/db&charset=utf8"),
-    (
-        "mysql+aiomysql://u:p@h:3306/db?connect_timeout=3&sslmode=disable",
-        "mysql+aiomysql://u:p@h:3306/db?connect_timeout=3",
-    ),
-]
-
-
-@pytest.mark.parametrize(("url", "expected"), MYSQL_STRIP_CASES)
-def test_fix_database_url_strips_mysql_sslmode(url: str, expected: str) -> None:
     assert fix_database_url(url) == expected
 
 
@@ -191,16 +175,10 @@ def test_split_postgres_sslmode_rejects_unsafe_or_unknown(url: str, bad_mode: st
         split_postgres_sslmode(url)
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        pytest.param("mysql+aiomysql://u:p@h/db?sslmode=require", id="mysql_scheme"),
-        pytest.param("sqlite+aiosqlite:///./test.db?sslmode=require", id="sqlite_scheme"),
-    ],
-)
-def test_split_postgres_sslmode_refuses_non_postgres_scheme(url: str) -> None:
+def test_split_postgres_sslmode_refuses_non_postgres_scheme() -> None:
+    # SQLite is the only non-PostgreSQL backend left (test-only, ADR 068).
     with pytest.raises(ValueError, match="scheme"):
-        split_postgres_sslmode(url)
+        split_postgres_sslmode("sqlite+aiosqlite:///./test.db?sslmode=require")
 
 
 # ---------------------------------------------------------------------------
@@ -234,12 +212,6 @@ def test_split_postgres_sslmode_refuses_non_postgres_scheme(url: str) -> None:
             "sqlite+aiosqlite:///./test.db?sslmode=require",
             None,
             id="sqlite_passes_through_untouched",
-        ),
-        pytest.param(
-            "mysql+aiomysql://u:p@h/db",
-            "mysql+aiomysql://u:p@h/db",
-            None,
-            id="mysql_passes_through_untouched",
         ),
     ],
 )

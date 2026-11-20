@@ -56,7 +56,7 @@ class EvalSuite(OrgScoped):
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # Denormalised list of evals.id belonging to this suite.
     # Physical jsonb (0130); JSONB_COL keeps the ORM declaration honest while
-    # preserving SQLite/MariaDB parity.
+    # preserving SQLite (test-only) parity.
     eval_definition_ids: Mapped[list[uuid.UUID]] = mapped_column(JSONB_COL, nullable=False, default=list)
     # Optional reference to an input set / dataset (Phase 2 concept). NULL in
     # Phase 1 — reserved column so later phases don't need a migration.

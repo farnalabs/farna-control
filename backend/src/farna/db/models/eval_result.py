@@ -110,7 +110,7 @@ class EvalResult(OrgScoped):
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Schema-versioned verdict envelope (ADR 066 D5). Physical jsonb; the
-    # shared JSONB_COL alias keeps SQLite/MariaDB parity.
+    # shared JSONB_COL alias keeps SQLite (test-only) parity.
     judge_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL, nullable=True)
     # Denormalised confidence provenance (envelope key ``confidence_kind``).
     judge_confidence_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)

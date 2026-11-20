@@ -333,8 +333,16 @@ def test_linux_launcher_serves_the_bundled_spa() -> None:
 
 #: install.sh's own default install root: the per-user ``${HOME}/...`` tail of
 #: its INSTALL_ROOT line (after the FARNA_CONTROL_/MODULO_ env overrides), so
-#: ``~/.local/opt/farna-control`` stays the single answer.
-_INSTALLER_ROOT_DEFAULT_RE = re.compile(r'^INSTALL_ROOT=".*:-\$\{HOME\}/(?P<root>[^}"]+)\}\}"$', re.MULTILINE)
+#: ``~/.local/opt/farna-control`` stays the single answer. FAR-2589 wrapped the
+#: assignment in ``absolute_from_invocation`` (the installer anchors a relative
+#: path at the invocation directory before ``cd /``), so the pin expects that
+#: wrapper too: an unwrapped default would silently reintroduce the
+#: cwd-relative root the fix removed.
+_INSTALLER_ROOT_DEFAULT_RE = re.compile(
+    r'^INSTALL_ROOT="\$\(absolute_from_invocation "'
+    r'.*:-\$\{HOME\}/(?P<root>[^}"]+)\}\}"\)"$',
+    re.MULTILINE,
+)
 
 
 def test_default_install_root_is_the_installer_default(monkeypatch: pytest.MonkeyPatch) -> None:

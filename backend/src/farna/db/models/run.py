@@ -674,7 +674,7 @@ class Run(OrgScoped):
     # written atomically with terminalization by the shared fenced terminal
     # write (crud/run) and refreshed (upsert) on re-terminalization. Physical
     # jsonb since 0110; JSONB_COL keeps the ORM declaration honest while
-    # preserving SQLite/MariaDB parity.
+    # preserving SQLite (test-only) parity.
     run_classification: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL)
     # FAR-213 blocked-partial summary (migration 0111) — structured
     # run-termination compensation record written when a run terminalizes
@@ -683,7 +683,7 @@ class Run(OrgScoped):
     # not-compensated), output references (never duplicated raw payloads), and
     # per-attempt compensation outcomes. JSONB in the 0111 migration;
     # JSONB_COL keeps the ORM declaration honest while preserving
-    # SQLite/MariaDB parity.
+    # SQLite (test-only) parity.
     blocked_partial_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL)
     # FAR-223 item 11 guardrail_summary telemetry (migration 0113) — a
     # point-in-time snapshot of the guardrail interception written at
@@ -691,7 +691,7 @@ class Run(OrgScoped):
     # {bound, evaluated, passed, violated, observed, errored, redacted,
     # skipped, expected_skips, unexpected_skips}. 0129 promoted it to jsonb;
     # JSONB_COL keeps the ORM declaration honest while preserving
-    # SQLite/MariaDB parity.
+    # SQLite (test-only) parity.
     guardrail_summary_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL)
     # FAR-2054 seam-scoped guardrail coverage (migration 0325) — the exhaustive
     # per-seam list written at create_run: [{seam, state, provenance, reason}]
@@ -700,7 +700,7 @@ class Run(OrgScoped):
     # (Modulo acted); ``runtime_loop`` is always ``not_applicable`` because
     # Alpha does not consume a runtime tool-event stream. JSONB in 0325;
     # JSONB_COL keeps the ORM declaration honest while preserving
-    # SQLite/MariaDB parity. NULL only for runs created before this shipped.
+    # SQLite (test-only) parity. NULL only for runs created before this shipped.
     seam_coverage_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB_COL)
     # FAR-801: workspace-input drift detection flag — written by the audit
     # layer (record_drift) in the SAME transaction as the audit row so

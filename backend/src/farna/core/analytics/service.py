@@ -908,8 +908,8 @@ def _keyset_conditions(cursor: tuple[date, datetime, uuid.UUID]) -> Any:
     scan, which is exactly what a scan surface must not do (FAR-102 deferral).
 
     The three-branch OR is written as explicit scalar comparisons rather than a
-    Postgres row-value tuple compare so it compiles on every conformance dialect
-    (SQLite/MariaDB) as well as the supported Postgres primary. Values are bound
+    Postgres row-value tuple compare so it compiles on the SQLite (test-only)
+    backend as well as the supported Postgres primary. Values are bound
     as named ``sa.bindparam`` (never interpolated) so each page re-binds fresh
     values against the same statement.
     """

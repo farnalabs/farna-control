@@ -86,10 +86,11 @@ class TestCleanupCronDrainLoop:
         mock_factory.assert_called()
 
     @pytest.mark.parametrize("case", JOB_CASES)
-    @pytest.mark.parametrize("non_pg_db", ["sqlite", "mariadb", "mysql"])
-    async def test_non_postgres_uses_plain_factory(self, case: JobCase, non_pg_db: str) -> None:
-        """On non-PostgreSQL backends (no RLS, no farna_control_system role) the job
-        must drain on the PLAIN factory and never touch the system engine."""
+    async def test_non_postgres_uses_plain_factory(self, case: JobCase) -> None:
+        """On the non-PostgreSQL backend (SQLite, test-only: no RLS, no
+        farna_control_system role) the job must drain on the PLAIN factory and
+        never touch the system engine."""
+        non_pg_db = "sqlite"
         factory, _ = make_factory_with_session()
 
         with (

@@ -259,16 +259,16 @@ grows with run history.
 | Database | Version | Status | Production Ready | Notes |
 |----------|---------|--------|-----------------|-------|
 | **PostgreSQL** | 16+ | **Supported** | **Yes** | The only supported runtime and production database |
-| **SQLite** | 3.x | Test-only | **No** | Used by the automated test suite (in-memory `create_all`); not deployable |
-| **MySQL** | 8+ | Not supported | **No** | Legacy `FARNA_CONTROL_DB=mysql` value is accepted by the validator; there is no production path |
-| **MariaDB** | 11+ | Not supported | **No** | Legacy `FARNA_CONTROL_DB=mariadb` value is accepted by the validator; there is no production path |
+| **SQLite** | 3.x | Test-only | **No** | Used by the automated test suite (in-memory `create_all`), behind the test-only `FARNA_CONTROL_ALLOW_SQLITE=1` opt-in; not deployable |
+| **MySQL** | 8+ | Not supported | **No** | `FARNA_CONTROL_DB=mysql` is rejected at startup; there is no production path |
+| **MariaDB** | 11+ | Not supported | **No** | `FARNA_CONTROL_DB=mariadb` is rejected at startup; there is no production path |
 
 ### Why only PostgreSQL
 
 PostgreSQL 16 is the only supported runtime database (ADR 068).
 
 - **The tenant boundary is PostgreSQL row-level security.** RLS is what isolates
-  one organisation's rows from another's. SQLite and MySQL have no equivalent, so
+  one organisation's rows from another's. SQLite (test-only) has no equivalent, so
   a non-Postgres deployment could only offer weaker application-level filtering.
 - **The Alembic migration chain is PostgreSQL-only.** The `0350` baseline is
   PostgreSQL DDL, so a fresh SQLite `alembic upgrade heads` fails at the first
@@ -279,8 +279,10 @@ PostgreSQL 16 is the only supported runtime database (ADR 068).
 
 SQLite remains in the automated test suite because in-memory `create_all` is
 fast and needs no database server; that is a test harness, not a deployment
-backend. The settings validator still accepts `sqlite`, `mariadb` and `mysql`,
-but those values only reach legacy code paths.
+backend. The settings validator accepts only `postgres` and `sqlite`:
+`mariadb` and `mysql` are rejected outright, and `sqlite` is accepted only when
+the test-only `FARNA_CONTROL_ALLOW_SQLITE=1` opt-in is set alongside a SQLite
+`DATABASE_URL`, so nothing but `postgres` reaches a deployment.
 
 ### PostgreSQL Requirements
 

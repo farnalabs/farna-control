@@ -1164,7 +1164,7 @@ async def _set_org_statement_timeout(session: AsyncSession) -> None:
     ``set_config`` takes no lock itself, so it cannot disturb lock ordering.
 
     Postgres-only, same dialect gate and same fail-safe direction as
-    ``_set_rls_org`` above: SQLite/MySQL have no ``set_config``, and the
+    ``_set_rls_org`` above: the SQLite (test-only) backend has no ``set_config``, and the
     bound is a safety improvement, never a correctness requirement.
 
     An expired bound raises SQLSTATE 57014 (``query_canceled``), which

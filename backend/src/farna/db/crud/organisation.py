@@ -29,9 +29,9 @@ from farna.settings import Settings
 
 _log = logging.getLogger(__name__)
 
-# The RLS tenant key generic backends (SQLite/MariaDB) store in ``session.info``
-# — mirrors ``modulo.db.rls._TENANT_KEY`` (kept local so the strict read here
-# does not depend on the module-private constant).
+# The RLS tenant key the generic backend (SQLite, test-only) stores in
+# ``session.info`` — mirrors ``modulo.db.rls._TENANT_KEY`` (kept local so the
+# strict read here does not depend on the module-private constant).
 _RLS_TENANT_KEY = "org_id"
 
 
@@ -301,7 +301,7 @@ async def update_org_settings_patch(
       :delete_keys::text[] WHERE id = :org_id AND deleted_at IS NULL RETURNING
       settings_json`` — the read and write are one statement, so no interleaving
       writer can be lost.
-    - Generic backends (SQLite / MariaDB, tests + legacy): an equivalent
+    - The generic backend (SQLite, test-only): an equivalent
       read-merge-write under ``SELECT ... FOR UPDATE``. Dialect-gated so the
       JSONB operators never reach a backend that lacks them.
 

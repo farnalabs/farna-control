@@ -2,7 +2,7 @@
 
 Two implementations dispatch via RepositoryHub:
   - PostgresRepository  — RLS handles tenant filtering via set_config()
-  - GenericRepository   — explicit .where() for MariaDB / SQLite
+  - GenericRepository   — explicit .where() for SQLite (test-only)
 """
 
 import uuid

@@ -854,8 +854,8 @@ async def _allocate_run_number(session: AsyncSession, org_id: uuid.UUID) -> int:
       drifted below the actual max catches up instead of re-allocating an
       already-used number.
 
-    Generic backends (SQLite/MariaDB) fall back to ``MAX(run_number)+1`` — a
-    documented divergence: they are single-writer in practice and do not share
+    The generic backend (SQLite, test-only) falls back to ``MAX(run_number)+1`` — a
+    documented divergence: it is single-writer in practice and does not share
     the same upsert semantics. The visible contract is unchanged: ``run_number``
     is per-org, sequential, unique.
     """
@@ -976,7 +976,7 @@ async def _enforce_pipeline_state_gate(session: AsyncSession, pipeline_id: uuid.
     The explicit ``organisation_id = :org`` predicate restores RLS equivalence
     on backends where the raw ``text()`` read bypasses the ORM tenant filter:
     Postgres scopes this read through the ``rls_org_isolation`` policy, while
-    SQLite/MariaDB only inject that filter into ORM statements. ``org_id`` is
+    the SQLite (test-only) backend only injects that filter into ORM statements. ``org_id`` is
     already a ``create_run`` parameter, so the bound value costs nothing and
     the ROW-ABSENT semantics below are unchanged (a row the session cannot see
     is absent, never a refusal).
@@ -4783,7 +4783,7 @@ async def get_run_stats(
 
     Postgres computes the p50/p95/p99 duration percentiles in SQL via
     ``percentile_cont`` so the endpoint does not load every run in the window
-    into Python. Generic backends (SQLite, MariaDB) fall back to loading runs
+    into Python. The generic backend (SQLite, test-only) falls back to loading runs
     and computing percentiles in Python because ``percentile_cont`` is
     Postgres-only. The response shape is identical on both paths.
     """

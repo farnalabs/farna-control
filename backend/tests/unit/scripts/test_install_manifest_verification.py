@@ -377,7 +377,9 @@ def test_from_file_bare_filename_resolves_the_manifest_beside_the_tarball(tmp_pa
     assert result.returncode == 1
     assert "offline install REFUSED" in combined
     assert f"{tarball_name}/RELEASE_MANIFEST.json" not in combined, "install.sh treated the bare tarball filename as the manifest's directory:\n" + combined
-    assert "./RELEASE_MANIFEST.json" in combined
+    # FAR-2589: the installer anchors a relative --from-file at the directory it
+    # was invoked from before leaving it, so the manifest is named absolutely.
+    assert f"{tmp_path.resolve()}/RELEASE_MANIFEST.json" in combined
 
 
 @pytest.mark.posix_only

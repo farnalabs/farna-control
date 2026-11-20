@@ -434,6 +434,98 @@ describe('AdminCostBreakdownView', () => {
     expect(list.text()).toContain('0% above')
   })
 
+  it('degrades to an empty list instead of throwing when anomalies arrive in a paged envelope', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/costs') {
+        return Promise.resolve({
+          data: { period: 'month', group_by: 'team', items: [] },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/analytics/query') {
+        return Promise.resolve({ data: { buckets: [] }, error: undefined })
+      }
+      if (path === '/api/v1/admin/costs/anomalies') {
+        // The contract is a bare array; this is the paged envelope shape that
+        // used to make `anomalies.value.filter` throw (FAR-2614).
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 'anomaly-1', anomaly_date: '2026-06-28', pipeline_id: null, amount: 150.0, baseline: 50.0, percent_above: 200.0, dismissed: false },
+            ],
+            total: 1,
+          },
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlanStore()
+    store.$patch({ features: { admin_cost_breakdown: true } })
+
+    const wrapper = mount(AdminCostBreakdownView, {
+      global: { plugins: [pinia] },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    // Rendering completes without a TypeError, the anomaly card shows its
+    // empty state, and the shape surprise is surfaced rather than swallowed.
+    expect(wrapper.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="cost-anomalies-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="cost-anomalies-list"]').exists()).toBe(false)
+    expect(warnSpy).toHaveBeenCalled()
+
+    warnSpy.mockRestore()
+  })
+
+  it('renders the anomalies when the payload is a bare array', async () => {
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/costs') {
+        return Promise.resolve({
+          data: { period: 'month', group_by: 'team', items: [] },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/analytics/query') {
+        return Promise.resolve({ data: { buckets: [] }, error: undefined })
+      }
+      if (path === '/api/v1/admin/costs/anomalies') {
+        return Promise.resolve({
+          data: [
+            { id: 'anomaly-active', anomaly_date: '2026-06-28', pipeline_id: null, amount: 150.0, baseline: 50.0, percent_above: 200.0, dismissed: false },
+            { id: 'anomaly-dismissed', anomaly_date: '2026-06-25', pipeline_id: null, amount: 90.0, baseline: 45.0, percent_above: 100.0, dismissed: true },
+          ],
+          error: undefined,
+        })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlanStore()
+    store.$patch({ features: { admin_cost_breakdown: true } })
+
+    const wrapper = mount(AdminCostBreakdownView, {
+      global: { plugins: [pinia] },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    const list = wrapper.find('[data-testid="cost-anomalies-list"]')
+    expect(list.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="cost-anomaly-anomaly-active"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="cost-anomaly-anomaly-dismissed"]').exists()).toBe(false)
+    expect(list.text()).toContain('1 dismissed')
+  })
+
   it('renders the empty states when there are no team rows and no anomalies', async () => {
     ;(api.GET as any).mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs') {
