@@ -74,6 +74,17 @@ describe('DevMetricsView', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('days=7'))
   })
 
+  it('reloads metrics for the chosen time range', async () => {
+    const wrapper = mount(DevMetricsView)
+    await flushPromises()
+    mockGet.mockClear()
+
+    wrapper.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 30)
+    await flushPromises()
+
+    expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('days=30'))
+  })
+
   it('shows loading spinner on initial load', async () => {
     // Hold the API call open
     mockGet.mockReturnValue(new Promise(() => {}))

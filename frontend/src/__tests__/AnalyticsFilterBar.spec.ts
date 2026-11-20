@@ -379,6 +379,49 @@ describe('AnalyticsFilterBar filter select handlers', () => {
   })
 })
 
+describe('AnalyticsFilterBar AppSelect edge handling', () => {
+  it('sorts folder options case-insensitively by name', () => {
+    const wrapper = mountBar({}, {
+      folders: [
+        { id: 'f2', name: 'beta' },
+        { id: 'f1', name: 'Alpha' },
+      ],
+    })
+    // '' is the "All" entry; the two folders follow, sorted by name.
+    expect(pickerOptions(wrapper, 'analytics-filter-folder').map((o) => o.value)).toEqual(['', 'f1', 'f2'])
+  })
+
+  it('clears the pipeline, trigger-type, and status filters to null', async () => {
+    const wrapper = mountBar()
+
+    const lastEmitted = () => {
+      const emitted = wrapper.emitted('update:filters')!
+      return emitted[emitted.length - 1][0] as unknown as Record<string, unknown>
+    }
+
+    await choose(wrapper, 'analytics-filter-pipeline', '')
+    expect(lastEmitted().pipelineId).toBeNull()
+
+    await choose(wrapper, 'analytics-filter-trigger-type', '')
+    expect(lastEmitted().triggerType).toBeNull()
+
+    await choose(wrapper, 'analytics-filter-status', '')
+    expect(lastEmitted().status).toBeNull()
+  })
+
+  it('treats a non-string AppSelect value as cleared', async () => {
+    const wrapper = mountBar({ dimension: 'status' })
+    // A clear can arrive as null rather than the '' sentinel; selectValue must
+    // narrow it to '' so the filter clears instead of leaking the value.
+    picker(wrapper, 'analytics-filter-dimension').vm.$emit('update:modelValue', null)
+    await nextTick()
+
+    const emitted = wrapper.emitted('update:filters')!
+    const last = emitted[emitted.length - 1][0] as { dimension?: string | null }
+    expect(last.dimension).toBeNull()
+  })
+})
+
 describe('AnalyticsFilterBar i18n labels', () => {
   it('uses i18n for timespan labels', () => {
     const wrapper = mountBar()

@@ -242,6 +242,20 @@ describe('SystemMapAttributionBindings', () => {
     expect(onCreate).not.toHaveBeenCalled()
   })
 
+  it('does not submit when a node is chosen but no pipeline is selected', async () => {
+    mockGet.mockResolvedValue(pipelinesResponse())
+    const onCreate = vi.fn(async () => {})
+
+    const wrapper = mountComponent({ createHandler: onCreate })
+    await flushPromises()
+
+    await choose(wrapper, 'system-map-binding-node', 'pipeline-1')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(onCreate).not.toHaveBeenCalled()
+  })
+
   it('submits an action-pipeline binding without loading triggers', async () => {
     mockGet.mockResolvedValue(pipelinesResponse())
     const onCreate = vi.fn(async () => {})

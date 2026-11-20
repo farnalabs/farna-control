@@ -3085,6 +3085,119 @@ describe('PipelineEditorView — coverage: loading / error / edge cases', () => 
     wrapper.unmount()
   })
 
+  it('renders every node-override AppSelect and maps the null/undefined sentinels', async () => {
+    router.push('/pipelines/test-pipeline-id/editor')
+    await router.isReady()
+    const wrapper = mountEditor()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.agents = [{ id: 'agent-1', parameter_schema_id: 'pschema-1' }]
+    vm.paramSchemas = [{
+      id: 'pschema-1',
+      name: 'Param Schema',
+      parameters: [
+        { name: 'flag', type: 'boolean', label: 'Flag' },
+        { name: 'choice', type: 'select', options: ['a', 'b'] },
+        { name: 'choice_empty', type: 'select' },
+        { name: 'mb', type: 'model_backend_ref' },
+        { name: 'out', type: 'schema_ref' },
+      ],
+    }]
+    vm.paramSets = [{ id: 'set-1', name: 'Set One', parameter_schema_id: 'pschema-1', values: {} }]
+    // Three backends cover display_name, name, and the shortId fallback.
+    vm.modelBackends = [
+      { id: 'mb-display', display_name: 'Display Name' },
+      { id: 'mb-name', name: 'Named Backend' },
+      { id: 'mb-shortid' },
+    ]
+    // Two schemas cover the name and shortId fallback.
+    vm.schemas = [
+      { id: 'schema-named', name: 'Named Schema' },
+      { id: 'schema-shortonly' },
+    ]
+
+    vm.rawNodes = [{
+      id: 'node-1',
+      node_type: 'agent',
+      agent_id: 'agent-1',
+      label: 'Agent',
+      description: '',
+      position: { x: 0, y: 0 },
+      parameter_set_id: 'set-1',
+      parameter_overrides: { flag: true, choice: 'a', choice_empty: 'b', mb: 'mb-display', out: 'schema-named' },
+    }]
+    vm.flowNodes = [{ id: 'node-1', type: 'agent', data: { label: 'Agent', description: '' } }]
+    vm.onNodeClick({ node: { id: 'node-1' } })
+    await nextTick()
+
+    const overrideSelect = (key: string) => wrapper
+      .findAllComponents({ name: 'Select' })
+      .find((component: any) => component.props('inputId') === `pipelineeditorview-override-${key}`)
+
+    for (const key of ['flag', 'choice', 'choice_empty', 'mb', 'out']) {
+      expect(overrideSelect(key), `expected an override AppSelect for "${key}"`).toBeDefined()
+    }
+
+    // The option lists exercise the ref fallbacks: display_name, name, shortId;
+    // schema name vs shortId; and select options present vs absent.
+    const mbOptions = overrideSelect('mb')!.props('options') as Array<{ value: string; label: string }>
+    expect(mbOptions.map((o) => o.label)).toEqual(expect.arrayContaining(['Display Name', 'Named Backend']))
+    expect(mbOptions.find((o) => o.value === 'mb-shortid')!.label).toBeTruthy()
+    const outOptions = overrideSelect('out')!.props('options') as Array<{ value: string; label: string }>
+    expect(outOptions.map((o) => o.label)).toContain('Named Schema')
+    expect(outOptions.find((o) => o.value === 'schema-shortonly')!.label).toBeTruthy()
+    expect((overrideSelect('choice')!.props('options') as unknown[])).toHaveLength(3)
+    expect((overrideSelect('choice_empty')!.props('options') as unknown[])).toHaveLength(1)
+
+    // A null selection from the control is the "no override" sentinel: it maps
+    // back to undefined in the node payload shape, and a real value passes through.
+    overrideSelect('flag')!.vm.$emit('update:modelValue', null)
+    await nextTick()
+    expect(vm.selectedNodeOverrides.flag).toBeUndefined()
+    overrideSelect('flag')!.vm.$emit('update:modelValue', true)
+    await nextTick()
+    expect(vm.selectedNodeOverrides.flag).toBe(true)
+
+    // A real value from each remaining control type passes through unchanged
+    // (this also executes each control's update handler).
+    overrideSelect('choice')!.vm.$emit('update:modelValue', 'a')
+    await nextTick()
+    expect(vm.selectedNodeOverrides.choice).toBe('a')
+    overrideSelect('mb')!.vm.$emit('update:modelValue', 'mb-name')
+    await nextTick()
+    expect(vm.selectedNodeOverrides.mb).toBe('mb-name')
+    overrideSelect('out')!.vm.$emit('update:modelValue', 'schema-named')
+    await nextTick()
+    expect(vm.selectedNodeOverrides.out).toBe('schema-named')
+
+    // Re-render with nullish override values so each `?? null` binding takes its
+    // right-hand arm as well as the non-null left arm exercised above.
+    vm.selectedNodeOverrides = { flag: undefined, choice: undefined, choice_empty: undefined, mb: undefined, out: undefined }
+    await nextTick()
+    expect(overrideSelect('flag')!.props('modelValue')).toBeNull()
+
+    // The editor-chrome controls also narrow a cleared (null) selection to ''.
+    await vm.updateMaxAutonomyLevel(null)
+    await vm.updateMaxAutonomyLevel('manual_approval')
+    await vm.updateOwnerTeam(null)
+    await vm.updateOwnerTeam('team-1')
+    await vm.updateEnvironmentProfile(null)
+    await vm.updateEnvironmentProfile('profile-1')
+
+    // onParamSetChange: an omitted argument keeps the current selection, null
+    // clears it, and a set id selects it.
+    vm.selectedNodeParamSetId = 'set-1'
+    vm.onParamSetChange(undefined)
+    expect(vm.selectedNodeParamSetId).toBe('set-1')
+    vm.onParamSetChange(null)
+    expect(vm.selectedNodeParamSetId).toBeUndefined()
+    vm.onParamSetChange('set-1')
+    expect(vm.selectedNodeParamSetId).toBe('set-1')
+
+    wrapper.unmount()
+  })
+
   it('does not load lifecycle maps in Alpha', async () => {
     router.push('/pipelines/test-pipeline-id/editor')
     await router.isReady()

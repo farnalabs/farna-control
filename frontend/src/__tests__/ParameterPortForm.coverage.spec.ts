@@ -76,4 +76,16 @@ describe('ParameterPortForm resolveDefaultFallback (SonarCloud coverage)', () =>
     expect(mount(ParameterPortForm, { props: { port: makePort('model_backend_ref'), modelValue: null } }).text()).toContain('Model backend picker')
     expect(mount(ParameterPortForm, { props: { port: makePort('schema_ref'), modelValue: null } }).text()).toContain('Schema picker')
   })
+
+  it('falls back to the i18n label and an empty option list for a select port with neither', () => {
+    // A select port can arrive with no label (use the placeholder copy) and no
+    // options array (treat as empty). Both are the fallback arms of the AppSelect
+    // bindings the native <select> used to cover implicitly.
+    const port = { ...makePort('select'), label: '', options: undefined as any }
+    const wrapper = mount(ParameterPortForm, { props: { port, modelValue: '' } })
+    const select = wrapper.findComponent({ name: 'Select' })
+    expect(select.exists()).toBe(true)
+    const options = select.props('options') as Array<{ value: string }>
+    expect(options).toHaveLength(1)
+  })
 })
