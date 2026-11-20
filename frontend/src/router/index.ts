@@ -1091,8 +1091,18 @@ async function enforceRouteFeatureFlag(
  */
 let _chunkRetryTarget: string | null = null
 
-router.beforeEach(async (to) => {
+/**
+ * Record the navigation being resolved so a chunk error can retry ITS
+ * destination. Exported (with the two helpers below) so the recovery contract
+ * is pinned by `__tests__/routerChunkRecovery.spec.ts`: the retry budget is
+ * module state, and these are its only mutators.
+ */
+export function noteNavigationStarted(to: { fullPath: string }): void {
   _chunkRetryTarget = to.fullPath
+}
+
+router.beforeEach(async (to) => {
+  noteNavigationStarted(to)
   try {
     // FAR-535 demo auto-login: /demo never renders as a page. The guard owns
     // the hand-off so it runs pre-mount — main.ts awaits router.isReady()
@@ -1155,16 +1165,34 @@ const CHUNK_LOAD_ERROR =
 const CHUNK_RETRY_LIMIT = 1
 
 let _chunkRetryCount = 0
-router.afterEach((to, _from, failure) => {
-  // Only a navigation that actually landed proves the chunks are healthy.
-  // A failed (or duplicated) navigation must NOT refill the budget: that is
-  // what made the hard-load fallback unreachable.
+
+/**
+ * A navigation that actually LANDED proves the chunks are healthy again, so
+ * the retry budget starts fresh. A failed (or duplicated) navigation must NOT
+ * refill it: that is what made the hard-load fallback unreachable.
+ */
+export function noteNavigationSettled(failure?: unknown): void {
   if (!failure) {
     _chunkRetryCount = 0
   }
-  document.title = documentTitleFor(to.meta)
-})
-router.onError((err) => {
+}
+
+/**
+ * The router's `onError` handler: recover a navigation whose route chunk is
+ * gone (FAR-2594). Exported so `__tests__/routerChunkRecovery.spec.ts` can
+ * drive it directly — `router.onError` keeps its listeners private, so a
+ * navigation-based test would have to mount the whole app graph to reach it.
+ *
+ * `assign` is the handler's single side-effecting boundary (a full document
+ * navigation to the destination) and is injectable because jsdom's
+ * `window.location` is non-configurable, so a test cannot observe it
+ * otherwise. Production never passes it: the default IS
+ * `window.location.assign`.
+ */
+export function handleRouteChunkError(
+  err: unknown,
+  assign: (target: string) => void = (target) => window.location.assign(target),
+): void {
   console.error('[router] navigation error:', err)
   if (!CHUNK_LOAD_ERROR.test(formatApiError(err))) return
 
@@ -1183,7 +1211,15 @@ router.onError((err) => {
   // Budget exhausted: this document's chunk map is stale. Only a full load
   // picks up the current index.html and its chunk filenames; `reload()` would
   // drop the user back on the page they are already stuck on.
-  window.location.assign(target)
+  assign(target)
+}
+
+router.afterEach((to, _from, failure) => {
+  noteNavigationSettled(failure)
+  document.title = documentTitleFor(to.meta)
 })
+// Vue Router calls a listener as (error, to, from); only the error is ours —
+// passing `to` through as the second argument would land in `assign`.
+router.onError((err) => handleRouteChunkError(err))
 
 export default router
