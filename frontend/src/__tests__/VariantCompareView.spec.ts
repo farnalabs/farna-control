@@ -43,6 +43,7 @@ import { api } from '../lib/api/client'
 import VariantCompareView from '../views/VariantCompareView.vue'
 import VariantGroupBuilder from '../components/variants/VariantGroupBuilder.vue'
 import PageTabs from '../components/PageTabs.vue'
+import FilterBar from '../components/shared/FilterBar.vue'
 
 const groupWithVariants = {
   id: 'g1',
@@ -942,5 +943,156 @@ describe('VariantCompareView', () => {
     await wrapper.find('[data-testid="variant-compare-empty-create"]').trigger('click')
     await nextTick()
     expect(wrapper.find('[data-testid="variant-group-builder"]').exists()).toBe(true)
+  })
+
+  it('tolerates a bare-array pipelines response and sparse group/variant payloads', async () => {
+    const sparseGroups = [
+      {
+        id: 'g1',
+        name: null,
+        pipeline_id: 'p1',
+        variants: null,
+        run_count: null,
+        selection_strategy: null,
+      },
+      {
+        id: 'g2',
+        name: 'Group 2',
+        pipeline_id: 'p-missing',
+        variants: [
+          { name: 'var-a', weight: 1, eval_definition_ids: ['e1', '', 123] },
+        ],
+        run_count: 3,
+      },
+    ]
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: sparseGroups, error: undefined })
+      }
+      if (url === '/api/v1/pipelines') {
+        // A bare array (not the documented { items } envelope) must still work,
+        // and a pipeline without a name falls back to its id.
+        return Promise.resolve({
+          data: [
+            { id: 'p1', name: null },
+            { id: '', name: 'No id pipeline' },
+            { id: 'p2', name: 'Beta pipeline' },
+          ],
+          error: undefined,
+        })
+      }
+      if (url === '/api/v1/variant-groups/{group_id}') {
+        return Promise.resolve({ data: sparseGroups[1], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="variant-compare-groups-table"]').exists()).toBe(true)
+    })
+
+    const rows = (wrapper.vm as any).groupRows as Array<Record<string, unknown>>
+    const byId = Object.fromEntries(rows.map(row => [row.id, row]))
+    // A null variants list counts as zero variants and zero declared evals.
+    expect(byId.g1.variants_count).toBe(0)
+    expect(byId.g1.declared_evals_count).toBe(0)
+    // Only non-empty string eval ids count: the empty string and the number are ignored.
+    expect(byId.g2.declared_evals_count).toBe(1)
+    // Missing pipeline name falls back to the id; an unknown pipeline keeps its id.
+    expect(byId.g1.pipeline).toBe('p1')
+    expect(byId.g2.pipeline).toBe('p-missing')
+
+    // A search term combined with a null group name must not throw.
+    ;(wrapper.vm as any).filterSearch = 'group'
+    await nextTick()
+    const filtered = (wrapper.vm as any).groupRows as Array<Record<string, unknown>>
+    expect(filtered.map(row => row.id)).toEqual(['g2'])
+  })
+
+  it('ignores an empty or non-string row id when selecting and auto-selecting', async () => {
+    const numericIdGroups = [
+      {
+        id: 123,
+        name: 'Numeric comparison',
+        pipeline_id: 'p1',
+        variants: [],
+        run_count: 0,
+      },
+      {
+        id: 'g2',
+        name: 'String comparison',
+        pipeline_id: 'p1',
+        variants: [],
+        run_count: 0,
+      },
+    ]
+    vi.mocked(api.GET as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: numericIdGroups, error: undefined })
+      }
+      if (url === '/api/v1/pipelines') {
+        return Promise.resolve({ data: { items: [{ id: 'p1', name: 'Alpha pipeline' }] }, error: undefined })
+      }
+      if (url === '/api/v1/variant-groups/{group_id}') {
+        return Promise.resolve({ data: numericIdGroups[0], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="variant-compare-groups-table"]').exists()).toBe(true)
+    })
+
+    const vm = wrapper.vm as any
+    // The row action only accepts a non-empty string id; a number or empty id is ignored.
+    vm.selectGroupRow({ id: 'g2' })
+    expect(vm.selectedGroupId).toBe('g2')
+    vm.selectGroupRow({ id: 123 })
+    vm.selectGroupRow({ id: '' })
+    expect(vm.selectedGroupId).toBe('g2')
+
+    // The auto-select watcher must not adopt a non-string first row id.
+    vm.selectedGroupId = null
+    vm.filterSearch = 'numeric'
+    await nextTick()
+    expect(vm.selectedGroupId).toBeNull()
+  })
+
+  it('applies pipeline filter updates from the filter bar and ignores unknown keys', async () => {
+    mockGroupsAndPipelines()
+
+    const wrapper = mount(VariantCompareView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Alpha pipeline')
+    })
+
+    const vm = wrapper.vm as any
+    const filterBar = wrapper.findComponent(FilterBar)
+    expect(filterBar.exists()).toBe(true)
+
+    filterBar.vm.$emit('update:filter', 'pipeline_id', 'p2')
+    await nextTick()
+    expect(vm.filterPipelineId).toBe('p2')
+
+    filterBar.vm.$emit('update:filter', 'unrelated', 'x')
+    await nextTick()
+    expect(vm.filterPipelineId).toBe('p2')
   })
 })
