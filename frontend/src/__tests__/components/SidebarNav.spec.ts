@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { useRoute } from 'vue-router'
 
 const mockManifest = vi.hoisted(() => ({
   sidebar_groups: {
@@ -13,6 +14,11 @@ const mockManifest = vi.hoisted(() => ({
     '/pipelines': { name: 'pipeline-list', breadcrumb: 'Pipelines', sidebar_group: 'build', sidebar_order: 2, type: 'list_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null, exact: true },
     '/runs': { name: 'runs-list', breadcrumb: 'Runs', sidebar_group: 'build', sidebar_order: 3, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null, exact: true },
     '/settings/license': { name: 'settings-license', breadcrumb: 'License', sidebar_group: 'admin', sidebar_order: 1, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
+    // FAR-2602: a list row plus a detail route that has NO nav row of its own,
+    // mirroring the real `/runs` + `/runs/:id` pair (detail routes declare the
+    // list page as their `parent`).
+    '/admin/error-log': { name: 'admin-error-log', breadcrumb: 'Error Log', sidebar_group: 'admin', sidebar_order: 2, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/admin/error-log/:id': { name: 'admin-error-detail', breadcrumb: 'Error Detail', parent: '/admin/error-log', sidebar_group: 'admin', sidebar_order: 3, type: 'detail_page', required_tier: null, required_roles: null, required_permissions: null },
     '/evals/editor': { name: 'eval-editor', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 1, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null, visibility: 'private_preview' },
     '/admin/notification-delivery': { name: 'admin-notification-delivery', breadcrumb: 'Webhook Notifications', sidebar_group: 'monitor', sidebar_order: 2, feature_flag: 'webhook_notification_log', type: 'list_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null },
     '/my-profile': { name: 'my-profile', breadcrumb: 'My Profile', sidebar_group: null, sidebar_order: null, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
@@ -49,9 +55,33 @@ function mountSidebar(props = {}) {
   return { wrapper, store: usePlanStore() }
 }
 
+// The app-wide setup mock returns one mutable route object shared by every
+// component in a test; assign `path` before mounting to place the shell on a
+// route.
+function setRoute(path: string) {
+  ;(useRoute() as unknown as { path: string }).path = path
+}
+
+function groupHeader(wrapper: ReturnType<typeof mountSidebar>['wrapper'], label: string) {
+  const header = wrapper.findAll('.sidebar-group-header').find((h) => h.text() === label)
+  expect(header, `expected group header "${label}" to render`).toBeTruthy()
+  return header!
+}
+
+// Only links the user can actually SEE. A collapsed `SidebarGroup` keeps its
+// items mounted under `v-show` (display:none), so a raw `findAll` still finds
+// them — the acceptance criterion is about a *visible* affordance.
+function linkHrefs(wrapper: ReturnType<typeof mountSidebar>['wrapper']) {
+  return wrapper
+    .findAll('a[data-testid="router-link-stub"]')
+    .filter((link) => link.isVisible())
+    .map((link) => link.attributes('href'))
+}
+
 describe('SidebarNav', () => {
   beforeEach(() => {
     localStorage.clear()
+    setRoute('/')
     // useSidebar's useStorage refs are module singletons — localStorage.clear()
     // alone leaves the in-memory refs polluted across tests (a prior test may
     // have collapsed a group). Dispatch a synthetic storage event so
@@ -307,6 +337,93 @@ describe('SidebarNav', () => {
       for (const link of wrapper.findAll('.sidebar-link')) {
         expect(link.classes()).not.toContain('sidebar-link--collapsed--touch')
       }
+    })
+  })
+
+  describe('active-route reveal (FAR-2602)', () => {
+    it('reveals a never-toggled default-collapsed group holding the active route', async () => {
+      setRoute('/settings/license')
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+
+      // ADMIN ships default-collapsed; the active route lives inside it.
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('true')
+      expect(linkHrefs(wrapper)).toContain('/settings/license')
+    })
+
+    it('keeps a group the user explicitly collapsed collapsed while it holds the active route', async () => {
+      setRoute('/settings/license')
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+      // Revealed on entry because the user has never toggled it…
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('true')
+
+      // …collapsing it is an explicit preference, and that must win.
+      await groupHeader(wrapper, 'ADMIN').trigger('click')
+      await flushPromises()
+
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('false')
+      expect(linkHrefs(wrapper)).not.toContain('/settings/license')
+      expect(localStorage.getItem('sidebar-group-prefs')).toContain('admin')
+    })
+
+    it('keeps an explicitly collapsed group collapsed across a remount on the same route', async () => {
+      setRoute('/settings/license')
+      const first = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+      await groupHeader(first.wrapper, 'ADMIN').trigger('click')
+      await flushPromises()
+      expect(groupHeader(first.wrapper, 'ADMIN').attributes('aria-expanded')).toBe('false')
+      first.wrapper.unmount()
+
+      const second = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+      expect(groupHeader(second.wrapper, 'ADMIN').attributes('aria-expanded')).toBe('false')
+      expect(linkHrefs(second.wrapper)).not.toContain('/settings/license')
+    })
+
+    it('leaves an expanded group unchanged', async () => {
+      setRoute('/settings/license')
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+
+      // BUILD is default-expanded and does not hold the active route here.
+      expect(groupHeader(wrapper, 'BUILD').attributes('aria-expanded')).toBe('true')
+      expect(linkHrefs(wrapper)).toContain('/')
+    })
+
+    it('reveals the parent group of a detail route that has no nav row of its own', async () => {
+      setRoute('/admin/error-log/abc')
+      const { wrapper } = mountSidebar({ isSystemAdmin: true })
+      await flushPromises()
+
+      const hrefs = linkHrefs(wrapper)
+      // The detail route itself has no sidebar row…
+      expect(hrefs).not.toContain('/admin/error-log/abc')
+      // …yet it is owned by the list row, so it activates and reveals the group.
+      expect(groupHeader(wrapper, 'ADMIN').attributes('aria-expanded')).toBe('true')
+      expect(hrefs).toContain('/admin/error-log')
+    })
+
+    it('reveals the active default-collapsed group in the collapsed rail too', async () => {
+      setRoute('/settings/license')
+      const { wrapper } = mountSidebar({ collapsed: true, isSystemAdmin: true })
+      await flushPromises()
+
+      const adminToggle = wrapper
+        .findAll('.sidebar-group-rail-toggle')
+        .find((toggle) => toggle.attributes('aria-controls') === 'sidebar-group-rail-admin')!
+      expect(adminToggle.attributes('aria-expanded')).toBe('true')
+      expect(linkHrefs(wrapper)).toContain('/settings/license')
+
+      // An explicit collapse still wins in the rail.
+      await adminToggle.trigger('click')
+      await flushPromises()
+      const collapsedToggle = wrapper
+        .findAll('.sidebar-group-rail-toggle')
+        .find((toggle) => toggle.attributes('aria-controls') === 'sidebar-group-rail-admin')!
+      expect(collapsedToggle.attributes('aria-expanded')).toBe('false')
+      expect(linkHrefs(wrapper)).not.toContain('/settings/license')
     })
   })
 })
