@@ -58,6 +58,14 @@ Bulleted, concrete gaps that are consciously not shipped or not covered.
 Dated audit notes: what was verified, when, and by which pass.
 ```
 
+Citations in `code:`, `unit-tests:` and `bdd:` must resolve to a path that exists
+today. The rebrand collapsed the pre-0350 migration lineage into four baseline
+migrations (`0350_baseline_schema.py`, `0351_baseline_rls.py`,
+`0352_baseline_privileges.py`, `0353_baseline_seed_data.py`), so an entry that
+cites a deleted migration file points at the baseline file that now defines the
+object. A pre-0350 migration number elsewhere in an entry is historical lineage,
+not a file to look for under `db/migrations/versions/`.
+
 The node id in a feature-graph entry is the `feat-*` id (e.g. `feat-infra-health`).
 Infra-only surfaces that have no UI route are tracked **here**, not in the manifest
 `features:` registry – the manifest registry is for route-referenced product features.

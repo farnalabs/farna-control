@@ -15,7 +15,7 @@ code:
   - backend/src/farna/core/pipeline_engine/eval_persist_order.py
   - backend/src/farna/db/models/policy_gate.py
   - backend/src/farna/db/models/policy_gate_decision.py
-  - backend/src/farna/db/migrations/versions/0274_policy_gate_pin_fingerprint_operator_control.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - backend/src/farna/api/routes/feedback.py
   - frontend/src/views/EvalEditorView.vue
   - frontend/src/views/EvalProposalsQueueView.vue
@@ -34,9 +34,7 @@ unit-tests:
   - backend/tests/unit/core/eval_engine/test_policy_gate_decision_row.py
   - backend/tests/unit/core/evidence/test_author_warnings.py
   - backend/tests/unit/db/crud/test_policy_gate_decision_purge.py
-  - backend/tests/unit/db/test_eval_suite_run.py
   - backend/tests/integration/api/test_policy_gate_acceptance.py
-  - backend/tests/integration/test_policy_gate_pin_migration.py
   - frontend/src/__tests__/EvalEditorView.spec.ts
   - frontend/src/__tests__/EvalEditorViewPolicyGate.spec.ts
   - frontend/src/__tests__/EvalProposalsQueueView.spec.ts
@@ -137,10 +135,9 @@ Surfaces: `/evals/editor` and `/evals/proposals`.
       (`core/eval_engine/policy_gate.py`,
       `core/pipeline_engine/executor.py`, `api/routes/evals.py`,
       `db/models/policy_gate.py`,
-      `db/migrations/versions/0274_policy_gate_pin_fingerprint_operator_control.py`,
+      `db/migrations/versions/0350_baseline_schema.py`,
       `test_policy_gate_pin.py`, `test_policy_gate_eval_wiring.py`,
       `test_policy_gate_routes_coverage.py`,
-      `test_policy_gate_pin_migration.py`,
       `EvalEditorViewPolicyGate.spec.ts`)
 - [x] Results are queryable per run (`GET /api/v1/runs/{run_id}/evals`) and
       comparable side-by-side between two runs (`POST /api/v1/evals/compare`)
@@ -197,9 +194,9 @@ Surfaces: `/evals/editor` and `/evals/proposals`.
   run-start `policy_gate_pins_fingerprint` re-verification, and the pin-governed
   evaluation universe (`_resolve_governed_gate`). Registered the newly visible
   `/evals/editor` policy-gate testids in the manifest `elements:` inventory and
-  added the checked behavior line + code/unit-test citations (migration 0274,
-  `test_policy_gate_pin.py`, `test_policy_gate_eval_wiring.py`,
-  `test_policy_gate_routes_coverage.py`, `test_policy_gate_pin_migration.py`,
+  added the checked behavior line + code/unit-test citations (the baseline
+  schema migration, `test_policy_gate_pin.py`, `test_policy_gate_eval_wiring.py`,
+  `test_policy_gate_routes_coverage.py`,
   `EvalEditorViewPolicyGate.spec.ts`). The policy-gate UI controls were written
   with a `data-test-id` typo that hid them from the product-map element guard and
   from Playwright's `getByTestId`; this walk normalized them to `data-testid`

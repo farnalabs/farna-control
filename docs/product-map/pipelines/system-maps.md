@@ -15,12 +15,8 @@ code:
   - backend/src/farna/api/mcp_server.py
   - backend/src/farna/db/models/system_map.py
   - backend/src/farna/db/repositories/system_map.py
-  - backend/src/farna/db/migrations/versions/0341_system_maps.py
-  - backend/src/farna/db/migrations/versions/0342_system_maps_integrity.py
-  - backend/src/farna/db/migrations/versions/0343_system_maps_revision_fk.py
-  - backend/src/farna/db/migrations/versions/0344_system_maps_tenant_integrity.py
-  - backend/src/farna/db/migrations/versions/0345_system_maps_name_integrity.py
-  - backend/src/farna/db/migrations/versions/0347_system_maps_version_aware.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
+  - backend/src/farna/db/migrations/versions/0351_baseline_rls.py
   - backend/src/farna/cli/apply/system_map_apply.py
   - backend/src/farna/cli/apply/plan.py
   - backend/src/farna/cli/apply/models.py
@@ -46,15 +42,12 @@ unit-tests:
   - backend/tests/unit/core/test_system_map_validation.py
   - backend/tests/unit/db/test_system_map_repository.py
   - backend/tests/unit/db/test_system_map_models.py
-  - backend/tests/unit/db/test_migration_0347_system_maps_version_aware.py
   - backend/tests/unit/cli/apply/test_system_map_apply.py
   - backend/tests/unit/mcp/test_mcp_system_map_discovery.py
   - backend/tests/integration/test_system_maps_discovery.py
   - backend/tests/integration/test_system_maps_version_aware.py
   - backend/tests/integration/test_system_maps_overview_metrics.py
   - backend/tests/integration/test_system_maps_publish_audit.py
-  - backend/tests/integration/test_migration_0347_system_maps_version_aware.py
-  - backend/tests/integration/db/test_system_map_migrations.py
   - frontend/src/__tests__/systemMapsStore.spec.ts
   - frontend/src/__tests__/systemMapsStoreCrud.spec.ts
   - frontend/src/__tests__/systemMapsAuthoring.spec.ts
@@ -98,14 +91,14 @@ and the `system_maps` feature flag, all resolved server-side on each request.
 Legacy JWTs and keys with no grant set keep the role-based behavior rather
 than being refused for the missing grant. Nothing publishes automatically.
 
-The map is stored in dedicated System Maps tables (migration
-`0341_system_maps.py`: `system_maps`, `system_map_revisions`,
+The map is stored in dedicated System Maps tables (baseline schema,
+`0350_baseline_schema.py`: `system_maps`, `system_map_revisions`,
 `system_map_nodes`, `system_map_relationships`, `system_map_loop_configs`,
 `system_map_attribution_bindings`, `system_map_loop_admission_attempts` and
-`system_map_loop_reservations`), not in `lifecycle_maps`. Migrations 0342 to
-0345 close graph, tenant and live-name integrity gaps, and
-`0347_system_maps_version_aware.py` adds the `effective_from` /
-`effective_to` windows that make a revision readable at a point in time.
+`system_map_loop_reservations`), not in `lifecycle_maps`. The same baseline
+carries the graph, tenant and live-name integrity constraints and the
+`effective_from` / `effective_to` windows that make a revision readable at a
+point in time.
 
 ## Behaviors
 
@@ -180,7 +173,8 @@ The map is stored in dedicated System Maps tables (migration
       update cannot set `team` visibility without an owner team (422)
       (`db/models/system_map.py`, `api/routes/system_maps.py`;
       `test_system_maps_routes.py`). Isolation itself is enforced in the
-      database: `0341_system_maps.py` creates the `rls_team_isolation` policy
+      database: the baseline RLS migration `0351_baseline_rls.py` creates the
+      `rls_team_isolation` policy
       on `system_maps` (the org check plus the visibility / owner-team
       membership matrix). `resolve_system_map_team_scope` is registered in
       `TEAM_SCOPED_RESOLVERS` for registry completeness but deliberately never
@@ -196,9 +190,7 @@ The map is stored in dedicated System Maps tables (migration
       `(system_map_id, revision_number)` pair, composite tenant foreign keys,
       and a partial unique live-name index on `(organisation_id, name)` where
       `deleted_at IS NULL` (`db/models/system_map.py`;
-      `0341_system_maps.py`, `0343_system_maps_revision_fk.py`,
-      `0345_system_maps_name_integrity.py`;
-      `test_system_map_migrations.py`)
+      `0350_baseline_schema.py`; `test_system_maps_version_aware.py`)
 - [x] `POST /api/v1/system-maps/discover` inspects only the caller's
       organization: live pipelines (`deleted_at IS NULL`,
       `archived_at IS NULL`), live triggers, live connector instances and
@@ -277,8 +269,7 @@ The map is stored in dedicated System Maps tables (migration
         (mutually exclusive; both -> 400) to show metrics for a specific
         historical revision's window
       (`api/routes/system_maps.py`, `db/repositories/system_map.py`,
-      `0347_system_maps_version_aware.py`, `test_system_maps_version_aware.py`,
-      `test_migration_0347_system_maps_version_aware.py`)
+      `0350_baseline_schema.py`, `test_system_maps_version_aware.py`)
 - [x] `GET /system-maps/{map_id}/overview` is a read model over the trailing
       seven UTC days: per-node health (`healthy` / `degraded` / `unhealthy` /
       `unknown`, where `unhealthy` is a failure rate of 50% or more, any
@@ -421,7 +412,7 @@ The map is stored in dedicated System Maps tables (migration
       admission check, budget enforcement, cooldown scheduling or concurrency
       guard at runtime, and the admission / reservation repository methods have
       no production caller (`db/repositories/system_map.py`;
-      `0341_system_maps.py`)
+      `0350_baseline_schema.py`)
 - [x] The dashboard card's "Discover My System" control runs the real
       discovery operation and deep-links to the created draft with
       `?discovery=1`, where the detail view opens the review panel on arrival;

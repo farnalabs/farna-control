@@ -9,7 +9,7 @@ code:
   - backend/src/farna/compliance/evidence_index.py
   - backend/src/farna/compliance/pack.py
   - backend/src/farna/db/models/evidence_redaction_rule.py
-  - backend/src/farna/db/migrations/versions/0320_evidence_redaction_rules.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - frontend/src/views/EvidenceView.vue
   - frontend/src/views/ComplianceEvidenceIndexView.vue
   - frontend/src/views/AdminEvidenceRedactionView.vue
@@ -18,7 +18,6 @@ unit-tests:
   - backend/tests/unit/api/test_compliance_endpoint.py
   - backend/tests/unit/core/evidence/test_evidence_redaction.py
   - backend/tests/unit/compliance/test_evidence_index.py
-  - backend/tests/integration/db/test_evidence_redaction_rules.py
   - backend/tests/integration/test_compliance_evidence_index.py
   - frontend/src/__tests__/EvidenceView.spec.ts
   - frontend/src/__tests__/ComplianceEvidenceIndexView.spec.ts
@@ -65,10 +64,11 @@ compatibility alias to the same view.
       `evidence.redaction.manage` (admin) via `require_system_or_org_admin`,
       with unknown redaction classes rejected 422 (a rule can never be a silent
       no-op); writes are audited (`evidence_redaction_rule_upserted`)
-- [x] Migration `0320_evidence_redaction_rules` creates `evidence_redaction_rules`
+- [x] The baseline schema migration creates `evidence_redaction_rules`
       (OrgScoped + soft-delete, `UNIQUE (organisation_id, key_pattern, role)`,
-      role CHECK in admin/operator/viewer), applies the four-step RLS pattern,
-      and seeds the mandatory catch-all row `key_pattern='*'` / `role='viewer'` /
+      role CHECK in admin/operator/viewer), the baseline RLS migration applies
+      the four-step RLS pattern,
+      and the seed data migration creates the mandatory catch-all row `key_pattern='*'` / `role='viewer'` /
       `redacted_fields='{sensitive_output, internal_metadata}'` for every
       existing organization
 - [x] The `/evidence` route renders under the MONITOR sidebar group;
@@ -176,7 +176,7 @@ the page is careful about identity:
   circular/undefined value formatting) to the frontmatter - it existed but was
   not listed. Verified the rest of the entry against the code: the list/detail
   reads are org-scoped and redacted server-side, the rule upsert is
-  admin-gated and audited, migration 0320 + org creation both seed the
+  admin-gated and audited, the baseline schema + org creation both seed the
   `*`/viewer catch-all, and the editor's create/edit guards match the
   documented contract. No behavior change.
 

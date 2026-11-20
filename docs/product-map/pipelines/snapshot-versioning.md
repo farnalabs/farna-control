@@ -24,7 +24,6 @@ unit-tests:
   - backend/tests/unit/db/test_pipeline_snapshot.py
   - backend/tests/unit/db/crud/test_snapshot_versioning_far402.py
   - backend/tests/unit/api/test_pipeline_snapshot_gating.py
-  - backend/tests/integration/db/test_migration_0317_drop_retired_pipeline_diff_rollback_flag.py
   - frontend/src/__tests__/PipelineEditorHistoricVersion.spec.ts
   - frontend/src/__tests__/PipelineEditorCompare.spec.ts
   - frontend/src/__tests__/components/PipelineSnapshotTimeline.spec.ts

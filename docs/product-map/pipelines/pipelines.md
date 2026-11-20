@@ -9,7 +9,7 @@ code:
   - backend/src/farna/api/routes/composite_templates.py
   - backend/src/farna/db/crud/pipeline.py
   - backend/src/farna/db/models/pipeline.py
-  - backend/src/farna/db/migrations/versions/0286_pipeline_run_state.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - backend/src/farna/core/pipeline_engine
   - backend/src/farna/core/pipeline_engine/graph_cache.py
   - backend/src/farna/core/graph_validator/__init__.py
@@ -252,7 +252,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
   walk's FAR-1528 entry covered only archived/soft-deleted). Added the behavior line
   to the manifest `feat-pipelines` registry and this tracker, citing the pause/resume
   routes, the unified `run_enabled` / `run_disabled_reason` / `run_disabled_at` columns
-  (migration 0286), the archive→Paused taxonomy, the create_run state gate, and the
+  (baseline schema, `0350_baseline_schema.py`), the archive→Paused taxonomy, the create_run state gate, and the
   circuit-breaker resume refusal. Also extended the `feat-runs` FAR-1528 line to name
   the `paused` state and updated the `feat-costs` breaker line for the unified-state
   fold (an operator pause survives a breaker reset; a trip keeps a first-cause

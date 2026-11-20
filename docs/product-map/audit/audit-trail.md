@@ -27,7 +27,7 @@ code:
   - backend/src/farna/db/models/audit_event.py
   - backend/src/farna/core/system_audit_logger.py
   - backend/src/farna/db/models/system_audit_event.py
-  - backend/src/farna/db/migrations/versions/0285_system_audit_events.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - frontend/src/views/AdminAuditView.vue
 unit-tests:
   - backend/tests/unit/audit_logger/test_audit_logger.py
@@ -208,7 +208,7 @@ guarded against tampering at both the ORM and the database layer.
       `admin.py:confirm_org_deletion` and `admin.py:delete_org_immediate` left
       the baseline once they stopped deleting and became audited refusals
       (`core/system_audit_logger.py`, `db/models/system_audit_event.py`,
-      migration 0285, the writer files `api/routes/admin.py` and
+      the baseline schema migration, the writer files `api/routes/admin.py` and
       `api/routes/admin_orgs.py`,
       `tests/integration/test_system_audit_org_deletion.py`,
       `tests/unit/core/test_system_audit_logger.py`)

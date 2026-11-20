@@ -14,14 +14,11 @@ code:
   - backend/src/farna/core/pipeline_execution.py
   - backend/src/farna/core/exceptions.py
   - backend/src/farna/db/models/run.py
-  - backend/src/farna/db/migrations/versions/0280_runs_node_deadline_watchdog_fired_count.py
-  - backend/src/farna/db/migrations/versions/0288_runs_execution_origin.py
+  - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - backend/src/farna/db/models/run_attempt.py
   - backend/src/farna/db/crud/run_attempts.py
-  - backend/src/farna/db/migrations/versions/0329_run_attempts.py
   - backend/src/farna/db/crud/run_node_outputs.py
   - backend/src/farna/db/models/run_node_outputs.py
-  - backend/src/farna/db/migrations/versions/0337_per_node_completion.py
   - backend/src/farna/core/pipeline_engine/executor.py
   - frontend/src/components/runs/RunAttemptHistory.vue
   - backend/src/farna/core/line_diff.py
@@ -43,7 +40,6 @@ unit-tests:
   - backend/tests/unit/core/cost_controller/test_cost_aggregate.py
   - backend/tests/unit/api/test_run_attempts_endpoint.py
   - backend/tests/unit/db/crud/test_run_attempts.py
-  - backend/tests/unit/db/test_migration_0329_run_attempts.py
   - backend/tests/unit/core/test_far2078_attempt_instrumentation.py
   - backend/tests/unit/core/test_per_node_completion.py
   - backend/tests/unit/db/test_migration_0337_per_node_completion.py
