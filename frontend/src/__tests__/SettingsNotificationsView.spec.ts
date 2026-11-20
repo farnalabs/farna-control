@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { createPinia } from 'pinia'
 import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
-const { mockApi } = vi.hoisted(() => ({
+const { mockApi, mockNotificationsApi } = vi.hoisted(() => ({
   mockApi: {
     GET: vi.fn(),
     PUT: vi.fn(),
+  },
+  mockNotificationsApi: {
+    fetchDashboardNotifications: vi.fn().mockResolvedValue({ notifications: [], total_unread: 0 }),
+    fetchUnreadCount: vi.fn().mockResolvedValue(0),
+    markAllNotificationsRead: vi.fn().mockResolvedValue({ status: 'marked_read', marked: 0 }),
   },
 }))
 
@@ -15,8 +21,13 @@ vi.mock('../lib/api/client', () => ({
   api: mockApi,
 }))
 
+// The bell dropdown mounted by the last test reads the notifications store,
+// which calls this module; mocking it keeps the spec network-free.
+vi.mock('../lib/api/notifications', () => mockNotificationsApi)
+
 import SettingsNotificationsView from '../views/SettingsNotificationsView.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import NotificationDropdown from '../components/NotificationDropdown.vue'
 import enUS from '../locales/en-US.js'
 import { getVisibleNavGroups } from '../config/navigation'
 import type { NavVisibilityContext } from '../config/navigation'
@@ -487,7 +498,7 @@ describe('SettingsNotificationsView', () => {
     expect(typeof provider?.failure).toBe('string')
   })
 
-  it('keeps the notification-preferences nav item visible to every role', () => {
+  it('leaves the sidebar (FAR-2605) and is reached from the notification bell instead', async () => {
     const roles = ['viewer', 'runner', 'operator', 'admin']
     const baseContext: NavVisibilityContext = {
       isSystemAdmin: false,
@@ -507,9 +518,32 @@ describe('SettingsNotificationsView', () => {
         .flatMap((group) => group.items)
         .map((item) => item.to)
 
+    // FAR-2605: Notification Preferences lost its sidebar_group, so no role
+    // reaches it from the nav any more.
     for (const role of roles) {
-      expect(visiblePaths(role)).toContain('/settings/notifications')
+      expect(visiblePaths(role)).not.toContain('/settings/notifications')
     }
+
+    // ...and the bell dropdown is its entry point, so it never becomes
+    // URL-only. This is the replacement for the old nav-visibility assertion.
+    const wrapper = mount(NotificationDropdown, {
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          'router-link': {
+            props: { to: { type: [String, Object], default: '' } },
+            template: '<a :href="typeof to === \'string\' ? to : undefined"><slot /></a>',
+          },
+          teleport: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    const preferences = wrapper.find('[data-testid="notification-dropdown-preferences"]')
+    expect(preferences.exists()).toBe(true)
+    expect(preferences.attributes('href')).toBe('/settings/notifications')
+    wrapper.unmount()
   })
 })
 

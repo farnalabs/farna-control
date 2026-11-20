@@ -301,17 +301,30 @@ describe('AppSidebar', () => {
       expect(avatar.attributes('href')).toBe('/admin/my-profile')
     })
 
-    it('lists Notifications in MONITOR above Error Dashboard (real manifest, FAR-656)', async () => {
+    it('renders Dashboard as a pinned row above the groups (real manifest, FAR-2605)', async () => {
       mockMatchMedia(true)
       const wrapper = mountSidebar()
       const store = usePlanStore()
       store.currentTier = 'team'
       await flushPromises()
-      const monitorItems = wrapper.find('#sidebar-group-monitor')
-      expect(monitorItems.exists()).toBe(true)
-      const hrefs = monitorItems.findAll('a.sidebar-link').map((l) => l.attributes('href'))
-      expect(hrefs[0]).toBe('/notifications')
-      expect(hrefs[1]).toBe('/admin/errors')
+      const pinned = wrapper.find('[data-testid="sidebar-pinned-link"]')
+      expect(pinned.exists()).toBe(true)
+      expect(pinned.attributes('href')).toBe('/')
+      // Pinned means OUTSIDE every group: no group section contains it.
+      expect(wrapper.find('#sidebar-group-pipelines a[href="/"]').exists()).toBe(false)
+    })
+
+    it('lists Runs before Error Dashboard in the RUNS group (real manifest, FAR-2605)', async () => {
+      mockMatchMedia(true)
+      const wrapper = mountSidebar()
+      const store = usePlanStore()
+      store.currentTier = 'team'
+      await flushPromises()
+      const runItems = wrapper.find('#sidebar-group-runs')
+      expect(runItems.exists()).toBe(true)
+      const hrefs = runItems.findAll('a.sidebar-link').map((l) => l.attributes('href'))
+      expect(hrefs[0]).toBe('/runs')
+      expect(hrefs.indexOf('/admin/errors')).toBeGreaterThan(hrefs.indexOf('/runs'))
     })
 
     it('shows the Webhook Notifications link by default (real manifest, FAR-2235)', async () => {
@@ -321,8 +334,8 @@ describe('AppSidebar', () => {
       store.currentTier = 'team'
       store.features['webhook_notification_log'] = true
       await flushPromises()
-      const monitorItems = wrapper.find('#sidebar-group-monitor')
-      const hrefs = monitorItems.findAll('a.sidebar-link').map((l) => l.attributes('href'))
+      const runItems = wrapper.find('#sidebar-group-runs')
+      const hrefs = runItems.findAll('a.sidebar-link').map((l) => l.attributes('href'))
       expect(hrefs).toContain('/admin/notification-delivery')
     })
 
@@ -333,8 +346,8 @@ describe('AppSidebar', () => {
       store.currentTier = 'team'
       store.features['webhook_notification_log'] = true
       await flushPromises()
-      const monitorItems = wrapper.find('#sidebar-group-monitor')
-      const hrefs = monitorItems.findAll('a.sidebar-link').map((l) => l.attributes('href'))
+      const runItems = wrapper.find('#sidebar-group-runs')
+      const hrefs = runItems.findAll('a.sidebar-link').map((l) => l.attributes('href'))
       expect(hrefs).toContain('/admin/notification-delivery')
     })
 

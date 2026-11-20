@@ -36,9 +36,9 @@ resolves a rule from `evidence_redaction_rules` (most-specific-wins by
 fail-closed default) and the covered evidence-value keys are replaced with the
 `[REDACTED]` sentinel before the payload is serialized. Redaction is name-based
 (a class covers a fixed set of JSON key NAMES), not a default-deny allowlist.
-The `/evidence` route renders under the MONITOR sidebar group, and the
-`/admin/evidence-redaction` editor under the ADMIN sidebar group lets an admin
-maintain the rules the boundary consults.
+The `/evidence` route renders under the RUNS sidebar group, and the
+`/admin/evidence-redaction` editor under the ADMINISTRATION sidebar group lets
+an admin maintain the rules the boundary consults.
 
 The same feature owns the per-instance **compliance evidence index** (FAR-2036):
 `/admin/compliance/evidence-index` renders pack metadata, framework coverage and
@@ -71,11 +71,11 @@ compatibility alias to the same view.
       and the seed data migration creates the mandatory catch-all row `key_pattern='*'` / `role='viewer'` /
       `redacted_fields='{sensitive_output, internal_metadata}'` for every
       existing organization
-- [x] The `/evidence` route renders under the MONITOR sidebar group;
+- [x] The `/evidence` route renders under the RUNS sidebar group;
       `EvidenceView.vue` fetches the already-redacted payload and renders it
       as-is with NO client-side redaction or conditional field hiding, with
       i18n-backed strings and `role=status`/`aria-live` status regions
-- [x] The `/admin/evidence-redaction` route (ADMIN sidebar group, admin role)
+- [x] The `/admin/evidence-redaction` route (ADMINISTRATION sidebar group, admin role)
       renders `AdminEvidenceRedactionView.vue`, which lists the org's rules and
       creates or edits them through the same
       `PUT /api/v1/evidence/redaction-rules` upsert keyed on

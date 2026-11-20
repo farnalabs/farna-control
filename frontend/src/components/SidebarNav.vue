@@ -8,6 +8,23 @@
     :aria-label="$t('components.SidebarNav.main_navigation')"
   >
     <div v-if="collapsed" class="flex flex-col items-center gap-1">
+      <!-- FAR-2605: the pinned row (Dashboard) sits ABOVE the groups, outside
+           every collapsible section, in both the rail and the expanded nav. -->
+      <SidebarLink
+        v-if="pinnedItem"
+        :to="pinnedItem.to"
+        :icon="pinnedItem.icon"
+        :label="pinnedItem.label"
+        :label-key="pinnedItem.labelKey"
+        :exact="pinnedItem.exact"
+        :visibility="pinnedItem.visibility"
+        :collapsed="true"
+        :size="linkSize"
+        class="w-full"
+        data-testid="sidebar-pinned-link"
+        @click="$emit('navigate')"
+      />
+      <div v-if="pinnedItem" class="my-1 w-full border-t" aria-hidden="true" />
       <template v-for="group in visibleSidebarGroups" :key="group.id">
         <button
           type="button"
@@ -65,6 +82,21 @@
     </div>
     <template v-else>
       <div class="space-y-6">
+        <!-- FAR-2605: the pinned row (Dashboard) renders above the groups, not
+             inside one — a single row with no collapsible header. -->
+        <div v-if="pinnedItem">
+          <SidebarLink
+            :to="pinnedItem.to"
+            :icon="pinnedItem.icon"
+            :label="pinnedItem.label"
+            :label-key="pinnedItem.labelKey"
+            :exact="pinnedItem.exact"
+            :visibility="pinnedItem.visibility"
+            :size="linkSize"
+            data-testid="sidebar-pinned-link"
+            @click="$emit('navigate')"
+          />
+        </div>
         <template v-for="group in visibleSidebarGroups" :key="group.id">
           <SidebarGroup
             :id="group.id"
@@ -101,7 +133,7 @@ import { OverlayScrollbarsComponent } from "overlayscrollbars-vue";
 import SidebarLink from "./SidebarLink.vue";
 import SidebarGroup from "./SidebarGroup.vue";
 
-import { getNavGroups, getVisibleNavGroups, isNavItemActive } from "../config/navigation";
+import { getNavGroups, getVisibleNavGroups, getVisiblePinnedNavItem, isNavItemActive } from "../config/navigation";
 import type { NavGroup } from "../config/navigation";
 import { useNavVisibilityContext } from "../composables/useNavVisibilityContext";
 import { useSidebar } from "../composables/useSidebar";
@@ -209,6 +241,9 @@ function groupToggleLabel(group: NavGroup): string {
     : t("components.SidebarNav.click_to_collapse");
   return `${groupLabel(group)} (${hint}) — ${action}`;
 }
+// FAR-2605: the pinned row (Dashboard) is rendered above the groups and is
+// subject to the same visibility gate as a grouped item.
+const pinnedItem = computed(() => getVisiblePinnedNavItem(navVisibility.value));
 </script>
 
 <style scoped>

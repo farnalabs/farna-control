@@ -21,8 +21,9 @@ routes:
         breadcrumb: Dashboard
         parent:
         product_map: [feat-dashboard]
-        sidebar_group: build
+        sidebar_group:
         sidebar_order: 0
+        sidebar_pinned: true
         type: page
         <<: *community
         deprecated: false
@@ -33,8 +34,8 @@ routes:
         breadcrumb: Governance Stack
         parent: /
         product_map: [feat-governance-stack]
-        sidebar_group: build
-        sidebar_order: 4
+        sidebar_group: controls
+        sidebar_order: 10
         type: page
         <<: *community
         deprecated: false
@@ -45,8 +46,8 @@ routes:
         breadcrumb: Analytics
         parent: /
         product_map: [feat-analytics]
-        sidebar_group: monitor
-        sidebar_order: 7
+        sidebar_group: runs
+        sidebar_order: 40
         type: page
         required_permissions: [analytics.query]
         <<: *community
@@ -133,8 +134,8 @@ routes:
         breadcrumb: Notifications
         parent: /
         product_map: [feat-notifications]
-        sidebar_group: monitor
-        sidebar_order: 0
+        sidebar_group:
+        sidebar_order:
         type: page
         <<: *community
         deprecated: false
@@ -144,8 +145,8 @@ routes:
         breadcrumb: Pipelines
         parent: /
         product_map: [feat-pipelines, feat-router, feat-apply]
-        sidebar_group: build
-        sidebar_order: 1
+        sidebar_group: pipelines
+        sidebar_order: 10
         type: list_page
         exact: true
         <<: *community
@@ -156,8 +157,8 @@ routes:
         breadcrumb: Library
         parent: /
         product_map: [feat-library]
-        sidebar_group: build
-        sidebar_order: 2
+        sidebar_group: pipelines
+        sidebar_order: 20
         type: list_page
         <<: *community
         deprecated: false
@@ -178,8 +179,8 @@ routes:
         breadcrumb: Runs
         parent: /
         product_map: [feat-runs]
-        sidebar_group: build
-        sidebar_order: 3
+        sidebar_group: runs
+        sidebar_order: 10
         type: list_page
         query_params:
           cursor: Keyset pagination cursor
@@ -195,8 +196,8 @@ routes:
         breadcrumb: Evidence
         parent: /
         product_map: [feat-evidence]
-        sidebar_group: monitor
-        sidebar_order: 8
+        sidebar_group: runs
+        sidebar_order: 30
         type: page
         <<: *community
         deprecated: false
@@ -206,8 +207,8 @@ routes:
         breadcrumb: Risk Assessment
         parent: /
         product_map: [feat-evidence, feat-risk-assessment]
-        sidebar_group: monitor
-        sidebar_order: 9
+        sidebar_group: runs
+        sidebar_order: 80
         type: page
         <<: *community
         deprecated: false
@@ -217,8 +218,8 @@ routes:
         breadcrumb: Determination
         parent: /
         product_map: [feat-determination]
-        sidebar_group: build
-        sidebar_order: 6
+        sidebar_group: pipelines
+        sidebar_order: 80
         type: page
         <<: *community
         required_permissions: [determination.scan]
@@ -230,8 +231,8 @@ routes:
         breadcrumb: Output Diff
         parent: /
         product_map: [feat-runs]
-        sidebar_group: monitor
-        sidebar_order: 2
+        sidebar_group: runs
+        sidebar_order: 100
         type: page
         <<: *community
         visibility: private_preview
@@ -260,7 +261,7 @@ routes:
         breadcrumb: Run Detail
         parent: /runs
         product_map: [feat-runs, feat-support]
-        sidebar_group: build
+        sidebar_group: pipelines
         sidebar_order: 8
         type: detail_page
         pattern: /runs/:id
@@ -291,8 +292,8 @@ routes:
         parent: /
         product_map: [feat-evals]
         required_permissions: [eval.list, gate.create, gate.edit]
-        sidebar_group: improve
-        sidebar_order: 1
+        sidebar_group: controls
+        sidebar_order: 30
         type: form_page
         <<: *community
         deprecated: false
@@ -302,8 +303,8 @@ routes:
         breadcrumb: Eval Proposals
         parent: /
         product_map: [feat-evals]
-        sidebar_group: improve
-        sidebar_order: 2
+        sidebar_group: controls
+        sidebar_order: 40
         type: list_page
         <<: *community
         deprecated: false
@@ -313,8 +314,8 @@ routes:
         breadcrumb: Variants
         parent: /
         product_map: [feat-variants]
-        sidebar_group: improve
-        sidebar_order: 3
+        sidebar_group: runs
+        sidebar_order: 130
         type: page
         query_params:
           pipeline_id: Open the comparison builder for this pipeline
@@ -327,7 +328,7 @@ routes:
         breadcrumb: Variant Batch Compare
         parent: /variants/compare
         product_map: [feat-variants]
-        sidebar_group: monitor
+        sidebar_group: runs
         sidebar_order: 5
         type: detail_page
         pattern: /variants/compare/:batchId
@@ -341,8 +342,8 @@ routes:
         breadcrumb: Schemas
         parent: /
         product_map: [feat-schemas, feat-apply]
-        sidebar_group: configure
-        sidebar_order: 1
+        sidebar_group: pipelines
+        sidebar_order: 30
         type: list_page
         <<: *community
         deprecated: false
@@ -378,8 +379,8 @@ routes:
         breadcrumb: Assistant config
         parent: /
         product_map: [feat-assistant]
-        sidebar_group: configure
-        sidebar_order: 10
+        sidebar_group: configuration
+        sidebar_order: 60
         type: form_page
         <<: *team
         visibility: private_preview
@@ -390,8 +391,8 @@ routes:
         breadcrumb: Assistant skills
         parent: /
         product_map: [feat-assistant]
-        sidebar_group: configure
-        sidebar_order: 11
+        sidebar_group: configuration
+        sidebar_order: 70
         type: form_page
         <<: *community
         visibility: private_preview
@@ -402,8 +403,8 @@ routes:
         breadcrumb: Teams
         parent: /
         product_map: [feat-teams]
-        sidebar_group: admin
-        sidebar_order: 2
+        sidebar_group: administration
+        sidebar_order: 50
         type: list_page
         <<: *team
         deprecated: false
@@ -413,8 +414,8 @@ routes:
         breadcrumb: SSO
         parent: /
         product_map: [feat-sso]
-        sidebar_group: admin
-        sidebar_order: 5
+        sidebar_group: administration
+        sidebar_order: 60
         type: form_page
         <<: *team
         deprecated: false
@@ -430,8 +431,8 @@ routes:
         # (`org.license.manage`), not a separate role check, and the tier floor
         # is community so a deployment whose licence has LAPSED can still reach
         # the page to install a replacement key.
-        sidebar_group: admin
-        sidebar_order: 12
+        sidebar_group: administration
+        sidebar_order: 30
         type: form_page
         <<: *community
         required_permissions: [org.license.manage]
@@ -441,8 +442,8 @@ routes:
         breadcrumb: MCP
         parent: /
         product_map: [feat-mcp]
-        sidebar_group: configure
-        sidebar_order: 4
+        sidebar_group: configuration
+        sidebar_order: 40
         type: form_page
         <<: *community
         deprecated: false
@@ -452,8 +453,8 @@ routes:
         breadcrumb: Triggers
         parent: /
         product_map: [feat-triggers, feat-apply]
-        sidebar_group: configure
-        sidebar_order: 6
+        sidebar_group: pipelines
+        sidebar_order: 50
         type: form_page
         <<: *community
         deprecated: false
@@ -467,8 +468,8 @@ routes:
         product_map: [feat-guardrails]
 
 
-        sidebar_group: configure
-        sidebar_order: 5
+        sidebar_group: controls
+        sidebar_order: 20
         type: form_page
         <<: *community
         deprecated: false
@@ -479,7 +480,7 @@ routes:
         parent: /
         product_map: [feat-runtime]
         sidebar_group: system
-        sidebar_order: 7
+        sidebar_order: 10
         type: form_page
         visibility: private_preview
         deprecated: false
@@ -491,7 +492,7 @@ routes:
         parent: /
         product_map: [feat-runtime]
         sidebar_group: system
-        sidebar_order: 8
+        sidebar_order: 20
         type: form_page
         visibility: private_preview
         deprecated: false
@@ -502,8 +503,8 @@ routes:
         breadcrumb: HITL Review
         parent: /
         product_map: [feat-hitl]
-        sidebar_group: monitor
-        sidebar_order: 6
+        sidebar_group: runs
+        sidebar_order: 20
         type: page
         <<: *community
         deprecated: false
@@ -515,7 +516,7 @@ routes:
         parent: /
         product_map: [feat-observability]
         sidebar_group: system
-        sidebar_order: 9
+        sidebar_order: 40
         type: form_page
         visibility: private_preview
         deprecated: false
@@ -527,7 +528,7 @@ routes:
         parent: /
         product_map: [feat-observability]
         sidebar_group: system
-        sidebar_order: 2
+        sidebar_order: 50
         type: form_page
         visibility: private_preview
         deprecated: false
@@ -538,8 +539,8 @@ routes:
         breadcrumb: Notification Preferences
         parent: /
         product_map: [feat-notifications]
-        sidebar_group: monitor
-        sidebar_order: 10
+        sidebar_group:
+        sidebar_order:
         type: form_page
         <<: *community
         # Per-user settings: visible to EVERY org role, so role gating stays
@@ -559,8 +560,8 @@ routes:
         # /api/v1/admin/org/{org_id}), so org admins must reach it. The SYSTEM
         # group is instance-wide and system-admin-only; placing this route there
         # made the router reject ordinary organisation admins.
-        sidebar_group: admin
-        sidebar_order: 13
+        sidebar_group: administration
+        sidebar_order: 40
         type: form_page
         deprecated: false
 
@@ -570,8 +571,8 @@ routes:
         breadcrumb: Browser Monitoring
         parent: /
         product_map: [feat-observability]
-        sidebar_group: monitor
-        sidebar_order: 4
+        sidebar_group: system
+        sidebar_order: 80
         type: form_page
         <<: *community
         visibility: private_preview
@@ -582,8 +583,8 @@ routes:
         breadcrumb: Users
         parent: /
         product_map: [feat-teams]
-        sidebar_group: admin
-        sidebar_order: 1
+        sidebar_group: administration
+        sidebar_order: 10
         type: list_page
         <<: *community
         required_roles: [admin]
@@ -594,8 +595,8 @@ routes:
         breadcrumb: Organization
         parent: /
         product_map: [feat-org]
-        sidebar_group: admin
-        sidebar_order: 3
+        sidebar_group: administration
+        sidebar_order: 20
         type: form_page
         # FAR-1269: the org HITL review window (GET/PUT
         # /api/v1/admin/org/hitl-review-window) is not plan-gated, so this page
@@ -617,8 +618,8 @@ routes:
         breadcrumb: Audit Log
         parent: /
         product_map: [feat-audit]
-        sidebar_group: admin
-        sidebar_order: 6
+        sidebar_group: runs
+        sidebar_order: 60
         type: list_page
         <<: *team
         deprecated: false
@@ -628,8 +629,8 @@ routes:
         breadcrumb: Costs
         parent: /
         product_map: [feat-costs]
-        sidebar_group: monitor
-        sidebar_order: 5
+        sidebar_group: runs
+        sidebar_order: 70
         type: page
         <<: *team
         deprecated: false
@@ -673,8 +674,8 @@ routes:
         breadcrumb: Connectors
         parent: /
         product_map: [feat-connectors]
-        sidebar_group: configure
-        sidebar_order: 7
+        sidebar_group: configuration
+        sidebar_order: 10
         type: list_page
         <<: *team
         deprecated: false
@@ -684,8 +685,8 @@ routes:
         breadcrumb: Model Backends
         parent: /
         product_map: [feat-model-backends, feat-apply]
-        sidebar_group: configure
-        sidebar_order: 3
+        sidebar_group: configuration
+        sidebar_order: 20
         type: list_page
         <<: *team
         deprecated: false
@@ -695,8 +696,8 @@ routes:
         breadcrumb: Node Categories
         parent: /
         product_map: [feat-pipelines]
-        sidebar_group: admin
-        sidebar_order: 7
+        sidebar_group: system
+        sidebar_order: 90
         type: list_page
         <<: *team
         visibility: private_preview
@@ -708,7 +709,7 @@ routes:
         parent: /
         product_map: [feat-org]
         sidebar_group: system
-        sidebar_order: 4
+        sidebar_order: 30
         type: list_page
         visibility: private_preview
         deprecated: false
@@ -720,7 +721,7 @@ routes:
         parent: /
         product_map: [feat-runtime]
         sidebar_group: system
-        sidebar_order: 6
+        sidebar_order: 70
         type: page
         <<: *community
         deprecated: false
@@ -730,8 +731,8 @@ routes:
         breadcrumb: Parameter Schemas
         parent: /
         product_map: [feat-schemas]
-        sidebar_group: configure
-        sidebar_order: 2
+        sidebar_group: pipelines
+        sidebar_order: 40
         type: list_page
         <<: *team
         deprecated: false
@@ -742,7 +743,7 @@ routes:
         parent: /
         product_map: [feat-runtime]
         sidebar_group: system
-        sidebar_order: 5
+        sidebar_order: 60
         type: page
         deprecated: false
 
@@ -763,8 +764,8 @@ routes:
          breadcrumb: Evidence Redaction
          parent: /
          product_map: [feat-evidence]
-         sidebar_group: admin
-         sidebar_order: 11
+         sidebar_group: administration
+         sidebar_order: 70
          type: list_page
          # The redaction-rules GET/PUT surface is admin-gated (not plan-gated),
          # so this page stays community-tier with an explicit ["admin"] role
@@ -790,8 +791,8 @@ routes:
         breadcrumb: Compliance Evidence Index
         parent: /
         product_map: [feat-evidence]
-        sidebar_group: monitor
-        sidebar_order: 11
+        sidebar_group: runs
+        sidebar_order: 90
         type: page
         <<: *community
         required_permissions: [compliance.evidence_index.read]
@@ -804,8 +805,8 @@ routes:
         breadcrumb: Error Dashboard
         parent: /
         product_map: [feat-observability, feat-support]
-        sidebar_group: monitor
-        sidebar_order: 1
+        sidebar_group: runs
+        sidebar_order: 50
         type: list_page
         <<: *team_viewer
         deprecated: false
@@ -815,7 +816,7 @@ routes:
         breadcrumb: Error Detail
         parent: /admin/errors
         product_map: [feat-observability, feat-support]
-        sidebar_group: admin
+        sidebar_group: runs
         sidebar_order: 2
         type: detail_page
         pattern: /admin/errors/:id
@@ -829,8 +830,8 @@ routes:
         breadcrumb: Webhook Notifications
         parent: /
         product_map: [feat-notifications]
-        sidebar_group: monitor
-        sidebar_order: 3
+        sidebar_group: runs
+        sidebar_order: 110
         feature_flag: webhook_notification_log
         type: list_page
         <<: *team
@@ -841,8 +842,8 @@ routes:
         breadcrumb: Trigger Event Log
         parent: /
         product_map: [feat-triggers]
-        sidebar_group: admin
-        sidebar_order: 9
+        sidebar_group: pipelines
+        sidebar_order: 60
         type: list_page
         <<: *team
         deprecated: false
@@ -892,8 +893,8 @@ routes:
         breadcrumb: Plugins
         parent: /
         product_map: [feat-plugins]
-        sidebar_group: admin
-        sidebar_order: 4
+        sidebar_group: configuration
+        sidebar_order: 50
         type: list_page
         <<: *team
         visibility: private_preview
@@ -937,8 +938,8 @@ routes:
         breadcrumb: Feedback Inbox
         parent: /
         product_map: [feat-feedback]
-        sidebar_group: admin
-        sidebar_order: 10
+        sidebar_group: runs
+        sidebar_order: 120
         type: list_page
         <<: *community
         visibility: private_preview
@@ -966,8 +967,8 @@ routes:
         breadcrumb: System Maps
         parent: /
         product_map: [feat-system-maps]
-        sidebar_group: build
-        sidebar_order: 5
+        sidebar_group: pipelines
+        sidebar_order: 70
         type: list_page
         pattern: /system-maps
         exact: true
@@ -999,8 +1000,8 @@ routes:
         breadcrumb: Runners
         parent: /
         product_map: [feat-environments, feat-runtime]
-        sidebar_group: configure
-        sidebar_order: 8
+        sidebar_group: configuration
+        sidebar_order: 30
         type: page
         <<: *team
         deprecated: false
@@ -8018,8 +8019,8 @@ features:
             - "[x] GET /api/v1/evidence/{evidence_id} returns a single org-scoped evidence row with the same server-side redaction applied and 404s an id absent for the org"
             - "[x] Redaction rules are readable and editable by org admins only: GET /api/v1/evidence/redaction-rules lists the org's rules and PUT /api/v1/evidence/redaction-rules upserts one by (key_pattern, role, redacted_fields) — gated by evidence.redaction.manage (admin) via require_system_or_org_admin, with unknown redaction classes rejected 422 so a rule can never be a silent no-op; writes are audited (evidence_redaction_rule_upserted) (modulo.auth.permissions evidence.read=viewer / evidence.redaction.manage=admin)"
             - "[x] Migration 0320_evidence_redaction_rules creates evidence_redaction_rules (OrgScoped + soft-delete, UNIQUE (organisation_id, key_pattern, role), role CHECK in admin/operator/viewer), applies the four-step RLS pattern, and seeds the mandatory catch-all row key_pattern='*' / role='viewer' / redacted_fields='{sensitive_output, internal_metadata}' for every existing organisation"
-            - "[x] The /evidence route renders under the MONITOR sidebar group; EvidenceView.vue fetches the already-redacted payload and renders it as-is with NO client-side redaction or conditional field hiding, with i18n-backed strings and role=status/aria-live status regions (frontend/src/views/EvidenceView.vue, frontend/src/manifest.yaml)"
-            - "[x] The /admin/evidence-redaction route (ADMIN sidebar group) renders AdminEvidenceRedactionView.vue, which lists the org's rules and creates/edits them through the PUT /api/v1/evidence/redaction-rules upsert keyed on (key_pattern, role): creating needs an unused pair and at least one redacted class (both rejected inline before any request), editing keeps key_pattern/role immutable and changes only redacted_fields, and the page has no delete surface; redacted_fields is limited to the backend REDACTION_CLASS_FIELDS vocabulary (an unrecognised stored class stays visible so it can be removed, and an unrecognised stored role is shown read-only with Save disabled). The seeded '*' / viewer catch-all is shown as mandatory, and the page explains the per-role fail-closed default — it configures the SERVER boundary only and never redacts or hides evidence values client-side (frontend/src/views/AdminEvidenceRedactionView.vue, frontend/src/manifest.yaml)"
+            - "[x] The /evidence route renders under the RUNS sidebar group; EvidenceView.vue fetches the already-redacted payload and renders it as-is with NO client-side redaction or conditional field hiding, with i18n-backed strings and role=status/aria-live status regions (frontend/src/views/EvidenceView.vue, frontend/src/manifest.yaml)"
+            - "[x] The /admin/evidence-redaction route (ADMINISTRATION sidebar group) renders AdminEvidenceRedactionView.vue, which lists the org's rules and creates/edits them through the PUT /api/v1/evidence/redaction-rules upsert keyed on (key_pattern, role): creating needs an unused pair and at least one redacted class (both rejected inline before any request), editing keeps key_pattern/role immutable and changes only redacted_fields, and the page has no delete surface; redacted_fields is limited to the backend REDACTION_CLASS_FIELDS vocabulary (an unrecognised stored class stays visible so it can be removed, and an unrecognised stored role is shown read-only with Save disabled). The seeded '*' / viewer catch-all is shown as mandatory, and the page explains the per-role fail-closed default — it configures the SERVER boundary only and never redacts or hides evidence values client-side (frontend/src/views/AdminEvidenceRedactionView.vue, frontend/src/manifest.yaml)"
             - "[x] The /admin/compliance/evidence-index route fetches GET /api/v1/compliance/evidence-index with the compliance.evidence_index.read permission, renders pack metadata, framework coverage counts, present/absent/customer-supplied artefacts, identifiers/locations/provenance/mapping row IDs, missing artefact warnings and the human-only lower-bound warning; a pipeline-snapshot identifier renders as a concise 'Pipeline snapshot v{n}' label with the app-wide short id, a link to that exact version and the raw identifier kept selectable behind a details disclosure plus a copy action, while every other identifier stays verbatim; customer-responsibility rows are explained as customer-owned records because the API intentionally omits them (frontend/src/views/ComplianceEvidenceIndexView.vue, frontend/src/manifest.yaml)"
             - "[x] The canonical /admin/compliance/evidence-index route renders ComplianceEvidenceIndexView.vue for the compliance evidence index, and the deprecated /admin/evidence route remains a compatibility alias to that same view; both routes use GET /api/v1/compliance/evidence-index to show pack metadata, completeness, missing artefact types, and each indexed artefact's status, provenance, record count, and location (frontend/src/router/index.ts, frontend/src/views/ComplianceEvidenceIndexView.vue, frontend/src/manifest.yaml)"
         deferrals:
@@ -8028,7 +8029,7 @@ features:
         description: Risk assessment dashboard for evidence-based risk analysis
         status: covered
         behaviours:
-            - "[x] The /risk-assessment route renders under the MONITOR sidebar group; RiskAssessmentView.vue fetches risk assessment data via the evidence store and renders facets, summary cards, and a sortable table with i18n-backed strings and role=status/aria-live status regions (frontend/src/views/RiskAssessmentView.vue, frontend/src/components/risk-assessment/)"
+            - "[x] The /risk-assessment route renders under the RUNS sidebar group; RiskAssessmentView.vue fetches risk assessment data via the evidence store and renders facets, summary cards, and a sortable table with i18n-backed strings and role=status/aria-live status regions (frontend/src/views/RiskAssessmentView.vue, frontend/src/components/risk-assessment/)"
             - "[x] Facet filters (key prefix, pipeline, time window, action) drive server-side filtering through the risk assessment store and update URL query params for deep-linking, and deep-link hydration accepts ONLY values the facet vocabulary can express and the wire contract parses — the time window must be one of the offered RISK_WINDOW_CHOICES, the action must be in the gate-action list, and pipeline_id must be a canonical UUID (key_prefix stays free text, as the API treats it as a LIKE prefix) — so an out-of-contract value is a malformed link that degrades to the default instead of being sent, because the backend answers it 422 and the error alert's Retry re-applies the same filters, turning a stale or hand-tampered link into an error the retry can never clear; the select renders the SAME RISK_WINDOW_CHOICES the hydration accepts, so the facet and the deep-link contract cannot drift (frontend/src/lib/riskAssessment.ts, frontend/src/views/RiskAssessmentView.vue, frontend/src/components/risk-assessment/RiskAssessmentFacets.vue, frontend/src/__tests__/RiskAssessmentView.spec.ts, frontend/src/__tests__/RiskAssessmentComponents.spec.ts)"
             - "[x] Summary card displays total rows and per-action counts (block, warn, continue, escalate) with facet degradation indicator and time window note (frontend/src/components/risk-assessment/RiskAssessmentSummaryCard.vue)"
             - "[x] Sortable table renders evidence rows with timestamp, key, action badge, subject, and formatted value columns; empty state handled (frontend/src/components/risk-assessment/RiskAssessmentTable.vue)"
@@ -8202,7 +8203,7 @@ features:
             - "[x] Caller-scoped plan bootstrap: GET /api/v1/plan returns 200 to ANY authenticated org member with license.tier / expires_at / org_id, dev_mode, and the FULL known flag set with the org feature_overrides overlay applied (inactive flags present as currently_active: false), so a non-admin reads their org's real tier, dev mode and effective flags instead of the bootstrap defaults left by the instance-admin-only /api/v1/admin/feature-flags + /api/v1/admin/license reads; the frontend planStore bootstraps from it alongside the viewer-readable /api/v1/admin/tiers catalogue, and the admin endpoints keep their system-admin gates for the inspection/toggle UI (backend/src/farna/api/routes/viewmodel.py plan_bootstrap, backend/tests/unit/api/test_viewmodel_plan.py, frontend/src/stores/planStore.ts, docs/product-map/licensing/license.md; FAR-1806 + FAR-1809)"
             - "[x] Plan/license-based gating is wired at the composition root (require_feature / get_plan_context): the Team-tier licensed surfaces (SSO administration, /api/v1/teams, audit export, admin spend limits) return 402 naming the gated feature without a valid Team license and pass with one; SSO AUTHENTICATION entry points are exempt from that 402 when NO license resolves at all, so a lapse never locks an administrator out of the licence screen (env-var SAML availability/config are configuration-only; FAR-2059/FAR-2060); the license resolves from the org settings with a system-license fallback (team_gates.feature, test_sso_licence_admin_invariant.py, docs/product-map/licensing/license.md)"
             - "[x] The authenticated shell surfaces a backend-derived renewal state (FAR-2075): GET /api/v1/admin/license returns `licence_state` (none | active | renewal_due | grace | lapsed), `days_until_expiry` and `grace_ends_at`, derived once from `expires_at` + `LICENCE_GRACE_DAYS` in `derive_licence_state`; the shell reads that status once per session for org admins and renders the notice on EVERY authenticated route (not only the licence page) without comparing dates itself — `renewal_due` shows a countdown banner that offers a purchase path ONLY for a manual renewal (an auto-renewing licence is never invited to buy again), `grace` shows a dismissible dialog that returns on the next visit until the licence is renewed, with two equally-weighted actions (install a key the customer may never have received, or buy a new licence), and `lapsed` explains that Team capability is off and where to install a key; the licence page reuses the same query instead of issuing a second read (backend/src/farna/api/routes/admin_license.py, frontend/src/components/AppLayout.vue, frontend/src/components/licence/LicenceRenewalNotice.vue, backend/tests/unit/api/test_admin_license.py, frontend/src/__tests__/LicenceRenewalNotice.spec.ts, frontend/src/__tests__/components/AppLayoutLicenceBanner.spec.ts)"
-            - "[x] The licence screen's audience is ONE permission, not a parallel role check (FAR-2104): /settings/license sits in the ADMIN group with `required_permissions: [org.license.manage]` and a community tier floor, so an org admin — and a deployment whose licence has lapsed — can reach the page and install a key; the authenticated shell derives the renewal notice's audience from the same permission (frontend/src/composables/useLicenceAccess.ts → the server-resolved GET /api/v1/auth/permissions list) instead of an `orgRole === admin` check; the page splits the scopes — an org admin installs/removes the organisation's key via PUT/DELETE /api/v1/admin/orgs/{org_id}/license, while the instance-wide POST /api/v1/admin/license controls render only for a system admin (system.config.manage); GET /api/v1/admin/license is require_system_or_org_admin so the read admits exactly the principals those writes admit, and backend/tests/unit/api/test_admin_license_permission_agreement.py pins the agreement so the surfaces cannot drift apart again"
+            - "[x] The licence screen's audience is ONE permission, not a parallel role check (FAR-2104): /settings/license sits in the ADMINISTRATION group with `required_permissions: [org.license.manage]` and a community tier floor, so an org admin — and a deployment whose licence has lapsed — can reach the page and install a key; the authenticated shell derives the renewal notice's audience from the same permission (frontend/src/composables/useLicenceAccess.ts → the server-resolved GET /api/v1/auth/permissions list) instead of an `orgRole === admin` check; the page splits the scopes — an org admin installs/removes the organisation's key via PUT/DELETE /api/v1/admin/orgs/{org_id}/license, while the instance-wide POST /api/v1/admin/license controls render only for a system admin (system.config.manage); GET /api/v1/admin/license is require_system_or_org_admin so the read admits exactly the principals those writes admit, and backend/tests/unit/api/test_admin_license_permission_agreement.py pins the agreement so the surfaces cannot drift apart again"
             - "[x] Both licence scopes are durable (FAR-2153): the org key is stored in `org.settings_json`, and the instance-wide key is stored in the RLS-free `system_config` row `system_license_key` (both slots — active and future-dated successor — are kept), so an install survives a restart/redeploy, is restored at startup, and is visible to the API and the SAQ worker within `SYSTEM_LICENSE_REFRESH_TTL_SECONDS` (15s); the precedence order is org key → persisted system install → `MODULO_LICENSE_KEY` → Community, and `DELETE /api/v1/admin/license` deletes the persisted row first so resolution falls back to the env key and then Community (backend/src/farna/core/license.py, backend/src/farna/core/feature_flags.py, backend/src/farna/api/routes/admin_license.py, docs/product-map/licensing/license.md)"
             - "[x] The INSTANCE-WIDE licence can be removed without a restart (FAR-2110): DELETE /api/v1/admin/license (guarded by the strict system-admin `system.config.manage`, so an org admin gets 403) deletes the persisted `system_config` licence row and clears the in-memory system licence, busting every cached `license:{org_id}` status entry, so GET /api/v1/admin/license immediately reports has_license false / licence_state none for an org falling back to the system key and Team-gated routes return 402 (or the deployment's env key, if one is configured); the system card renders a Remove control only for a caller holding system.config.manage (frontend/src/composables/useLicenceAccess.ts), and the removal is audited as license_removed on resource license (backend/tests/unit/api/test_admin_license.py, frontend/src/__tests__/SettingsLicenseView.spec.ts)"
             - "[ ] License-driven gating is not applied to EVERY registered feat-* surface — gating targets the licensed Team-tier surfaces, not the whole feature registry"
@@ -8288,7 +8289,7 @@ features:
             - "[x] GET /dashboard returns the dashboard feed, GET /unread-count the badge count, GET '' the paginated inbox, GET/PUT /preferences the per-user notification preferences, GET /{id} the detail, and POST /{id}/review-later + POST /{id}/dismiss action the record"
 
             # FAR-248 — per-user notification preferences UI
-            - "[x] The /settings/notifications page (sidebar MONITOR group, visible to every org role) renders one toggle per category returned by GET /api/v1/notifications/in-app/preferences — the backend derives that set from _EVENT_CONFIG, so the page holds no hardcoded category list and every emitted category has a curated label — writes each toggle as a single-key delta so a concurrent change is never clobbered, and offers the dashboard minimum level as a separate select saved on its own; the in-flight save is announced through a persistently-mounted aria-live region plus aria-busy and a visible per-row label on the saving switch, and a failed save keeps the previous state with an inline assertive retry (tests/integration/test_notification_preferences_contract.py, frontend/src/__tests__/SettingsNotificationsView.spec.ts)"
+            - "[x] The /settings/notifications page (reachable from the notification bell's Preferences link, visible to every org role) renders one toggle per category returned by GET /api/v1/notifications/in-app/preferences — the backend derives that set from _EVENT_CONFIG, so the page holds no hardcoded category list and every emitted category has a curated label — writes each toggle as a single-key delta so a concurrent change is never clobbered, and offers the dashboard minimum level as a separate select saved on its own; the in-flight save is announced through a persistently-mounted aria-live region plus aria-busy and a visible per-row label on the saving switch, and a failed save keeps the previous state with an inline assertive retry (tests/integration/test_notification_preferences_contract.py, frontend/src/__tests__/SettingsNotificationsView.spec.ts)"
 
             # FAR-1234 — read-time run metadata + clearing stopped-run notifications
             - "[x] Run-linked notifications carry point-in-time run metadata resolved at READ time on GET /dashboard, GET '' and GET /{id}: run_id parsed from the /runs/{run_id} deep link, run_status, run_terminal computed against db.models.run.TERMINAL_STATUSES, and run_cancel_reason (FAR-1233) — the notification row itself is never re-stamped, so a hitl.awaiting raised before the run was cancelled reports run_terminal true at read time; a non-run deep link or an unreadable run degrades to null/false instead of failing the read (tests/unit/api/test_in_app_notifications_run_metadata.py)"
@@ -8305,7 +8306,7 @@ features:
             - "[x] POST /api/v1/admin/notifications/{webhook_id}/deliveries/replay is the per-endpoint dead-letter replay surface (admin.notification.manage): it re-dispatches every failed + dead-lettered delivery of a SINGLE webhook through the shared retry path (retained payloads replayed verbatim), returning {replayed, delivered, errors, success}; a missing or cross-org webhook is 404 and the repo DB-error mapping applies (ProgrammingError 501 / SQLAlchemyError 503 / other 500)"
             - "[x] Admin webhook management lives under /api/v1/admin/notifications (list/create/get/update) with the same secret-handling and break-glass deny rules as the user surface"
             - "[x] Email delivery: GET/PUT /api/v1/admin/org/{org_id}/email-settings (feature email_config; org.email.view / org.email.manage) configures SMTP with a clear_password flag and smtp_timeout, and a POST test endpoint verifies the configuration"
-            - "[x] Frontend surfaces: team-tier notification centre (/notifications, listed in the sidebar MONITOR group above Error Dashboard) with preferences, review-later and dismiss actions; team-tier email settings (/settings/email); admin webhook delivery-log UI (/admin/notification-delivery, titled 'Webhook Notifications') with status/event-type/date filters, a retry control, retry-all and an empty state"
+            - "[x] Frontend surfaces: team-tier notification centre (/notifications, reached from the notification bell's View all link) with preferences, review-later and dismiss actions; team-tier email settings (/settings/email); admin webhook delivery-log UI (/admin/notification-delivery, titled 'Webhook Notifications') with status/event-type/date filters, a retry control, retry-all and an empty state"
             - "[x] The webhook delivery-log UI is enabled by default for the community tier: the webhook_notification_log flag gates the /admin/notification-delivery manifest route, while an explicit feature_overrides entry may still disable it; the sidebar item and router guard use the same flag state (FAR-2235)"
         deferrals:
             - A realtime/push transport is not part of the notifier — webhook (+ HMAC) and in-app notification are the only delivery channels; email settings exist but the notifier does not fan out to SMTP subscribers
@@ -8693,7 +8694,7 @@ features:
 
             # Trigger event log
             - "[x] Per-trigger event logs (GET /triggers/{id}/events) are cursor-paginated, filterable by validation_result, and 404 on a missing trigger; an admin org-wide log surface (GET /api/v1/admin/trigger-events) is cursor-paginated by trigger_type / validation_result"
-            - "[x] The frontend SettingsTriggersView covers create for every trigger type (incl. webhook URL/method/headers, cron expression/timezone/input, polling connector/query/condition, agent-signal source, ongoing target/interval/spend) plus the pause-all kill-switch and streak/outcomes UI; the org-wide trigger event-log view ships as its own routed surface (SettingsTriggerEventLogView at /admin/trigger-events in the ADMIN sidebar group, reading GET /api/v1/admin/trigger-events with trigger-type / result filters and cursor pagination)"
+            - "[x] The frontend SettingsTriggersView covers create for every trigger type (incl. webhook URL/method/headers, cron expression/timezone/input, polling connector/query/condition, agent-signal source, ongoing target/interval/spend) plus the pause-all kill-switch and streak/outcomes UI; the org-wide trigger event-log view ships as its own routed surface (SettingsTriggerEventLogView at /admin/trigger-events in the PIPELINES sidebar group, reading GET /api/v1/admin/trigger-events with trigger-type / result filters and cursor pagination)"
             - "[x] The streak/outcomes readout surfaces each outcome's delivery confidence (FAR-1373, renamed by FAR-1388): streak_status.last_outcomes entries carry delivery_confidence (agent_reported on post-FAR-1336 records, including the pre-rename self_reported alias which is never backfilled and is read as agent_reported; None on legacy six-key rows — an absent/unknown value never reads as verified), and SettingsTriggersView renders an 'Agent-reported' confidence qualifier chip only on a delivered outcome whose confidence is agent_reported or its deprecated self_reported alias — a no_delivery/excluded/unclassified row, a non-agent-reported confidence, or an unknown key renders no qualifier (backend/src/farna/core/trigger_streak.py, backend/tests/unit/core/test_trigger_streak_engine.py, frontend/src/__tests__/SettingsTriggersView.spec.ts)"
             - "[x] The no-delivery streak engine covers cron triggers as well as ongoing (FAR-1387): the sweep walks cron triggers' terminal classifications with the SAME streak walk and GREATEST(last_delivery_at, streak_epoch) boundary, streak_status returns real values for a covered cron (no longer the unconfigured base), and a cron trip NOTIFIES and SURFACES (append-only cron_trigger.no_delivery_streak_alert record + sweep 'tripped' count) without auto-deactivating — deactivation is opt-in per cron via config_json no_delivery_auto_deactivate (default OFF), cron applies its own 48h minimum wall-clock window (MODULO_CRON_STREAK_MIN_WINDOW_HOURS override), and cron audit records use cron_trigger.* event types, never the ongoing_trigger.* stream (backend/src/farna/core/trigger_streak.py, backend/tests/unit/core/test_trigger_streak_engine.py)"
             - "[x] The streak badge in SettingsTriggersView renders for every trigger type the engine covers — ongoing AND cron — via ONE mirrored constant (STREAK_COVERED_TRIGGER_TYPES, pointing at the backend STREAK_TRIGGER_TYPES in core/trigger_streak.py), and the 'Deactivated' badge + re-enable action are driven by streak_status.state === 'deactivated' (deactivated_reason), NEVER by the trigger type: a notify-only cron trip (state 'ok', deactivated_reason null) shows only 'No-delivery streak x/N' with role=status/aria-live, while 'Deactivated' wording appears only when the backend reports the deactivated state (frontend/src/views/SettingsTriggersView.vue, frontend/src/__tests__/SettingsTriggersView.spec.ts; FAR-1405)"
@@ -8715,31 +8716,31 @@ features:
             - "[x] /variants/compare lists comparison groups in the shared DataTable (name, pipeline, variants, declared evals, selection strategy, runs, degraded evals, actions) with a pipeline select and a name search; it requests the endpoint's 100-row page ceiling and prints a 'Showing N comparisons' count (plus a capped-list notice at 100) because the endpoint returns a bare array with no total, and it surfaces a pipeline-name read failure instead of silently showing ids. A row selects the comparison IN PLACE (the per-node comparison table and output diff viewer render below it) and never navigates to the batch-detail route; the pipeline_id deep link still opens the builder (VariantCompareView.vue, VariantCompareView.spec.ts, variant-compare-groups.spec.ts)"
             - "[x] User-visible copy on the variants surface standardises on 'comparison' (table columns, empty state, the inline explainer link to /evals, and the builder title/subtitle) while 'variant group' stays the code and route vocabulary; the declared-eval column is labelled 'Declared evals' with a tooltip because variants[].eval_definition_ids are declarations the UI builder writes empty, NOT the scores a run received (VariantCompareView.vue, VariantGroupBuilder.vue, locales/en-US.js)"
 sidebar_groups:
-    build:
-        label: BUILD
+    pipelines:
+        label: PIPELINES
         order: 1
         default_expanded: true
-        labelKey: components.SidebarNav.group_build
-    monitor:
-        label: MONITOR
+        labelKey: components.SidebarNav.group_pipelines
+    controls:
+        label: CONTROLS
         order: 2
-        default_expanded: true
-        labelKey: components.SidebarNav.group_monitor
-    improve:
-        label: IMPROVE
+        default_expanded: false
+        labelKey: components.SidebarNav.group_controls
+    runs:
+        label: RUNS
         order: 3
         default_expanded: false
-        labelKey: components.SidebarNav.group_improve
-    configure:
-        label: CONFIGURE
+        labelKey: components.SidebarNav.group_runs
+    configuration:
+        label: CONFIGURATION
         order: 4
         default_expanded: false
-        labelKey: components.SidebarNav.group_configure
-    admin:
-        label: ADMIN
+        labelKey: components.SidebarNav.group_configuration
+    administration:
+        label: ADMINISTRATION
         order: 5
         default_expanded: false
-        labelKey: components.SidebarNav.group_admin
+        labelKey: components.SidebarNav.group_administration
     system:
         label: SYSTEM
         order: 6

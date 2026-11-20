@@ -20,7 +20,8 @@ export interface NavItem {
 export interface NavGroup {
   id: string
   label: string
-  labelKey: string
+  /** i18n key for the group label; absent when the manifest declares none. */
+  labelKey?: string
   items: NavItem[]
   defaultCollapsed: boolean
   systemAdminOnly?: boolean
@@ -90,14 +91,11 @@ const routeConfigMap: Record<string, { icon: string; labelKey: string }> = {
   'admin-parameter-schemas': { icon: 'FileText', labelKey: 'components.SidebarNav.item_parameter_schemas' },
 }
 
-const groupLabelKeyMap: Record<string, string> = {
-  build: 'components.SidebarNav.group_build',
-  monitor: 'components.SidebarNav.group_monitor',
-  configure: 'components.SidebarNav.group_configure',
-  admin: 'components.SidebarNav.group_admin',
-  improve: 'components.SidebarNav.group_improve',
-  system: 'components.SidebarNav.group_system',
-}
+// FAR-2605: the per-group fallback key map is gone. Every declared group in
+// the real manifest carries a `labelKey`, so the map only ever shadowed a
+// group id, and a stale entry outlived its group as an unreferenced locale key.
+// A group with no `labelKey` now falls back to its manifest `label` (the
+// pre-i18n English string), never to a synthetic unresolved key.
 
 interface ManifestRoute {
   name: string
@@ -118,6 +116,9 @@ interface ManifestRoute {
   // FAR-1796: route-entry system-admin gate (blank sidebar_group routes carry
   // their gate here, not on a sidebar group).
   system_admin_only?: boolean
+  // FAR-2605: a pinned route renders as a single row ABOVE the groups (the
+  // Dashboard), never inside one — so it must carry no `sidebar_group`.
+  sidebar_pinned?: boolean | null
 }
 
 interface ManifestSidebarGroup {
@@ -323,6 +324,47 @@ export function isNavItemActive(
   )
 }
 
+/** Map one manifest route entry onto the NavItem the sidebar renders. */
+function toNavItem(
+  path: string,
+  route: ManifestRoute,
+  systemAdminOnly: true | undefined,
+): NavItem {
+  return {
+    to: path,
+    icon: routeConfigMap[route.name]?.icon ?? 'File',
+    label: route.breadcrumb ?? route.name,
+    labelKey: routeConfigMap[route.name]?.labelKey ?? `nav.${route.name}`,
+    exact: route.exact ?? undefined,
+    visibility: (route.visibility as 'public_preview' | 'private_preview' | 'in_dev') ?? undefined,
+    requiredRoles: route.required_roles ?? null,
+    requiredTier: route.required_tier ?? null,
+    requiredPermissions: route.required_permissions ?? null,
+    requiredFeatureFlag: route.feature_flag ?? null,
+    systemAdminOnly,
+  }
+}
+
+/**
+ * FAR-2605: the single row pinned above the groups (`sidebar_pinned: true`).
+ * Pinned routes belong to no group, so they are never part of
+ * `buildSidebarGroups()`; the manifest validator rejects a route that declares
+ * both. More than one pinned route is not supported — the first by
+ * `sidebar_order` wins, and the nav-membership guard asserts exactly one.
+ */
+function buildPinnedNavItem(): NavItem | null {
+  if (!isManifest(manifest)) return null
+  const pinned = Object.entries(manifest.routes)
+    .filter(([, route]) => route.sidebar_pinned === true)
+    .sort(([, a], [, b]) => (a.sidebar_order ?? 0) - (b.sidebar_order ?? 0))
+  const first = pinned[0]
+  if (!first) return null
+  const [path, route] = first
+  // A pinned route has no group to inherit a gate from, so only its own
+  // route-level `system_admin_only` can hide it.
+  return toNavItem(path, route, route.system_admin_only ? true : undefined)
+}
+
 function buildSidebarGroups(): NavGroup[] {
   if (!isManifest(manifest)) {
     console.error('[navigation] manifest is invalid — missing routes or sidebar_groups')
@@ -348,23 +390,10 @@ function buildSidebarGroups(): NavGroup[] {
       groupItems = []
       itemsByGroup[route.sidebar_group] = groupItems
     }
-    groupItems.push({
-      to: path,
-      icon: routeConfigMap[route.name]?.icon ?? 'File',
-      label: route.breadcrumb ?? route.name,
-      labelKey: routeConfigMap[route.name]?.labelKey ?? `nav.${route.name}`,
-      exact: route.exact ?? undefined,
-      visibility: (route.visibility as 'public_preview' | 'private_preview' | 'in_dev') ?? undefined,
-      requiredRoles: route.required_roles ?? null,
-      requiredTier: route.required_tier ?? null,
-      requiredPermissions: route.required_permissions ?? null,
-      requiredFeatureFlag: route.feature_flag ?? null,
-      // FAR-1796: the route entry ORs with its group's flag, mirroring the
-      // router's hydrateManifestMeta derivation. A true on either signal gates
-      // the item; a false route flag must not shadow a true group flag.
-      systemAdminOnly: resolveSystemAdminOnly(route, group),
-
-    })
+    // FAR-1796: the route entry ORs with its group's flag, mirroring the
+    // router's hydrateManifestMeta derivation. A true on either signal gates
+    // the item; a false route flag must not shadow a true group flag.
+    groupItems.push(toNavItem(path, route, resolveSystemAdminOnly(route, group)))
   }
 
   for (const groupId of Object.keys(itemsByGroup)) {
@@ -380,7 +409,7 @@ function buildSidebarGroups(): NavGroup[] {
     .map(([id, sg]) => ({
       id,
       label: sg.label,
-      labelKey: sg.labelKey ?? groupLabelKeyMap[id] ?? `components.SidebarNav.group_${id}`,
+      labelKey: sg.labelKey,
       items: itemsByGroup[id] ?? [],
       defaultCollapsed: !sg.default_expanded,
       systemAdminOnly: sg.system_admin_only ?? undefined,
@@ -468,4 +497,23 @@ let _cachedGroups: NavGroup[] | null = null
 export function getNavGroups(): NavGroup[] {
   _cachedGroups ??= buildSidebarGroups()
   return _cachedGroups.map((g) => ({ ...g, items: [...g.items] }))
+}
+
+let _cachedPinnedItem: NavItem | null | undefined
+
+/** FAR-2605: the manifest's pinned nav row (the Dashboard), or null. */
+export function getPinnedNavItem(): NavItem | null {
+  if (_cachedPinnedItem === undefined) _cachedPinnedItem = buildPinnedNavItem()
+  return _cachedPinnedItem === null ? null : { ..._cachedPinnedItem }
+}
+
+/**
+ * FAR-2605: the pinned row after the SAME visibility filtering the grouped
+ * items get, so a pinned route cannot leak past its tier/role/flag gate. The
+ * Dashboard is community/pinned with no gate today; this keeps that true if a
+ * gate is ever added.
+ */
+export function getVisiblePinnedNavItem(ctx: NavVisibilityContext): NavItem | null {
+  const item = getPinnedNavItem()
+  return item && isNavItemVisible(item, ctx) ? item : null
 }
