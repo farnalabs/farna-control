@@ -167,6 +167,19 @@ jobs:
         with:
           node-version: "22"
 
+      # Install wrangler explicitly at a pinned version instead of fetching it
+      # on demand with `npx`: an on-demand fetch executes the package's
+      # lifecycle scripts straight from the registry (Sonar S6505), and the
+      # pin belongs in one visible place. `--ignore-scripts` is safe here -
+      # wrangler ships no postinstall and workerd resolves its platform
+      # binary from an optional dependency.
+      - name: Install wrangler
+        env:
+          WRANGLER_VERSION: "4.157.0"
+        run: |
+          set -euo pipefail
+          npm install --global --ignore-scripts "wrangler@${WRANGLER_VERSION}"
+
       - name: wrangler pages deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -175,7 +188,7 @@ jobs:
           set -euo pipefail
           test -s site/dists/stable/InRelease
           test -s site/_redirects
-          npx --yes wrangler@4.157.0 pages deploy site \
+          wrangler pages deploy site \
             --project-name "${PAGES_PROJECT}" --branch main --commit-dirty=true
 
   verify:

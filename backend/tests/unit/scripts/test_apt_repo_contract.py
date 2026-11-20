@@ -197,9 +197,13 @@ def test_workflow_permissions_are_read_only() -> None:
 
 def test_wrangler_is_pinned_to_an_exact_version_and_project() -> None:
     text = _workflow_text()
-    assert re.search(r"npx --yes wrangler@\d+\.\d+\.\d+ pages deploy site", text)
+    run_scripts = "\n".join(step.get("run", "") for job in _workflow()["jobs"].values() for step in job.get("steps", []))
+    assert re.search(r'WRANGLER_VERSION: "\d+\.\d+\.\d+"', text)
+    assert 'npm install --global --ignore-scripts "wrangler@${WRANGLER_VERSION}"' in run_scripts
+    assert "wrangler pages deploy site" in run_scripts
+    assert not re.search(r"\bnpx\b", run_scripts), "wrangler must be installed explicitly, not fetched on demand"
     assert "PAGES_PROJECT: farna-control-apt" in text
-    assert '--project-name "${PAGES_PROJECT}" --branch main' in text
+    assert '--project-name "${PAGES_PROJECT}" --branch main' in run_scripts
 
 
 def test_workflow_verifies_every_deb_against_release_sha256sums() -> None:
