@@ -616,7 +616,7 @@ def _render_event_alert(settings: Settings, event: dict[str, Any], note: str | N
         details.append(("Note", note))
     values = dict(details)
 
-    subject_prefix = "[Modulo Billing] ACTION REQUIRED" if note else "[Modulo Billing]"
+    subject_prefix = "[Farna Control Billing] ACTION REQUIRED" if note else "[Farna Control Billing]"
     subject_parts = [f"{subject_prefix} {kind}"]
     if "Amount" in values:
         # The readable figure only — the minor-unit form belongs in the body.
@@ -629,13 +629,13 @@ def _render_event_alert(settings: Settings, event: dict[str, Any], note: str | N
     text_lines = [f"{label}: {value}" for label, value in details]
     if link:
         text_lines.append(f"Dashboard: {link}")
-    body_text = "\n".join([f"Modulo billing: {kind}", "", *text_lines, "", alert_context_text(settings)])
+    body_text = "\n".join([f"Farna Control billing: {kind}", "", *text_lines, "", alert_context_text(settings)])
 
     rows = "".join(f"<tr><th align='left'>{html.escape(label)}</th><td>{html.escape(value)}</td></tr>" for label, value in details)
     if link:
         escaped_link = html.escape(link, quote=True)
         rows += f"<tr><th align='left'>Dashboard</th><td><a href='{escaped_link}'>{escaped_link}</a></td></tr>"
-    body_html = f"<html><body><h2>Modulo billing: {html.escape(kind)}</h2><table cellpadding='4'>{rows}</table>{alert_context_html(settings)}</body></html>"
+    body_html = f"<html><body><h2>Farna Control billing: {html.escape(kind)}</h2><table cellpadding='4'>{rows}</table>{alert_context_html(settings)}</body></html>"
     return subject, body_html, body_text
 
 

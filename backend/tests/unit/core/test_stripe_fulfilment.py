@@ -84,7 +84,7 @@ class TestEmailTeamLicense:
         mock_send.assert_called_once()
         args = mock_send.call_args.args
         assert args[1] == ["bob@acme.com"]
-        assert args[2] == "Your Modulo Team License"
+        assert args[2] == "Your Farna Control Team License"
         assert "FARNA_CONTROL_LICENSE_KEY=abc.def" in args[3]
 
     async def test_email_failure_is_logged_not_raised(self, caplog: pytest.LogCaptureFixture) -> None:
