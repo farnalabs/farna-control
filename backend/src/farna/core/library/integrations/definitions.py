@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
+AUTHOR = "Farna Control"
+
 # ---------------------------------------------------------------------------
 # 1. sentry
 # ---------------------------------------------------------------------------
@@ -25,7 +27,7 @@ SENTRY_INTEGRATION: dict[str, Any] = {
     "name": "Sentry",
     "description": ("Error tracking and performance monitoring integration. Captures exceptions, transactions, and crash reports from applications and surfaces them in the Farna Control pipeline for triage and alerting."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["monitoring", "error-tracking", "observability", "canonical"],
     "connector_type": "sentry",
     "default_config": {
@@ -55,7 +57,7 @@ BITBUCKET_INTEGRATION: dict[str, Any] = {
     "name": "Bitbucket",
     "description": ("Bitbucket Cloud git hosting integration. Provides repository access, pull request management, and code review workflows."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["git", "hosting", "code-review", "canonical"],
     "connector_type": "bitbucket",
     "default_config": {
@@ -80,7 +82,7 @@ AZURE_DEVOPS_INTEGRATION: dict[str, Any] = {
     "name": "Azure DevOps",
     "description": ("Azure DevOps Services integration including Azure Repos (git), Azure Pipelines (CI/CD), Boards, and Wiki."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["devops", "ci-cd", "azure", "repos", "canonical"],
     "connector_type": "azure_pipelines",
     "default_config": {
@@ -106,7 +108,7 @@ PROMETHEUS_INTEGRATION: dict[str, Any] = {
     "name": "Prometheus",
     "description": ("Prometheus monitoring and alerting integration. Queries metrics via PromQL, retrieves alertmanager alerts, and feeds time-series data into pipeline analysis."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["monitoring", "metrics", "observability", "promql", "canonical"],
     "connector_type": "custom",
     "default_config": {
@@ -148,7 +150,7 @@ DATADOG_INTEGRATION: dict[str, Any] = {
     "name": "Datadog",
     "description": ("Datadog observability integration. Ingests metrics, traces, logs, and monitors from Datadog for pipeline-driven alerting and incident analysis."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["monitoring", "observability", "logs", "metrics", "canonical"],
     "connector_type": "datadog",
     "default_config": {
@@ -180,7 +182,7 @@ PAGERDUTY_INTEGRATION: dict[str, Any] = {
     "name": "PagerDuty",
     "description": ("Incident management integration. Creates, acknowledges, and resolves PagerDuty incidents from pipeline failures and alert conditions."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["incidents", "alerting", "on-call", "canonical"],
     "connector_type": "pagerduty",
     "default_config": {
@@ -205,7 +207,7 @@ JIRA_INTEGRATION: dict[str, Any] = {
     "name": "Jira",
     "description": ("Jira issue and project tracking integration. Supports issue CRUD, sprint management, and custom field mapping."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["issue-tracking", "project-management", "agile", "canonical"],
     "connector_type": "jira",
     "default_config": {
@@ -235,7 +237,7 @@ GITLAB_INTEGRATION: dict[str, Any] = {
     "name": "GitLab",
     "description": ("GitLab git hosting and CI/CD integration. Provides repository access, merge request management, CI pipeline triggers, and issue tracking."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["git", "ci-cd", "hosting", "devops", "canonical"],
     "connector_type": "gitlab",
     "default_config": {
@@ -260,7 +262,7 @@ SLACK_INTEGRATION: dict[str, Any] = {
     "name": "Slack",
     "description": ("Slack messaging integration. Sends pipeline notifications, receives slash-command triggers, and posts structured messages with blocks and attachments."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["messaging", "notifications", "collaboration", "canonical"],
     "connector_type": "slack",
     "default_config": {
@@ -285,7 +287,7 @@ CONFLUENCE_INTEGRATION: dict[str, Any] = {
     "name": "Confluence",
     "description": ("Confluence wiki and documentation integration. Creates, updates, and retrieves pages, attachments, and blog posts."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["wiki", "documentation", "knowledge-base", "canonical"],
     "connector_type": "confluence",
     "default_config": {
@@ -315,7 +317,7 @@ NOTION_INTEGRATION: dict[str, Any] = {
     "name": "Notion",
     "description": ("Notion knowledge-base integration. Reads and writes pages, databases, and blocks for documentation and project tracking."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["documentation", "knowledge-base", "project-management", "canonical"],
     "connector_type": "notion",
     "default_config": {
@@ -340,7 +342,7 @@ SONARQUBE_INTEGRATION: dict[str, Any] = {
     "name": "SonarQube",
     "description": ("Code quality and static analysis integration. Retrieves quality gate status, code smells, bugs, vulnerabilities, and coverage metrics from SonarQube."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["code-quality", "static-analysis", "linting", "canonical"],
     "connector_type": "sonarqube",
     "default_config": {
@@ -365,7 +367,7 @@ ELASTIC_INTEGRATION: dict[str, Any] = {
     "name": "Elasticsearch",
     "description": ("Elasticsearch search and observability integration. Queries indices for log analytics, application performance data, and structured search operations."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["search", "observability", "logs", "analytics", "canonical"],
     "connector_type": "custom",
     "default_config": {
@@ -401,7 +403,7 @@ N8N_INTEGRATION: dict[str, Any] = {
     "name": "n8n",
     "description": ("n8n workflow automation integration. Triggers and manages n8n workflows from pipeline events and receives webhook callbacks."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["automation", "workflow", "integration", "canonical"],
     "connector_type": "n8n",
     "default_config": {
@@ -426,7 +428,7 @@ TERRAFORM_INTEGRATION: dict[str, Any] = {
     "name": "Terraform",
     "description": ("Infrastructure as Code integration. Plans and applies Terraform configurations, retrieves state, and validates HCL syntax."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["infrastructure", "iac", "terraform", "cloud", "canonical"],
     "connector_type": "custom",
     "default_config": {
@@ -463,7 +465,7 @@ TEAMS_INTEGRATION: dict[str, Any] = {
     "name": "Microsoft Teams",
     "description": ("Microsoft Teams messaging integration. Sends adaptive card notifications, receives commands, and posts pipeline updates to Teams channels."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["messaging", "notifications", "collaboration", "microsoft", "canonical"],
     "connector_type": "microsoft_teams",
     "default_config": {
@@ -488,7 +490,7 @@ DISCORD_INTEGRATION: dict[str, Any] = {
     "name": "Discord",
     "description": ("Discord messaging integration. Sends pipeline notifications via webhooks, manages threads, and listens for bot commands."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["messaging", "notifications", "collaboration", "canonical"],
     "connector_type": "discord",
     "default_config": {
@@ -512,7 +514,7 @@ JENKINS_INTEGRATION: dict[str, Any] = {
     "name": "Jenkins",
     "description": ("Jenkins CI/CD integration. Triggers builds, retrieves build logs and status, and monitors job health."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["ci-cd", "automation", "jenkins", "build", "canonical"],
     "connector_type": "jenkins",
     "default_config": {
@@ -545,7 +547,7 @@ GITHUB_ACTIONS_INTEGRATION: dict[str, Any] = {
     "name": "GitHub Actions",
     "description": ("GitHub Actions CI/CD integration. Triggers workflow runs, monitors run status and logs, and dispatches repository events."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["ci-cd", "github", "automation", "workflows", "canonical"],
     "connector_type": "ci_runner",
     "default_config": {
@@ -575,7 +577,7 @@ SNYK_INTEGRATION: dict[str, Any] = {
     "name": "Snyk",
     "description": ("Vulnerability scanning integration. Tests dependencies and container images for known CVEs, retrieves advisory details, and monitors project risk."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["security", "vulnerability", "dependencies", "scanning", "canonical"],
     "connector_type": "snyk",
     "default_config": {
@@ -601,7 +603,7 @@ KUBERNETES_INTEGRATION: dict[str, Any] = {
     "name": "Kubernetes",
     "description": ("Kubernetes container orchestration integration. Retrieves pod status, deployment health, events, and logs for pipeline-driven deployment monitoring and incident analysis."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["kubernetes", "containers", "orchestration", "infrastructure", "canonical"],
     "connector_type": "custom",
     "default_config": {
@@ -646,7 +648,7 @@ DOCKER_INTEGRATION: dict[str, Any] = {
     "name": "Docker",
     "description": ("Docker container management integration. Builds, pulls, and manages container images and containers via the Docker API."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["containers", "docker", "build", "deployment", "canonical"],
     "connector_type": "custom",
     "default_config": {
@@ -681,7 +683,7 @@ CIRCLECI_INTEGRATION: dict[str, Any] = {
     "name": "CircleCI",
     "description": ("CircleCI CI/CD integration. Triggers pipeline runs, monitors job status, retrieves test results and artifacts."),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["ci-cd", "automation", "testing", "build", "canonical"],
     "connector_type": "circleci",
     "default_config": {
@@ -718,7 +720,7 @@ REST_INTEGRATION: dict[str, Any] = {
         "response-size capping, and idempotent retry."
     ),
     "version": "1.0.0",
-    "author": "Farna Control",
+    "author": AUTHOR,
     "tags": ["generic", "http", "rest", "integration", "canonical"],
     "connector_type": "rest",
     "default_config": {
