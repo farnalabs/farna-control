@@ -738,6 +738,11 @@ OWNED_PAGES = {
         "frontend/src/components/pipelines/FolderListError.vue",
     ),
     "/analytics": "frontend/src/views/AnalyticsView.vue",
+    "/evals": (
+        "frontend/src/views/EvalsListView.vue",
+        "frontend/src/components/FeatureGate.vue",
+        "frontend/src/components/LockIcon.vue",
+    ),
     "/evals/editor": (
         "frontend/src/views/EvalEditorView.vue",
         "frontend/src/components/FeatureGate.vue",

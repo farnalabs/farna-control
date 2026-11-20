@@ -23,7 +23,8 @@ const mockManifest = vi.hoisted(() => ({
      '/lifecycle-maps/:id': { name: 'lifecycle-map-detail', breadcrumb: 'Lifecycle Map', sidebar_group: null, sidebar_order: null, type: 'detail_page', required_tier: null, required_roles: null, required_permissions: null, visibility: 'in_dev' },
 
     '/runs/diff': { name: 'runs-diff', breadcrumb: 'Output Diff', sidebar_group: 'monitor', sidebar_order: 2, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
-    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 3, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/evals': { name: 'evals-list', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 18, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null, exact: true },
+    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Eval Editor', sidebar_group: 'monitor', sidebar_order: 3, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
     '/evals/proposals': { name: 'eval-proposals-queue', breadcrumb: 'Eval Proposals', sidebar_group: 'monitor', sidebar_order: 4, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
     '/variants/compare': { name: 'variant-compare', breadcrumb: 'Variants', sidebar_group: 'monitor', sidebar_order: 5, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
     '/settings/observability': { name: 'settings-observability', breadcrumb: 'Observability', sidebar_group: 'monitor', sidebar_order: 7, type: 'form_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null },
@@ -360,6 +361,19 @@ describe('navigation.ts', () => {
     expect(warn).toHaveBeenCalled()
     manifest.routes['/risk-assessment'] = original
     warn.mockRestore()
+  })
+
+  it('maps the all-evals list nav entry with the shared Evals label (FAR-2597)', () => {
+    const list = navGroups.flatMap((group) => group.items).find((item) => item.to === '/evals')!
+    expect(list).toBeDefined()
+    expect(list.labelKey).toBe('components.SidebarNav.item_evals')
+    expect(list.icon).toBe('CheckSquare')
+  })
+
+  it('gives the eval editor its own label now that Evals names the list (FAR-2597)', () => {
+    const all = navGroups.flatMap((group) => group.items)
+    const editor = all.find((item) => item.to === '/evals/editor')!
+    expect(editor.labelKey).toBe('components.SidebarNav.item_eval_editor')
   })
 
   it('monitor has evals, diff, observability, etc', () => {

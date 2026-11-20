@@ -2,7 +2,25 @@
   <FeatureGate feature-name="eval_system" required-tier="community" show-disabled>
 
     <div class="page-wide">
-    <PageHeader :title="$t('views.EvalEditorView.eval_editor')" :subtitle="$t('views.EvalEditorView.create_and_manage_eval_definitions')" />
+    <PageHeader
+      :title="$t('views.EvalEditorView.eval_editor')"
+      :subtitle="$t('views.EvalEditorView.create_and_manage_eval_definitions')"
+      :tabs="evalPageTabs"
+    />
+
+    <!-- Deep link (?pipeline_id=) pointing at a pipeline that no longer exists
+         (deleted, or never visible to this org): the page falls back to the
+         all-pipelines state instead of rendering an empty editor, and says so
+         so the fallback is never mistaken for a broken link. -->
+    <p
+      v-if="pipelineLinkNotice"
+      class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+      role="status"
+      aria-live="polite"
+      data-testid="eval-editor-pipeline-link-notice"
+    >
+      {{ $t('views.EvalEditorView.pipeline_link_notice') }}
+    </p>
 
     <LoadingSpinner v-if="loading" />
 
@@ -955,6 +973,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useDataFetch } from '../composables/useDataFetch'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
@@ -987,6 +1006,19 @@ import {
 } from '../components/eval/typedJudge'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+
+// Set when a `?pipeline_id=` deep link does not resolve to a visible pipeline.
+const pipelineLinkNotice = ref(false)
+
+// Route-per-tab navigation across the eval surface (costs-style), so the list,
+// the editor and the proposals queue are three destinations, not query states.
+const evalPageTabs = computed(() => [
+  { label: t('views.EvalsListView.tabs_all'), to: '/evals' },
+  { label: t('views.EvalsListView.tabs_editor'), to: '/evals/editor' },
+  { label: t('views.EvalsListView.tabs_proposals'), to: '/evals/proposals' },
+])
 
 const planStore = usePlanStore()
 const { track } = useProductAnalytics()
@@ -1525,7 +1557,53 @@ async function onPipelineChange() {
   deletingEvalId.value = null
   nodesError.value = null
   evalsError.value = null
+  syncPipelineQuery()
   await Promise.all([loadNodes(), loadEvals()])
+}
+
+/**
+ * Keep the URL in sync with the pipeline selector so the page is shareable and
+ * a reload restores the same pipeline. `__all__` clears the param rather than
+ * writing a sentinel value into the query string.
+ */
+function syncPipelineQuery() {
+  if (pipelineLinkNotice.value) pipelineLinkNotice.value = false
+  const raw = route?.query?.pipeline_id
+  const current = typeof raw === 'string' ? raw : undefined
+  const next = selectedPipelineId.value === '__all__' ? undefined : selectedPipelineId.value
+  if (current === next) return
+  replacePipelineQuery(next)
+}
+
+/**
+ * Replace the `pipeline_id` query param, preserving every other param. A mount
+ * without a router plugin (unit tests that drive the view directly) injects no
+ * router instance, so there is nothing to sync and the update is a no-op.
+ */
+function replacePipelineQuery(pipelineId: string | undefined) {
+  if (!router?.replace) return
+  void router.replace({ query: { ...route?.query, pipeline_id: pipelineId } })
+}
+
+/**
+ * Resolve the `?pipeline_id=` deep link from the evals list against the fetched
+ * pipeline list. An id that resolves selects that pipeline and loads its nodes
+ * and evals; an id that does not resolve falls back to the all-pipelines state
+ * with a visible notice — never a blank editor — and is dropped from the URL so
+ * reloading or sharing the corrected page does not repeat the message.
+ */
+function applyPipelineDeepLink() {
+  const raw = route?.query?.pipeline_id
+  const linkedPipelineId = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : undefined
+  if (!linkedPipelineId) return
+  if (pipelines.value.some(p => p.id === linkedPipelineId)) {
+    selectedPipelineId.value = linkedPipelineId
+    void onPipelineChange()
+    return
+  }
+  selectedPipelineId.value = '__all__'
+  pipelineLinkNotice.value = true
+  replacePipelineQuery(undefined)
 }
 
 /**
@@ -1983,11 +2061,14 @@ async function retryPolicyGate() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   planStore.fetchPlan()
-  void loadAll()
   // The typed builder's backing axis needs the org's model backends. A failure
   // is non-fatal: the select stays empty and shows an inline message.
   void loadModelBackends()
+  // Resolve `?pipeline_id=` only once the pipeline list is known — that is
+  // what makes an unknown id distinguishable from a not-yet-loaded one.
+  await loadAll()
+  applyPipelineDeepLink()
 })
 </script>
