@@ -104,13 +104,21 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
   })
 
   it('/system-maps published reads are authenticated viewer routes, not anonymous public routes (FAR-2363)', () => {
+    // FAR-2638 splits the visibility: the LIST route is private_preview until
+    // System Maps ships at Beta, while the DETAIL route keeps `public` (a
+    // detail page is never rendered as a sidebar row). The tier/role/
+    // permission floor is unchanged on both.
+    const expectedVisibility: Record<string, string> = {
+      '/system-maps': 'private_preview',
+      '/system-maps/:id': 'public',
+    }
     for (const path of ['/system-maps', '/system-maps/:id']) {
       const route = routes[path]
       expect(route, `${path} must exist`).toBeDefined()
       expect(route.required_entitlement == null, `${path} required_entitlement`).toBe(true)
       expect(route.required_roles, `${path} required_roles`).toEqual(['viewer', 'operator', 'admin'])
       expect(route.required_permissions, `${path} required_permissions`).toEqual(['system_maps.read'])
-      expect(route.visibility, `${path} visibility`).toBe('public')
+      expect(route.visibility, `${path} visibility`).toBe(expectedVisibility[path])
     }
   })
 
@@ -164,6 +172,33 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
     expect(route.meta.requiresSystemAdmin).toBeTruthy()
     expect(route.meta.requiredRoles).toBeFalsy()
   })
+})
+
+describe('release-gated surfaces stay out of the alpha nav (FAR-2638)', () => {
+  // The canonical release list puts System Maps in Beta and Determination in
+  // GA, so neither may render in an alpha instance's sidebar. Both are gated
+  // the same way the other preview routes are: `visibility: private_preview`,
+  // which the sidebar (isNavItemVisible) and the router
+  // (enforceRoleTierVisibility) both read — hidden for every customer and for
+  // the read-only demo, reachable only with developer mode on. They are
+  // promoted to `public` when Beta (System Maps) and GA (Determination) enable
+  // them.
+  const routes = loadManifest().routes
+  const RELEASE_GATED_ROUTES = [
+    { path: '/system-maps', release: 'Beta' },
+    { path: '/determination', release: 'GA' },
+  ] as const
+
+  for (const { path, release } of RELEASE_GATED_ROUTES) {
+    it(`${path} is declared private_preview until ${release}`, () => {
+      const route = routes[path]
+      expect(route, `${path} must exist in the manifest`).toBeDefined()
+      expect(
+        route.visibility,
+        `${path} ships at ${release} and must be private_preview so it stays out of the alpha nav (FAR-2638)`,
+      ).toBe('private_preview')
+    })
+  }
 })
 
 describe('Beta surfaces stay out of the alpha nav (FAR-2615)', () => {

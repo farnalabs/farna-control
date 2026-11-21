@@ -226,6 +226,7 @@ routes:
         sidebar_order: 80
         type: page
         <<: *community
+        visibility: private_preview
         required_permissions: [determination.scan]
         deprecated: false
         exact: true
@@ -1028,7 +1029,7 @@ routes:
         type: list_page
         pattern: /system-maps
         exact: true
-        visibility: public
+        visibility: private_preview
         <<: *community
         required_roles: [viewer, operator, admin]
         required_permissions: [system_maps.read]
