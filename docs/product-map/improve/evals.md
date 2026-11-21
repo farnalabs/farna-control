@@ -109,17 +109,31 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
 - [x] The eval surface is three route-per-tab destinations rendered by the
       shared `PageHeader` tabs - `/evals` (All evals), `/evals/editor`
       (Editor) and `/evals/proposals` (Proposals) - and `/evals` is a real
-      page, not a redirect to the editor. The editor accepts a
+      page, not a redirect to the editor. `/evals/editor` is a WRITE surface,
+      so it is gated on the eval-definition writer permissions
+      (`eval.definition.create` / `eval.definition.update`, operator) rather
+      than on the viewer read `eval.list`; the `/evals` tab strip drops the
+      Editor tab and the page's New-eval / row-edit affordances for a caller
+      who cannot save, so a viewer reads the all-evals list without being
+      routed into a form that would 403 on save (FAR-2609). The editor accepts a
       `?pipeline_id=` deep link from the list, validates it against the
       fetched pipeline list, keeps the URL in sync with the pipeline selector,
       and falls back to the all-pipelines state with a visible notice for an
       unknown id instead of a blank page (`frontend/src/views/EvalEditorView.vue`,
       `frontend/src/views/EvalProposalsQueueView.vue`)
-- [x] Eval definitions are org-scoped CRUD - create/update/delete are
-      admin-gated while reads are runner-readable (`POST/GET/PUT/DELETE
-      /api/v1/evals`, `GET /api/v1/evals/{eval_id}`) - with pagination and
-      pipeline / eval_type filters, plus `POST /api/v1/evals/from-run` to
-      author a definition from run data
+- [x] Eval definitions are org-scoped CRUD whose permissions come from the
+      ADR 047 registry and the route dependencies, not from prose:
+      `POST /api/v1/evals` requires `eval.definition.create` and
+      `PUT /api/v1/evals/{eval_id}` requires `eval.definition.update` (both
+      operator, with an in-body operator floor that fails closed for a
+      below-operator role); `DELETE /api/v1/evals/{eval_id}` carries the
+      operator-scoped `eval.definition.delete` dependency and additionally
+      refuses any non-admin caller in-body; reads (`GET /api/v1/evals`,
+      `GET /api/v1/evals/{eval_id}`) require `eval.list` (viewer). Pagination
+      and pipeline / eval_type filters are supported, plus
+      `POST /api/v1/evals/from-run` to author a definition from run data
+      (`backend/src/farna/api/routes/evals.py`,
+      `backend/src/farna/auth/permissions.py`)
 - [x] Policy-gate permissions are separate from eval-definition permissions: `gate.create` and `gate.edit` are operator-or-admin, `gate.enforcement.raise` explicitly authorizes warn→block, and `gate.enforcement.weaken` is admin-only for block→warn with a mandatory non-blank reason. The transition is checked under the existing per-eval advisory lock and audited with previous/new action, actor, and reason; the shared REST/MCP eval writers fail closed before creating or updating a PolicyGate without its gate permission.
 - [x] Policy-gate binding (`POST`/`PUT /api/v1/evals/{eval_id}/policy-gate`)
       runs the FAR-957 advisory author-warning checks for the eval's
@@ -197,6 +211,17 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
   triggered/run via the suite machinery, not a standalone cron in the eval API.
 
 ## QA History
+- 2026-11-21: **FAR-2609 permission-gate fix** – `/evals/editor` was gated on
+  `[eval.list, gate.create, gate.edit]`, and the router admits on ANY of those,
+  so `eval.list` (viewer) let a viewer open the editor and 403 on save. The
+  route's gate is now the write permissions its save path actually enforces
+  (`eval.definition.create` / `eval.definition.update`, operator; the delete
+  permission is excluded because DELETE eval definitions additionally requires
+  admin in-body). `/evals` stays readable at `eval.list`, and its New-eval /
+  empty-state CTA / row-edit affordances plus the Editor tab are withheld from
+  a caller without a writer permission, so no viewer is routed into the form.
+  Also corrected this file's stale "admin-gated while reads are runner-readable"
+  claim to the registry + route-dependency truth.
 - 2026-10-10: **product-map review pass** – reconciled the tracker with the
   shipped code: split the conflated coverage surface (`GET /api/v1/evals/coverage`
   vs the `GET /api/v1/eval-coverage-gap` insufficiency signal that owns
