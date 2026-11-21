@@ -16,19 +16,32 @@
               <span class="block text-xs text-muted-foreground ml-6">{{ $t('views.SystemMapDetailView.deterministic_hint') }}</span>
             </label>
             <label v-if="canUseAi" class="rounded border p-3 cursor-pointer" :class="mode === 'ai_assisted' ? 'border-primary bg-primary/5' : ''">
-              <input v-model="mode" type="radio" value="ai_assisted" class="mr-2" data-testid="system-map-discovery-mode-ai" />
+              <input v-model="mode" type="radio" value="ai_assisted" class="mr-2" :disabled="optionsLoaded && !aiDiscoveryAvailable" data-testid="system-map-discovery-mode-ai" />
               <span class="font-medium">{{ $t('views.SystemMapDetailView.mode_ai_assisted') }}</span>
               <span class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">{{ $t('views.SystemMapDetailView.beta_private_preview') }}</span>
               <span class="block text-xs text-muted-foreground ml-6">{{ $t('views.SystemMapDetailView.ai_assisted_hint') }}</span>
             </label>
           </div>
+          <!-- The AI path is decided from what the caller can actually read
+               (their organisation's model backends and model-judge evals).
+               There is no system-admin-only access probe, so an ordinary org
+               admin sees the reason and a route to fix it instead of a
+               silently unavailable option. -->
+          <p v-if="canUseAi && optionsLoaded && !modelBackendsConfigured" class="mt-2 rounded border bg-muted/40 p-3 text-sm text-muted-foreground" aria-live="polite" data-testid="system-map-discovery-no-model-backend">
+            {{ $t('views.SystemMapDetailView.ai_needs_model_backend') }}
+            <a href="/admin/model-backends" class="font-medium text-primary-text underline" data-testid="system-map-discovery-configure-backend-link">{{ $t('views.SystemMapDetailView.configure_model_backend_link') }}</a>
+          </p>
+          <p v-else-if="canUseAi && optionsLoaded && !modelJudgeConfigured" class="mt-2 rounded border bg-muted/40 p-3 text-sm text-muted-foreground" aria-live="polite" data-testid="system-map-discovery-no-eval-judge">
+            {{ $t('views.SystemMapDetailView.ai_needs_eval_judge') }}
+            <a href="/evals/editor" class="font-medium text-primary-text underline" data-testid="system-map-discovery-configure-eval-link">{{ $t('views.SystemMapDetailView.configure_eval_judge_link') }}</a>
+          </p>
         </fieldset>
 
         <div v-if="mode === 'ai_assisted'" class="space-y-4" data-testid="system-map-ai-controls">
           <p class="text-sm text-muted-foreground">{{ $t('views.SystemMapDetailView.ai_gate_explanation') }}</p>
           <div>
             <label for="discovery-backend" class="block text-sm font-medium">{{ $t('views.SystemMapDetailView.model_backend_label') }}</label>
-            <AppSelect id="discovery-backend" v-model="backendId" class="mt-1 w-full" :options="backendOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.model_backend_label')" :disabled="loading || failed || submitting" data-testid="system-map-discovery-backend">
+            <AppSelect id="discovery-backend" v-model="backendId" class="mt-1 w-full" :options="backendOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.model_backend_label')" :disabled="loading || failed || submitting || !modelBackendsConfigured" data-testid="system-map-discovery-backend">
               <template #option="{ option }">
                 <span :data-value="option.value">{{ option.label }}</span>
               </template>
@@ -36,7 +49,7 @@
           </div>
           <div>
             <label for="discovery-eval" class="block text-sm font-medium">{{ $t('views.SystemMapDetailView.eval_judge_label') }}</label>
-            <AppSelect id="discovery-eval" v-model="evalId" class="mt-1 w-full" :options="evalOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.eval_judge_label')" :disabled="loading || failed || submitting" data-testid="system-map-discovery-eval">
+            <AppSelect id="discovery-eval" v-model="evalId" class="mt-1 w-full" :options="evalOptions" option-label="label" option-value="value" :label="$t('views.SystemMapDetailView.eval_judge_label')" :disabled="loading || failed || submitting || !modelJudgeConfigured" data-testid="system-map-discovery-eval">
               <template #option="{ option }">
                 <span :data-value="option.value">{{ option.label }}</span>
               </template>
@@ -44,7 +57,6 @@
           </div>
           <p v-if="loading" class="text-sm text-muted-foreground" aria-live="polite">{{ $t('views.SystemMapDetailView.loading_ai_options') }}</p>
           <p v-if="failed" class="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive">{{ failedMessage }}</p>
-          <p v-else-if="!accessProbePositive" class="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive">{{ $t('views.SystemMapDetailView.internal_probe_required') }}</p>
         </div>
         <p v-if="submitting" class="rounded border bg-muted/40 p-3 text-sm" aria-live="polite" data-testid="system-map-discovery-request-loading">{{ $t('views.SystemMapDetailView.discovery_request_loading') }}</p>
         <p v-if="submitError" class="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive" data-testid="system-map-discovery-request-error">{{ submitError }}</p>
@@ -84,7 +96,20 @@ const evals = ref<Evaluation[]>([])
 const loading = ref(false)
 const failed = ref(false)
 const failedMessage = ref('')
-const accessProbePositive = ref(false)
+// True once a successful options read has completed. A read that returns no
+// usable backend/eval is still a SUCCESSFUL read: the caller is authorised,
+// their organisation simply has not configured the AI path yet. That is a
+// distinct state from a failed request and from an access refusal.
+const optionsLoaded = ref(false)
+const modelBackendsConfigured = computed(() => backends.value.length > 0)
+const modelJudgeConfigured = computed(() => evals.value.length > 0)
+// ``canUseAi`` is the org-aware authoring gate passed in by the detail view
+// (``store.hasAccess``: the org's effective ``system_maps`` flag + operator or
+// admin role + ``system_maps_access``). AI discovery needs no higher role than
+// authoring itself, so this is the only role/flag input.
+const aiDiscoveryAvailable = computed(
+  () => props.canUseAi && optionsLoaded.value && !loading.value && !failed.value && modelBackendsConfigured.value && modelJudgeConfigured.value,
+)
 
 // AppSelect option lists for the AI-assisted controls (both were native
 // <select> elements). The leading empty entry is the "not selected" placeholder.
@@ -103,7 +128,9 @@ const evalOptions = computed(() => [
   })),
 ])
 
-const canSubmit = computed(() => mode.value === 'deterministic' || (props.canUseAi && !loading.value && !failed.value && accessProbePositive.value && Boolean(backendId.value) && Boolean(evalId.value)))
+const canSubmit = computed(
+  () => mode.value === 'deterministic' || (aiDiscoveryAvailable.value && Boolean(backendId.value) && Boolean(evalId.value)),
+)
 
 let loadToken = 0
 
@@ -112,18 +139,23 @@ async function loadAiOptions(): Promise<void> {
   loading.value = true
   failed.value = false
   failedMessage.value = ''
-  accessProbePositive.value = false
+  optionsLoaded.value = false
   try {
-    const [probe, backendResponse, evalResponse] = await Promise.all([
-      api.GET('/api/v1/admin/feature-flags'),
+    // Both reads are viewer-scoped (``model_backend.list`` / ``eval.list``),
+    // so an ordinary org admin can make them. AI discovery genuinely needs an
+    // active org-visible model backend; the model-judge eval is what the panel
+    // gates the candidate against. The old system-admin-only
+    // ``/api/v1/admin/feature-flags`` probe was removed (FAR-2612): it 403'd
+    // every org admin and hid the AI option with no explanation.
+    const [backendResponse, evalResponse] = await Promise.all([
       api.GET('/api/v1/model-backends', { params: { query: { page: 1, page_size: 100 } } }),
       api.GET('/api/v1/evals', { params: { query: { page: 1, page_size: 100, eval_type: 'model_judge' } } }),
     ])
     if (token !== loadToken) return
-    const responses = [probe, backendResponse, evalResponse]
+    const responses = [backendResponse, evalResponse]
     const denied = responses.some((response) => response.response?.status === 403)
     if (denied) {
-      failedMessage.value = $t('views.SystemMapDetailView.ai_options_private_preview')
+      failedMessage.value = $t('views.SystemMapDetailView.ai_options_unavailable_private')
       throw new Error('AI discovery options are not available to this caller')
     }
     const unavailable = responses.some((response) => response.response?.status !== undefined && response.response.status >= 400 && response.response.status < 500)
@@ -131,12 +163,10 @@ async function loadAiOptions(): Promise<void> {
       failedMessage.value = $t('views.SystemMapDetailView.ai_options_unavailable_private')
       throw new Error('AI discovery options are unavailable to this caller')
     }
-    if (probe.error || backendResponse.error || evalResponse.error || !backendResponse.data || !evalResponse.data) throw new Error('AI discovery options unavailable')
-    const flags = (probe.data as { flags?: Array<{ name: string; currently_active: boolean }> }).flags
-    accessProbePositive.value = Array.isArray(flags) && flags.some((flag) => flag.name === 'system_maps' && flag.currently_active)
-    if (!accessProbePositive.value) throw new Error('Internal access probe failed')
+    if (backendResponse.error || evalResponse.error || !backendResponse.data || !evalResponse.data) throw new Error('AI discovery options unavailable')
     backends.value = backendResponse.data.items.filter((backend) => backend.visibility === 'org' && backend.tier !== 'in_dev')
     evals.value = evalResponse.data.items.filter((evaluation) => evaluation.eval_type === 'model_judge')
+    optionsLoaded.value = true
   } catch {
     if (token !== loadToken) return
     failed.value = true
@@ -148,7 +178,11 @@ async function loadAiOptions(): Promise<void> {
   }
 }
 
-watch(() => [mode.value, props.canUseAi] as const, ([value, allowed]) => { if (value === 'ai_assisted' && allowed) void loadAiOptions() })
+// Load as soon as the caller is allowed to author at all, so the panel can
+// state availability (and the fix) up front rather than after a failed try.
+watch(() => props.canUseAi, (allowed) => { if (allowed) void loadAiOptions() }, { immediate: true })
+// Selecting AI after a failed/skipped read gives the caller a retry path.
+watch(mode, (value) => { if (value === 'ai_assisted' && props.canUseAi && !optionsLoaded.value && !loading.value) void loadAiOptions() })
 
 function submit(): void {
   if (!canSubmit.value) return

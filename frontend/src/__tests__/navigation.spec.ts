@@ -172,7 +172,7 @@ describe('navigation.ts', () => {
        to: '/lifecycle-maps',
        icon: 'Map',
        label: 'Lifecycle Maps',
-       labelKey: 'item_lifecycle_maps',
+       labelKey: 'item_dashboard',
        visibility: 'in_dev',
      }
      expect(isNavItemVisible(item, visibilityContext())).toBe(false)
