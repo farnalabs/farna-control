@@ -5605,11 +5605,11 @@ export default {
     },
     "SidebarNav": {
       "main_navigation": "Main navigation",
-      "group_build": "BUILD",
-      "group_monitor": "MONITOR",
-      "group_configure": "CONFIGURE",
-      "group_admin": "ADMIN",
-      "group_improve": "IMPROVE",
+      "group_pipelines": "PIPELINES",
+      "group_controls": "CONTROLS",
+      "group_runs": "RUNS",
+      "group_configuration": "CONFIGURATION",
+      "group_administration": "ADMINISTRATION",
       "group_system": "SYSTEM",
       "item_dashboard": "Dashboard",
       "item_analytics": "Analytics",
@@ -5768,7 +5768,8 @@ export default {
       "retry": "Retry",
       "no_notifications": "No notifications",
       "view_all": "View all notifications",
-      "close": "Close notifications"
+      "close": "Close notifications",
+      "preferences": "Preferences"
     },
     "PageTabs": {
       "section_navigation": "Section navigation",

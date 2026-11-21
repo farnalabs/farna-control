@@ -770,7 +770,6 @@ constraint-dependencies = [
     "virtualenv>=21.14.13",
     "pyasn1>=0.6.5",
 ]
-
 # GHSA-53pm-wgxf-c6qf / CVE-2026-132276: wcmatch <11.2 is vulnerable to a
 # polynomial-time ReDoS when matching untrusted names against multi-star
 # patterns. wcmatch is transitive (semgrep -> wcmatch) and semgrep pins

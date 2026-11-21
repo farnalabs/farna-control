@@ -20,7 +20,14 @@ referential sanity:**
 - ``sidebar_order`` is unique within a group, so the sidebar sort is fully
   deterministic;
 - every declared group carries ``label`` / ``order`` / ``default_expanded``,
-  the fields navigation.ts reads unconditionally, with the right types.
+  the fields navigation.ts reads unconditionally, with the right types;
+- a PINNED route (``sidebar_pinned: true``, FAR-2605) declares no
+  ``sidebar_group`` and carries an integer ``sidebar_order`` — it renders as a
+  single row above the groups, so belonging to a group as well is
+  contradictory;
+- the root route stays reachable from the nav: ``/`` is either pinned or a
+  grouped nav entry, never neither (un-pinning the Dashboard without
+  regrouping it would drop it from the sidebar with no error anywhere).
 
 **2. Route-id parity with navigation.ts:**
 
@@ -151,6 +158,42 @@ def _sidebar_order_problems(routes: dict) -> list[str]:
     return problems
 
 
+def _pinned_route_problems(routes: dict) -> list[str]:
+    """FAR-2605: pinned-route invariants (the row above the sidebar groups).
+
+    A pinned route renders ABOVE the groups, so it must not also declare a
+    ``sidebar_group``; and because a pinned route is the only way a page can
+    live outside a group, the root route must stay pinned or grouped. Nothing
+    else stops a future edit from un-pinning the Dashboard and leaving it in no
+    group at all — it would then vanish from the sidebar silently, with every
+    gate green.
+    """
+    problems: list[str] = []
+    for path, entry in routes.items():
+        if not isinstance(entry, dict) or not entry.get("sidebar_pinned"):
+            continue
+        group = entry.get("sidebar_group")
+        if group:
+            problems.append(
+                f"pinned route {path!r} must not also declare sidebar_group {group!r} "
+                "(a pinned route renders above the groups, never inside one)"
+            )
+        order = entry.get("sidebar_order")
+        if type(order) is not int:
+            problems.append(
+                f"pinned route {path!r} must carry an integer sidebar_order "
+                f"(got {order!r} — the pinned row's sort key)"
+            )
+
+    root = routes.get("/")
+    if isinstance(root, dict) and not root.get("sidebar_pinned") and not root.get("sidebar_group"):
+        problems.append(
+            "the root route '/' must be either pinned (sidebar_pinned: true) or a grouped nav entry — "
+            "otherwise the Dashboard disappears from the sidebar"
+        )
+    return problems
+
+
 def _group_field_problems(groups: dict) -> list[str]:
     """Each declared group carries the fields navigation.ts reads."""
     problems: list[str] = []
@@ -186,6 +229,7 @@ def _structure_problems(manifest: object) -> list[str]:
     problems.extend(_referential_problems(routes, groups))
     problems.extend(_sidebar_order_problems(routes))
     problems.extend(_group_field_problems(groups))
+    problems.extend(_pinned_route_problems(routes))
     return problems
 
 
@@ -259,9 +303,11 @@ def _main(argv: list[str] | None = None) -> int:
     routes = manifest.get("routes", {}) if isinstance(manifest, dict) else {}
     groups = manifest.get("sidebar_groups", {}) if isinstance(manifest, dict) else {}
     nav_count = sum(1 for entry in routes.values() if _nav.is_sidebar_nav_entry(entry))
+    pinned_count = sum(1 for entry in routes.values() if isinstance(entry, dict) and entry.get("sidebar_pinned"))
     print(
         f"run_validate_nav_config: OK - {nav_count} nav entries across "
-        f"{len(groups)} sidebar groups, {len(_nav.route_config_keys(nav_text))} routeConfigMap entries",
+        f"{len(groups)} sidebar groups, {pinned_count} pinned, "
+        f"{len(_nav.route_config_keys(nav_text))} routeConfigMap entries",
         file=sys.stderr,
     )
     return 0

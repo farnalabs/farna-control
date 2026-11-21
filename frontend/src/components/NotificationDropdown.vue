@@ -131,7 +131,7 @@
         </li>
       </ul>
 
-      <div class="border-t border-border px-3 py-2 text-center">
+      <div class="flex items-center justify-center gap-2 border-t border-border px-3 py-2 text-center">
         <router-link
           to="/notifications"
           data-testid="notification-dropdown-view-all"
@@ -139,6 +139,17 @@
           @click="$emit('close')"
         >
           {{ $t("components.NotificationDropdown.view_all") }}
+        </router-link>
+        <!-- FAR-2605: Notification Preferences left the sidebar (the nav shows
+             operator-facing surfaces only), so the bell is its entry point. -->
+        <span class="text-xs text-muted-foreground" aria-hidden="true">·</span>
+        <router-link
+          to="/settings/notifications"
+          data-testid="notification-dropdown-preferences"
+          class="text-xs font-medium text-primary-text hover:underline"
+          @click="$emit('close')"
+        >
+          {{ $t("components.NotificationDropdown.preferences") }}
         </router-link>
       </div>
     </dialog>

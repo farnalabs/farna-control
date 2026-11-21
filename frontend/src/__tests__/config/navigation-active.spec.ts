@@ -5,6 +5,7 @@ import manifest from '@/manifest.yaml'
 import SidebarLink from '../../components/SidebarLink.vue'
 import {
   getNavGroups,
+  getPinnedNavItem,
   isNavItemActive,
   resolveActiveNavPath,
   type NavActiveRoute,
@@ -40,7 +41,13 @@ function mountLink(to: string, exact?: boolean) {
   })
 }
 
-const navItems = getNavGroups().flatMap((group) => group.items)
+// FAR-2605: the Dashboard is a pinned row above the groups, not part of any
+// group, so include it explicitly when sweeping the rendered nav items.
+const pinnedNavItem = getPinnedNavItem()
+const navItems = [
+  ...(pinnedNavItem ? [pinnedNavItem] : []),
+  ...getNavGroups().flatMap((group) => group.items),
+]
 
 function activeItemPaths(fixture: RouteFixture | string): string[] {
   const route = routeFor(fixture)

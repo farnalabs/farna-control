@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockManifest = vi.hoisted(() => ({
   sidebar_groups: {
-    core: { label: 'BUILD', order: 1, default_expanded: true, labelKey: 'components.SidebarNav.group_build' },
-    monitor: { label: 'MONITOR', order: 2, default_expanded: true, labelKey: 'components.SidebarNav.group_monitor' },
-    configure: { label: 'CONFIGURE', order: 3, default_expanded: false, labelKey: 'components.SidebarNav.group_configure' },
-    admin: { label: 'ADMIN', order: 4, default_expanded: false, labelKey: 'components.SidebarNav.group_admin' },
+    core: { label: 'PIPELINES', order: 1, default_expanded: true, labelKey: 'components.SidebarNav.group_pipelines' },
+    monitor: { label: 'RUNS', order: 2, default_expanded: true, labelKey: 'components.SidebarNav.group_runs' },
+    configure: { label: 'CONFIGURATION', order: 3, default_expanded: false, labelKey: 'components.SidebarNav.group_configuration' },
+    admin: { label: 'ADMINISTRATION', order: 4, default_expanded: false, labelKey: 'components.SidebarNav.group_administration' },
     system: { label: 'SYSTEM', order: 5, default_expanded: false, labelKey: 'components.SidebarNav.group_system', system_admin_only: true },
   },
   routes: {
@@ -326,10 +326,10 @@ describe('navigation.ts', () => {
 
   it('sets group labelKey from manifest labelKey', () => {
     const core = navGroups.find((g) => g.id === 'core')!
-    expect(core.labelKey).toBe('components.SidebarNav.group_build')
+    expect(core.labelKey).toBe('components.SidebarNav.group_pipelines')
 
     const monitor = navGroups.find((g) => g.id === 'monitor')!
-    expect(monitor.labelKey).toBe('components.SidebarNav.group_monitor')
+    expect(monitor.labelKey).toBe('components.SidebarNav.group_runs')
   })
 
   it('configure group is collapsed by default (not expanded)', () => {
