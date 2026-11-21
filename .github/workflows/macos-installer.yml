@@ -951,6 +951,9 @@ jobs:
           # functions visible, which a timeout/perl wrapper would not)
           # terminates an attempt that outlives CODESIGN_ATTEMPT_TIMEOUT and
           # reports exit 124 so the caller retries it like a transient failure.
+          # Cross-reference: run_bounded in scripts/macos/signature-diagnostics.sh
+          # is the same watchdog shape; a change to either timeout/terminate
+          # policy belongs in both.
           codesign_attempt_bounded() {
             local timeout_secs="$1" output_file="$2"
             shift 2

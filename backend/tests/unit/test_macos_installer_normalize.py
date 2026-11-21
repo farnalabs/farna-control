@@ -6,6 +6,7 @@ import http.server
 import io
 import json
 import os
+import plistlib
 import re
 import shlex
 import shutil
@@ -2860,6 +2861,65 @@ def test_macos_signature_diagnostics_quick_mode_skips_the_whole_bundle_scans() -
 
     for heavy in ("for attempt in 1 2 3", "syspolicy_check distribution", "xcrun swiftc", "log show", 'scan.py"', "xattr -r", "diff -rq"):
         assert code.index(heavy) > quick_exit, heavy
+
+
+def _embedded_bundle_scan() -> str:
+    """Return the Python scanner embedded in signature-diagnostics.sh."""
+    helper = _signature_diagnostics_helper()
+    opener = "cat >\"$work_dir/scan.py\" <<'PY'\n"
+    start = helper.index(opener) + len(opener)
+    end = helper.index("\nPY\n", start)
+    return helper[start:end] + "\n"
+
+
+def _run_embedded_bundle_scan(app: Path) -> subprocess.CompletedProcess[str]:
+    scan = app.parent / "scan.py"
+    scan.write_text(_embedded_bundle_scan(), encoding="utf-8")
+    return subprocess.run(  # noqa: S603 - repository-owned scanner and a temp bundle
+        [sys.executable, "-I", scan.as_posix(), app.as_posix()],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+def _sealed_bundle(tmp_path: Path, *, sealed_bytes: bytes, stored_bytes: bytes) -> Path:
+    app = tmp_path / "Farna Control.app"
+    contents = app / "Contents"
+    (contents / "_CodeSignature").mkdir(parents=True)
+    (contents / "Info.plist").write_bytes(sealed_bytes)
+    (contents / "_CodeSignature" / "CodeResources").write_bytes(plistlib.dumps({"files2": {"Info.plist": stored_bytes}}))
+    return app
+
+
+@pytest.mark.parametrize("shape", ["raw-bytes", "dict-hash2"])
+def test_macos_bundle_scan_flags_a_tampered_sealed_file(tmp_path: Path, shape: str) -> None:
+    """FAR-2593 review: Apple stores an ordinary sealed file as a raw <data>
+    digest directly under files2[path] (plistlib returns bytes), not only the
+    dict hash2 form. Both shapes must be hashed and compared, naming a file
+    whose contents no longer match its seal."""
+    info = b"sealed contents\n"
+    expected = hashlib.sha256(info).digest()
+    stored = expected if shape == "raw-bytes" else {"hash2": expected}
+    app = _sealed_bundle(tmp_path, sealed_bytes=info + b"tampered\n", stored_bytes=stored)
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert "seal_hash_mismatch Info.plist" in result.stdout, result.stdout
+    assert "seal_entries=1 seal_problems=1" in result.stdout
+
+
+def test_macos_bundle_scan_accepts_a_matching_raw_digest_sealed_file(tmp_path: Path) -> None:
+    info = b"sealed contents\n"
+    app = _sealed_bundle(tmp_path, sealed_bytes=info, stored_bytes=hashlib.sha256(info).digest())
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert "seal_hash_mismatch" not in result.stdout, result.stdout
+    assert "seal_entries=1 seal_problems=0" in result.stdout
 
 
 def _run_bounded_harness(helper: str) -> str:

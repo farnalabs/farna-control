@@ -48,6 +48,10 @@ section() {
 
 # Run "$@" for at most $1 seconds (bash 3.2-safe watchdog; macOS ships no
 # timeout(1)). Prints a marker and returns 124 when the bound is hit.
+#
+# Cross-reference: codesign_attempt_bounded in .github/workflows/macos-installer.yml
+# is the same watchdog shape for the codesign retry. Either is fine for one
+# call site, but a change to the timeout/terminate policy belongs in both.
 run_bounded() {
   local timeout_secs="$1" pid status started
   shift
@@ -230,7 +234,16 @@ for rel, entry in sorted(files2.items()):
     if not os.path.isfile(path) or os.path.islink(path):
         report("seal", f"seal_missing {rel}")
         continue
-    expected = entry.get("hash2") if isinstance(entry, dict) else None
+    # Apple's CodeResources stores an ordinary sealed file two ways: a raw
+    # <data> digest directly under files2[path] (plistlib gives us bytes), or a
+    # dict carrying hash2. Both are the expected SHA-256; a shape we do not
+    # recognise must not silently skip the check.
+    if isinstance(entry, (bytes, bytearray)):
+        expected = entry
+    elif isinstance(entry, dict):
+        expected = entry.get("hash2")
+    else:
+        expected = None
     if expected is not None and sha256(path) != bytes(expected):
         report("seal", f"seal_hash_mismatch {rel}")
 
