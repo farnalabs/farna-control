@@ -288,6 +288,17 @@ async def _list_deliveries(
             )
             .where(
                 NotificationDeliveryLog.organisation_id == principal.organisation_id,
+                # FAR-2596: this surface is the OUTBOUND delivery log only.
+                # The error-tracking alert dispatcher also writes delivery-log
+                # rows, with status 'in_app' and a NULL endpoint_id, for in-app
+                # error alerts — they belong to the in-app inbox, not to a
+                # webhook delivery page, and their presence made the page's
+                # "nothing will appear here until you add a webhook" warning
+                # false. Exclude them by STATUS. Do NOT filter
+                # `endpoint_id IS NOT NULL`: a deleted endpoint nulls the FK
+                # (ondelete=SET NULL), and those historical deliveries must
+                # stay visible.
+                NotificationDeliveryLog.status != "in_app",
             )
         )
 
@@ -416,6 +427,10 @@ async def _count_deliveries(
 ) -> int:
     count_query = select(sa_func.count(NotificationDeliveryLog.id)).where(
         NotificationDeliveryLog.organisation_id == principal.organisation_id,
+        # FAR-2596: the list excludes 'in_app' rows, so the count must apply
+        # the SAME predicate — otherwise `total` disagrees with the page it
+        # describes.
+        NotificationDeliveryLog.status != "in_app",
     )
     if status_filter:
         count_query = count_query.where(NotificationDeliveryLog.status == status_filter)

@@ -5,10 +5,11 @@ const mockGet = vi.hoisted(() => vi.fn())
 const mockPost = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
 const mockGetAccessToken = vi.hoisted(() => vi.fn())
+const mockSystemMapsFlag = vi.hoisted(() => ({ value: true }))
 const mockPlanStore = vi.hoisted(() => ({
   loaded: true,
   currentTier: 'community',
-  devMode: true,
+  featureEnabled: (name: string) => (name === 'system_maps' ? mockSystemMapsFlag.value : false),
   userPermissions: ['system_maps_access', 'system.config.manage'],
   fetchPlan: vi.fn(),
   fetchPermissions: vi.fn(),
@@ -537,27 +538,36 @@ describe('useSystemMapsStore derived access and non-Error failures', () => {
     setActivePinia(createPinia())
     mockGet.mockReset()
     mockPost.mockReset()
+    mockSystemMapsFlag.value = true
   })
 
-  it('requires the flag, a role and the permission for hasAccess', () => {
-    mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
+  it('requires the plan flag, a role and the permission for hasAccess', () => {
+    // FAR-2595: hasAccess derives from the plan-bootstrap flag, not a
+    // dev-mode probe or the store's systemMapsEnabled mirror.
+    mockSystemMapsFlag.value = true
+    mockPlanStore.userPermissions = ['system_maps_access']
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
     let store = useSystemMapsStore()
-
-    expect(store.hasAccess).toBe(false)
-
     store.systemMapsEnabled = true
+
     expect(store.hasAccess).toBe(true)
 
     setActivePinia(createPinia())
+    mockSystemMapsFlag.value = false
+    store = useSystemMapsStore()
+    store.systemMapsEnabled = true
+    expect(store.hasAccess).toBe(false)
+
+    setActivePinia(createPinia())
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = []
     store = useSystemMapsStore()
     store.systemMapsEnabled = true
     expect(store.hasAccess).toBe(false)
 
     setActivePinia(createPinia())
-    mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
+    mockPlanStore.userPermissions = ['system_maps_access']
     mockIsOperator.value = false
     mockIsSystemAdmin.value = true
     store = useSystemMapsStore()
@@ -566,6 +576,7 @@ describe('useSystemMapsStore derived access and non-Error failures', () => {
 
     setActivePinia(createPinia())
     mockIsSystemAdmin.value = false
+    mockPlanStore.userPermissions = ['system_maps_access']
     store = useSystemMapsStore()
     store.systemMapsEnabled = true
     expect(store.hasAccess).toBe(false)

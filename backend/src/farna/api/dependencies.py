@@ -243,17 +243,19 @@ def _require_internal_system_maps_access(
     principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
     settings: Settings = Depends(get_settings),
 ) -> TenantPrincipal:
-    """Keep the system maps API surface on the internal path only.
+    """Authorize the System Maps authoring surface.
 
-    System Maps deliberately has its own grant, separate from the retained
-    lifecycle-map ``library.search.in_dev`` grant. Legacy JWTs and keys without
-    an explicit grant-set keep the role-based behaviour; grant-bearing keys must
-    carry the dedicated System Maps grant.
+    FAR-2595: this is a Beta-preview authoring surface, not a dev-mode-only
+    internal surface. It is gated by the per-organisation ``system_maps``
+    feature flag (default OFF), the operator/admin role floor, and the
+    dedicated ``system_maps_access`` grant — deliberately NOT by developer
+    mode, so a self-hosted Alpha deployment can dogfood it. The retained
+    lifecycle-map ``library.search.in_dev`` grant keeps its developer-mode
+    semantics; this gate is separate.
     """
     require_in_dev_operator(
         principal,
         SYSTEM_MAPS_ACCESS_PERMISSION,
-        require_dev_mode=True,
         settings=settings,
     )
     return principal
@@ -299,6 +301,15 @@ def _system_maps_internal_access(
     time rather than binding a ``Depends`` default, so the internal gate is
     always evaluated against the same settings surface as
     ``_require_internal_system_maps_access``.
+
+    DELIBERATE DECISION (FAR-2595): this probe is role + ``system_maps_access``
+    grant only and deliberately does NOT consult the per-organisation
+    ``system_maps`` authoring flag. An operator who can author System Maps keeps
+    read access to the org's existing unpublished drafts even when the org has
+    the authoring feature switched off, so toggling the feature off cannot
+    strand or hide that organisation's saved drafts from the operators
+    responsible for them. It is a read of data already in the org, on the same
+    principal set the authoring gate admits — not a second authoring path.
     """
     try:
         _require_internal_system_maps_access(principal, get_settings())
@@ -817,8 +828,8 @@ def _feature_required_detail(feature_name: str, current_tier: str) -> str:
     genuine plan-tier restriction names the licence scope an operator must
     install. But naming a licence for a feature that is merely switched off is
     a falsehood the operator cannot act on (a community-tier flag like
-    ``system_maps`` is default-off in ``DEFAULT_OFF_FLAGS`` / ``INTERNAL_FLAGS``;
-    no licence would enable it). The declared tier is therefore read from the
+    ``system_maps`` is default-off in ``DEFAULT_OFF_FLAGS``; no licence would
+    enable it). The declared tier is therefore read from the
     flag catalog first:
 
     * declared tier ABOVE the caller's tier -> the feature genuinely needs a
@@ -915,10 +926,70 @@ def require_feature(feature_name: str) -> DependsParameter:
 
        _: object = require_feature("sso")           # route parameter
        dependencies=[require_feature("team_rbac")]  # decorator
+
+    NOTE: this reads ONLY the tier/licence-derived plan state. It does NOT
+    apply ``organisations.settings_json.feature_overrides``. For a
+    default-OFF, org-toggleable flag use :func:`require_org_feature` instead —
+    otherwise an admin's org toggle (which ``GET /api/v1/plan`` DOES apply)
+    would show the feature in the UI while the API still answers 402.
     """
 
     def _check(ctx: PlanContext = Depends(get_plan_context)) -> None:
         if not ctx.feature_enabled(feature_name):
+            raise ProblemException(
+                ProblemType.FEATURE_REQUIRED,
+                detail=_feature_required_detail(feature_name, ctx.tier()),
+                instance=feature_name,
+            )
+
+    return cast("DependsParameter", Depends(_check))
+
+
+def require_org_feature(feature_name: str) -> DependsParameter:
+    """FastAPI dependency factory — feature gate that applies org overrides.
+
+    ``require_feature`` reads only the tier/licence-derived plan default and
+    never the org's ``settings_json.feature_overrides``. That is invisible for
+    default-ON flags, but a default-OFF, org-toggleable flag (``system_maps``)
+    would stay 402 forever even after an admin enabled it — while
+    ``GET /api/v1/plan`` (which overlays the overrides) reports it enabled.
+
+    This gate applies the SAME overlay, with the plan bootstrap's precedence:
+    an explicit org override wins, otherwise the plan default applies. An
+    override-read failure DENIES (``enabled = False``) and is logged rather
+    than surfacing as a 500 from a feature check: a gate is a security control,
+    so an unreadable override must fail closed. Falling back to the plan
+    default would silently fail OPEN for a future default-ON, org-toggleable
+    flag even though the org may have disabled it.
+    """
+
+    async def _check(
+        ctx: PlanContext = Depends(get_plan_context),
+        principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+        session: AsyncSession = Depends(get_db_session),
+    ) -> None:
+        from farna.core.feature_flags import feature_overrides_from_settings
+        from farna.db.crud.organisation import get_organisation
+
+        enabled = ctx.feature_enabled(feature_name)
+        if principal.organisation_id is not None:
+            try:
+                async with session.begin():
+                    org = await get_organisation(session, principal.organisation_id)
+                override = feature_overrides_from_settings(getattr(org, "settings_json", None)).get(feature_name)
+                if override is not None:
+                    enabled = override
+            except SQLAlchemyError:
+                # Fail closed: the override is unreadable, so the plan default
+                # cannot be trusted as an authorisation decision (a future
+                # default-ON, org-toggleable flag would otherwise fail open).
+                logger.warning(
+                    "feature_gate.org_override_read_failed",
+                    extra={"feature": feature_name},
+                    exc_info=True,
+                )
+                enabled = False
+        if not enabled:
             raise ProblemException(
                 ProblemType.FEATURE_REQUIRED,
                 detail=_feature_required_detail(feature_name, ctx.tier()),

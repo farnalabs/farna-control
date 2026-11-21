@@ -56,6 +56,9 @@ const SLICE = [
   'tests/e2e/mobile-pages.spec.ts',
   // FAR-2539: mobile table overflow + empty-state width at 390px (local mocks).
   'tests/e2e/mobile-tables.spec.ts',
+  // FAR-2598: comparison-groups table legibility at 390px (hidden columns + no
+  // horizontal overflow) on /variants/compare. Local mocks, two cheap tests.
+  'tests/e2e/variant-compare-groups.spec.ts',
   // FAR-2016 instance: design-token colours (light-mode probe) + long-value
   // geometry. The exact spec whose stale probe blocked the deploy train.
   'tests/e2e/json-viewer.spec.ts',

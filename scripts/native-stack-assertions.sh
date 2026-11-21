@@ -23,7 +23,8 @@
 #      (default 900; first boot runs initdb + all migrations)
 #   a. SMOKE_SETTLE_SECONDS after that (default 180, min 180): `status --json` shows
 #      api, postgres, redis, saq-runs and saq-system alive, stack not degraded
-#   b. GET /healthz/ready answers 200
+#   b. GET /healthz/ready answers 200 (and, when SMOKE_EXPECTED_VERSION is
+#      set, its "version" equals it)
 #   c. `users add <admin> --admin` succeeds and does not land in the orphan org
 #   d. POST /api/v1/auth/login answers 200 with a JWT whose org_id is not the
 #      nil-UUID orphan org
@@ -124,6 +125,15 @@ ready_meta="$(curl -sS -o "${SCRATCH}/ready.json" -w '%{http_code} %{time_total}
 ready_code="${ready_meta%% *}"
 log "  /healthz/ready -> ${ready_code} in ${ready_meta#* }s $(head -c 400 "${SCRATCH}/ready.json")"
 [[ "${ready_code}" == "200" ]] || fail "/healthz/ready answered ${ready_code}, expected 200"
+# FAR-2589: when the caller knows the build version, the running app must
+# report it (the macOS app reported "0.0.0-dev" while the Linux bundle carried
+# its VERSION stamp).
+if [[ -n "${SMOKE_EXPECTED_VERSION:-}" ]]; then
+  reported_version="$(python3 -c 'import json,sys; v=json.load(open(sys.argv[1], encoding="utf-8")).get("version"); print(v if isinstance(v, str) else "")' "${SCRATCH}/ready.json" 2>/dev/null || true)"
+  log "  /healthz/ready version=${reported_version:-<none>} expected=${SMOKE_EXPECTED_VERSION}"
+  [[ "${reported_version}" == "${SMOKE_EXPECTED_VERSION}" ]] || \
+    fail "/healthz/ready reports version '${reported_version}', expected the build version '${SMOKE_EXPECTED_VERSION}'"
+fi
 
 # --- c. first admin -------------------------------------------------------------
 log "c: users add (first admin)"

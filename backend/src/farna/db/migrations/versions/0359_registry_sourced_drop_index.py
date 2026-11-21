@@ -8,15 +8,15 @@ that trips the gate is the signed registry, so the column is renamed to
 ``ix_library_primitives_visibility_contribution`` was built for the cross-org
 community catalogue listing, which no longer exists; no query uses it.
 
-Revision ID: 0358_registry_sourced_drop_index
-Revises: 0357_rebrand_library_seed_copy
+Revision ID: 0359_registry_sourced_drop_index
+Revises: 0358_community_flag_tiers
 Create Date: 2026-11-20
 """
 
 from alembic import op
 
-revision = "0358_registry_sourced_drop_index"
-down_revision = "0357_rebrand_library_seed_copy"
+revision = "0359_registry_sourced_drop_index"
+down_revision = "0358_community_flag_tiers"
 branch_labels = None
 depends_on = None
 

@@ -1,7 +1,10 @@
 """System Maps REST API (FAR-2236).
 
-Internal preview surface — gated by the `system_maps` feature flag, dev mode,
-operator/admin role, and the `system_maps_access` grant.
+Beta-preview authoring surface — gated by the per-organisation `system_maps`
+feature flag (default OFF), operator/admin role, and the `system_maps_access`
+grant. FAR-2595 removed the developer-mode requirement so a self-hosted Alpha
+deployment can dogfood authoring; the published read model has its own
+viewer-level gate (`system_maps_read` + `system_maps.read`).
 """
 
 import hashlib
@@ -27,6 +30,7 @@ from farna.api.dependencies import (
     get_or_create_engine,
     get_or_create_session_factory,
     require_feature,
+    require_org_feature,
     require_permission,
 )
 from farna.api.schemas.system_maps import (
@@ -80,7 +84,9 @@ from farna.core.system_maps_ai_discovery import (
     enhance_discovery_with_outcome,
 )
 from farna.core.system_maps_discovery import (
+    MAX_DISCOVERY_SOURCES,
     DiscoverySource,
+    cap_discovery_sources,
     discover_draft,
 )
 from farna.db.models.connector_instance import ConnectorInstance
@@ -166,7 +172,11 @@ OVERVIEW_WINDOW_MAX_DAYS = 90
 _UNHEALTHY_FAILURE_RATE_THRESHOLD = 0.5
 
 _INTERNAL_SYSTEM_MAP_PERMISSION = SYSTEM_MAPS_ACCESS_PERMISSION
-_require_system_maps_feature = require_feature("system_maps")
+# FAR-2595: the authoring flag is default-OFF and org-toggleable, so it MUST
+# be resolved with the org's ``feature_overrides`` applied. Plain
+# ``require_feature`` only reads the tier/licence default, which is always OFF
+# for this flag, so an admin enabling it in the UI would still get 402 here.
+_require_system_maps_feature = require_org_feature("system_maps")
 _require_system_maps_read_feature = require_feature("system_maps_read")
 
 _log = logging.getLogger(__name__)
@@ -2365,38 +2375,51 @@ async def discover_system_map(
     async with session.begin():
         await set_rls_org(session, principal.organisation_id)
         await set_rls_user_context(session, principal.account_id, principal.org_role)
+        # FAR-2595: bound every inventory read. The +1 lets the truncation
+        # warning fire when a single kind overflows the cap; the merged list is
+        # capped again below before it is materialised into a draft.
+        row_limit = MAX_DISCOVERY_SOURCES + 1
         pipelines = list(
             (
                 await session.execute(
-                    select(Pipeline).where(
+                    select(Pipeline)
+                    .where(
                         Pipeline.organisation_id == principal.organisation_id,
                         Pipeline.deleted_at.is_(None),
                         Pipeline.archived_at.is_(None),
                     )
+                    .order_by(Pipeline.id)
+                    .limit(row_limit)
                 )
             ).scalars()
         )
         triggers = list(
             (
                 await session.execute(
-                    select(Trigger).where(
+                    select(Trigger)
+                    .where(
                         Trigger.organisation_id == principal.organisation_id,
                         Trigger.deleted_at.is_(None),
                     )
+                    .order_by(Trigger.id)
+                    .limit(row_limit)
                 )
             ).scalars()
         )
         connectors = list(
             (
                 await session.execute(
-                    select(ConnectorInstance).where(
+                    select(ConnectorInstance)
+                    .where(
                         ConnectorInstance.organisation_id == principal.organisation_id,
                         ConnectorInstance.deleted_at.is_(None),
                     )
+                    .order_by(ConnectorInstance.id)
+                    .limit(row_limit)
                 )
             ).scalars()
         )
-        folders = list((await session.execute(select(PipelineFolder).where(PipelineFolder.organisation_id == principal.organisation_id))).scalars())
+        folders = list((await session.execute(select(PipelineFolder).where(PipelineFolder.organisation_id == principal.organisation_id).order_by(PipelineFolder.id).limit(row_limit))).scalars())
         sources = [
             *[
                 DiscoverySource(
@@ -2429,6 +2452,10 @@ async def discover_system_map(
             ],
             *[DiscoverySource(kind="folder", identifier=str(folder.id), name=folder.name) for folder in folders],
         ]
+        # FAR-2595: the draft is built from the capped set; the truncation
+        # warning is added by ``discover_draft`` itself. ``inspected_sources``
+        # mirrors that same capped ordering for the report.
+        inspected_sources, _total_sources = cap_discovery_sources(sources)
         draft = discover_draft(sources)
         deterministic_fingerprint = _fingerprint(draft)
         ai_assisted = False
@@ -2496,7 +2523,7 @@ async def discover_system_map(
         )
 
     return SystemMapDiscoveryReport(
-        sources_inspected=[SystemMapDiscoverySource(kind=source.kind, identifier=source.identifier, name=source.name) for source in sources],
+        sources_inspected=[SystemMapDiscoverySource(kind=source.kind, identifier=source.identifier, name=source.name) for source in inspected_sources],
         node_count=draft.node_count,
         edge_count=draft.edge_count,
         inferred_nodes=list(draft.nodes),

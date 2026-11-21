@@ -24,6 +24,24 @@ from tests.unit.api.mock_session import configure_mock_session
 
 _VALID_32 = "a" * 32
 _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+@pytest.fixture(autouse=True)
+def _no_org_feature_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the org-aware feature gate off the mocked session queue.
+
+    ``require_org_feature`` reads the org row to apply ``feature_overrides``.
+    These tests pin the plan default with a stubbed ``get_plan_context`` and
+    already script ``session.execute`` for the inventory reads, so the org read
+    is stubbed to "no overrides" rather than consuming one of those results.
+    """
+
+    async def _none(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr("farna.db.crud.organisation.get_organisation", _none)
+
+
 _USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 _MAP_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 _REVISION_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")
@@ -183,7 +201,12 @@ def test_discovery_denies_without_system_maps_grant() -> None:
         app.dependency_overrides.clear()
 
 
-def test_discovery_denies_without_dev_mode() -> None:
+def test_discovery_allows_operator_without_dev_mode() -> None:
+    """FAR-2595: an operator with the flag on is NOT bounced by dev mode.
+
+    The deployment runs with ``modulo_dev_mode=False`` (a self-hosted Alpha
+    default); discovery must still reach the handler and persist a draft.
+    """
     mock_session = _make_mock_session()
 
     async def override_session() -> AsyncGenerator[AsyncMock, None]:
@@ -212,11 +235,30 @@ def test_discovery_denies_without_dev_mode() -> None:
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
 
+    authz_result = MagicMock(scalar_one_or_none=MagicMock(return_value=True))
+    mock_session.execute.side_effect = [
+        authz_result,
+        MagicMock(scalars=MagicMock(return_value=[])),
+        MagicMock(scalars=MagicMock(return_value=[])),
+        MagicMock(scalars=MagicMock(return_value=[])),
+        MagicMock(scalars=MagicMock(return_value=[])),
+    ]
+
+    draft_map = _DraftMap()
     try:
-        response = TestClient(app).post("/api/v1/system-maps/discover", json={})
-        assert response.status_code == 403
+        with (
+            patch.object(SystemMapDiscoveryRepository, "get_or_create_draft", new=AsyncMock(return_value=draft_map)),
+            patch.object(
+                SystemMapDiscoveryRepository,
+                "save_discovery_revision",
+                new=AsyncMock(return_value=(draft_map, _REVISION_ID, 1)),
+            ),
+        ):
+            response = TestClient(app).post("/api/v1/system-maps/discover", json={"name": "no-dev-mode"})
     finally:
         app.dependency_overrides.clear()
+
+    assert response.status_code == 201
 
 
 @pytest.mark.parametrize(("org_role", "expected_status"), [("viewer", 403), ("operator", 201)])
@@ -420,6 +462,9 @@ def test_discovery_tenant_scoping_queries_filter_and_set_rls(
     inventory_selects = [s for s in selects if any(table in str(s) for table in inventory_tables)]
     assert len(inventory_selects) == 4
     assert all("organisation_id" in str(statement) for statement in inventory_selects)
+    # FAR-2595: a bounded per-kind read must also be ORDERED, otherwise the
+    # capped subset is arbitrary and discovery stops being deterministic.
+    assert all("ORDER BY" in str(statement) for statement in inventory_selects)
 
 
 def test_discovery_route_fingerprint_is_stable() -> None:

@@ -285,14 +285,27 @@ routes:
         <<: *community
         deprecated: false
 
-    /evals/editor:
-        name: eval-editor
+    /evals:
+        name: evals-list
         breadcrumb: Evals
         parent: /
         product_map: [feat-evals]
-        required_permissions: [eval.list, gate.create, gate.edit]
+        required_permissions: [eval.list]
         sidebar_group: improve
         sidebar_order: 1
+        type: list_page
+        <<: *community
+        deprecated: false
+        exact: true
+
+    /evals/editor:
+        name: eval-editor
+        breadcrumb: Eval Editor
+        parent: /
+        product_map: [feat-evals]
+        required_permissions: [eval.list, gate.create, gate.edit]
+        sidebar_group:
+        sidebar_order:
         type: form_page
         <<: *community
         deprecated: false
@@ -302,8 +315,8 @@ routes:
         breadcrumb: Eval Proposals
         parent: /
         product_map: [feat-evals]
-        sidebar_group: improve
-        sidebar_order: 2
+        sidebar_group:
+        sidebar_order:
         type: list_page
         <<: *community
         deprecated: false
@@ -314,8 +327,10 @@ routes:
         parent: /
         product_map: [feat-variants]
         sidebar_group: improve
-        sidebar_order: 3
+        sidebar_order: 4
         type: page
+        query_params:
+          pipeline_id: Open the comparison builder for this pipeline
         <<: *community
         deprecated: false
         exact: true
@@ -380,6 +395,7 @@ routes:
         sidebar_order: 10
         type: form_page
         <<: *team
+        required_tier: community
         visibility: private_preview
         deprecated: false
 
@@ -563,6 +579,7 @@ routes:
         deprecated: false
 
         <<: *team
+        required_tier: community
     /settings/monitoring:
         name: settings-monitoring
         breadcrumb: Browser Monitoring
@@ -675,6 +692,7 @@ routes:
         sidebar_order: 7
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/model-backends:
@@ -686,6 +704,7 @@ routes:
         sidebar_order: 3
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/node-categories:
@@ -697,6 +716,7 @@ routes:
         sidebar_order: 7
         type: list_page
         <<: *team
+        required_tier: community
         visibility: private_preview
         deprecated: false
 
@@ -712,6 +732,7 @@ routes:
         deprecated: false
 
         <<: *team
+        required_tier: community
     /admin/housekeeping:
         name: admin-housekeeping
         breadcrumb: Housekeeping
@@ -732,6 +753,7 @@ routes:
         sidebar_order: 2
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/run-retention:
@@ -754,6 +776,7 @@ routes:
         sidebar_order:
         type: form_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/evidence-redaction:
@@ -824,7 +847,7 @@ routes:
 
     /admin/notification-delivery:
         name: admin-notification-delivery
-        breadcrumb: Webhook Notifications
+        breadcrumb: Webhook Deliveries
         parent: /
         product_map: [feat-notifications]
         sidebar_group: monitor
@@ -832,6 +855,7 @@ routes:
         feature_flag: webhook_notification_log
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/trigger-events:
@@ -843,6 +867,7 @@ routes:
         sidebar_order: 9
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/product-analytics:
@@ -857,7 +882,10 @@ routes:
         <<: *team
         # A system_admin_only route is an INSTANCE-level gate; the org-ROLE
         # requirement *team carries does not apply (FAR-1795), so it is
-        # overridden to none. The Team TIER gate is deliberate.
+        # overridden to none. The TIER is community: the ratified Team bundle
+        # does not name product analytics, and this is an instance-level admin
+        # surface, so a system admin on a community install must reach it.
+        required_tier: community
         required_roles:
         deprecated: false
 
@@ -1001,6 +1029,7 @@ routes:
         sidebar_order: 8
         type: page
         <<: *team
+        required_tier: community
         deprecated: false
         exact: true
 
@@ -1013,6 +1042,7 @@ routes:
         sidebar_order:
         type: form_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/runners/profiles/:id/edit:
@@ -1027,6 +1057,7 @@ routes:
         dynamic_params:
           - id
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/my-profile:
@@ -1185,6 +1216,9 @@ elements:
         dynamic_testid: false
 
     /system-maps:
+      - testid: system-maps-beta-preview
+        type: element
+        dynamic_testid: false
       - testid: system-maps-create
         type: button
         dynamic_testid: false
@@ -1232,6 +1266,9 @@ elements:
         dynamic_testid: false
 
     /system-maps/:id:
+      - testid: system-map-detail-beta-preview
+        type: element
+        dynamic_testid: false
       - testid: system-map-detail-back
         type: link
         dynamic_testid: false
@@ -2404,6 +2441,27 @@ elements:
       - testid: admin-notification-log-title
         type: element
         dynamic_testid: false
+      - testid: admin-notification-log-boundary
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-trigger-events-link
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-no-endpoints
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-no-endpoints-history
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-add-endpoint
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-team-hint
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-dead-lettered-help
+        type: element
+        dynamic_testid: false
       - testid: admin-notification-log-status
         type: select
         dynamic_testid: false
@@ -2429,6 +2487,9 @@ elements:
         type: element
         dynamic_testid: false
       - testid: admin-notification-log-empty
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-empty-filters
         type: element
         dynamic_testid: false
       - testid: admin-notification-log-empty-reset
@@ -4223,6 +4284,58 @@ elements:
       - testid: envprofile-form-cancel
         type: button
         dynamic_testid: false
+    /evals:
+      - testid: page-header-right
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-new
+        type: button
+        dynamic_testid: false
+      - testid: evals-list-loading
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-empty
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-empty-cta
+        type: button
+        dynamic_testid: false
+      - testid: evals-list-filtered-empty
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-reset
+        type: button
+        dynamic_testid: false
+      - testid: evals-list-row
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-count
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-previous-page
+        type: button
+        dynamic_testid: false
+      - testid: evals-list-page-indicator
+        type: element
+        dynamic_testid: false
+      - testid: evals-list-next-page
+        type: button
+        dynamic_testid: false
+      - testid: feature-gate
+        type: element
+        dynamic_testid: false
+      - testid: feature-gate-disabled
+        type: element
+        dynamic_testid: false
+      - testid: feature-gate-lock
+        type: element
+        dynamic_testid: false
+      - testid: feature-gate-title
+        type: element
+        dynamic_testid: false
+      - testid: lock-icon
+        type: element
+        dynamic_testid: false
     /evals/editor:
       - testid: eval-editor-pipeline
         type: select
@@ -4453,6 +4566,9 @@ elements:
         type: element
         dynamic_testid: false
       - testid: lock-icon
+        type: element
+        dynamic_testid: false
+      - testid: eval-editor-pipeline-link-notice
         type: element
         dynamic_testid: false
     /evals/proposals:
@@ -7610,8 +7726,17 @@ elements:
       - testid: variant-compare-loading-skeleton
         type: element
         dynamic_testid: false
-      - testid: variant-compare-group-select
-        type: select
+      - testid: variant-compare-filters
+        type: element
+        dynamic_testid: false
+      - testid: variant-compare-groups-table
+        type: element
+        dynamic_testid: false
+      - testid: variant-compare-count
+        type: element
+        dynamic_testid: false
+      - testid: page-header-right
+        type: element
         dynamic_testid: false
       - testid: variant-compare-diff-node
         type: select
@@ -7944,6 +8069,7 @@ features:
             # Cost report + run-cost aggregation (GET /api/v1/admin/costs)
             - "[x] The cost report aggregates org spend for the selected period (day/week/month/year) and groups by team or org; each item carries total_spend_usd, total_runs, a summed per-component breakdown (cost components resolved per environment) and per-org annotations, and the response surfaces org_total / org_run_count / legacy_total / has_more plus org_unassigned_components"
             - "[x] The /admin/costs Per-Team Cost Breakdown card reads group_by=team&period=month, renders the team-attributed ledger rows with refused/clamped annotations and a derived average per run, and discloses the response's org_unassigned_components (component spend from runs with no team) — showing an explicit unavailable state when that bucket is absent or corrupt — so the bucket is never silently omitted from the breakdown (frontend/src/views/AdminCostBreakdownView.vue, frontend/src/__tests__/AdminCostBreakdownView.spec.ts)"
+            - "[x] The four Costs pages are navigable from each other by CLICKING the page tabs (Overview / Spend Limits / Cost Components / Cost Controls) that PageHeader renders from useCostPageTabs: each tab is a router-link to its own route, the destination renders its own h1 and marks the clicked tab aria-selected, and a click whose route chunk the running bundle can no longer fetch (a tab left open across a deploy) retries once then performs a full document load to the destination instead of silently doing nothing, bounded to one reload per tab: if the freshly loaded bundle is missing the same chunk the user is told and returned to the dashboard rather than reloading in a loop (frontend/tests/e2e/costs-tabs.spec.ts, frontend/src/__tests__/routerChunkRecovery.spec.ts, frontend/src/router/index.ts)"
             - "[x] An invalid group_by or period query param is rejected with 422 (pattern-constrained, no silent fallback)"
             - "[x] The cost endpoints are admin-only: operators/viewers are refused 403 and an unauthenticated caller 401 (require_permission cost.manage)"
 
@@ -8079,9 +8205,11 @@ features:
             # BYO agent image path + digest-pinning UX (FAR-1779, ADR 059)
             - "[x] The environment-profile form makes the BYO agent-image path discoverable and presents digest pinning as advice, never enforcement (FAR-1779, ADR 059 §4): the Image Reference field carries persistent helper copy that names the path — runner_docker and Kubernetes profiles run the given container image; on an E2B profile the Runners-page Test Connection provisions a sandbox from the profile's image reference, while real pipeline runs take the E2B template from each sandbox_agent node in the pipeline editor; and the process the agent runs is set per sandbox_agent node (its agent commands list); a FULLY valid digest-pinned ref — name[@tag]@<algorithm>:<lowercase hex>, where the algorithm is one the Docker daemon registers (sha256 with 64 hex, sha384 with 96, sha512 with 128; an unsupported algorithm such as md5 or blake3 is rejected, not pinned) (Docker's reference grammar: a registry host — a mixed-case domain, an IPv6 address in brackets with an optional port, or a non-lowercase first component, which Docker's `splitDockerDomain` reads as a domain-name — followed by lowercase repository path components no more than 255 characters in total, each with a single `.` or `_`, a double `__`, or one-or-more `-` separators, multi-level namespace, optional mixed-case tag, no whitespace) is visibly acknowledged as pinned/immutable (role=status); a valid ref that is not digest-pinned (a mutable tag, or no tag — an implicit :latest) shows a NON-BLOCKING role=status warning advising a digest pin and the save is never blocked; a non-empty ref that is not a valid Docker reference (uppercase repository path component or digest hex, an unsupported digest algorithm such as `md5`, a repository path over 255 characters, embedded space, otherwise malformed) shows its own accurate `invalid` role=status message instead of the mutable-tag advice (never pinned, and never telling the operator to do what they already tried); and the release placeholder digest is excluded from pinned and shown as its own `placeholder` unresolvable state (no green assurance on an image that cannot be pulled); the digest classification applies only to container-image providers (runner_docker, kubernetes) so an E2B template ID is never mis-warned, and local_docker is excluded because dispatch refuses it outright (SandboxDispatchUnboundError) rather than running a container image; the Runners profiles list surfaces the pre-provision resolution states the backend already returns with actionable copy — a row whose ProfileHealthResponse.placeholder_digest is true (available=false) renders an 'image cannot be resolved' note pointing at Edit to set a real image (the only action that clears the state) and reports an 'image unresolvable' health badge rather than a green 'healthy' one, and a row with health_state=image_not_pulled renders a pull-remediation hint — while the existing dispatch guards (Kubernetes requires image_ref; runner_docker placeholder-digest refusal) are unchanged and no new backend guard is added (frontend/src/views/environment-profiles/EnvironmentProfileForm.vue, frontend/src/views/runners/RunnersProfilesTab.vue, frontend/src/__tests__/environment-profiles/EnvironmentProfileForm.spec.ts, frontend/src/__tests__/runners/RunnersProfilesTab.spec.ts)"
     feat-evals:
-        description: Evaluation editor and proposal queue
+        description: Evaluation list, editor and proposal queue
         status: covered
         behaviours:
+            - "[x] An all-evals list page (/evals) shows every eval in the organisation in one filterable, page-number paginated table (name, pipeline, node, type, judging, pass threshold, version) with pipeline and eval-type filters, a pipeline name joined client-side from the pipeline list, distinct first-run and filtered-to-nothing empty states, and a row action that opens the editor for that eval's pipeline; the eval surface is a costs-style route-per-tab strip (All evals / Editor / Proposals), and the editor accepts a ?pipeline_id= deep link from the list, validates it against the fetched pipelines, syncs the URL with the selector, and falls back to the all-pipelines state with a visible notice for an unknown id (frontend/src/views/EvalsListView.vue, frontend/src/views/EvalEditorView.vue, frontend/src/__tests__/EvalsListView.spec.ts, frontend/src/__tests__/EvalEditorView.spec.ts)"
+
             - "[x] The eval editor creates, configures, and deletes evaluation definitions per pipeline node"
             - "[x] The eval editor's free-form config textarea is a typed-question builder behind a two-axis Judging control (ADR 066 D4/D19): the mechanism axis offers only Typed questions or Deterministic (never a flat list mixing a deterministic eval_type with a backing); a typed judge declares a backing (a model backend, displayed as the model via its provider with 'LLM, self-reported confidence', or a decision model whose class label comes from the single locale 'System One model' value — no view composes that phrase), and each question is edited as noul (instructions, criteria, weight, required, min_pass_confidence), choice (2–255 unique option keys with descriptions, passing keys, optional 0–1 option_scores) or score (2–10 ordered levels, pass_from), with a per-question dotted field, top-level context_fields, pass_rule.threshold and timeouts; the emitted config_json is exactly the server's TypedJudgeConfig wire shape (snake_case, no extra keys, no pass_threshold), the editor mirrors the server's bounds client-side, the server's typed 422 codes (judge_config_invalid / judge_verdict_kind_unsupported / judge_backend_*) render inline, verdict_kind=derivation is blocked with an explanation because typed judges are weaker where the verdict must be derived, and a stored legacy prompt judge stays read-only until explicitly migrated (frontend/src/views/EvalEditorView.vue, frontend/src/components/eval/typedJudge.ts, frontend/src/__tests__/EvalEditorView.spec.ts, frontend/src/__tests__/EvalEditorViewTypedJudge.spec.ts, backend/src/farna/core/eval_engine/typed_judge/config.py)"
             - "[x] The proposal queue surfaces eval proposals for review and supports publish / dismiss (the API publish endpoint creates a live eval definition; the /evals/proposals view's publish currently marks the proposal resolved)"
@@ -8294,7 +8422,8 @@ features:
             - "[x] POST /api/v1/admin/notifications/{webhook_id}/deliveries/replay is the per-endpoint dead-letter replay surface (admin.notification.manage): it re-dispatches every failed + dead-lettered delivery of a SINGLE webhook through the shared retry path (retained payloads replayed verbatim), returning {replayed, delivered, errors, success}; a missing or cross-org webhook is 404 and the repo DB-error mapping applies (ProgrammingError 501 / SQLAlchemyError 503 / other 500)"
             - "[x] Admin webhook management lives under /api/v1/admin/notifications (list/create/get/update) with the same secret-handling and break-glass deny rules as the user surface"
             - "[x] Email delivery: GET/PUT /api/v1/admin/org/{org_id}/email-settings (feature email_config; org.email.view / org.email.manage) configures SMTP with a clear_password flag and smtp_timeout, and a POST test endpoint verifies the configuration"
-            - "[x] Frontend surfaces: team-tier notification centre (/notifications, listed in the sidebar MONITOR group above Error Dashboard) with preferences, review-later and dismiss actions; team-tier email settings (/settings/email); admin webhook delivery-log UI (/admin/notification-delivery, titled 'Webhook Notifications') with status/event-type/date filters, a retry control, retry-all and an empty state"
+            - "[x] Frontend surfaces: team-tier notification centre (/notifications, listed in the sidebar MONITOR group above Error Dashboard) with preferences, review-later and dismiss actions; team-tier email settings (/settings/email); admin webhook delivery-log UI (/admin/notification-delivery, titled 'Webhook Deliveries', sidebar label aligned to the same words) with status/event-type/date filters, a retry control, retry-all and split empty states"
+            - "[x] FAR-2596 explains the webhook delivery page instead of leaving an operator guessing: a one-line boundary explainer states each row is one OUTBOUND delivery attempt (including deliveries to a webhook since deleted), that in-app error alerts are not shown, and that inbound trigger webhooks are recorded on the Trigger Event Log (inline link to /admin/trigger-events); event types and delivery statuses render through the existing locale labels rather than raw run_failed/dead_lettered strings with a one-line 'Dead Lettered' explanation; the empty state is split into 'No deliveries yet' (endpoints configured, nothing fired) and 'No deliveries match these filters' (with a Reset filters CTA). The 'No outbound notification webhooks are configured' banner is shown ONLY when GET /api/v1/notifications returns zero endpoints AND the log is empty, with forward-looking copy ('New deliveries appear once you add an endpoint'), an 'Add a webhook endpoint' CTA to /settings/teams and a secondary line telling an org with no team to create one first; when the endpoint list is empty but retained delivery history exists (a deleted webhook keeps its rows) the page shows a quieter history notice instead, so it never claims 'nothing will appear here' above a populated table. The endpoint state is ONE tri-state (unknown/none/configured) read from the endpoint list, never inferred from the delivery log, the fetch is fail-open (an error or unexpected body is 'unknown' and renders no claim), and the CTA is withheld when team_rbac is inactive (so it never links into a disabled gate). The warning is announced through a persistently-mounted aria-live=polite region (frontend/src/views/AdminNotificationDeliveryLogView.vue, frontend/src/__tests__/AdminNotificationDeliveryLogView.spec.ts)"
             - "[x] The webhook delivery-log UI is enabled by default for the community tier: the webhook_notification_log flag gates the /admin/notification-delivery manifest route, while an explicit feature_overrides entry may still disable it; the sidebar item and router guard use the same flag state (FAR-2235)"
         deferrals:
             - A realtime/push transport is not part of the notifier — webhook (+ HMAC) and in-app notification are the only delivery channels; email settings exist but the notifier does not fan out to SMTP subscribers
@@ -8585,13 +8714,14 @@ features:
             - "[x] DELETE /api/v1/admin/orgs/{org_id} deletes an organisation — 404 for a missing org, 403 for a regular admin (system_admin_orgs.feature)"
             - "[x] Org-level license management: GET/PUT/DELETE on /api/v1/admin/orgs/{org_id}/license resolves/stores/clears the org's settings_json.license_key via parse_and_verify, falls back to the system license, and is role-gated (GET org.license.view / PUT+DELETE org.license.manage) — BDD: system_admin_orgs.feature"
     feat-system-maps:
-        description: Bounded visual authoring of delivery system maps
+        description: Bounded visual authoring of delivery system maps (Beta preview, available in Alpha behind a default-OFF org flag)
         status: partial
         behaviours:
             - "[x] System Maps list page (/system-maps) with published viewer read access and operator-only create, edit, delete, and discover actions"
             - "[x] Map detail page (/system-maps/:id) with bounded visual graph editor for the backend node/relationship vocabularies, connected edges, endpoint selection, and drag/keyboard repositioning"
             - "[x] Version-aware revision read model ships (FAR-2288): GET /api/v1/system-maps/{map_id}/revisions/current, /revisions/by-time?at=<ISO8601> and /revisions/history resolve the revision active at a point in time (including superseded revisions after a re-publish), and /overview accepts revision_id or at to report metrics against that revision's window, all behind the same internal access gate and tenant/RLS isolation (backend/src/farna/api/routes/system_maps.py, test_system_maps_version_aware.py, test_system_map_repository.py)"
             - "[x] Revision history sidebar with current/historical revision switching (FAR-2288 follow-up): the sidebar reads GET /revisions/history on map load so every published, draft and archived revision appears, offers a View current action backed by GET /revisions/current and a datetime picker that resolves GET /revisions/by-time?at=<ISO8601> (the local datetime is converted to an absolute instant client-side), the matched revision's graph then loads through the shared per-revision read path and is highlighted as the active revision, the currently published revision is badged Current, and the 404 that GET /revisions/by-time raises for an unmatched timestamp is mapped onto a distinct \"No revision was active at that time\" error instead of silently leaving the previous revision on screen (frontend/src/components/system-maps/SystemMapRevisionSidebar.vue, frontend/src/views/SystemMapDetailView.vue, frontend/src/stores/systemMaps.ts; SystemMapComponents.coverage.spec.ts, SystemMapDetailView.spec.ts, systemMapsStoreCrud.spec.ts)"
+            - "[x] Discovery is bounded, not an unbounded tenant scan: every per-kind inventory query is ordered by id and capped at MAX_DISCOVERY_SOURCES + 1 rows, the merged source list is deterministically sorted then truncated to MAX_DISCOVERY_SOURCES (1000), and a visible truncation warning is returned when the inventory exceeds the cap (core/system_maps_discovery.py, api/routes/system_maps.py; test_system_maps_discovery.py, test_system_maps_discovery_routes.py)"
             - "[x] Draft revision creation and save with node/relationship/loop-config payload"
             - "[x] Publish revision (validation + status change to published)"
             - "[x] Archive revision (status change to archived)"
@@ -8602,7 +8732,7 @@ features:
             - "[x] Operators can compare a historical revision with the published revision from the revision sidebar; the view calls POST /api/v1/system-maps/{map_id}/revisions/{rev_id}/diff and renders changed node, relationship, loop-config, and content counts (frontend/src/components/system-maps/SystemMapRevisionSidebar.vue, frontend/src/views/SystemMapDetailView.vue, frontend/src/stores/systemMaps.ts)"
             - "[ ] Re-scan existing organisation resources into existing draft with added/removed/ambiguous diff and operator edit preservation (deferred: discovery can be re-run and an unchanged inventory resolves to the same revision identity, but there is no re-scan-into-existing-draft endpoint reporting an added/removed/ambiguous diff while preserving operator edits)"
             - "[x] No auto-publish — operator must explicitly publish"
-            - "[x] Published reads are gated by system_maps_read + system_maps.read; authoring, discovery, publish, archive, restore, apply, loop dispatch and MCP discovery remain gated by system_maps + developer mode + operator/admin + system_maps_access"
+            - "[x] Published reads are gated by system_maps_read + system_maps.read; REST authoring, discovery, publish, archive, restore, apply and loop dispatch are gated by the org-aware default-OFF system_maps flag (org feature_overrides applied) + operator/admin role + system_maps_access, and MCP discovery applies the same predicate (no developer mode since FAR-2595)"
             - "[x] i18n keys and product-map test IDs registered"
             - "[x] Accessibility: STATE-1/2/6, A11Y-1/2/4, I18N-1, TYPE-1, VIS-4"
         deferrals:
@@ -8701,6 +8831,8 @@ features:
             - "[x] Coverage gaps are reported via get_coverage_gaps"
             - "[x] Per-node eval score comparison is shipped: comparison surfaces include eval scores per node, prompt diffs and coverage gaps (variants/variant_groups.feature, docs/product-map/improve/variants.md)"
             - "[x] Per-token breakdown comparison across variants is shipped: each variant's per-node token usage (input/output/total tokens + cost) rides the batch-compare and variant-batch compare surfaces via the persisted node_token_usage union, serialized through the RunResponse bounds (model_cost_raw_usd display clamp + newest-N node truncation), and the /variants/compare/:batchId page renders a per-node token table per expanded variant run (backend/src/farna/api/routes/{variant_batches,variants}.py, VariantBatchCompareView.vue, test_variant_batches.py, test_variants.py, VariantBatchCompareView.spec.ts)"
+            - "[x] /variants/compare lists comparison groups in the shared DataTable (name, pipeline, variants, declared evals, selection strategy, runs, degraded evals, actions) with a pipeline select and a name search; it requests the endpoint's 100-row page ceiling and prints a 'Showing N comparisons' count (plus a capped-list notice at 100) because the endpoint returns a bare array with no total, and it surfaces a pipeline-name read failure instead of silently showing ids. A row selects the comparison IN PLACE (the per-node comparison table and output diff viewer render below it) and never navigates to the batch-detail route; the pipeline_id deep link still opens the builder (VariantCompareView.vue, VariantCompareView.spec.ts, variant-compare-groups.spec.ts)"
+            - "[x] User-visible copy on the variants surface standardises on 'comparison' (table columns, empty state, the inline explainer link to /evals, and the builder title/subtitle) while 'variant group' stays the code and route vocabulary; the declared-eval column is labelled 'Declared evals' with a tooltip because variants[].eval_definition_ids are declarations the UI builder writes empty, NOT the scores a run received (VariantCompareView.vue, VariantGroupBuilder.vue, locales/en-US.js)"
 sidebar_groups:
     build:
         label: BUILD

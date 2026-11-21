@@ -97,7 +97,7 @@ Fresh entries for these features are added to the graph below as behavior tracke
 - **feat-library-collections** - Install, uninstall, and manage library collection installs into runnable org entities (flag-gated behind `library_collection`; see FAR-760 / FAR-762 / FAR-764) - routes: `/library/collections/new`, `/library/collections/:id`
 - **feat-runs** - Run execution, history, and detail (Output Diff deferred from the MVP nav – hidden via private_preview; see FAR-542) - routes: `/runs`, `/runs/:id`
 - **feat-lifecycle-maps** - Internal lifecycle maps and stage workflows (dev-mode dogfood only; not Alpha-facing) - routes: `/lifecycle-maps`, `/lifecycle-maps/:id/editor`, `/lifecycle-maps/:id`
-- **feat-system-maps** - Bounded visual authoring of delivery system maps (private_preview, dev-mode dogfood only; not Alpha-facing) - routes: `/system-maps`, `/system-maps/:id`
+- **feat-system-maps** - Bounded visual authoring of delivery system maps (Beta preview available in Alpha: a default-OFF, org-admin-settable `system_maps` flag plus the operator/admin role and `system_maps_access` grant; no dev-mode gate; published maps remain viewer-readable) - routes: `/system-maps`, `/system-maps/:id`
 - **feat-governance-stack** - Read-only governance-hierarchy taxonomy readout over existing list APIs - routes: `/governance`
 - **feat-determination** - Read-only SDLC determination scan, evidence-backed proposal review, and a recorded review decision that never activates a pipeline - routes: `/determination`
 
@@ -111,7 +111,7 @@ Fresh entries for these features are added to the graph below as behavior tracke
 - **feat-risk-assessment** - Risk assessment dashboard for evidence-based risk analysis - routes: `/risk-assessment`
 
 ### Improve
-- **feat-evals** - Evaluation editor and proposal queue - routes: `/evals/editor`, `/evals/proposals`
+- **feat-evals** - Evaluation list, editor and proposal queue - routes: `/evals`, `/evals/editor`, `/evals/proposals`
 - **feat-variants** - Variant comparison and batch runs - routes: `/variants/compare`, `/variants/compare/:batchId`
 
 ### Configure

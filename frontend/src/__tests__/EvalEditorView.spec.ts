@@ -26,6 +26,58 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
 
+// A mutable route query lets a test seed ?pipeline_id= before mount; the
+// replace spy proves the URL is kept in sync with the selector.
+const routerMocks = vi.hoisted(() => ({
+  push: vi.fn().mockResolvedValue(undefined),
+  replace: vi.fn().mockResolvedValue(undefined),
+  query: {} as Record<string, unknown>,
+}))
+
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  const query = reactive<Record<string, unknown>>({})
+  routerMocks.query = query
+  // Behave like the real router for the one thing this page does: replacing
+  // the query also updates the route the component reads back.
+  const replace = vi.fn(async (to: { query?: Record<string, unknown> }) => {
+    for (const key of Object.keys(query)) delete query[key]
+    Object.assign(query, to?.query ?? {})
+  })
+  routerMocks.replace = replace
+  return {
+    useRoute: vi.fn(() => ({
+      path: '/evals/editor',
+      fullPath: '/evals/editor',
+      params: {},
+      query,
+      hash: '',
+      matched: [],
+      name: 'eval-editor',
+      redirectedFrom: undefined,
+      meta: {},
+    })),
+    useRouter: vi.fn(() => ({
+      push: routerMocks.push,
+      replace,
+      resolve: vi.fn(),
+      go: vi.fn(),
+      back: vi.fn(),
+      forward: vi.fn(),
+      beforeEach: vi.fn(),
+      afterEach: vi.fn(),
+      onError: vi.fn(),
+      currentRoute: { value: {} },
+      getRoutes: vi.fn(() => []),
+      addRoute: vi.fn(),
+      removeRoute: vi.fn(),
+      hasRoute: vi.fn(() => false),
+      isReady: vi.fn().mockResolvedValue(undefined),
+      install: vi.fn(),
+    })),
+  }
+})
+
 import EvalEditorView from '../views/EvalEditorView.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { api } from '../lib/api/client'
@@ -62,6 +114,7 @@ describe('EvalEditorView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    for (const key of Object.keys(routerMocks.query)) delete routerMocks.query[key]
     apiGET.mockResolvedValue({ data: { items: [] } })
     apiPOST.mockResolvedValue({ data: {} })
     apiPUT.mockResolvedValue({ data: {} })
@@ -80,7 +133,7 @@ describe('EvalEditorView', () => {
     expect(wrapper.text()).toContain('views.EvalEditorView.eval_editor')
   })
 
-  it('does not render the redundant page-level tab strip (FAR-1236)', async () => {
+  it('renders the three eval-surface tabs, costs-style (FAR-2597)', async () => {
     const wrapper = mount(EvalEditorView, {
       global: {
         stubs: { FeatureGate: { template: '<div><slot /></div>' } },
@@ -90,7 +143,15 @@ describe('EvalEditorView', () => {
     await vi.waitFor(() => {
       expect(wrapper.find('[data-testid="eval-editor-pipeline"]').exists()).toBe(true)
     })
-    expect(wrapper.findComponent(PageTabs).exists()).toBe(false)
+    // Route-per-tab navigation, not query-state tabs: three destinations that
+    // the shared PageTabs renders and highlights.
+    const tabs = wrapper.findComponent(PageTabs)
+    expect(tabs.exists()).toBe(true)
+    expect(tabs.props('tabs')).toEqual([
+      { label: 'views.EvalsListView.tabs_all', to: '/evals' },
+      { label: 'views.EvalsListView.tabs_editor', to: '/evals/editor' },
+      { label: 'views.EvalsListView.tabs_proposals', to: '/evals/proposals' },
+    ])
   })
 
   it('renders a per-type config placeholder on the deterministic JSON textarea', async () => {
@@ -149,6 +210,7 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    for (const key of Object.keys(routerMocks.query)) delete routerMocks.query[key]
     apiGET.mockResolvedValue({ data: { items: [] } })
     apiPOST.mockResolvedValue({ data: {} })
     apiPUT.mockResolvedValue({ data: {} })
@@ -160,7 +222,9 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
     const wrapper = mountView()
     await flush()
 
-    expect(apiGET).toHaveBeenCalledWith('/api/v1/pipelines')
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/pipelines', {
+      params: { query: { page_size: 100 } },
+    })
     const save = wrapper.find('[data-testid="eval-editor-save"]')
     expect(save.attributes('disabled')).toBeDefined()
 
@@ -486,5 +550,219 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
     vm.setQuestionType(question, 'not-a-type')
     vm.setQuestionType(question, 42)
     expect(question.type).toBe('noul')
+  })
+})
+
+describe('EvalEditorView — ?pipeline_id= deep link (FAR-2597)', () => {
+  function mountView() {
+    return mount(EvalEditorView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    for (const key of Object.keys(routerMocks.query)) delete routerMocks.query[key]
+    apiPOST.mockResolvedValue({ data: {} })
+    apiPUT.mockResolvedValue({ data: {} })
+    apiDELETE.mockResolvedValue({ data: {} })
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') {
+        return { data: { nodes: [{ id: 'n1', node_type: 'agent', label: 'Writer', agent_id: null, position: { x: 0, y: 0 } }] } }
+      }
+      if (url === '/api/v1/evals') return { data: { items: [evalItem()], total: 1 } }
+      if (url === '/api/v1/evals/{eval_id}') return { data: undefined, error: { detail: 'Eval not found' } }
+      return { data: { items: [] } }
+    })
+  })
+
+  it('selects the linked pipeline and loads its nodes and evals', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    const wrapper = mountView()
+    await flush()
+
+    expect((wrapper.vm as unknown as { selectedPipelineId: string }).selectedPipelineId).toBe('p1')
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/evals', { params: { query: { pipeline_id: 'p1' } } })
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+    // A resolved link is already in the URL: nothing to rewrite on mount.
+    expect(routerMocks.replace).not.toHaveBeenCalled()
+  })
+
+  it('falls back to all pipelines with a visible notice for an unknown id', async () => {
+    routerMocks.query.pipeline_id = 'deleted-pipeline'
+    const wrapper = mountView()
+    await flush()
+
+    expect((wrapper.vm as unknown as { selectedPipelineId: string }).selectedPipelineId).toBe('__all__')
+    const notice = wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.attributes('role')).toBe('status')
+    expect(wrapper.find('[data-testid="eval-editor-pipeline"]').exists()).toBe(true)
+    // The stale id is dropped so a reload does not repeat the notice.
+    const replacedQuery = (routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query
+    expect(replacedQuery.pipeline_id).toBeUndefined()
+  })
+
+  it('keeps the URL in sync when the pipeline selector changes', async () => {
+    const wrapper = mountView()
+    await flush()
+    const vm = wrapper.vm as unknown as {
+      selectedPipelineId: string
+      onPipelineChange: () => Promise<void>
+    }
+
+    vm.selectedPipelineId = 'p1'
+    await vm.onPipelineChange()
+    await flush()
+    expect((routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query.pipeline_id).toBe('p1')
+
+    vm.selectedPipelineId = '__all__'
+    await vm.onPipelineChange()
+    await flush()
+    expect((routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query.pipeline_id).toBeUndefined()
+  })
+
+  it('reads the first value of an array query param and can write an eval id back to the URL', async () => {
+    // A repeated ?pipeline_id= arrives as an array; the first string value wins.
+    routerMocks.query.pipeline_id = ['p1']
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as {
+      selectedPipelineId: string
+      replacePipelineQuery: (pipelineId?: string, evalId?: string) => void
+    }
+    expect(vm.selectedPipelineId).toBe('p1')
+
+    vm.replacePipelineQuery('p1', 'eval-1')
+    const replaced = (routerMocks.replace.mock.calls.at(-1)?.[0] as { query: Record<string, unknown> }).query
+    expect(replaced.eval_id).toBe('eval-1')
+    wrapper.unmount()
+  })
+
+  it('clears the stale-link notice when the pipeline selection changes again', async () => {
+    routerMocks.query.pipeline_id = 'deleted-pipeline'
+    const wrapper = mountView()
+    await flush()
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(true)
+
+    const vm = wrapper.vm as unknown as { onPipelineChange: () => Promise<void> }
+    await vm.onPipelineChange()
+    await flush()
+
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('preselects the eval named by ?eval_id= once its pipeline has loaded', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-1'
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; form: { name: string } }
+    expect(vm.editingEvalId).toBe('eval-1')
+    expect(vm.form.name).toBe('Existing Eval')
+  })
+
+  it('preselects an eval outside the paged list by reading it directly', async () => {
+    // The pipeline list endpoint pages at 20 by default, so a pipeline with 21+
+    // evals returns a first page that does not contain the linked eval. The deep
+    // link must still open it rather than silently drop the selection.
+    const pagedEvals = Array.from({ length: 21 }, (_, i) =>
+      evalItem({ id: `eval-page-${i}`, name: `Paged eval ${i}` }),
+    )
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') return { data: { nodes: [] } }
+      if (url === '/api/v1/evals') return { data: { items: pagedEvals, total: 21 } }
+      if (url === '/api/v1/evals/{eval_id}') {
+        return { data: evalItem({ id: 'eval-off-page', name: 'Off-page eval' }) }
+      }
+      return { data: { items: [] } }
+    })
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-off-page'
+    const wrapper = mountView()
+    await flush()
+
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/evals/{eval_id}', {
+      params: { path: { eval_id: 'eval-off-page' } },
+    })
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; form: { name: string } }
+    expect(vm.editingEvalId).toBe('eval-off-page')
+    expect(vm.form.name).toBe('Off-page eval')
+  })
+
+  it('does not preselect a directly-fetched eval that belongs to another pipeline', async () => {
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') return { data: { nodes: [] } }
+      if (url === '/api/v1/evals') return { data: { items: [], total: 0 } }
+      if (url === '/api/v1/evals/{eval_id}') {
+        return { data: evalItem({ id: 'eval-other', pipeline_id: 'p2' }) }
+      }
+      return { data: { items: [] } }
+    })
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-other'
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; selectedPipelineId: string }
+    expect(vm.selectedPipelineId).toBe('p1')
+    expect(vm.editingEvalId).toBeNull()
+  })
+
+  it('ignores an eval id that is no longer in the pipeline, keeping the pipeline open', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    routerMocks.query.eval_id = 'eval-deleted'
+    const wrapper = mountView()
+    await flush()
+
+    const vm = wrapper.vm as unknown as { editingEvalId: string | null; selectedPipelineId: string }
+    expect(vm.selectedPipelineId).toBe('p1')
+    expect(vm.editingEvalId).toBeNull()
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+  })
+
+  it('treats a failed pipeline read as a load error, not as a missing pipeline', async () => {
+    routerMocks.query.pipeline_id = 'p1'
+    let pipelineAttempts = 0
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/pipelines') {
+        pipelineAttempts += 1
+        if (pipelineAttempts === 1) return { data: undefined, error: { detail: 'pipelines unavailable' } }
+        return { data: { items: [{ id: 'p1', name: 'Ingest', description: null }] } }
+      }
+      if (url === '/api/v1/pipelines/{pipeline_id}/graph') return { data: { nodes: [] } }
+      if (url === '/api/v1/evals') return { data: { items: [evalItem()], total: 1 } }
+      return { data: { items: [] } }
+    })
+    const wrapper = mountView()
+    await flush()
+
+    // A failed read is surfaced as a retryable load error…
+    expect(wrapper.find('[data-testid="error-alert-retry"]').exists()).toBe(true)
+    // …never as "this pipeline does not exist".
+    expect(wrapper.find('[data-testid="eval-editor-pipeline-link-notice"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="error-alert-retry"]').trigger('click')
+    await flush()
+
+    const vm = wrapper.vm as unknown as { selectedPipelineId: string }
+    expect(vm.selectedPipelineId).toBe('p1')
+    expect(apiGET).toHaveBeenCalledWith('/api/v1/evals', { params: { query: { pipeline_id: 'p1' } } })
   })
 })

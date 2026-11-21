@@ -319,8 +319,8 @@ async def _persist_collection_row(
     Everything happens under the sentinel org's RLS context (the installing
     org's RLS session may neither read nor write sentinel rows), then the RLS
     context is restored to the installing org. The sentinel ``Organisation``
-    row itself is created by migration 0228 — this function only reads it and
-    raises a clear, actionable error when it is absent.
+    row itself is created by migration 0353_baseline_seed_data — this function
+    only reads it and raises a clear, actionable error when it is absent.
 
     Returns the id of the backing DB row; the caller MUST use it as
     ``collection_install.collection_id`` so the FK targets the row that
@@ -334,7 +334,7 @@ async def _persist_collection_row(
     try:
         org_row = await session.get(Organisation, MODULO_ORG_ID)
         if org_row is None:
-            raise CollectionInstallError("The Modulo sentinel organisation is missing from the database. It is created by migration 0232_seed_modulo_sentinel_organisation — run `alembic upgrade head` and retry the install.")
+            raise CollectionInstallError("The Farna Control sentinel organisation is missing from the database. It is created by migration 0353_baseline_seed_data — run `alembic upgrade head` and retry the install.")
         existing = (
             await session.execute(
                 select(LibraryPrimitive).where(

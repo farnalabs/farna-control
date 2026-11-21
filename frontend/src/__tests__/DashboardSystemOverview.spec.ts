@@ -5,10 +5,11 @@ import { createI18n } from 'vue-i18n'
 
 const mockGet = vi.hoisted(() => vi.fn())
 const mockPush = vi.hoisted(() => vi.fn())
+const mockSystemMapsFlag = vi.hoisted(() => ({ value: true }))
 const mockPlanStore = vi.hoisted(() => ({
   loaded: true,
   currentTier: 'community',
-  devMode: true,
+  featureEnabled: (name: string) => (name === 'system_maps' ? mockSystemMapsFlag.value : false),
   userPermissions: ['system_maps_access', 'system.config.manage'],
   fetchPlan: vi.fn(),
   fetchPermissions: vi.fn(),
