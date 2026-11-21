@@ -52,7 +52,7 @@ The gates above are the ones that actually stop a change: `pip-audit` fails on a
 
 | CVE / ID | Package | Reason | Reviewer | Date |
 |----------|---------|--------|----------|------|
-| *(none)* | | | | |
+| GHSA-53pm-wgxf-c6qf | wcmatch | Dev-only polynomial ReDoS when matching an attacker-controlled filename against a multi-star pattern. wcmatch is transitive via `semgrep` and is excluded from production (`uv sync --no-dev` in the Dockerfile); semgrep pins `wcmatch~=8.3`, so the fixed 11.2 cannot be installed. Suppressed in the CI `Lint (Backend)` and deploy `pip-audit` gates. | Branch Fixer Bot | 2026-11-21 |
 
 ## Dependency Update Workflow
 
