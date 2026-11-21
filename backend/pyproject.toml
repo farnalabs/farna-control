@@ -770,3 +770,14 @@ constraint-dependencies = [
     "virtualenv>=21.14.13",
     "pyasn1>=0.6.5",
 ]
+
+# GHSA-53pm-wgxf-c6qf / CVE-2026-132276: wcmatch <11.2 is vulnerable to a
+# polynomial-time ReDoS when matching untrusted names against multi-star
+# patterns. wcmatch is transitive (semgrep -> wcmatch) and semgrep pins
+# `wcmatch~=8.3`, so a constraint cannot reach the fix; an override is required
+# to force the secure version. semgrep only uses the stable
+# `wcmatch.glob.globfilter(..., flags=GLOBSTAR | DOTGLOB)` API, so the 11.2
+# release is compatible.
+override-dependencies = [
+    "wcmatch>=11.2",
+]
