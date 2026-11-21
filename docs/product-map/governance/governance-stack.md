@@ -110,7 +110,7 @@ change**, so `pnpm run generate:api` is not required.
 - 2026-11-17 (improve-architecture). Fixed MAJOR (fabricated state): the
   telemetry level's two best-effort reads were folded in with
   `(errorGroups ?? 0) + (endpoints ?? 0)`, so a 402/403/transport failure on
-  either source was published as a ZERO contribution — a partial read was
+  either source was published as a ZERO contribution – a partial read was
   rendered as the level's whole destination count (`2 notification endpoints`
   with the error dashboard unreadable printed "2 telemetry destinations"),
   and with the OTel export unconfigured the collapsed zero also published an
