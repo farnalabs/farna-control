@@ -262,7 +262,7 @@ class OpsgenieConnector(ConnectorBase):
             "message": message,
             "description": data.get("description", ""),
             "priority": data.get("priority", "P3"),
-            "source": data.get("source", "Modulo"),
+            "source": data.get("source", "Farna Control"),
         }
         if data.get("tags"):
             body["tags"] = data["tags"]

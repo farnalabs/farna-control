@@ -111,7 +111,7 @@ class TestAWSSecretsManagerBackend:
         backend._client.create_secret.assert_called_once_with(
             Name="my-key",
             SecretString="my-value",
-            Description="Modulo secret",
+            Description="Farna Control secret",
         )
 
     async def test_set_secret_updates_existing(self, mock_boto3):

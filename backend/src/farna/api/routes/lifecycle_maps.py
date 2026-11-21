@@ -377,10 +377,10 @@ class JourneySelfReportRequest(BaseModel):
     malformed entry (non-dict, missing kind/ref, bad status) is REJECTED and
     counted per-ref by ``validate_and_normalise_reported_refs`` instead of
     failing the whole request with a 422 — fail-open per ref.
-    ``pipeline_id`` is the optional Modulo pipeline that completed the stage;
+    ``pipeline_id`` is the optional Farna Control pipeline that completed the stage;
     when it is a stage of this map, the matched journey advances into it.
     ``stage_id`` is the map stage id the workflow completed; used when the
-    stage is external (a GitHub Actions workflow, not a Modulo pipeline) and
+    stage is external (a GitHub Actions workflow, not a Farna Control pipeline) and
     has no ``pipeline_id`` — the stage is resolved against this map's current
     ``lifecycle_map_stages`` projection so the journey advances into it
     (e.g. the merge queue reports ``stage_id: "merge"``, the deploy agent

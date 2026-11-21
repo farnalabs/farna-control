@@ -1684,7 +1684,7 @@ def _validate_bundle_format(bundle: dict[str, Any]) -> None:
     fmt_version = bundle.get("format_version")
     if fmt_version == BUNDLE_FORMAT_VERSION:
         return
-    msg = f"Unsupported bundle format version '{fmt_version}'. Expected '{BUNDLE_FORMAT_VERSION}'. This bundle may have been created by a different version of Modulo."
+    msg = f"Unsupported bundle format version '{fmt_version}'. Expected '{BUNDLE_FORMAT_VERSION}'. This bundle may have been created by a different version of Farna Control."
     raise ValueError(msg)
 
 
