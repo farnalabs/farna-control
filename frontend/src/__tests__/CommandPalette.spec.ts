@@ -138,17 +138,19 @@ describe('CommandPalette', () => {
     authState.isSystemAdmin = false
     await openPalette()
 
-    // /admin/system/config is system-admin-only and has no sidebar entry, so
-    // the nav gate cannot hide it — the extra carries its own gate.
-    expect(resultLabels()).not.toContain('System')
+    // FAR-2619 gave /admin/system/config a home in the system-admin-only SYSTEM
+    // sidebar group, so the nav gate (not a curated extra) now hides the page.
+    expect(resultLabels()).not.toContain('System Config')
   })
 
   it('offers the system page to a system admin and navigates to it', async () => {
     authState.isSystemAdmin = true
     await openPalette()
 
+    // FAR-2619 moved the page into the SYSTEM sidebar group, so the palette
+    // surfaces it from the nav with the route's breadcrumb label.
     const labels = resultLabels()
-    const system = resultButtons()[labels.indexOf('System')]
+    const system = resultButtons()[labels.indexOf('System Config')]
     expect(system).toBeDefined()
 
     const push = useRouter().push as unknown as ReturnType<typeof vi.fn>
