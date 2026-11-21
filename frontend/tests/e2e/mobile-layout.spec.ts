@@ -98,13 +98,21 @@ const DEACTIVATED_ROUTES: Record<string, string> = {
   // GET /api/v1/auth/permissions falls through to setupLocalMockApi's
   // catch-all ({}), so the router's permission gate denies the route there ---
   '/settings/license': 'required_permissions [org.license.manage] unsatisfied on the local mock; FAR-2104 moved it out of the SYSTEM group, so the staging org admin reaches it and every check runs there',
+  // --- system_admin_only (FAR-2605): /settings/monitoring lives in the SYSTEM
+  // sidebar group and the backend gates it on
+  // require_system_permission("system.config.manage"), so an ordinary org
+  // admin is redirected to /. It was previously reachable only while the
+  // staging dev-mode preview flag rendered private_preview routes; the
+  // sidebar reshape now derives requiresSystemAdmin from the SYSTEM group, so
+  // the redirect is the intended gate for the e2e org-admin identity.
+  '/settings/monitoring': 'system_admin_only — SYSTEM sidebar group; backend gate require_system_permission("system.config.manage")',
   // --- private_preview: documented mechanism, currently deactivates nothing.
   // Both e2e identities run with dev mode on (local mock dev_mode: true;
   // staging org flag observed on 2026-10-16), so preview routes render in
-  // both environments. The 5 routes that were listed here (/runs/diff,
-  // /settings/monitoring, /feedback/inbox, /assistant, /settings/assistant)
-  // were removed after they were observed RENDERING on staging; if the
-  // staging dev-mode flag is turned off again they must come back.
+  // both environments. The 4 routes that remain preview-only (/runs/diff,
+  // /feedback/inbox, /assistant, /settings/assistant) were removed after they
+  // were observed RENDERING on staging; if the staging dev-mode flag is turned
+  // off again they must come back.
 }
 
 const DEACTIVATED_ROUTES_SET = new Set(Object.keys(DEACTIVATED_ROUTES))
