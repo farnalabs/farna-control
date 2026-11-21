@@ -770,3 +770,14 @@ constraint-dependencies = [
     "virtualenv>=21.14.13",
     "pyasn1>=0.6.5",
 ]
+# GHSA-53pm-wgxf-c6qf: wcmatch <= 11.1 has a polynomial-time ReDoS when matching
+# untrusted names against multi-star patterns; fixed in 11.2. wcmatch is
+# transitive (semgrep -> wcmatch) and semgrep 1.79.0 (still the latest release)
+# declares `wcmatch~=8.3`, so a plain constraint would make the resolution
+# unsatisfiable. It is forced via an override instead: semgrep only uses the
+# stable `glob.globfilter` API with `GLOBSTAR | DOTGLOB`, which is unchanged in
+# 11.x. This keeps pip-audit (run in CI Lint (Backend)) green and stops a relock
+# from silently reintroducing the vulnerable range.
+override-dependencies = [
+    "wcmatch>=11.2",
+]
