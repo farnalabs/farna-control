@@ -15,7 +15,7 @@ the referenced backends, decrypting via the secrets backend, and explicitly
 disposed via the async context manager (never left to GC).
 
 Pure save-time constraints (name validation, reserved-var exclusion, and the
-credential-field surface) live in ``modulo.db.runner_binding_constraints``
+credential-field surface) live in ``farna.db.runner_binding_constraints``
 and are re-exported here for the core users (node_runner dispatch, routes).
 """
 

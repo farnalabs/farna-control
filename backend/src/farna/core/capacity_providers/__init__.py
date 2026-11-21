@@ -1,17 +1,17 @@
 """Provider/platform capacity probes (FAR-1992).
 
 The infra/provider layer that implements the provider-agnostic
-:class:`modulo.db.capacity.PlatformCapacityProbe` port. ``modulo.db`` owns the
+:class:`farna.db.capacity.PlatformCapacityProbe` port. ``farna.db`` owns the
 port and the FAR-1882 source chain; this package owns the concrete providers and
 is wired in at application startup (the API lifespan and the SAQ worker startup
-hook), so the DB layer never imports ``modulo.core``.
+hook), so the DB layer never imports ``farna.core``.
 
 :func:`build_platform_capacity_probe` is the single factory: it maps
 ``DB_CAPACITY_PLATFORM_PROVIDER`` to a provider and returns ``None`` when the
 provider is disabled, unknown, or its config is incomplete - in which case the
 source chain falls through to ``none`` (the hard-stop stays inert). Adding a new
 provider means adding a module here and a branch in the factory; nothing in
-``modulo.db`` changes.
+``farna.db`` changes.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def build_platform_capacity_probe(settings: Settings) -> PlatformCapacityProbe |
     ``None`` is returned - never a guessing probe - when the provider is
     disabled, unknown, or its config is incomplete (missing app name or token).
     The caller installs the result via
-    ``modulo.db.capacity.set_platform_capacity_probe``.
+    ``farna.db.capacity.set_platform_capacity_probe``.
     """
     provider = (settings.db_capacity_platform_provider or "").strip().lower()
     if provider in _DISABLED_PROVIDERS:

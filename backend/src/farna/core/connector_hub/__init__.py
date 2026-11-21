@@ -1090,11 +1090,11 @@ def _optional_base_url(config: dict[str, Any], label: str) -> str | None:
 
 
 def _core_security_guard() -> SecurityGuard:
-    """Wire the production ``modulo.core`` SSRF + output-injection guards at the root.
+    """Wire the production ``farna.core`` SSRF + output-injection guards at the root.
 
     The REST connector depends on the (connector-local) ``SecurityGuard`` port
-    rather than importing ``modulo.core`` directly; this is the single place that
-    binds the port to the real ``modulo.core`` implementations. Imports are lazy
+    rather than importing ``farna.core`` directly; this is the single place that
+    binds the port to the real ``farna.core`` implementations. Imports are lazy
     to avoid pulling ``pipeline_engine`` / ``ssrf`` at connector-hub import time.
     """
 

@@ -1,6 +1,6 @@
 """Rollback threshold evaluator for REST connector outcome rates (FAR-413).
 
-Mirrors the ``modulo.core.rollback_thresholds`` design contract: this module is
+Mirrors the ``farna.core.rollback_thresholds`` design contract: this module is
 DETECTION + NOTIFICATION only. It never flips a feature flag or reverts a
 version by itself — it computes whether the measured error/UNKNOWN rates over
 a sliding window cross the configured threshold, emits a structured WARNING so

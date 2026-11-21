@@ -28,7 +28,7 @@ async def update_otel_config(
     """Atomically merge ``config`` into the stored OTel config and return it.
 
     FAR-1832 (QA F3): routes through the SHARED atomic JSON-column patch
-    machinery (:func:`modulo.db.crud.organisation.update_org_json_column_patch`)
+    machinery (:func:`farna.db.crud.organisation.update_org_json_column_patch`)
     — one implementation of the bounded lock wait, the fail-closed tenant
     guard, the dialect split, the ``LookupError`` for a missing org and the
     identity-map refresh, exactly as the settings writer uses. The two

@@ -376,7 +376,7 @@ def _strip_env_vars(node_id: str, env: dict[str, Any]) -> tuple[dict[str, Any], 
 def _strip_context_files(node_id: str, files: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
     """Remove context files whose CONTENT carries a secret (value tier only).
 
-    Mirrors :func:`modulo.api.middleware.sensitive_mask.mask_pipeline_graph_node`,
+    Mirrors :func:`farna.api.middleware.sensitive_mask.mask_pipeline_graph_node`,
     which runs only the value patterns over file content — a file NAME is not a
     credential, its bytes are.
     """

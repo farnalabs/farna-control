@@ -15,7 +15,7 @@ Two rules from the ADRs are encoded here:
   primary key.
 * **Registry-level exclusion** — the delegable-permission boundary is NOT
   re-listed here. :func:`service_permission_allowed` delegates straight to
-  FAR-1477's :func:`modulo.auth.permissions.is_delegable`, the one registry flag
+  FAR-1477's :func:`farna.auth.permissions.is_delegable`, the one registry flag
   read live at enforcement and mint time. A second list would be a fourth grant
   vocabulary (ADR 058 explicitly forbids it).
 
@@ -78,7 +78,7 @@ def service_permission_allowed(permission: str) -> bool:
     """May a service principal be granted ``permission``?
 
     Delegates to FAR-1477's registry-level exclusion flag
-    (:func:`modulo.auth.permissions.is_delegable`) — deliberately NOT a second
+    (:func:`farna.auth.permissions.is_delegable`) — deliberately NOT a second
     exclusion list. Unknown keys deny (fail-closed), exactly as the grant
     resolver does.
     """
@@ -89,7 +89,7 @@ def clamp_service_role(role: str | None) -> str:
     """Clamp a role assigned to a service principal to the ``operator`` ceiling.
 
     Returns ``""`` (the deny sentinel) for an unknown/absent role, so a caller
-    that already clamps through :func:`modulo.auth.permissions._clamp_role`
+    that already clamps through :func:`farna.auth.permissions._clamp_role`
     keeps its fail-closed behaviour instead of widening. A service principal
     can never hold ``admin`` (ADR 058).
     """

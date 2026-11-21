@@ -663,7 +663,7 @@ _CANCEL_DELIVERY_GRACE_SECONDS = 0.5
 #: once so the three emitters can never drift apart (SonarCloud S1192).
 _CANCEL_DRAIN_FAILED_EVENT = "sandbox_agent.cancel_retention_drain_failed"
 # FAR-458: the per-connector-per-write ``on_unknown`` modes and default live in
-# ONE place — ``modulo.connectors.base`` (a stdlib-only leaf imported by both
+# ONE place — ``farna.connectors.base`` (a stdlib-only leaf imported by both
 # the pipeline engine's gate read and the REST connector's config validation)
 # so the mode set can never drift between the two. The default
 # ``DEFAULT_ON_UNKNOWN`` (``"fail_open"``) re-fires the write on ambiguity
@@ -1112,7 +1112,7 @@ def _recover_token_usage_from_raw_output(raw_output: str | None) -> dict[str, in
     this recovers them.
 
     FAR-1914 M2: the parse itself lives in the langgraph-free leaf
-    :func:`modulo.core.agent_event_evidence.parse_step_finish_evidence` — ONE
+    :func:`farna.core.agent_event_evidence.parse_step_finish_evidence` — ONE
     implementation shared with the cost finalizer (which is reachable from the
     API and must not import this module). The shipped CLI nests both ``tokens``
     and ``cost`` under ``part``; the leaf reads that shape only.
@@ -2933,7 +2933,7 @@ async def _read_run_raw_output_markers_for_gate(
     (qa M4/M5): the old predicate SELECT + fat all-sides fallback reader (two
     statements, a TOCTOU window vs terminalize, and every blob side fetched on
     the per-node hot path) is replaced by the repo's SINGLE fenced
-    markers-scoped reader :func:`modulo.db.crud.run_node_outputs.read_run_markers_fenced`
+    markers-scoped reader :func:`farna.db.crud.run_node_outputs.read_run_markers_fenced`
     — the fence predicates (id + org + claim_token + ``status='running'``)
     moved INTO that one statement, which reassembles the markers
     (new-table-only since B2c - the legacy fallback leg is removed) and
@@ -3776,7 +3776,7 @@ async def _connector_write_gate(
     key, killswitch off, DB error, malformed key) returns ``None`` — the write
     proceeds, never blocked. The killswitch
     ``modulo_connector_write_gate_enabled`` is GENUINELY OPT-IN: it defaults to
-    ``False`` (set in ``modulo.settings``), so a deploy never silently suppresses
+    ``False`` (set in ``farna.settings``), so a deploy never silently suppresses
     byte-identical re-executed connector writes — a behavioural change vs. the
     pre-FAR-458 contract where every visit fired. Operators enable it explicitly.
     """
@@ -5386,7 +5386,7 @@ async def _dispatch_reject_correction_best_effort(
 #: ------------------------------------------------
 #: ``output`` is ONE SHARED "current node output" slot: every node returns a
 #: value for it and the state reducer replaces it wholesale
-#: (:func:`modulo.core.pipeline_engine.graph_cache._pipeline_state_reducer`).
+#: (:func:`farna.core.pipeline_engine.graph_cache._pipeline_state_reducer`).
 #: The moment the next node runs, ``state["output"]`` holds THAT node's value
 #: while this per-gate key survives in state and in the checkpoint. So the
 #: marker does **not** describe whatever ``state["output"]`` happens to hold
@@ -5410,7 +5410,7 @@ async def _dispatch_reject_correction_best_effort(
 #:     }
 #:
 #: ``attested`` is the governed-run provenance class of a human statement
-#: (:data:`modulo.core.provenance.PROVENANCE_ATTESTED` — "governance events
+#: (:data:`farna.core.provenance.PROVENANCE_ATTESTED` — "governance events
 #: Modulo records natively: approvals, guardrail verdicts, HITL decisions").
 #: Per ADR-042 an ``attested`` datum is a natively-recorded human/governance
 #: statement, NOT a computed measurement and NOT an agent report — and agent
@@ -5958,7 +5958,7 @@ def _serialize_condition_value(value: Any) -> str:
     shared redaction primitive BEFORE truncation (FAR-163: a secret
     straddling the cut point must still be removed) and is then bounded,
     marked when sliced. Serialisation reuses the briefing's deterministic
-    serializer (:func:`modulo.core.pipeline_engine.hitl_context.serialize_value`)
+    serializer (:func:`farna.core.pipeline_engine.hitl_context.serialize_value`)
     instead of re-implementing it; the slice carries the marker WITHIN the cap.
     """
     return slice_with_marker(sanitize_error_text(serialize_value(value)), _CONDITION_RESULT_FIELD_MAX_CHARS)
@@ -6885,7 +6885,7 @@ _DISPATCH_WAIT_RETRY_AFTER_MAX_SECONDS = 300.0
 #: dispatch-node outcome.
 #:
 #: Keys are the substrate codes VERBATIM, exactly as published by
-#: ``modulo.connectors.base.CIRunStatus`` (``pending``, ``queued``,
+#: ``farna.connectors.base.CIRunStatus`` (``pending``, ``queued``,
 #: ``in_progress``, ``success``, ``failure``, ``cancelled``, ``timed_out``,
 #: ``unknown``). Values:
 #:
@@ -6924,7 +6924,7 @@ def _is_transient_dispatch_poll_error(exc: BaseException) -> bool:
       plausibly survive, and the external job is already fired, so abandoning
       the observation would misreport a run that is still going.
     * **Permanent** (propagate immediately, as itself): everything else — the
-      ACL's :class:`~modulo.connectors.base.ConnectorPermissionError`, a
+      ACL's :class:`~farna.connectors.base.ConnectorPermissionError`, a
       connector's fail-loud ``ValueError`` (including Jenkins' intentional
       queue-404), an HTTP **4xx**, and any error we cannot classify. Retrying
       these cannot succeed, and the old blanket ``except Exception`` not only
@@ -7234,7 +7234,7 @@ def _stamp_dispatch_provenance(result: Any, instance_id: str) -> Any:
     ``{"result": ...}`` envelope carrying the same keys. A bare list used to
     pass through unstamped, so a witnessed run list read as an array Modulo
     produced. The key set is the one
-    :data:`modulo.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` lifts back
+    :data:`farna.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` lifts back
     out on the failed-artifact path, so the two cannot drift.
 
     Each provenance key is OVERWRITTEN, never merged — a hostile or
@@ -7266,7 +7266,7 @@ def _dispatch_trigger_failure_envelope(node_id: str, result: dict[str, Any]) -> 
     artifact's ``error`` is the substrate's terminal code VERBATIM (e.g. the
     literal ``"failure"``) and the stamped output — which carries the witness
     provenance — is preserved as ``output``. Every
-    :data:`modulo.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` key is ALSO
+    :data:`farna.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` key is ALSO
     lifted to the envelope top level because the failed-connector branch of
     ``node_output_split._split_connector`` drops ``output``; without the lift the
     provenance would never reach run state from this path.

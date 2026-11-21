@@ -537,7 +537,7 @@ def resolve_effective_license(settings: Any, org: Any | None) -> LicenseData | N
     no valid licence resolves.
 
     Grace: capability expiry is ``expires_at + LICENCE_GRACE_DAYS`` (a fixed,
-    non-configurable delivery window in ``modulo.core.license``), so a key that
+    non-configurable delivery window in ``farna.core.license``), so a key that
     expired fewer than ``LICENCE_GRACE_DAYS`` ago still resolves here and keeps
     granting its tier. Past the grace every rung falls through to the
     unlicensed (Community) default — the lapse is never a lockout, because
@@ -548,7 +548,7 @@ def resolve_effective_license(settings: Any, org: Any | None) -> LicenseData | N
     capability early. It starts resolving here automatically once its start
     arrives — no operator action, because the gate is evaluated per call.
 
-    Local imports keep ``modulo.core.license.{get_license,parse_and_verify}``
+    Local imports keep ``farna.core.license.{get_license,parse_and_verify}``
     patchable at call time (tests patch the source module, not this one).
     """
     from farna.core.license import get_license

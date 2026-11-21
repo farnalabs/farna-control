@@ -161,7 +161,7 @@ def resolve_instance_identity() -> str:
 def set_first_boot_guard(guard: Callable[[], None] | None) -> None:
     """Install (or clear, with None) the first-boot ambient-env refusal hook.
 
-    The launcher installs ``modulo.launcher.env_safety.make_first_boot_guard
+    The launcher installs ``farna.launcher.env_safety.make_first_boot_guard
     (data_dir)`` before constructing Settings; the hook runs at validation
     time and raises ``AmbientEnvironmentError`` when ambient service URLs are
     present on an un-bootstrapped data dir (ADR 031 Decision 2).
@@ -173,7 +173,7 @@ def set_first_boot_guard(guard: Callable[[], None] | None) -> None:
 # ---------------------------------------------------------------------------
 # FAR-1257 HITL review-window constants (module level, NOT Settings fields).
 #
-# This module is a near-leaf: it imports only ``modulo.db.url_utils``, so BOTH
+# This module is a near-leaf: it imports only ``farna.db.url_utils``, so BOTH
 # the DB layer and core may import it. That is WHY the claim-TTL constant lives
 # here rather than in ``core.hitl_manager`` — the import-linter contract
 # ``db-does-not-import-core`` forbids ``db.crud.hitl_review_config`` from
@@ -218,7 +218,7 @@ class Settings(BaseSettings):
     modulo_users: str = Field("", validation_alias="FARNA_CONTROL_USERS")
     # Gated demo-org seed framework (FAR-450). When True, the FastAPI boot
     # lifespan seeds the organisations listed in
-    # ``modulo.core.seed_data.demo_data.DEMO_ORGS`` with per-org signed licenses.
+    # ``farna.core.seed_data.demo_data.DEMO_ORGS`` with per-org signed licenses.
     # False by default — nothing seeds unless an operator opts in.
     modulo_seed_demo_orgs: bool = Field(False, validation_alias="FARNA_CONTROL_SEED_DEMO_ORGS")
 
@@ -1162,7 +1162,7 @@ class Settings(BaseSettings):
     modulo_dev_mode: bool = Field(default=False, description="Enable preview/in-development features (FARNA_CONTROL_DEV_MODE)", validation_alias="FARNA_CONTROL_DEV_MODE")
 
     # Plugin discovery — when enabled, scans installed packages for entry points
-    # registered in the ``modulo.connectors`` and ``modulo.model_backends`` groups.
+    # registered in the ``farna.connectors`` and ``farna.model_backends`` groups.
     # Set to "false" to disable plugin discovery at startup.
     modulo_plugin_discovery: bool = Field(True, validation_alias="FARNA_CONTROL_PLUGIN_DISCOVERY")
 

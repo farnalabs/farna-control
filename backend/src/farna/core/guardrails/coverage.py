@@ -84,7 +84,7 @@ class SeamCoverageState(StrEnum):
 class SeamCoverageProvenance(StrEnum):
     """The ADR-042 provenance classes, bound to the canonical constants.
 
-    Members are assigned FROM ``modulo.core.provenance`` so a rename there
+    Members are assigned FROM ``farna.core.provenance`` so a rename there
     propagates instead of drifting; a test asserts this enum covers the whole
     canonical set (a new ADR-042 class must be added here too).
     """

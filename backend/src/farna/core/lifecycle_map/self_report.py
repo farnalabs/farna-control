@@ -19,7 +19,7 @@ an ADVISORY OPERATOR CLAIM and stamps it ``source="agent"`` (rank 0) — so a
 self-reported claim can only confirm or match an existing journey row keyed by
 the same canonical ``(org, kind, ref)`` — it can NEVER mint one. Minting is owned
 by the create-time ``INSERT ... ON CONFLICT DO NOTHING`` path in
-``modulo.db.crud.run`` (FAR-142).
+``farna.db.crud.run`` (FAR-142).
 
 Both functions here are PURE — no DB access, no side effects, deterministic —
 so they can be unit tested in isolation and reused by the finalise path and any

@@ -174,7 +174,7 @@ class DecisionPayloadError(HITLError, ValueError):
 # ---------------------------------------------------------------------------
 
 _TOKEN_BYTES = 32
-# FAR-1257: the claim-TTL constant is owned by ``modulo.settings`` — a near-leaf
+# FAR-1257: the claim-TTL constant is owned by ``farna.settings`` — a near-leaf
 # module BOTH ``core`` and ``db`` may import — because ``db.crud.hitl_review_config``
 # composes the instance default review window from it (import-linter contract
 # ``db-does-not-import-core``). Deriving the minutes from the shared seconds

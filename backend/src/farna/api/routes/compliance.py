@@ -73,7 +73,7 @@ _MSG_TIMEOUT = "The compliance evidence index exceeded its time bound. Narrow th
 _LOG_PREFIX = "compliance.evidence_index"
 
 #: Admin-only: the index aggregates org-wide audit evidence. See the
-#: registration comment in ``modulo.auth.permissions``.
+#: registration comment in ``farna.auth.permissions``.
 _CODE_EVIDENCE_INDEX_READ = "compliance.evidence_index.read"
 
 

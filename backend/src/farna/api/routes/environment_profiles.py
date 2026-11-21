@@ -630,17 +630,17 @@ def _sse_event(event: str, detail: str) -> str:
 
 
 # Provider registry -> canonical egress tier.  The tier vocabulary is owned
-# by ``modulo.core.pipeline_engine.egress`` (``_TIER_ENFORCEMENT``); the
+# by ``farna.core.pipeline_engine.egress`` (``_TIER_ENFORCEMENT``); the
 # provider identity (``provider_id`` + ``provider_aliases``) is owned by the
 # runtime-provider classes.  The mapping itself now lives ONCE in
-# ``modulo.core.runtime_provider.egress_tier_for_provider_type`` (FAR-1051),
+# ``farna.core.runtime_provider.egress_tier_for_provider_type`` (FAR-1051),
 # so this route, the dispatch-route workspace-spec mapper and the sandbox
 # capability certification all resolve the SAME tier for a provider_type —
 # this wrapper keeps the route's local name for its existing callers/tests.
 def _egress_tier_for_provider_type(provider_type: str) -> str | None:
     """Return the canonical egress tier for a profile ``provider_type``.
 
-    Thin delegation to :func:`modulo.core.runtime_provider.egress_tier_for_provider_type`
+    Thin delegation to :func:`farna.core.runtime_provider.egress_tier_for_provider_type`
     (the single source of truth). Provider aliases are read from the
     runtime-provider classes themselves — ``local_docker`` is a Docker alias
     (``DockerRuntimeProvider.provider_aliases``), NOT the host-process local

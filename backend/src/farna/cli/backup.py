@@ -1059,7 +1059,7 @@ class RestorePostureError(click.ClickException):
     the grants it needs), which is a tenant-isolation breach — so the restore
     FAILS instead of reporting success. The data itself is already restored:
     fix the reported check, then re-run the posture step with
-    ``uv run python -m modulo.db.bootstrap_role`` (with ``DATABASE_ADMIN_URL``
+    ``uv run python -m farna.db.bootstrap_role`` (with ``DATABASE_ADMIN_URL``
     and ``DATABASE_URL`` set) before serving from the cluster.
     """
 
@@ -1124,7 +1124,7 @@ def _resolve_restore_app_url(settings: Any, app_db_url: str | None) -> str:
 def _ensure_restore_posture(admin_url: str, app_url: str) -> None:
     """Re-run the promoted first-boot bootstrap/bootstrap_role ceremony.
 
-    Reuses the promoted path (``modulo.db.bootstrap_role.bootstrap_roles`` —
+    Reuses the promoted path (``farna.db.bootstrap_role.bootstrap_roles`` —
     ADR 031 Decision 2) so a restored database ends up with exactly the
     role/grant posture first boot would produce: farna_control_app NOBYPASSRLS,
     farna_control_system/farna_control_breakglass BYPASSRLS, grants re-applied, and the

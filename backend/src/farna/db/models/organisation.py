@@ -104,7 +104,7 @@ class Organisation(SoftDeleteMixin, Base):
     # ceilings (per-run and org lifetime) and the consumed total onto
     # ``organisation_cost_state`` keyed by ``org_id``, read/written under the
     # per-org cost-state advisory lock
-    # (``modulo.core.runner_capacity.lock_org_cost_state``). Keeping the cost
+    # (``farna.core.runner_capacity.lock_org_cost_state``). Keeping the cost
     # path off the ``organisations`` row removes the lock coupling (the D9
     # deadlock) between the finalize gate+accrual and the ceiling set/clear
     # endpoints. The retired ``max_run_cost_cents`` / ``spend_ceiling_cents`` /

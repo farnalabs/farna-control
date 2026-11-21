@@ -4,11 +4,11 @@ Modulo holds no SOC 2, ISO/IEC 42001 or EU AI Act attestation. In a
 self-hosted deployment the customer's auditor audits the customer's own
 instance, so this package ships the two things that make that possible:
 
-* a **versioned control-mapping pack** (:mod:`modulo.compliance.pack`) mapping
+* a **versioned control-mapping pack** (:mod:`farna.compliance.pack`) mapping
   framework clauses to Modulo controls, the artefact that evidences each one,
   where the customer finds it, an honest coverage attribution and the
   evidence's provenance;
-* a **per-instance evidence index** (:mod:`modulo.compliance.evidence_index`)
+* a **per-instance evidence index** (:mod:`farna.compliance.evidence_index`)
   that lists the artefacts that actually exist for one organisation, keyed to
   the mapping rows, and surfaces a missing mapped artefact instead of omitting
   it.

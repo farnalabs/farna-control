@@ -173,7 +173,7 @@ def _str_to_lock_keys(key: str) -> tuple[int, int]:
     """Hash an arbitrary string into two signed 32-bit integers.
 
     Uses MD5 for stable, uniform distribution over the int32 range.
-    Matches the convention used by ``modulo.core.connector_hub.locking``.
+    Matches the convention used by ``farna.core.connector_hub.locking``.
     """
     digest = hashlib.md5(key.encode("utf-8"), usedforsecurity=False).digest()
     k1 = int.from_bytes(digest[:4], "big", signed=True)

@@ -132,7 +132,7 @@ _PUBLIC_DAILY_CAP_RETENTION_HOURS = 48
 _MAX_TRACKED_PUBLIC_DAILY_CLIENTS = 10_000
 
 # System / no-tenant sentinel org (SYSTEM_ORG_ID) is imported from
-# modulo.db.models.organisation at module top — the single canonical
+# farna.db.models.organisation at module top — the single canonical
 # definition shared with the admin listing filter and migration tooling
 # (FAR-1505). Do NOT re-type the nil-UUID literal or re-alias it here.
 
@@ -843,7 +843,7 @@ async def get_scheduler_starvation(
     row per starved pipeline (bounded by the org's pipeline count), so no
     pagination and ``total`` is the exact item count. Detection (the SQL
     aggregate) lives in the crud layer
-    (:func:`modulo.db.crud.error_tracking.get_scheduler_starvation_pipelines`)
+    (:func:`farna.db.crud.error_tracking.get_scheduler_starvation_pipelines`)
     — the route keeps auth, RLS pinning and serialization only; the
     ``handle_db_errors`` decorator owns the DB-error mapping (it re-raises
     ``HTTPException`` untouched).
