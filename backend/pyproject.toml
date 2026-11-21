@@ -776,8 +776,8 @@ constraint-dependencies = [
 # patterns. wcmatch is transitive (semgrep -> wcmatch) and semgrep pins
 # `wcmatch~=8.3`, so a constraint cannot reach the fix; an override is required
 # to force the secure version. semgrep only uses the stable
-# `wcmatch.glob.globfilter(..., flags=GLOBSTAR | DOTGLOB)` API, so the 11.2
-# release is compatible.
+# `wcmatch.glob.globfilter(..., flags=GLOBSTAR | DOTGLOB)` API, which the locked
+# 12.0.4 release (>=11.2) provides.
 override-dependencies = [
     "wcmatch>=11.2",
 ]
