@@ -1334,6 +1334,7 @@ docs/product-map/core/evidence-store.md	1
 docs/product-map/core/runtime-provider-core.md	2
 docs/product-map/hitl/hitl-gates.md	4
 docs/product-map/improve/variants.md	1
+docs/product-map/infra/apt-distribution.md	1
 docs/product-map/infra/health-checks.md	1
 docs/product-map/infra/support-diagnostics.md	2
 docs/product-map/library/library.md	4
