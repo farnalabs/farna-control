@@ -9,9 +9,9 @@ import yaml from 'js-yaml'
 import CommandPalette from '../components/CommandPalette.vue'
 import { getNavGroups } from '../config/navigation'
 
-// The palette gates its extras with the nav visibility context, which reads the
-// decoded access token. Mock that one seam so the system-admin gate on the
-// `System` extra can be exercised with the claim present and absent; the
+// The palette gates its results with the nav visibility context, which reads
+// the decoded access token. Mock that one seam so the system-admin gate on the
+// system pages can be exercised with the claim present and absent; the
 // defaults reproduce an unauthenticated session, so every other test is
 // unaffected.
 const authState = vi.hoisted(() => ({ isSystemAdmin: false }))
@@ -138,8 +138,9 @@ describe('CommandPalette', () => {
     authState.isSystemAdmin = false
     await openPalette()
 
-    // FAR-2619 gave /admin/system/config a home in the system-admin-only SYSTEM
-    // sidebar group, so the nav gate (not a curated extra) now hides the page.
+    // FAR-2619 gave /admin/system/config a home in the SYSTEM-group sidebar
+    // (label comes from the manifest breadcrumb). Both the group and the route
+    // are system-admin gated, so the nav gate (not a curated extra) hides it.
     expect(resultLabels()).not.toContain('System Config')
   })
 
