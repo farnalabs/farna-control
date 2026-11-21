@@ -80,13 +80,34 @@ vi.mock('vue-router', async () => {
 
 import EvalEditorView from '../views/EvalEditorView.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import { api } from '../lib/api/client'
+import { api, getAccessToken } from '../lib/api/client'
 import PageTabs from '../components/PageTabs.vue'
 
 const apiGET = api.GET as ReturnType<typeof vi.fn>
 const apiPOST = api.POST as ReturnType<typeof vi.fn>
 const apiPUT = api.PUT as ReturnType<typeof vi.fn>
 const apiDELETE = api.DELETE as ReturnType<typeof vi.fn>
+const getAccessTokenMock = getAccessToken as ReturnType<typeof vi.fn>
+
+// FAR-2620: the eval-editor delete affordance mirrors TWO backend gates — the
+// `eval.definition.delete` route permission (operator floor, resolved live by
+// the store) AND an in-body `org_role == "admin"` check. These helpers seed a
+// real caller identity so a test can pin exactly which half it is exercising.
+const PERMISSIONS_URL = '/api/v1/auth/permissions'
+const EVAL_DELETE_PERMISSION = 'eval.definition.delete'
+
+function fakeJwt(orgRole: string): string {
+  const segment = (value: unknown) => btoa(JSON.stringify(value))
+  return `${segment({ alg: 'none', typ: 'JWT' })}.${segment({
+    sub: `${orgRole}-user`,
+    org_id: 'org-1',
+    org_role: orgRole,
+  })}.test-signature`
+}
+
+function permissionsOk(permissions: string[]) {
+  return { data: { permissions } }
+}
 
 function evalItem(over: Record<string, unknown> = {}) {
   return {
@@ -115,6 +136,7 @@ describe('EvalEditorView', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     for (const key of Object.keys(routerMocks.query)) delete routerMocks.query[key]
+    getAccessTokenMock.mockReturnValue(fakeJwt('admin'))
     apiGET.mockResolvedValue({ data: { items: [] } })
     apiPOST.mockResolvedValue({ data: {} })
     apiPUT.mockResolvedValue({ data: {} })
@@ -211,6 +233,7 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     for (const key of Object.keys(routerMocks.query)) delete routerMocks.query[key]
+    getAccessTokenMock.mockReturnValue(fakeJwt('admin'))
     apiGET.mockResolvedValue({ data: { items: [] } })
     apiPOST.mockResolvedValue({ data: {} })
     apiPUT.mockResolvedValue({ data: {} })
@@ -472,6 +495,7 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
 
   it('delete flow: confirm deletes via the API and removes the eval from the list', async () => {
     apiGET.mockImplementation(async (url: string) => {
+      if (url === PERMISSIONS_URL) return permissionsOk([EVAL_DELETE_PERMISSION])
       if (url === '/api/v1/evals') return { data: { items: [evalItem()] } }
       return { data: { items: [] } }
     })
@@ -504,6 +528,7 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
 
   it('delete failure with a 404 payload surfaces the already-deleted message', async () => {
     apiGET.mockImplementation(async (url: string) => {
+      if (url === PERMISSIONS_URL) return permissionsOk([EVAL_DELETE_PERMISSION])
       if (url === '/api/v1/evals') return { data: { items: [evalItem()] } }
       return { data: { items: [] } }
     })
@@ -550,6 +575,58 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
     vm.setQuestionType(question, 'not-a-type')
     vm.setQuestionType(question, 42)
     expect(question.type).toBe('noul')
+  })
+
+  // FAR-2620: DELETE /api/v1/evals/{eval_id} needs BOTH the
+  // `eval.definition.delete` permission AND an admin org role. The editor
+  // route itself only requires create/update (operator), so the delete
+  // affordance must not inherit the editor's audience.
+  function far2620MountView(orgRole: string, permissions: string[]) {
+    getAccessTokenMock.mockReturnValue(fakeJwt(orgRole))
+    apiGET.mockImplementation(async (url: string) => {
+      if (url === PERMISSIONS_URL) return permissionsOk(permissions)
+      if (url === '/api/v1/evals') return { data: { items: [evalItem()] } }
+      return { data: { items: [] } }
+    })
+    return mountView()
+  }
+
+  async function mountWithRow(orgRole: string, permissions: string[]) {
+    const wrapper = far2620MountView(orgRole, permissions)
+    await flush()
+    await selectPipeline(wrapper, 'p1')
+    await flush()
+    return wrapper
+  }
+
+  it('shows the eval delete affordance for an admin the endpoint accepts (FAR-2620)', async () => {
+    const wrapper = await mountWithRow('admin', [EVAL_DELETE_PERMISSION])
+
+    // The row rendered (its edit action proves it), and the delete action is
+    // offered because the caller satisfies both endpoint gates.
+    expect(wrapper.find('[data-testid="eval-editor-edit"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="eval-editor-delete"]').exists()).toBe(true)
+  })
+
+  it('hides the eval delete affordance for an operator the endpoint refuses (FAR-2620)', async () => {
+    // An operator holds `eval.definition.delete` (it is an operator-floor
+    // permission) and reaches the editor, but the endpoint's in-body
+    // `org_role != "admin"` check answers 403 — so the action must be absent,
+    // not a button that fails on click.
+    const wrapper = await mountWithRow('operator', [EVAL_DELETE_PERMISSION])
+
+    expect(wrapper.find('[data-testid="eval-editor-edit"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="eval-editor-delete"]').exists()).toBe(false)
+  })
+
+  it('hides the eval delete affordance from an admin lacking the delete permission (FAR-2620)', async () => {
+    // The route-permission half, mirrored: a restricted (scoped) credential can
+    // carry an admin org role yet not hold `eval.definition.delete`, and the
+    // endpoint refuses that caller at the permission gate. Fail closed.
+    const wrapper = await mountWithRow('admin', ['eval.definition.update'])
+
+    expect(wrapper.find('[data-testid="eval-editor-edit"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="eval-editor-delete"]').exists()).toBe(false)
   })
 })
 
