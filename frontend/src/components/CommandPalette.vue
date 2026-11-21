@@ -66,6 +66,13 @@ interface SearchItem {
   path: string
   icon: string
   section: string
+  /**
+   * Instance-level pages (manifest `system_admin_only`) are not sidebar items,
+   * so the nav-membership gate in `searchItems` cannot see their gate. Such an
+   * extra applies the system-admin check directly instead of being shown to
+   * every user and then bounced by the router guard.
+   */
+  systemAdminOnly?: boolean
 }
 
 const router = useRouter()
@@ -80,21 +87,22 @@ const dialogRef = ref<HTMLDialogElement | null>(null)
 // Sections are the manifest's sidebar-group labels (FAR-2605: pipelines,
 // controls, runs, configuration, administration, system), so a result never
 // advertises a group the sidebar no longer has. The pinned Dashboard sits above
-// the groups and borrows the closest one; /evals, /settings and /admin/system
-// are parent landing paths, labelled by the group their children live in. Each
-// section resolves through $t() against the same labelKey the sidebar group
-// uses, so the palette never drifts into hardcoded English.
+// the groups and borrows the closest one. Each `path` MUST be a route the app
+// actually serves (FAR-2616): there is no /evals hub (the group entry page is
+// the eval editor), no /settings hub at all (so no Settings entry is curated)
+// and no /admin/system hub (the deployment-wide page is /admin/system/config).
+// Each section resolves through $t() against the same labelKey the sidebar
+// group uses, so the palette never drifts into hardcoded English.
 const paletteExtras: SearchItem[] = [
   { label: 'Dashboard', path: '/', icon: 'LayoutDashboard', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Pipelines', path: '/pipelines', icon: 'GitFork', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Library', path: '/library', icon: 'BookOpen', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Runs', path: '/runs', icon: 'CirclePlay', section: t('components.SidebarNav.group_runs') },
-  { label: 'Evals', path: '/evals', icon: 'CheckSquare', section: t('components.SidebarNav.group_controls') },
+  { label: 'Evals', path: '/evals/editor', icon: 'CheckSquare', section: t('components.SidebarNav.group_controls') },
   { label: 'Schemas', path: '/schemas', icon: 'Database', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Connectors', path: '/admin/connectors', icon: 'Plug', section: t('components.SidebarNav.group_configuration') },
-  { label: 'Settings', path: '/settings', icon: 'Settings', section: t('components.SidebarNav.group_administration') },
   { label: 'Organization', path: '/admin/org', icon: 'Building', section: t('components.SidebarNav.group_administration') },
-  { label: 'System', path: '/admin/system', icon: 'Settings', section: t('components.SidebarNav.group_system') },
+  { label: 'System', path: '/admin/system/config', icon: 'Settings', section: t('components.SidebarNav.group_system'), systemAdminOnly: true },
   { label: 'Cost Management', path: '/admin/costs', icon: 'DollarSign', section: t('components.SidebarNav.group_runs') },
 ]
 
@@ -117,16 +125,17 @@ const searchItems = computed<SearchItem[]>(() => {
       })
     }
   }
-  // Curated parent/landing routes that are not sidebar items in the manifest
-  // (e.g. /settings, /admin/system). Gate them with the SAME navbar rules:
-  // if a path resolves to a manifest item it must appear in the visible set
-  // (group-level systemAdminOnly + item-level gates already applied),
-  // otherwise it stays hidden. Parent routes with no manifest entry are
-  // landing pages and are always shown.
+  // Curated parent/landing routes that are not sidebar items in the manifest.
+  // Gate them with the SAME navbar rules: if a path resolves to a sidebar item
+  // it must appear in the visible set (group-level systemAdminOnly + item-level
+  // gates already applied), otherwise it stays hidden. An extra whose route the
+  // sidebar never lists (an instance-level system page) has no nav entry for
+  // that check to read, so it declares its own `systemAdminOnly` flag.
   const extras: SearchItem[] = paletteExtras
   const rawItems = getNavGroups().flatMap((g) => g.items)
   for (const extra of extras) {
     if (seen.has(extra.path)) continue
+    if (extra.systemAdminOnly && !ctx.isSystemAdmin) continue
     const hasNavItem = rawItems.some((i) => i.to === extra.path)
     if (hasNavItem && !visiblePaths.has(extra.path)) continue
     seen.add(extra.path)
@@ -189,7 +198,8 @@ function onBackdropClick(event: MouseEvent) {
 }
 
 // `paletteExtras` is exposed so the spec can assert every curated section
-// label against the manifest's current sidebar groups (FAR-2605).
+// label against the manifest's current sidebar groups (FAR-2605) and every
+// curated path against the routes the manifest declares (FAR-2616).
 defineExpose({ open, paletteExtras })
 
 function navigate() {

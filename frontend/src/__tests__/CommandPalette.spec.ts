@@ -1,10 +1,53 @@
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { computed, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useRouter } from 'vue-router'
+import { readFileSync } from 'node:fs'
+import { resolve as resolvePath } from 'node:path'
+import yaml from 'js-yaml'
 import CommandPalette from '../components/CommandPalette.vue'
 import { getNavGroups } from '../config/navigation'
+
+// The palette gates its extras with the nav visibility context, which reads the
+// decoded access token. Mock that one seam so the system-admin gate on the
+// `System` extra can be exercised with the claim present and absent; the
+// defaults reproduce an unauthenticated session, so every other test is
+// unaffected.
+const authState = vi.hoisted(() => ({ isSystemAdmin: false }))
+
+vi.mock('../composables/useCurrentUser', () => ({
+  useCurrentUser: () => ({
+    jwtPayload: computed(() => ({
+      is_system_admin: authState.isSystemAdmin,
+      org_role: null,
+      permissions: [],
+    })),
+  }),
+}))
+
+/**
+ * FAR-2616: the curated extras must point at routes the app actually serves.
+ * Three entries (/evals, /settings, /admin/system) were not routes, so picking
+ * them fell through to the router's catch-all redirect to "/". The manifest is
+ * the declaration the router hydrates route gates from, so membership in its
+ * `routes` map is the proof a path is real.
+ */
+const DECLARED_ROUTES = new Set(
+  Object.keys(
+    (
+      yaml.load(readFileSync(resolvePath(__dirname, '../manifest.yaml'), 'utf-8')) as {
+        routes: Record<string, unknown>
+      }
+    ).routes,
+  ),
+)
+
+interface ExposedPaletteExtra {
+  label: string
+  path: string
+  section: string
+}
 
 // Track mounted wrappers so afterEach can unmount them. CommandPalette is
 // mounted with attachTo: document.body, so each wrapper must be explicitly
@@ -43,6 +86,22 @@ function highlightedButton(): HTMLElement | null {
   return resultButtons().find(b => b.classList.contains('bg-accent')) ?? null
 }
 
+/** The visible label of each rendered result (the first span in the button). */
+function resultLabels(): string[] {
+  return resultButtons().map(
+    button => button.querySelector('span.flex-1')?.textContent?.trim() ?? '',
+  )
+}
+
+/**
+ * The extras the mounted palette actually curates. `paletteExtras` is exposed
+ * via `defineExpose` (FAR-2605), so the spec reads the component's own list
+ * rather than a hand-copied mirror that could drift.
+ */
+function exposedExtras(wrapper: VueWrapper): ExposedPaletteExtra[] {
+  return (wrapper.vm as unknown as { paletteExtras: ExposedPaletteExtra[] }).paletteExtras
+}
+
 async function typeQuery(value: string) {
   const input = paletteInput()
   input.value = value
@@ -55,6 +114,49 @@ describe('CommandPalette', () => {
   afterEach(() => {
     while (mounted.length) mounted.pop()?.unmount()
     document.body.innerHTML = ''
+    authState.isSystemAdmin = false
+  })
+
+  it('points every curated palette path at a declared route', async () => {
+    const wrapper = await openPalette()
+    const extras = exposedExtras(wrapper)
+
+    // A vacuous pass must not be possible if the curated set is ever emptied.
+    expect(extras.length).toBeGreaterThan(0)
+
+    for (const extra of extras) {
+      // The message names the offending path so a regression is diagnosable
+      // straight from the failure.
+      expect(
+        DECLARED_ROUTES.has(extra.path),
+        `palette extra "${extra.label}" points at "${extra.path}", which is not a route declared in manifest.yaml`,
+      ).toBe(true)
+    }
+  })
+
+  it('hides the system page from users without the system-admin claim', async () => {
+    authState.isSystemAdmin = false
+    await openPalette()
+
+    // /admin/system/config is system-admin-only and has no sidebar entry, so
+    // the nav gate cannot hide it — the extra carries its own gate.
+    expect(resultLabels()).not.toContain('System')
+  })
+
+  it('offers the system page to a system admin and navigates to it', async () => {
+    authState.isSystemAdmin = true
+    await openPalette()
+
+    const labels = resultLabels()
+    const system = resultButtons()[labels.indexOf('System')]
+    expect(system).toBeDefined()
+
+    const push = useRouter().push as unknown as ReturnType<typeof vi.fn>
+    push.mockClear()
+    system.click()
+    await nextTick()
+
+    expect(push).toHaveBeenCalledWith('/admin/system/config')
   })
 
   it('clamps selectedIndex when the query shrinks the result list', async () => {
