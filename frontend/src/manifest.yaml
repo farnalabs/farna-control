@@ -211,6 +211,7 @@ routes:
         sidebar_order: 80
         type: page
         <<: *community
+        visibility: private_preview
         deprecated: false
 
     /determination:
@@ -828,6 +829,7 @@ routes:
         sidebar_order: 90
         type: page
         <<: *community
+        visibility: private_preview
         required_permissions: [compliance.evidence_index.read]
         deprecated: false
 
