@@ -213,8 +213,13 @@ def report(kind: str, line: str) -> None:
         print(line)
 
 
-def sha256(path: str) -> bytes:
-    digest = hashlib.sha256()
+# A sealed digest's length names its algorithm: hash2 is SHA-256 (32 bytes);
+# the legacy hash and a raw <data> digest are SHA-1 (20 bytes).
+DIGEST_BY_LENGTH = {20: "sha1", 32: "sha256"}
+
+
+def file_digest(path: str, algorithm: str) -> bytes:
+    digest = hashlib.new(algorithm)
     with open(path, "rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
@@ -236,15 +241,20 @@ for rel, entry in sorted(files2.items()):
         continue
     # Apple's CodeResources stores an ordinary sealed file two ways: a raw
     # <data> digest directly under files2[path] (plistlib gives us bytes), or a
-    # dict carrying hash2. Both are the expected SHA-256; a shape we do not
-    # recognise must not silently skip the check.
+    # dict carrying hash2 (and usually the legacy hash). The digest length picks
+    # the algorithm, and a shape or length we do not recognise is reported
+    # rather than silently skipping the check.
     if isinstance(entry, (bytes, bytearray)):
-        expected = entry
+        expected = bytes(entry)
     elif isinstance(entry, dict):
-        expected = entry.get("hash2")
+        expected = entry.get("hash2", entry.get("hash"))
+        expected = bytes(expected) if isinstance(expected, (bytes, bytearray)) else None
     else:
         expected = None
-    if expected is not None and sha256(path) != bytes(expected):
+    algorithm = DIGEST_BY_LENGTH.get(len(expected)) if expected is not None else None
+    if algorithm is None:
+        report("seal", f"seal_unrecognised_digest {rel}")
+    elif file_digest(path, algorithm) != expected:
         report("seal", f"seal_hash_mismatch {rel}")
 
 seen = {}

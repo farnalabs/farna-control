@@ -2922,6 +2922,31 @@ def test_macos_bundle_scan_accepts_a_matching_raw_digest_sealed_file(tmp_path: P
     assert "seal_entries=1 seal_problems=0" in result.stdout
 
 
+@pytest.mark.parametrize("tampered", [False, True])
+def test_macos_bundle_scan_checks_a_legacy_sha1_raw_digest_with_sha1(tmp_path: Path, tampered: bool) -> None:
+    """A raw <data> digest is the legacy 20-byte SHA-1 form; hashing it as
+    SHA-256 would report every such file as tampered."""
+    info = b"sealed contents\n"
+    on_disk = info + b"tampered\n" if tampered else info
+    app = _sealed_bundle(tmp_path, sealed_bytes=on_disk, stored_bytes=hashlib.sha1(info).digest())  # noqa: S324 - mirrors Apple's legacy seal digest
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert ("seal_hash_mismatch Info.plist" in result.stdout) is tampered, result.stdout
+    assert f"seal_entries=1 seal_problems={int(tampered)}" in result.stdout
+
+
+def test_macos_bundle_scan_reports_a_digest_it_cannot_check(tmp_path: Path) -> None:
+    app = _sealed_bundle(tmp_path, sealed_bytes=b"sealed contents\n", stored_bytes=b"\x00" * 7)
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert "seal_unrecognised_digest Info.plist" in result.stdout, result.stdout
+    assert "seal_entries=1 seal_problems=1" in result.stdout
+
+
 def _run_bounded_harness(helper: str) -> str:
     start = helper.index("run_bounded() {")
     function = helper[start : helper.index("\n}\n", start) + 3]
