@@ -770,3 +770,14 @@ constraint-dependencies = [
     "virtualenv>=21.14.13",
     "pyasn1>=0.6.5",
 ]
+# GHSA-53pm-wgxf-c6qf: wcmatch < 11.2 has a polynomial-time ReDoS when matching
+# untrusted names against multi-star patterns, fixed in 11.2. wcmatch is
+# transitive (semgrep -> wcmatch) and every semgrep release pins `wcmatch~=8.3`,
+# so a constraint cannot fix it (a constraint must stay compatible with every
+# declared requirement and would be unsatisfiable). It is forced with an
+# override instead, so a relock cannot silently drop the fix and pip-audit (run
+# in CI Lint (Backend)) passes. semgrep is a dev-only lint dependency, never a
+# runtime dep, so the wcmatch major-version jump cannot affect the shipped app.
+override-dependencies = [
+    "wcmatch>=11.2",
+]
