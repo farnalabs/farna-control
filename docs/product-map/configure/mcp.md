@@ -214,7 +214,7 @@ applications. Built on the auth + model-backend core.
       payload stamps
 - [x] MCP library browse (2026-09-25): the `search_library` tool is the
       read-only library-browse surface (browse + text search + cursor
-      pagination over org / Native / community primitives). It stays on the
+      pagination over org / Native primitives). It stays on the
       read-only allowlist (pinned at the `resource.read_only` viewer floor) in
       the centralized scope
       gate (`core/mcp/scope_validator.py`) and – following the

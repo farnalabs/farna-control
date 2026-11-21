@@ -55,10 +55,10 @@ gated behind the `library_collection` feature flag.
       `connector_checklist` entry is `configured+bound` and the org has at least
       one active model backend, `False` otherwise
       (`core/library_service/runnability.py`)
-- [x] Community-sourced or registry-sourced collections restrict agent
+- [x] Registry-sourced collections restrict agent
       tool/connector access until an operator explicitly grants access via
       `grant_collection_agents` (sets `agents_granted=True`, idempotent);
-      non-community (`source=local`) collections skip the gate and agents are
+      non-registry (`source=local`) collections skip the gate and agents are
       immediately usable (`core/library_service/grant.py`)
 - [x] Each unique `connector_type_id` referenced by any agent in the collection
       gets a `connector_checklist` entry with `status=pending`; the runnability
@@ -69,7 +69,7 @@ gated behind the `library_collection` feature flag.
       record + runnability verdict, a non-published collection is 400, an
       unresolvable pin is 422, a repeat install is 400; uninstall returns the
       deleted/detached split (modified entities detached, unmodified deleted,
-      unknown install 404); grant flips `agents_granted` for community-sourced
+      unknown install 404); grant flips `agents_granted` for registry-sourced
       installs (200, idempotent when already granted), 400 for local installs,
       404 for unknown installs (`library_collections.feature`,
       `steps/test_library_collections.py`)
@@ -159,7 +159,7 @@ gated behind the `library_collection` feature flag.
   wired from `steps/test_library_collections.py`, driving the real
   `/api/v1/libraries/collections` install/uninstall/grant routes (patched
   library_service functions) - the install 201/400/422 error contract,
-  uninstall delete-vs-detach semantics + 404, and the community-sourced grant
+  uninstall delete-vs-detach semantics + 404, and the registry-sourced grant
   gate (200/idempotent, 400 local, 404 unknown) with `agents_granted`.
   `_ORPHANED_BDD_FEATURES` stays empty.
 

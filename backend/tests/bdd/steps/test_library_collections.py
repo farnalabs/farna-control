@@ -6,8 +6,8 @@ functions patched: installing a published collection (201 with an
 ``installed`` install record and a runnability verdict), the error mappings
 for a non-published collection (400), an unresolvable pin (422) and a repeat
 install (400); uninstall deletion-vs-detach semantics (modified entities are
-detached, unmodified ones deleted); and the community-sourced grant gate
-(200 when community-sourced / already granted, 400 for local installs, 404
+detached, unmodified ones deleted); and the registry-sourced grant gate
+(200 when registry-sourced / already granted, 400 for local installs, 404
 for an unknown install) with ``agents_granted`` reflected in the response.
 
 Closes the ``feat-library-collections`` BDD gap recorded in
@@ -32,7 +32,7 @@ from farna.core.library_service.grant import (
     InstallNotFoundError as GrantInstallNotFoundError,
 )
 from farna.core.library_service.grant import (
-    NotCommunitySourcedError,
+    NotRegistrySourcedError,
 )
 from farna.core.library_service.install import (
     CollectionInstallError,
@@ -52,12 +52,12 @@ def ctx() -> dict[str, Any]:
     return {"response": None}
 
 
-def _mk_install(*, community_sourced: bool = False, agents_granted: bool = False) -> MagicMock:
+def _mk_install(*, registry_sourced: bool = False, agents_granted: bool = False) -> MagicMock:
     """Build the service-returned ``CollectionInstall``-shaped object.
 
     The install/uninstall/grant routes read ``install_id`` / ``collection_id`` /
     ``collection_version`` / ``organisation_id`` / ``status`` /
-    ``community_sourced`` / ``agents_granted`` / ``resolved_manifest`` /
+    ``registry_sourced`` / ``agents_granted`` / ``resolved_manifest`` /
     ``connector_checklist`` / ``created_at`` off the object before shaping the
     pydantic response. (FAR-1754: the entity list is NOT read off this object —
     the response derives ``installed_entities`` from the
@@ -69,7 +69,7 @@ def _mk_install(*, community_sourced: bool = False, agents_granted: bool = False
     inst.collection_version = "1.0"
     inst.organisation_id = ORG_ID
     inst.status = "installed"
-    inst.community_sourced = community_sourced
+    inst.registry_sourced = registry_sourced
     inst.agents_granted = agents_granted
     inst.resolved_manifest = {
         "schemas": {"input-schema": str(uuid.uuid4())},
@@ -225,20 +225,20 @@ def _one_schema_modified(ctx: dict[str, Any]) -> None:
     )
 
 
-@given("the collection is installed from the community")
-def _collection_installed_community(ctx: dict[str, Any]) -> None:
-    ctx["install"] = _mk_install(community_sourced=True, agents_granted=True)
+@given("the collection is installed from the registry")
+def _collection_installed_registry(ctx: dict[str, Any]) -> None:
+    ctx["install"] = _mk_install(registry_sourced=True, agents_granted=True)
     ctx["install_id"] = ctx["install"].install_id
 
 
 @given("the collection is installed from a local source")
 def _collection_installed_local(ctx: dict[str, Any]) -> None:
-    ctx["grant_error"] = NotCommunitySourcedError("Install is not community-sourced; grant is only available for community-sourced collection installs")
+    ctx["grant_error"] = NotRegistrySourcedError("Install is not registry-sourced; grant is only available for registry-sourced collection installs")
 
 
 @given("the install already has agent access granted")
 def _install_already_granted(ctx: dict[str, Any]) -> None:
-    ctx["install"] = _mk_install(community_sourced=True, agents_granted=True)
+    ctx["install"] = _mk_install(registry_sourced=True, agents_granted=True)
     ctx["install_id"] = ctx["install"].install_id
 
 

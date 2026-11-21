@@ -590,7 +590,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > runnability verdict, a non-published collection → 400, an unresolvable pin →
 > 422, a repeat install → 400; uninstall's delete-vs-detach semantics (unmodified
 > entities deleted, a modified schema detached) + unknown-install 404; and the
-> community-sourced grant gate (200 with `agents_granted` for community installs,
+> registry-sourced grant gate (200 with `agents_granted` for registry installs,
 > idempotent re-grant 200, 400 for local installs, 404 for unknown installs).
 > 11 scenarios execute in CI. `_ORPHANED_BDD_FEATURES` stays empty.
 
@@ -751,7 +751,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `workflows/import.feature` `@awaiting-implementation` gap
 > (`library/library.md`). The five drafted scenarios previously targeted a wire
 > shape the workflow-import path does not ship (an Ed25519 signature check on
-> `/import/confirm` – signatures are verified on the community-registry install
+> `/import/confirm` – signatures are verified on the registry install
 > path – and a connector-instance selection list) and were pinned since 2026-08;
 > they are rewritten to the real two-phase import contract and now drive the
 > REAL `POST /api/v1/libraries/import/analyse` + `/api/v1/libraries/import/confirm`
@@ -797,7 +797,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > org, invite member, revoke API key, viewer denial) referenced eleven
 > `data-testid`s that exist NOWHERE in the frontend (verified 0/11 across
 > `frontend/src`; `/admin/org` ships a different surface – org profile, data
-> export, product-analytics + community-objects toggles, delete confirmation),
+> export, product-analytics toggle, delete confirmation),
 > so they described a page that never shipped and could never execute. The stale
 > drafts were archived (file deleted, `scenarios()` registration + Playwright
 > steps removed from `steps/test_ui.py`, pin removed from

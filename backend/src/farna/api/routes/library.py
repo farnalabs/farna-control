@@ -29,7 +29,7 @@ from farna.core.audit_coverage import audited
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
 from farna.core.library_service import (
-    CommunityPrimitiveReadOnlyError,
+    BuiltinPrimitiveReadOnlyError,
     _bump_version,
     copy_to_adapt,
     get_primitive,
@@ -369,7 +369,7 @@ class LibraryPrimitiveResponse(BaseModel):
         ``library.search`` could read a contributor's plaintext credentials
         back out of the library. Every read surface that serialises a
         ``LibraryPrimitiveResponse`` (list, get, create, patch, delete, restore,
-        adapt, community contribute/list/publish, community entry install)
+        adapt, contribute/list/publish)
         passes through this validator, so the shipped
         :func:`modulo.api.middleware.sensitive_mask.mask_pipeline_graph_node`
         per-node masker covers them all at one chokepoint. Non-composite
@@ -1204,10 +1204,10 @@ async def copy_to_adapt_endpoint(
             org_role=principal.org_role,
             via_mcp=False,
         )
-    except CommunityPrimitiveReadOnlyError:
+    except BuiltinPrimitiveReadOnlyError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Community primitives may only be adapted via the browser UI, not via MCP.",
+            detail="Built-in primitives may only be adapted via the browser UI, not via MCP.",
         ) from None
     except LookupError:
         raise HTTPException(
@@ -2498,7 +2498,7 @@ class CollectionInstallResponse(BaseModel):
     collection_version: str | None
     organisation_id: uuid.UUID
     status: str
-    community_sourced: bool = False
+    registry_sourced: bool = False
     agents_granted: bool = False
     resolved_manifest: dict[str, Any] | None = None
     connector_checklist: list[dict[str, Any]] | None = None
@@ -2681,7 +2681,7 @@ def _install_response(
         collection_version=install.collection_version,
         organisation_id=install.organisation_id,
         status=install.status,
-        community_sourced=install.community_sourced,
+        registry_sourced=install.registry_sourced,
         agents_granted=install.agents_granted,
         resolved_manifest=install.resolved_manifest,
         connector_checklist=install.connector_checklist,
@@ -2939,7 +2939,7 @@ async def list_collection_installs_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# Community execution gate — grant access (FAR-764 / ADR 032 D2)
+# Registry execution gate — grant access (FAR-764 / ADR 032 D2)
 # ---------------------------------------------------------------------------
 
 
@@ -2955,10 +2955,10 @@ async def grant_collection_agents_endpoint(
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission(_CODE_LIBRARY_MANAGE),
 ) -> CollectionInstallResponse:
-    """Grant tool/connector access for community-sourced collection agents.
+    """Grant tool/connector access for registry-sourced collection agents.
 
     Flips ``agents_granted`` on the install record.  Only applies to
-    community-sourced installs; raises 400 for non-community installs.
+    registry-sourced installs; raises 400 for non-registry installs.
     Idempotent: granting an already-granted install returns the record as-is.
     """
     org_id = _require_organisation_id(principal)

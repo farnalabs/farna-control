@@ -149,10 +149,10 @@
               </div>
               <div class="flex items-center gap-2">
                 <span
-                  v-if="install.community_sourced"
+                  v-if="install.registry_sourced"
                   class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
                 >
-                  {{ $t('views.CollectionDetail.community_sourced') }}
+                  {{ $t('views.CollectionDetail.registry_sourced') }}
                 </span>
                 <span
                   v-if="install.agents_granted"
@@ -161,7 +161,7 @@
                   {{ $t('views.CollectionDetail.agents_granted') }}
                 </span>
                 <Button
-                  v-if="install.community_sourced && !install.agents_granted"
+                  v-if="install.registry_sourced && !install.agents_granted"
                   size="small"
                   :disabled="granting === install.install_id"
                   data-testid="collection-grant-agents"
@@ -289,7 +289,7 @@ interface CollectionInstall {
   collection_version: string | null
   organisation_id: string
   status: string
-  community_sourced: boolean
+  registry_sourced: boolean
   agents_granted: boolean
   resolved_manifest: ResolvedManifest | null
   connector_checklist: ConnectorChecklistEntry[] | null
@@ -395,7 +395,7 @@ async function install() {
       (data as unknown as CollectionInstall).resolved_manifest,
     )
     // Refetch so the installs section renders the new install record —
-    // provenance, connector checklist, runnability, and for community-sourced
+    // provenance, connector checklist, runnability, and for registry-sourced
     // collections the default-deny state with its Grant Access control.
     //
     // Guarded separately from the install above: this is a follow-up READ, not

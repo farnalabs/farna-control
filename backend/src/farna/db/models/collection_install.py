@@ -89,7 +89,7 @@ class CollectionInstall(SoftDeleteMixin, Base):
     organisation_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    community_sourced: Mapped[bool] = mapped_column(
+    registry_sourced: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         server_default=text("false"),

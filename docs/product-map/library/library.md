@@ -39,17 +39,17 @@ status: covered
 
 The library (`/library`, `/library/:id/create-pipeline`) is the reusable-primitive and
 pipeline-template surface. Primitives (agents, schemas, workflows, connectors) are listed,
-type-filtered, searched and detail-viewed; community primitives are copied into the org and
-adapted (forked) with an owner team; community sync/install, contribution, ratings and
+type-filtered, searched and detail-viewed; built-in primitives are copied into the org and
+adapted (forked) with an owner team; org-internal contribution and ratings apply, and
 each primitive carries an integration tier (native / preview / in_dev) per ADR 010.
 Library collections (FAR-760) are authored at `/library/collections/new` and viewed at
 `/library/collections/:id`, gated behind the `library_collection` feature flag.
 
 ## Behaviors
 
-- [x] Primitives list with `primitive_type`, `source` (local/community), and `search`
+- [x] Primitives list with `primitive_type`, `source` (local/registry/modulo), and `search`
       filters, plus single-primitive detail (`browse.feature`)
-- [x] Copy-to-adapt: POST `/api/v1/libraries/{id}/adapt` copies a community primitive
+- [x] Copy-to-adapt: POST `/api/v1/libraries/{id}/adapt` copies a built-in primitive
       locally with `forked_from` set, supports an optional `owner_team_id`, returns 404 for
       a missing primitive, and MCP copy requires the runner role (403 for viewers)
       (`copy_to_adapt.feature`)
@@ -114,7 +114,7 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 
 - **Workflow import verifies no Ed25519 signature** – `/api/v1/libraries/import/confirm`
   accepts any structural `bundle_json`; bundle signatures are verified on the
-  community-registry install path, not the workflow-import path (the drafted
+  registry install path, not the workflow-import path (the drafted
   `import.feature` signature scenario was re-anchored to the shipped 400
   "Invalid bundle JSON" tamper rejection instead).
 - **Schema-structure disambiguation is materialize-time only** – an imported schema
@@ -148,7 +148,7 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
   with no entities, connector disambiguation, schema abstract-name resolution,
   duplicate pipeline-name suffix). The drafts that asserted a wire shape the
   workflow-import path does not ship (an Ed25519 signature check on
-  `/import/confirm` – signatures are verified on the community-registry install
+  `/import/confirm` – signatures are verified on the registry install
   path – and a connector-instance selection list) were re-anchored to the
   shipped contract instead. The five scenarios were removed from
   `PINNED_AWAITING_IMPLEMENTATION`; `workflows/export.feature` is cited here too.
