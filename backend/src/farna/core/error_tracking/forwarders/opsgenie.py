@@ -51,7 +51,7 @@ class OpsGenieErrorForwarder(BaseForwarder):
                 "message": message[:512],
                 "alias": f"modulo:{org_id}:{error_group.fingerprint}" if error_group else f"modulo:{org_id}",
                 "description": self._build_description(org_id, error_group, error_event),
-                "source": "Modulo Error Forwarder",
+                "source": "Farna Control Error Forwarder",
                 "priority": priority,
                 "tags": [
                     f"org_id:{org_id}",

@@ -11513,7 +11513,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                         _input_schema_path = f"{_sandbox_schema_dir}/{node_id}/input.active.json"
                         _output_schema_path = f"{_sandbox_schema_dir}/{node_id}/output.active.json"
                         _schema_injection = (
-                            f"\n\n---\nSchema contract files (advisory — Modulo validates independently):\n  Input schema:  {_input_schema_path}\n  Output schema: {_output_schema_path}\n"
+                            f"\n\n---\nSchema contract files (advisory — Farna Control validates independently):\n  Input schema:  {_input_schema_path}\n  Output schema: {_output_schema_path}\n"
                             f"  Schema dir:    {_sandbox_schema_dir}/{node_id}/\n  Environment:   FARNA_CONTROL_SCHEMA_DIR={_sandbox_schema_dir}\n---"
                         )
                         rendered_prompt = rendered_prompt + _schema_injection

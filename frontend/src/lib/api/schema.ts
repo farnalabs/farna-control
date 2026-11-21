@@ -6737,7 +6737,7 @@ export interface paths {
          *     the release SBOM and the build identity. It does not list every artefact the
          *     pack maps: a row resting on ``customer_records`` (policies, risk assessments,
          *     internal-audit reports, incident and restore-test records) is the customer's
-         *     own evidence, produced outside Modulo, and the index produces no entry for
+         *     own evidence, produced outside Farna Control, and the index produces no entry for
          *     that type - so those rows are not returned here in any form. The shipped
          *     mapping documentation (``docs/security/compliance-control-mapping.md``)
          *     lists them for the customer instead.
@@ -16288,7 +16288,7 @@ export interface components {
         IdentityResponse: {
             /**
              * Instance Id
-             * @description UUID of this Modulo instance
+             * @description UUID of this Farna Control instance
              */
             instance_id: string;
             /**
@@ -16557,10 +16557,10 @@ export interface components {
          *     malformed entry (non-dict, missing kind/ref, bad status) is REJECTED and
          *     counted per-ref by ``validate_and_normalise_reported_refs`` instead of
          *     failing the whole request with a 422 — fail-open per ref.
-         *     ``pipeline_id`` is the optional Modulo pipeline that completed the stage;
+         *     ``pipeline_id`` is the optional Farna Control pipeline that completed the stage;
          *     when it is a stage of this map, the matched journey advances into it.
          *     ``stage_id`` is the map stage id the workflow completed; used when the
-         *     stage is external (a GitHub Actions workflow, not a Modulo pipeline) and
+         *     stage is external (a GitHub Actions workflow, not a Farna Control pipeline) and
          *     has no ``pipeline_id`` — the stage is resolved against this map's current
          *     ``lifecycle_map_stages`` projection so the journey advances into it
          *     (e.g. the merge queue reports ``stage_id: "merge"``, the deploy agent
@@ -21937,7 +21937,7 @@ export interface components {
         SeamCoverageProvenance: "observed" | "derived" | "reported" | "attested";
         /**
          * SeamCoverageState
-         * @description Whether a Modulo-owned control covered the seam for this run.
+         * @description Whether a Farna Control-owned control covered the seam for this run.
          * @enum {string}
          */
         SeamCoverageState: "enforced" | "degraded" | "not_applicable";

@@ -238,7 +238,7 @@ def render_unit(executable: Path) -> str:
     """
     lines = [
         "[Unit]",
-        "Description=Modulo single-install launcher (bundled Postgres/Redis + API)",
+        "Description=Farna Control single-install launcher (bundled Postgres/Redis + API)",
         "After=network-online.target",
         "Wants=network-online.target",
         "# Co-designed with the launcher's own crash cap (farna.launcher.policy): the",

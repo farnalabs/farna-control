@@ -137,7 +137,7 @@ def _json(payload: dict[str, object]) -> Response:
 
 @router.get(AUTHORIZATION_SERVER_METADATA_PATH, include_in_schema=False)
 def authorization_server_metadata(request: Request, settings: Settings = Depends(get_settings)) -> Response:
-    """RFC 8414 authorization-server metadata for this Modulo instance.
+    """RFC 8414 authorization-server metadata for this Farna Control instance.
 
     Unauthenticated by design (see the module docstring). No
     ``registration_endpoint``: there is no RFC 7591 dynamic client
