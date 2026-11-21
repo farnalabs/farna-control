@@ -2152,10 +2152,10 @@ class PipelineExecutor:
         # Agent connector_type_refs grants) and reused by the compensation hub
         # so both run paths apply the same deny-by-default fetch gate.
         self._run_connector_scope: list[str] | None = None
-        # Agent IDs whose collection_install is community-sourced and
+        # Agent IDs whose collection_install is registry-sourced and
         # not-yet-granted.  These agents run under default-deny tool/connector
         # scope (no connectors, read-only tools) until the operator grants them.
-        self._community_gated_agents: set[str] = set()
+        self._registry_gated_agents: set[str] = set()
         # Cancellation-intent signals wired by run_executor_with_watchdog so the
         # NodeCancelledError retry handler can tell a watchdog stall / supersession
         # from a genuine transient node cancellation and skip the pending-reset.
@@ -3768,7 +3768,7 @@ class PipelineExecutor:
     ) -> tuple[dict[str, set[str]], set[str]]:
         """Load connector grants and apply the FAR-764 execution gate.
 
-        Agents from a ``community_sourced`` collection install (registry-sourced
+        Agents from a ``registry_sourced`` collection install (registry-sourced
         installs still set it) that the operator has not yet granted are
         returned in the gated set and lose their connector grants
         (default-deny until ``grant_collection_agents`` flips the install).
@@ -3788,7 +3788,7 @@ class PipelineExecutor:
         install_rows = []
         if install_ids:
             install_rows = (await session.execute(select(CollectionInstall).where(CollectionInstall.install_id.in_(install_ids)))).scalars().all()
-        gated_installs = {str(ci.install_id) for ci in install_rows if ci.community_sourced and not ci.agents_granted}
+        gated_installs = {str(ci.install_id) for ci in install_rows if ci.registry_sourced and not ci.agents_granted}
         for agent in agent_rows:
             agent_key = str(agent.id)
             grants[agent_key] = agent_granted_connector_types(agent.connector_type_refs)
@@ -3816,9 +3816,9 @@ class PipelineExecutor:
         referenced agents are returned.
 
         Also enforces the execution gate (FAR-764 / ADR 032 D2): agents whose
-        ``collection_install_id`` references a community-sourced,
+        ``collection_install_id`` references a registry-sourced,
         not-yet-granted install get NO connector scope (default-deny) and are
-        recorded in ``_community_gated_agents`` for the node-level gate.
+        recorded in ``_registry_gated_agents`` for the node-level gate.
         """
         if graph_json is None:
             return self._run_connector_scope
@@ -3826,12 +3826,12 @@ class PipelineExecutor:
         from farna.core.capability_scope import compute_run_fetch_scope
 
         agent_ids = _connector_scope_agent_ids(graph_json)
-        grants, community_gated = await self._load_connector_scope_grants(
+        grants, registry_gated = await self._load_connector_scope_grants(
             session,
             org_id,
             agent_ids,
         )
-        self._community_gated_agents = community_gated
+        self._registry_gated_agents = registry_gated
         allowed_connectors = compute_run_fetch_scope(graph_json, grants)
         self._run_connector_scope = allowed_connectors
         return allowed_connectors
@@ -6719,9 +6719,9 @@ class PipelineExecutor:
                 # ceiling) on the FIRST execution; the value persists in the run
                 # checkpoint so a resume does not re-pin a promoted level.
                 "_claim_lease": self._claim_token,
-                # FAR-764: community-gated agent IDs seeded into state so
+                # FAR-764: registry-gated agent IDs seeded into state so
                 # node functions can enforce default-deny without DB access.
-                "_community_gated_agents": self._community_gated_agents,
+                "_registry_gated_agents": self._registry_gated_agents,
             }
         )
         runtime_config: dict[str, Any] = {"configurable": {"thread_id": scope.thread_id}}

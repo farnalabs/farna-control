@@ -103,18 +103,6 @@ class LibraryPrimitive(SoftDeleteMixin, OrgScoped):
         # called once per manifest pin on collection install/upgrade. The partial
         # unique above cannot serve it (wrong leading column).
         Index("ix_library_primitives_type_slug", "primitive_type", "slug"),
-        # visibility + contribution_status index. It was built for the cross-org
-        # community catalogue listing, which was removed with the community
-        # library; no current query depends on it. Retained so the model keeps
-        # matching the baseline schema (0350) - dropping it needs a migration.
-        # Org-scoped reads of this table use ``ix_library_primitives_organisation_id``.
-        Index(
-            "ix_library_primitives_visibility_contribution",
-            "visibility",
-            "contribution_status",
-            postgresql_where=_DELETED_AT_WHERE,
-            sqlite_where=_DELETED_AT_WHERE,
-        ),
     )
 
     source: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -494,7 +494,7 @@ export default {
       "install_warnings_action": "Review each warning below. If credentials were stripped from the exported bundle, re-provision them on this instance before running the collection.",
       "installs_title": "Installs",
       "install_status": "Status: {status}",
-      "community_sourced": "Community",
+      "registry_sourced": "Registry",
       "agents_granted": "Granted",
       "grant_agents": "Grant Access",
       "granting": "Granting...",

@@ -7,6 +7,7 @@ import pytest
 
 from farna.core.library_service import (
     _MODULO_PRIMITIVES,
+    BuiltinPrimitiveReadOnlyError,
     copy_to_adapt,
     get_primitive,
     list_primitives,
@@ -141,6 +142,28 @@ async def test_copy_to_adapt_composite_succeeds():
         result = await copy_to_adapt(session, org_id, source.id)
 
     assert result is copied
+
+
+async def test_copy_to_adapt_via_mcp_rejects_builtin_source():
+    """Adapting a built-in (``visibility="community"``) via MCP is browser-UI only.
+
+    Built-in registry primitives are stored with the legacy ``community``
+    visibility value; ``via_mcp=True`` must short-circuit before any copy so
+    an MCP client cannot clone one into the org workspace.
+    """
+    session = _mock_session()
+    org_id = uuid.uuid4()
+    source = _fake_primitive(visibility="community")
+
+    with (
+        patch(
+            "farna.core.library_service.get_primitive",
+            new_callable=AsyncMock,
+            return_value=source,
+        ),
+        pytest.raises(BuiltinPrimitiveReadOnlyError),
+    ):
+        await copy_to_adapt(session, org_id, source.id, via_mcp=True)
 
 
 async def test_copy_to_adapt_composite_preserves_content_json():

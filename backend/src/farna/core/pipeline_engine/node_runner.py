@@ -4766,21 +4766,21 @@ def _finalize_node_result(
     return result
 
 
-def _community_gated_stub(
+def _registry_gated_stub(
     state: dict[str, Any],
     *,
     node_id: str,
     agent_id: uuid.UUID | None,
 ) -> dict[str, Any] | None:
-    """FAR-764 community-execution gate (ADR 032 D2): the block stub.
+    """FAR-764 registry-execution gate (ADR 032 D2): the block stub.
 
-    Community-sourced agents that have not been granted by the operator are
+    registry-sourced agents that have not been granted by the operator are
     restricted to read-only / no-tool scope. The gated agent set is seeded
     into state by the executor at run start. A gated node returns a stub
     artifact instead of invoking the model - the agent cannot execute until
     the operator grants access. Returns ``None`` when no gate applies.
     """
-    gated = state.get("_community_gated_agents") or set()
+    gated = state.get("_registry_gated_agents") or set()
     # Compare the canonicalised UUID form, not the raw snapshot string - a
     # non-canonical rendering (uppercase / brace / no-dash) of the same agent
     # id would otherwise slip past the gate and fail it open.
@@ -4790,7 +4790,7 @@ def _community_gated_stub(
                 {
                     "node_id": node_id,
                     "status": "blocked",
-                    "reason": "community_sourced_not_granted",
+                    "reason": "registry_sourced_not_granted",
                 }
             ]
         }
@@ -4821,13 +4821,13 @@ async def _dispatch_node(
 ) -> tuple[dict[str, Any] | None, str, str, Any]:
     """Node-start gates and stub dispatch (FAR-215 / FAR-764 / FAR-1115).
 
-    Runs the mid-run conformance gate, the community-execution gate and the
+    Runs the mid-run conformance gate, the registry-execution gate and the
     missing-model-backend branch, resolving the FAR-332/342 run overrides on
     the way.  Returns ``(stub, model_backend_id_str, prompt_template,
     raw_input)``:
 
     - *stub* is not ``None`` -> return it from the node without invoking the
-      model (community-gate block, or the connector/manual stub for a node
+      model (registry-gate block, or the connector/manual stub for a node
       with no backend); the other elements are placeholders.
     - *stub* is ``None`` -> the agent path proceeds with the resolved backend
       id, prompt template, and the PRE-truncation ``raw_input`` (the same
@@ -4843,8 +4843,8 @@ async def _dispatch_node(
     # raises a LangGraph interrupt, so control never reaches the node body.
     await _run_conformance_gate(state, node_id=node_id, agent_id=agent_id)
 
-    # FAR-764: community execution gate (ADR 032 D2) - one-line stub branch.
-    gated_stub = _community_gated_stub(state, node_id=node_id, agent_id=agent_id)
+    # FAR-764: registry execution gate (ADR 032 D2) - one-line stub branch.
+    gated_stub = _registry_gated_stub(state, node_id=node_id, agent_id=agent_id)
     if gated_stub is not None:
         return gated_stub, "", "", ""
 
@@ -13863,10 +13863,10 @@ def make_sandbox_agent_fn(
         role="sandbox_agent",
     )
     async def _sandbox_agent(state: dict[str, Any]) -> dict[str, Any]:
-        # FAR-764: community execution gate — community-sourced sandbox agents
+        # FAR-764: registry execution gate — registry-sourced sandbox agents
         # that have not been granted are blocked from executing.
         agent_id_raw = node_def.get("agent_id")
-        gated = state.get("_community_gated_agents") or set()
+        gated = state.get("_registry_gated_agents") or set()
         # Compare the canonicalised UUID form, not the raw snapshot string — a
         # non-canonical rendering (uppercase / brace / no-dash) of the same agent
         # id would otherwise slip past the gate and fail it open.
@@ -13877,7 +13877,7 @@ def make_sandbox_agent_fn(
                     {
                         "node_id": node_id,
                         "status": "blocked",
-                        "reason": "community_sourced_not_granted",
+                        "reason": "registry_sourced_not_granted",
                     }
                 ]
             }

@@ -390,7 +390,11 @@ jobs:
           for attempt in 1 2 3; do
             : > "$LOG"
             set +e
-            uv run --no-build --no-sync pip-audit 2>&1 | tee "$LOG"
+            # GHSA-53pm-wgxf-c6qf: dev-only ReDoS in wcmatch (pulled in by semgrep). It
+            # never ships to production (`uv sync --no-dev` in the Dockerfile) and semgrep
+            # pins `wcmatch~=8.3`, so the fixed 11.2 cannot be installed. Reviewed exception
+            # documented in docs/security/dependency-policy.md (Approved CVE Override List).
+            uv run --no-build --no-sync pip-audit --ignore-vuln GHSA-53pm-wgxf-c6qf 2>&1 | tee "$LOG"
             RC=${PIPESTATUS[0]}
             set -e
             if [ "$RC" -eq 0 ]; then

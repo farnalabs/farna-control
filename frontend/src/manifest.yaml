@@ -8287,7 +8287,7 @@ features:
             - "[x] Workflow bundle export writes a .modulo.zip / signed YAML bundle with org-private fields (owner_team_id, visibility, credentials/ciphertexts, env secrets) stripped, and workflow import runs a two-phase REST contract — /import/analyse resolves connector/schema(abstract_name)/model-backend references and detects pipeline-name conflicts with a disambiguation suffix, /import/confirm materialises the pipeline (200 imported); a tampered non-JSON bundle is rejected 400 without creating entities (backend/tests/bdd/features/workflows/import.feature, workflows/export.feature, steps/test_workflows.py)"
             - "[x] Composite library-primitive content is masked on every read surface (FAR-1380): the shared LibraryPrimitiveResponse._mask_composite_graph_credentials validator masks credential-bearing node fields inside a composite primitive's content_json for the library list/get/create/patch/delete/restore/adapt responses, the fixture contributions list, and the MCP modulo://library/{type}/{slug} resource masks composite nodes before rendering; non-composite primitives pass through byte-identical. The FAR-1374 sentinel rule applies on write: POST /api/v1/libraries, PATCH /api/v1/libraries/{id} resolve a submitted mask echo against the stored sub-graph (resolve_and_reject_mask_sentinels) and refuse an unmappable sentinel with 422 COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL, and a masked-read -> patch round-trip preserves the stored secret (backend/tests/unit/api/test_library_primitive_masking.py, api/routes/library.py, api/mcp_server.py; control statement docs/deployment-security.md 2.6)"
         deferrals:
-            - "Collections authoring is gated behind the default-off library_collection feature flag per org (FAR-760); collection install/uninstall + community trust gates are tracked under feat-library-collections"
+            - "Collections authoring is gated behind the default-off library_collection feature flag per org (FAR-760); collection install/uninstall + registry trust gates are tracked under feat-library-collections"
     feat-library-collections:
         description: Install, uninstall, and manage library collection installs
         status: covered
@@ -8301,9 +8301,9 @@ features:
             - "[x] Re-install of the same version is idempotent: missing entities are re-added via materialize_import without duplicating existing ones"
             # Runnability (FAR-762)
             - "[x] compute_runnable is a pure read-time check: returns True when all connector_checklist entries are configured+bound and the org has at least one active model backend; returns False otherwise"
-            # Community trust gate (FAR-764 / ADR 032 D2)
-            - "[x] Community-sourced or registry-sourced collections restrict agent tool/connector access until an operator explicitly grants access via grant_collection_agents (sets agents_granted=True, idempotent)"
-            - "[x] Non-community-sourced collections (source=local) are not subject to the grant gate and agents are immediately usable"
+            # Registry trust gate (FAR-764 / ADR 032 D2)
+            - "[x] Registry-sourced collections restrict agent tool/connector access until an operator explicitly grants access via grant_collection_agents (sets agents_granted=True, idempotent)"
+            - "[x] Non-registry-sourced collections (source=local) are not subject to the grant gate and agents are immediately usable"
             # Connector checklist
             - "[x] Each unique connector_type_id referenced by any agent in the collection gets a checklist entry with status=pending; the runnability check verifies all entries are configured+bound"
             # Version upgrade (FAR-759)

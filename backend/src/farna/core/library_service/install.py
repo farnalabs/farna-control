@@ -60,8 +60,7 @@ _PIN_TYPE_ORDER: tuple[str, ...] = ("schema", "agent", "workflow", "pipeline_tem
 # Sources whose primitives are visible to EVERY organisation via the
 # library_service resolver (ADR 032 §4): modulo built-ins come from the
 # in-code registry, which lives outside the installing org's RLS slice.
-# The retired ``community`` source is deliberately absent — migration 0356
-# soft-deletes its legacy rows, so a community primitive must never be
+# Only built-ins qualify: nothing sourced from outside the org may be
 # resolvable as a visible-everywhere primitive.
 _VISIBLE_EVERYWHERE_SOURCES = frozenset({"modulo"})
 
@@ -986,7 +985,7 @@ async def install_collection(
         collection_version=collection.version,
         organisation_id=org_id,
         status="installed",
-        community_sourced=collection.source in ("community", "registry"),
+        registry_sourced=collection.source == "registry",
         created_by=created_by,
     )
     session.add(install)
@@ -1026,11 +1025,11 @@ async def install_collection(
     # 8. Build connector checklist
     connector_checklist = _build_connector_checklist(resolved_pins)
 
-    # 9. Determine community provenance (ADR 032 D2).
-    # Community-sourced or registry-sourced collections restrict agent tool/
+    # 9. Determine registry provenance (ADR 032 D2).
+    # Registry-sourced collections restrict agent tool/
     # connector access until an operator explicitly grants access.
-    community_sourced = collection.source in ("community", "registry")
-    install.community_sourced = community_sourced
+    registry_sourced = collection.source == "registry"
+    install.registry_sourced = registry_sourced
 
     # 10. Populate the provenance record (row already created + flushed above).
     install.resolved_manifest = {

@@ -1,6 +1,6 @@
-"""Community execution gate grant service (FAR-764 / ADR 032 D2).
+"""Registry execution gate grant service (FAR-764 / ADR 032 D2).
 
-When a community-sourced collection is installed, its agents default to a
+When a registry-sourced collection is installed, its agents default to a
 read-only / fully-denied tool scope until an operator explicitly grants access.
 The grant is once-per-install: calling ``grant_collection_agents`` flips
 ``CollectionInstall.agents_granted`` to True for the given install.
@@ -35,8 +35,8 @@ class AlreadyGrantedError(GrantError):
     """Raised when the install has already been granted."""
 
 
-class NotCommunitySourcedError(GrantError):
-    """Raised when attempting to grant a non-community-sourced install."""
+class NotRegistrySourcedError(GrantError):
+    """Raised when attempting to grant a non-registry-sourced install."""
 
 
 async def grant_collection_agents(
@@ -44,10 +44,10 @@ async def grant_collection_agents(
     org_id: uuid.UUID,
     install_id: uuid.UUID,
 ) -> CollectionInstall:
-    """Grant access for community-sourced collection agents.
+    """Grant access for registry-sourced collection agents.
 
     Sets ``agents_granted=True`` on the install record.  Idempotent if already
-    granted.  Raises ``NotCommunitySourcedError`` for non-community installs,
+    granted.  Raises ``NotRegistrySourcedError`` for non-registry installs,
     ``InstallNotFoundError`` when the record is absent, org-mismatched, or
     already retired (soft-deleted by an uninstall).
     """
@@ -62,8 +62,8 @@ async def grant_collection_agents(
     if install.deleted_at is not None:
         raise InstallNotFoundError(f"Install {install_id} not found")
 
-    if not install.community_sourced:
-        raise NotCommunitySourcedError(f"Install {install_id} is not community-sourced; grant is only available for community-sourced collection installs")
+    if not install.registry_sourced:
+        raise NotRegistrySourcedError(f"Install {install_id} is not registry-sourced; grant is only available for registry-sourced collection installs")
 
     if install.agents_granted:
         return install
