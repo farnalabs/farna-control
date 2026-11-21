@@ -92,7 +92,11 @@
             <span class="min-w-0 truncate">{{ pipelineLabel(row.pipeline_id as string) }}</span>
           </template>
           <template #cell-node="{ row }">
-            <span v-if="row.node_id" class="font-mono text-xs text-muted-foreground">{{ shortId(row.node_id as string) }}</span>
+            <span
+              v-if="row.node_id"
+              :title="nodeCellTitle(row.pipeline_id as string, row.node_id as string)"
+              :class="nodeCellIsFallback(row.pipeline_id as string, row.node_id as string) ? 'font-mono text-xs text-muted-foreground' : ''"
+            >{{ nodeCellLabel(row.pipeline_id as string, row.node_id as string) }}</span>
             <span v-else class="text-muted-foreground">{{ $t('views.EvalsListView.node_all_outputs') }}</span>
           </template>
           <template #cell-eval_type="{ row }">
@@ -158,9 +162,11 @@ import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { usePlanStore } from '../stores/planStore'
 import { shortId } from '../utils/format'
+import { usePipelineNodeLabels } from '../composables/usePipelineNodeLabels'
 
 const { t } = useI18n()
 const router = useRouter()
+const { ensureNodeLabels, nodeLabel, nodeLabelsUnavailable } = usePipelineNodeLabels()
 const planStore = usePlanStore()
 void planStore.fetchPermissions()
 
@@ -282,6 +288,31 @@ function pipelineLabel(pipelineId: string): string {
   return match?.name ?? shortId(pipelineId)
 }
 
+// Node labels live in each pipeline's graph, joined here for the rows on this
+// page (label -> node_type -> short id). The join is bounded to ONE graph read
+// per distinct pipeline and never fails the page: a failed read keeps the short
+// id and puts the full id in the cell's title.
+function nodeCellLabel(pipelineId: string, nodeId: string): string {
+  return nodeLabel(pipelineId, nodeId) ?? shortId(nodeId)
+}
+
+function nodeCellIsFallback(pipelineId: string, nodeId: string): boolean {
+  return nodeLabel(pipelineId, nodeId) === null
+}
+
+function nodeCellTitle(pipelineId: string, nodeId: string): string | undefined {
+  return nodeLabelsUnavailable(pipelineId) ? nodeId : undefined
+}
+
+function refreshNodeLabels(): void {
+  // Only a row bound to a node needs its pipeline's graph; a page of
+  // all-outputs rows reads no graphs at all.
+  const pipelineIds = items.value
+    .filter(item => typeof item.node_id === 'string' && item.node_id !== '')
+    .map(item => item.pipeline_id)
+  void ensureNodeLabels(pipelineIds)
+}
+
 function evalTypeLabel(evalType: string): string {
   const option = EVAL_TYPES.find(o => o.value === evalType)
   return option ? t(option.labelKey) : evalType
@@ -330,6 +361,9 @@ async function loadEvals(): Promise<void> {
     if (apiError) throw apiError
     items.value = (data?.items ?? []) as EvalItem[]
     total.value = data?.total ?? 0
+    // Deliberately not awaited: the list is already usable, and a slow graph
+    // read must not hold the page in its loading state.
+    refreshNodeLabels()
   } catch (e) {
     items.value = []
     total.value = 0

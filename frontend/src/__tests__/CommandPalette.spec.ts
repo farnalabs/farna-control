@@ -138,9 +138,9 @@ describe('CommandPalette', () => {
     authState.isSystemAdmin = false
     await openPalette()
 
-    // /admin/system/config is a SYSTEM-group sidebar item (FAR-2619), and both
-    // the group and the route are system-admin gated, so the nav filter hides
-    // it (label comes from the manifest breadcrumb).
+    // FAR-2619 gave /admin/system/config a home in the SYSTEM-group sidebar
+    // (label comes from the manifest breadcrumb). Both the group and the route
+    // are system-admin gated, so the nav gate (not a curated extra) hides it.
     expect(resultLabels()).not.toContain('System Config')
   })
 
@@ -148,6 +148,8 @@ describe('CommandPalette', () => {
     authState.isSystemAdmin = true
     await openPalette()
 
+    // FAR-2619 moved the page into the SYSTEM sidebar group, so the palette
+    // surfaces it from the nav with the route's breadcrumb label.
     const labels = resultLabels()
     const system = resultButtons()[labels.indexOf('System Config')]
     expect(system).toBeDefined()

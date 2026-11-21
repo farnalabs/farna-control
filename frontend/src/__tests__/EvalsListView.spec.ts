@@ -84,6 +84,7 @@ function mockApi(options: {
   evals?: { items: unknown[]; total: number }
   evalsError?: unknown
   pipelines?: unknown[]
+  graphs?: Record<string, { nodes?: unknown[] } | 'error'>
   /**
    * The caller's permission list, served by `GET /api/v1/auth/permissions` —
    * the same caller-scoped registry read the plan store consumes. Defaults to
@@ -97,7 +98,7 @@ function mockApi(options: {
     'eval.definition.create',
     'eval.definition.update',
   ]
-  apiGet.mockImplementation(async (path: string) => {
+  apiGet.mockImplementation(async (path: string, request?: { params?: { path?: { pipeline_id?: string } } }) => {
     if (path === '/api/v1/auth/permissions') {
       return { data: { permissions }, error: undefined }
     }
@@ -109,6 +110,14 @@ function mockApi(options: {
         return { data: undefined, error: options.evalsError }
       }
       return { data: options.evals ?? { items: [], total: 0 }, error: undefined }
+    }
+    if (path === '/api/v1/pipelines/{pipeline_id}/graph') {
+      const pipelineId = request?.params?.path?.pipeline_id ?? ''
+      const graph = options.graphs?.[pipelineId]
+      if (graph === 'error') {
+        return { data: undefined, error: { detail: 'graph unavailable' } }
+      }
+      return { data: graph ?? { nodes: [] }, error: undefined }
     }
     return { data: { items: [], total: 0 }, error: undefined }
   })
@@ -133,6 +142,11 @@ async function flush() {
 function lastEvalsQuery(): Record<string, unknown> {
   const calls = apiGet.mock.calls.filter(call => call[0] === '/api/v1/evals')
   return (calls.at(-1)?.[1] as { params?: { query?: Record<string, unknown> } })?.params?.query ?? {}
+}
+
+/** The pipeline-graph reads the view issued for node labels. */
+function graphCalls() {
+  return apiGet.mock.calls.filter(call => call[0] === '/api/v1/pipelines/{pipeline_id}/graph')
 }
 
 function filterBar(wrapper: ReturnType<typeof mountView>) {
@@ -512,6 +526,78 @@ describe('EvalsListView', () => {
     // A pipeline without a selected eval opens the editor with the filter only.
     vm.openEditor('p2')
     expect(routerMocks.push).toHaveBeenCalledWith({ path: '/evals/editor', query: { pipeline_id: 'p2' } })
+    wrapper.unmount()
+  })
+
+  it('fetches each distinct pipeline graph once and renders node labels with fallbacks', async () => {
+    mockApi({
+      evals: {
+        items: [
+          evalItem({ id: 'eval-1', pipeline_id: 'p1', node_id: 'node-9' }),
+          evalItem({ id: 'eval-2', pipeline_id: 'p1', node_id: 'node-10' }),
+          evalItem({ id: 'eval-3', pipeline_id: 'p2', node_id: 'node-7' }),
+        ],
+        total: 3,
+      },
+      graphs: {
+        p1: {
+          nodes: [
+            { id: 'node-9', node_type: 'agent', label: 'Tone reviewer' },
+            // No label on this node: the node_type is the fallback.
+            { id: 'node-10', node_type: 'sandbox_agent' },
+          ],
+        },
+        p2: { nodes: [{ id: 'node-7', node_type: 'manual', label: 'Approval gate' }] },
+      },
+    })
+    const wrapper = mountView()
+    await flush()
+
+    // Two evals on p1 share ONE graph read; p2 gets its own — never per row.
+    const calls = graphCalls()
+    expect(calls).toHaveLength(2)
+    const requested = calls
+      .map(call => (call[1] as { params: { path: { pipeline_id: string } } }).params.path.pipeline_id)
+      .sort()
+    expect(requested).toEqual(['p1', 'p2'])
+
+    const rows = wrapper.findAll('[data-testid="evals-list-row"]')
+    expect(rows[0].text()).toContain('Tone reviewer')
+    expect(rows[1].text()).toContain('sandbox_agent')
+    expect(rows[2].text()).toContain('Approval gate')
+    // A resolved label is not a short id, so it carries no title fallback.
+    expect(rows[0].find('span[title]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('degrades to the short node id with a title when the graph read fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockApi({
+      evals: { items: [evalItem({ id: 'eval-1', pipeline_id: 'p1', node_id: 'node-9' })], total: 1 },
+      graphs: { p1: 'error' },
+    })
+    const wrapper = mountView()
+    await flush()
+
+    // The list itself is unaffected: the row renders on its short id.
+    expect(wrapper.findComponent(ErrorAlert).exists()).toBe(false)
+    const row = wrapper.find('[data-testid="evals-list-row"]')
+    expect(row.text()).toContain('#node-9')
+    expect(row.find('span[title]').attributes('title')).toBe('node-9')
+    expect(warn).toHaveBeenCalled()
+    wrapper.unmount()
+    warn.mockRestore()
+  })
+
+  it('leaves the all-outputs row unchanged and reads no graph for it', async () => {
+    mockApi({
+      evals: { items: [evalItem({ id: 'eval-1', pipeline_id: 'p1', node_id: null })], total: 1 },
+    })
+    const wrapper = mountView()
+    await flush()
+
+    expect(wrapper.find('[data-testid="evals-list-row"]').text()).toContain('All outputs')
+    expect(graphCalls()).toHaveLength(0)
     wrapper.unmount()
   })
 })
