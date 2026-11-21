@@ -13,6 +13,23 @@
 # below (taken from the release's own actionlint_<version>_checksums.txt),
 # exactly like the repo's verified-install convention for flyctl - no
 # third-party marketplace action sits between the runner and the linter.
+#
+# What this gate proves, and why it is two steps (FAR-2606)
+# --------------------------------------------------------
+# The gate proves two things: actionlint's structural findings, and shellcheck's
+# SC* findings inside `run:` blocks. actionlint runs shellcheck itself, one
+# process per run block, and that per-block spawn was the entire cost: this job
+# crossed its 10-minute `timeout-minutes` on every run from 2026-11-20 onward,
+# on main and on every PR branch, so every PR carried a red check. actionlint
+# with `-shellcheck=` finishes in well under a second.
+#
+# So the two proofs are split. `actionlint -shellcheck=` keeps the structural
+# half; `scripts/run_check_workflow_shellcheck.py` runs the shellcheck half as
+# one invocation per shell dialect over every extracted run block, using the
+# same argv, dialect detection and disabled-rule list actionlint itself uses.
+# Neither step may be dropped: a `-shellcheck=` with no shellcheck step would
+# silently check nothing, and the shellcheck step fails loudly when it cannot
+# run. `backend/tests/unit/test_workflow_lint_gate.py` pins both steps.
 name: "Workflow lint (actionlint)"
 
 on:
@@ -85,12 +102,50 @@ jobs:
           # question, the version it ran under is right here in the log.
           shellcheck --version
 
-      - name: Run actionlint on .github/workflows/**
+      - name: Run actionlint structural checks on .github/workflows/**
         shell: bash
         run: |
           set -euo pipefail
           # Run from the repo root: actionlint discovers .github/workflows and
           # loads .github/actionlint.yaml (self-hosted runner labels) itself.
           # No -ignore list is passed, so actionlint's own exit code is the
-          # gate: any finding fails this job.
-          actionlint
+          # gate: any structural finding fails this job.
+          #
+          # -shellcheck= disables actionlint's own shellcheck pass, whose
+          # per-run-block process spawn is what timed this job out (FAR-2606).
+          # The shellcheck proof is the next step, not dropped: it runs over the
+          # same blocks with the same rules. Do not remove that step.
+          actionlint -shellcheck=
+
+      - name: Ensure PyYAML is importable (workflow parser dependency)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # scripts/run_check_workflow_shellcheck.py parses the workflow tree
+          # with PyYAML. The runner image usually carries it; install it only
+          # when it is missing, pinned, so the gate never depends on whatever
+          # version happens to be present.
+          if python3 -c 'import yaml' 2>/dev/null; then
+            python3 -c 'import yaml; print("PyYAML", yaml.__version__, "already present")'
+          else
+            # Ubuntu's system python is PEP 668 externally managed and the
+            # runner is ephemeral, so installing into it is the supported path.
+            # --only-binary :all: refuses any source distribution, so pip never
+            # runs a dependency's setup script; PyYAML 6.0.2 ships manylinux
+            # wheels for every runner architecture this job uses.
+            python3 -m pip install --quiet --disable-pip-version-check --break-system-packages --only-binary :all: 'PyYAML==6.0.2'
+            python3 -c 'import yaml; print("PyYAML", yaml.__version__, "installed")'
+          fi
+
+      - name: Run shellcheck over every workflow run block
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The shellcheck half of this gate (FAR-2606): one shellcheck
+          # invocation per dialect over every extracted `run:` block, instead
+          # of actionlint's one process per block. The helper reproduces
+          # actionlint's shell resolution, workflow-expression substitution and
+          # disabled rule list, refuses to pass when shellcheck is missing, and exits
+          # non-zero on any finding - so this step is the gate for SC* findings
+          # and must never be made non-fatal.
+          python3 scripts/run_check_workflow_shellcheck.py
