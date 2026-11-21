@@ -38,7 +38,7 @@ FAR-2547 completed the `dvh` sweep: every `100vh`/`h-screen`/`min-h-screen` view
 keeps its `vh` class as the fallback and adds the matching `dvh` companion. A new
 screen should reach for one of the shared utilities instead of a bare `vh` class:
 
-- `h-screen-dvh` — full viewport height (`h-screen` stays as the fallback).
-- `min-h-screen-dvh` — at least full viewport height (`min-h-screen` fallback).
-- `h-chrome-dvh` — viewport minus the `3.5rem` app-chrome bar (`h-[calc(100vh-3.5rem)]` fallback).
-- `max-h-viewport-dvh` — viewport minus a `1rem` gutter, for fixed popovers.
+- `h-screen-dvh` – full viewport height (`h-screen` stays as the fallback).
+- `min-h-screen-dvh` – at least full viewport height (`min-h-screen` fallback).
+- `h-chrome-dvh` – viewport minus the `3.5rem` app-chrome bar (`h-[calc(100vh-3.5rem)]` fallback).
+- `max-h-viewport-dvh` – viewport minus a `1rem` gutter, for fixed popovers.
