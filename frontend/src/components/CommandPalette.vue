@@ -87,18 +87,18 @@ const dialogRef = ref<HTMLDialogElement | null>(null)
 // Sections are the manifest's sidebar-group labels (FAR-2605: pipelines,
 // controls, runs, configuration, administration, system), so a result never
 // advertises a group the sidebar no longer has. The pinned Dashboard sits above
-// the groups and borrows the closest one. Each `path` MUST be a route the app
-// actually serves (FAR-2616): there is no /evals hub (the group entry page is
-// the eval editor), no /settings hub at all (so no Settings entry is curated)
-// and no /admin/system hub (the deployment-wide page is /admin/system/config).
-// Each section resolves through $t() against the same labelKey the sidebar
-// group uses, so the palette never drifts into hardcoded English.
+// the groups and borrows the closest one. Every curated `path` below is a real
+// route the app serves (FAR-2616): there is no /settings hub, so no Settings
+// entry is curated, and no /admin/system hub, so the System entry points at
+// the deployment-wide page /admin/system/config. Each section resolves through
+// $t() against the same labelKey the sidebar group uses, so the palette never
+// drifts into hardcoded English.
 const paletteExtras: SearchItem[] = [
   { label: 'Dashboard', path: '/', icon: 'LayoutDashboard', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Pipelines', path: '/pipelines', icon: 'GitFork', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Library', path: '/library', icon: 'BookOpen', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Runs', path: '/runs', icon: 'CirclePlay', section: t('components.SidebarNav.group_runs') },
-  { label: 'Evals', path: '/evals/editor', icon: 'CheckSquare', section: t('components.SidebarNav.group_controls') },
+  { label: 'Evals', path: '/evals', icon: 'CheckSquare', section: t('components.SidebarNav.group_controls') },
   { label: 'Schemas', path: '/schemas', icon: 'Database', section: t('components.SidebarNav.group_pipelines') },
   { label: 'Connectors', path: '/admin/connectors', icon: 'Plug', section: t('components.SidebarNav.group_configuration') },
   { label: 'Organization', path: '/admin/org', icon: 'Building', section: t('components.SidebarNav.group_administration') },

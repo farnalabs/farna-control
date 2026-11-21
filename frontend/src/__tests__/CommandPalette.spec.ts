@@ -28,9 +28,9 @@ vi.mock('../composables/useCurrentUser', () => ({
 
 /**
  * FAR-2616: the curated extras must point at routes the app actually serves.
- * Three entries (/evals, /settings, /admin/system) were not routes, so picking
- * them fell through to the router's catch-all redirect to "/". The manifest is
- * the declaration the router hydrates route gates from, so membership in its
+ * Two entries (/settings, /admin/system) were not routes, so picking them fell
+ * through to the router's catch-all redirect to "/". The manifest is the
+ * declaration the router hydrates route gates from, so membership in its
  * `routes` map is the proof a path is real.
  */
 const DECLARED_ROUTES = new Set(
