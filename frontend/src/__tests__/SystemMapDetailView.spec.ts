@@ -9,10 +9,11 @@ const mockGetAccessToken = vi.hoisted(() => vi.fn())
 const mockRoute = vi.hoisted(() => ({ params: { id: 'map-1' } as Record<string, string>, query: {} as Record<string, string> }))
 const mockIsOperator = vi.hoisted(() => ({ value: true }))
 const mockIsSystemAdmin = vi.hoisted(() => ({ value: false }))
+const mockSystemMapsFlag = vi.hoisted(() => ({ value: true }))
 const mockPlanStore = vi.hoisted(() => ({
   loaded: true,
   currentTier: 'community',
-  devMode: true,
+  featureEnabled: (name: string) => (name === 'system_maps' ? mockSystemMapsFlag.value : false),
   userPermissions: ['system_maps_access', 'system.config.manage'],
   fetchPlan: vi.fn(),
   fetchPermissions: vi.fn(),
@@ -63,7 +64,7 @@ describe('SystemMapDetailView load failures', () => {
     mockGetAccessToken.mockReturnValue('header.eyJzdWIiOiJvcGVyYXRvci0xIn0.signature')
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
-    mockPlanStore.devMode = true
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
   })
 
@@ -207,7 +208,7 @@ describe('SystemMapDetailView authoring actions', () => {
     mockGetAccessToken.mockReturnValue('header.eyJzdWIiOiJvcGVyYXRvci0xIn0.signature')
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
-    mockPlanStore.devMode = true
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
     mockGet.mockImplementation((path: string) => {
       if (path === '/api/v1/admin/feature-flags') return Promise.resolve({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
@@ -738,7 +739,7 @@ describe('SystemMapDetailView authoring actions', () => {
 
   it('renders the published detail read-only for a viewer', async () => {
     mockIsOperator.value = false
-    mockPlanStore.devMode = false
+    mockSystemMapsFlag.value = false
     mockPlanStore.userPermissions = ['system_maps.read']
     mockGet.mockImplementation(() =>
       Promise.resolve({ data: { id: 'map-1', name: 'Demo Delivery System', published_revision_id: 'rev-1' } }),
@@ -901,7 +902,7 @@ describe('SystemMapDetailView guards and non-Error failures', () => {
     mockGetAccessToken.mockReturnValue('header.eyJzdWIiOiJvcGVyYXRvci0xIn0.signature')
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
-    mockPlanStore.devMode = true
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
     mockGet.mockImplementation((path: string) => {
       if (path === '/api/v1/admin/feature-flags') return Promise.resolve({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
@@ -1031,7 +1032,7 @@ describe('SystemMapDetailView loading and graph state lifecycle (STATE-1 / STATE
     mockGetAccessToken.mockReturnValue('header.eyJzdWIiOiJvcGVyYXRvci0xIn0.signature')
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
-    mockPlanStore.devMode = true
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
   })
 

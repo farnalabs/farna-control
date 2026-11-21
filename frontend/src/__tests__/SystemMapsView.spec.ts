@@ -10,10 +10,11 @@ const mockPush = vi.hoisted(() => vi.fn())
 const mockGetAccessToken = vi.hoisted(() => vi.fn())
 const mockIsOperator = vi.hoisted(() => ({ value: true }))
 const mockIsSystemAdmin = vi.hoisted(() => ({ value: false }))
+const mockSystemMapsFlag = vi.hoisted(() => ({ value: true }))
 const mockPlanStore = vi.hoisted(() => ({
   loaded: true,
   currentTier: 'community',
-  devMode: true,
+  featureEnabled: (name: string) => (name === 'system_maps' ? mockSystemMapsFlag.value : false),
   userPermissions: ['system_maps_access', 'system.config.manage'],
   fetchPlan: vi.fn(),
   fetchPermissions: vi.fn(),
@@ -114,7 +115,7 @@ describe('SystemMapsView', () => {
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
     mockPlanStore.loaded = true
-    mockPlanStore.devMode = true
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
   })
 
@@ -503,7 +504,7 @@ describe('SystemMapsView fallback branches', () => {
     mockGetAccessToken.mockReturnValue('header.eyJzdWIiOiJvcGVyYXRvci0xIn0.signature')
     mockIsOperator.value = true
     mockPlanStore.loaded = true
-    mockPlanStore.devMode = true
+    mockSystemMapsFlag.value = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
   })
 
@@ -545,9 +546,26 @@ describe('SystemMapsView fallback branches', () => {
   })
 
 
+  it('renders authoring controls without developer mode when the flag is on', async () => {
+    // FAR-2595 regression: the store no longer reads planStore.devMode, so an
+    // operator with the flag, role and grant sees the Beta-preview controls on
+    // a non-dev-mode deployment.
+    mockIsOperator.value = true
+    mockSystemMapsFlag.value = true
+    mockPlanStore.userPermissions = ['system_maps_access']
+    mockGet.mockImplementation(() => Promise.resolve(listResponse([map()])))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="system-maps-create"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="system-maps-discover"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="system-maps-beta-preview"]').exists()).toBe(true)
+  })
+
   it('renders a viewer read-only list without authoring controls', async () => {
     mockIsOperator.value = false
-    mockPlanStore.devMode = false
+    mockSystemMapsFlag.value = false
     mockPlanStore.userPermissions = ['system_maps.read']
     mockGet.mockImplementation(() => Promise.resolve(listResponse([map()])))
 
@@ -564,7 +582,7 @@ describe('SystemMapsView fallback branches', () => {
 
   it('renders the unavailable state without a retry on a 402 feature_required', async () => {
     mockIsOperator.value = false
-    mockPlanStore.devMode = false
+    mockSystemMapsFlag.value = false
     mockPlanStore.userPermissions = ['system_maps.read']
     mockGet.mockResolvedValue({
       error: {

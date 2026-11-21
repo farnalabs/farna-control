@@ -1216,6 +1216,9 @@ elements:
         dynamic_testid: false
 
     /system-maps:
+      - testid: system-maps-beta-preview
+        type: element
+        dynamic_testid: false
       - testid: system-maps-create
         type: button
         dynamic_testid: false
@@ -1263,6 +1266,9 @@ elements:
         dynamic_testid: false
 
     /system-maps/:id:
+      - testid: system-map-detail-beta-preview
+        type: element
+        dynamic_testid: false
       - testid: system-map-detail-back
         type: link
         dynamic_testid: false
@@ -8708,13 +8714,14 @@ features:
             - "[x] DELETE /api/v1/admin/orgs/{org_id} deletes an organisation — 404 for a missing org, 403 for a regular admin (system_admin_orgs.feature)"
             - "[x] Org-level license management: GET/PUT/DELETE on /api/v1/admin/orgs/{org_id}/license resolves/stores/clears the org's settings_json.license_key via parse_and_verify, falls back to the system license, and is role-gated (GET org.license.view / PUT+DELETE org.license.manage) — BDD: system_admin_orgs.feature"
     feat-system-maps:
-        description: Bounded visual authoring of delivery system maps
+        description: Bounded visual authoring of delivery system maps (Beta preview, available in Alpha behind a default-OFF org flag)
         status: partial
         behaviours:
             - "[x] System Maps list page (/system-maps) with published viewer read access and operator-only create, edit, delete, and discover actions"
             - "[x] Map detail page (/system-maps/:id) with bounded visual graph editor for the backend node/relationship vocabularies, connected edges, endpoint selection, and drag/keyboard repositioning"
             - "[x] Version-aware revision read model ships (FAR-2288): GET /api/v1/system-maps/{map_id}/revisions/current, /revisions/by-time?at=<ISO8601> and /revisions/history resolve the revision active at a point in time (including superseded revisions after a re-publish), and /overview accepts revision_id or at to report metrics against that revision's window, all behind the same internal access gate and tenant/RLS isolation (backend/src/farna/api/routes/system_maps.py, test_system_maps_version_aware.py, test_system_map_repository.py)"
             - "[x] Revision history sidebar with current/historical revision switching (FAR-2288 follow-up): the sidebar reads GET /revisions/history on map load so every published, draft and archived revision appears, offers a View current action backed by GET /revisions/current and a datetime picker that resolves GET /revisions/by-time?at=<ISO8601> (the local datetime is converted to an absolute instant client-side), the matched revision's graph then loads through the shared per-revision read path and is highlighted as the active revision, the currently published revision is badged Current, and the 404 that GET /revisions/by-time raises for an unmatched timestamp is mapped onto a distinct \"No revision was active at that time\" error instead of silently leaving the previous revision on screen (frontend/src/components/system-maps/SystemMapRevisionSidebar.vue, frontend/src/views/SystemMapDetailView.vue, frontend/src/stores/systemMaps.ts; SystemMapComponents.coverage.spec.ts, SystemMapDetailView.spec.ts, systemMapsStoreCrud.spec.ts)"
+            - "[x] Discovery is bounded, not an unbounded tenant scan: every per-kind inventory query is ordered by id and capped at MAX_DISCOVERY_SOURCES + 1 rows, the merged source list is deterministically sorted then truncated to MAX_DISCOVERY_SOURCES (1000), and a visible truncation warning is returned when the inventory exceeds the cap (core/system_maps_discovery.py, api/routes/system_maps.py; test_system_maps_discovery.py, test_system_maps_discovery_routes.py)"
             - "[x] Draft revision creation and save with node/relationship/loop-config payload"
             - "[x] Publish revision (validation + status change to published)"
             - "[x] Archive revision (status change to archived)"
@@ -8725,7 +8732,7 @@ features:
             - "[x] Operators can compare a historical revision with the published revision from the revision sidebar; the view calls POST /api/v1/system-maps/{map_id}/revisions/{rev_id}/diff and renders changed node, relationship, loop-config, and content counts (frontend/src/components/system-maps/SystemMapRevisionSidebar.vue, frontend/src/views/SystemMapDetailView.vue, frontend/src/stores/systemMaps.ts)"
             - "[ ] Re-scan existing organisation resources into existing draft with added/removed/ambiguous diff and operator edit preservation (deferred: discovery can be re-run and an unchanged inventory resolves to the same revision identity, but there is no re-scan-into-existing-draft endpoint reporting an added/removed/ambiguous diff while preserving operator edits)"
             - "[x] No auto-publish — operator must explicitly publish"
-            - "[x] Published reads are gated by system_maps_read + system_maps.read; authoring, discovery, publish, archive, restore, apply, loop dispatch and MCP discovery remain gated by system_maps + developer mode + operator/admin + system_maps_access"
+            - "[x] Published reads are gated by system_maps_read + system_maps.read; REST authoring, discovery, publish, archive, restore, apply and loop dispatch are gated by the org-aware default-OFF system_maps flag (org feature_overrides applied) + operator/admin role + system_maps_access, and MCP discovery applies the same predicate (no developer mode since FAR-2595)"
             - "[x] i18n keys and product-map test IDs registered"
             - "[x] Accessibility: STATE-1/2/6, A11Y-1/2/4, I18N-1, TYPE-1, VIS-4"
         deferrals:

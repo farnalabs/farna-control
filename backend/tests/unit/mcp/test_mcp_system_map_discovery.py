@@ -5,8 +5,9 @@ The tool is deliberately a thin transport wrapper: it drives the SAME
 inventory read, inference (``discover_draft``) and persistence
 (``SystemMapDiscoveryRepository``) are one implementation. These tests pin:
 
-* the four internal-gate legs (role, grant, developer mode, ``system_maps``
-  feature) each refuse on their own, before any discovery work;
+* the three authoring-gate legs (role, ``system_maps_access`` grant,
+  ``system_maps`` feature) each refuse on their own, before any discovery work;
+  developer mode is NOT a leg since FAR-2595;
 * tenant wiring (the principal the handler receives is the authenticated one);
 * the shared-service proof — the MCP path and the REST path persist the exact
   same draft content for the same organisation inventory.
@@ -149,9 +150,10 @@ def _mcp_auth_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         _ctx_user_id,
     )
 
-    # Developer mode is part of the internal gate; the production default is
-    # OFF, so an authorised scenario must opt in explicitly.
-    monkeypatch.setattr("farna.api.mcp_server.get_settings", lambda: _make_settings())
+    # FAR-2595: developer mode is NOT part of the System Maps authoring gate.
+    # The fixture pins the production default (OFF) so every authorised
+    # scenario proves the non-dev-mode path works.
+    monkeypatch.setattr("farna.api.mcp_server.get_settings", lambda: _make_settings(dev_mode=False))
     _ctx_org_id.set(ORG_ID)
     _ctx_user_id.set(USER_ID)
     _ctx_role.set("operator")
@@ -173,7 +175,7 @@ def _mcp_auth_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 @pytest.mark.asyncio
 async def test_authorized_caller_gets_unpublished_draft_report() -> None:
-    """Operator + grant + dev mode + feature reaches inference and persistence."""
+    """Operator + grant + feature (dev mode OFF) reaches inference and persistence."""
     session = _discovery_session()
     with (
         patch("farna.api.mcp_server.validate_current_auth", new=AsyncMock(return_value=True)),
@@ -237,20 +239,31 @@ async def test_grant_set_without_system_maps_access_is_refused() -> None:
 
 
 @pytest.mark.asyncio
-async def test_developer_mode_off_is_refused() -> None:
-    """The dev-mode leg refuses even an operator holding the grant."""
+async def test_developer_mode_off_is_allowed() -> None:
+    """FAR-2595: an operator with the grant is allowed with dev mode OFF.
+
+    Mirrors the REST gate: the MCP authoring gate is role + grant only, so a
+    self-hosted Alpha deployment (dev mode off) can dogfood MCP discovery.
+    """
+    session = _discovery_session()
     with (
         patch("farna.api.mcp_server.validate_current_auth", new=AsyncMock(return_value=True)),
         patch("farna.api.mcp_server.get_settings", return_value=_make_settings(dev_mode=False)),
         patch("farna.api.mcp_server._require_plan_feature", new=AsyncMock(return_value=None)) as feature_gate,
-        patch("farna.api.routes.system_maps.discover_system_map", new=AsyncMock()) as rest_handler,
+        patch.object(SystemMapDiscoveryRepository, "get_or_create_draft", new=AsyncMock(return_value=_draft_map())),
+        patch.object(
+            SystemMapDiscoveryRepository,
+            "save_discovery_revision",
+            new=AsyncMock(return_value=(_draft_map(), _REVISION_ID, 1)),
+        ),
+        _patch_discovery_session(session),
     ):
-        result = await discover_system_map()
+        result = await discover_system_map(name="no-dev-mode")
 
-    assert result["error"] == "insufficient_scope"
-    assert "restricted to internal operators" in result["detail"]
-    feature_gate.assert_not_awaited()
-    rest_handler.assert_not_awaited()
+    assert "error" not in result
+    assert result["published"] is False
+    assert result["draft_map_id"] == str(_MAP_ID)
+    feature_gate.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -832,10 +845,53 @@ async def test_system_map_overview_delegates_to_rest_handler() -> None:
     assert result == {"revision_id": str(_REVISION_ID), "nodes": []}
     feature_gate.assert_awaited_once()
     assert feature_gate.await_args.args[0] == ORG_ID
-    assert feature_gate.await_args.args[2] == "system_maps"
+    assert feature_gate.await_args.args[2] == "system_maps_read"
     rest_handler.assert_awaited_once()
     assert rest_handler.await_args.kwargs["repository"] is repository
     assert rest_handler.await_args.kwargs["window_days"] == 14
+    assert rest_handler.await_args.kwargs["internal_access"] is True
+
+
+@pytest.mark.asyncio
+async def test_system_map_overview_gates_on_read_flag_regardless_of_authoring_access() -> None:
+    """FAR-2595: overview gates on ``system_maps_read`` for EVERY caller.
+
+    A non-authoring caller (no operator role, no ``system_maps_access`` grant)
+    must still pass the published-overview gate on ``system_maps_read`` — the
+    regression was gating the flag on authoring access, which refused published
+    overviews whenever the org's default-OFF ``system_maps`` flag was off.
+    """
+    from farna.api.mcp_server import (
+        _ctx_key_grants,
+        _ctx_role,
+        get_system_map_overview,
+    )
+
+    overview = SimpleNamespace(model_dump=MagicMock(return_value={"revision_id": str(_REVISION_ID)}))
+    rest_handler = AsyncMock(return_value=overview)
+    repository = object()
+
+    @asynccontextmanager
+    async def session_cm() -> AsyncGenerator[AsyncMock, None]:
+        yield AsyncMock()
+
+    _ctx_role.set("viewer")
+    _ctx_key_grants.set(frozenset())
+    with (
+        patch("farna.api.mcp_server.validate_current_auth", new=AsyncMock(return_value=True)),
+        patch("farna.api.mcp_server._require_plan_feature", new=AsyncMock(return_value=None)) as feature_gate,
+        patch("farna.api.mcp_server._system_maps_discovery_session", return_value=session_cm()),
+        patch("farna.api.mcp_server._check_agent_tool_scope"),
+        patch("farna.api.routes.system_maps.get_system_map_overview_endpoint", new=rest_handler),
+        patch("farna.api.routes.system_maps.get_repo", new=AsyncMock(return_value=repository)),
+    ):
+        result = await get_system_map_overview(map_id=_MAP_ID)
+
+    assert result == {"revision_id": str(_REVISION_ID)}
+    feature_gate.assert_awaited_once()
+    assert feature_gate.await_args.args[2] == "system_maps_read"
+    rest_handler.assert_awaited_once()
+    assert rest_handler.await_args.kwargs["internal_access"] is False
 
 
 @pytest.mark.asyncio
@@ -906,3 +962,72 @@ def test_system_map_overview_is_registered_without_unimplemented_tools() -> None
 
     assert "get_system_map_overview" in mcp._tool_manager._tools
     assert TOOL_SCOPE_REQUIREMENTS["get_system_map_overview"] == "system_map.overview"
+
+
+# ---------------------------------------------------------------------------
+# FAR-2595: the MCP feature gate must apply the org feature override
+# ---------------------------------------------------------------------------
+
+
+def _patched_plan_gate(plan_enabled: bool, overrides: dict[str, bool] | None) -> Any:
+    """Patch the org read + plan resolution ``_require_plan_feature`` performs."""
+    from contextlib import asynccontextmanager
+
+    org = SimpleNamespace(settings_json={"feature_overrides": overrides} if overrides is not None else {})
+    plan_ctx = MagicMock()
+    plan_ctx.feature_enabled.return_value = plan_enabled
+
+    @asynccontextmanager
+    async def _cm(_org_id: uuid.UUID) -> AsyncGenerator[AsyncMock, None]:
+        yield AsyncMock()
+
+    return (
+        plan_ctx,
+        patch("farna.api.mcp_server._session", _cm),
+        patch("farna.db.crud.organisation.get_organisation", new=AsyncMock(return_value=org)),
+        patch("farna.core.feature_flags.resolve_plan_context", new=AsyncMock(return_value=plan_ctx)),
+    )
+
+
+@pytest.mark.asyncio
+async def test_plan_feature_gate_applies_an_org_override() -> None:
+    """A default-OFF flag enabled by the org is allowed over MCP too."""
+    from farna.api.mcp_server import _require_plan_feature
+
+    _, session_patch, org_patch, plan_patch = _patched_plan_gate(
+        plan_enabled=False,
+        overrides={"system_maps": True},
+    )
+    with session_patch, org_patch, plan_patch:
+        result = await _require_plan_feature(ORG_ID, MagicMock(), "system_maps")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_plan_feature_gate_refuses_without_an_org_override() -> None:
+    """No override leaves the DEFAULT-OFF plan default in force."""
+    from farna.api.mcp_server import _require_plan_feature
+
+    _, session_patch, org_patch, plan_patch = _patched_plan_gate(plan_enabled=False, overrides=None)
+    with session_patch, org_patch, plan_patch:
+        result = await _require_plan_feature(ORG_ID, MagicMock(), "system_maps")
+
+    assert result is not None
+    assert result["error"] == "feature_required"
+
+
+@pytest.mark.asyncio
+async def test_plan_feature_gate_org_override_false_wins_over_the_plan_default() -> None:
+    """Precedence matches GET /api/v1/plan: explicit override beats the default."""
+    from farna.api.mcp_server import _require_plan_feature
+
+    _, session_patch, org_patch, plan_patch = _patched_plan_gate(
+        plan_enabled=True,
+        overrides={"system_maps": False},
+    )
+    with session_patch, org_patch, plan_patch:
+        result = await _require_plan_feature(ORG_ID, MagicMock(), "system_maps")
+
+    assert result is not None
+    assert result["error"] == "feature_required"

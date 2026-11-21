@@ -2,12 +2,10 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api, getAccessToken } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
-import { withTimeout } from '../lib/asyncUtils'
 import { isFeatureRequiredProblem } from '../lib/api/formatError'
 import { withTimeout as withRequestDeadline } from '../lib/requestTimeout'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import { usePlanStore } from './planStore'
-import { SYSTEM_CONFIG_MANAGE_PERMISSION } from '../composables/useLicenceAccess'
 import i18n from '../i18n'
 
 type SystemMapOverview = components['schemas']['SystemMapOverviewResponse']
@@ -47,8 +45,6 @@ export const NODE_TYPES = ['pipeline', 'agent', 'connector', 'improvement_loop',
 export const RELATIONSHIP_TYPES = ['flow', 'data', 'trigger', 'loop_back'] as const
 export type NodeType = (typeof NODE_TYPES)[number]
 export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number]
-
-interface InternalFeatureFlagsPayload { flags?: Array<{ name: string; currently_active: boolean }> }
 
 /** The overview aggregate is a read model; a stalled request must not hang it. */
 const OVERVIEW_REQUEST_TIMEOUT_MS = 15000
@@ -108,11 +104,20 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
 
   const planStore = usePlanStore()
   const { isOperator, isSystemAdmin } = useCurrentUser()
-  const hasSystemMapsAccess = computed(() => planStore.userPermissions.includes('system_maps_access'))
-  const hasSystemMapsRead = computed(() => planStore.userPermissions.includes('system_maps.read'))
-  const canProbeInternalFlags = computed(() => planStore.userPermissions.includes(SYSTEM_CONFIG_MANAGE_PERMISSION))
-  const hasAccess = computed(() => systemMapsEnabled.value && (isOperator.value || isSystemAdmin.value) && hasSystemMapsAccess.value)
-  const hasReadAccess = computed(() => systemMapsEnabled.value && hasSystemMapsRead.value)
+  // FAR-2595: authoring is a Beta-preview capability behind the default-OFF
+  // ``system_maps`` flag, no longer dev-mode gated. The effective flag state
+  // comes from the caller-scoped plan bootstrap (``GET /api/v1/plan``), which
+  // now carries ``system_maps`` for every org member.
+  const hasAccess = computed(
+    () =>
+      systemMapsEnabled.value &&
+      planStore.featureEnabled('system_maps') &&
+      (isOperator.value || isSystemAdmin.value) &&
+      planStore.userPermissions.includes('system_maps_access'),
+  )
+  const hasReadAccess = computed(
+    () => systemMapsEnabled.value && planStore.userPermissions.includes('system_maps.read'),
+  )
 
   function reset(): void {
     accessGeneration += 1
@@ -177,12 +182,16 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
     try {
       const planRequest = planStore.loaded || planStore.currentTier !== 'community' ? Promise.resolve() : planStore.fetchPlan()
       await Promise.all([planRequest, planStore.fetchPermissions()])
-      if (hasSystemMapsRead.value) systemMapsEnabled.value = true
-      if (!isOperator.value && !isSystemAdmin.value) return
-      if (!planStore.devMode || !hasSystemMapsAccess.value || !canProbeInternalFlags.value) return
-      const response = await withTimeout(api.GET('/api/v1/admin/feature-flags'), 15000, 'Internal feature flags request')
-      const flags = (response.data as InternalFeatureFlagsPayload | undefined)?.flags
-      if (current() && Array.isArray(flags)) systemMapsEnabled.value = flags.some((flag) => flag.name === 'system_maps' && flag.currently_active) || hasReadAccess.value
+      if (!current()) return
+      // The published read model is viewer-readable and default-ON; authoring
+      // needs the flag, the operator/admin role and the dedicated grant.
+      const permissions = planStore.userPermissions
+      const authoring = (
+        planStore.featureEnabled('system_maps') &&
+        (isOperator.value || isSystemAdmin.value) &&
+        permissions.includes('system_maps_access')
+      )
+      systemMapsEnabled.value = permissions.includes('system_maps.read') || authoring
     } catch (err: unknown) {
       if (current()) error.value = err instanceof Error ? err.message : tr('systemMaps.errors.feature_flags')
     } finally {
