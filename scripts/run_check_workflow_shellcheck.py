@@ -212,6 +212,46 @@ def _defaults_shell(node: Any) -> str | None:
     return _scalar(_mapping_value(run, "shell"))
 
 
+def _script_first_line(run_node: Any) -> int:
+    """Return the workflow line of a ``run:`` block's first script line.
+
+    A block scalar's mark points at the `run:` key, so script line 1 is the next
+    line; a plain scalar's content is on the same line.
+    """
+    is_block_scalar = isinstance(run_node, yaml.ScalarNode) and run_node.style in ("|", ">")
+    return run_node.start_mark.line + (2 if is_block_scalar else 1)
+
+
+def _step_block(
+    rel_path: str,
+    job_id: str,
+    index: int,
+    step_node: Any,
+    job_shell: str | None,
+    workflow_shell: str | None,
+    runner_os: str,
+    skipped: Counter[str],
+) -> RunBlock | None:
+    """Build the ``RunBlock`` for one step, or None when the step is not checkable."""
+    run_node = _mapping_value(step_node, "run")
+    script = _scalar(run_node)
+    if script is None:
+        return None
+    shell = _resolve_shell(_scalar(_mapping_value(step_node, "shell")), job_shell, workflow_shell, runner_os)
+    if shell not in SHELLCHECK_DIALECTS:
+        skipped[shell] += 1
+        return None
+    step_name = _scalar(_mapping_value(step_node, "name")) or f"steps[{index}]"
+    return RunBlock(
+        workflow=rel_path,
+        job=job_id,
+        step=step_name,
+        dialect=shell,
+        script=_EXPRESSION_RE.sub(lambda match: "_" * len(match.group(0)), script),
+        first_line=_script_first_line(run_node),
+    )
+
+
 def _collect_blocks(workflow_path: Path, rel_path: str) -> tuple[list[RunBlock], Counter[str]]:
     """Extract every shellcheck-able ``run:`` block from one workflow file."""
     text = workflow_path.read_text(encoding="utf-8")
@@ -234,29 +274,9 @@ def _collect_blocks(workflow_path: Path, rel_path: str) -> tuple[list[RunBlock],
         job_shell = _defaults_shell(job_node)
         runner_os = _runner_os(_mapping_value(job_node, "runs-on"))
         for index, step_node in enumerate(steps.value):
-            run_node = _mapping_value(step_node, "run")
-            script = _scalar(run_node)
-            if script is None:
-                continue
-            step_name = _scalar(_mapping_value(step_node, "name")) or f"steps[{index}]"
-            shell = _resolve_shell(_scalar(_mapping_value(step_node, "shell")), job_shell, workflow_shell, runner_os)
-            if shell not in SHELLCHECK_DIALECTS:
-                skipped[shell] += 1
-                continue
-            # A block scalar's mark points at the `run:` key, so script line 1 is
-            # the next line; a plain scalar's content is on the same line.
-            is_block_scalar = isinstance(run_node, yaml.ScalarNode) and run_node.style in ("|", ">")
-            first_line = run_node.start_mark.line + (2 if is_block_scalar else 1)
-            blocks.append(
-                RunBlock(
-                    workflow=rel_path,
-                    job=job_id,
-                    step=step_name,
-                    dialect=shell,
-                    script=_EXPRESSION_RE.sub(lambda match: "_" * len(match.group(0)), script),
-                    first_line=first_line,
-                )
-            )
+            block = _step_block(rel_path, job_id, index, step_node, job_shell, workflow_shell, runner_os, skipped)
+            if block is not None:
+                blocks.append(block)
     return blocks, skipped
 
 
@@ -272,13 +292,8 @@ def _write_block(directory: Path, index: int, block: RunBlock) -> Path:
     return path
 
 
-def run_check(workflows_dir: Path, shellcheck: str) -> int:
-    """Extract every run block, shellcheck it, and report. Returns the exit code."""
-    workflow_files = sorted([*workflows_dir.glob("*.yml"), *workflows_dir.glob("*.yaml")])
-    if not workflow_files:
-        print(f"::error::no workflow files found under {workflows_dir}", file=sys.stderr)
-        return 2
-
+def _extract_all_blocks(workflow_files: list[Path]) -> tuple[list[RunBlock], Counter[str]] | None:
+    """Extract blocks from every workflow file, or None when a file will not parse."""
     blocks: list[RunBlock] = []
     skipped: Counter[str] = Counter()
     for workflow_path in workflow_files:
@@ -287,9 +302,88 @@ def run_check(workflows_dir: Path, shellcheck: str) -> int:
             file_blocks, file_skipped = _collect_blocks(workflow_path, rel_path)
         except (ValueError, yaml.YAMLError) as exc:
             print(f"::error::could not extract run blocks from {rel_path}: {exc}", file=sys.stderr)
-            return 2
+            return None
         blocks.extend(file_blocks)
         skipped.update(file_skipped)
+    return blocks, skipped
+
+
+def _materialise_blocks(blocks: list[RunBlock], tmpdir: Path) -> tuple[dict[str, RunBlock], dict[str, list[str]]]:
+    """Write every block to ``tmpdir``, keyed for reporting and grouped for shellcheck."""
+    written: dict[str, RunBlock] = {}
+    by_dialect: dict[str, list[str]] = {dialect: [] for dialect in SHELLCHECK_DIALECTS}
+    for index, block in enumerate(blocks):
+        path = _write_block(tmpdir, index, block)
+        written[path.name] = block
+        by_dialect[block.dialect].append(str(path))
+    return written, by_dialect
+
+
+def _shellcheck_batch(shellcheck: str, dialect: str, batch: list[str]) -> str | None:
+    """Run one shellcheck invocation; return its stdout, or None on a tool failure."""
+    argv = [
+        shellcheck,
+        # actionlint's own argv, in its own order (see the module docstring):
+        # --norc keeps a stray .shellcheckrc or SHELLCHECK_OPTS from changing
+        # the result, -x follows source directives.
+        "--norc",
+        "--format=gcc",
+        "-x",
+        f"--shell={dialect}",
+        "-e",
+        ",".join(SHELLCHECK_DISABLED_RULES),
+        *batch,
+    ]
+    # argv[0] is a PATH-resolved shellcheck executable and every other element is
+    # a fixed literal or a temp path this helper created itself; subprocess runs
+    # without a shell, so an operator-supplied --shellcheck cannot inject a
+    # command. CI invokes the gate with no arguments at all (S8701 false positive).
+    completed = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)  # NOSONAR pythonsecurity:S8701
+    if completed.returncode not in (0, 1):
+        print(
+            f"::error::shellcheck failed with exit code {completed.returncode} (not a findings exit) - refusing to report a result:\n{completed.stderr}",
+            file=sys.stderr,
+        )
+        return None
+    return completed.stdout
+
+
+def _run_shellcheck(shellcheck: str, by_dialect: dict[str, list[str]]) -> list[str] | None:
+    """Shellcheck every dialect in batches; return findings, or None on a tool failure."""
+    findings: list[str] = []
+    for dialect, paths in by_dialect.items():
+        for start in range(0, len(paths), _BATCH_SIZE):
+            stdout = _shellcheck_batch(shellcheck, dialect, paths[start : start + _BATCH_SIZE])
+            if stdout is None:
+                return None
+            findings.extend(line for line in stdout.splitlines() if line.strip())
+    return findings
+
+
+def _report_findings(findings: list[str], written: dict[str, RunBlock]) -> None:
+    """Print each finding against its workflow file, line and step."""
+    for raw_line in findings:
+        match = _GCC_LINE_RE.match(raw_line)
+        if match is None:
+            print(raw_line)
+            continue
+        block = written.get(Path(match.group("file")).name)
+        location = f"{block.workflow}:{match.group('line')}:{match.group('col')}" if block else match.group("file")
+        context = f" ({block.job} / {block.step})" if block else ""
+        print(f"{location}: {match.group('rest')}{context}")
+
+
+def run_check(workflows_dir: Path, shellcheck: str) -> int:
+    """Extract every run block, shellcheck it, and report. Returns the exit code."""
+    workflow_files = sorted([*workflows_dir.glob("*.yml"), *workflows_dir.glob("*.yaml")])
+    if not workflow_files:
+        print(f"::error::no workflow files found under {workflows_dir}", file=sys.stderr)
+        return 2
+
+    extracted = _extract_all_blocks(workflow_files)
+    if extracted is None:
+        return 2
+    blocks, skipped = extracted
 
     if not blocks:
         print(
@@ -301,44 +395,10 @@ def run_check(workflows_dir: Path, shellcheck: str) -> int:
     dialect_counts = Counter(block.dialect for block in blocks)
     with tempfile.TemporaryDirectory(prefix="workflow-shellcheck-") as tmp:
         tmpdir = Path(tmp)
-        written: dict[str, RunBlock] = {}
-        by_dialect: dict[str, list[str]] = {dialect: [] for dialect in SHELLCHECK_DIALECTS}
-        for index, block in enumerate(blocks):
-            path = _write_block(tmpdir, index, block)
-            written[path.name] = block
-            by_dialect[block.dialect].append(str(path))
-
-        findings: list[str] = []
-        for dialect, paths in by_dialect.items():
-            for start in range(0, len(paths), _BATCH_SIZE):
-                batch = paths[start : start + _BATCH_SIZE]
-                argv = [
-                    shellcheck,
-                    # actionlint's own argv, in its own order (see the module
-                    # docstring): --norc keeps a stray .shellcheckrc or
-                    # SHELLCHECK_OPTS from changing the result, -x follows
-                    # source directives.
-                    "--norc",
-                    "--format=gcc",
-                    "-x",
-                    f"--shell={dialect}",
-                    "-e",
-                    ",".join(SHELLCHECK_DISABLED_RULES),
-                    *batch,
-                ]
-                # argv[0] is a PATH-resolved shellcheck executable and every
-                # other element is a fixed literal or a temp path this helper
-                # created itself; subprocess runs without a shell, so an
-                # operator-supplied --shellcheck cannot inject a command. CI
-                # invokes the gate with no arguments at all (S8701 false positive).
-                completed = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)  # NOSONAR pythonsecurity:S8701
-                if completed.returncode not in (0, 1):
-                    print(
-                        f"::error::shellcheck failed with exit code {completed.returncode} (not a findings exit) - refusing to report a result:\n{completed.stderr}",
-                        file=sys.stderr,
-                    )
-                    return 2
-                findings.extend(line for line in completed.stdout.splitlines() if line.strip())
+        written, by_dialect = _materialise_blocks(blocks, tmpdir)
+        findings = _run_shellcheck(shellcheck, by_dialect)
+    if findings is None:
+        return 2
 
     if skipped:
         summary = ", ".join(f"{shell}={count}" for shell, count in sorted(skipped.items()))
@@ -348,15 +408,7 @@ def run_check(workflows_dir: Path, shellcheck: str) -> int:
     if not findings:
         return 0
 
-    for raw_line in findings:
-        match = _GCC_LINE_RE.match(raw_line)
-        if match is None:
-            print(raw_line)
-            continue
-        block = written.get(Path(match.group("file")).name)
-        location = f"{block.workflow}:{match.group('line')}:{match.group('col')}" if block else match.group("file")
-        context = f" ({block.job} / {block.step})" if block else ""
-        print(f"{location}: {match.group('rest')}{context}")
+    _report_findings(findings, written)
 
     print(f"::error::{len(findings)} shellcheck finding(s) in workflow run blocks", file=sys.stderr)
     return 1
