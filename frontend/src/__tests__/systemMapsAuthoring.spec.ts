@@ -359,6 +359,35 @@ describe('DiscoveryConfigPanel', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('AI discovery options could not be loaded'))
   })
 
+  it('retries the AI options read when AI mode is chosen after a failed load', async () => {
+    // The panel loads as soon as authoring is allowed, so a failed first read
+    // leaves options unloaded with nothing in flight. Selecting AI afterwards
+    // must issue a fresh read instead of staying stuck on the error.
+    mockGet.mockClear()
+    let reads = 0
+    mockGet.mockImplementation((path: string) => {
+      reads += 1
+      const firstLoad = reads <= 2
+      if (path === '/api/v1/model-backends') {
+        if (firstLoad) return Promise.resolve({ data: undefined, error: { detail: 'nope' }, response: { status: 500 } })
+        return Promise.resolve({ data: { items: [backend] } })
+      }
+      if (path === '/api/v1/evals') {
+        if (firstLoad) return Promise.resolve({ data: undefined, error: { detail: 'nope' }, response: { status: 500 } })
+        return Promise.resolve({ data: { items: [evaluation] } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    const wrapper = mountConfig()
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+    await flushPromises()
+
+    await wrapper.get('[data-testid="system-map-discovery-mode-ai"]').setValue(true)
+    await vi.waitFor(() => expect(hasOption(wrapper, 'system-map-discovery-backend', 'backend-1')).toBe(true))
+    expect(mockGet).toHaveBeenCalledTimes(4)
+  })
+
   it('renders only authorised org backends and model-judge evals', async () => {
     mockOptions({
       backends: [
