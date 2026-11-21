@@ -214,6 +214,57 @@ describe('router permission navigation guard', () => {
   })
 })
 
+describe('/evals/proposals permission gate (FAR-2621)', () => {
+  // The proposal queue reads with `feedback.list` (viewer floor); publishing and
+  // dismissing are operator-floor and hidden per-permission inside the view.
+  // Drive the guard with the REAL manifest entry so a future edit that drops or
+  // widens the read gate fails here.
+  function hydratedProposalsRoute(): any {
+    const resolved = router.resolve('/evals/proposals')
+    const route = {
+      name: resolved.name,
+      matched: resolved.matched,
+      path: resolved.path,
+      meta: {} as Record<string, unknown>,
+    }
+    hydrateManifestMeta(route as never)
+    return route
+  }
+
+  it('declares exactly the read permission the list endpoint enforces', () => {
+    const manifest = yaml.load(
+      readFileSync(resolve(__dirname, '../manifest.yaml'), 'utf-8'),
+    ) as { routes: Record<string, { required_permissions?: string[] | null }> }
+    const entry = manifest.routes['/evals/proposals']
+    expect(entry).toBeDefined()
+    // `GET /api/v1/feedback/proposals` is require_permission("feedback.list").
+    expect(entry.required_permissions).toEqual(['feedback.list'])
+  })
+
+  it('hydrates the manifest read gate onto the resolved route', () => {
+    const route = hydratedProposalsRoute()
+
+    expect(route.name).toBe('eval-proposals-queue')
+    expect(route.meta.requiredPermissions).toEqual(['feedback.list'])
+  })
+
+  it('admits a viewer whose resolved permissions include feedback.list', async () => {
+    planStore.userPermissions = ['feedback.list']
+
+    await expect(
+      enforceRoleTierVisibility(hydratedProposalsRoute(), adminToken()),
+    ).resolves.toBe(true)
+  })
+
+  it('redirects a caller who does not hold feedback.list', async () => {
+    planStore.userPermissions = ['feedback.review', 'gate.create', 'feedback.update']
+
+    await expect(
+      enforceRoleTierVisibility(hydratedProposalsRoute(), adminToken()),
+    ).resolves.toEqual({ name: 'dashboard' })
+  })
+})
+
 describe('enforceRoleTierVisibility', () => {
   it('redirects a requiresSystemAdmin route when the token is not a system admin', async () => {
     decodeJwtPayload.mockReturnValue({ is_system_admin: false })

@@ -38,6 +38,14 @@
       />
 
       <div v-else class="space-y-4">
+        <p
+          v-if="showReadonlyNotice"
+          data-testid="proposal-readonly-notice"
+          class="rounded-lg border border-input bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+        >
+          {{ $t('views.EvalProposalsQueueView.readonly_notice') }}
+        </p>
+
         <DataCard
           v-for="p in proposals"
           :key="p.id"
@@ -85,11 +93,11 @@
               </div>
             </div>
 
-            <div v-if="isActionable(p.feedback_status)" class="flex shrink-0 items-center gap-2">
-            <Button :disabled="actioningId === p.id" data-testid="proposal-publish" @click="openPublishDialog(p)">
+            <div v-if="isActionable(p.feedback_status) && (canPublish || canDismiss)" class="flex shrink-0 items-center gap-2">
+            <Button v-if="canPublish" :disabled="actioningId === p.id" data-testid="proposal-publish" @click="openPublishDialog(p)">
               {{ actioningId === p.id ? $t('views.EvalProposalsQueueView.publishing') : $t('views.EvalProposalsQueueView.publish') }}
             </Button>
-              <button type="button"
+              <button v-if="canDismiss" type="button"
                 :disabled="actioningId === p.id"
                 data-testid="proposal-dismiss"
                 class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -221,6 +229,7 @@ import { ref, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
+import { usePlanStore } from '../stores/planStore'
 import { formatApiError, throwOnError } from '../lib/api/formatError'
 import { shortId } from '../utils/format'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
@@ -281,6 +290,45 @@ const { loading, error: pageError, data: proposalsResp, load: loadProposals } = 
 const proposals = computed(() => proposalsResp.value?.items ?? [])
 const actioningId = ref<string | null>(null)
 const actionMessages = ref<Record<string, { type: string; text: string }>>({})
+
+// --- Action capability ----------------------------------------------------
+// The proposal-list READ is `feedback.list` (viewer floor), so the queue is a
+// legitimate read-only surface for every org role. The two actions are
+// narrower, and this view mirrors EXACTLY what each endpoint it calls enforces:
+//
+//   * publish -> POST /api/v1/feedback/proposals/{record_id}/publish
+//       require_permission("feedback.review") on the route AND the in-handler
+//       gate check for "gate.create" (route handler:
+//       farna/api/routes/feedback.py publish_eval_proposal) — BOTH are
+//       operator-floor, so the button needs both.
+//   * dismiss -> PATCH /api/v1/feedback/{record_id}/status
+//       require_permission("feedback.update") (farna/api/routes/feedback.py
+//       update_feedback_status) — operator-floor.
+//
+// The names are the permission registry's own keys, resolved server-side from
+// the SAME registry `require_permission` compares against, so this cannot drift
+// into a parallel hand-maintained role check. The store fails closed (empty
+// list) until the read resolves, so a pending or failed permissions read hides
+// the actions instead of flashing them enabled and 403-ing on click.
+const PROPOSAL_PUBLISH_PERMISSIONS = ['feedback.review', 'gate.create'] as const
+const PROPOSAL_DISMISS_PERMISSION = 'feedback.update'
+
+const planStore = usePlanStore()
+void planStore.fetchPermissions()
+
+const canPublish = computed(() =>
+  PROPOSAL_PUBLISH_PERMISSIONS.every((permission) => planStore.userPermissions.includes(permission)),
+)
+const canDismiss = computed(() => planStore.userPermissions.includes(PROPOSAL_DISMISS_PERMISSION))
+
+// A caller who can read the queue but act on none of it gets one honest line
+// explaining why no actions are offered — never a silently actionless page.
+const showReadonlyNotice = computed(
+  () =>
+    !canPublish.value &&
+    !canDismiss.value &&
+    proposals.value.some((p) => isActionable(p.feedback_status)),
+)
 
 // --- Publish dialog state -------------------------------------------------
 // FeedbackRecord stores no proposed-eval fields, so the reviewer supplies the
