@@ -54,6 +54,23 @@
         </label>
       </div>
 
+      <div v-if="selectedPipelineId" class="space-y-1">
+        <label class="flex items-center gap-2 text-sm">
+          <input
+            id="variant-builder-degraded-evals"
+            v-model="degradedEvals"
+            data-testid="variant-builder-degraded-evals"
+            type="checkbox"
+            class="h-4 w-4 rounded border-input"
+            aria-describedby="variant-builder-degraded-evals-help"
+          />
+          <span class="font-medium">{{ $t('views.variantCreator.degraded_evals_label') }}</span>
+        </label>
+        <p id="variant-builder-degraded-evals-help" class="text-xs text-muted-foreground">
+          {{ $t('views.variantCreator.degraded_evals_help') }}
+        </p>
+      </div>
+
       <template v-if="selectedPipelineId">
         <EmptyState
           v-if="snapshots.length === 0"
@@ -337,6 +354,10 @@ const pipelines = ref<PipelineItem[]>([])
 const modelBackends = ref<ModelBackend[]>([])
 const selectedPipelineId = ref<string>('')
 const comparisonName = ref('')
+// Group-level flag. The backend persists it and, when on, adds
+// `_degraded_evals: true` to every run's input payload (Modulo itself does not
+// skip any eval). Default off: the operator must opt in.
+const degradedEvals = ref(false)
 const variants = ref<VariantForm[]>([])
 const snapshots = ref<Array<{ id: string; snapshot_version: number; tag: string | null }>>([])
 const promptVersionOptions = ref<Array<{ value: string; label: string }>>([])
@@ -484,7 +505,7 @@ async function fireBatch() {
         variants: variantDefs as unknown as components['schemas']['VariantDef'][],
         selection_strategy: 'weighted',
         max_concurrent_runs: 10,
-        degraded_evals: false,
+        degraded_evals: degradedEvals.value,
       },
     })
     if (createErr) {

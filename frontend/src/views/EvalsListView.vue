@@ -8,6 +8,7 @@
       >
         <template #right>
           <button
+            v-if="canWriteEvals"
             type="button"
             data-testid="evals-list-new"
             class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -53,6 +54,7 @@
         :description="$t('views.EvalsListView.empty_body')"
       >
         <button
+          v-if="canWriteEvals"
           type="button"
           data-testid="evals-list-empty-cta"
           class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -83,6 +85,7 @@
           :columns="columns"
           :rows="rows"
           row-testid="evals-list-row"
+          :row-clickable="canWriteEvals"
           @row-click="row => openEditor(row.pipeline_id as string, row.id as string)"
         >
           <template #cell-pipeline="{ row }">
@@ -157,12 +160,34 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import { DataTable, type Column, type DataTableRow } from '../components/ui/data-table'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
+import { usePlanStore } from '../stores/planStore'
 import { shortId } from '../utils/format'
 import { usePipelineNodeLabels } from '../composables/usePipelineNodeLabels'
 
 const { t } = useI18n()
 const router = useRouter()
 const { ensureNodeLabels, nodeLabel, nodeLabelsUnavailable } = usePipelineNodeLabels()
+const planStore = usePlanStore()
+void planStore.fetchPermissions()
+
+/**
+ * FAR-2609: the permissions the editor's save path enforces, mirrored from the
+ * route dependencies in `backend/src/farna/api/routes/evals.py`
+ * (`POST /api/v1/evals` -> `eval.definition.create`,
+ * `PUT /api/v1/evals/{eval_id}` -> `eval.definition.update`; both operator).
+ *
+ * The caller-scoped list from `GET /api/v1/auth/permissions` is resolved from
+ * the same registry `require_permission` compares against, so "can this caller
+ * save an eval" has one definition. `eval.list` is deliberately absent: it
+ * resolves to viewer, so gating on it is what routed viewers into a form that
+ * 403'd on save. The store fails closed (an unresolved list denies), so the
+ * write affordances never flash enabled for a viewer.
+ */
+const EVAL_WRITE_PERMISSIONS = ['eval.definition.create', 'eval.definition.update'] as const
+
+const canWriteEvals = computed(() =>
+  EVAL_WRITE_PERMISSIONS.some(permission => planStore.userPermissions.includes(permission)),
+)
 
 const PAGE_SIZE = 25
 
@@ -205,11 +230,17 @@ const filterEvalType = ref('')
 
 const hasFilters = computed(() => filterPipelineId.value !== '' || filterEvalType.value !== '')
 
-const evalPageTabs = computed(() => [
-  { label: t('views.EvalsListView.tabs_all'), to: '/evals' },
-  { label: t('views.EvalsListView.tabs_editor'), to: '/evals/editor' },
-  { label: t('views.EvalsListView.tabs_proposals'), to: '/evals/proposals' },
-])
+// The editor tab is a route INTO the write surface, so it is only offered to a
+// caller who can save; leaving it visible would bounce a viewer straight off
+// `/evals/editor`'s permission gate to the dashboard (FAR-2609).
+const evalPageTabs = computed(() => {
+  const tabs = [{ label: t('views.EvalsListView.tabs_all'), to: '/evals' }]
+  if (canWriteEvals.value) {
+    tabs.push({ label: t('views.EvalsListView.tabs_editor'), to: '/evals/editor' })
+  }
+  tabs.push({ label: t('views.EvalsListView.tabs_proposals'), to: '/evals/proposals' })
+  return tabs
+})
 
 const columns = computed<Column[]>(() => [
   { key: 'name', label: t('views.EvalsListView.column_name'), width: '24%' },
@@ -365,6 +396,11 @@ function nextPage(): void {
 }
 
 function openEditor(pipelineId?: string, evalId?: string): void {
+  // Structural backstop: every affordance above is already hidden or inert for
+  // a caller without the write permission, so this only fires if one is added
+  // later without its own gate. Never navigate a caller into a form they cannot
+  // save (FAR-2609).
+  if (!canWriteEvals.value) return
   if (!pipelineId) {
     void router.push({ path: '/evals/editor' })
     return

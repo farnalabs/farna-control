@@ -56,6 +56,7 @@ vi.mock('vue-router', () => ({
 import EvalsListView from '../views/EvalsListView.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import PageHeader from '../components/shared/PageHeader.vue'
 import { DataTable } from '../components/ui/data-table'
 
 const PIPELINES = [
@@ -84,8 +85,23 @@ function mockApi(options: {
   evalsError?: unknown
   pipelines?: unknown[]
   graphs?: Record<string, { nodes?: unknown[] } | 'error'>
+  /**
+   * The caller's permission list, served by `GET /api/v1/auth/permissions` —
+   * the same caller-scoped registry read the plan store consumes. Defaults to
+   * a caller who may write eval definitions, so the pre-existing assertions
+   * about the New-eval affordances keep describing a writer.
+   */
+  permissions?: string[]
 } = {}) {
+  const permissions = options.permissions ?? [
+    'eval.list',
+    'eval.definition.create',
+    'eval.definition.update',
+  ]
   apiGet.mockImplementation(async (path: string, request?: { params?: { path?: { pipeline_id?: string } } }) => {
+    if (path === '/api/v1/auth/permissions') {
+      return { data: { permissions }, error: undefined }
+    }
     if (path === '/api/v1/pipelines') {
       return { data: { items: options.pipelines ?? PIPELINES }, error: undefined }
     }
@@ -335,6 +351,77 @@ describe('EvalsListView', () => {
 
     expect(routerMocks.push).toHaveBeenNthCalledWith(1, { path: '/evals/editor' })
     expect(routerMocks.push).toHaveBeenNthCalledWith(2, { path: '/evals/editor' })
+    wrapper.unmount()
+  })
+
+  // FAR-2609: `eval.list` resolves to viewer while the editor's save endpoints
+  // require `eval.definition.create` / `eval.definition.update` (operator). A
+  // viewer must not be handed an affordance that walks them into the form and
+  // then 403s (or, now that the route is gated, bounces them to the dashboard).
+  it('withholds every write affordance from a viewer who can only list evals', async () => {
+    mockApi({ permissions: ['eval.list'] })
+    const wrapper = mountView()
+    await flush()
+
+    expect(wrapper.find('[data-testid="evals-list-new"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="evals-list-empty-cta"]').exists()).toBe(false)
+    // The list itself stays readable: the empty state still explains the concept.
+    expect(wrapper.find('[data-testid="evals-list-empty"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('makes eval rows inert for a viewer, and drops the Editor tab', async () => {
+    mockApi({
+      permissions: ['eval.list'],
+      evals: { items: [evalItem({ id: 'eval-9', pipeline_id: 'p2' })], total: 1 },
+    })
+    const wrapper = mountView()
+    await flush()
+
+    const row = wrapper.find('[data-testid="evals-list-row"]')
+    expect(row.exists()).toBe(true)
+    // Rows stay visible (the list is a viewer surface) but not focusable.
+    expect(row.attributes('tabindex')).toBeUndefined()
+    await row.trigger('click')
+    expect(routerMocks.push).not.toHaveBeenCalled()
+
+    const tabs = wrapper.findComponent(PageHeader).props('tabs') as Array<{ to: string }>
+    expect(tabs.map(tab => tab.to)).toEqual(['/evals', '/evals/proposals'])
+    wrapper.unmount()
+  })
+
+  it('offers the Editor tab and clickable rows to a writer', async () => {
+    mockApi({ evals: { items: [evalItem({ id: 'eval-9', pipeline_id: 'p2' })], total: 1 } })
+    const wrapper = mountView()
+    await flush()
+
+    expect(wrapper.find('[data-testid="evals-list-row"]').attributes('tabindex')).toBe('0')
+    const tabs = wrapper.findComponent(PageHeader).props('tabs') as Array<{ to: string }>
+    expect(tabs.map(tab => tab.to)).toEqual(['/evals', '/evals/editor', '/evals/proposals'])
+    wrapper.unmount()
+  })
+
+  it('treats either eval-definition writer permission as sufficient (scoped-key grants)', async () => {
+    mockApi({ permissions: ['eval.definition.update'] })
+    const wrapper = mountView()
+    await flush()
+
+    expect(wrapper.find('[data-testid="evals-list-new"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('never navigates a viewer into the editor, even from a stray call', async () => {
+    mockApi({ permissions: ['eval.list'] })
+    const wrapper = mountView()
+    await flush()
+    const vm = wrapper.vm as unknown as {
+      openEditor: (pipelineId?: string, evalId?: string) => void
+    }
+
+    vm.openEditor()
+    vm.openEditor('p2', 'eval-9')
+
+    expect(routerMocks.push).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
