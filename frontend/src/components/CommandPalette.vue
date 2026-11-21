@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getNavGroups, getVisibleNavGroups } from '../config/navigation'
 import SvgIcon from './SvgIcon.vue'
 import { useNavVisibilityContext } from '../composables/useNavVisibilityContext'
@@ -68,6 +69,7 @@ interface SearchItem {
 }
 
 const router = useRouter()
+const { t } = useI18n()
 const navContext = useNavVisibilityContext()
 const isOpen = ref(false)
 const query = ref('')
@@ -79,19 +81,21 @@ const dialogRef = ref<HTMLDialogElement | null>(null)
 // controls, runs, configuration, administration, system), so a result never
 // advertises a group the sidebar no longer has. The pinned Dashboard sits above
 // the groups and borrows the closest one; /evals, /settings and /admin/system
-// are parent landing paths, labelled by the group their children live in.
+// are parent landing paths, labelled by the group their children live in. Each
+// section resolves through $t() against the same labelKey the sidebar group
+// uses, so the palette never drifts into hardcoded English.
 const paletteExtras: SearchItem[] = [
-  { label: 'Dashboard', path: '/', icon: 'LayoutDashboard', section: 'PIPELINES' },
-  { label: 'Pipelines', path: '/pipelines', icon: 'GitFork', section: 'PIPELINES' },
-  { label: 'Library', path: '/library', icon: 'BookOpen', section: 'PIPELINES' },
-  { label: 'Runs', path: '/runs', icon: 'CirclePlay', section: 'RUNS' },
-  { label: 'Evals', path: '/evals', icon: 'CheckSquare', section: 'CONTROLS' },
-  { label: 'Schemas', path: '/schemas', icon: 'Database', section: 'PIPELINES' },
-  { label: 'Connectors', path: '/admin/connectors', icon: 'Plug', section: 'CONFIGURATION' },
-  { label: 'Settings', path: '/settings', icon: 'Settings', section: 'ADMINISTRATION' },
-  { label: 'Organization', path: '/admin/org', icon: 'Building', section: 'ADMINISTRATION' },
-  { label: 'System', path: '/admin/system', icon: 'Settings', section: 'SYSTEM' },
-  { label: 'Cost Management', path: '/admin/costs', icon: 'DollarSign', section: 'RUNS' },
+  { label: 'Dashboard', path: '/', icon: 'LayoutDashboard', section: t('components.SidebarNav.group_pipelines') },
+  { label: 'Pipelines', path: '/pipelines', icon: 'GitFork', section: t('components.SidebarNav.group_pipelines') },
+  { label: 'Library', path: '/library', icon: 'BookOpen', section: t('components.SidebarNav.group_pipelines') },
+  { label: 'Runs', path: '/runs', icon: 'CirclePlay', section: t('components.SidebarNav.group_runs') },
+  { label: 'Evals', path: '/evals', icon: 'CheckSquare', section: t('components.SidebarNav.group_controls') },
+  { label: 'Schemas', path: '/schemas', icon: 'Database', section: t('components.SidebarNav.group_pipelines') },
+  { label: 'Connectors', path: '/admin/connectors', icon: 'Plug', section: t('components.SidebarNav.group_configuration') },
+  { label: 'Settings', path: '/settings', icon: 'Settings', section: t('components.SidebarNav.group_administration') },
+  { label: 'Organization', path: '/admin/org', icon: 'Building', section: t('components.SidebarNav.group_administration') },
+  { label: 'System', path: '/admin/system', icon: 'Settings', section: t('components.SidebarNav.group_system') },
+  { label: 'Cost Management', path: '/admin/costs', icon: 'DollarSign', section: t('components.SidebarNav.group_runs') },
 ]
 
 const searchItems = computed<SearchItem[]>(() => {

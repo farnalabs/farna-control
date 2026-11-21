@@ -584,6 +584,11 @@ routes:
         breadcrumb: Browser Monitoring
         parent: /
         product_map: [feat-observability]
+        # SYSTEM is deliberate, not a regroup: the backend gate is
+        # require_system_permission("system.config.manage") (see
+        # api/routes/admin_monitor_config.py), a permission only a system admin
+        # holds, so an org admin can never use this page. Keeping the row in a
+        # normal group showed org admins a link straight into a 403.
         sidebar_group: system
         sidebar_order: 80
         type: form_page
@@ -709,8 +714,15 @@ routes:
         breadcrumb: Node Categories
         parent: /
         product_map: [feat-pipelines]
-        sidebar_group: system
-        sidebar_order: 90
+        # Org-scoped, NOT system-admin-only: the backend gates this page on the
+        # org-role permissions node_category.list (viewer) and
+        # node_category.create/update/delete (operator) — never a system
+        # permission. The SYSTEM group is system_admin_only, so placing it there
+        # made the router redirect an ordinary org admin to / and hid the page.
+        # CONFIGURATION is the nearest non-system-admin settings group (it
+        # already carries a private_preview page, /admin/plugins).
+        sidebar_group: configuration
+        sidebar_order: 80
         type: list_page
         <<: *team
         visibility: private_preview

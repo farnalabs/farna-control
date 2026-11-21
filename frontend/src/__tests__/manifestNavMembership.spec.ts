@@ -88,6 +88,7 @@ const EXPECTED_GROUPED_ROWS: Record<string, string[]> = {
     '/admin/plugins',
     '/admin/assistant',
     '/settings/assistant',
+    '/admin/node-categories',
   ],
   administration: [
     '/admin/users',
@@ -107,7 +108,6 @@ const EXPECTED_GROUPED_ROWS: Record<string, string[]> = {
     '/admin/run-retention',
     '/admin/housekeeping',
     '/settings/monitoring',
-    '/admin/node-categories',
   ],
 }
 

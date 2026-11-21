@@ -106,4 +106,58 @@ describe('getPinnedNavItem (FAR-2605)', () => {
     const { getPinnedNavItem } = await import('../../config/navigation')
     expect(getPinnedNavItem()?.systemAdminOnly).toBe(true)
   })
+
+  /**
+   * The real Dashboard is community-tier with no gate, so
+   * `getVisiblePinnedNavItem`'s hidden branch never executes against it. Drive
+   * it with a synthetic pinned route that carries a role gate.
+   */
+  const baseCtx = {
+    isSystemAdmin: false,
+    userRole: 'viewer',
+    userPermissions: [] as string[],
+    devMode: false,
+    tierInfoLoaded: true,
+    isAtMinimumTier: () => true,
+    isDemoSession: false,
+    isFeatureEnabled: () => true,
+  }
+
+  it('hides a gated pinned route from a user who fails its role gate', async () => {
+    vi.resetModules()
+    vi.doMock(
+      '@/manifest.yaml',
+      () =>
+        mockManifest({
+          '/admin-only': {
+            name: 'admin-only',
+            breadcrumb: 'Admin only',
+            sidebar_pinned: true,
+            sidebar_order: 1,
+            required_roles: ['admin'],
+          },
+        }),
+    )
+    const { getVisiblePinnedNavItem } = await import('../../config/navigation')
+    expect(getVisiblePinnedNavItem({ ...baseCtx })).toBeNull()
+  })
+
+  it('shows the same gated pinned route to a user who passes its role gate', async () => {
+    vi.resetModules()
+    vi.doMock(
+      '@/manifest.yaml',
+      () =>
+        mockManifest({
+          '/admin-only': {
+            name: 'admin-only',
+            breadcrumb: 'Admin only',
+            sidebar_pinned: true,
+            sidebar_order: 1,
+            required_roles: ['admin'],
+          },
+        }),
+    )
+    const { getVisiblePinnedNavItem } = await import('../../config/navigation')
+    expect(getVisiblePinnedNavItem({ ...baseCtx, userRole: 'admin' })?.to).toBe('/admin-only')
+  })
 })
