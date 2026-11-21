@@ -121,7 +121,7 @@ These tickets (parent design **FAR-401**) build a generic REST connector – a *
 ## 10. Run-status change protocol (CRITICAL – read before any status addition)
 Adding `COMPENSATION_FAILED`, `ROUTER_NO_MATCH`, or adopting `UNKNOWN` requires updating the **FULL enumerated set** of status-definition sites (the codebase has a "single source of truth" leak – all must stay in sync, per `run.py:35`):
 1. Migration `ck_runs_status` expected-def (`0110_schema_pipeline_runtime.py:4170`) AND create (`:4485`) strings.
-2. ORM model `CheckConstraint` (`run.py:95-99`) – used by SQLite/dev/`create_all`; must match migration.
+2. ORM model `CheckConstraint` (`run.py:95-99`) – used by the SQLite test bootstrap (`create_all`); must match migration.
 3. `RUN_STATUS_WHITELIST` (`crud/run.py:63-76`) – the **actual write gate** in `update_run_status`/`transition_run`; without it the write raises `ValueError` before DB.
 4. `TERMINAL_STATUSES`, `ACTIVE_RUN_STATUSES`, `ONGOING_ACTIVE_STATUSES` frozensets (`run.py:41-47`); `UNKNOWN` must be in `ACTIVE_RUN_STATUSES` (non-terminal).
 5. `_FAILURE_BUCKET_STATUSES` / `_FAILURE_REASON_STATUSES` (`run.py:88-89`) – include `compensation_failed`.

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12, <3.15"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -17,6 +17,7 @@ constraints = [
     { name = "pyasn1", specifier = ">=0.6.5" },
     { name = "virtualenv", specifier = ">=21.14.13" },
 ]
+overrides = [{ name = "wcmatch", specifier = ">=11.2" }]
 
 [[package]]
 name = "aiodocker"
@@ -150,18 +151,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/02/53/8dbcc0ab82c8b5cd33b0e74633b3819848552a3b8d62b0bb15cc0df80c96/aiohttp_basicauth-1.2.0.tar.gz", hash = "sha256:cc489f3fae191c1eca5bead09a152a23b57527bb74774e6d410aaeadb7cc63bb", size = 7925, upload-time = "2026-06-05T12:58:21.147Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/98/54/f2e5d09f65092b6a5e964ab10b807edb3b605a8589a67c798fb9c31c2a4a/aiohttp_basicauth-1.2.0-py3-none-any.whl", hash = "sha256:2a30373b0b799987eb61c215db3b62e4b4900a718d4a2b2170a15ee946854e71", size = 7487, upload-time = "2026-06-05T12:58:19.918Z" },
-]
-
-[[package]]
-name = "aiomysql"
-version = "0.3.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pymysql" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/29/e0/302aeffe8d90853556f47f3106b89c16cc2ec2a4d269bdfd82e3f4ae12cc/aiomysql-0.3.2.tar.gz", hash = "sha256:72d15ef5cfc34c03468eb41e1b90adb9fd9347b0b589114bd23ead569a02ac1a", size = 108311, upload-time = "2025-10-22T00:15:21.278Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/af/aae0153c3e28712adaf462328f6c7a3c196a1c1c27b491de4377dd3e6b52/aiomysql-0.3.2-py3-none-any.whl", hash = "sha256:c82c5ba04137d7afd5c693a258bea8ead2aad77101668044143a991e04632eb2", size = 71834, upload-time = "2025-10-22T00:15:15.905Z" },
 ]
 
 [[package]]
@@ -1210,7 +1199,6 @@ version = "0.3.329"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
-    { name = "aiomysql" },
     { name = "aiosqlite" },
     { name = "alembic" },
     { name = "asyncpg" },
@@ -1245,7 +1233,6 @@ dependencies = [
     { name = "psycopg-binary" },
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
-    { name = "pymysql" },
     { name = "python-json-logger" },
     { name = "python-multipart" },
     { name = "python3-saml" },
@@ -1342,7 +1329,6 @@ requires-dist = [
     { name = "aiodocker", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "aiodocker", marker = "extra == 'docker'", specifier = ">=0.21.0" },
     { name = "aiohttp", specifier = ">=3.14.3" },
-    { name = "aiomysql", specifier = ">=0.3.2" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "alembic", specifier = ">=1.16.0" },
     { name = "asyncpg", specifier = ">=0.29.0" },
@@ -1387,7 +1373,6 @@ requires-dist = [
     { name = "psycopg-binary", specifier = ">=3.3.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
-    { name = "pymysql", specifier = ">=1.1.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-bdd", marker = "extra == 'dev'", specifier = ">=7.2.0" },
@@ -4730,15 +4715,6 @@ crypto = [
 ]
 
 [[package]]
-name = "pymysql"
-version = "1.2.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c8/69/808dc3d9bcc7d2841cdc2909b978c64eb1c450b7cd7b42d5907f7de7567d/pymysql-1.2.4.tar.gz", hash = "sha256:491558165b8e11f3644c5f9cfb30cc9c9111ffd54e53d3aa91b9a0a20be2294f", size = 51598, upload-time = "2026-11-09T09:37:09.356Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/60/acffa1e7261fdc68fadf6f196b66058e03dcb3df239f2c0acbfd11165845/pymysql-1.2.4-py3-none-any.whl", hash = "sha256:e169bed906168fffd0088925f45b3df024c2775c6fd128da0df773d47c458840", size = 46892, upload-time = "2026-11-09T09:37:07.987Z" },
-]
-
-[[package]]
 name = "pyparsing"
 version = "3.3.3"
 source = { registry = "https://pypi.org/simple" }
@@ -6140,14 +6116,14 @@ wheels = [
 
 [[package]]
 name = "wcmatch"
-version = "8.5.2"
+version = "12.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bracex" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/c4/55e0d36da61d7b8b2a49fd273e6b296fd5e8471c72ebbe438635d1af3968/wcmatch-8.5.2.tar.gz", hash = "sha256:a70222b86dea82fb382dd87b73278c10756c138bd6f8f714e2183128887b9eb2", size = 114983, upload-time = "2024-05-15T12:51:08.054Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/96/3a/fd5e95b2c1c04e3874682f9796d06f7389e2a95ab581177800ca17e785fa/wcmatch-12.0.4.tar.gz", hash = "sha256:23fe77fbfa3fff9e46f0f4a3d1891065270596774bd6131bd2f973fb822242a1", size = 168204, upload-time = "2026-11-20T13:18:10.541Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/78/533ef890536e5ba0fd4f7df37482b5800ecaaceae9afc30978a1a7f88ff1/wcmatch-8.5.2-py3-none-any.whl", hash = "sha256:17d3ad3758f9d0b5b4dedc770b65420d4dac62e680229c287bf24c9db856a478", size = 39397, upload-time = "2024-05-15T12:51:06.2Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/60/2645de23088abc90f1201f7339412c281e2b7766a52e7ccf795e0d3ac73c/wcmatch-12.0.4-py3-none-any.whl", hash = "sha256:3e61e404a90a8b6c8bca197fb9ad5f1accbb34ee206b63e0c588a2ab9aa05862", size = 52567, upload-time = "2026-11-20T13:18:09.455Z" },
 ]
 
 [[package]]

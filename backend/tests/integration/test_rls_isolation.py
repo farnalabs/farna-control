@@ -1190,8 +1190,10 @@ async def test_orm_tenant_filter_select_update_delete(monkeypatch: pytest.Monkey
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-    # Force non-Postgres path so tenant filter activates
+    # Force non-Postgres path so tenant filter activates (SQLite is the
+    # test-only backend, ADR 068 — the Settings guard requires the opt-in).
     monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
 
     class _TenantTestBase(DeclarativeBase):
         pass

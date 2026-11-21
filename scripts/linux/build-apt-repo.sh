@@ -3,13 +3,26 @@
 # Build the signed Farna Control apt repository site (FAR-2579 phase 2).
 #
 # Usage:
-#   scripts/linux/build-apt-repo.sh <out-site-dir> <manifest>
+#   scripts/linux/build-apt-repo.sh <out-site-dir> <manifest> [<reuse-manifest>]
 #
-# <manifest> lists every package version the repository publishes, one per
-# line, as "<release-tag><TAB><path to farna-control_<version>_amd64.deb>".
-# Blank lines and lines starting with '#' are ignored. Each .deb must be the
-# EXACT bytes of the asset attached to that GitHub release: the Packages index
-# records their size and hashes, and apt downloads the release asset itself.
+# Together the two manifests list every package version the repository
+# publishes. Blank lines and lines starting with '#' are ignored in both.
+#
+# <manifest> lists the versions whose .deb is available locally, one per line,
+# as "<release-tag><TAB><path to farna-control_<version>_amd64.deb>". Each .deb
+# must be the EXACT bytes of the asset attached to that GitHub release: the
+# Packages index records their size and hashes, and apt downloads the release
+# asset itself. It may be empty when every version is reused.
+#
+# <reuse-manifest> (optional, FAR-2590) lists versions the live repository
+# already indexes, so a refresh need not re-download their ~224 MB .debs:
+# "<release-tag><TAB><stanza-file><TAB><path to the release's SHA256SUMS>".
+# A stanza file holds that version's Packages paragraph exactly as the
+# previous index published it (scripts/linux/plan-apt-repo.sh writes them,
+# after verifying the previous InRelease signature). The builder re-checks
+# each one: it must be a well-formed farna-control stanza whose Filename is
+# the version's pool path and whose SHA256 equals the release's SHA256SUMS
+# entry for the .deb. Anything else is refused.
 #
 # The output is a static site for Cloudflare Pages (https://apt.farna.dev):
 #
@@ -66,14 +79,19 @@ info() {
 }
 
 usage() {
-  printf 'Usage: %s <out-site-dir> <manifest: release-tag<TAB>deb-path per line>\n' "${0##*/}" >&2
+  printf 'Usage: %s <out-site-dir> <manifest> [<reuse-manifest>]\n' "${0##*/}" >&2
 }
 
-[[ $# -eq 2 ]] || { usage; exit 2; }
+[[ $# -eq 2 || $# -eq 3 ]] || { usage; exit 2; }
 SITE="$1"
 MANIFEST="$2"
+REUSE_MANIFEST="${3:-}"
+
+# shellcheck source=scripts/linux/apt-repo-lib.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/apt-repo-lib.sh"
 
 [[ -f "${MANIFEST}" ]] || die "manifest not found: ${MANIFEST}"
+[[ -z "${REUSE_MANIFEST}" || -f "${REUSE_MANIFEST}" ]] || die "reuse manifest not found: ${REUSE_MANIFEST}"
 [[ -n "${APT_REPO_GPG_PRIVATE_KEY:-}" ]] || die "APT_REPO_GPG_PRIVATE_KEY is not set (armored private signing key)"
 [[ "${PUBLIC_URL}" =~ ^https?://[A-Za-z0-9.:-]+$ ]] || die "APT_REPO_PUBLIC_URL must be a bare http(s) origin (got '${PUBLIC_URL}')"
 [[ "${RELEASE_DOWNLOAD_BASE}" =~ ^https://[A-Za-z0-9./_-]+[A-Za-z0-9]$ ]] || \
@@ -101,10 +119,13 @@ trap cleanup EXIT
 
 # --- read and check the manifest --------------------------------------------
 
-mkdir -p -- "${WORK}/${POOL_DIR}"
+mkdir -p -- "${WORK}/${POOL_DIR}" "${WORK}/reused"
 declare -A seen=()
 redirects=()
 versions=()
+new_files=()
+# Reused versions, as "<deb-file-name><TAB><SHA256 from the release's SHA256SUMS>".
+reused_files=()
 line_no=0
 while IFS= read -r line || [[ -n "${line}" ]]; do
   line_no=$((line_no + 1))
@@ -128,16 +149,52 @@ while IFS= read -r line || [[ -n "${line}" ]]; do
   ln -s -- "$(cd -- "$(dirname -- "${deb}")" && pwd)/${file}" "${WORK}/${POOL_DIR}/${file}"
   redirects+=("/${POOL_DIR}/${file} ${RELEASE_DOWNLOAD_BASE}/${tag}/${file} 302")
   versions+=("${version}"$'\t'"${tag}")
+  new_files+=("${file}")
   info "package ${version} <- ${tag} (${file})"
 done < "${MANIFEST}"
-[[ "${#versions[@]}" -gt 0 ]] || die "the manifest lists no packages"
+
+if [[ -n "${REUSE_MANIFEST}" ]]; then
+  line_no=0
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line_no=$((line_no + 1))
+    line="${line%$'\r'}"
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    IFS=$'\t' read -r tag stanza sums extra <<< "${line}"
+    [[ -n "${sums:-}" && -z "${extra:-}" ]] || \
+      die "reuse manifest line ${line_no}: expected '<release-tag><TAB><stanza-file><TAB><SHA256SUMS>'"
+    [[ "${tag}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "reuse manifest line ${line_no}: invalid release tag '${tag}'"
+    [[ -f "${stanza}" ]] || die "reuse manifest line ${line_no}: no such stanza file: ${stanza}"
+    file="$(sed -n "s|^Filename: ${POOL_DIR}/||p" "${stanza}" | head -n 1)"
+    version="$(apt_deb_version "${file}")" || \
+      die "reuse manifest line ${line_no}: stanza Filename is not ${POOL_DIR}/${PACKAGE}_<X.Y.Z>_${ARCH}.deb"
+    [[ -z "${seen[${file}]:-}" ]] || die "reuse manifest line ${line_no}: ${file} is listed twice (${seen[${file}]} and ${tag})"
+    seen["${file}"]="${tag}"
+    want_sha="$(apt_sums_entry "${sums}" "${file}")" || \
+      die "reuse manifest line ${line_no}: ${sums} has no single SHA256SUMS entry for ${file}"
+    problem="$(apt_stanza_problem "${stanza}" "${file}" "${want_sha}")" || \
+      die "reuse manifest line ${line_no}: refusing the stanza for ${file}: ${problem}"
+    cp -- "${stanza}" "${WORK}/reused/${file}.stanza"
+    redirects+=("/${POOL_DIR}/${file} ${RELEASE_DOWNLOAD_BASE}/${tag}/${file} 302")
+    versions+=("${version}"$'\t'"${tag}")
+    reused_files+=("${file}"$'\t'"${want_sha}")
+    info "package ${version} <- ${tag} (${file}, reused stanza confirmed by SHA256SUMS)"
+  done < "${REUSE_MANIFEST}"
+fi
+[[ "${#versions[@]}" -gt 0 ]] || die "the manifests list no packages"
 
 # --- Packages ---------------------------------------------------------------
 
 BINARY_DIR="dists/${SUITE}/${COMPONENT}/binary-${ARCH}"
 mkdir -p -- "${SITE}/${BINARY_DIR}"
 info "generating ${BINARY_DIR}/Packages"
-(cd -- "${WORK}" && apt-ftparchive --md5=yes --sha1=yes --sha256=yes --sha512=yes packages "${POOL_DIR}") > "${WORK}/Packages.raw"
+: > "${WORK}/Packages.raw"
+if [[ "${#new_files[@]}" -gt 0 ]]; then
+  (cd -- "${WORK}" && apt-ftparchive --md5=yes --sha1=yes --sha256=yes --sha512=yes packages "${POOL_DIR}") > "${WORK}/Packages.raw"
+fi
+# Merge in the reused stanzas; the sort below orders the whole index.
+for entry in "${reused_files[@]}"; do
+  { printf '\n'; cat -- "${WORK}/reused/${entry%%$'\t'*}.stanza"; printf '\n'; } >> "${WORK}/Packages.raw"
+done
 
 # Order the stanzas newest version first (versions are X.Y.Z, so sort -V is
 # exact). Stanzas are paragraphs; join each onto one line with \001 to sort.
@@ -159,14 +216,20 @@ awk 'BEGIN { RS = ""; FS = "\n" }
 
 stanzas="$(grep -c '^Package: ' "${SITE}/${BINARY_DIR}/Packages" || true)"
 [[ "${stanzas}" -eq "${#versions[@]}" ]] || die "Packages has ${stanzas} stanzas for ${#versions[@]} manifest entries"
-# Self-check: every stanza must carry the size and SHA256 of the exact bytes.
-for file in "${!seen[@]}"; do
+# Self-check: every new stanza must carry the size and SHA256 of the exact bytes.
+for file in "${new_files[@]}"; do
   real="$(readlink -f -- "${WORK}/${POOL_DIR}/${file}")"
   want_sha="$(sha256sum -- "${real}" | awk '{print $1}')"
   want_size="$(stat -c %s -- "${real}")"
   stanza="$(awk -v f="Filename: ${POOL_DIR}/${file}" 'BEGIN { RS = "" } index($0, f "\n") { print }' "${SITE}/${BINARY_DIR}/Packages")"
   grep -qx "SHA256: ${want_sha}" <<< "${stanza}" || die "Packages SHA256 for ${file} does not match the file"
   grep -qx "Size: ${want_size}" <<< "${stanza}" || die "Packages Size for ${file} does not match the file"
+done
+# Self-check: every reused stanza must still carry its release's SHA256SUMS entry.
+for entry in "${reused_files[@]}"; do
+  file="${entry%%$'\t'*}"
+  stanza="$(apt_packages_stanza "${SITE}/${BINARY_DIR}/Packages" "${file}")"
+  grep -qx "SHA256: ${entry#*$'\t'}" <<< "${stanza}" || die "Packages SHA256 for reused ${file} does not match its release SHA256SUMS"
 done
 gzip -9nc "${SITE}/${BINARY_DIR}/Packages" > "${SITE}/${BINARY_DIR}/Packages.gz"
 

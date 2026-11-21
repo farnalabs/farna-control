@@ -51,7 +51,7 @@ export interface Tab {
   label: string
   /**
    * This tab's destination. It may carry a query string (e.g.
-   * `/library?section=community`); every query pair is matched against the
+   * `/library?section=collections`); every query pair is matched against the
    * current route when resolving the active tab, so tabs that sub-select a
    * view on one path stay distinguishable.
    *
@@ -154,7 +154,7 @@ interface TabTarget {
 
 /**
  * Split a tab destination into its path and query pairs. A `to` may be a bare
- * path, carry a query (`/library?section=community`) or a hash, or any of those
+ * path, carry a query (`/library?section=collections`) or a hash, or any of those
  * combined; only the path is used for prefix matching.
  */
 function parseTabTarget(to: string): TabTarget {

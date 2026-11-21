@@ -8,20 +8,37 @@
     :aria-label="$t('components.SidebarNav.main_navigation')"
   >
     <div v-if="collapsed" class="flex flex-col items-center gap-1">
+      <!-- FAR-2605: the pinned row (Dashboard) sits ABOVE the groups, outside
+           every collapsible section, in both the rail and the expanded nav. -->
+      <SidebarLink
+        v-if="pinnedItem"
+        :to="pinnedItem.to"
+        :icon="pinnedItem.icon"
+        :label="pinnedItem.label"
+        :label-key="pinnedItem.labelKey"
+        :exact="pinnedItem.exact"
+        :visibility="pinnedItem.visibility"
+        :collapsed="true"
+        :size="linkSize"
+        class="w-full"
+        data-testid="sidebar-pinned-link"
+        @click="$emit('navigate')"
+      />
+      <div v-if="pinnedItem" class="my-1 w-full border-t" aria-hidden="true" />
       <template v-for="group in visibleSidebarGroups" :key="group.id">
         <button
           type="button"
           class="sidebar-group-rail-toggle"
           :class="{ 'sidebar-group-rail-toggle--touch': size === 'touch' }"
-          :aria-expanded="!isGroupCollapsed(group.id, group.defaultCollapsed)"
+          :aria-expanded="!isGroupCollapsedFor(group)"
           :aria-controls="`sidebar-group-rail-${group.id}`"
           :title="groupToggleLabel(group)"
           :aria-label="groupToggleLabel(group)"
-          @click="toggleGroup(group.id, group.defaultCollapsed)"
+          @click="onToggleGroup(group)"
         >
           <span
             class="sidebar-group-rail-chevron"
-            :class="{ rotated: !isGroupCollapsed(group.id, group.defaultCollapsed) }"
+            :class="{ rotated: !isGroupCollapsedFor(group) }"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -41,7 +58,7 @@
           </span>
         </button>
         <section
-          v-if="!isGroupCollapsed(group.id, group.defaultCollapsed)"
+          v-if="!isGroupCollapsedFor(group)"
           :id="`sidebar-group-rail-${group.id}`"
           class="flex flex-col items-center gap-1"
           :aria-label="groupLabel(group)"
@@ -65,14 +82,29 @@
     </div>
     <template v-else>
       <div class="space-y-6">
+        <!-- FAR-2605: the pinned row (Dashboard) renders above the groups, not
+             inside one — a single row with no collapsible header. -->
+        <div v-if="pinnedItem">
+          <SidebarLink
+            :to="pinnedItem.to"
+            :icon="pinnedItem.icon"
+            :label="pinnedItem.label"
+            :label-key="pinnedItem.labelKey"
+            :exact="pinnedItem.exact"
+            :visibility="pinnedItem.visibility"
+            :size="linkSize"
+            data-testid="sidebar-pinned-link"
+            @click="$emit('navigate')"
+          />
+        </div>
         <template v-for="group in visibleSidebarGroups" :key="group.id">
           <SidebarGroup
             :id="group.id"
             :label="group.label"
             :label-key="group.labelKey"
-            :collapsed="isGroupCollapsed(group.id, group.defaultCollapsed)"
+            :collapsed="isGroupCollapsedFor(group)"
             :is-active="activeGroupIds.has(group.id)"
-            @toggle="toggleGroup(group.id, group.defaultCollapsed)"
+            @toggle="onToggleGroup(group)"
           >
             <SidebarLink
               v-for="item in group.items"
@@ -101,7 +133,7 @@ import { OverlayScrollbarsComponent } from "overlayscrollbars-vue";
 import SidebarLink from "./SidebarLink.vue";
 import SidebarGroup from "./SidebarGroup.vue";
 
-import { getVisibleNavGroups, isNavItemActive } from "../config/navigation";
+import { getNavGroups, getVisibleNavGroups, getVisiblePinnedNavItem, isNavItemActive } from "../config/navigation";
 import type { NavGroup } from "../config/navigation";
 import { useNavVisibilityContext } from "../composables/useNavVisibilityContext";
 import { useSidebar } from "../composables/useSidebar";
@@ -143,34 +175,6 @@ const { toggleGroup, isGroupCollapsed } = useSidebar();
 // its own `default` so the desktop rail renders exactly as before.
 const linkSize = computed(() => (props.size === "touch" ? "touch" : undefined));
 
-function groupLabel(group: NavGroup): string {
-  return group.labelKey ? t(group.labelKey) : group.label;
-}
-
-function groupToggleLabel(group: NavGroup): string {
-  const collapsed = isGroupCollapsed(group.id, group.defaultCollapsed);
-  const hint = collapsed
-    ? t("components.SidebarNav.group_collapsed_hint")
-    : t("components.SidebarNav.group_expanded_hint");
-  const action = collapsed
-    ? t("components.SidebarNav.click_to_expand")
-    : t("components.SidebarNav.click_to_collapse");
-  return `${groupLabel(group)} (${hint}) — ${action}`;
-}
-
-const activeGroupIds = computed(() => {
-  const ids = new Set<string>()
-  for (const group of visibleSidebarGroups.value) {
-    for (const item of group.items) {
-      if (isNavItemActive(item, route)) {
-        ids.add(group.id)
-        break
-      }
-    }
-  }
-  return ids
-})
-
 // qa iter 2 (FAR-535): consume the shared nav-visibility composable instead
 // of hand-building a second NavVisibilityContext inline — the composable is
 // the single construction point, so context fields (isDemoSession,
@@ -185,6 +189,61 @@ const navVisibility = useNavVisibilityContext(() => ({
 }));
 
 const visibleSidebarGroups = computed(() => getVisibleNavGroups(navVisibility.value));
+
+// Groups holding the current route. FAR-2602 reuses the same activation the
+// link highlight uses, so a detail page (`/runs/:id`, which has no nav row of
+// its own) activates — and so reveals — the sidebar item that owns it.
+//
+// Derived from the UNFILTERED manifest groups, not the visible ones: route
+// ownership is a manifest fact, not a visibility fact (FAR-2602 review). For a
+// permission-gated active item the visible set resolves after the plan/tier
+// fetch, so keying off it reveals the group one paint late.
+const activeGroupIds = computed(() => {
+  const ids = new Set<string>()
+  for (const group of getNavGroups()) {
+    for (const item of group.items) {
+      if (isNavItemActive(item, route)) {
+        ids.add(group.id)
+        break
+      }
+    }
+  }
+  return ids
+})
+
+function groupLabel(group: NavGroup): string {
+  return group.labelKey ? t(group.labelKey) : group.label;
+}
+
+function isGroupActive(group: NavGroup): boolean {
+  return activeGroupIds.value.has(group.id);
+}
+
+// The collapse state the user actually sees: an explicit toggle wins, and a
+// never-toggled default-collapsed group is revealed while it holds the active
+// route (FAR-2602). One helper keeps every read — aria-expanded, the rail's
+// disclosure, the header label and the toggle itself — in agreement.
+function isGroupCollapsedFor(group: NavGroup): boolean {
+  return isGroupCollapsed(group.id, group.defaultCollapsed, isGroupActive(group));
+}
+
+function onToggleGroup(group: NavGroup): void {
+  toggleGroup(group.id, group.defaultCollapsed, isGroupActive(group));
+}
+
+function groupToggleLabel(group: NavGroup): string {
+  const collapsed = isGroupCollapsedFor(group);
+  const hint = collapsed
+    ? t("components.SidebarNav.group_collapsed_hint")
+    : t("components.SidebarNav.group_expanded_hint");
+  const action = collapsed
+    ? t("components.SidebarNav.click_to_expand")
+    : t("components.SidebarNav.click_to_collapse");
+  return `${groupLabel(group)} (${hint}) — ${action}`;
+}
+// FAR-2605: the pinned row (Dashboard) is rendered above the groups and is
+// subject to the same visibility gate as a grouped item.
+const pinnedItem = computed(() => getVisiblePinnedNavItem(navVisibility.value));
 </script>
 
 <style scoped>

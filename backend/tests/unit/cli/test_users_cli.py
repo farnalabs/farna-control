@@ -81,8 +81,14 @@ def isolated_launcher_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> I
 
 @pytest.fixture(autouse=True)
 def db_env(db_url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
-    """Point Settings' DATABASE_URL at the hermetic SQLite file for every test."""
+    """Point Settings' DATABASE_URL at the hermetic SQLite file for every test.
+
+    SQLite is test-only (ADR 068) and the Settings guard inspects the DSN, so
+    both halves of the escape hatch are set here — the URL alone is refused.
+    """
     monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
     get_settings.cache_clear()
     yield db_url
     settings_module._pinned_env_file = None

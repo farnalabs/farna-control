@@ -483,9 +483,9 @@ async def _bound_hot_runs_row_lock(conn: AsyncConnection) -> None:
     deliberately does NOT depend on that landing: it issues the identical
     bound statement itself, so the executor path is correct either way.
 
-    POSTGRES-ONLY (the same safe no-op gate as the shared helper): SQLite /
-    MariaDB take no ``lock_timeout``, and the unit fixtures run on SQLite
-    connection doubles.
+    POSTGRES-ONLY (the same safe no-op gate as the shared helper): SQLite
+    (test-only) and the unsupported dialects take no ``lock_timeout``, and the
+    unit fixtures run on SQLite connection doubles.
     """
     if conn.dialect.name != "postgresql":
         return

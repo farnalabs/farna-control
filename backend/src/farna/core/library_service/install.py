@@ -59,9 +59,10 @@ _PIN_TYPE_ORDER: tuple[str, ...] = ("schema", "agent", "workflow", "pipeline_tem
 
 # Sources whose primitives are visible to EVERY organisation via the
 # library_service resolver (ADR 032 §4): modulo built-ins come from the
-# in-code registry and community contributions from the published
-# community cache — neither lives inside the installing org's RLS slice.
-_VISIBLE_EVERYWHERE_SOURCES = frozenset({"modulo", "community"})
+# in-code registry, which lives outside the installing org's RLS slice.
+# Only built-ins qualify: nothing sourced from outside the org may be
+# resolvable as a visible-everywhere primitive.
+_VISIBLE_EVERYWHERE_SOURCES = frozenset({"modulo"})
 
 # Library-primitive ``content_json["fields"]`` → JSON Schema type conversion.
 _FIELD_TYPE_MAP: dict[str, str] = {
@@ -135,7 +136,7 @@ def _definition_from_field_spec(spec: Any) -> dict[str, Any]:
 def _definition_from_fields(fields: list[dict[str, Any]]) -> dict[str, Any]:
     """Convert a library-primitive ``fields`` list into a JSON Schema definition.
 
-    Builtin modulo/community schema primitives carry a simplified
+    Builtin modulo schema primitives carry a simplified
     ``content_json={"fields": [...]}`` shape; ``materialize_import`` requires a
     ``definition_json`` JSON Schema (it refuses to materialise a schema
     without one), so collection install translates eagerly.
@@ -187,10 +188,10 @@ async def _resolve_collection(
 
     The org-scoped DB row wins (unchanged behaviour for genuinely local
     collections). Otherwise fall back to the library_service resolver, which
-    sees the in-code modulo registry and the published community cache —
-    primitives every org may install (ADR 032 §4). A resolver fallback is
-    only accepted when the row itself is org-owned or comes from a
-    visible-everywhere source; cross-org local rows stay invisible.
+    sees the in-code modulo registry — primitives every org may install
+    (ADR 032 §4). A resolver fallback is only accepted when the row itself is
+    org-owned or comes from a visible-everywhere source; cross-org local rows
+    stay invisible.
     """
     collection = await session.get(LibraryPrimitive, collection_id)
     if collection is not None and collection.organisation_id == org_id:
@@ -212,7 +213,7 @@ async def _resolve_pin(
     """Resolve a single manifest pin to its backing primitive.
 
     Routes through the library_service resolver (ADR 032 §4): the org-scoped
-    DB first, then the visible-everywhere modulo/community registries. Raises
+    DB first, then the visible-everywhere modulo registry. Raises
     ``PinResolutionError`` when the pin references an unknown, invisible, or
     version-mismatched primitive.
     """
@@ -231,7 +232,7 @@ async def _resolve_pin(
 def _transient_primitives(prims: list[LibraryPrimitive]) -> list[LibraryPrimitive]:
     """Return the registry objects with NO backing DB row yet (transient).
 
-    Builtin modulo/community primitives are module-level ``LibraryPrimitive``
+    Builtin modulo primitives are module-level ``LibraryPrimitive``
     instances outside any session; ``sa_inspect(...).transient`` identifies
     exactly those (DB-loaded rows are persistent/detached with a row on disk).
     """
@@ -303,8 +304,7 @@ async def _persist_collection_row(
     persist its row first. ONLY the collection row is persisted — pin content is
     read in-memory by ``_build_bundle_from_pins`` and is never written to disk,
     so the DB can never drift from the registry for pins (ADR 032 §4: the
-    in-code registry is the single source of truth for modulo/community
-    primitives).
+    in-code registry is the single source of truth for modulo primitives).
 
     The upsert is idempotent on the unique tuple ``(organisation_id, source,
     slug, version)`` (``uq_library_primitive_version``, WHERE deleted_at IS
@@ -319,8 +319,8 @@ async def _persist_collection_row(
     Everything happens under the sentinel org's RLS context (the installing
     org's RLS session may neither read nor write sentinel rows), then the RLS
     context is restored to the installing org. The sentinel ``Organisation``
-    row itself is created by migration 0228 — this function only reads it and
-    raises a clear, actionable error when it is absent.
+    row itself is created by migration 0353_baseline_seed_data — this function
+    only reads it and raises a clear, actionable error when it is absent.
 
     Returns the id of the backing DB row; the caller MUST use it as
     ``collection_install.collection_id`` so the FK targets the row that
@@ -334,7 +334,7 @@ async def _persist_collection_row(
     try:
         org_row = await session.get(Organisation, MODULO_ORG_ID)
         if org_row is None:
-            raise CollectionInstallError("The Modulo sentinel organisation is missing from the database. It is created by migration 0232_seed_modulo_sentinel_organisation — run `alembic upgrade head` and retry the install.")
+            raise CollectionInstallError("The Farna Control sentinel organisation is missing from the database. It is created by migration 0353_baseline_seed_data — run `alembic upgrade head` and retry the install.")
         existing = (
             await session.execute(
                 select(LibraryPrimitive).where(
@@ -916,9 +916,9 @@ async def install_collection(
     ``materialize_import`` errors (which rollback all-or-nothing).
     """
     # 1. Load the collection primitive — org-scoped DB first, then the
-    # library_service resolver so shipped modulo/community collections
-    # (in-code registry + published community cache, no DB row in the
-    # installing org's RLS slice) are installable per ADR 032 §4.
+    # library_service resolver so shipped modulo collections (in-code
+    # registry, no DB row in the installing org's RLS slice) are installable
+    # per ADR 032 §4.
     collection = await _resolve_collection(session, org_id, collection_id)
     if collection is None:
         raise CollectionInstallError(f"Collection {collection_id} not found")
@@ -929,7 +929,7 @@ async def install_collection(
 
     # 2. Resolve manifest pins
     # Local org collections carry the pins on the ``manifest_pins`` column;
-    # built-in modulo/community collections carry them in ``content_json``.
+    # built-in modulo collections carry them in ``content_json``.
     # The legacy ``content_json["pins"]`` key (written by an earlier version of
     # the API routes) is accepted as a last resort so already-persisted rows
     # keep resolving; the ``manifest_pins`` COLUMN stays the first source.
@@ -947,7 +947,7 @@ async def install_collection(
         raise CollectionInstallError("Collection has no manifest pins to install")
 
     # 2b. Persist ONLY the collection row when it comes from the in-code
-    # registry (built-in modulo/community items). ``collection_install.collection_id``
+    # registry (built-in modulo items). ``collection_install.collection_id``
     # references ``library_primitives``, so that one row must exist on disk;
     # pin rows are NEVER persisted — pin content is consumed in-memory by
     # ``_build_bundle_from_pins`` and the registry stays the single source of
@@ -985,7 +985,7 @@ async def install_collection(
         collection_version=collection.version,
         organisation_id=org_id,
         status="installed",
-        community_sourced=collection.source in ("community", "registry"),
+        registry_sourced=collection.source == "registry",
         created_by=created_by,
     )
     session.add(install)
@@ -1025,11 +1025,11 @@ async def install_collection(
     # 8. Build connector checklist
     connector_checklist = _build_connector_checklist(resolved_pins)
 
-    # 9. Determine community provenance (ADR 032 D2).
-    # Community-sourced or registry-sourced collections restrict agent tool/
+    # 9. Determine registry provenance (ADR 032 D2).
+    # Registry-sourced collections restrict agent tool/
     # connector access until an operator explicitly grants access.
-    community_sourced = collection.source in ("community", "registry")
-    install.community_sourced = community_sourced
+    registry_sourced = collection.source == "registry"
+    install.registry_sourced = registry_sourced
 
     # 10. Populate the provenance record (row already created + flushed above).
     install.resolved_manifest = {

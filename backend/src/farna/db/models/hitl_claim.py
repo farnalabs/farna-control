@@ -83,7 +83,7 @@ class HitlClaim(OrgScoped):
     # web routes pass to executor.resume. Survives SAQ job loss so a recovered
     # resume injects the human's actual verdict, never an empty approval.
     # jsonb in the database after migration 0147 — JSONB_COL keeps the ORM
-    # declaration honest while preserving SQLite/MariaDB parity.
+    # declaration honest while preserving SQLite (test-only) parity.
     decision_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL, nullable=True, default=None)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Set by the hitl_overdue notification job once a `hitl_overdue` event has
@@ -97,7 +97,7 @@ class HitlClaim(OrgScoped):
     # time and reads without a per-gate snapshot walk. Nullable: legacy gates
     # that fired before this column existed carry NULL (the UI renders a muted
     # "no description" fallback). jsonb in the parallel migration; JSONB_COL
-    # keeps the ORM declaration honest while preserving SQLite/MariaDB parity
+    # keeps the ORM declaration honest while preserving SQLite (test-only) parity
     # (same pattern as decision_payload).
     context_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL, nullable=True, default=None)
     # FAR-634: the resolved ``hitl_review_config``, stamped by the executor's
@@ -109,7 +109,7 @@ class HitlClaim(OrgScoped):
     # stamp failure at fire time is failure-isolated (the gate still fires
     # with NULL config and the resolver falls back). jsonb in the parallel
     # migration; JSONB_COL keeps the ORM declaration honest while preserving
-    # SQLite/MariaDB parity (same pattern as context_json).
+    # SQLite (test-only) parity (same pattern as context_json).
     gate_config_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COL, nullable=True, default=None)
     # FAR-1257: the ABSOLUTE terminalization deadline, stamped ONCE at fire time
     # by ``HITLManager.create_gate`` from the resolved review window (pipeline

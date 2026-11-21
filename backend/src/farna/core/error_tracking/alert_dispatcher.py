@@ -190,22 +190,22 @@ async def _dispatch_email(
 
         to_emails = [a.email for a in admin_accounts if a.email]
 
-        subject = f"[Modulo Alert] {alert.level}: {alert.rule_name}"
+        subject = f"[Farna Control Alert] {alert.level}: {alert.rule_name}"
 
         body_html = (
             "<html><body>"
-            f"<h2>Modulo Alert: {alert.rule_name}</h2>"
+            f"<h2>Farna Control Alert: {alert.rule_name}</h2>"
             f"<p><strong>Level:</strong> {alert.level}</p>"
             f"<p><strong>Rule:</strong> {alert.rule_name}</p>"
             f"<p><strong>Message:</strong> {_escape_html(sample_message[:1000])}</p>"
             f"<p><strong>Count:</strong> {alert.count}</p>"
             f"<p><strong>Fingerprint:</strong> {alert.fingerprint}</p>"
             f"<p><strong>Environment:</strong> {_escape_html(alert.environment or 'N/A')}</p>"
-            f'<p><a href="{_escape_html(admin_url)}">View in Modulo</a></p>'
+            f'<p><a href="{_escape_html(admin_url)}">View in Farna Control</a></p>'
             "</body></html>"
         )
 
-        body_text = f"Modulo Alert: {alert.rule_name}\nLevel: {alert.level}\nRule: {alert.rule_name}\nMessage: {sample_message[:500]}\nCount: {alert.count}\nFingerprint: {alert.fingerprint}\nEnvironment: {alert.environment or 'N/A'}\nView: {admin_url}"
+        body_text = f"Farna Control Alert: {alert.rule_name}\nLevel: {alert.level}\nRule: {alert.rule_name}\nMessage: {sample_message[:500]}\nCount: {alert.count}\nFingerprint: {alert.fingerprint}\nEnvironment: {alert.environment or 'N/A'}\nView: {admin_url}"
 
         try:
             success = await asyncio.to_thread(
@@ -403,7 +403,7 @@ async def dispatch_alert_resolved(
 
 def _format_slack_payload(payload: dict[str, Any], emoji: str) -> dict[str, Any]:
     return {
-        "text": f"{emoji} *Error Alert: {payload['rule']}*\n• Group: `{payload['group_id']}`\n• Level: {payload['level']}\n• Count: {payload['count']}\n• Message: {payload['message'][:500]}\n• Environment: {payload['environment']}\n• <{payload['url']}|View in Modulo>",
+        "text": f"{emoji} *Error Alert: {payload['rule']}*\n• Group: `{payload['group_id']}`\n• Level: {payload['level']}\n• Count: {payload['count']}\n• Message: {payload['message'][:500]}\n• Environment: {payload['environment']}\n• <{payload['url']}|View in Farna Control>",
     }
 
 

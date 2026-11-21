@@ -116,3 +116,63 @@ def test_rescan_rename_keeps_node_identity_and_updates_its_name() -> None:
 
     assert [node["node_key"] for node in after.nodes] == [node["node_key"] for node in before.nodes]
     assert after.nodes[0]["display_name"] == "build-v2"
+
+
+# ---------------------------------------------------------------------------
+# FAR-2595: bounded discovery source cap
+# ---------------------------------------------------------------------------
+
+_CAP_WARNING = "Discovery is capped at {cap} sources; additional organisation sources beyond the cap were not scanned"
+
+
+def _pipelines(count: int) -> list[DiscoverySource]:
+    return [DiscoverySource(kind="pipeline", identifier=f"p{index:04d}", name=f"pipeline-{index:04d}") for index in range(count)]
+
+
+def test_source_cap_scans_exactly_the_cap_and_warns() -> None:
+    """Over the cap, the draft is bounded to exactly the cap and warns."""
+    draft = discover_draft(_pipelines(5), max_sources=3)
+
+    assert draft.node_count == 3
+    assert _CAP_WARNING.format(cap=3) in draft.warnings
+
+
+def test_source_cap_at_the_boundary_does_not_warn() -> None:
+    """Exactly at the cap is not a truncation, so no warning is emitted."""
+    draft = discover_draft(_pipelines(3), max_sources=3)
+
+    assert draft.node_count == 3
+    assert _CAP_WARNING.format(cap=3) not in draft.warnings
+
+
+def test_source_cap_below_the_cap_does_not_warn() -> None:
+    draft = discover_draft(_pipelines(2), max_sources=3)
+
+    assert draft.node_count == 2
+    assert not any("capped at" in warning for warning in draft.warnings)
+
+
+def test_source_cap_selection_is_order_independent() -> None:
+    """The same capped subset is chosen regardless of input order."""
+    sources = _pipelines(5)
+    shuffled = [sources[3], sources[0], sources[4], sources[2], sources[1]]
+
+    forward = discover_draft(sources, max_sources=3)
+    reversed_draft = discover_draft(list(reversed(sources)), max_sources=3)
+    shuffled_draft = discover_draft(shuffled, max_sources=3)
+
+    forward_keys = [node["node_key"] for node in forward.nodes]
+    assert forward_keys == [node["node_key"] for node in reversed_draft.nodes]
+    assert forward_keys == [node["node_key"] for node in shuffled_draft.nodes]
+    # Deterministic order: the first three identifiers, not input order.
+    assert forward_keys == ["pipeline:p0000", "pipeline:p0001", "pipeline:p0002"]
+
+
+def test_truncation_warning_does_not_invent_an_unmeasured_total() -> None:
+    """The warning must not claim an "N of M" total the query never measured."""
+    from farna.core.system_maps_discovery import discovery_truncation_warning
+
+    warning = discovery_truncation_warning(1000)
+
+    assert warning == _CAP_WARNING.format(cap=1000)
+    assert " of " not in warning

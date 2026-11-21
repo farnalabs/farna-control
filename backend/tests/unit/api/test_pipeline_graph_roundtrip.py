@@ -190,8 +190,12 @@ async def seeded_db(session: AsyncSession) -> None:
 async def _make_settings() -> Any:
     from farna.settings import Settings
 
+    # SQLite is test-only: Settings refuses a SQLite DSN unless BOTH the
+    # ``modulo_db`` knob and the test-only opt-in agree (ADR 068).
     return Settings(
         database_url="sqlite+aiosqlite://",
+        modulo_db="sqlite",
+        allow_sqlite=True,
         secret_key="a" * 32,
         fernet_key="a" * 32,
         modulo_admin_password="test",

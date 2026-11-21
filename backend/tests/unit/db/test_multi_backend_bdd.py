@@ -1,7 +1,8 @@
 """Unit tests covering multi-backend behaviour from multi_backend.feature scenarios.
 
-Verifies tenant isolation, migrations, locks, and time functions across Postgres,
-MariaDB, and SQLite backends.  Mirrors the BDD scenarios in:
+Verifies tenant isolation, migrations, locks, and timestamp defaults on
+PostgreSQL (the only supported runtime database, ADR 068) and SQLite
+(test-only). Mirrors the BDD scenarios in:
     backend/tests/bdd/features/organisation/multi_backend.feature
 """
 
@@ -11,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import Select
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.repositories import RepositoryHub
@@ -63,16 +65,16 @@ def _make_stmt(*, entities: list | None = None) -> MagicMock:
 
 
 # ===========================================================================
-# Scenario 1-2: GenericRepository tenant filtering (SQLite / MariaDB)
+# Scenario 1-2: GenericRepository tenant filtering (SQLite, test-only)
 # ===========================================================================
 
 
 class TestGenericRepositoryTenantFilter:
     """Verify GenericRepository dispatches tenant filtering via session.info."""
 
-    @pytest.fixture(params=["sqlite", "mysql"])
-    def dialect(self, request: pytest.FixtureRequest) -> str:
-        return request.param
+    @pytest.fixture
+    def dialect(self) -> str:
+        return "sqlite"
 
     @pytest.fixture
     def repo(self) -> GenericRepository:
@@ -240,7 +242,7 @@ class TestCrossOrgIsolationGeneric:
 
 
 # ===========================================================================
-# Scenario 5: Alembic migration on all backends
+# Scenario 5: Alembic migration on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
 
@@ -251,11 +253,6 @@ class TestMigrationBackendConfig:
         from farna.db.migrations.env import _detect_backend
 
         assert _detect_backend("postgresql+asyncpg://user:pass@localhost/db") == "postgresql"
-
-    def test_detect_mysql(self) -> None:
-        from farna.db.migrations.env import _detect_backend
-
-        assert _detect_backend("mysql+aiomysql://user:pass@localhost/db") == "mysql"
 
     def test_detect_sqlite(self) -> None:
         from farna.db.migrations.env import _detect_backend
@@ -273,14 +270,6 @@ class TestMigrationBackendConfig:
         assert "+async" not in converted
         assert "psycopg2" in converted
 
-    @pytest.mark.parametrize("driver", ["aiomysql", "asyncmy"])
-    def test_async_mysql_driver_converts_to_pymysql(self, driver: str) -> None:
-        from farna.db.migrations.env import _to_sync_url
-
-        converted = _to_sync_url(f"mysql+{driver}://user:pass@localhost/db")
-        assert "+async" not in converted
-        assert "pymysql" in converted
-
     def test_sqlite_preserved_as_is(self) -> None:
         url = "sqlite:///test.db"
         assert "+async" not in url
@@ -295,12 +284,6 @@ class TestMigrationBackendConfig:
 
         backend = _detect_backend("postgresql+asyncpg://user:pass@localhost/db")
         assert backend == "postgresql"
-
-    def test_render_as_batch_disabled_for_mysql(self) -> None:
-        from farna.db.migrations.env import _detect_backend
-
-        backend = _detect_backend("mysql+aiomysql://user:pass@localhost/db")
-        assert backend == "mysql"
 
 
 # ===========================================================================
@@ -325,10 +308,6 @@ class TestAdvisoryLockAbstraction:
 
     def test_sqlite_lock_service_type(self) -> None:
         svc = _build_lock_service("sqlite")
-        assert isinstance(svc, GenericLock)
-
-    def test_mariadb_lock_service_type(self) -> None:
-        svc = _build_lock_service("mariadb")
         assert isinstance(svc, GenericLock)
 
     async def test_postgres_lock_calls_pg_try_advisory_lock(self) -> None:
@@ -441,41 +420,132 @@ class TestAdvisoryLockAbstraction:
 
 
 # ===========================================================================
-# Scenario 7: Time functions on all backends
+# Scenario 7: Timestamp defaults on the supported pair (SQLite + PostgreSQL)
 # ===========================================================================
 
+# The timestamp SQL form the shared mixin declares, rendered identically by
+# every supported dialect.
+_PORTABLE_TIMESTAMP_SQL = "current_timestamp"
 
-class TestTimeFunctionsMultiBackend:
-    """Verify func.now() / func.current_timestamp() work on all backends.
+_SQLITE_DIALECT = sqlite.dialect()
 
-    The test validates that ORM models using SA-generic time functions are
-    backend-agnostic — no dialect-specific timestamp calls.
+
+def _registered_model_classes() -> list[type]:
+    """Every mapped class, after importing the model package to register them."""
+    from farna.db.models.base import Base
+
+    return [mapper.class_ for mapper in Base.registry.mappers]
+
+
+def _default_arg_name(default: object) -> str | None:
+    """The SQL function name a column default renders, when it renders one.
+
+    ``server_default=func.now()`` produces a ``DefaultClause`` whose ``arg`` is
+    the SQL function (which exposes ``name``); a literal default, a ``text()``
+    clause or a Python-side callable exposes no ``name`` and returns ``None``.
+    """
+    if default is None:
+        return None
+    arg = getattr(default, "arg", default)
+    return getattr(arg, "name", None)
+
+
+def _render_default_on_sqlite(default: object) -> str:
+    """Render a column default as SQLite's DDL would receive it.
+
+    A plain-string default is already SQL and is returned verbatim; every other
+    form (a SQL function, a ``text()`` clause) is compiled with the SQLite
+    dialect.
+    """
+    arg = getattr(default, "arg", default)
+    compile_sql = getattr(arg, "compile", None)
+    if compile_sql is None:
+        return str(arg)
+    return str(compile_sql(dialect=_SQLITE_DIALECT))
+
+
+class TestTimestampDefaultsMultiBackend:
+    """Model timestamp defaults must stay valid on every supported dialect.
+
+    The supported pair is SQLite (test-only, ``create_all``) and PostgreSQL (the
+    only runtime database, ADR 068). Two spellings are portable and both are
+    accepted here:
+
+    * ``func.current_timestamp()`` - the SQL-standard form, which the shared
+      ``TimestampMixin`` declares and which both dialects render as
+      ``CURRENT_TIMESTAMP``.
+    * ``func.now()`` - SQLAlchemy renders it as ``CURRENT_TIMESTAMP`` on SQLite
+      and ``now()`` on PostgreSQL, so it is portable too.
+
+    What is *not* portable is hard-coding the PostgreSQL spelling as raw SQL:
+    ``text("now()")`` renders ``DEFAULT (now())`` on SQLite, which parses but
+    then fails every insert with ``unknown function: now()``. So the invariant
+    pinned below is about the rendered SQLite DDL, not about which SQLAlchemy
+    construct was chosen.
+
+    These tests inspect real model metadata; they do not compile SQLAlchemy
+    primitives, which would only prove what SQLAlchemy itself does.
     """
 
-    def test_model_uses_sa_func_now_not_backend_specific(self) -> None:
-        from sqlalchemy import func
+    def test_concrete_models_declare_the_portable_sql_form(self) -> None:
+        from farna.db.models.base import TimestampMixin
+        from farna.db.models.library_primitive import LibraryPrimitive
+        from farna.db.models.organisation import Organisation
 
-        now = func.now()
-        compiled = str(now.compile(compile_kwargs={"literal_binds": True}))
-        assert "now" in compiled.lower()
+        assert issubclass(LibraryPrimitive, TimestampMixin)
+        shared_columns = LibraryPrimitive.__table__.c
+        assert _default_arg_name(shared_columns["created_at"].server_default) == _PORTABLE_TIMESTAMP_SQL
+        assert _default_arg_name(shared_columns["updated_at"].server_default) == _PORTABLE_TIMESTAMP_SQL
+        assert _default_arg_name(shared_columns["updated_at"].onupdate) == _PORTABLE_TIMESTAMP_SQL
 
-    def test_model_uses_sa_func_current_timestamp_not_backend_specific(self) -> None:
-        from sqlalchemy import func
+        # Organisation does not use the mixin: it declares created_at itself,
+        # so it covers the hand-written column that must match the mixin.
+        assert _default_arg_name(Organisation.__table__.c["created_at"].server_default) == _PORTABLE_TIMESTAMP_SQL
 
-        ts = func.current_timestamp()
-        compiled = str(ts.compile(compile_kwargs={"literal_binds": True}))
-        assert "current_timestamp" in compiled.lower()
+    def test_every_shared_timestamp_column_declares_the_portable_sql_form(self) -> None:
+        from farna.db.models.base import TimestampMixin
 
-    def test_default_factory_is_not_backend_specific(self) -> None:
-        import datetime
+        checked = 0
+        for model in _registered_model_classes():
+            if not issubclass(model, TimestampMixin):
+                continue
+            columns = model.__table__.c
+            assert _default_arg_name(columns["created_at"].server_default) == _PORTABLE_TIMESTAMP_SQL, model.__name__
+            assert _default_arg_name(columns["updated_at"].server_default) == _PORTABLE_TIMESTAMP_SQL, model.__name__
+            assert _default_arg_name(columns["updated_at"].onupdate) == _PORTABLE_TIMESTAMP_SQL, model.__name__
+            checked += 1
 
-        now = datetime.datetime.now(datetime.UTC)
-        assert now.tzinfo is not None
+        # Guard against a registry that imported nothing: an empty loop would
+        # pass without inspecting a single column.
+        assert checked >= 20
 
-    def test_created_at_column_uses_default_factory(self) -> None:
+    def test_no_model_server_default_renders_raw_now_on_sqlite(self) -> None:
+        """No model default may render PostgreSQL-only ``now()`` in SQLite DDL.
+
+        ``server_default`` and ``onupdate`` are walked for every mapped table and
+        each expression is compiled with the SQLite dialect, i.e. rendered
+        exactly as SQLite would receive it. ``func.now()`` and
+        ``func.current_timestamp()`` both render ``CURRENT_TIMESTAMP`` and pass;
+        ``text("now()")`` renders ``now()`` and fails.
+        """
         from farna.db.models.base import Base
 
-        assert hasattr(Base, "metadata")
+        offenders: list[str] = []
+        checked = 0
+        for table_name, table in Base.metadata.tables.items():
+            for column in table.c:
+                for kind, default in (("server_default", column.server_default), ("onupdate", column.onupdate)):
+                    if default is None:
+                        continue
+                    checked += 1
+                    rendered = _render_default_on_sqlite(default)
+                    if "now()" in rendered.lower():
+                        offenders.append(f"{table_name}.{column.name} ({kind}) -> {rendered}")
+
+        # Guard against an unpopulated registry: an empty sweep would pass
+        # without rendering a single default.
+        assert checked >= 50, f"only {checked} column defaults inspected; the model registry looks empty"
+        assert not offenders, "SQLite-unsafe timestamp default(s): " + ", ".join(sorted(offenders))
 
 
 # ===========================================================================
@@ -496,20 +566,12 @@ class TestRepositoryHubDispatch:
         hub = RepositoryHub(session_factory=MagicMock(), db_type="sqlite")
         assert isinstance(hub.repo, GenericRepository)
 
-    def test_mariadb_repo_is_generic_repository(self) -> None:
-        hub = RepositoryHub(session_factory=MagicMock(), db_type="mariadb")
-        assert isinstance(hub.repo, GenericRepository)
-
     def test_postgres_lock_is_postgres_lock(self) -> None:
         hub = RepositoryHub(session_factory=MagicMock(), db_type="postgres")
         assert isinstance(hub.locks, PostgresLock)
 
     def test_sqlite_lock_is_generic_lock(self) -> None:
         hub = RepositoryHub(session_factory=MagicMock(), db_type="sqlite")
-        assert isinstance(hub.locks, GenericLock)
-
-    def test_mariadb_lock_is_generic_lock(self) -> None:
-        hub = RepositoryHub(session_factory=MagicMock(), db_type="mariadb")
         assert isinstance(hub.locks, GenericLock)
 
 
@@ -551,23 +613,6 @@ class TestRegisterTenantFilter:
         with patch("farna.db.rls.get_settings") as mock_get_settings:
             mock_settings = MagicMock(spec=Settings)
             mock_settings.modulo_db = "sqlite"
-            mock_get_settings.return_value = mock_settings
-
-            from farna.db.rls import register_tenant_filter
-
-            with patch("farna.db.rls.event.listen") as mock_listen:
-                register_tenant_filter()
-
-            mock_listen.assert_called_once()
-
-    def test_registers_for_mariadb(self) -> None:
-        from unittest.mock import patch
-
-        from farna.settings import Settings
-
-        with patch("farna.db.rls.get_settings") as mock_get_settings:
-            mock_settings = MagicMock(spec=Settings)
-            mock_settings.modulo_db = "mariadb"
             mock_get_settings.return_value = mock_settings
 
             from farna.db.rls import register_tenant_filter
@@ -648,18 +693,6 @@ class TestRegisterRlsResetHookSkip:
     def test_skips_for_sqlite(self) -> None:
         engine = MagicMock()
         engine.dialect.name = "sqlite"
-        engine.sync_engine = MagicMock()
-
-        from farna.db.rls import register_rls_reset_hook
-
-        with patch("farna.db.rls.event.listens_for") as mock_listens:
-            register_rls_reset_hook(engine)
-
-        mock_listens.assert_not_called()
-
-    def test_skips_for_mysql(self) -> None:
-        engine = MagicMock()
-        engine.dialect.name = "mysql"
         engine.sync_engine = MagicMock()
 
         from farna.db.rls import register_rls_reset_hook

@@ -466,6 +466,38 @@ describe('SystemMapGraphEditor coverage', () => {
     await wrapper.vm.$nextTick()
   }
 
+  it('shows each relationship picker\'s prompt while no option is selected', () => {
+    // No nodes means the source and target models have no matching option; an
+    // empty relationship vocabulary leaves the type without its usual default.
+    // All three controls are therefore unselected and must render their own
+    // prompt rather than a blank closed control (FAR-2591).
+    const wrapper = mountEditor({ relationshipTypes: [] })
+
+    const prompts: Array<[string, string]> = [
+      ['system-map-relationship-source', 'Relationship source'],
+      ['system-map-relationship-type', 'Relationship type'],
+      ['system-map-relationship-target', 'Relationship target'],
+    ]
+    for (const [testId, prompt] of prompts) {
+      const control = wrapper.get(`[data-testid="${testId}"]`)
+      expect(control.text(), `expected the ${testId} prompt`).toContain(prompt)
+      expect(
+        control.find('.p-placeholder').exists(),
+        `expected ${testId} to render as a placeholder`,
+      ).toBe(true)
+    }
+  })
+
+  it('keeps the selected option label instead of the prompt once a picker has a value', () => {
+    const wrapper = mountEditor({ nodes: [node()] })
+
+    // The source defaults to the only node, so it shows that node's label and
+    // is not a placeholder: the prompt never masks a real selection.
+    const source = wrapper.get('[data-testid="system-map-relationship-source"]')
+    expect(source.text()).toContain('Pipeline 1')
+    expect(source.find('.p-placeholder').exists()).toBe(false)
+  })
+
   it('adds node types that contain an underscore', async () => {
     const wrapper = mountEditor()
 

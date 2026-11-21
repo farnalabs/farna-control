@@ -397,7 +397,8 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `SECRET_KEY` | **Yes** | – | 32+ byte random string for JWT signing |
 | `FERNET_KEY` | **Yes** | – | 44-char base64 Fernet key for credential encryption |
 | `FARNA_CONTROL_USERS` | No (but needed for a first login) | – | Comma-separated `email:password` pairs for initial user seed (plaintext is bcrypt-hashed at seed time; `admin` gets the admin role). Without it - and without `farna-control users add` - no account exists and login returns `401`; see *Docker Compose* step 1 |
-| `FARNA_CONTROL_DB` | No | `postgres` | Database backend (`postgres`, `sqlite`, `mariadb`, or `mysql`) |
+| `FARNA_CONTROL_DB` | No | `postgres` | Supported: `postgres` only. `sqlite` is refused unless the test-only `FARNA_CONTROL_ALLOW_SQLITE=1` opt-in is also set (never an operator option, never a deployment backend). `mariadb` and `mysql` are rejected at startup. |
+| `FARNA_CONTROL_ALLOW_SQLITE` | No | `false` | **TEST-ONLY escape hatch, not an operator option.** Permits `FARNA_CONTROL_DB=sqlite` for the automated test suite, and only together with a SQLite `DATABASE_URL`. Never set it in a deployment. |
 | `REDIS_URL` | **Yes** | `redis://localhost:6379/0` | Redis URL for the SAQ broker, scheduling, event coordination, and rate limiting. The API refuses to boot when this is explicitly empty. |
 | `FARNA_CONTROL_PUBLIC_URL` | For SSO | `http://localhost:8000` | Public-facing URL for OAuth redirects |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed CORS origins |
@@ -413,67 +414,29 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 
 ## Deployment Modes
 
-Farna Control supports three deployment modes depending on your needs.
+The deployment modes are Docker Compose (server and production), Kubernetes
+(multi-replica), and the native install on a Linux workstation. All of them run
+on PostgreSQL 16, the only supported runtime database.
 
-### Standalone (single-user, local)
+### SQLite is not a supported deployment
 
-The API itself requires three environment variables that have no default: the
-app refuses to start without them:
+SQLite is used only by the automated test suite. It is not a deployment backend:
 
-| Variable | Purpose | How to generate |
-|----------|---------|-----------------|
-| `DATABASE_URL` | SQLAlchemy async DB URL for the application database | `sqlite+aiosqlite:///./farna.db` for the local SQLite file below |
-| `SECRET_KEY` | 32+ byte random string used to sign JWTs | `$(openssl rand -base64 48)` |
-| `FERNET_KEY` | 44-char base64 Fernet key used to encrypt stored connector credentials | `$(uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")` (URL-safe base64 of exactly 32 bytes) |
+- There is no row-level security. The production tenant boundary is PostgreSQL
+  RLS, so another backend could only offer application-level filtering.
+- The Alembic migration chain is PostgreSQL-only. The `0350` baseline is
+  PostgreSQL DDL, so a fresh SQLite `alembic upgrade heads` fails at the first
+  migration with a SQL syntax error. There is no SQLite migration path.
 
-The SAQ **system** worker needs one more variable: `FARNA_CONTROL_SYSTEM_DATABASE_URL`.
-Its system-engine crons (the jobs that run on the `farna_control_system` role,
-including `dispatcher_reconcile`) refuse to run without it, and
-`dispatcher_reconcile` gates `/healthz/ready`, so leaving it unset gives an API
-that answers while readiness never becomes ready. The stale-run sweep and
-`fire_due_triggers` are not in this set: they scope per-org on the regular
-engine and run without it. In standalone mode point it at the same SQLite file;
-in every other mode use the dedicated `farna_control_system` role (see
-[Docker Compose](#docker-compose-single-server-multi-user)).
-
-The command below sets the required variables inline, so it is runnable as
-written. `FARNA_CONTROL_USERS`
-seeds the initial admin user (optional but recommended for first login); `FARNA_CONTROL_DB=sqlite`
-selects the SQLite backend so no separate database server is needed.
-
-```bash
-git clone https://github.com/farnalabs/farna-control   # or install the farna-control package
-cd backend
-uv sync
-DATABASE_URL=sqlite+aiosqlite:///./farna.db \
-  FARNA_CONTROL_SYSTEM_DATABASE_URL=sqlite+aiosqlite:///./farna.db \
-  SECRET_KEY=$(openssl rand -base64 48) \
-  FERNET_KEY=$(uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
-  FARNA_CONTROL_USERS=admin:changeme \
-  FARNA_CONTROL_DB=sqlite \
-  uv run uvicorn farna.api.main:app --port 8000
-```
-
-| Component | How it runs |
-|---|---|
-| Database | SQLite file (`./farna.db`), no server process needed |
-| Task scheduling | SAQ system-worker cron (`fire_due_triggers`); cron & polling triggers fire via the Redis-backed SAQ workers |
-| Task queue | SAQ Redis queue (runs worker); Redis is required |
-| Rate limiting | Redis sliding window when Redis is reachable; per-process no-op otherwise |
-| Concurrency | Single process, single worker |
-
-Runs and triggers require Redis plus the SAQ workers – see [`docs/quickstart.md`](./quickstart.md) §3b. `REDIS_URL` defaults to `redis://localhost:6379/0`, so start a local Redis and the two SAQ workers; otherwise pipeline runs and cron/polling triggers never execute (and `api/main.py` refuses to boot if `REDIS_URL` is empty).
-
-**What you lose vs. full deployment:**
-- **No horizontal scaling** – one process, one user at a time
-- **No high availability** – a worker crash mid-run is recovered or terminalized by `dispatcher_reconcile` only while the system worker and Redis stay up; a lost Redis strands in-flight jobs until it returns
-- **No distributed rate limiting** – without Redis the limiter is a per-process no-op, so limits don't coordinate across processes
-
-**What you keep:**
-- Cron-triggered pipelines ✓ (with Redis + SAQ workers running)
-- Polling triggers ✓ (with Redis + SAQ workers running)
-- All pipeline features, evals, HITL, connectors ✓
-- The SQLite DB file is portable – copy it to another machine and restart `uvicorn` from the new location to pick it up
+Use [Docker Compose](#docker-compose-single-server-multi-user) for a server, the
+native install for a Linux workstation (see
+[`docs/system-requirements.md`](./system-requirements.md#native-single-install-bundle-linux)),
+or Fly.io for a managed host (see
+[`docs/deployment-journey.md`](./deployment-journey.md)). `FARNA_CONTROL_DB`
+accepts only `postgres` in a deployment: `mariadb` and `mysql` are rejected at
+startup, and `sqlite` is refused unless the test-only
+`FARNA_CONTROL_ALLOW_SQLITE=1` escape hatch is set, which no deployment should
+ever do (ADR 068).
 
 ### Docker Compose (single-server, multi-user)
 

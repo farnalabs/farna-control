@@ -309,7 +309,7 @@ jobs:
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.12
+          version: 11.28.13
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
@@ -1047,6 +1047,7 @@ jobs:
           # END codesign_with_timestamp_retry
 
             # Diagnostic capture helper for post-install smoke assertions
+            # BEGIN run_assertion (extracted verbatim by test_macos_installer_normalize)
             run_assertion() {
               local name="$1"; shift
               local output_file="$DATA/assertion-${name}.log"
@@ -1065,6 +1066,7 @@ jobs:
                 return "$exit_code"
               fi
             }
+            # END run_assertion
 
           # BEGIN spa_root_html_ready (extracted verbatim by test_macos_installer_normalize)
           # The launcher serves the API before the built SPA assets finish
@@ -1861,9 +1863,9 @@ jobs:
                 if [[ -f "$candidate" && -x "$candidate" ]]; then cli="$candidate"; break; fi
               done
               [[ -n "$cli" ]] || { echo "no installed app executable under $1" >&2; exit 1; }
-              echo "native_stack_stability: cli=$cli"
-              bash scripts/native-stack-assertions.sh "$cli" "$2/native-stack-assertions" "$2"
-            ' bash "$INSTALL_ROOT" "$DATA" || exit 1
+              echo "native_stack_stability: cli=$cli expected_version=$3"
+              SMOKE_EXPECTED_VERSION="$3" bash scripts/native-stack-assertions.sh "$cli" "$2/native-stack-assertions" "$2"
+            ' bash "$INSTALL_ROOT" "$DATA" "$VERSION_NUM" || exit 1
 
            # Service PID / binary identity
            # shellcheck disable=SC2016
@@ -1922,8 +1924,17 @@ jobs:
            SERVICE_BINARY="$(lsof -p "$SERVICE_PID" -a -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)"
 
 
-           run_assertion "service_binary_macho" \
-             file "$SERVICE_BINARY" | grep -E "Mach-O 64-bit executable $MACOS_ARCH" || exit 1
+           # BEGIN service_binary_macho_assertion (extracted verbatim by test_macos_installer_normalize)
+           # The check runs INSIDE run_assertion so its `assertion:` line and
+           # captured `file` output reach the log; piping run_assertion into
+           # grep swallowed both while still gating (FAR-2589).
+           # shellcheck disable=SC2016
+           run_assertion "service_binary_macho" bash -c '
+             description="$(file "$1")" || exit 1
+             printf "%s\n" "$description"
+             printf "%s\n" "$description" | grep -Eq "Mach-O 64-bit executable $2"
+           ' bash "$SERVICE_BINARY" "$MACOS_ARCH" || exit 1
+           # END service_binary_macho_assertion
 
            # Owned PID tree collection
            # shellcheck disable=SC2016

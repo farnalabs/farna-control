@@ -28,7 +28,7 @@ status: covered
 
 The read-only `/risk-assessment` dashboard (FAR-941 sub-scope B) over the core
 evidence fact store provides a facet-driven risk analysis surface. The page
-renders under the MONITOR sidebar group and exposes key prefix, pipeline, time
+renders under the RUNS sidebar group and exposes key prefix, pipeline, time
 window, and action filters that drive server-side filtering through the risk
 assessment store. Results are displayed as a summary card with per-action counts
 and a sortable evidence table with timestamp, key, action badge, subject, and
@@ -37,7 +37,7 @@ formatted value columns. All strings are i18n-backed and status regions use
 
 ## Behaviors
 
-- [x] The `/risk-assessment` route renders under the MONITOR sidebar group;
+- [x] The `/risk-assessment` route renders under the RUNS sidebar group;
       `RiskAssessmentView.vue` fetches risk assessment data via the evidence
       store and renders facets, summary cards, and a sortable table with
       i18n-backed strings and `role=status`/`aria-live` status regions

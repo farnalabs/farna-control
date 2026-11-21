@@ -95,6 +95,73 @@ describe('useSidebar', () => {
     expect(second.useSidebar().isGroupCollapsed('runs', true)).toBe(false)
   })
 
+  describe('active-route reveal (FAR-2602)', () => {
+    it('reveals a never-toggled default-collapsed group while it holds the active route', async () => {
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true, true)).toBe(false)
+    })
+
+    it('keeps a never-toggled default-collapsed group collapsed when no active route is inside it', async () => {
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true, false)).toBe(true)
+    })
+
+    it('leaves a default-expanded group expanded whether or not it holds the active route', async () => {
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('build', false, true)).toBe(false)
+      expect(sidebar.isGroupCollapsed('build', false, false)).toBe(false)
+    })
+
+    it('honours an explicit collapse even while the group holds the active route', async () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ runs: true }))
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true, true)).toBe(true)
+    })
+
+    it('honours an explicit expand even when no active route is inside the group', async () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ runs: false }))
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true, false)).toBe(false)
+    })
+
+    it('collapses an active-revealed group on the first toggle and records an explicit preference', async () => {
+      const sidebar = await setupSidebar()
+      // The user sees it expanded because the active route is inside it…
+      expect(sidebar.isGroupCollapsed('runs', true, true)).toBe(false)
+
+      sidebar.toggleGroup('runs', true, true)
+
+      // …so the first toggle must collapse it rather than "expand" it again.
+      expect(sidebar.isGroupCollapsed('runs', true, true)).toBe(true)
+      await vi.waitFor(() =>
+        expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ runs: true }),
+      )
+    })
+
+    it('does not record a preference when it merely reveals an active group', async () => {
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true, true)).toBe(false)
+
+      // A reveal is transient state, not a user choice: writing it would keep
+      // the group expanded after navigating away (FAR-2602 review).
+      expect(sidebar.groupPrefs.value).toEqual({})
+    })
+
+    it('keeps the two-argument call meaning "default only"', async () => {
+      const sidebar = await setupSidebar()
+
+      expect(sidebar.isGroupCollapsed('runs', true)).toBe(true)
+      sidebar.toggleGroup('runs', true)
+      expect(sidebar.isGroupCollapsed('runs', true)).toBe(false)
+    })
+  })
+
   it('exposes groupPrefs as a readonly ref', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const { useSidebar } = await import('../../composables/useSidebar')

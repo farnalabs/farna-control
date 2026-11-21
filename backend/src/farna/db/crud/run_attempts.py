@@ -28,7 +28,7 @@ attempts of different runs never contend.
 that bypasses this helper cannot create two attempts with the same index — it
 gets an ``IntegrityError`` rather than silent corruption.
 
-Generic backends (SQLite/MariaDB) have no advisory lock. They fall back to the
+The generic backend (SQLite, test-only) has no advisory lock. It falls back to the
 same MAX+1 computation without serialisation; SQLite serialises writers on the
 database and the unique constraint still rejects a duplicate, but concurrent
 starters are NOT guaranteed a retry-free outcome there. This is the same

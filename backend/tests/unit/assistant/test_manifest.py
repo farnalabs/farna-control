@@ -79,12 +79,14 @@ class TestManifestLoad:
 
         manifest = load_manifest()
         groups = manifest.get("sidebar_groups", {})
+        # FAR-2605 reshaped the sidebar into these groups; the Dashboard moved
+        # out of the groups to a pinned row, so it is not a sidebar_group here.
         expected_groups = {
-            "build",
-            "monitor",
-            "improve",
-            "configure",
-            "admin",
+            "pipelines",
+            "controls",
+            "runs",
+            "configuration",
+            "administration",
             "system",
         }
         assert set(groups.keys()) == expected_groups

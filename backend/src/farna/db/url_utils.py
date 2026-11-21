@@ -1,32 +1,34 @@
 """Zero-dependency database-URL helpers shared by every boot path (FAR-671).
 
-This is a LEAF module: stdlib only, no SQLAlchemy, no ``modulo`` imports, no
+This is a LEAF module: stdlib only, no SQLAlchemy, no ``farna`` imports, no
 logging side effects. It is importable from the container entrypoint
 (``deploy/fly/bootstrap_db.py``), the native launcher (ADR 031), and
-``modulo.settings`` — the single implementation of the boot URL contract.
+``farna.settings`` — the single implementation of the boot URL contract.
 
-Unified semantics (FAR-1440):
+Unified semantics (FAR-1440, PostgreSQL-only since ADR 068):
 
 * ``deploy/fly/bootstrap_db.py`` historically rewrote ``postgres://`` to the
   asyncpg scheme and stripped **every** ``sslmode`` parameter (asyncpg 0.24
   did not understand ``sslmode`` in URLs; on Fly's private networks the
   driver's SSL default caused ``ConnectionResetError``).
-* ``modulo.settings`` rewrote the same scheme PLUS the legacy
-  ``mysql+asyncmy`` driver prefix, but stripped only ``sslmode=disable``.
+* ``farna.settings`` rewrote the same scheme.
 
 The current posture (FAR-1440): an operator's explicit ``sslmode`` on a
 Postgres-family URL is HONOURED, not silently stripped — the docs
 (``docs/deployment-security.md`` §3.2) recommend ``sslmode=require``, so the
-code must accept it. ``fix_database_url`` therefore only strips ``sslmode``
-from MySQL-family URLs (the aiomysql driver rejects ``sslmode``); Postgres
-URLs keep the parameter and consumers translate it themselves:
+code must accept it. ``fix_database_url`` therefore only rewrites the legacy
+``postgres://`` prefix and leaves the query string untouched; consumers
+translate ``sslmode`` themselves:
 
-* the SQLAlchemy engine factory (:mod:`modulo.db.session` and the system-role
+* the SQLAlchemy engine factory (:mod:`farna.db.session` and the system-role
   engines) extracts ``sslmode`` via :func:`split_postgres_sslmode` and passes
   the translated value through asyncpg's ``ssl`` connect arg;
-* ``modulo.api.dependencies.pg_connection_string`` copies the parameter into
+* ``farna.api.dependencies.pg_connection_string`` copies the parameter into
   the psycopg-compatible URL the checkpointer/migration path uses (psycopg
   honours ``sslmode`` natively).
+
+PostgreSQL 16 is the only supported runtime database (ADR 068). SQLite is
+test-only, so this module holds no MySQL-family URL handling.
 
 Absent ``sslmode`` still means explicit plaintext (``ssl=False``) — never the
 driver default, which on Fly's private networks caused
@@ -43,7 +45,6 @@ real Postgres URL; prefix-only rewriting is strictly safer and matches the
 Settings contract.
 """
 
-import re
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 # ---------------------------------------------------------------------------
@@ -78,37 +79,23 @@ LEGACY_OWNER_ROLE = "modulo"
 _REQUIRE_TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 _PLAINTEXT_SSLMODES = frozenset({"disable"})
 
-# Strip any sslmode parameter from MySQL-family URLs only (aiomysql rejects
-# sslmode); Postgres URLs keep theirs (FAR-1440 — honoured upstream).
-SSL_MODE_PARAM_RE = re.compile(r"[?&]sslmode=[^&]*")
-
 _POSTGRES_PREFIX = "postgres://"
 _POSTGRES_ASYNC_PREFIX = "postgresql+asyncpg://"
-_MYSQL_ASYNCMY_PREFIX = "mysql+asyncmy://"
-_MYSQL_AIOMYSQL_PREFIX = "mysql+aiomysql://"
 
 
 def fix_database_url(url: str) -> str:
-    """Rewrite legacy driver prefixes; strip ``sslmode`` only where it is alien.
+    """Rewrite the legacy ``postgres://`` driver prefix.
 
     * ``postgres://`` → ``postgresql+asyncpg://`` (prefix only)
-    * ``mysql+asyncmy://`` → ``mysql+aiomysql://`` (prefix only)
-    * ``sslmode`` is PRESERVED on Postgres-family URLs (FAR-1440: an
-      operator's explicit TLS setting is honoured, translated to asyncpg's
-      ``ssl`` connect arg by the engine factory) and stripped from
-      MySQL-family URLs (aiomysql does not accept ``sslmode``). When the strip
-      leaves other params behind, the remaining param keeps a leading ``&``
-      when ``sslmode`` was FIRST (a wart carried from the historical deploy
-      variant, kept only on the MySQL path now).
+    * ``sslmode`` is PRESERVED (FAR-1440: an operator's explicit TLS setting
+      is honoured, translated to asyncpg's ``ssl`` connect arg by the engine
+      factory). No MySQL-family prefix rewrite or ``sslmode`` stripping
+      remains: PostgreSQL 16 is the only supported runtime database
+      (ADR 068).
     """
-    fixed = url
-    if fixed.startswith(_POSTGRES_PREFIX):
-        fixed = _POSTGRES_ASYNC_PREFIX + fixed[len(_POSTGRES_PREFIX) :]
-    elif fixed.startswith(_MYSQL_ASYNCMY_PREFIX):
-        fixed = _MYSQL_AIOMYSQL_PREFIX + fixed[len(_MYSQL_ASYNCMY_PREFIX) :]
-    if fixed.startswith(_MYSQL_AIOMYSQL_PREFIX):
-        return SSL_MODE_PARAM_RE.sub("", fixed).rstrip("?")
-    return fixed
+    if url.startswith(_POSTGRES_PREFIX):
+        return _POSTGRES_ASYNC_PREFIX + url[len(_POSTGRES_PREFIX) :]
+    return url
 
 
 _POSTGRES_SCHEMES = frozenset({"postgres", "postgresql", "postgresql+asyncpg", "postgresql+psycopg"})
@@ -178,8 +165,8 @@ def split_engine_sslmode(url: str) -> tuple[str, str | bool | None]:
     The ONE gate every asyncpg engine factory routes through (FAR-1440): a
     Postgres-family URL is split by :func:`split_postgres_sslmode`; any other
     scheme is returned unchanged with ``None``, signalling "not an asyncpg
-    engine URL — pass no ``ssl``/``statement_cache_size`` connect args" so
-    SQLite/MySQL boot paths keep their driver defaults.
+    engine URL — pass no ``ssl``/``statement_cache_size`` connect args" so the
+    SQLite (test-only) boot path keeps its driver defaults.
 
     Callers MUST pass ``ssl`` only when it is not ``None``::
 

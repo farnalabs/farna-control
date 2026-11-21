@@ -2,11 +2,29 @@
   <FeatureGate feature-name="eval_system" required-tier="community" show-disabled>
 
     <div class="page-wide">
-    <PageHeader :title="$t('views.EvalEditorView.eval_editor')" :subtitle="$t('views.EvalEditorView.create_and_manage_eval_definitions')" />
+    <PageHeader
+      :title="$t('views.EvalEditorView.eval_editor')"
+      :subtitle="$t('views.EvalEditorView.create_and_manage_eval_definitions')"
+      :tabs="evalPageTabs"
+    />
+
+    <!-- Deep link (?pipeline_id=) pointing at a pipeline that no longer exists
+         (deleted, or never visible to this org): the page falls back to the
+         all-pipelines state instead of rendering an empty editor, and says so
+         so the fallback is never mistaken for a broken link. -->
+    <p
+      v-if="pipelineLinkNotice"
+      class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+      role="status"
+      aria-live="polite"
+      data-testid="eval-editor-pipeline-link-notice"
+    >
+      {{ $t('views.EvalEditorView.pipeline_link_notice') }}
+    </p>
 
     <LoadingSpinner v-if="loading" />
 
-    <ErrorAlert v-else-if="pageError" :message="pageError" :on-retry="loadAll" />
+    <ErrorAlert v-else-if="pageError" :message="pageError" :on-retry="retryPageLoad" />
 
     <template v-else>
       <div class="grid gap-6 lg:grid-cols-2">
@@ -955,6 +973,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useDataFetch } from '../composables/useDataFetch'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
@@ -987,6 +1006,19 @@ import {
 } from '../components/eval/typedJudge'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+
+// Set when a `?pipeline_id=` deep link does not resolve to a visible pipeline.
+const pipelineLinkNotice = ref(false)
+
+// Route-per-tab navigation across the eval surface (costs-style), so the list,
+// the editor and the proposals queue are three destinations, not query states.
+const evalPageTabs = computed(() => [
+  { label: t('views.EvalsListView.tabs_all'), to: '/evals' },
+  { label: t('views.EvalsListView.tabs_editor'), to: '/evals/editor' },
+  { label: t('views.EvalsListView.tabs_proposals'), to: '/evals/proposals' },
+])
 
 const planStore = usePlanStore()
 const { track } = useProductAnalytics()
@@ -1403,7 +1435,15 @@ function resetForm() {
 
 const { loading, error: pageError, data: pipelinesResp, load: loadAll } = useDataFetch(
   async () => {
-    const { data } = await api.GET('/api/v1/pipelines')
+    // page_size 100 is the house convention for an "all of them" selector read
+    // (the API defaults to 20), so the list is not silently truncated.
+    const { data, error } = await api.GET('/api/v1/pipelines', {
+      params: { query: { page_size: 100 } },
+    })
+    // A failed read must NOT look like an empty pipeline list: an empty list is
+    // exactly what a `?pipeline_id=` deep link would misread as "not found", so
+    // surface the failure through the page error channel with a retry.
+    if (error) return { data: undefined, error }
     return { data: data?.items ?? [], error: undefined }
   },
   { initialValue: [] as PipelineItem[] },
@@ -1525,7 +1565,132 @@ async function onPipelineChange() {
   deletingEvalId.value = null
   nodesError.value = null
   evalsError.value = null
+  syncPipelineQuery()
   await Promise.all([loadNodes(), loadEvals()])
+}
+
+/**
+ * Keep the URL in sync with the pipeline selector so the page is shareable and
+ * a reload restores the same pipeline. `__all__` clears the param rather than
+ * writing a sentinel value into the query string.
+ */
+function syncPipelineQuery() {
+  if (pipelineLinkNotice.value) pipelineLinkNotice.value = false
+  const raw = route?.query?.pipeline_id
+  const current = typeof raw === 'string' ? raw : undefined
+  const next = selectedPipelineId.value === '__all__' ? undefined : selectedPipelineId.value
+  if (current === next) return
+  // The eval id belongs to the pipeline that carried it, so a pipeline change
+  // drops it rather than leaving a stale id in a shareable URL.
+  replacePipelineQuery(next, undefined)
+}
+
+/**
+ * Replace the `pipeline_id` query param, preserving every other param. When
+ * `evalId` is omitted the `eval_id` param is removed. A mount without a router
+ * plugin (unit tests that drive the view directly) injects no router instance,
+ * so there is nothing to sync and the update is a no-op.
+ */
+function replacePipelineQuery(pipelineId: string | undefined, evalId?: string) {
+  if (!router?.replace) return
+  const query: LocationQueryRaw = { ...route?.query, pipeline_id: pipelineId }
+  if (evalId === undefined) delete query.eval_id
+  else query.eval_id = evalId
+  void router.replace({ query })
+}
+
+// The deep link is captured once on mount and stays pending until the pipeline
+// list has actually loaded, so a failed read can never be mistaken for an id
+// that does not exist.
+const pendingPipelineDeepLink = ref<string | null>(null)
+const pendingEvalDeepLink = ref<string | null>(null)
+
+function queryString(key: string): string | undefined {
+  const raw = route?.query?.[key]
+  if (typeof raw === 'string') return raw
+  if (Array.isArray(raw) && typeof raw[0] === 'string') return raw[0]
+  return undefined
+}
+
+function captureDeepLink() {
+  pendingPipelineDeepLink.value = queryString('pipeline_id') ?? null
+  pendingEvalDeepLink.value = queryString('eval_id') ?? null
+}
+
+/**
+ * Resolve an eval id named by a deep link to its definition.
+ *
+ * The pipeline's eval list is paged by the API (default page_size 20), so an
+ * eval outside that first page is absent from `evals.value` even though it
+ * still exists. Reading it directly keeps the row action faithful no matter how
+ * many evals a pipeline has. The single-eval read is unscoped by pipeline (and
+ * includes soft-deleted rows for historical lookups), so the pipeline guard the
+ * list lookup applied is kept here: an eval that belongs to another pipeline is
+ * not preselected.
+ */
+async function resolveLinkedEval(
+  evalId: string,
+  pipelineId: string,
+): Promise<EvalDefinition | null> {
+  const inList = evals.value.find(e => e.id === evalId)
+  if (inList) return inList
+  try {
+    const { data } = await api.GET('/api/v1/evals/{eval_id}', {
+      params: { path: { eval_id: evalId } },
+    })
+    // openapi-fetch resolves a non-2xx as `{ data: undefined, error }` — it
+    // never throws — so a missing eval simply has no data and is treated as
+    // "nothing to preselect".
+    const fetched = (data ?? null) as EvalDefinition | null
+    if (fetched && fetched.pipeline_id === pipelineId) return fetched
+  } catch {
+    // Network-level failure only — treat as "no such eval".
+  }
+  return null
+}
+
+/**
+ * Resolve the `?pipeline_id=` / `?eval_id=` deep link from the evals list.
+ *
+ * - list not loaded yet (a read is in flight, or it failed): keep the link
+ *   pending — the page already shows the load error with a retry, and a failed
+ *   read is not evidence that the pipeline is missing;
+ * - id resolves: select that pipeline, load its nodes and evals, then open the
+ *   requested eval so a row click lands on the eval it named. The eval is
+ *   fetched directly when it falls outside the pipeline's paged eval list;
+ * - id genuinely absent from a LOADED list: fall back to the all-pipelines
+ *   state with a visible notice — never a blank editor — and drop the stale id
+ *   from the URL so a reload does not repeat the message.
+ */
+async function applyPipelineDeepLink() {
+  const linkedPipelineId = pendingPipelineDeepLink.value
+  if (!linkedPipelineId) return
+  if (pageError.value) return
+  if (pipelines.value.some(p => p.id === linkedPipelineId)) {
+    pendingPipelineDeepLink.value = null
+    selectedPipelineId.value = linkedPipelineId
+    await onPipelineChange()
+    const linkedEvalId = pendingEvalDeepLink.value
+    pendingEvalDeepLink.value = null
+    if (linkedEvalId) {
+      const evalItem = await resolveLinkedEval(linkedEvalId, linkedPipelineId)
+      // An eval that no longer exists in this pipeline is not an error: the
+      // editor simply opens on the pipeline with nothing preselected.
+      if (evalItem) void startEdit(evalItem)
+    }
+    return
+  }
+  pendingPipelineDeepLink.value = null
+  pendingEvalDeepLink.value = null
+  selectedPipelineId.value = '__all__'
+  pipelineLinkNotice.value = true
+  replacePipelineQuery(undefined)
+}
+
+/** Retry the pipelines read, then resolve a still-pending deep link. */
+async function retryPageLoad() {
+  await loadAll()
+  await applyPipelineDeepLink()
 }
 
 /**
@@ -1983,11 +2148,15 @@ async function retryPolicyGate() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   planStore.fetchPlan()
-  void loadAll()
   // The typed builder's backing axis needs the org's model backends. A failure
   // is non-fatal: the select stays empty and shows an inline message.
   void loadModelBackends()
+  // Resolve `?pipeline_id=` only once the pipeline list is known — that is
+  // what makes an unknown id distinguishable from a not-yet-loaded one.
+  captureDeepLink()
+  await loadAll()
+  await applyPipelineDeepLink()
 })
 </script>

@@ -101,7 +101,7 @@ def test_settings_source_probe_failure(tmp_path: Path):
 
 
 def test_settings_source_moduledb_away(tmp_path: Path):
-    res = check_settings_source(tmp_path, _state(), _probes(env_value=lambda n: "mysql" if n == "FARNA_CONTROL_DB" else None))
+    res = check_settings_source(tmp_path, _state(), _probes(env_value=lambda n: "sqlite" if n == "FARNA_CONTROL_DB" else None))
     assert res.ok is True
     assert res.warning is True
     assert "FARNA_CONTROL_DB" in res.detail

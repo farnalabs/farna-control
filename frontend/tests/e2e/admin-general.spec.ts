@@ -19,10 +19,10 @@ test.describe('Admin My Profile', { tag: "@regression" }, () => {
 })
 
 test.describe('Admin Notification Delivery', { tag: "@regression" }, () => {
-  test('renders the Webhook Notifications page by default', { tag: "@regression" }, async ({ page, env }) => {
+  test('renders the Webhook Deliveries page by default', { tag: "@regression" }, async ({ page, env }) => {
     await loginAsAdmin(page, env)
     await page.goto('/admin/notification-delivery')
-    await expect(page.locator('h1')).toContainText('Webhook Notifications')
+    await expect(page.locator('h1')).toContainText('Webhook Deliveries')
     await expect(page.getByTestId('admin-notification-log-title')).toBeVisible()
   })
 

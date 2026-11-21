@@ -51,7 +51,7 @@ _log = logging.getLogger(__name__)
 # duplicate deliveries and manual replays never double-fulfil.
 _IDEMPOTENCY_TTL_SECONDS = 90 * 24 * 3600
 
-_RENEWAL_NOTE = "Your Modulo Team License renews annually at list price."
+_RENEWAL_NOTE = "Your Farna Control Team License renews annually at list price."
 
 # ---------------------------------------------------------------------------
 # Chosen licence start (FAR-2146)
@@ -220,7 +220,7 @@ def _licence_email_html(license_key: str, expires_at: str, starts_at: str | None
     return f"""\
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
-  <p>Thank you for purchasing <strong>Modulo Team License</strong>. Your license key is:</p>
+  <p>Thank you for purchasing <strong>Farna Control Team License</strong>. Your license key is:</p>
   <pre style="background:#f3f4f6;padding:12px;border-radius:6px;overflow-x:auto;">FARNA_CONTROL_LICENSE_KEY={key_html}</pre>
   <p>This license is valid until <strong>{expiry_html}</strong>.{start_sentence}</p>
   <p>To activate it:</p>
@@ -238,7 +238,7 @@ def _licence_email_html(license_key: str, expires_at: str, starts_at: str | None
 def _licence_email_text(license_key: str, expires_at: str, starts_at: str | None = None) -> str:
     start_sentence = f" It becomes active on {starts_at}." if starts_at else ""
     return (
-        "Thank you for purchasing Modulo Team License.\n\n"
+        "Thank you for purchasing Farna Control Team License.\n\n"
         f"Your license key is:\n\n  FARNA_CONTROL_LICENSE_KEY={license_key}\n\n"
         f"This license is valid until {expires_at or 'N/A'}.{start_sentence}\n\n"
         "To activate it, set FARNA_CONTROL_LICENSE_KEY to the value above in your "
@@ -307,7 +307,7 @@ async def email_team_license(
             send_email,
             settings,
             [to],
-            "Your Modulo Team License",
+            "Your Farna Control Team License",
             _licence_email_html(license_key, expires_at, starts_at),
             _licence_email_text(license_key, expires_at, starts_at),
         )

@@ -90,12 +90,6 @@ class TestSetRlsOrgMultiBackend:
         session.execute.assert_not_called()
         assert session.info[_TENANT_KEY] == _ORG_ID
 
-    async def test_mariadb_stores_in_session_info(self) -> None:
-        session = _make_session(dialect="mysql")
-        await set_rls_org(session, _ORG_ID)
-        session.execute.assert_not_called()
-        assert session.info[_TENANT_KEY] == _ORG_ID
-
     async def test_raises_without_active_transaction(self) -> None:
         session = _make_session(in_tx=False)
         with pytest.raises(RuntimeError, match="requires an active transaction"):
@@ -259,17 +253,6 @@ class TestSetRlsUserContextMultiBackend:
         session = _make_session(dialect="sqlite")
         user_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
         org_role = "admin"
-
-        await set_rls_user_context(session, user_id, org_role)
-
-        session.execute.assert_not_called()
-        assert session.info["user_id"] == user_id
-        assert session.info["org_role"] == org_role
-
-    async def test_mariadb_stores_in_session_info(self) -> None:
-        session = _make_session(dialect="mysql")
-        user_id = uuid.UUID("00000000-0000-0000-0000-000000000003")
-        org_role = "viewer"
 
         await set_rls_user_context(session, user_id, org_role)
 

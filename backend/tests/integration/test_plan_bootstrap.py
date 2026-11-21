@@ -119,7 +119,9 @@ async def test_plan_bootstrap_serves_effective_plan_to_non_admin(
     known = {flag.name for flag in _KNOWN_FLAGS} - RETIRED_INTERNAL_FLAGS - INTERNAL_FLAGS
     served = {f["name"] for f in body["flags"]}
     assert known <= served, f"plan bootstrap dropped known flags: {sorted(known - served)}"
-    assert "system_maps" not in served
+    # FAR-2595: authoring is a served, default-OFF Beta-preview flag now.
+    assert flags["system_maps"]["currently_active"] is False
+    assert "lifecycle_map_journeys" not in served
 
 
 async def test_viewmodel_feature_flags_agree_with_plan_bootstrap(

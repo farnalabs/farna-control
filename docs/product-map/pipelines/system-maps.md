@@ -43,6 +43,7 @@ unit-tests:
   - backend/tests/unit/db/test_system_map_repository.py
   - backend/tests/unit/db/test_system_map_models.py
   - backend/tests/unit/cli/apply/test_system_map_apply.py
+  - backend/tests/integration/test_system_maps_authoring_flag.py
   - backend/tests/integration/test_system_maps_discovery.py
   - backend/tests/integration/test_system_maps_version_aware.py
   - backend/tests/integration/test_system_maps_overview_metrics.py
@@ -64,7 +65,7 @@ bdd:
 status: partial
 ---
 
-# System Maps (Beta, published reads + internal authoring)
+# System Maps (Beta preview, published reads + operator authoring)
 
 System Maps inspects an organization's existing inventory (pipelines, triggers,
 connector instances and pipeline folders), materializes a deterministic,
@@ -75,18 +76,27 @@ permission can read the **published** maps, revisions, overview, history,
 by-time and diff views (routes `/system-maps` and `/system-maps/:id`, visible in
 the manifest as `public` and gated on `required_permissions:
 [system_maps.read]`), while authoring (discovery, create, update, delete,
-publish, archive, restore-as-new, apply, loop dispatch and MCP discovery)
-remains behind the internal-only `system_maps` gate. Both classes are registered
-in the manifest `features:` registry as `feat-system-maps`.
+publish, archive, restore-as-new and apply) is a clearly-labelled Beta-preview
+surface behind the default-OFF, per-organisation `system_maps` feature flag
+(resolved with the organisation's `feature_overrides` applied, so an admin
+toggle really unlocks the API) plus the operator/admin role and
+`system_maps_access` grant. FAR-2595 removed the
+developer-mode requirement from that authoring gate so Alpha self-hosters can
+dogfood it; the flag remains OFF until an org admin (or system admin) enables
+it. Both classes are registered in the manifest `features:` registry as
+`feat-system-maps`. MCP discovery applies the same authoring predicate
+(operator/admin role + `system_maps_access` grant, no developer mode) as the
+REST gate (FAR-2595).
 
 The published-read routes sit on their own router
 (`published_router` in `api/routes/system_maps.py`) with
 `_require_published_system_maps_read` (viewer floor + API-key grant check) and
 `require_feature("system_maps_read")`, and the repository is asked for
 `published_only=True` maps/revisions; a draft or an unpublished map is a 404 to
-a viewer. The authoring routes keep the internal gate: developer mode, the
-operator role floor, the `system_maps_access` grant for grant-bearing API keys,
-and the `system_maps` feature flag, all resolved server-side on each request.
+a viewer. The authoring routes keep the operator gate: the operator role
+floor, the `system_maps_access` grant for grant-bearing API keys, and the
+`system_maps` feature flag, all resolved server-side on each request. Developer
+mode is deliberately NOT part of this gate (FAR-2595).
 Legacy JWTs and keys with no grant set keep the role-based behavior rather
 than being refused for the missing grant. Nothing publishes automatically.
 
@@ -101,31 +111,36 @@ point in time.
 
 ## Behaviors
 
-- [x] The `system_maps` flag is a community-tier `FeatureFlag` registered in
-      `INTERNAL_FLAGS` and `DEFAULT_OFF_FLAGS`, so it is off by default and
-      filtered from customer-facing plan/catalog responses
-      (`effective_feature_flags`); it is visible in the admin feature-flag list
-      only to a caller passing the internal System Maps gate, and the list's
-      cache key is scoped by that visibility class so an internal response can
-      never be served to an ordinary caller or vice versa
-      (`core/feature_flags.py`, `api/routes/admin_feature_flags.py`)
+- [x] The `system_maps` flag is a community-tier `FeatureFlag` in
+      `DEFAULT_OFF_FLAGS`, so it is OFF per organisation until enabled. Since
+      FAR-2595 it is `org_admin_settable` and is NOT in `INTERNAL_FLAGS`: it is
+      served in customer-facing plan/catalogue responses (default OFF), and an
+      organisation admin can see and toggle it through the normal
+      org-feature-flag path. The admin list's Redis cache is a single
+      org-scoped key; there is no longer a caller-visibility class to separate
+      (`core/feature_flags.py`, `api/routes/admin_feature_flags.py`,
+      `api/routes/admin_org_feature_flags.py`)
 - [x] Every System Maps request passes three gates and fails closed: the
-      router-level `_require_internal_system_maps_access`, which enforces
-      developer mode and the operator role floor through
-      `require_in_dev_operator`, the `require_feature("system_maps")`
-      entitlement gate (disabled -> 402), and the handler's
-      `require_permission(...)` role floor, all before any inventory read. The
+      router-level `_require_internal_system_maps_access`, which enforces the
+      operator role floor through `require_in_dev_operator` (developer mode is
+      NOT required since FAR-2595), the org-aware
+      `require_org_feature("system_maps")` entitlement gate (disabled -> 402;
+      it applies `settings_json.feature_overrides` on top of the plan default,
+      because plain `require_feature` never reads overrides and this flag is
+      DEFAULT-OFF), and the handler's `require_permission(...)` role floor, all
+      before any inventory read. The
       dedicated `system_maps_access` grant is an additional leg that binds only
       grant-bearing API keys: `_enforce_key_grant` treats `key_grants is None`
       as a no-op because `grants_permit(None, ...)` returns `True`, so a legacy
-      JWT or an ungranted key is judged on developer mode and role alone, as
-      the dependency's own docstring states (`api/routes/system_maps.py`,
+      JWT or an ungranted key is judged on role alone (`api/routes/system_maps.py`,
       `api/dependencies.py`, `auth/permissions.py`). The unit cases pin a
-      viewer denied, an operator denied with developer mode off, and an
+      viewer denied, an operator ALLOWED with developer mode off, and an
       operator key denied without the grant and allowed with it; the
       grant-denial case presents a grant-bearing key, and a legacy JWT with no
       grant set is explicitly allowed by the same dependency
-      (`test_system_maps_routes.py::test_internal_jwt_without_grants_can_access`)
+      (`test_system_maps_routes.py::test_dev_mode_is_not_required`,
+      `test_system_maps_discovery_routes.py::test_discovery_allows_operator_without_dev_mode`,
+      `test_internal_jwt_without_grants_can_access`)
 - [x] Published reads are a distinct, viewer-level surface (FAR-2363):
       `system_maps.read` is a viewer permission and `system_maps_read` is a
       community-tier entitlement flag that is NOT internal/default-OFF, so a
@@ -133,9 +148,15 @@ point in time.
       `viewer`) can list/get published maps, the current/published revision,
       by-time, history, overview and diff. Drafts and unpublished maps are
       filtered in the repository (`published_only=True`) and re-checked in the
-      route (404), never merely hidden in the UI. The authoring gate is
-      unchanged: `system_maps_access` (operator, developer mode,
-      `system_maps` flag) still guards create/update/delete, revision
+      route (404), never merely hidden in the UI. The internal draft-read probe
+      (`_system_maps_internal_access`) is deliberately role + `system_maps_access`
+      grant only and does NOT consult the authoring flag: an operator who can
+      author keeps read access to the org's existing unpublished drafts when the
+      org switches authoring off, so a feature toggle cannot hide or strand
+      saved data from the operators responsible for it (deliberate decision,
+      FAR-2595). The authoring gate is
+      `system_maps_access` (operator role, `system_maps` flag; no developer
+      mode since FAR-2595) and still guards create/update/delete, revision
       create/publish/archive/delete, restore-as-new, attribution bindings,
       discovery, apply, loop dispatch and MCP discovery. The two route groups
       are registered as separate routers with the published router included
@@ -197,6 +218,17 @@ point in time.
       inspected, node/edge counts, inferred nodes and edges, skipped sources,
       warnings, draft map/revision ids, revision number, `published=false`)
       (`api/routes/system_maps.py`, `api/schemas/system_maps.py`;
+      `test_system_maps_discovery_routes.py`)
+- [x] Discovery is bounded, not an unbounded tenant scan: every per-kind
+      inventory query is ordered by `id` and capped at
+      `MAX_DISCOVERY_SOURCES + 1` rows, so Postgres returns a stable subset
+      rather than an arbitrary one; the merged source list is deterministically
+      sorted then truncated to `MAX_DISCOVERY_SOURCES` (1000), and a visible
+      truncation warning is returned when the inventory exceeds the cap. The
+      warning states the cap and that further sources were not scanned; it
+      deliberately reports no "N of M" total because the per-kind reads are
+      already bounded (`core/system_maps_discovery.py`,
+      `api/routes/system_maps.py`; `test_system_maps_discovery.py`,
       `test_system_maps_discovery_routes.py`)
 - [x] Discovery is deterministic and explainable: sources are sorted by
       `(kind, identifier, name)`; nodes are built only for the supported kinds
@@ -321,38 +353,40 @@ point in time.
       `SystemMapGraphEditor.spec.ts`)
 - [x] The dashboard card renders the real overview aggregate for the default
       (or first) published map, with loading, empty, error and retry states,
-      and only after the internal access probe settles with the flag enabled
+      and only after the store access probe settles with the flag enabled
       (`frontend/src/components/dashboard/DashboardSystemOverview.vue`,
       `frontend/src/views/DashboardView.vue`;
       `DashboardSystemOverview.spec.ts`, `systemMapsStore.spec.ts`)
 - [x] The store's access probe fails closed and rejects stale principals: it
       revalidates on every access-token change, de-duplicates concurrent
-      probes, drops responses from a previous generation or token, requires
-      operator/system-admin, dev mode, `system_maps_access` and the
-      `system.config.manage` probe permission, and bounds the flag and overview
-      requests (15s) (`frontend/src/stores/systemMaps.ts`;
-      `systemMapsStore.spec.ts`)
-- [x] MCP flag listings hide `system_maps` unless the caller passes the
-      internal access predicate: `_mcp_internal_system_maps_access` requires
-      developer mode, the operator role floor and `grants_permit` over the
-      caller's grant set, and `_mcp_flag_visible` keys the `system_maps` flag
-      on that result. Ordinary callers (no developer mode, or below operator)
-      never see it. As on REST, the grant leg only narrows a grant-bearing
-      credential: a JWT session sets the MCP grant context to `None`,
-      `grants_permit` treats that as "do not narrow", so an ungranted JWT
-      operator does see the flag (`api/mcp_server.py`;
-      `tests/unit/mcp/test_mcp_config_tools.py` -
+      probes, drops responses from a previous generation or token, and derives
+      the effective flag from the caller-scoped plan bootstrap
+      (`planStore.featureEnabled('system_maps')`) rather than a dev-mode or
+      system-admin probe. Authoring controls render for an operator/admin with
+      `system_maps_access` when that flag is ON; published reads need only
+      `system_maps.read`. Overview requests are bounded (15s)
+      (`frontend/src/stores/systemMaps.ts`, `frontend/src/views/SystemMapsView.vue`,
+      `frontend/src/components/system-maps/SystemMapHeaderBar.vue`;
+      `systemMapsStore.spec.ts`, `SystemMapsView.spec.ts`)
+- [x] MCP flag listings include `system_maps` for every caller since FAR-2595
+      removed it from `INTERNAL_FLAGS`; `_mcp_flag_visible` returns it through
+      the normal (non-internal) path, and the flag stays default-OFF. The MCP
+      authoring predicate mirrors REST: operator/admin role floor plus
+      `grants_permit` over the caller's `system_maps_access` grant, with no
+      developer-mode leg (FAR-2595)
+      (`api/mcp_server.py`; `tests/unit/mcp/test_mcp_config_tools.py` -
       `TestSystemMapsInternalFlagMCP` and
-      `TestSystemMapsAccessUsesSharedGrantCheck::test_ungranted_jwt_caller_keeps_role_behaviour`)
+      `TestSystemMapsAccessUsesSharedGrantCheck`)
 - [x] Discovery is exposed over MCP: the `discover_system_map` tool drives the
       SAME `POST /api/v1/system-maps/discover` handler the REST surface uses, so
       the inventory read, deterministic inference and persistence stay one
       implementation. It runs the reused handler in a fresh session, re-applies
-      the internal gate server-side (developer mode, operator/admin role floor,
+      the authoring gate server-side (operator/admin role floor,
       `system_maps_access` grant and the `system_maps` feature, each before any
-      inventory read), refuses team- and user-scoped credentials because the
-      scan covers the whole organization, and returns the discovery report as
-      JSON or a branchable error code. It calls the route's undecorated handler
+      inventory read; developer mode is not part of the gate since FAR-2595),
+      refuses team- and user-scoped credentials because the scan covers the
+      whole organization, and returns the discovery report as JSON or a
+      branchable error code. It calls the route's undecorated handler
       and classifies DB failures itself (session contract, lock timeout,
       conflict, migration required, unavailable) instead of inheriting the REST
       wrapper's generic mapping (`api/mcp_server.py::discover_system_map`,
@@ -424,8 +458,9 @@ point in time.
       `access_and_discovery.feature` drives the real router through
       `TestClient` for an authorized discovery (201, the report names the
       unpublished draft, infers suggested edges, records honest stage types and
-      reads tenant-scoped) plus the four refusals (viewer 403, grantless key
-      403, developer mode off 403, feature off 402);
+      reads tenant-scoped) plus the refusals (viewer 403, grantless key
+      403, feature off 402) and a developer-mode-off discovery that now
+      succeeds (201, FAR-2595);
       `revisions.feature` drives an invalid publish returning validation errors
       without publishing, a diff naming the added node, restore-as-new from an
       archived revision (and the draft 409), and the `by-time` read including

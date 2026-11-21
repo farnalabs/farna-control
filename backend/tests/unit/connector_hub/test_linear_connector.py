@@ -53,7 +53,7 @@ def _viewer_response():
 def _comment_create_response():
     return httpx.Response(
         200,
-        json={"data": {"commentCreate": {"success": True, "comment": {"id": "cm1", "body": "[Modulo] hello"}}}},
+        json={"data": {"commentCreate": {"success": True, "comment": {"id": "cm1", "body": "[Farna Control] hello"}}}},
     )
 
 
@@ -260,7 +260,7 @@ async def test_comment_is_prefixed(connector):
     assert result["comment_id"] == "cm1"
 
     sent = json.loads(captured["body"])
-    assert sent["variables"]["input"]["body"] == "[Modulo] hello"
+    assert sent["variables"]["input"]["body"] == "[Farna Control] hello"
 
 
 @respx.mock
@@ -272,11 +272,11 @@ async def test_comment_dedup_no_double_prefix(connector):
         return _graphql_router(request)
 
     respx.post(_URL).mock(side_effect=_capture)
-    result = await connector.comment("ENG-123", "[Modulo] hello")
+    result = await connector.comment("ENG-123", "[Farna Control] hello")
     assert result["comment_id"] == "cm1"
 
     sent = json.loads(captured["body"])
-    assert sent["variables"]["input"]["body"] == "[Modulo] hello"
+    assert sent["variables"]["input"]["body"] == "[Farna Control] hello"
 
 
 async def test_comment_empty_issue_ref(connector):
@@ -350,7 +350,7 @@ async def test_write_comment_resource(connector):
     assert result["comment_id"] == "cm1"
 
     sent = json.loads(captured["body"])
-    assert sent["variables"]["input"]["body"] == "[Modulo] looks good"
+    assert sent["variables"]["input"]["body"] == "[Farna Control] looks good"
 
 
 @respx.mock
@@ -441,4 +441,4 @@ async def test_comment_create_uses_input_argument(connector):
     variables = sent["variables"]
     assert "input" in variables
     assert variables["input"]["issueId"] == "c1a2b3c4-0000-0000-0000-000000000001"
-    assert variables["input"]["body"] == "[Modulo] hello"
+    assert variables["input"]["body"] == "[Farna Control] hello"

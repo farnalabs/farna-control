@@ -27,9 +27,9 @@ status: covered
 
 # Database Abstraction Core
 
-The multi-backend data layer (ADR 002): PostgreSQL 16 as the primary backend with
-conformance support for SQLite and MariaDB/MySQL, repository + session plumbing,
-and org-scoped tenant context injection that is backend-aware.
+The data layer (ADR 002): PostgreSQL 16 as the only supported runtime database,
+with SQLite used only by the automated test suite, repository + session plumbing,
+and org-scoped tenant context injection.
 
 ## Behaviors
 
@@ -55,11 +55,11 @@ and org-scoped tenant context injection that is backend-aware.
 
 ## Known Gaps
 
-- **SQLite/MariaDB are conformance-only** - Postgres is the supported primary;
-      dialect-specific features (e.g. `SET LOCAL` RLS) are not available on
-      non-Postgres, which instead records the org in `session.info` and relies on
-      the `do_orm_execute` listener to inject `WHERE organisation_id = :oid`
-      (`db/rls.py`).
+- **PostgreSQL is the only supported runtime database** - SQLite is test-only,
+      and MariaDB/MySQL are unsupported (ADR 068). Dialect-specific features
+      (e.g. `SET LOCAL` RLS) do not exist elsewhere, so a non-Postgres test run
+      records the org in `session.info` and relies on the `do_orm_execute`
+      listener to inject `WHERE organisation_id = :oid` (`db/rls.py`).
 - **Migrations run against Postgres only** in CI (per ADR 002 conformance scope).
 
 ## QA History

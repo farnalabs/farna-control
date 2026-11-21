@@ -49,8 +49,8 @@ class TicketTrackerBase(ConnectorBase):
     """
 
     # Structured, prefixed marker prepended to every connector-authored comment
-    # so downstream issue trackers can attribute and de-dupe Modulo comments.
-    COMMENT_PREFIX: str = "[Modulo] "
+    # so downstream issue trackers can attribute and de-dupe Farna Control comments.
+    COMMENT_PREFIX: str = "[Farna Control] "
 
     @abstractmethod
     async def get_ticket(self, ticket_id: str) -> Ticket:

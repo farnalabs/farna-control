@@ -2,7 +2,7 @@ Feature: Library collection authoring / install / uninstall / grant lifecycle
   As an organisation operator
   I want to author a library collection with manifest pins, publish it,
   install it into runnable org entities, uninstall it, and grant
-  tool/connector access for community-sourced collections
+  tool/connector access for registry-sourced collections
   So that I can adopt proven bundles without hand-wiring every entity
 
   The authoring/install/uninstall/grant REST surface is served by
@@ -65,9 +65,9 @@ Feature: Library collection authoring / install / uninstall / grant lifecycle
     Then the response status is 404
     And the error mentions "not found"
 
-  Scenario: Grant tool access to community-sourced collection agents
+  Scenario: Grant tool access to registry-sourced collection agents
     Given a published library collection exists
-    And the collection is installed from the community
+    And the collection is installed from the registry
     When the user grants tool access to the installed agents
     Then the response status is 200
     And the install response has agents_granted true
@@ -77,7 +77,7 @@ Feature: Library collection authoring / install / uninstall / grant lifecycle
     And the collection is installed from a local source
     When the user grants tool access to the installed agents
     Then the response status is 400
-    And the error mentions "community"
+    And the error mentions "registry"
 
   Scenario: Grant tool access to an unknown install returns 404
     Given a published library collection exists
@@ -89,7 +89,7 @@ Feature: Library collection authoring / install / uninstall / grant lifecycle
 
   Scenario: Grant tool access is idempotent once already granted
     Given a published library collection exists
-    And the collection is installed from the community
+    And the collection is installed from the registry
     And the install already has agent access granted
     When the user grants tool access to the installed agents
     Then the response status is 200

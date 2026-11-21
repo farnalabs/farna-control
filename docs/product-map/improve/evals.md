@@ -17,6 +17,7 @@ code:
   - backend/src/farna/db/models/policy_gate_decision.py
   - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - backend/src/farna/api/routes/feedback.py
+  - frontend/src/views/EvalsListView.vue
   - frontend/src/views/EvalEditorView.vue
   - frontend/src/views/EvalProposalsQueueView.vue
 unit-tests:
@@ -35,6 +36,7 @@ unit-tests:
   - backend/tests/unit/core/evidence/test_author_warnings.py
   - backend/tests/unit/db/crud/test_policy_gate_decision_purge.py
   - backend/tests/integration/api/test_policy_gate_acceptance.py
+  - frontend/src/__tests__/EvalsListView.spec.ts
   - frontend/src/__tests__/EvalEditorView.spec.ts
   - frontend/src/__tests__/EvalEditorViewPolicyGate.spec.ts
   - frontend/src/__tests__/EvalProposalsQueueView.spec.ts
@@ -63,7 +65,8 @@ surface + generated types on 2026-09-26 – FAR-1103 chunk 5a; it is no longer
 writable/readable through the API or the generated frontend types); blocked
 evals raise `EvalBlockedError` and are the mechanism engine-side guardrails
 build on (`feat-guardrails` depends on this engine).
-Surfaces: `/evals/editor` and `/evals/proposals`.
+Surfaces: `/evals` (the all-evals list), `/evals/editor` and
+`/evals/proposals`, joined by a costs-style route-per-tab strip.
 
 ## Behaviors
 
@@ -96,6 +99,22 @@ Surfaces: `/evals/editor` and `/evals/proposals`.
       `test_policy_gate_acceptance.py` for the FK RESTRICT guard, and
       `test_admin_housekeeping_decision_block.py` for the housekeeping
       `blocked_by` surfacing)
+- [x] The `/evals` list shows every eval in the organisation in one table
+      (name, pipeline, node, type, judging, pass threshold, version) without
+      picking a pipeline first, filterable by pipeline and eval type and
+      page-number paginated over `GET /api/v1/evals`; the pipeline name is
+      joined client-side because the API row carries no `pipeline_name`
+      (`frontend/src/views/EvalsListView.vue`,
+      `frontend/src/__tests__/EvalsListView.spec.ts`)
+- [x] The eval surface is three route-per-tab destinations rendered by the
+      shared `PageHeader` tabs - `/evals` (All evals), `/evals/editor`
+      (Editor) and `/evals/proposals` (Proposals) - and `/evals` is a real
+      page, not a redirect to the editor. The editor accepts a
+      `?pipeline_id=` deep link from the list, validates it against the
+      fetched pipeline list, keeps the URL in sync with the pipeline selector,
+      and falls back to the all-pipelines state with a visible notice for an
+      unknown id instead of a blank page (`frontend/src/views/EvalEditorView.vue`,
+      `frontend/src/views/EvalProposalsQueueView.vue`)
 - [x] Eval definitions are org-scoped CRUD - create/update/delete are
       admin-gated while reads are runner-readable (`POST/GET/PUT/DELETE
       /api/v1/evals`, `GET /api/v1/evals/{eval_id}`) - with pagination and

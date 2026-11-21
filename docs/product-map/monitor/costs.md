@@ -57,6 +57,18 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       absent or corrupt – so the bucket is not silently omitted from the card
       (`AdminCostBreakdownView.vue`,
       `frontend/src/__tests__/AdminCostBreakdownView.spec.ts`)
+- [x] The four Costs pages are navigable from each other by CLICKING the page tabs
+      (Overview / Spend Limits / Cost Components / Cost Controls) rendered by
+      `PageHeader` from `useCostPageTabs`: each tab is a router-link to its own
+      route, the destination renders its own `<h1>` and marks the clicked tab
+      `aria-selected`, and a click whose route chunk the running bundle can no
+      longer fetch (a tab left open across a deploy) retries once then performs a
+      full document load to the destination instead of silently doing nothing,
+      bounded to one reload per tab: if the freshly loaded bundle is missing the
+      same chunk the user is told and returned to the dashboard rather than
+      reloading in a loop (`frontend/tests/e2e/costs-tabs.spec.ts`,
+      `frontend/src/__tests__/routerChunkRecovery.spec.ts`,
+      `frontend/src/router/index.ts`)
 - [x] `GET/PUT /limits/org` and `PUT /limits/teams/{id}` read and set daily spend
       limits (null clears, negative rejected 422, cross-org team 404s untouched)
 - [x] `GET/PUT /controls` read/update the full cost-controls payload: budget,

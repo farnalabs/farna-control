@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useRouter } from 'vue-router'
 import CommandPalette from '../components/CommandPalette.vue'
+import { getNavGroups } from '../config/navigation'
 
 // Track mounted wrappers so afterEach can unmount them. CommandPalette is
 // mounted with attachTo: document.body, so each wrapper must be explicitly
@@ -70,8 +71,10 @@ describe('CommandPalette', () => {
     expect(beforeShrink).not.toBeNull()
 
     // Shrink the list to a single result far above the current selection.
-    // "Pipelines" is a curated extra in the palette that narrows to 1 hit.
-    await typeQuery('pipelines')
+    // The query must not collide with a sidebar-group label: a section label
+    // is searchable too, so "pipelines" now matches every item in that group.
+    // "Governance" is a unique page label, so it narrows to 1 hit.
+    await typeQuery('governance')
     const shrunk = resultButtons()
     expect(shrunk).toHaveLength(1)
     const highlighted = highlightedButton()
@@ -97,6 +100,29 @@ describe('CommandPalette', () => {
     const highlighted = highlightedButton()
     expect(highlighted).not.toBeNull()
     expect(resultButtons().indexOf(highlighted!)).toBe(0)
+  })
+
+  it('labels every curated extra with a current sidebar-group label', async () => {
+    const wrapper = await openPalette()
+    const extras = (wrapper.vm as unknown as { paletteExtras: { section: string }[] }).paletteExtras
+
+    // FAR-2605 reshaped the sidebar into these groups. A curated extra whose
+    // section is not one of them shows a user a group the sidebar does not
+    // have (the extras used to say BUILD / MONITOR / CONFIGURE / ADMIN).
+    const groupLabels = getNavGroups().map(g => g.label)
+    expect(groupLabels).toEqual([
+      'PIPELINES',
+      'CONTROLS',
+      'RUNS',
+      'CONFIGURATION',
+      'ADMINISTRATION',
+      'SYSTEM',
+    ])
+
+    expect(extras.length).toBeGreaterThan(0)
+    for (const extra of extras) {
+      expect(groupLabels).toContain(extra.section)
+    }
   })
 
   it('closes on Escape via the document-level keydown handler', async () => {

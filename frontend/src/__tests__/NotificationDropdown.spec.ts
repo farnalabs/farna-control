@@ -314,6 +314,23 @@ describe('NotificationDropdown (FAR-249)', () => {
     expect(link.attributes('href')).toBe('/notifications')
   })
 
+  it('renders a preferences link to notification settings (FAR-2605)', async () => {
+    // Notification Preferences left the sidebar in FAR-2605, so this link is
+    // the page's only entry point; without it the route is URL-only.
+    const wrapper = await mountDropdown()
+    const link = wrapper.find('[data-testid="notification-dropdown-preferences"]')
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toBe('/settings/notifications')
+    // Localised, never the raw key (components.NotificationDropdown.preferences).
+    expect(link.text()).toBe('Preferences')
+  })
+
+  it('emits close when the preferences link is clicked', async () => {
+    const wrapper = await mountDropdown()
+    await wrapper.find('[data-testid="notification-dropdown-preferences"]').trigger('click')
+    expect(wrapper.emitted('close')).toBeTruthy()
+  })
+
   it('renders notifications without an action_url as non-link rows', async () => {
     h.mockFetchDashboard.mockResolvedValue({
       notifications: [notification({ action_url: null })],

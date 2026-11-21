@@ -16,7 +16,7 @@ Usage:
         name="Complexity Reviewer",
         slug="complexity-reviewer",
         version="1.0.0",
-        author="Modulo",
+        author="Farna Control",
         content_json=COMPLEXITY_REVIEWER,
         tags=["context-setter", "canonical", "complexity", "cost"],
     )
@@ -86,5 +86,5 @@ COMPLEXITY_REVIEWER: dict[str, Any] = {
     ],
     "tags": ["context-setter", "canonical", "complexity", "cost", "library"],
     "version": "1.0.0",
-    "author": "Modulo",
+    "author": "Farna Control",
 }

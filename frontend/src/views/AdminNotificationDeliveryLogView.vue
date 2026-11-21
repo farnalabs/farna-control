@@ -1,7 +1,73 @@
 <template>
   <FeatureGate feature-name="webhook_notification_log" required-tier="community" show-disabled>
     <div class="page-wide">
-    <PageHeader :title="$t('views.AdminNotificationDeliveryLogView.notification_delivery_log')" :subtitle="$t('views.AdminNotificationDeliveryLogView.admin_view_of_all_webhook_notification_deliveries')" data-testid="admin-notification-log-title" />
+    <PageHeader :title="$t('views.AdminNotificationDeliveryLogView.webhook_deliveries')" :subtitle="$t('views.AdminNotificationDeliveryLogView.webhook_deliveries_subtitle')" data-testid="admin-notification-log-title">
+      <p data-testid="admin-notification-log-boundary" class="text-sm text-muted-foreground">
+        {{ $t('views.AdminNotificationDeliveryLogView.boundary_prefix') }}
+        <RouterLink to="/admin/trigger-events" data-testid="admin-notification-log-trigger-events-link" class="font-medium text-primary-text underline hover:no-underline">{{ $t('views.AdminNotificationDeliveryLogView.boundary_link') }}</RouterLink>{{ $t('views.AdminNotificationDeliveryLogView.boundary_suffix') }}
+      </p>
+    </PageHeader>
+
+    <!-- FAR-2596: the warning is announced through a PERSISTENTLY mounted
+         live region, so it is announced when it appears rather than depending
+         on a just-inserted aria-live node being picked up by the AT.
+
+         The absolute "nothing will appear here" claim is made ONLY when the
+         log is empty as well. A deleted webhook drops out of
+         GET /api/v1/notifications while its delivery history stays in the log
+         (the FK is nulled, the rows are kept), so an empty endpoint list can
+         sit above a full table — in that case a quieter notice replaces the
+         banner rather than contradicting the rows beneath it. -->
+    <div aria-live="polite">
+      <div
+        v-if="showNoEndpointsBanner"
+        data-testid="admin-notification-log-no-endpoints"
+        class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3"
+      >
+        <p class="text-sm font-semibold text-warning-text">
+          {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_title') }}
+        </p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_body') }}
+        </p>
+        <template v-if="canConfigureEndpoints">
+          <RouterLink
+            to="/settings/teams"
+            data-testid="admin-notification-log-add-endpoint"
+            class="mt-2 inline-block text-sm font-medium text-primary-text underline hover:no-underline"
+          >
+            {{ $t('views.AdminNotificationDeliveryLogView.add_webhook_endpoint') }}
+          </RouterLink>
+          <!-- Endpoints are created per team: the CTA dead-ends for an org
+               that has no team yet, so say what to do first. -->
+          <span
+            data-testid="admin-notification-log-team-hint"
+            class="mt-1 block text-xs text-muted-foreground"
+          >
+            {{ $t('views.AdminNotificationDeliveryLogView.add_endpoint_needs_team') }}
+          </span>
+        </template>
+      </div>
+
+      <p
+        v-else-if="showHistoryOnlyNotice"
+        data-testid="admin-notification-log-no-endpoints-history"
+        class="mb-4 text-sm text-muted-foreground"
+      >
+        {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_history') }}
+        <RouterLink
+          v-if="canConfigureEndpoints"
+          to="/settings/teams"
+          data-testid="admin-notification-log-add-endpoint"
+          class="font-medium text-primary-text underline hover:no-underline"
+        >
+          {{ $t('views.AdminNotificationDeliveryLogView.add_webhook_endpoint') }}
+        </RouterLink>
+        <span v-if="canConfigureEndpoints" class="text-xs">
+          {{ $t('views.AdminNotificationDeliveryLogView.add_endpoint_needs_team_inline') }}
+        </span>
+      </p>
+    </div>
 
     <DataCard variant="bordered" padding="md" elevation="sm">
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -14,7 +80,7 @@
   :placeholder="$t('views.AdminNotificationDeliveryLogView.status')"
   data-testid="admin-notification-log-status"
   class="w-full"
-  :options="[{ value: '__all__', label: $t('views.AdminErrorsView.all_statuses') }, { value: 'delivered', label: $t('views.AdminNotificationDeliveryLogView.delivered') }, { value: 'failed', label: $t('views.AdminNotificationDeliveryLogView.failed') }, { value: 'dead_lettered', label: $t('views.AdminNotificationDeliveryLogView.dead_lettered') }, { value: 'pending', label: $t('views.AdminNotificationDeliveryLogView.pending') }]"
+  :options="[{ value: '__all__', label: $t('views.AdminErrorsView.all_statuses') }, { value: 'delivered', label: $t('views.AdminNotificationDeliveryLogView.delivered') }, { value: 'failed', label: $t('views.AdminNotificationDeliveryLogView.failed') }, { value: 'dead_lettered', label: $t('views.AdminNotificationDeliveryLogView.dead_lettered') }]"
   option-label="label"
   option-value="value"
 >
@@ -136,10 +202,10 @@
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadDeliveries" />
 
     <EmptyState
-      v-else-if="items.length === 0"
-      data-testid="admin-notification-log-empty"
-      :title="$t('views.AdminNotificationDeliveryLogView.no_delivery_logs_found')"
-      :description="$t('views.AdminNotificationDeliveryLogView.no_delivery_logs_for_filters')"
+      v-else-if="items.length === 0 && hasActiveFilters"
+      data-testid="admin-notification-log-empty-filters"
+      :title="$t('views.AdminNotificationDeliveryLogView.no_deliveries_match_title')"
+      :description="$t('views.AdminNotificationDeliveryLogView.no_deliveries_match_body')"
     >
        <button
          type="button"
@@ -148,9 +214,20 @@
          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
          @click="resetFilters"
        >
-         {{ $t('views.AdminNotificationDeliveryLogView.reset') }}
+         {{ $t('views.AdminNotificationDeliveryLogView.reset_filters') }}
        </button>
      </EmptyState>
+
+    <!-- FAR-2596: "No deliveries yet" is only rendered once the endpoint read
+         has positively resolved to `configured`. While the state is `unknown`
+         (still loading, failed, or a malformed body) nothing is claimed; when
+         it is `none` the banner above is the whole story. -->
+    <EmptyState
+      v-else-if="items.length === 0 && endpointsConfigured"
+      data-testid="admin-notification-log-empty"
+      :title="$t('views.AdminNotificationDeliveryLogView.no_deliveries_yet_title')"
+      :description="$t('views.AdminNotificationDeliveryLogView.no_deliveries_yet_body')"
+    />
 
     <template v-else>
       <div class="table-wrapper">
@@ -195,13 +272,13 @@
               <td class="table-cell whitespace-nowrap text-muted-foreground">
                 {{ formatTimestamp(entry.created_at) }}
               </td>
-              <td class="table-cell font-medium">{{ entry.event_type }}</td>
+              <td class="table-cell font-medium">{{ deliveryLabel(entry.event_type) }}</td>
               <td class="table-cell max-w-xs truncate text-muted-foreground" :title="entry.endpoint_url ?? undefined">
                 {{ entry.endpoint_url || '—' }}
               </td>
               <td class="table-cell">
-                <span :class="statusBadge(entry.status)" class="capitalize">
-                  {{ entry.status }}
+                <span :class="statusBadge(entry.status)">
+                  {{ deliveryLabel(entry.status) }}
                 </span>
               </td>
               <td class="table-cell table-cell-numeric text-muted-foreground">{{ entry.attempt_count }}</td>
@@ -250,6 +327,13 @@
           </tbody>
         </table>
       </div>
+
+      <p
+        data-testid="admin-notification-log-dead-lettered-help"
+        class="mt-2 text-xs text-muted-foreground"
+      >
+        {{ $t('views.AdminNotificationDeliveryLogView.dead_lettered_help') }}
+      </p>
 
       <div class="flex items-center justify-between">
         <button
@@ -301,7 +385,7 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
 import { formatApiError } from '../lib/api/formatError'
@@ -315,8 +399,10 @@ import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'
 import { ChevronRight } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
+import { usePlanStore } from '../stores/planStore'
 
 const { t, te } = useI18n()
+const planStore = usePlanStore()
 
 type DeliveryLogEntry = components['schemas']['DeliveryLogEntry']
 interface DeliveryLogPage {
@@ -349,6 +435,86 @@ const { data: deliveriesData, loading, error, load: loadDeliveries } = useDataFe
 
 const items = computed(() => deliveriesData.value?.items ?? [])
 
+type EndpointState = 'unknown' | 'none' | 'configured'
+
+/**
+ * FAR-2596 — "no outbound webhooks are configured" is read from the org's
+ * endpoint list (GET /api/v1/notifications), NEVER inferred from the delivery
+ * log: a soft-deleted endpoint leaves its historical deliveries behind, so an
+ * empty log cannot tell "nothing was ever configured" apart from "configured,
+ * nothing has fired yet". This page lists outbound deliveries only; inbound
+ * trigger webhooks are recorded on the Trigger Event Log.
+ *
+ * ONE tri-state drives every surface that would otherwise guess, so no claim is
+ * rendered before the read resolves:
+ *
+ * - ``unknown``    — not resolved yet, or the read failed / returned an
+ *                    unexpected body. Fail open: no warning, and no
+ *                    "your webhooks are configured" claim either.
+ * - ``none``       — positively read an EMPTY list.
+ * - ``configured`` — positively read at least one endpoint.
+ */
+const endpointState = ref<EndpointState>('unknown')
+const endpointsConfigured = computed(() => endpointState.value === 'configured')
+const noEndpointsConfigured = computed(() => endpointState.value === 'none')
+
+/**
+ * Best-effort and FAIL OPEN: never surfaces an error and never touches the
+ * page's error state. A failure (or a body that is not an array) leaves the
+ * state ``unknown``, so it can never accuse the operator of having no
+ * endpoints.
+ */
+async function loadEndpoints(): Promise<void> {
+  try {
+    const response = await api.GET('/api/v1/notifications')
+    const body: unknown = response.data
+    if (!Array.isArray(body)) return
+    endpointState.value = body.length === 0 ? 'none' : 'configured'
+  } catch {
+    // Leave `unknown` — no claim either way.
+  }
+}
+
+onMounted(() => {
+  void loadEndpoints()
+})
+
+/**
+ * The empty state must distinguish "your webhooks are configured, nothing has
+ * fired yet" from "the current filters match nothing". The default range is
+ * always applied, so a user-applied filter is anything differing from the
+ * initial defaults.
+ */
+const hasActiveFilters = computed(
+  () =>
+    filterStatus.value !== '__all__' ||
+    filterEventType.value !== '__all__' ||
+    filterDateFrom.value !== initialDateRange.from ||
+    filterDateTo.value !== initialDateRange.to
+)
+
+/**
+ * The CTA mirrors FeatureGate's own predicate for `/settings/teams`
+ * (`feature-name="team_rbac" required-tier="team"`), so the warning never
+ * links into a disabled gate.
+ */
+const canConfigureEndpoints = computed(
+  () => planStore.featureEnabled('team_rbac') || planStore.isAtMinimumTier('team')
+)
+
+/**
+ * Render an event type / delivery status with its human label. The locale
+ * namespace carries labels for the registry events and the delivery statuses,
+ * so a raw `run_failed` / `dead_lettered` never reaches the table. A value with
+ * no label (an event registered on the server before its copy shipped, or an
+ * unexpected status) degrades to itself rather than to blank — the same
+ * fallback the event-type filter already uses.
+ */
+function deliveryLabel(value: string): string {
+  const key = `views.AdminNotificationDeliveryLogView.${value}`
+  return te(key) ? t(key) : value
+}
+
 /**
  * FAR-1319 — the event-type filter is driven by the server-side registry
  * (GET /api/v1/admin/notifications/available-events) instead of a hardcoded
@@ -373,12 +539,25 @@ const eventTypeOptions = computed(() => [
   { value: '__all__', label: t('views.AdminNotificationDeliveryLogView.all_types') },
   ...availableEventsData.value.map(eventType => ({
     value: eventType,
-    label: te(`views.AdminNotificationDeliveryLogView.${eventType}`)
-      ? t(`views.AdminNotificationDeliveryLogView.${eventType}`)
-      : eventType,
+    label: deliveryLabel(eventType),
   })),
 ])
 const total = computed(() => deliveriesData.value?.total ?? 0)
+
+/**
+ * FAR-2596: a deleted webhook disappears from the endpoint list while its
+ * delivery history stays in the log (the FK is nulled, the rows are kept), so
+ * the absolute "nothing will appear here" claim is only true when the LOG is
+ * empty too. With retained history a quieter notice replaces the banner rather
+ * than contradicting the table beneath it.
+ */
+const logIsEmpty = computed(() => items.value.length === 0 && total.value === 0)
+const showNoEndpointsBanner = computed(
+  () => noEndpointsConfigured.value && logIsEmpty.value && !loading.value
+)
+const showHistoryOnlyNotice = computed(
+  () => noEndpointsConfigured.value && !logIsEmpty.value
+)
 const nextCursor = computed(() => deliveriesData.value?.next_cursor ?? null)
 const prevCursor = computed(() => {
   const dc = deliveriesData.value

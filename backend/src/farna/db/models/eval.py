@@ -76,7 +76,7 @@ class Eval(SoftDeleteMixin, OrgScoped):
     eval_type: Mapped[str] = mapped_column(Text, nullable=False)
     # Physical jsonb: 0250 created it ``json``; 0254 promoted it to match the
     # 0147 standard. JSONB_COL keeps the ORM declaration honest while
-    # preserving SQLite/MariaDB parity.
+    # preserving SQLite (test-only) parity.
     config_json: Mapped[dict[str, Any]] = mapped_column(JSONB_COL, nullable=False, default=dict)
     pass_threshold: Mapped[Decimal | None] = mapped_column(Numeric, nullable=True)
     # deleted_by exists but SoftDeleteMixin supplies deleted_at.

@@ -4,7 +4,7 @@ On Postgres, tenant scoping uses set_config('app.organisation_id', value, is_loc
 which is equivalent to SET LOCAL and supports bound parameters. The semgrep rule
 rls_set_local enforces that bare SET (without is_local) is never used.
 
-On generic backends (MariaDB, SQLite), tenant scoping stores the org_id in
+On the generic backend (SQLite, test-only), tenant scoping stores the org_id in
 ``session.info`` and a ``do_orm_execute`` listener injects ``WHERE organisation_id = :oid``
 into every SELECT/UPDATE/DELETE automatically.
 """
@@ -75,7 +75,7 @@ async def read_rls_org(session: AsyncSession) -> uuid.UUID | None:
       unrelated to the transaction's real RLS context and must not shadow it — a
       stale or foreign info value would otherwise report a different org than RLS
       actually enforces.
-    * Generic backends (MariaDB, SQLite) — store the org in
+    * Generic backend (SQLite, test-only) — store the org in
       ``session.info['org_id']`` and have no GUC, so the info lookup is
       authoritative there.
 
@@ -218,7 +218,7 @@ async def set_rls_org(session: AsyncSession, org_id: uuid.UUID | None) -> None:
     so the operation runs unscoped — the caller must scope manually.
 
     Postgres: calls ``SELECT set_config('app.organisation_id', :oid, true)``.
-    Generic backends (MariaDB, SQLite): stores *org_id* in ``session.info``
+    Generic backend (SQLite, test-only): stores *org_id* in ``session.info``
     for the ``do_orm_execute`` tenant-filter listener to pick up.
     """
     if org_id is None:
@@ -428,7 +428,7 @@ def register_tenant_filter() -> None:
     ``WHERE organisation_id = :oid`` into every SELECT, UPDATE, and DELETE.
 
     This is the generic-backend counterpart to Postgres RLS — it makes the
-    same 200+ CRUD functions and 30+ route handlers work on MariaDB and SQLite
+    same 200+ CRUD functions and 30+ route handlers work on SQLite (test-only)
     without any code changes.
     """
     db_type = get_settings().modulo_db.lower()

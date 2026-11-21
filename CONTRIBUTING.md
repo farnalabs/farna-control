@@ -43,7 +43,7 @@ good faith.
 |---|---|---|
 | Python | >= 3.12 | Managed via `uv` |
 | Node.js | >= 20 | Frontend tooling |
-| Docker | Latest | Postgres, Redis, MariaDB |
+| Docker | Latest | Postgres, Redis |
 | uv | Latest | [Install uv](https://docs.astral.sh/uv/getting-started/installation/) |
 
 ### Required services
@@ -90,10 +90,10 @@ with the following defaults:
 `POSTGRES_PASSWORD=farna_control` instead and pairs it with the matching
 `DATABASE_URL`, so keep the password and the URL in step with each other.
 
-No maintained Docker override ships for MariaDB. To run against MariaDB, point
-`DATABASE_URL` at your own MariaDB instance and set `FARNA_CONTROL_DB=mariadb` (e.g.
-`DATABASE_URL=mysql+aiomysql://modulo:modulo@localhost:3306/modulo`). PostgreSQL
-is the supported primary database; MariaDB is a conformance-tier backend only.
+PostgreSQL 16 is the only supported runtime database (ADR 068). There is no
+MariaDB/MySQL option: `FARNA_CONTROL_DB` rejects those values at startup. SQLite
+is used only by the automated test suite and CI tooling, behind the test-only
+`FARNA_CONTROL_ALLOW_SQLITE=1` opt-in (see "Running the test suite" below).
 
 ---
 
@@ -188,8 +188,8 @@ environment variable.
 |---|---|---|---|
 | `SECRET_KEY` | Yes | — | JWT signing key (min 32 bytes) |
 | `FERNET_KEY` | Yes | — | Fernet encryption key for credentials (valid urlsafe-base64 key, min 32 bytes) |
-| `DATABASE_URL` | Yes | — | Database connection string (required, no static default); the SQLite URL applies only when `FARNA_CONTROL_DB=sqlite` |
-| `FARNA_CONTROL_DB` | No | `postgres` | Database dialect (`postgres`, `sqlite`, `mariadb`) |
+| `DATABASE_URL` | Yes | — | Database connection string (required, no static default); a SQLite URL is accepted only when `FARNA_CONTROL_DB=sqlite` and `FARNA_CONTROL_ALLOW_SQLITE=1`, both test-only |
+| `FARNA_CONTROL_DB` | No | `postgres` | Database dialect (`postgres`; `sqlite` is test-only and also requires `FARNA_CONTROL_ALLOW_SQLITE=1`) |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis connection for the SAQ broker (required in production) |
 | `FARNA_CONTROL_PUBLIC_URL` | No | `http://localhost:8000` | Public-facing URL for OIDC/SAML callbacks |
 | `FARNA_CONTROL_USERS` | No | — | Seed admin users (`username:password`) |
@@ -445,17 +445,23 @@ merges them with `coverage combine` and applies every threshold above to the
 merged report, so a local `coverage report` after a manual run needs a
 `coverage combine` first (`parallel = true` in `backend/pyproject.toml`).
 
-### Running tests on multiple databases
+### Running the test suite
 
-The backend nominally supports PostgreSQL, SQLite, and MariaDB/MySQL (see
-`docs/architecture.md`). Use the `FARNA_CONTROL_DB` environment variable to switch
-locally:
+PostgreSQL 16 is the only supported runtime database (ADR 068). SQLite is the
+test-suite backend only, and the Settings guard inspects the DSN: a SQLite
+`DATABASE_URL` is refused unless BOTH `FARNA_CONTROL_DB=sqlite` and the
+test-only `FARNA_CONTROL_ALLOW_SQLITE=1` are set. Never set that opt-in in a
+deployment.
 
 ```powershell
 $env:DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 $env:FARNA_CONTROL_DB = "sqlite"
+$env:FARNA_CONTROL_ALLOW_SQLITE = "1"
 uv run pytest tests/unit/ -m 'not integration' -q
 ```
+
+The integration suite runs against real Postgres via testcontainers and needs no
+SQLite opt-in.
 
 ---
 

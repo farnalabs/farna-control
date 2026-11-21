@@ -585,7 +585,19 @@ async def admin_get_org_license(
     session: AsyncSession = Depends(get_db_session),
 ) -> OrgLicenseResponse:
     try:
-        org = await get_organisation(session, org_id)
+        # The REST DI session is ``autobegin=False``, so the org read MUST run
+        # inside an explicit transaction -- exactly like the sibling PUT/DELETE
+        # licence handlers below, and the module's other GET handlers. Without
+        # ``session.begin()`` the query raises ``InvalidRequestError`` ("session
+        # used outside an active transaction"), which the arm below classifies
+        # as a 500 session-contract violation: the production failure on this
+        # route. Resolve inside the transaction too, so the response never
+        # dereferences an ORM instance after commit.
+        async with session.begin():
+            org = await get_organisation(session, org_id)
+            if org is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_ORGANISATION_NOT_FOUND)
+            return _resolve_org_license(org)
     except ProgrammingError as exc:
         _raise_programming_error(_CODE_ADMIN_ORGS_ADMIN_GET_ORG_LICENSE, MSG_FEATURE_NOT_AVAILABLE, exc)
     except SQLAlchemyError as exc:
@@ -595,10 +607,6 @@ async def admin_get_org_license(
         raise
     except Exception as exc:
         _raise_internal_error("Unexpected error in admin_get_org_license", exc)
-    if org is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_ORGANISATION_NOT_FOUND)
-
-    return _resolve_org_license(org)
 
 
 class _OrgLicenseProblemDetail(ProblemDetail):

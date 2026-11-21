@@ -59,7 +59,7 @@ function makeInstall() {
     collection_version: '1.0',
     organisation_id: 'org-1',
     status: 'installed',
-    community_sourced: false,
+    registry_sourced: false,
     agents_granted: false,
     resolved_manifest: null,
     connector_checklist: null,
@@ -752,9 +752,9 @@ describe('CollectionDetailView grantAgents flow', () => {
     postMock.mockResolvedValue({ status: 'published' })
   })
 
-  it('shows Grant Access button for community-sourced install without agents granted', async () => {
+  it('shows Grant Access button for registry-sourced install without agents granted', async () => {
     mockPublishedCollection([
-      { ...makeInstall(), community_sourced: true, agents_granted: false, install_id: 'install-1' },
+      { ...makeInstall(), registry_sourced: true, agents_granted: false, install_id: 'install-1' },
     ])
     router.push('/library/collections/col-1')
     await router.isReady()
@@ -769,7 +769,7 @@ describe('CollectionDetailView grantAgents flow', () => {
 
   it('calls grantAgents endpoint and updates the install', async () => {
     mockPublishedCollection([
-      { ...makeInstall(), community_sourced: true, agents_granted: false, install_id: 'install-1' },
+      { ...makeInstall(), registry_sourced: true, agents_granted: false, install_id: 'install-1' },
     ])
     router.push('/library/collections/col-1')
     await router.isReady()
@@ -777,7 +777,7 @@ describe('CollectionDetailView grantAgents flow', () => {
     await nextTick()
     await nextTick()
 
-    const updatedInstall = { ...makeInstall(), community_sourced: true, agents_granted: true, install_id: 'install-1' }
+    const updatedInstall = { ...makeInstall(), registry_sourced: true, agents_granted: true, install_id: 'install-1' }
     postMock.mockResolvedValueOnce(updatedInstall)
 
     await wrapper.find('[data-testid="collection-grant-agents"]').trigger('click')
@@ -798,7 +798,7 @@ describe('CollectionDetailView grantAgents flow', () => {
 
   it('handles grantAgents error', async () => {
     mockPublishedCollection([
-      { ...makeInstall(), community_sourced: true, agents_granted: false, install_id: 'install-1' },
+      { ...makeInstall(), registry_sourced: true, agents_granted: false, install_id: 'install-1' },
     ])
     postMock.mockRejectedValueOnce(new Error('grant failed'))
     router.push('/library/collections/col-1')

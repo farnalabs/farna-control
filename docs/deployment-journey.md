@@ -17,12 +17,13 @@ codebase, same Docker images, same RuntimeProvider ABC.
 | Approach | What you need | How to run | RuntimeProvider |
 |---|---|---|---|
 | Docker Compose (recommended) | Docker Desktop | `docker compose -f docker-compose.local.yml up -d` then `uv run uvicorn ...` | `LocalRuntimeProvider` (default, max 2 concurrent agents) |
-| SQLite mode | Python 3.12-3.14, `uv` | Set `FARNA_CONTROL_DB=sqlite` plus the required `DATABASE_URL` (a `sqlite+aiosqlite:///` URL), `FARNA_CONTROL_SYSTEM_DATABASE_URL`, `SECRET_KEY` and `FERNET_KEY`, then run `uv run uvicorn farna.api.main:app` - see `docs/deployment.md` §Standalone | `LocalRuntimeProvider` |
+| Native install (Linux) | Linux workstation, no Docker | `scripts/install.sh` (or on Ubuntu 22.04/24.04 `sudo apt install farna-control`) then `farna-control start` - see [system-requirements.md](./system-requirements.md#native-single-install-bundle-linux) | `LocalRuntimeProvider` (default, max 2 concurrent agents) |
 | Full stack with Docker | Docker Compose | `docker compose -f docker-compose.local.yml --profile observability up -d` | `LocalRuntimeProvider` |
 
-SQLite removes the separate PostgreSQL service, but it does not remove the Redis
-requirement. Start Redis and both SAQ workers before running pipelines or cron and
-polling triggers; the API refuses to boot when `REDIS_URL` is empty.
+Every option runs on PostgreSQL 16, the only supported runtime database. SQLite
+is used only by the automated test suite and is not a deployment backend. Redis
+is still required: start Redis and both SAQ workers before running pipelines or
+cron and polling triggers; the API refuses to boot when `REDIS_URL` is empty.
 
 Both compose rows need a valid `FERNET_KEY` in `.env` at the repo root before
 the first `up` – compose refuses to start without one (FAR-2181):
@@ -34,7 +35,6 @@ For a full walkthrough, see `docs/quickstart.md`.
 - No sandbox isolation (agents run as subprocesses on your machine)
 - Concurrency capped at `FARNA_CONTROL_MAX_LOCAL_CONCURRENCY` (default 2)
 - No horizontal scaling (single process)
-- SQLite mode: no RLS, no advisory locks, no flood protection
 
 ### When to outgrow this
 You want to share the instance with a team, deploy it somewhere always-on,
@@ -194,7 +194,7 @@ you want to offer Farna Control as a service to external teams.
                         ┌──────────────────────┐
                         │  Local Development    │
                         │  (Docker Compose /    │
-                        │   SQLite)             │
+                        │   native install)     │
                         │  ~2 concurrent agents │
                         └──────────┬───────────┘
                                    │

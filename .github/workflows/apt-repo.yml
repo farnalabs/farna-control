@@ -16,8 +16,15 @@ name: "Linux: signed apt repository (FAR-2579)"
 # GITHUB_TOKEN raises no `release` event for other workflows.
 #
 # Every published release that carries a farna-control_<version>_amd64.deb is
-# rebuilt into the index on each run, so all versions stay installable and
-# pinnable. Each .deb is verified against its release's SHA256SUMS first.
+# listed in the index rebuilt on each run, so all versions stay installable and
+# pinnable. The .debs are ~224 MB each, so versions the live index already lists
+# are NOT re-downloaded (FAR-2590): scripts/linux/plan-apt-repo.sh reuses a
+# version's published Packages stanza only when the live InRelease verifies
+# against the reviewed key, the signed Packages hash matches, and the stanza's
+# SHA256 equals the release's SHA256SUMS entry. Everything else - new versions,
+# or any stanza that fails a check - is downloaded and verified against the
+# release's SHA256SUMS before the builder hashes it. No reachable or trusted
+# live index (first run) means a full download.
 #
 # Secrets: APT_REPO_GPG_PRIVATE_KEY (armored; its fingerprint must match the
 # reviewed public key deploy/apt/farna-control-archive-keyring.asc),
@@ -35,8 +42,9 @@ on:
         default: ""
 
 concurrency:
-  # One publish at a time; every run rebuilds the full index, so a queued run
-  # always publishes a superset of the one before it.
+  # One publish at a time; every run rebuilds the full index (reusing what the
+  # live one already lists), so a queued run always publishes a superset of
+  # the one before it.
   group: apt-repo
   cancel-in-progress: false
 
@@ -77,11 +85,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download every released .deb and verify it against SHA256SUMS
+      - name: Plan reuse against the live index, download only new .debs, verify against SHA256SUMS
         id: collect
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          APT_REPO_PUBLIC_KEY_FILE: deploy/apt/farna-control-archive-keyring.asc
         run: |
           set -euo pipefail
           api="https://api.github.com/repos/${REPO}/releases"
@@ -101,32 +110,58 @@ jobs:
                    | [.tag_name, ([.assets[].name] | join(" "))] | @tsv' <<< "${body}" >> releases.tsv
             page=$((page + 1))
           done
-          : > manifest.tsv
+          # Every version the index must list, with its release's SHA256SUMS
+          # (small: always fetched fresh, it is what reuse is checked against).
+          : > candidates.tsv
           while IFS=$'\t' read -r tag assets; do
             deb="$(tr ' ' '\n' <<< "${assets}" | grep -E '^farna-control_[0-9]+\.[0-9]+\.[0-9]+_amd64\.deb$' || true)"
             [ -n "${deb}" ] || continue
             [ "$(wc -l <<< "${deb}")" -eq 1 ] || { echo "::error::${tag} carries more than one .deb asset"; exit 1; }
-            if grep -qF "/${deb}" manifest.tsv; then
+            if cut -f2 candidates.tsv | grep -qxF "${deb}"; then
               echo "::warning::${deb} is attached to more than one release; keeping the newest one"
               continue
             fi
             tr ' ' '\n' <<< "${assets}" | grep -qx SHA256SUMS || { echo "::error::${tag} has ${deb} but no SHA256SUMS asset"; exit 1; }
             dir="debs/${tag}"
             mkdir -p "${dir}"
-            # The exact public URL the repository redirects apt to.
-            curl --proto '=https' -fsSL --retry 3 -o "${dir}/${deb}" "${download_base}/${tag}/${deb}"
             curl --proto '=https' -fsSL --retry 3 -o "${dir}/SHA256SUMS" "${download_base}/${tag}/SHA256SUMS"
-            (cd "${dir}" && grep -E "^[0-9a-f]{64}  ${deb}\$" SHA256SUMS | sha256sum --check --strict -) \
-              || { echo "::error::${tag}/${deb} does not match the release SHA256SUMS"; exit 1; }
-            printf '%s\t%s\n' "${tag}" "${PWD}/${dir}/${deb}" >> manifest.tsv
+            printf '%s\t%s\t%s\n' "${tag}" "${deb}" "${PWD}/${dir}/SHA256SUMS" >> candidates.tsv
           done < releases.tsv
-          if [ ! -s manifest.tsv ]; then
+          if [ ! -s candidates.tsv ]; then
             echo "::warning::no published release carries a farna-control .deb yet; nothing to publish"
             echo "has_debs=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          cat manifest.tsv
-          newest="$(sed -E 's/.*farna-control_([0-9.]+)_amd64\.deb$/\1/' manifest.tsv | sort -rV | head -n 1)"
+
+          # The index currently live: the public URL, else the Pages hostname.
+          # Unreachable on both = first run = full download. The planner
+          # verifies it before reusing anything from it.
+          mkdir -p previous
+          for base in "${APT_REPO_PUBLIC_URL}" "${APT_REPO_PAGES_URL}"; do
+            rm -f previous/InRelease previous/Packages
+            if curl --proto '=https' -fsSL --retry 2 --max-time 60 -o previous/InRelease "${base}/dists/stable/InRelease" \
+              && curl --proto '=https' -fsSL --retry 2 --max-time 120 -o previous/Packages "${base}/dists/stable/main/binary-amd64/Packages"; then
+              echo "previous index fetched from ${base}"
+              break
+            fi
+            rm -f previous/InRelease previous/Packages
+            echo "::notice::no index served at ${base}"
+          done
+          bash scripts/linux/plan-apt-repo.sh candidates.tsv previous plan
+
+          # Download only what the plan needs, verified against SHA256SUMS
+          # before the builder ever hashes it.
+          : > manifest.tsv
+          while IFS=$'\t' read -r tag deb; do
+            dir="debs/${tag}"
+            # The exact public URL the repository redirects apt to.
+            curl --proto '=https' -fsSL --retry 3 -o "${dir}/${deb}" "${download_base}/${tag}/${deb}"
+            (cd "${dir}" && grep -E "^[0-9a-f]{64}  ${deb}\$" SHA256SUMS | sha256sum --check --strict -) \
+              || { echo "::error::${tag}/${deb} does not match the release SHA256SUMS"; exit 1; }
+            printf '%s\t%s\n' "${tag}" "${PWD}/${dir}/${deb}" >> manifest.tsv
+          done < plan/download.tsv
+          echo "downloaded $(wc -l < manifest.tsv), reused $(wc -l < plan/reuse.tsv) of $(wc -l < candidates.tsv) version(s)"
+          newest="$(cut -f2 candidates.tsv | sed -E 's/^farna-control_([0-9.]+)_amd64\.deb$/\1/' | sort -rV | head -n 1)"
           echo "has_debs=true" >> "$GITHUB_OUTPUT"
           echo "newest_version=${newest}" >> "$GITHUB_OUTPUT"
 
@@ -139,7 +174,7 @@ jobs:
           APT_REPO_RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download
         run: |
           set -euo pipefail
-          bash scripts/linux/build-apt-repo.sh site manifest.tsv
+          bash scripts/linux/build-apt-repo.sh site manifest.tsv plan/reuse.tsv
 
       - name: Upload the site
         if: steps.collect.outputs.has_debs == 'true'

@@ -1022,8 +1022,12 @@ The HITL budget is AGGREGATE per identity (JWT user, API-key prefix, or IP) acro
 
 | Mode | Components | Use case |
 |------|-----------|----------|
-| **Standalone** | Single process + SQLite file | Local dev, quick evaluation |
+| **Native single-install** | Single host: API, workers, bundled PostgreSQL 16 and Redis 8 | Workstation or single-machine evaluation (ADR 031) |
 | **Docker Compose** | Backend + Frontend + PostgreSQL 16 + (optional) Redis 8 + (optional) OTel stack | Single-server production |
+
+Both modes run the same stack on PostgreSQL 16, which is the only supported
+runtime database. SQLite is used only by the automated test suite and is not a
+deployment backend (ADR 068).
 
 ### Docker Compose
 
@@ -1098,7 +1102,7 @@ ADRs document key trade-offs and are maintained alongside this project's private
 | 001 | Agent Execution Environment as a V1 Primitive | Implemented (provider/tier model superseded by ADR 029) |
 | 002 | Multi-Backend Database Abstraction Strategy | Draft |
 | 044 | Agent Dispatch Model | Supersedes ADR 001 |
-| 003 | Packaging & Distribution Strategy | Draft |
+| 003 | Packaging & Distribution Strategy | Superseded by ADR 031 |
 | 045 | Agent as a Self-Contained Bundle | Accepted |
 | 004 | User Offboarding Uses Deactivation (Not Hard Deletion) | Accepted |
 | 046 | Agent Architecture: Two-Tier Orchestration + Execution | Superseded by ADR 029 |

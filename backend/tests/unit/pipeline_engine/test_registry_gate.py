@@ -1,23 +1,21 @@
-"""Unit tests for the FAR-764 community execution gate (default-deny).
+"""Unit tests for the FAR-764 registry execution gate (default-deny).
 
-The gate restricts community-sourced agents that have not yet been granted by
+The gate restricts registry-sourced agents that have not yet been granted by
 the operator:
 
   * ``make_node_fn`` (LLM node) and ``make_sandbox_agent_fn`` (sandbox node)
-    return a ``blocked`` / ``community_sourced_not_granted`` stub instead of
+    return a ``blocked`` / ``registry_sourced_not_granted`` stub instead of
     invoking the model, proving the default-deny security property before any
     model invocation.
   * The gate compares the *canonicalised* UUID form, so a non-canonical
     rendering (uppercase / brace / no-dash) of the same agent id cannot slip
     past the gate and fail it open.
   * ``PipelineExecutor._resolve_run_connector_scope`` zeroes the connector
-    grants of gated agents and records them in ``_community_gated_agents`` so
+    grants of gated agents and records them in ``_registry_gated_agents`` so
     the gate is seeded into run state.
 
-These cover the prove-the-fix gaps from the PR review of #344. The FAR-959
-``community_objects_enabled`` kill switch was removed with the community
-library; the FAR-764 grant gate still applies to community-sourced
-(registry-sourced) collection installs.
+These cover the prove-the-fix gaps from the PR review of #344. The FAR-764
+grant gate applies to registry-sourced collection installs.
 """
 
 from __future__ import annotations
@@ -43,7 +41,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def _node_state(gated: set[str] | None = None) -> dict[str, Any]:
     return {
         "run_context": {"input": {}},
-        "_community_gated_agents": gated or set(),
+        "_registry_gated_agents": gated or set(),
     }
 
 
@@ -59,7 +57,7 @@ async def test_make_node_fn_blocks_gated_agent():
     result = await fn(_node_state({str(agent_id)}))
     artifact = result["artifacts"][0]
     assert artifact["status"] == "blocked"
-    assert artifact["reason"] == "community_sourced_not_granted"
+    assert artifact["reason"] == "registry_sourced_not_granted"
 
 
 async def test_make_node_fn_blocks_noncanonical_agent_id():
@@ -72,7 +70,7 @@ async def test_make_node_fn_blocks_noncanonical_agent_id():
 
 
 async def test_make_node_fn_allows_ungated_agent():
-    """An un-gated agent executes normally (no community gate block)."""
+    """An un-gated agent executes normally (no registry gate block)."""
     agent_id = uuid.uuid4()
     fn = nr.make_node_fn(
         {
@@ -110,7 +108,7 @@ async def test_make_sandbox_agent_fn_blocks_gated_agent():
         result = await fn(_node_state({str(agent_id)}))
     artifact = result["artifacts"][0]
     assert artifact["status"] == "blocked"
-    assert artifact["reason"] == "community_sourced_not_granted"
+    assert artifact["reason"] == "registry_sourced_not_granted"
     impl.assert_not_awaited()
 
 
@@ -175,59 +173,59 @@ def _make_agent(agent_id: uuid.UUID, ci_id: uuid.UUID, grants: list[str]) -> Any
     )
 
 
-def _make_install(ci_id: uuid.UUID, *, community_sourced: bool, agents_granted: bool) -> Any:
+def _make_install(ci_id: uuid.UUID, *, registry_sourced: bool, agents_granted: bool) -> Any:
     return SimpleNamespace(
         install_id=ci_id,
-        community_sourced=community_sourced,
+        registry_sourced=registry_sourced,
         agents_granted=agents_granted,
     )
 
 
-async def test_resolve_scope_gates_community_not_granted_install():
-    """A community-sourced, not-yet-granted install gates its agent and zeroes
+async def test_resolve_scope_gates_registry_not_granted_install():
+    """A registry-sourced, not-yet-granted install gates its agent and zeroes
     the agent's connector grants in the run scope."""
     org_id = uuid.uuid4()
     agent_id = uuid.uuid4()
     ci_id = uuid.uuid4()
     agent = _make_agent(agent_id, ci_id, ["github"])
-    install = _make_install(ci_id, community_sourced=True, agents_granted=False)
+    install = _make_install(ci_id, registry_sourced=True, agents_granted=False)
     executor = PipelineExecutor(MagicMock())
     graph_json = {"nodes": [{"id": "n1", "agent_id": str(agent_id)}]}
 
     scope = await executor._resolve_run_connector_scope(_FakeSession([agent], [install]), org_id, graph_json)
 
-    assert executor._community_gated_agents == {str(agent_id)}
+    assert executor._registry_gated_agents == {str(agent_id)}
     assert scope is None or "github" not in scope
 
 
-async def test_resolve_scope_keeps_granted_community_install_connectors():
-    """A community install the operator HAS granted is not gated, and its
+async def test_resolve_scope_keeps_granted_registry_install_connectors():
+    """A registry install the operator HAS granted is not gated, and its
     connector grants survive in the run scope."""
     org_id = uuid.uuid4()
     agent_id = uuid.uuid4()
     ci_id = uuid.uuid4()
     agent = _make_agent(agent_id, ci_id, ["github"])
-    install = _make_install(ci_id, community_sourced=True, agents_granted=True)
+    install = _make_install(ci_id, registry_sourced=True, agents_granted=True)
     executor = PipelineExecutor(MagicMock())
     graph_json = {"nodes": [{"id": "n1", "agent_id": str(agent_id)}]}
 
     scope = await executor._resolve_run_connector_scope(_FakeSession([agent], [install]), org_id, graph_json)
 
-    assert not executor._community_gated_agents
+    assert not executor._registry_gated_agents
     assert "github" in scope
 
 
-async def test_resolve_scope_keeps_non_community_install_connectors():
-    """A non-community install is never gated regardless of grant state."""
+async def test_resolve_scope_keeps_non_registry_install_connectors():
+    """A non-registry install is never gated regardless of grant state."""
     org_id = uuid.uuid4()
     agent_id = uuid.uuid4()
     ci_id = uuid.uuid4()
     agent = _make_agent(agent_id, ci_id, ["github"])
-    install = _make_install(ci_id, community_sourced=False, agents_granted=False)
+    install = _make_install(ci_id, registry_sourced=False, agents_granted=False)
     executor = PipelineExecutor(MagicMock())
     graph_json = {"nodes": [{"id": "n1", "agent_id": str(agent_id)}]}
 
     scope = await executor._resolve_run_connector_scope(_FakeSession([agent], [install]), org_id, graph_json)
 
-    assert not executor._community_gated_agents
+    assert not executor._registry_gated_agents
     assert "github" in scope

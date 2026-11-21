@@ -2641,6 +2641,111 @@ def _spctl_retry_harness(block: str) -> str:
     )
 
 
+# --- FAR-2589: the macOS app reports its build version ------------------------
+
+
+def _fake_macos_app(tmp_path: Path, *, info_plist: bool = True) -> Path:
+    """A macOS app layout holding the real farna.version, returning its bundle root.
+
+    The stub interpreter stands in for the bundled runtime + its relative .pth:
+    the gate strips PYTHONPATH, and the stub points the import path at the
+    bundle's own backend/src copy, which is what the .pth does in the app.
+    """
+    contents = tmp_path / "FarnaControl.app" / "Contents"
+    bundle_root = contents / "Resources" / "bundle"
+    package = bundle_root / "backend" / "src" / "farna"
+    package.mkdir(parents=True)
+    for name in ("__init__.py", "version.py"):
+        shutil.copyfile(REPO_ROOT / "backend" / "src" / "farna" / name, package / name)
+    if info_plist:
+        (contents / "Info.plist").write_text("<plist/>\n", encoding="utf-8")
+    _write_executable(
+        bundle_root / "runtime" / "bin" / "python3",
+        "#!/usr/bin/env bash\n" + f'export PYTHONPATH="{(bundle_root / "backend" / "src").as_posix()}"\n' + f'exec "{Path(sys.executable).as_posix()}" "$@"\n',
+    )
+    return bundle_root
+
+
+def _run_version_stamp(tmp_path: Path, bundle_root: Path, version: str) -> subprocess.CompletedProcess[str]:
+    block = _extract_marked_bash(_bundle_build_script(), "bundle_version_stamp")
+    driver = tmp_path / "version_stamp_driver.sh"
+    driver.write_text('#!/usr/bin/env bash\nset -euo pipefail\nVERSION="$1"\nBUNDLE_ROOT="$2"\n' + block + "\n", encoding="utf-8")
+    return _run_bash_file(driver, [version, bundle_root.as_posix()], cwd=tmp_path)
+
+
+def test_macos_bundle_version_stamp_is_what_the_bundled_app_reports(tmp_path: Path) -> None:
+    """FAR-2589: the stamp the build writes is the one farna.version resolves
+    inside the app layout, so /healthz/ready reports the build version."""
+    bundle_root = _fake_macos_app(tmp_path)
+
+    result = _run_version_stamp(tmp_path, bundle_root, "9.8.7")
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "bundle version stamp: 9.8.7" in result.stdout
+    assert (bundle_root / "VERSION").read_text(encoding="utf-8") == "bundle-v9.8.7\n"
+
+
+def test_macos_bundle_version_gate_fails_when_the_app_cannot_resolve_the_stamp(tmp_path: Path) -> None:
+    """Without the app marker the stamp is ignored; the build gate must fail
+    rather than ship an app that reports another version."""
+    bundle_root = _fake_macos_app(tmp_path, info_plist=False)
+
+    result = _run_version_stamp(tmp_path, bundle_root, "9.8.7")
+
+    assert result.returncode != 0, result.stdout
+    assert "expected the build version '9.8.7'" in result.stderr
+
+
+def test_macos_smoke_asserts_the_running_app_reports_the_build_version() -> None:
+    _step, build_run = _native_installer_step()
+
+    assert 'SMOKE_EXPECTED_VERSION="$3" bash scripts/native-stack-assertions.sh' in build_run
+    assert '\' bash "$INSTALL_ROOT" "$DATA" "$VERSION_NUM" || exit 1' in build_run
+    assertions = (REPO_ROOT / "scripts" / "native-stack-assertions.sh").read_text(encoding="utf-8")
+    assert '[[ "${reported_version}" == "${SMOKE_EXPECTED_VERSION}" ]]' in assertions
+
+
+# --- FAR-2589: every smoke assertion's own line reaches the log ---------------
+
+_PIPED_RUN_ASSERTION = re.compile(r"^\s*run_assertion\b[^'\n]*\|", re.MULTILINE)
+
+
+def _logical_lines(script: str) -> str:
+    return script.replace("\\n", " ")
+
+
+def test_macos_smoke_never_pipes_run_assertion_output_away() -> None:
+    """Piping run_assertion into grep hides its `assertion:` line from the log."""
+    _step, build_run = _native_installer_step()
+
+    assert not _PIPED_RUN_ASSERTION.findall(_logical_lines(build_run))
+    historical = 'run_assertion "service_binary_macho" \\n  file "$SERVICE_BINARY" | grep -E "Mach-O" || exit 1\n'
+    assert _PIPED_RUN_ASSERTION.findall(_logical_lines(historical))
+
+
+def _macho_harness(run_assertion_block: str, macho_block: str) -> str:
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            'stub="$(mktemp -d)"',
+            'DATA="$(mktemp -d)"',
+            "cat > \"$stub/file\" <<'STUB'",
+            "#!/bin/sh",
+            'echo "$1: Mach-O 64-bit executable arm64"',
+            "STUB",
+            'chmod +x "$stub/file"',
+            'PATH="$stub:$PATH"',
+            "redact_pre_smoke_output() { cat; }",
+            run_assertion_block,
+            'SERVICE_BINARY="/opt/Farna Control.app/Contents/Resources/bundle/runtime/bin/python3"',
+            'MACOS_ARCH="$1"',
+            macho_block,
+            "echo REACHED_AFTER_MACHO_ASSERTION",
+            "",
+        ]
+    )
+
+
 def _run_spctl_retry(flavour: str, verdicts: str) -> subprocess.CompletedProcess[str]:
     _step, build_run = _native_installer_step()
     block = _extract_marked_bash(build_run, "mounted_app_spctl_with_retry")
@@ -2796,3 +2901,94 @@ def test_macos_contract_gates_the_signature_diagnostics_helper() -> None:
     assert "test -x scripts/macos/signature-diagnostics.sh" in contract
     assert "shellcheck scripts/macos/signature-diagnostics.sh" in contract
     assert "bash -n scripts/macos/signature-diagnostics.sh" in contract
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_macho_assertion_logs_its_line_and_passes_on_a_match(flavour: str) -> None:
+    _step, build_run = _native_installer_step()
+    harness = _macho_harness(_extract_marked_bash(build_run, "run_assertion"), _extract_marked_bash(build_run, "service_binary_macho_assertion"))
+
+    result = _run_bash_stdin(flavour, harness, ["arm64"])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "assertion: service_binary_macho=ok (exit=0)" in result.stdout
+    assert "Mach-O 64-bit executable arm64" in result.stdout
+    assert "REACHED_AFTER_MACHO_ASSERTION" in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_macho_assertion_logs_its_line_and_fails_on_an_architecture_mismatch(flavour: str) -> None:
+    _step, build_run = _native_installer_step()
+    harness = _macho_harness(_extract_marked_bash(build_run, "run_assertion"), _extract_marked_bash(build_run, "service_binary_macho_assertion"))
+
+    result = _run_bash_stdin(flavour, harness, ["x86_64"])
+
+    assert result.returncode != 0, result.stdout
+    assert "assertion: service_binary_macho=FAILED (exit=1)" in result.stdout
+    assert "REACHED_AFTER_MACHO_ASSERTION" not in result.stdout
+
+
+# --- FAR-2589 review: a command word glued to its quoted argument ------------
+#
+# `file"${APP_ROOT}/Contents/MacOS/modulo"` (a lost separator) is ONE valid
+# word, so bash -n and shellcheck both accept it; on the macOS runner it runs a
+# command named `file/.../modulo` and the build dies at its final check. Only a
+# lexical scan catches the class before a runner does.
+
+_HEREDOC_OPENER = re.compile(r"""<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1""")
+_GLUED_COMMAND_WORD = re.compile(r"""^\s*([A-Za-z_][A-Za-z0-9_.-]+)["']""")
+
+
+def _bash_code_lines(text: str) -> list[str]:
+    """Non-comment shell lines, with heredoc bodies (C, Python, plist) skipped."""
+    lines: list[str] = []
+    terminator: str | None = None
+    for line in text.splitlines():
+        if terminator is not None:
+            if line.strip() == terminator:
+                terminator = None
+            continue
+        if line.lstrip().startswith("#"):
+            continue
+        opener = _HEREDOC_OPENER.search(line)
+        if opener:
+            terminator = opener.group(2)
+        lines.append(line)
+    return lines
+
+
+def _glued_command_words(text: str) -> list[str]:
+    return [line.strip() for line in _bash_code_lines(text) if _GLUED_COMMAND_WORD.match(line)]
+
+
+def test_installer_bash_never_glues_a_command_word_to_its_quoted_argument() -> None:
+    sources = _macos_bash_sources()
+    for relative in ("scripts/install.sh", "scripts/linux/native-firstrun-smoke.sh"):
+        sources[relative] = (REPO_ROOT / relative).read_text(encoding="utf-8")
+
+    offenders = [f"{label}: {line}" for label, text in sources.items() for line in _glued_command_words(text)]
+
+    assert not offenders, offenders
+
+
+def test_glued_command_word_scan_flags_the_reviewed_build_script_typo() -> None:
+    """Negative control: the exact PR #3291 line is caught; heredoc bodies are not."""
+    script = _bundle_build_script()
+    typo = script.replace('file "${APP_ROOT}/Contents/MacOS/modulo"', 'file"${APP_ROOT}/Contents/MacOS/modulo"')
+    assert typo != script
+
+    assert _glued_command_words(typo) == ['file"${APP_ROOT}/Contents/MacOS/modulo"']
+    assert not _glued_command_words("cat <<'PY'\nprint\"x\"\nPY\n")
+
+
+def test_macos_bundle_build_ends_with_the_launcher_identity_checks() -> None:
+    """The build's last checks run right after the version stamp, verbatim."""
+    script = _bundle_build_script()
+    tail = script[script.index("# END bundle_version_stamp") :].splitlines()[1:5]
+
+    assert tail == [
+        'file "${APP_ROOT}/Contents/MacOS/modulo"',
+        '"${BUNDLE_ROOT}/pg/bin/postgres" --version',
+        '"${BUNDLE_ROOT}/redis/redis-server" --version',
+        '"${APP_ROOT}/Contents/MacOS/modulo" --help >/dev/null',
+    ]

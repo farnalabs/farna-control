@@ -166,9 +166,9 @@ class TestSystemConfigCRUD:
         ``sqlite`` and ``postgresql`` are the supported backends; anything else
         must fail loudly rather than emit a statement the backend cannot run.
         """
-        mock_session.get_bind.return_value.dialect.name = "mysql"
+        mock_session.get_bind.return_value.dialect.name = "oracle"
 
-        with pytest.raises(NotImplementedError, match="mysql"):
+        with pytest.raises(NotImplementedError, match="oracle"):
             await update_config(mock_session, "key", "value")
 
     async def test_set_config_with_updated_by(self, mock_session: AsyncMock) -> None:

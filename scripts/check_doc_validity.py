@@ -337,7 +337,7 @@ def _self_test() -> list[str]:
         root = Path(tmp)
         (root / "docs").mkdir()
         (root / "README.md").write_text("# t\n", encoding="utf-8")
-        (root / "docs" / "page.md").write_text("See https://modulo.run for details.\n", encoding="utf-8")
+        (root / "docs" / "page.md").write_text("See https://farna.dev for details.\n", encoding="utf-8")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             capped_exit = main(["--repo-root", str(root), "--max-urls", "0"])
         check("a capped URL pass exits non-zero", capped_exit != 0)

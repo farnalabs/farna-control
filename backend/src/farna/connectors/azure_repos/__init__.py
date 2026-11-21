@@ -206,7 +206,7 @@ class AzureReposConnector(ConnectorBase):
                     repo = payload.data["repo"]
                     path = payload.data["path"]
                     content = payload.data["content"]
-                    message = payload.data.get("message", "Update via Modulo")
+                    message = payload.data.get("message", "Update via Farna Control")
                     branch = payload.data.get("branch", "main")
 
                     # Get the current commit ID for the branch

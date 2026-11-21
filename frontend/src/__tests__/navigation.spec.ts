@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockManifest = vi.hoisted(() => ({
   sidebar_groups: {
-    core: { label: 'BUILD', order: 1, default_expanded: true, labelKey: 'components.SidebarNav.group_build' },
-    monitor: { label: 'MONITOR', order: 2, default_expanded: true, labelKey: 'components.SidebarNav.group_monitor' },
-    configure: { label: 'CONFIGURE', order: 3, default_expanded: false, labelKey: 'components.SidebarNav.group_configure' },
-    admin: { label: 'ADMIN', order: 4, default_expanded: false, labelKey: 'components.SidebarNav.group_admin' },
+    core: { label: 'PIPELINES', order: 1, default_expanded: true, labelKey: 'components.SidebarNav.group_pipelines' },
+    monitor: { label: 'RUNS', order: 2, default_expanded: true, labelKey: 'components.SidebarNav.group_runs' },
+    configure: { label: 'CONFIGURATION', order: 3, default_expanded: false, labelKey: 'components.SidebarNav.group_configuration' },
+    admin: { label: 'ADMINISTRATION', order: 4, default_expanded: false, labelKey: 'components.SidebarNav.group_administration' },
     system: { label: 'SYSTEM', order: 5, default_expanded: false, labelKey: 'components.SidebarNav.group_system', system_admin_only: true },
   },
   routes: {
@@ -23,8 +23,9 @@ const mockManifest = vi.hoisted(() => ({
      '/lifecycle-maps/:id': { name: 'lifecycle-map-detail', breadcrumb: 'Lifecycle Map', sidebar_group: null, sidebar_order: null, type: 'detail_page', required_tier: null, required_roles: null, required_permissions: null, visibility: 'in_dev' },
 
     '/runs/diff': { name: 'runs-diff', breadcrumb: 'Output Diff', sidebar_group: 'monitor', sidebar_order: 2, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
-    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 3, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
-    '/evals/proposals': { name: 'eval-proposals-queue', breadcrumb: 'Eval Proposals', sidebar_group: 'monitor', sidebar_order: 4, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/evals': { name: 'evals-list', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 18, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null, exact: true },
+    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Eval Editor', sidebar_group: null, sidebar_order: null, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/evals/proposals': { name: 'eval-proposals-queue', breadcrumb: 'Eval Proposals', sidebar_group: null, sidebar_order: null, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
     '/variants/compare': { name: 'variant-compare', breadcrumb: 'Variants', sidebar_group: 'monitor', sidebar_order: 5, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
     '/settings/observability': { name: 'settings-observability', breadcrumb: 'Observability', sidebar_group: 'monitor', sidebar_order: 7, type: 'form_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null },
     '/settings/monitoring': { name: 'settings-monitoring', breadcrumb: 'Browser Monitoring', sidebar_group: 'monitor', sidebar_order: 8, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
@@ -325,10 +326,10 @@ describe('navigation.ts', () => {
 
   it('sets group labelKey from manifest labelKey', () => {
     const core = navGroups.find((g) => g.id === 'core')!
-    expect(core.labelKey).toBe('components.SidebarNav.group_build')
+    expect(core.labelKey).toBe('components.SidebarNav.group_pipelines')
 
     const monitor = navGroups.find((g) => g.id === 'monitor')!
-    expect(monitor.labelKey).toBe('components.SidebarNav.group_monitor')
+    expect(monitor.labelKey).toBe('components.SidebarNav.group_runs')
   })
 
   it('configure group is collapsed by default (not expanded)', () => {
@@ -362,11 +363,28 @@ describe('navigation.ts', () => {
     warn.mockRestore()
   })
 
+  it('maps the all-evals list nav entry with the shared Evals label (FAR-2597)', () => {
+    const list = navGroups.flatMap((group) => group.items).find((item) => item.to === '/evals')!
+    expect(list).toBeDefined()
+    expect(list.labelKey).toBe('components.SidebarNav.item_evals')
+    expect(list.icon).toBe('CheckSquare')
+  })
+
+  it('keeps the tab-fed eval pages out of the sidebar (FAR-2597)', () => {
+    // Costs precedent: /evals is the one sidebar entry; the editor and the
+    // proposals queue are reached through the eval-surface tab strip, so they
+    // must not also appear as sidebar items.
+    const all = navGroups.flatMap((group) => group.items)
+    expect(all.some((item) => item.to === '/evals')).toBe(true)
+    expect(all.some((item) => item.to === '/evals/editor')).toBe(false)
+    expect(all.some((item) => item.to === '/evals/proposals')).toBe(false)
+  })
+
   it('monitor has evals, diff, observability, etc', () => {
     const monitor = navGroups.find((g) => g.id === 'monitor')!
     expect(monitor.items.length).toBeGreaterThanOrEqual(3)
     expect(monitor.items.some(i => i.to === '/runs/diff')).toBe(true)
-    expect(monitor.items.some(i => i.to === '/evals/editor')).toBe(true)
+    expect(monitor.items.some(i => i.to === '/evals')).toBe(true)
   })
 
   it('places Notifications first in the monitor group, above Error Dashboard (FAR-656)', () => {

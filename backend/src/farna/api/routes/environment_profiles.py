@@ -762,8 +762,8 @@ async def _sandbox_test_stream(profile: EnvironmentProfile) -> AsyncIterator[str
         yield _sse_event("provisioned", f"Workspace created via {type(provider).__name__}: {provider_ref}")
         await asyncio.sleep(0.3)
 
-        yield _sse_event("command_start", 'Executing: echo "Hello from Modulo sandbox"')
-        result = await provider.exec_command(provider_ref, ["echo", "Hello from Modulo sandbox"], cmd_timeout=30)
+        yield _sse_event("command_start", 'Executing: echo "Hello from Farna Control sandbox"')
+        result = await provider.exec_command(provider_ref, ["echo", "Hello from Farna Control sandbox"], cmd_timeout=30)
         yield _sse_event(
             "command_complete",
             json.dumps(

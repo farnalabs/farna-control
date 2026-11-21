@@ -1,5 +1,7 @@
 # ORM Research – Async, Multi-Backend, UUID/JSON/RLS
 
+> Historical research note (June 2026). Superseded for support decisions by ADR 031 and ADR 068: PostgreSQL is the only supported runtime database; SQLite is test-only.
+
 > Compiled: 26 June 2026
 > Sources: PyPI JSON API, GitHub REST API, ORM documentation
 

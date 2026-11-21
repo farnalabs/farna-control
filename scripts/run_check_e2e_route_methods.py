@@ -276,8 +276,12 @@ E2E_DIR = REPO_ROOT / "frontend" / "tests" / "e2e"
 
 # Same template environment the schema-freshness job and
 # scripts/run_generate_api_types.py use to import the app without a DB.
+# SQLite is the test/tooling backend only (ADR 068): Settings rejects a SQLite
+# DSN unless FARNA_CONTROL_DB says sqlite AND FARNA_CONTROL_ALLOW_SQLITE=1.
 _TEMPLATE_ENV = {
     "DATABASE_URL": "sqlite+aiosqlite://",
+    "FARNA_CONTROL_DB": "sqlite",
+    "FARNA_CONTROL_ALLOW_SQLITE": "1",
     "SECRET_KEY": "a" * 32,
     "FERNET_KEY": "b" * 32,
     "FARNA_CONTROL_CSRF_ENABLED": "false",
