@@ -8749,7 +8749,7 @@ features:
             - "[x] DELETE /api/v1/admin/orgs/{org_id} deletes an organisation — 404 for a missing org, 403 for a regular admin (system_admin_orgs.feature)"
             - "[x] Org-level license management: GET/PUT/DELETE on /api/v1/admin/orgs/{org_id}/license resolves/stores/clears the org's settings_json.license_key via parse_and_verify, falls back to the system license, and is role-gated (GET org.license.view / PUT+DELETE org.license.manage) — BDD: system_admin_orgs.feature"
     feat-system-maps:
-        description: Bounded visual authoring of delivery system maps (Beta preview, available in Alpha behind a default-OFF org flag)
+        description: Bounded visual authoring of delivery system maps (ships at Beta; release-gated behind developer mode until then)
         status: partial
         behaviours:
             - "[x] System Maps list page (/system-maps) with published viewer read access and operator-only create, edit, delete, and discover actions"

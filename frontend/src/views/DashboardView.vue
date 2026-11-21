@@ -41,7 +41,7 @@
            which requires `!summary`. -->
       <ErrorAlert v-if="error" class="mb-4" :message="error" :on-retry="retryDashboard" />
       <DashboardSystemOverview
-        v-if="systemMapsStore.accessLoaded && systemMapsStore.systemMapsEnabled"
+        v-if="systemOverviewVisible"
         :window-days="selectedWindow ?? 7"
         class="mb-4"
       />
@@ -287,6 +287,21 @@ const { currencyCode, loadCurrency } = useOrgCurrency()
 const planStore = usePlanStore()
 const systemMapsStore = useSystemMapsStore()
 const dashboardStore = useDashboardStore()
+
+/**
+ * FAR-2638: System Maps ships at Beta, so its dashboard entry point obeys the
+ * SAME release gate the sidebar and the router read from the manifest
+ * (`systemMapsStore.systemMapsReleased` → `private_preview` needs developer
+ * mode, never a demo session). `systemMapsEnabled` alone is not enough: it
+ * derives from the viewer-floor `system_maps.read` permission, so on its own
+ * it kept the card on an alpha dashboard while the route bounced back here.
+ */
+const systemOverviewVisible = computed(
+  () =>
+    systemMapsStore.accessLoaded &&
+    systemMapsStore.systemMapsEnabled &&
+    systemMapsStore.systemMapsReleased,
+)
 
 const loading = computed(() => dashboardStore.loading)
 const error = computed(() => dashboardStore.error)

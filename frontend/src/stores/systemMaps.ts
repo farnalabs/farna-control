@@ -1,6 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import manifest from '@/manifest.yaml'
 import { api, getAccessToken } from '../lib/api/client'
+// FAR-2638: imported from the module that OWNS the demo-session flag rather
+// than via the api-client re-export. `isDemoSession` is the same function
+// either way, but the client module is stubbed wholesale by component specs
+// (partial mocks with no such export), and a store that read it through the
+// client would throw wherever the gate is evaluated.
+import { isDemoSession } from '../lib/api/auth'
 import type { components } from '../lib/api/schema'
 import { isFeatureRequiredProblem } from '../lib/api/formatError'
 import { withTimeout as withRequestDeadline } from '../lib/requestTimeout'
@@ -64,6 +71,31 @@ function thrownMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
+/**
+ * System Maps ships at Beta, so its routes carry `visibility: private_preview`
+ * until they are promoted. Read once: `visibility` is static manifest data,
+ * not runtime state.
+ *
+ * FAR-2638: the sidebar and the router both read this field (the sidebar
+ * through `toNavItem` → `isNavItemVisible`, the router through
+ * `hydrateManifestMeta`). The store is not a component and cannot build the
+ * sidebar's visibility context, so it reads the SAME manifest route entry and
+ * applies the SAME rule — no parallel gate on a different signal.
+ */
+const systemMapsReleaseGated = (() => {
+  const route = (manifest as {
+    routes?: Record<string, { visibility?: string | null } | null>
+  }).routes?.['/system-maps']
+  // Fail closed on a missing entry: with no manifest route there is no nav row
+  // either, so there is no surface the card could legitimately open. A present
+  // entry with no `visibility` is public, exactly as the sidebar treats it.
+  return (
+    route == null ||
+    route.visibility === 'private_preview' ||
+    route.visibility === 'in_dev'
+  )
+})()
+
 // The store is not a component, so it cannot call useI18n(). Use the shared
 // i18n instance directly so error strings stay translatable and consistent.
 function tr(key: string): string { return i18n.global.t(key) }
@@ -117,6 +149,16 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   )
   const hasReadAccess = computed(
     () => systemMapsEnabled.value && planStore.userPermissions.includes('system_maps.read'),
+  )
+  /**
+   * FAR-2638: whether the manifest release gate permits System Maps surfaces
+   * for this caller. A `private_preview` / `in_dev` route needs developer mode
+   * and is never shown in a demo session — the exact rule `isNavItemVisible`
+   * applies, so a dashboard entry point (the System Overview card) cannot leak
+   * a surface the sidebar hides and the router bounces.
+   */
+  const systemMapsReleased = computed(
+    () => !systemMapsReleaseGated || (planStore.devMode && !isDemoSession()),
   )
 
   function reset(): void {
@@ -579,5 +621,5 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   // Kept for the dashboard's preview card; discovery is now a real operation.
   function fetchDiscovery(): void { loaded.value = true }
 
-  return { loaded, loading, error, unavailable, maps, total, page, pageSize, activeMap, activeRevision, graph, revisions, discovery, attributionBindings, overview, overviewLoading, overviewError, overviewUnavailable, overviewEmpty, accessLoaded, systemMapsEnabled, hasAccess, hasReadAccess, reset, fetchAccess, fetchOverview, fetchDefaultOverview, fetchMaps, createMap, deleteMap, loadMap, loadRevision, loadRevisionHistory, loadCurrentRevision, loadRevisionByTime, loadAttributionBindings, createAttributionBinding, deleteAttributionBinding, saveDraft, publish, archive, restoreRevisionAsNew, diffRevision, discover, clearActive, fetchDiscovery }
+  return { loaded, loading, error, unavailable, maps, total, page, pageSize, activeMap, activeRevision, graph, revisions, discovery, attributionBindings, overview, overviewLoading, overviewError, overviewUnavailable, overviewEmpty, accessLoaded, systemMapsEnabled, systemMapsReleased, hasAccess, hasReadAccess, reset, fetchAccess, fetchOverview, fetchDefaultOverview, fetchMaps, createMap, deleteMap, loadMap, loadRevision, loadRevisionHistory, loadCurrentRevision, loadRevisionByTime, loadAttributionBindings, createAttributionBinding, deleteAttributionBinding, saveDraft, publish, archive, restoreRevisionAsNew, diffRevision, discover, clearActive, fetchDiscovery }
 })
