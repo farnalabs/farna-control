@@ -909,8 +909,8 @@ routes:
         breadcrumb: System Config
         parent: /
         product_map: [feat-system-config]
-        sidebar_group:
-        sidebar_order:
+        sidebar_group: system
+        sidebar_order: 100
         system_admin_only: true
         type: page
         <<: *community
@@ -921,8 +921,8 @@ routes:
         breadcrumb: Organisations
         parent: /
         product_map: [feat-system-orgs]
-        sidebar_group:
-        sidebar_order:
+        sidebar_group: system
+        sidebar_order: 110
         system_admin_only: true
         type: page
         <<: *community
