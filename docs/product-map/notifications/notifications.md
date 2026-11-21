@@ -64,13 +64,13 @@ events into typed notification payloads; and in-app notifications stream over SS
       `X-Modulo-Signature` / `X-Modulo-Timestamp`, and a receiver can verify the signature
       (`signing.feature`)
 - [x] Delivery attempts are recorded against `NotificationDeliveryLog` and are
-      manageable from `/admin/notification-delivery` — titled **Webhook
-      Deliveries** — (status/event filters, retry of failed deliveries)
+      manageable from `/admin/notification-delivery` – titled **Webhook
+      Deliveries** – (status/event filters, retry of failed deliveries)
       (`api/routes/admin_notifications.py`, `test_admin_notifications_webhooks.py`).
       The page explains its own scope (FAR-2596): each row is one outbound
       delivery attempt, including deliveries to a webhook that has since been
       deleted (the FK is nulled, the history is kept), while in-app error alerts
-      are excluded — the error-tracking alert dispatcher also writes
+      are excluded – the error-tracking alert dispatcher also writes
       `NotificationDeliveryLog` rows, with `status='in_app'` and a NULL
       `endpoint_id`, and both the list query and its count filter them by STATUS
       (`status != 'in_app'`, never `endpoint_id IS NOT NULL`), so the page and
@@ -82,7 +82,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       attempt; the empty state distinguishes "no deliveries yet" from "no
       deliveries match these filters". The "No outbound notification webhooks
       are configured" banner is shown ONLY when `GET /api/v1/notifications`
-      reports zero endpoints AND the log is empty — its copy is forward-looking
+      reports zero endpoints AND the log is empty – its copy is forward-looking
       ("New deliveries appear once you add an endpoint"), it links to
       `/settings/teams` (omitted when `team_rbac` is inactive) and carries a
       secondary line telling an org with no team to create one first. An empty
@@ -225,7 +225,7 @@ coverage gate is satisfied by that test rather than by deleting the branch.
       version negotiation.
 
 ## QA History
-- 2026-11-20: **FAR-2596 pre-PR QA — the banner can no longer contradict the
+- 2026-11-20: **FAR-2596 pre-PR QA – the banner can no longer contradict the
   table.** `GET /api/v1/notifications` excludes soft-deleted endpoints while the
   log deliberately keeps their delivery rows, so an operator who deleted their
   last webhook saw "Nothing will appear here until you add one" directly above
@@ -236,7 +236,7 @@ coverage gate is satisfied by that test rather than by deleting the branch.
   before it resolves, and a secondary line under the CTA tells an org with no
   team to create one first (endpoints are created per team). Pinned by the
   retained-history regression test, which fails with the old banner condition.
-- 2026-11-20: **FAR-2596 follow-up — the page is now strictly outbound.** The
+- 2026-11-20: **FAR-2596 follow-up – the page is now strictly outbound.** The
   first slice's banner claim ("Nothing will appear here until you add one") was
   false for an org with in-app error-alert rules: the error-tracking alert
   dispatcher writes `NotificationDeliveryLog` rows with `status='in_app'` and a
@@ -255,7 +255,7 @@ coverage gate is satisfied by that test rather than by deleting the branch.
   Event Log), warns when no outbound endpoints exist with a CTA to
   `/settings/teams`, splits the two empty states, and renders event types and
   statuses through the existing locale labels. The "zero endpoints" condition
-  is read from `GET /api/v1/notifications` and fails open — it is never inferred
+  is read from `GET /api/v1/notifications` and fails open – it is never inferred
   from the delivery log, because a soft-deleted endpoint leaves historical
   deliveries behind. Retitled from "Webhook Notifications" to "Webhook
   Deliveries" across the page, the sidebar label and the manifest.

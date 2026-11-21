@@ -102,13 +102,13 @@ install root is `~/.local/opt/farna-control`, and the bundle artifact is
 pre-rename install (`~/.local/opt/modulo` and `~/.local/bin/modulo`) is migrated
 automatically on the next install run: the root is renamed, the marker file
 becomes `.farna-control-native-install`, and the old shim is removed. The
-installer refuses — rather than guessing — when both an old and a new install
+installer refuses – rather than guessing – when both an old and a new install
 root exist. A RUNNING pre-rebrand install is migrated in two passes, because the
 root rename needs it stopped while the enforced dump needs a live stack: take an
 out-of-band database backup first (see
-[backup](./operations/backup.md) — a `--data-dir` backup cannot run while the
+[backup](./operations/backup.md) – a `--data-dir` backup cannot run while the
 launcher is live, so use its `--db-url`/`pg_dump` form), stop it
-(`modulo stop`), then re-run this installer with `--skip-backup` — the loud
+(`modulo stop`), then re-run this installer with `--skip-backup` – the loud
 acknowledgement that the out-of-band backup is the authoritative snapshot (a
 stopped stack cannot be dumped). The bundled data dir keeps its
 `~/.local/share/modulo/data` location so an upgrade never strands existing data.

@@ -13,13 +13,19 @@ On a native install, the launcher composes the bundled-service config
 from two credential-free/0600 inputs in the data dir (state.json holds
 ports; secrets.json holds generated passwords) and pins the composed
 values as a 0600 dotenv file (`config.env`) inside the data dir.
-`compose_config` emits six keys today: `DATABASE_URL`, `DATABASE_ADMIN_URL`
-(the same URL promoted), `REDIS_URL`, `FARNA_CONTROL_SYSTEM_DATABASE_URL`, plus
-`SECRET_KEY` and `FERNET_KEY`, which are derived from the state HMAC key in
-`secrets.json` with domain separation. The direct `Settings(**source())` path
-(`LauncherConfigSource`) resolves only the three URL fields in
-`_COMPOSED_FIELDS`; `SECRET_KEY` and `FERNET_KEY` reach `Settings` through the
-pinned `config.env`, which carries all six keys.
+`compose_config` emits eight keys today: `DATABASE_URL` (the app role),
+`DATABASE_ADMIN_URL` (the owner role, used for DDL and migrations),
+`REDIS_URL`, `FARNA_CONTROL_SYSTEM_DATABASE_URL`, `SAQ_AUTH_USERNAME`,
+`SAQ_AUTH_PASSWORD`, `SECRET_KEY` and `FERNET_KEY`. The four URLs are
+assembled from `state.json` ports plus `secrets.json` passwords;
+`SECRET_KEY`, `FERNET_KEY` and `SAQ_AUTH_PASSWORD` are derived from the
+state HMAC key in `secrets.json` with domain separation, and
+`SAQ_AUTH_USERNAME` is the fixed login name `admin`. The direct
+`Settings(**source())` path (`LauncherConfigSource`) resolves only the three
+URL fields in `_COMPOSED_FIELDS`; the four launcher-owned keys reach
+`Settings` through the pinned `config.env`, which carries all eight keys.
+For those four keys the per-key precedence is operator environment > value
+already persisted in `config.env` > launcher-derived value (FAR-2581).
 
 Implementation: `backend/src/farna/launcher/config_source.py`
 (`compose_config`, `write_pinned_env_file`). The pin lands through
