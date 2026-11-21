@@ -73,8 +73,8 @@ by the `variant_batch_compare` feature flag.
       comparisons" (plus a capped-list notice at 100) because the endpoint
       returns a bare array with no total; a pipeline-name read failure is
       surfaced rather than silently degrading to ids. A row selects the
-      comparison IN PLACE — the per-node comparison table and output diff viewer
-      render below it — and never navigates to the batch-detail route; the
+      comparison IN PLACE – the per-node comparison table and output diff viewer
+      render below it – and never navigates to the batch-detail route; the
       `pipeline_id` deep link still opens the builder, and the page selects the
       first visible row so it never lands empty-handed
       (`VariantCompareView.vue`, `VariantCompareView.spec.ts`,
@@ -87,6 +87,20 @@ by the `variant_batch_compare` feature flag.
       writes them empty and nothing scores with them), not the scores a run
       received (`VariantCompareView.vue`, `VariantGroupBuilder.vue`,
       `locales/en-US.js`)
+- [x] The comparison builder exposes the group-level `degraded_evals` flag
+      (default off, operator-controlled) and sends it in
+      `CreateVariantGroupRequest`; the backend persists it
+      (`variant_groups.degraded_evals`) and, when on, adds
+      `_degraded_evals: true` to every run's input payload
+      (`_merge_variant_payload`, `db/crud/variant_group.py`). It does NOT skip
+      or weaken eval execution — the builder help line and the table badge
+      tooltip say so, so a pipeline only reacts to the marker if its templates
+      read `input._degraded_evals`. The comparisons table shows the "degraded"
+      badge from the group response, so the flag round-trips
+      builder → `POST /api/v1/variant-groups` → group response → table
+      (`VariantGroupBuilder.vue`, `VariantCompareView.vue`,
+      `locales/en-US.js`, `VariantGroupBuilder.spec.ts`,
+      `VariantCompareView.spec.ts`)
 
 ## Known Gaps
 
@@ -97,6 +111,17 @@ the per-token breakdown comparison the manifest previously parked as the lone
 
 ## QA History
 
+- 2026-11-21: **FAR-2611**: `degraded_evals` was API-only — `VariantGroupBuilder`
+  always sent `false`, so the FAR-2598 comparisons table could never show its
+  "Degraded evals" column. The backend consumer was read before writing copy:
+  the flag is persisted on `variant_groups` and, when on,
+  `_merge_variant_payload` adds `_degraded_evals: true` to every run's input
+  payload; nothing in Modulo skips or weakens eval execution. Added an
+  operator-controlled builder checkbox (default off) with help text stating
+  exactly that, wired it to `CreateVariantGroupRequest.degraded_evals`, and
+  added a tooltip to the existing table badge. Covered by
+  `VariantGroupBuilder.spec.ts` (payload round-trip, default off) and
+  `VariantCompareView.spec.ts` (badge + tooltip from the group response).
 - 2026-11-20: **FAR-2598**: replaced the unlabelled group dropdown on
   `/variants/compare` with a comparison-groups `DataTable` (pipeline filter +
   name search, row selection in place, first-row default) so the list reads as

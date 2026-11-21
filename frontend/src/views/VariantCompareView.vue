@@ -110,7 +110,11 @@
               <span class="tabular-nums">{{ $t('views.variantCompare.runs', { count: Number(row.run_count ?? 0) }) }}</span>
             </template>
             <template #cell-degraded="{ row }">
-              <span v-if="row.degraded" class="badge badge-status-warning">
+              <span
+                v-if="row.degraded"
+                class="badge badge-status-warning"
+                :title="$t('views.variantCompare.degradedTooltip')"
+              >
                 {{ $t('views.variantCompare.degradedBadge') }}
               </span>
               <span v-else class="text-xs text-muted-foreground">—</span>

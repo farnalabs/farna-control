@@ -90,6 +90,8 @@ const routeConfigMap: Record<string, { icon: string; labelKey: string }> = {
   'feedback-inbox': { icon: 'MessageSquare', labelKey: 'components.SidebarNav.item_feedback_inbox' },
   'admin-housekeeping': { icon: 'Broom', labelKey: 'components.SidebarNav.item_housekeeping' },
   'admin-parameter-schemas': { icon: 'FileText', labelKey: 'components.SidebarNav.item_parameter_schemas' },
+  'admin-system-config': { icon: 'Settings', labelKey: 'components.SidebarNav.item_system_config' },
+  'admin-system-orgs': { icon: 'Building', labelKey: 'components.SidebarNav.item_organisations' },
 }
 
 // FAR-2605: the per-group fallback key map is gone. Every declared group in

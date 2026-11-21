@@ -228,7 +228,7 @@ below (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
 `EMAIL_FROM`, `ALERT_EMAIL_TO`), are deduplicated by Stripe event id, and are
 skipped for test-mode events (`livemode: false`) and for any environment the
 `ALERT_ENVIRONMENTS` allowlist excludes. A delivery failure never fails the
-webhook — it is logged with the event id and type and the endpoint still
+webhook – it is logged with the event id and type and the endpoint still
 returns 200. Alerts can only fire for events Stripe actually delivers, so the
 endpoint's subscription in the Stripe dashboard must cover them; an unknown or
 unsubscribed event type is logged and acknowledged without an alert.
