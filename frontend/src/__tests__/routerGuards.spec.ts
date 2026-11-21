@@ -420,3 +420,60 @@ describe('/runs/diff private_preview gate (FAR-2248)', () => {
     expect(result).toBe(true)
   })
 })
+
+describe('/evals/editor write gate (FAR-2609)', () => {
+  function hydratedEvalEditor(): any {
+    const resolved = router.resolve('/evals/editor')
+    const route = {
+      name: resolved.name,
+      matched: resolved.matched,
+      path: resolved.path,
+      meta: {} as Record<string, unknown>,
+    }
+    hydrateManifestMeta(route as never)
+    return route
+  }
+
+  // The registry resolves `eval.list` to viewer while the editor's save
+  // endpoints require `eval.definition.create` / `eval.definition.update`
+  // (operator). Listing `eval.list` in an any-of permission gate is what let a
+  // viewer open the editor and 403 on save.
+  it('declares only the eval-definition writer permissions, never the viewer read', () => {
+    const manifest = yaml.load(
+      readFileSync(resolve(__dirname, '../manifest.yaml'), 'utf-8'),
+    ) as { routes: Record<string, { required_permissions?: string[] | null }> }
+
+    expect(manifest.routes['/evals/editor'].required_permissions).toEqual([
+      'eval.definition.create',
+      'eval.definition.update',
+    ])
+    // The all-evals list stays readable at the viewer permission.
+    expect(manifest.routes['/evals'].required_permissions).toEqual(['eval.list'])
+  })
+
+  it('bounces a viewer who can only list evals', async () => {
+    planStore.userPermissions = ['eval.list']
+
+    const result = await enforceRoleTierVisibility(hydratedEvalEditor(), adminToken())
+
+    expect(result).toEqual({ name: 'dashboard' })
+  })
+
+  it('admits an operator who can create and update eval definitions', async () => {
+    planStore.userPermissions = ['eval.list', 'eval.definition.create', 'eval.definition.update']
+
+    const result = await enforceRoleTierVisibility(hydratedEvalEditor(), adminToken())
+
+    expect(result).toBe(true)
+  })
+
+  it('admits a scoped caller holding only the update permission', async () => {
+    // Fine-grained API-key grants can carry one writer permission without the
+    // other, so the gate is any-of rather than requiring both.
+    planStore.userPermissions = ['eval.definition.update']
+
+    const result = await enforceRoleTierVisibility(hydratedEvalEditor(), adminToken())
+
+    expect(result).toBe(true)
+  })
+})

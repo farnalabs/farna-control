@@ -304,7 +304,14 @@ routes:
         breadcrumb: Eval Editor
         parent: /
         product_map: [feat-evals]
-        required_permissions: [eval.list, gate.create, gate.edit]
+        # FAR-2609: the editor is a WRITE surface. `eval.list` resolves to viewer
+        # and the router admits on ANY of these, so listing it here let a viewer
+        # open the form and 403 on save. The eval-definition writers the form
+        # calls (POST /api/v1/evals, PUT /api/v1/evals/{eval_id}) both require an
+        # `eval.definition.create` / `eval.definition.update` dependency, which
+        # resolve to operator; `eval.definition.delete` is deliberately NOT listed
+        # because DELETE eval definitions additionally enforces admin in-body.
+        required_permissions: [eval.definition.create, eval.definition.update]
         sidebar_group:
         sidebar_order:
         type: form_page
