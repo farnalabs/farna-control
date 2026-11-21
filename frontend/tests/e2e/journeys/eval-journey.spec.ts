@@ -56,18 +56,19 @@ test.describe('Real-stack journeys: eval definition lifecycle', { tag: '@regress
       pipelineId = pipeline.id
 
       await loginAsAdmin(page, env)
-      await page.goto('/evals/editor')
 
-      // Select OUR pipeline through the real select. The pipeline change resets
-      // the editor form (and loads the pipeline's nodes/evals). That reset is
-      // applied on the same update as the selection, so wait for the URL to
-      // carry the pipeline_id (written AFTER the reset) before typing —
-      // otherwise the deferred reset can clear the Name field after it is
-      // filled.
-      await page.getByTestId('eval-editor-pipeline').click()
-      await page.locator(`[data-value="${pipeline.id}"]`).first().click()
-      await expect.poll(async () => page.url(), { timeout: 30_000 })
-        .toContain(`pipeline_id=${pipeline.id}`)
+      // Open the editor already scoped to OUR pipeline via the ?pipeline_id=
+      // deep link. Selecting the pipeline through the real select writes
+      // ?pipeline_id= into the URL, and AppLayout keys the routed view by
+      // route.fullPath (components/AppLayout.vue) — so that query write
+      // remounts the whole view a beat later, re-resolving the deep link and
+      // resetting the form. Typing into the create form during that window is
+      // wiped by the remount. The deep link resolves once on mount (the query
+      // already matches, so no second URL write/remount) and leaves the form
+      // stable.
+      await page.goto(`/evals/editor?pipeline_id=${pipeline.id}`)
+      await expect(page.getByTestId('eval-editor-pipeline'))
+        .toContainText(pipelineName, { timeout: 30_000 })
 
       // Create through the real form: name + the lightweight regex type
       // (the default model_judge judge-config placeholder stays untouched).
