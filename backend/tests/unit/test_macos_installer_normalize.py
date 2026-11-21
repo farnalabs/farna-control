@@ -150,7 +150,7 @@ def test_macos_dmg_contract_structurally_verifies_staging_and_post_mount_gates()
     assert "iconutil --convert icns" in bundle_script
 
     staging_start = next(index for index, line in enumerate(lines) if 'mkdir -p "$DMG_STAGING"' in line)
-    dmg_create = next(index for index, line in enumerate(lines) if "run_pre_smoke dmg_create" in line)
+    dmg_create = next(index for index, line in enumerate(lines) if "hdiutil_with_resource_busy_retry dmg_create" in line)
     hard_staging_checks = {
         "app": 'test -d "$DMG_STAGING/Farna Control.app"',
         "alias": 'test -L "$DMG_STAGING/Applications"',
@@ -176,7 +176,7 @@ def test_macos_dmg_contract_structurally_verifies_staging_and_post_mount_gates()
         "icon": r"run_pre_smoke mounted_dmg_icon bash -c",
         "plist": r"run_pre_smoke mounted_dmg_plist_icon bash -c",
     }
-    attach_index = next(index for index, line in enumerate(lines) if "run_pre_smoke dmg_attach" in line)
+    attach_index = next(index for index, line in enumerate(lines) if "hdiutil_with_resource_busy_retry dmg_attach" in line)
     for name, pattern in mounted_checks.items():
         matches = _line_numbers(build_run, pattern)
         assert len(matches) == 1, name
@@ -191,12 +191,12 @@ def test_macos_dmg_contract_structurally_preserves_signing_notarization_and_gate
     order = [
         "run_pre_smoke app_codesign codesign",
         "run_pre_smoke app_codesign_verify codesign",
-        "run_pre_smoke dmg_create bash -c",
+        "hdiutil_with_resource_busy_retry dmg_create bash -c",
         "run_pre_smoke dmg_codesign codesign",
         "run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh",
         "run_pre_smoke dmg_codesign_verify codesign",
         "run_pre_smoke dmg_verify hdiutil verify",
-        "run_pre_smoke dmg_attach hdiutil attach",
+        "hdiutil_with_resource_busy_retry dmg_attach hdiutil attach",
         "run_pre_smoke mounted_app_codesign codesign",
         "run_pre_smoke mounted_app_spctl spctl --assess --type execute",
     ]
@@ -1842,7 +1842,7 @@ def test_macos_nothing_resigns_or_rewrites_the_dmg_after_notarization() -> None:
 
     # And the signed order that makes that possible: app signed, DMG built, DMG
     # signed, then submitted.
-    order = ["run_pre_smoke app_codesign codesign", "run_pre_smoke dmg_create", "run_pre_smoke dmg_codesign", "run_pre_smoke dmg_notary_submit"]
+    order = ["run_pre_smoke app_codesign codesign", "hdiutil_with_resource_busy_retry dmg_create", "run_pre_smoke dmg_codesign", "run_pre_smoke dmg_notary_submit"]
     positions = [build_run.index(command) for command in order]
     assert positions == sorted(positions)
 
@@ -2034,7 +2034,7 @@ def test_macos_signer_selects_every_macho_and_audits_before_submit() -> None:
         "run_pre_smoke app_codesign codesign",
         "run_pre_smoke app_codesign_verify codesign",
         'run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"',
-        "run_pre_smoke dmg_create bash -c",
+        "hdiutil_with_resource_busy_retry dmg_create bash -c",
         "run_pre_smoke dmg_codesign codesign",
         "run_pre_smoke dmg_notary_submit bash scripts/macos/notarize-and-verify.sh",
     ]
@@ -2808,7 +2808,7 @@ def test_macos_signed_bundle_is_diagnosed_before_it_is_staged() -> None:
     order = [
         'run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"',
         'bash scripts/macos/signature-diagnostics.sh --quick pre_dmg "$APP"',
-        "run_pre_smoke dmg_create bash -c",
+        "hdiutil_with_resource_busy_retry dmg_create bash -c",
     ]
     positions = [build_run.index(command) for command in order]
     assert positions == sorted(positions)
@@ -3080,14 +3080,19 @@ def test_macos_bundle_build_ends_with_the_launcher_identity_checks() -> None:
 
 
 # ---------------------------------------------------------------------------
-# FAR-2629: `hdiutil create` intermittently failed on the GitHub macOS runners
-# with "hdiutil: create failed - Resource busy" while the freshly copied
-# staging tree was still settling, blocking a release cut. The retry block is
-# extracted verbatim from the workflow and executed against a stubbed hdiutil,
-# so the classification these tests pin is the code the macOS job runs.
+# FAR-2629 / FAR-2631: `hdiutil` intermittently fails on the GitHub macOS
+# runners with a transient "Resource busy" (EBUSY). FAR-2629 bounded `hdiutil
+# create`; FAR-2631 found the same verdict at `pre_install_detach` (run
+# 44923958746, the failure that blocked the 0.3.329-rc2 cut) and moved the retry
+# into one shared helper that every EBUSY-capable call site routes through. The
+# blocks are extracted verbatim from the workflow and executed against a stubbed
+# hdiutil, so the classification these tests pin is the code the macOS job runs.
 # ---------------------------------------------------------------------------
 
 _HDIUTIL_RESOURCE_BUSY = "hdiutil: create failed - Resource busy"
+
+#: The detach diagnostic observed in run 44923958746.
+_HDIUTIL_DETACH_RESOURCE_BUSY = 'hdiutil: couldn\'t eject "disk5" - Resource busy'
 
 #: Stand-in `hdiutil`. It fails with a configurable message/status for the
 #: first FAKE_HDIUTIL_FAILURES calls, then creates its output target (the last
@@ -3121,7 +3126,7 @@ def _workflow_bash_function(build_run: str, name: str) -> str:
 
 
 def _dmg_create_harness(build_run: str) -> str:
-    """Run the extracted retry block with the workflow's own run_pre_smoke."""
+    """Run the extracted creation block via the workflow's shared retry helper."""
     block = _extract_marked_bash(build_run, "dmg_create_with_resource_busy_retry")
     return "\n".join(
         [
@@ -3140,6 +3145,7 @@ def _dmg_create_harness(build_run: str) -> str:
             "printf 'payload\\n' >\"$DMG_STAGING/placeholder.txt\"",
             _workflow_bash_function(build_run, "redact_pre_smoke_output"),
             _workflow_bash_function(build_run, "run_pre_smoke"),
+            _extract_marked_bash(build_run, "hdiutil_with_resource_busy_retry"),
             block,
             "printf 'REACHED_AFTER_DMG_CREATE\\n'",
             "",
@@ -3173,7 +3179,7 @@ def _run_dmg_create(tmp_path: Path, **env_overrides: str) -> tuple[subprocess.Co
     _write_executable(stub_dir / "hdiutil", _FAKE_HDIUTIL)
     work = tmp_path / "work"
     work.mkdir()
-    env = {"FAKE_HDIUTIL_CALLS": _posix_path(calls_file), "DMG_CREATE_RETRY_DELAY": "0"}
+    env = {"FAKE_HDIUTIL_CALLS": _posix_path(calls_file), "HDIUTIL_RESOURCE_BUSY_RETRY_DELAY": "0"}
     env.update(env_overrides)
 
     result = _run_dmg_create_harness(
@@ -3227,30 +3233,209 @@ def test_macos_dmg_create_stops_at_the_bounded_attempt_cap(tmp_path: Path) -> No
     assert not dmg.is_file()
 
 
-def test_macos_dmg_create_retry_wraps_the_single_creation_call() -> None:
-    """FAR-2629: the retry surrounds the one DMG creation and stays bash-3.2 safe."""
+def test_macos_dmg_create_routes_the_single_creation_through_the_shared_retry_helper() -> None:
+    """FAR-2629/FAR-2631: the one DMG creation is retried by the shared helper.
+
+    FAR-2629's retry loop was inlined here; FAR-2631 moved it into
+    hdiutil_with_resource_busy_retry so the attach and detach gates reuse it.
+    The defaults and the per-attempt log lines are unchanged, so this pins them
+    on the helper the call site now delegates to.
+    """
     _step, build_run = _native_installer_step()
     block = _extract_marked_bash(build_run, "dmg_create_with_resource_busy_retry")
+    helper = _extract_marked_bash(build_run, "hdiutil_with_resource_busy_retry")
 
-    assert "run_pre_smoke dmg_create bash -c" in block
+    assert "hdiutil_with_resource_busy_retry dmg_create bash -c" in block
     assert build_run.count("# BEGIN dmg_create_with_resource_busy_retry") == 1
     # Exactly one DMG creation in the whole job, and it is this one.
     creation_lines = [line.strip() for line in _code_only(build_run).splitlines() if "hdiutil create" in line]
     assert len(creation_lines) == 1
     assert creation_lines[0].startswith("hdiutil create -volname")
     # Production bounds: 3 attempts, a 5s pause between them.
-    assert "DMG_CREATE_MAX_ATTEMPTS:-3" in block
-    assert "DMG_CREATE_RETRY_DELAY:-5" in block
-    assert '-ge "$dmg_create_attempts"' in block
+    assert "HDIUTIL_RESOURCE_BUSY_MAX_ATTEMPTS:-3" in helper
+    assert "HDIUTIL_RESOURCE_BUSY_RETRY_DELAY:-5" in helper
+    assert '-ge "$max_attempts"' in helper
     # Only the Resource busy verdict is retried.
-    assert re.findall(r"grep -Fq '([^']*)'", block) == ["Resource busy"]
-    # The retry reads the log run_pre_smoke writes for this very call.
-    assert '"$DATA/pre-smoke-dmg_create.log"' in block
+    assert re.findall(r"grep -Fq '([^']*)'", helper) == ["Resource busy"]
+    # The retry reads the log run_pre_smoke writes for the call site's label.
+    assert '"$DATA/pre-smoke-${label}.log"' in helper
     assert "pre-smoke-${name}.log" in _workflow_bash_function(build_run, "run_pre_smoke")
     # Bash 3.2 + `set -u` on macOS (FAR-2588): no array expansions, no bash-4
     # constructs.
-    assert not _unguarded_array_expansions(block)
-    assert not [name for name, pattern in _BASH4_ONLY.items() if pattern.search(_code_only(block))]
+    assert not _unguarded_array_expansions(helper)
+    assert not [name for name, pattern in _BASH4_ONLY.items() if pattern.search(_code_only(helper))]
     # The staging tree is still removed, and only after creation finishes.
     after_retry = build_run[build_run.index("# END dmg_create_with_resource_busy_retry") :]
     assert 'rm -rf "$DMG_STAGING"' in after_retry
+
+
+# --- FAR-2631: the shared retry covers the detach that blocked a release cut ---
+
+
+def _pre_install_detach_invocation(build_run: str) -> str:
+    """The shipped pre-install detach call site, without its explicit exit guard."""
+    guard = " || exit $?"
+    for line in _code_only(build_run).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("hdiutil_with_resource_busy_retry pre_install_detach "):
+            assert stripped.endswith(guard), stripped
+            return stripped[: -len(guard)]
+    raise AssertionError("the workflow has no retried pre-install detach call site")
+
+
+def _hdiutil_resource_busy_harness(build_run: str, invocation: str) -> str:
+    """Run the shipped detach call site against the workflow's shared helper.
+
+    ``hdiutil``, ``sleep`` and the redactor are shell functions, so the harness
+    runs unchanged under bash 3.2 in a container where no host stub directory is
+    mounted. ``$1`` is the verdict sequence, ``$2`` the Resource busy line.
+    """
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            'DATA="$(mktemp -d)"',
+            'MOUNT="/Volumes/Farna Control"',
+            'VERDICTS="$1"',
+            'BUSY_LINE="$2"',
+            "hdiutil_calls=0",
+            "hdiutil() {",
+            "  local verdict",
+            '  verdict="${VERDICTS%%,*}"',
+            '  if [[ "$VERDICTS" == *,* ]]; then VERDICTS="${VERDICTS#*,}"; fi',
+            "  hdiutil_calls=$((hdiutil_calls + 1))",
+            '  case "$verdict" in',
+            "    ok) printf 'hdiutil: detach succeeded\\n'; return 0 ;;",
+            "    busy) printf '%s\\n' \"$BUSY_LINE\" >&2; return 16 ;;",
+            "    other) printf 'hdiutil: detach failed - No such file or directory\\n' >&2; return 1 ;;",
+            "    *) return 99 ;;",
+            "  esac",
+            "}",
+            "sleep() { printf 'SLEPT %s\\n' \"$1\"; }",
+            "redact_pre_smoke_output() { cat; }",
+            _workflow_bash_function(build_run, "run_pre_smoke"),
+            _extract_marked_bash(build_run, "hdiutil_with_resource_busy_retry"),
+            "retry_status=0",
+            invocation + " || retry_status=$?",
+            "printf 'RETRY_STATUS %d\\n' \"$retry_status\"",
+            "printf 'HDIUTIL_CALLS %d\\n' \"$hdiutil_calls\"",
+            "if [[ \"$retry_status\" -eq 0 ]]; then printf 'REACHED_AFTER_HDIUTIL_RETRY\\n'; fi",
+            "",
+        ]
+    )
+
+
+def _run_detach_retry(flavour: str, verdicts: str) -> subprocess.CompletedProcess[str]:
+    _step, build_run = _native_installer_step()
+    harness = _hdiutil_resource_busy_harness(build_run, _pre_install_detach_invocation(build_run))
+    return _run_bash_stdin(flavour, harness, [verdicts, _HDIUTIL_DETACH_RESOURCE_BUSY])
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_pre_install_detach_retries_the_resource_busy_failure_then_accepts(flavour: str) -> None:
+    """FAR-2631: the EBUSY detach from run 44923958746 is retried, then ships."""
+    result = _run_detach_retry(flavour, "busy,ok")
+
+    assert "RETRY_STATUS 0" in result.stdout, result.stdout + result.stderr
+    assert "HDIUTIL_CALLS 2" in result.stdout
+    assert "pre_install_detach: attempt=1/3 exit=16" in result.stdout
+    assert _HDIUTIL_DETACH_RESOURCE_BUSY in result.stdout
+    assert "pre_install_detach: retrying in 5s (Resource busy)" in result.stderr
+    assert "SLEPT 5" in result.stdout
+    assert "pre_smoke: pre_install_detach=ok (exit=0)" in result.stdout
+    assert "pre_install_detach: attempt=2/3 exit=0" in result.stdout
+    assert "REACHED_AFTER_HDIUTIL_RETRY" in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_pre_install_detach_never_retries_another_hdiutil_failure(flavour: str) -> None:
+    """FAR-2631: only Resource busy is retried; any other verdict fails at once.
+
+    The stub would succeed on a second call, so a regression that retried the
+    wrong diagnostic would pass the job instead of failing it here.
+    """
+    result = _run_detach_retry(flavour, "other,ok")
+
+    assert "RETRY_STATUS 1" in result.stdout, result.stdout + result.stderr
+    assert "HDIUTIL_CALLS 1" in result.stdout
+    assert "failed for a reason other than Resource busy; not retried" in result.stderr
+    assert "retrying in" not in result.stderr
+    assert "REACHED_AFTER_HDIUTIL_RETRY" not in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_pre_install_detach_stops_at_the_bounded_attempt_cap(flavour: str) -> None:
+    """FAR-2631: a persistent Resource busy still fails the gate after three tries."""
+    result = _run_detach_retry(flavour, "busy")
+
+    assert "RETRY_STATUS 16" in result.stdout, result.stdout + result.stderr
+    assert "HDIUTIL_CALLS 3" in result.stdout
+    assert "pre_install_detach: Resource busy persisted through 3 attempt(s)" in result.stderr
+    assert result.stdout.count("SLEPT 5") == 2
+    assert "REACHED_AFTER_HDIUTIL_RETRY" not in result.stdout
+
+
+# --- FAR-2631: no EBUSY-capable hdiutil call site may bypass the helper -------
+
+#: `hdiutil` subcommands that only inspect an image. None of them mounts, ejects
+#: or creates a volume, so the mount-conflict "Resource busy" verdict the wrapper
+#: retries cannot arise from them.
+_HDIUTIL_READ_ONLY_SUBCOMMANDS = {"info", "verify"}
+
+_HDIUTIL_COMMAND = re.compile(r"(?<![\w-])hdiutil\s+(?P<subcommand>[a-z]+)")
+_HDIUTIL_DETACH_COMMAND = re.compile(r"(?<![\w-])hdiutil\s+detach\b")
+
+
+def _unwrapped_hdiutil_commands(text: str) -> list[str]:
+    """hdiutil commands that do not travel through the shared retry helper."""
+    unwrapped: list[str] = []
+    for line in _code_only(text).splitlines():
+        stripped = line.strip()
+        for match in _HDIUTIL_COMMAND.finditer(stripped):
+            if match.group("subcommand") in _HDIUTIL_READ_ONLY_SUBCOMMANDS:
+                continue
+            if "hdiutil_with_resource_busy_retry" in stripped:
+                continue
+            unwrapped.append(stripped)
+    return unwrapped
+
+
+def test_macos_hdiutil_bare_call_scanner_flags_an_unwrapped_detach() -> None:
+    """The coverage scan must fail on the bare detach it exists to prevent."""
+    bare = 'run_pre_smoke pre_install_detach hdiutil detach "$MOUNT"'
+
+    assert _unwrapped_hdiutil_commands(bare) == [bare]
+    assert not _unwrapped_hdiutil_commands('hdiutil_with_resource_busy_retry pre_install_detach hdiutil detach "$MOUNT"')
+    assert not _unwrapped_hdiutil_commands("run_pre_smoke pre_install_mount_absent bash -c '! hdiutil info | grep -Fq \"$1\"'")
+
+
+def test_macos_every_covered_hdiutil_call_site_routes_through_the_retry_helper() -> None:
+    """FAR-2631: one retry implementation covers every EBUSY-capable hdiutil call."""
+    _step, build_run = _native_installer_step()
+
+    # One implementation, defined once and used by all three call sites
+    # (dmg_create, dmg_attach, pre_install_detach).
+    assert build_run.count("# BEGIN hdiutil_with_resource_busy_retry") == 1
+    assert build_run.count("# END hdiutil_with_resource_busy_retry") == 1
+    call_sites = re.findall(r"hdiutil_with_resource_busy_retry(?=\s)", _code_only(build_run))
+    assert len(call_sites) == 3
+    assert 'hdiutil_with_resource_busy_retry dmg_attach hdiutil attach "$DMG" -mountpoint "$MOUNT" -nobrowse -readonly || exit $?' in build_run
+    assert 'hdiutil_with_resource_busy_retry pre_install_detach hdiutil detach "$MOUNT" || exit $?' in build_run
+
+    # The EXIT-cleanup detach loop stays outside the wrapper on purpose: cleanup
+    # must never abort, so it keeps its own bounded, re-inspecting loop.
+    trap_line = "trap 'cleanup \"$?\"' EXIT"
+    cleanup_region = build_run[: build_run.index(trap_line)]
+    assert "hdiutil_with_resource_busy_retry" not in cleanup_region
+    cleanup_detach_lines = [line.strip() for line in _code_only(cleanup_region).splitlines() if _HDIUTIL_DETACH_COMMAND.search(line)]
+    assert cleanup_detach_lines == ['if hdiutil detach "$MOUNT" >/dev/null 2>&1; then']
+
+    # The one DMG creation still happens inside the wrapped dmg_create gate.
+    create_block = _extract_marked_bash(build_run, "dmg_create_with_resource_busy_retry")
+    create_lines = [line.strip() for line in _code_only(create_block).splitlines() if _HDIUTIL_COMMAND.search(line)]
+    assert create_lines == ['hdiutil create -volname "Farna Control $1" -srcfolder "$2" -ov -format UDZO "$3"']
+    assert "hdiutil_with_resource_busy_retry dmg_create bash -c '" in create_block
+
+    # Nothing else in the smoke body calls a mutating hdiutil subcommand bare.
+    smoke_body = build_run[build_run.index(trap_line) :]
+    offenders = _unwrapped_hdiutil_commands(smoke_body.replace(create_block, ""))
+    assert not offenders, offenders
