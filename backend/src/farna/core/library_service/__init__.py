@@ -46,7 +46,7 @@ __all__ = [
     "_MODULO_BY_ID",
     "_MODULO_BY_SLUG",
     "_MODULO_PRIMITIVES",
-    "CommunityPrimitiveReadOnlyError",
+    "BuiltinPrimitiveReadOnlyError",
     "ContributionInvalidTransitionError",
     "ContributionNotFoundError",
     "contribute_fixture",
@@ -61,8 +61,8 @@ __all__ = [
 ]
 
 
-class CommunityPrimitiveReadOnlyError(Exception):
-    """Raised when a modulo/community primitive is adapted via MCP — browser UI only."""
+class BuiltinPrimitiveReadOnlyError(Exception):
+    """Raised when a built-in primitive is adapted via MCP — browser UI only."""
 
 
 class ContributionNotFoundError(LookupError):
@@ -350,7 +350,7 @@ async def copy_to_adapt(
 ) -> LibraryPrimitive:
     """Clone a primitive into the org workspace.
 
-    Raises CommunityPrimitiveReadOnlyError if via_mcp=True and the source is community.
+    Raises BuiltinPrimitiveReadOnlyError if via_mcp=True and the source is a built-in primitive.
     Raises LookupError if the primitive does not exist.
     """
     source = await get_primitive(session, org_id, primitive_id)
@@ -358,7 +358,7 @@ async def copy_to_adapt(
         raise LookupError(f"Primitive {primitive_id} not found for org {org_id}")
 
     if via_mcp and source.visibility == "community":
-        raise CommunityPrimitiveReadOnlyError("Community primitives may only be adapted via the browser UI, not via MCP.")
+        raise BuiltinPrimitiveReadOnlyError("Built-in primitives may only be adapted via the browser UI, not via MCP.")
 
     async def _do(s: AsyncSession) -> LibraryPrimitive:
         if created_by is not None:
@@ -386,7 +386,7 @@ async def copy_to_adapt(
 
 
 # ---------------------------------------------------------------------------
-# Contribution flow (fixture contributions only - no community library)
+# Contribution flow (fixture contributions only)
 # ---------------------------------------------------------------------------
 
 

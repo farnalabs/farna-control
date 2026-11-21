@@ -245,6 +245,7 @@ class TestOrgAdminSettableClassification:
         "library_collection",
         "autonomy_gating",
         "analytics_page",
+        "system_maps",
     }
 
     #: Sensitive or instance-scoped flags that must stay system-admin-only.

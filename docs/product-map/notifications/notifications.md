@@ -64,9 +64,35 @@ events into typed notification payloads; and in-app notifications stream over SS
       `X-Modulo-Signature` / `X-Modulo-Timestamp`, and a receiver can verify the signature
       (`signing.feature`)
 - [x] Delivery attempts are recorded against `NotificationDeliveryLog` and are
-      manageable from `/admin/notification-delivery` (status/event filters, retry of
-      failed deliveries) (`api/routes/admin_notifications.py`,
-      `test_admin_notifications_webhooks.py`)
+      manageable from `/admin/notification-delivery` — titled **Webhook
+      Deliveries** — (status/event filters, retry of failed deliveries)
+      (`api/routes/admin_notifications.py`, `test_admin_notifications_webhooks.py`).
+      The page explains its own scope (FAR-2596): each row is one outbound
+      delivery attempt, including deliveries to a webhook that has since been
+      deleted (the FK is nulled, the history is kept), while in-app error alerts
+      are excluded — the error-tracking alert dispatcher also writes
+      `NotificationDeliveryLog` rows, with `status='in_app'` and a NULL
+      `endpoint_id`, and both the list query and its count filter them by STATUS
+      (`status != 'in_app'`, never `endpoint_id IS NOT NULL`), so the page and
+      its `total` describe only outbound attempts; inbound trigger webhooks are
+      linked out to the Trigger Event Log; event types and statuses render their
+      human labels, and the status filter offers only values the log can contain
+      (delivered / failed / dead_lettered); a "Dead Lettered" line says the
+      delivery gave up after the final attempt and that a retry starts a fresh
+      attempt; the empty state distinguishes "no deliveries yet" from "no
+      deliveries match these filters". The "No outbound notification webhooks
+      are configured" banner is shown ONLY when `GET /api/v1/notifications`
+      reports zero endpoints AND the log is empty — its copy is forward-looking
+      ("New deliveries appear once you add an endpoint"), it links to
+      `/settings/teams` (omitted when `team_rbac` is inactive) and carries a
+      secondary line telling an org with no team to create one first. An empty
+      endpoint list alongside retained history (a deleted webhook keeps its
+      rows) shows a quieter history notice instead, so the page never claims
+      "nothing will appear here" above a populated table. The endpoint signal is
+      read from the endpoint list, never inferred from the delivery log, and is
+      ONE tri-state (`unknown` / `none` / `configured`): a failed or malformed
+      read stays `unknown` and renders no claim at all, so no empty state is
+      ever shown before the read resolves.
 - [x] In-app notifications stream over SSE with a dashboard panel, per-user filters and a
       dismiss flow (`in_app_notifications/*.feature`, `test_in_app_notifications.py`)
 - [x] Email delivery settings and message sending are configured under `/settings/email`
@@ -199,6 +225,40 @@ coverage gate is satisfied by that test rather than by deleting the branch.
       version negotiation.
 
 ## QA History
+- 2026-11-20: **FAR-2596 pre-PR QA — the banner can no longer contradict the
+  table.** `GET /api/v1/notifications` excludes soft-deleted endpoints while the
+  log deliberately keeps their delivery rows, so an operator who deleted their
+  last webhook saw "Nothing will appear here until you add one" directly above
+  a table of retained history. The banner now renders only when the log is also
+  empty, its copy is forward-looking, and an empty endpoint list with history
+  shows a quieter notice. Also fixed in the same pass: the endpoint read is ONE
+  tri-state (`unknown` / `none` / `configured`) so no empty state is rendered
+  before it resolves, and a secondary line under the CTA tells an org with no
+  team to create one first (endpoints are created per team). Pinned by the
+  retained-history regression test, which fails with the old banner condition.
+- 2026-11-20: **FAR-2596 follow-up — the page is now strictly outbound.** The
+  first slice's banner claim ("Nothing will appear here until you add one") was
+  false for an org with in-app error-alert rules: the error-tracking alert
+  dispatcher writes `NotificationDeliveryLog` rows with `status='in_app'` and a
+  NULL `endpoint_id`, and the org-wide delivery-log query did not exclude them.
+  Both the list query and `_count_deliveries` now filter `status != 'in_app'`
+  (deliberately NOT `endpoint_id IS NOT NULL`, because `ondelete=SET NULL` keeps
+  a deleted webhook's history visible), the page's status filter drops its
+  never-matching `pending` option, the boundary explainer states that in-app
+  error alerts are not shown and that deliveries to deleted webhooks remain, and
+  a real-SQLite unit test pins all three outcomes
+  (`test_list_all_deliveries_excludes_in_app_rows_and_keeps_deleted_endpoint_rows`).
+- 2026-11-20: **FAR-2596 delivery page comprehension pass** – the product
+  owner opened `/admin/notification-delivery` against production, saw an empty
+  page and could not tell what it was for. The page now states its boundary
+  (outbound deliveries only, inbound trigger webhooks linked to the Trigger
+  Event Log), warns when no outbound endpoints exist with a CTA to
+  `/settings/teams`, splits the two empty states, and renders event types and
+  statuses through the existing locale labels. The "zero endpoints" condition
+  is read from `GET /api/v1/notifications` and fails open — it is never inferred
+  from the delivery log, because a soft-deleted endpoint leaves historical
+  deliveries behind. Retitled from "Webhook Notifications" to "Webhook
+  Deliveries" across the page, the sidebar label and the manifest.
 - 2026-09-30: **Improve Architecture product-map walk** – reconciled this
   tracker with the shipped `hitl_deadline_warning` surface (FAR-1295,
   merged 2026-09-29): the manifest `feat-notifications` registry tracked the

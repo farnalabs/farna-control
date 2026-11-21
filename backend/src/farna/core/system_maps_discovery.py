@@ -11,6 +11,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+# FAR-2595: discovery previously scanned an unbounded organisation inventory.
+# Cap the number of sources materialised into a draft so a large tenant cannot
+# round-trip an arbitrarily large draft through JSON. The cap is a named
+# constant (overridable per call for tests); the API surfaces a visible warning
+# when it truncates.
+MAX_DISCOVERY_SOURCES = 1000
+
 
 @dataclass(frozen=True)
 class DiscoverySource:
@@ -47,6 +54,33 @@ def _node_key(source: DiscoverySource) -> str:
 
 def _sorted_sources(sources: Iterable[DiscoverySource]) -> list[DiscoverySource]:
     return sorted(sources, key=lambda item: (item.kind, item.identifier, item.name))
+
+
+def cap_discovery_sources(
+    sources: Iterable[DiscoverySource],
+    max_sources: int = MAX_DISCOVERY_SOURCES,
+) -> tuple[list[DiscoverySource], int]:
+    """Return the deterministically ordered sources (capped) and the total count.
+
+    The order is the same sort ``discover_draft`` uses, so the inspected set
+    reported by the API is exactly the set the draft was built from. Returns
+    ``(capped, total)`` where ``total > len(capped)`` means the scan was
+    truncated.
+    """
+    ordered = _sorted_sources(sources)
+    return ordered[:max_sources], len(ordered)
+
+
+def discovery_truncation_warning(max_sources: int) -> str:
+    """Visible warning for a scan that hit the source cap.
+
+    States only what was measured: the cap and the fact that further sources
+    were not scanned. It deliberately does NOT report an "N of M" total, because
+    the inventory queries are bounded per kind before the merge, so a total
+    derived from those rows would understate a large tenant's real inventory and
+    put a false number in user-facing copy.
+    """
+    return f"Discovery is capped at {max_sources} sources; additional organisation sources beyond the cap were not scanned"
 
 
 def _relationship(
@@ -150,14 +184,22 @@ def _dedupe_relationships(relationships: Iterable[dict[str, Any]]) -> tuple[dict
     return tuple(deduped[key] for key in sorted(deduped))
 
 
-def discover_draft(sources: Iterable[DiscoverySource]) -> DiscoveryDraft:
+def discover_draft(
+    sources: Iterable[DiscoverySource],
+    *,
+    max_sources: int = MAX_DISCOVERY_SOURCES,
+) -> DiscoveryDraft:
     """Build a deterministic draft from explicitly supported relationships.
 
     The function never guesses from names or arbitrary connector configuration.
     A relationship is emitted only when both endpoints are present and its rule
     is explicit. Every emitted edge is marked ``suggested: true``.
+
+    FAR-2595: at most ``max_sources`` sources are scanned (deterministically
+    ordered), and a truncation warning is surfaced when the inventory exceeds
+    the cap.
     """
-    ordered = _sorted_sources(sources)
+    ordered, total_sources = cap_discovery_sources(sources, max_sources)
     by_key = {_node_key(source): source for source in ordered}
     nodes: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -180,6 +222,8 @@ def discover_draft(sources: Iterable[DiscoverySource]) -> DiscoveryDraft:
     ]
     skipped.extend(_improvement_loop_skips(pipelines))
 
+    if total_sources > max_sources:
+        warnings.append(discovery_truncation_warning(max_sources))
     if not nodes:
         warnings.append("No supported organisation sources were available for discovery")
     if skipped:

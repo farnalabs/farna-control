@@ -83,6 +83,23 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         description="OpenTelemetry export and LangSmith integration settings",
         tier="community",
     ),
+    # FAR-2604: these two are Community, not Team. A self-hosted Community
+    # install cannot operate without them — the runners page manages the
+    # environment profiles every sandbox_agent dispatch resolves, and the
+    # email settings are the organisation SMTP configuration that HITL email
+    # alerts and readiness alerts send through. Gating either to Team left a
+    # Community operator with a page they could reach but a feature they
+    # could not use (a "Team Feature" lock plus 402s on every call).
+    FeatureFlag(
+        name="email_config",
+        description="SMTP email configuration for notifications",
+        tier="community",
+    ),
+    FeatureFlag(
+        name="environment_profiles",
+        description="Sandbox environment profiles for code execution",
+        tier="community",
+    ),
     # ── Team tier ──────────────────────────────────────────────────────
     FeatureFlag(
         name="sso",
@@ -110,11 +127,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         tier="team",
     ),
     FeatureFlag(
-        name="email_config",
-        description="SMTP email configuration for notifications",
-        tier="team",
-    ),
-    FeatureFlag(
         name="error_tracking",
         description="External error tracking and alerting integrations",
         tier="team",
@@ -122,11 +134,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="scim",
         description="SCIM 2.0 user and group provisioning",
-        tier="team",
-    ),
-    FeatureFlag(
-        name="environment_profiles",
-        description="Sandbox environment profiles for code execution",
         tier="team",
     ),
     FeatureFlag(
@@ -210,10 +217,14 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         tier="community",
     ),
     # ── Community tier — System Maps authoring and published read model ────────
+    # FAR-2595: authoring is a clearly-labelled Beta-preview surface, not
+    # dev-mode-only. It stays default-OFF so each organisation opts in, but it
+    # is org-admin settable and visible in the customer-facing plan payload.
     FeatureFlag(
         name="system_maps",
-        description="Beta System Maps authoring (internal operator surface)",
+        description="Beta preview: System Maps authoring (discovery and map editing)",
         tier="community",
+        org_admin_settable=True,
     ),
     FeatureFlag(
         name="system_maps_read",
@@ -294,12 +305,14 @@ RETIRED_INTERNAL_FLAGS: frozenset[str] = frozenset({"lifecycle_map_journeys"})
 # internal operators (system admin + operator role + in-dev grant). These are
 # filtered from customer-facing catalogue and plan responses (see
 # effective_feature_flags, get_available_features MCP tool).
-INTERNAL_FLAGS: frozenset[str] = frozenset(
-    {
-        "lifecycle_map_journeys",
-        "system_maps",
-    }
-)
+#
+# FAR-2595: the set is currently empty. ``system_maps`` left it (its authoring
+# surface is a Beta-preview feature behind the default-OFF ``system_maps``
+# flag, not a dev-mode-only internal surface), and the retained
+# ``lifecycle_map_journeys`` lives in ``RETIRED_INTERNAL_FLAGS``. Keeping the
+# two sets disjoint avoids every reader having to union/duplicate them; a
+# future internal-only flag that is NOT retired belongs here.
+INTERNAL_FLAGS: frozenset[str] = frozenset()
 
 
 DEFAULT_OFF_FLAGS: frozenset[str] = frozenset(

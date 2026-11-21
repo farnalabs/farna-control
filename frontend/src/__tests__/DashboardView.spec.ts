@@ -197,9 +197,8 @@ describe('DashboardView', () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
       if (url === '/api/v1/dashboard/trends') return Promise.resolve({ data: null, error: undefined })
-      if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true }, error: undefined })
+      if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
       if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps_access', 'system.config.manage'] }, error: undefined })
-      if (url === '/api/v1/admin/feature-flags') return Promise.resolve({ data: { flags: [{ name: 'system_maps', currently_active: true }] }, error: undefined })
       return Promise.resolve({ data: null, error: undefined })
     })
 
@@ -207,7 +206,7 @@ describe('DashboardView', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="dashboard-system-overview"]').exists()).toBe(true)
-    expect(mockGet).toHaveBeenCalledWith('/api/v1/admin/feature-flags')
+    expect(mockGet).not.toHaveBeenCalledWith('/api/v1/admin/feature-flags')
   })
 
   it('falls back to a 7-day System Overview window when All time is selected', async () => {
@@ -215,9 +214,8 @@ describe('DashboardView', () => {
     vi.mocked(getAccessToken).mockReturnValue(jwtForUser('operator'))
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
-      if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true }, error: undefined })
+      if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
       if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps_access', 'system.config.manage'] }, error: undefined })
-      if (url === '/api/v1/admin/feature-flags') return Promise.resolve({ data: { flags: [{ name: 'system_maps', currently_active: true }] }, error: undefined })
       return Promise.resolve({ data: null, error: undefined })
     })
 

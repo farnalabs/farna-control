@@ -6605,10 +6605,10 @@ export interface paths {
         put?: never;
         /**
          * Grant Collection Agents Endpoint
-         * @description Grant tool/connector access for community-sourced collection agents.
+         * @description Grant tool/connector access for registry-sourced collection agents.
          *
          *     Flips ``agents_granted`` on the install record.  Only applies to
-         *     community-sourced installs; raises 400 for non-community installs.
+         *     registry-sourced installs; raises 400 for non-registry installs.
          *     Idempotent: granting an already-granted install returns the record as-is.
          */
         post: operations["grant_collection_agents_endpoint_api_v1_libraries_collections__primitive_id__installs__install_id__grant_post"];
@@ -13320,10 +13320,10 @@ export interface components {
             /** Status */
             status: string;
             /**
-             * Community Sourced
+             * Registry Sourced
              * @default false
              */
-            community_sourced: boolean;
+            registry_sourced: boolean;
             /**
              * Agents Granted
              * @default false

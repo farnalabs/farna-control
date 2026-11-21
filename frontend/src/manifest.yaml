@@ -396,6 +396,7 @@ routes:
         sidebar_order: 60
         type: form_page
         <<: *team
+        required_tier: community
         visibility: private_preview
         deprecated: false
 
@@ -579,6 +580,7 @@ routes:
         deprecated: false
 
         <<: *team
+        required_tier: community
     /settings/monitoring:
         name: settings-monitoring
         breadcrumb: Browser Monitoring
@@ -696,6 +698,7 @@ routes:
         sidebar_order: 10
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/model-backends:
@@ -707,6 +710,7 @@ routes:
         sidebar_order: 20
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/node-categories:
@@ -725,6 +729,7 @@ routes:
         sidebar_order: 80
         type: list_page
         <<: *team
+        required_tier: community
         visibility: private_preview
         deprecated: false
 
@@ -740,6 +745,7 @@ routes:
         deprecated: false
 
         <<: *team
+        required_tier: community
     /admin/housekeeping:
         name: admin-housekeeping
         breadcrumb: Housekeeping
@@ -760,6 +766,7 @@ routes:
         sidebar_order: 40
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/run-retention:
@@ -782,6 +789,7 @@ routes:
         sidebar_order:
         type: form_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/evidence-redaction:
@@ -852,7 +860,7 @@ routes:
 
     /admin/notification-delivery:
         name: admin-notification-delivery
-        breadcrumb: Webhook Notifications
+        breadcrumb: Webhook Deliveries
         parent: /
         product_map: [feat-notifications]
         sidebar_group: runs
@@ -860,6 +868,7 @@ routes:
         feature_flag: webhook_notification_log
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/trigger-events:
@@ -871,6 +880,7 @@ routes:
         sidebar_order: 60
         type: list_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/product-analytics:
@@ -885,7 +895,10 @@ routes:
         <<: *team
         # A system_admin_only route is an INSTANCE-level gate; the org-ROLE
         # requirement *team carries does not apply (FAR-1795), so it is
-        # overridden to none. The Team TIER gate is deliberate.
+        # overridden to none. The TIER is community: the ratified Team bundle
+        # does not name product analytics, and this is an instance-level admin
+        # surface, so a system admin on a community install must reach it.
+        required_tier: community
         required_roles:
         deprecated: false
 
@@ -1029,6 +1042,7 @@ routes:
         sidebar_order: 30
         type: page
         <<: *team
+        required_tier: community
         deprecated: false
         exact: true
 
@@ -1041,6 +1055,7 @@ routes:
         sidebar_order:
         type: form_page
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/runners/profiles/:id/edit:
@@ -1055,6 +1070,7 @@ routes:
         dynamic_params:
           - id
         <<: *team
+        required_tier: community
         deprecated: false
 
     /admin/my-profile:
@@ -1213,6 +1229,9 @@ elements:
         dynamic_testid: false
 
     /system-maps:
+      - testid: system-maps-beta-preview
+        type: element
+        dynamic_testid: false
       - testid: system-maps-create
         type: button
         dynamic_testid: false
@@ -1260,6 +1279,9 @@ elements:
         dynamic_testid: false
 
     /system-maps/:id:
+      - testid: system-map-detail-beta-preview
+        type: element
+        dynamic_testid: false
       - testid: system-map-detail-back
         type: link
         dynamic_testid: false
@@ -2432,6 +2454,27 @@ elements:
       - testid: admin-notification-log-title
         type: element
         dynamic_testid: false
+      - testid: admin-notification-log-boundary
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-trigger-events-link
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-no-endpoints
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-no-endpoints-history
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-add-endpoint
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-team-hint
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-dead-lettered-help
+        type: element
+        dynamic_testid: false
       - testid: admin-notification-log-status
         type: select
         dynamic_testid: false
@@ -2457,6 +2500,9 @@ elements:
         type: element
         dynamic_testid: false
       - testid: admin-notification-log-empty
+        type: element
+        dynamic_testid: false
+      - testid: admin-notification-log-empty-filters
         type: element
         dynamic_testid: false
       - testid: admin-notification-log-empty-reset
@@ -8254,7 +8300,7 @@ features:
             - "[x] Workflow bundle export writes a .modulo.zip / signed YAML bundle with org-private fields (owner_team_id, visibility, credentials/ciphertexts, env secrets) stripped, and workflow import runs a two-phase REST contract — /import/analyse resolves connector/schema(abstract_name)/model-backend references and detects pipeline-name conflicts with a disambiguation suffix, /import/confirm materialises the pipeline (200 imported); a tampered non-JSON bundle is rejected 400 without creating entities (backend/tests/bdd/features/workflows/import.feature, workflows/export.feature, steps/test_workflows.py)"
             - "[x] Composite library-primitive content is masked on every read surface (FAR-1380): the shared LibraryPrimitiveResponse._mask_composite_graph_credentials validator masks credential-bearing node fields inside a composite primitive's content_json for the library list/get/create/patch/delete/restore/adapt responses, the fixture contributions list, and the MCP modulo://library/{type}/{slug} resource masks composite nodes before rendering; non-composite primitives pass through byte-identical. The FAR-1374 sentinel rule applies on write: POST /api/v1/libraries, PATCH /api/v1/libraries/{id} resolve a submitted mask echo against the stored sub-graph (resolve_and_reject_mask_sentinels) and refuse an unmappable sentinel with 422 COMPOSITE_SUBGRAPH_MASKED_CREDENTIAL, and a masked-read -> patch round-trip preserves the stored secret (backend/tests/unit/api/test_library_primitive_masking.py, api/routes/library.py, api/mcp_server.py; control statement docs/deployment-security.md 2.6)"
         deferrals:
-            - "Collections authoring is gated behind the default-off library_collection feature flag per org (FAR-760); collection install/uninstall + community trust gates are tracked under feat-library-collections"
+            - "Collections authoring is gated behind the default-off library_collection feature flag per org (FAR-760); collection install/uninstall + registry trust gates are tracked under feat-library-collections"
     feat-library-collections:
         description: Install, uninstall, and manage library collection installs
         status: covered
@@ -8268,9 +8314,9 @@ features:
             - "[x] Re-install of the same version is idempotent: missing entities are re-added via materialize_import without duplicating existing ones"
             # Runnability (FAR-762)
             - "[x] compute_runnable is a pure read-time check: returns True when all connector_checklist entries are configured+bound and the org has at least one active model backend; returns False otherwise"
-            # Community trust gate (FAR-764 / ADR 032 D2)
-            - "[x] Community-sourced or registry-sourced collections restrict agent tool/connector access until an operator explicitly grants access via grant_collection_agents (sets agents_granted=True, idempotent)"
-            - "[x] Non-community-sourced collections (source=local) are not subject to the grant gate and agents are immediately usable"
+            # Registry trust gate (FAR-764 / ADR 032 D2)
+            - "[x] Registry-sourced collections restrict agent tool/connector access until an operator explicitly grants access via grant_collection_agents (sets agents_granted=True, idempotent)"
+            - "[x] Non-registry-sourced collections (source=local) are not subject to the grant gate and agents are immediately usable"
             # Connector checklist
             - "[x] Each unique connector_type_id referenced by any agent in the collection gets a checklist entry with status=pending; the runnability check verifies all entries are configured+bound"
             # Version upgrade (FAR-759)
@@ -8389,7 +8435,8 @@ features:
             - "[x] POST /api/v1/admin/notifications/{webhook_id}/deliveries/replay is the per-endpoint dead-letter replay surface (admin.notification.manage): it re-dispatches every failed + dead-lettered delivery of a SINGLE webhook through the shared retry path (retained payloads replayed verbatim), returning {replayed, delivered, errors, success}; a missing or cross-org webhook is 404 and the repo DB-error mapping applies (ProgrammingError 501 / SQLAlchemyError 503 / other 500)"
             - "[x] Admin webhook management lives under /api/v1/admin/notifications (list/create/get/update) with the same secret-handling and break-glass deny rules as the user surface"
             - "[x] Email delivery: GET/PUT /api/v1/admin/org/{org_id}/email-settings (feature email_config; org.email.view / org.email.manage) configures SMTP with a clear_password flag and smtp_timeout, and a POST test endpoint verifies the configuration"
-            - "[x] Frontend surfaces: team-tier notification centre (/notifications, reached from the notification bell's View all link) with preferences, review-later and dismiss actions; team-tier email settings (/settings/email); admin webhook delivery-log UI (/admin/notification-delivery, titled 'Webhook Notifications') with status/event-type/date filters, a retry control, retry-all and an empty state"
+            - "[x] Frontend surfaces: team-tier notification centre (/notifications, reached from the notification bell's View all link) with preferences, review-later and dismiss actions; team-tier email settings (/settings/email); admin webhook delivery-log UI (/admin/notification-delivery, titled 'Webhook Deliveries', sidebar label aligned to the same words) with status/event-type/date filters, a retry control, retry-all and split empty states"
+            - "[x] FAR-2596 explains the webhook delivery page instead of leaving an operator guessing: a one-line boundary explainer states each row is one OUTBOUND delivery attempt (including deliveries to a webhook since deleted), that in-app error alerts are not shown, and that inbound trigger webhooks are recorded on the Trigger Event Log (inline link to /admin/trigger-events); event types and delivery statuses render through the existing locale labels rather than raw run_failed/dead_lettered strings with a one-line 'Dead Lettered' explanation; the empty state is split into 'No deliveries yet' (endpoints configured, nothing fired) and 'No deliveries match these filters' (with a Reset filters CTA). The 'No outbound notification webhooks are configured' banner is shown ONLY when GET /api/v1/notifications returns zero endpoints AND the log is empty, with forward-looking copy ('New deliveries appear once you add an endpoint'), an 'Add a webhook endpoint' CTA to /settings/teams and a secondary line telling an org with no team to create one first; when the endpoint list is empty but retained delivery history exists (a deleted webhook keeps its rows) the page shows a quieter history notice instead, so it never claims 'nothing will appear here' above a populated table. The endpoint state is ONE tri-state (unknown/none/configured) read from the endpoint list, never inferred from the delivery log, the fetch is fail-open (an error or unexpected body is 'unknown' and renders no claim), and the CTA is withheld when team_rbac is inactive (so it never links into a disabled gate). The warning is announced through a persistently-mounted aria-live=polite region (frontend/src/views/AdminNotificationDeliveryLogView.vue, frontend/src/__tests__/AdminNotificationDeliveryLogView.spec.ts)"
             - "[x] The webhook delivery-log UI is enabled by default for the community tier: the webhook_notification_log flag gates the /admin/notification-delivery manifest route, while an explicit feature_overrides entry may still disable it; the sidebar item and router guard use the same flag state (FAR-2235)"
         deferrals:
             - A realtime/push transport is not part of the notifier — webhook (+ HMAC) and in-app notification are the only delivery channels; email settings exist but the notifier does not fan out to SMTP subscribers
@@ -8680,13 +8727,14 @@ features:
             - "[x] DELETE /api/v1/admin/orgs/{org_id} deletes an organisation — 404 for a missing org, 403 for a regular admin (system_admin_orgs.feature)"
             - "[x] Org-level license management: GET/PUT/DELETE on /api/v1/admin/orgs/{org_id}/license resolves/stores/clears the org's settings_json.license_key via parse_and_verify, falls back to the system license, and is role-gated (GET org.license.view / PUT+DELETE org.license.manage) — BDD: system_admin_orgs.feature"
     feat-system-maps:
-        description: Bounded visual authoring of delivery system maps
+        description: Bounded visual authoring of delivery system maps (Beta preview, available in Alpha behind a default-OFF org flag)
         status: partial
         behaviours:
             - "[x] System Maps list page (/system-maps) with published viewer read access and operator-only create, edit, delete, and discover actions"
             - "[x] Map detail page (/system-maps/:id) with bounded visual graph editor for the backend node/relationship vocabularies, connected edges, endpoint selection, and drag/keyboard repositioning"
             - "[x] Version-aware revision read model ships (FAR-2288): GET /api/v1/system-maps/{map_id}/revisions/current, /revisions/by-time?at=<ISO8601> and /revisions/history resolve the revision active at a point in time (including superseded revisions after a re-publish), and /overview accepts revision_id or at to report metrics against that revision's window, all behind the same internal access gate and tenant/RLS isolation (backend/src/farna/api/routes/system_maps.py, test_system_maps_version_aware.py, test_system_map_repository.py)"
             - "[x] Revision history sidebar with current/historical revision switching (FAR-2288 follow-up): the sidebar reads GET /revisions/history on map load so every published, draft and archived revision appears, offers a View current action backed by GET /revisions/current and a datetime picker that resolves GET /revisions/by-time?at=<ISO8601> (the local datetime is converted to an absolute instant client-side), the matched revision's graph then loads through the shared per-revision read path and is highlighted as the active revision, the currently published revision is badged Current, and the 404 that GET /revisions/by-time raises for an unmatched timestamp is mapped onto a distinct \"No revision was active at that time\" error instead of silently leaving the previous revision on screen (frontend/src/components/system-maps/SystemMapRevisionSidebar.vue, frontend/src/views/SystemMapDetailView.vue, frontend/src/stores/systemMaps.ts; SystemMapComponents.coverage.spec.ts, SystemMapDetailView.spec.ts, systemMapsStoreCrud.spec.ts)"
+            - "[x] Discovery is bounded, not an unbounded tenant scan: every per-kind inventory query is ordered by id and capped at MAX_DISCOVERY_SOURCES + 1 rows, the merged source list is deterministically sorted then truncated to MAX_DISCOVERY_SOURCES (1000), and a visible truncation warning is returned when the inventory exceeds the cap (core/system_maps_discovery.py, api/routes/system_maps.py; test_system_maps_discovery.py, test_system_maps_discovery_routes.py)"
             - "[x] Draft revision creation and save with node/relationship/loop-config payload"
             - "[x] Publish revision (validation + status change to published)"
             - "[x] Archive revision (status change to archived)"
@@ -8697,7 +8745,7 @@ features:
             - "[x] Operators can compare a historical revision with the published revision from the revision sidebar; the view calls POST /api/v1/system-maps/{map_id}/revisions/{rev_id}/diff and renders changed node, relationship, loop-config, and content counts (frontend/src/components/system-maps/SystemMapRevisionSidebar.vue, frontend/src/views/SystemMapDetailView.vue, frontend/src/stores/systemMaps.ts)"
             - "[ ] Re-scan existing organisation resources into existing draft with added/removed/ambiguous diff and operator edit preservation (deferred: discovery can be re-run and an unchanged inventory resolves to the same revision identity, but there is no re-scan-into-existing-draft endpoint reporting an added/removed/ambiguous diff while preserving operator edits)"
             - "[x] No auto-publish — operator must explicitly publish"
-            - "[x] Published reads are gated by system_maps_read + system_maps.read; authoring, discovery, publish, archive, restore, apply, loop dispatch and MCP discovery remain gated by system_maps + developer mode + operator/admin + system_maps_access"
+            - "[x] Published reads are gated by system_maps_read + system_maps.read; REST authoring, discovery, publish, archive, restore, apply and loop dispatch are gated by the org-aware default-OFF system_maps flag (org feature_overrides applied) + operator/admin role + system_maps_access, and MCP discovery applies the same predicate (no developer mode since FAR-2595)"
             - "[x] i18n keys and product-map test IDs registered"
             - "[x] Accessibility: STATE-1/2/6, A11Y-1/2/4, I18N-1, TYPE-1, VIS-4"
         deferrals:

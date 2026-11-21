@@ -263,8 +263,8 @@ class TestRequireFeature:
 class TestFeatureRequiredDetail:
     """The 402 detail must only claim a licence when one would actually help.
 
-    A community-tier flag that is default-off (``DEFAULT_OFF_FLAGS`` /
-    ``INTERNAL_FLAGS``, e.g. ``system_maps``) is not enabled by any licence, so
+    A community-tier flag that is default-off (``DEFAULT_OFF_FLAGS``, e.g.
+    ``system_maps``) is not enabled by any licence, so
     naming a Team licence is false and unactionable. The detail therefore reads
     the flag's declared tier from the catalog.
     """

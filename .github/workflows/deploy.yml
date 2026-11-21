@@ -512,7 +512,7 @@ jobs:
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.12
+          version: 11.28.13
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
@@ -774,7 +774,11 @@ jobs:
           for attempt in 1 2 3; do
             : > "$LOG"
             set +e
-            uv run --no-build --project backend --no-sync pip-audit 2>&1 | tee "$LOG"
+            # GHSA-53pm-wgxf-c6qf: dev-only ReDoS in wcmatch (pulled in by semgrep). It
+            # never ships to production (`uv sync --no-dev` in the Dockerfile) and semgrep
+            # pins `wcmatch~=8.3`, so the fixed 11.2 cannot be installed. Reviewed exception
+            # documented in docs/security/dependency-policy.md (Approved CVE Override List).
+            uv run --no-build --project backend --no-sync pip-audit --ignore-vuln GHSA-53pm-wgxf-c6qf 2>&1 | tee "$LOG"
             RC=${PIPESTATUS[0]}
             set -e
             if [ "$RC" -eq 0 ]; then
@@ -2508,7 +2512,7 @@ jobs:
           fi
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.12
+          version: 11.28.13
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
@@ -3986,7 +3990,7 @@ jobs:
           fi
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.12
+          version: 11.28.13
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"

@@ -54,15 +54,14 @@ kill-switch, authorization enforcement).
       the already-committed override
       (`backend/src/farna/api/routes/admin_feature_flags.py`,
       `backend/tests/unit/api/test_admin_feature_flags.py`)
-- [x] Internal-only flags stay off the customer-facing catalog (FAR-2230):
-      `system_maps` (Beta System Maps) is a default-OFF, internal-only flag, so
-      `effective_feature_flags` filters it and the retired internal flags out of
-      plan/customer-facing flag responses. `GET /api/v1/admin/feature-flags` omits
-      it unless the caller is an internal operator with developer mode and the
-      dedicated `system_maps_access` grant, and the toggle route refuses the flag
-      without that grant; the response cache key carries the caller's visibility
-      class so an internal catalog can never be served to an ordinary caller
-      (`backend/src/farna/core/feature_flags.py`,
+- [x] Retired internal flags stay off the customer-facing catalog:
+      `RETIRED_INTERNAL_FLAGS` (`lifecycle_map_journeys`) is filtered from
+      plan/customer-facing flag responses. Since FAR-2595 `system_maps` is NOT
+      in `INTERNAL_FLAGS`: it is a normal default-OFF, `org_admin_settable`
+      community flag, served in the plan payload (OFF) and visible/toggleable
+      through both the system-admin list and the org-admin governance surface.
+      The admin list cache is a single org-scoped key (no caller-visibility
+      class) (`backend/src/farna/core/feature_flags.py`,
       `backend/src/farna/api/routes/admin_feature_flags.py`,
       `backend/tests/unit/api/test_admin_feature_flags.py`,
       `backend/tests/unit/core/test_feature_flag_registry.py`)
@@ -131,7 +130,7 @@ behavior is covered by the citations above.
   closed the lingering `ui/org_settings.feature` gap. Archived the five
   never-executing UI-journey drafts (verified: 0/11 referenced testids exist in
   `frontend/src`; `/admin/org` ships a different surface - org profile, data
-  export, product-analytics + community-objects toggles, with no active-org
+  export, product-analytics toggle, with no active-org
   delete control because the self-service API refuses deletion (FAR-2225))
   and re-anchored `feat-org` to the real org-management coverage: self-service
   org profile read/rename + admin role gate (unit, `test_admin.py`),
@@ -145,7 +144,7 @@ behavior is covered by the citations above.
 - 2026-09-27: **Improve Architecture product-map walk** -
   reconciled the stale "org settings UI not yet built" Known Gap: the
   `/admin/org` UI ships (`AdminOrgSettingsView.vue`, org profile, data export,
-  product-analytics / community-objects toggles, and no active-org delete
+  product-analytics toggle, and no active-org delete
   control because self-service deletion is refused (FAR-2225)) and its surface
   is guarded in the manifest; the remaining gap was re-scoped to the
   `@awaiting-implementation` UI-journey BDD scenarios, which describe frontend

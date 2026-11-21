@@ -67,7 +67,7 @@ _GLOSSARY_TERMS: dict[str, str] = {
     "HITL Gate": "A Human-in-the-Loop transition point that pauses execution until a human approves or rejects.",
     "Eval": "An automated quality check on agent output (llm_judge, regex, json_schema, custom_function).",
     "Variant": ("A set of runs against the same pipeline and input differing only in context overrides, used for A/B testing."),
-    "Library": "Published community primitives — schemas, workflows, agents, and integrations with metadata.",
+    "Library": "Reusable primitives — schemas, workflows, agents, and integrations with metadata.",
     "Assistant": ("Your AI SDLC assistant that can navigate the UI, trigger runs, review results, approve HITL gates, and configure settings."),
 }
 

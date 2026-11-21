@@ -5,13 +5,14 @@ const mockGet = vi.hoisted(() => vi.fn())
 const mockGetAccessToken = vi.hoisted(() => vi.fn())
 const mockIsOperator = vi.hoisted(() => ({ value: false }))
 const mockIsSystemAdmin = vi.hoisted(() => ({ value: false }))
+const mockFlag = vi.hoisted(() => ({ systemMaps: false }))
 const mockPlanStore = vi.hoisted(() => ({
   loaded: false,
   currentTier: 'community',
-  devMode: false,
   userPermissions: [] as string[],
   fetchPlan: vi.fn(),
   fetchPermissions: vi.fn(),
+  featureEnabled: (name: string) => (name === 'system_maps' ? mockFlag.systemMaps : false),
 }))
 
 vi.mock('../lib/api/client', () => ({
@@ -33,8 +34,8 @@ function jwtFor(sub: string, claims: Record<string, unknown> = {}): string {
 function configureAuthorizedAccess(): void {
   mockIsOperator.value = true
   mockPlanStore.loaded = true
-  mockPlanStore.devMode = true
-  mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
+  mockFlag.systemMaps = true
+  mockPlanStore.userPermissions = ['system_maps_access']
 }
 
 describe('useSystemMapsStore access', () => {
@@ -46,193 +47,136 @@ describe('useSystemMapsStore access', () => {
     mockIsSystemAdmin.value = false
     mockPlanStore.loaded = false
     mockPlanStore.currentTier = 'community'
-    mockPlanStore.devMode = false
+    mockFlag.systemMaps = false
     mockPlanStore.userPermissions = []
     mockPlanStore.fetchPlan.mockReset()
+    mockPlanStore.fetchPlan.mockResolvedValue(undefined)
     mockPlanStore.fetchPermissions.mockReset()
+    mockPlanStore.fetchPermissions.mockResolvedValue(undefined)
   })
 
-  it('does not probe the system-admin endpoint without system.config.manage', async () => {
-    mockIsOperator.value = true
-    mockPlanStore.loaded = true
-    mockPlanStore.devMode = true
-    mockPlanStore.userPermissions = ['system_maps_access']
+  it('enables authoring when the plan flag is on and role plus grant are present', async () => {
+    configureAuthorizedAccess()
 
     const store = useSystemMapsStore()
     await store.fetchAccess()
 
-    expect(mockGet).not.toHaveBeenCalled()
-    expect(store.systemMapsEnabled).toBe(false)
+    expect(store.systemMapsEnabled).toBe(true)
+    expect(store.hasAccess).toBe(true)
     expect(store.accessLoaded).toBe(true)
   })
 
-  it('probes feature flags only when the caller has the real system capability', async () => {
+  it('never probes the system-admin feature-flag endpoint', async () => {
     configureAuthorizedAccess()
-    mockGet.mockResolvedValue({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
-
-    const store = useSystemMapsStore()
-    await store.fetchAccess()
-
-    expect(mockGet).toHaveBeenCalledWith('/api/v1/admin/feature-flags')
-    expect(store.systemMapsEnabled).toBe(true)
-  })
-
-  it('allows a system admin with no org role to probe the system-admin endpoint', async () => {
-    mockIsSystemAdmin.value = true
-    mockPlanStore.loaded = true
-    mockPlanStore.devMode = true
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
-    mockGet.mockResolvedValue({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
-
-    const store = useSystemMapsStore()
-    await store.fetchAccess()
-
-    expect(mockGet).toHaveBeenCalledWith('/api/v1/admin/feature-flags')
-    expect(store.systemMapsEnabled).toBe(true)
-  })
-
-  it('denies an ordinary admin without the system-admin capability', async () => {
-    mockIsOperator.value = true
-    mockPlanStore.loaded = true
-    mockPlanStore.devMode = true
-    mockPlanStore.userPermissions = ['system_maps_access']
 
     const store = useSystemMapsStore()
     await store.fetchAccess()
 
     expect(mockGet).not.toHaveBeenCalled()
+  })
+
+  it('denies authoring when the system_maps flag is off', async () => {
+    configureAuthorizedAccess()
+    mockFlag.systemMaps = false
+
+    const store = useSystemMapsStore()
+    await store.fetchAccess()
+
     expect(store.systemMapsEnabled).toBe(false)
+    expect(store.hasAccess).toBe(false)
+  })
+
+  it('denies authoring without the system_maps_access grant', async () => {
+    configureAuthorizedAccess()
+    mockPlanStore.userPermissions = []
+
+    const store = useSystemMapsStore()
+    await store.fetchAccess()
+
+    expect(store.systemMapsEnabled).toBe(false)
+    expect(store.hasAccess).toBe(false)
+  })
+
+  it('allows a system admin with no org role to author', async () => {
+    mockIsSystemAdmin.value = true
+    mockPlanStore.loaded = true
+    mockFlag.systemMaps = true
+    mockPlanStore.userPermissions = ['system_maps_access']
+
+    const store = useSystemMapsStore()
+    await store.fetchAccess()
+
+    expect(store.systemMapsEnabled).toBe(true)
+    expect(store.hasAccess).toBe(true)
+  })
+
+  it('keeps the published read model enabled for a viewer', async () => {
+    mockPlanStore.loaded = true
+    mockPlanStore.userPermissions = ['system_maps.read']
+
+    const store = useSystemMapsStore()
+    await store.fetchAccess()
+
+    expect(store.systemMapsEnabled).toBe(true)
+    expect(store.hasReadAccess).toBe(true)
+    expect(store.hasAccess).toBe(false)
   })
 
   it('does not repeat an access probe after access has settled', async () => {
     configureAuthorizedAccess()
-    mockGet.mockResolvedValue({ data: { flags: [] } })
     const store = useSystemMapsStore()
 
     await store.fetchAccess()
     await store.fetchAccess()
 
-    expect(mockGet).toHaveBeenCalledTimes(1)
+    expect(mockPlanStore.fetchPermissions).toHaveBeenCalledTimes(1)
   })
 
   it('resets access state when the token principal changes', async () => {
     configureAuthorizedAccess()
-    mockGet.mockResolvedValue({ data: { flags: [] } })
     const store = useSystemMapsStore()
 
     await store.fetchAccess()
     expect(store.accessLoaded).toBe(true)
 
     mockGetAccessToken.mockReturnValue(jwtFor('operator-2'))
-    await store.fetchAccess()
-
-    expect(mockGet).toHaveBeenCalledTimes(2)
-    expect(store.systemMapsEnabled).toBe(false)
-  })
-
-  it('revalidates when the same subject receives a demoted token', async () => {
-    configureAuthorizedAccess()
-    mockGet.mockResolvedValue({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
-    const store = useSystemMapsStore()
-
-    await store.fetchAccess()
-    expect(store.systemMapsEnabled).toBe(true)
-
-    mockGetAccessToken.mockReturnValue(jwtFor('operator-1', { org_role: 'viewer' }))
-    mockIsOperator.value = false
     mockPlanStore.userPermissions = []
     await store.fetchAccess()
 
-    expect(mockGet).toHaveBeenCalledTimes(1)
     expect(store.accessLoaded).toBe(true)
     expect(store.systemMapsEnabled).toBe(false)
   })
 
-  it('ignores an authorized response after a same-subject token is demoted', async () => {
+  it('ignores a stale authorization result after a same-subject token demotion', async () => {
     configureAuthorizedAccess()
-    let resolveOldRequest: ((value: unknown) => void) | undefined
-    mockGet.mockImplementationOnce(
+    let resolveOldPermissions: ((value: unknown) => void) | undefined
+    mockPlanStore.fetchPermissions.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          resolveOldRequest = resolve
+          resolveOldPermissions = resolve
         }),
     )
     const store = useSystemMapsStore()
 
     const oldRequest = store.fetchAccess()
-    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
-
-    mockGetAccessToken.mockReturnValue(jwtFor('operator-1', { org_role: 'viewer' }))
-    mockIsOperator.value = false
-    mockPlanStore.userPermissions = []
-    const newRequest = store.fetchAccess()
-    await newRequest
-
-    resolveOldRequest?.({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
-    await oldRequest
-
-    expect(store.systemMapsEnabled).toBe(false)
-    expect(store.accessLoaded).toBe(true)
-    expect(store.error).toBeNull()
-  })
-
-  it('ignores an authorization error after a same-subject token is demoted', async () => {
-    configureAuthorizedAccess()
-    let rejectOldRequest: ((reason?: unknown) => void) | undefined
-    mockGet.mockImplementationOnce(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectOldRequest = reject
-        }),
-    )
-    const store = useSystemMapsStore()
-
-    const oldRequest = store.fetchAccess()
-    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mockPlanStore.fetchPermissions).toHaveBeenCalledTimes(1))
 
     mockGetAccessToken.mockReturnValue(jwtFor('operator-1', { org_role: 'viewer' }))
     mockIsOperator.value = false
     mockPlanStore.userPermissions = []
     await store.fetchAccess()
 
-    rejectOldRequest?.(new Error('stale request failed'))
+    resolveOldPermissions?.(undefined)
     await oldRequest
 
     expect(store.systemMapsEnabled).toBe(false)
-    expect(store.error).toBeNull()
     expect(store.accessLoaded).toBe(true)
-  })
-
-  it('does not let a previous principal re-enable access after a token replacement', async () => {
-    configureAuthorizedAccess()
-    let resolveOldRequest: ((value: unknown) => void) | undefined
-    mockGet.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveOldRequest = resolve
-        }),
-    )
-    const store = useSystemMapsStore()
-
-    const oldRequest = store.fetchAccess()
-    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
-
-    mockGetAccessToken.mockReturnValue(jwtFor('operator-2'))
-    mockIsOperator.value = false
-    mockPlanStore.userPermissions = []
-    await store.fetchAccess()
-
-    resolveOldRequest?.({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
-    await oldRequest
-
-    expect(store.systemMapsEnabled).toBe(false)
     expect(store.error).toBeNull()
-    expect(store.accessLoaded).toBe(true)
   })
 
   it('resets access state when reset is called', async () => {
     configureAuthorizedAccess()
-    mockGet.mockResolvedValue({ data: { flags: [{ name: 'system_maps', currently_active: true }] } })
     const store = useSystemMapsStore()
 
     await store.fetchAccess()
@@ -257,23 +201,23 @@ describe('useSystemMapsStore access', () => {
 
   it('deduplicates concurrent access probes', async () => {
     configureAuthorizedAccess()
-    let resolveRequest: ((value: unknown) => void) | undefined
-    mockGet.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve }))
+    let resolvePermissions: ((value: unknown) => void) | undefined
+    mockPlanStore.fetchPermissions.mockImplementation(() => new Promise((resolve) => { resolvePermissions = resolve }))
     const store = useSystemMapsStore()
 
     const first = store.fetchAccess()
     const second = store.fetchAccess()
-    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mockPlanStore.fetchPermissions).toHaveBeenCalledTimes(1))
 
-    resolveRequest?.({ data: { flags: [] } })
+    resolvePermissions?.(undefined)
     await Promise.all([first, second])
+
+    expect(mockPlanStore.fetchPermissions).toHaveBeenCalledTimes(1)
   })
 
   it('fetches the plan before permissions for an unloaded community-tier store', async () => {
     mockIsOperator.value = true
     mockPlanStore.currentTier = 'community'
-    mockPlanStore.fetchPlan.mockResolvedValue(undefined)
-    mockPlanStore.fetchPermissions.mockResolvedValue(undefined)
 
     const store = useSystemMapsStore()
     await store.fetchAccess()
@@ -285,7 +229,6 @@ describe('useSystemMapsStore access', () => {
   it('does not fetch the plan for a known non-community tier', async () => {
     mockIsOperator.value = true
     mockPlanStore.currentTier = 'team'
-    mockPlanStore.fetchPermissions.mockResolvedValue(undefined)
 
     const store = useSystemMapsStore()
     await store.fetchAccess()
@@ -296,36 +239,40 @@ describe('useSystemMapsStore access', () => {
 
   it('records an Error rejection and remains disabled', async () => {
     configureAuthorizedAccess()
-    mockGet.mockRejectedValue(new Error('feature flags unavailable'))
+    mockPlanStore.loaded = false
+    mockPlanStore.fetchPlan.mockRejectedValue(new Error('plan unavailable'))
 
     const store = useSystemMapsStore()
     await store.fetchAccess()
 
-    expect(store.error).toBe('feature flags unavailable')
+    expect(store.error).toBe('plan unavailable')
     expect(store.systemMapsEnabled).toBe(false)
     expect(store.accessLoaded).toBe(true)
   })
 
   it('uses a stable message for non-Error failures', async () => {
     configureAuthorizedAccess()
-    mockGet.mockRejectedValue('not an Error instance')
+    mockPlanStore.loaded = false
+    mockPlanStore.fetchPlan.mockRejectedValue('not an Error instance')
 
     const store = useSystemMapsStore()
     await store.fetchAccess()
 
-    expect(store.error).toBe('Internal feature flags request failed')
+    expect(store.error).toBe('Could not read System Maps feature flags')
     expect(store.systemMapsEnabled).toBe(false)
   })
 
-  it('fails closed for malformed or missing feature-flag payloads', async () => {
-    configureAuthorizedAccess()
+  it('stays disabled when the flag is off for every permission shape', async () => {
     const store = useSystemMapsStore()
 
-    for (const data of [undefined, {}, { flags: undefined }, { flags: 'not-an-array' }]) {
-      mockGet.mockResolvedValueOnce({ data })
+    for (const permissions of [[], ['system_maps_access'], ['system_maps.read']]) {
+      mockIsOperator.value = true
+      mockPlanStore.loaded = true
+      mockFlag.systemMaps = false
+      mockPlanStore.userPermissions = permissions
       store.reset()
       await store.fetchAccess()
-      expect(store.systemMapsEnabled).toBe(false)
+      expect(store.hasAccess).toBe(false)
     }
   })
 

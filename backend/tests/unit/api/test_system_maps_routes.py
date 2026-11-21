@@ -529,8 +529,14 @@ def test_internal_jwt_without_grants_can_access() -> None:
     assert result is principal
 
 
-def test_dev_mode_required() -> None:
-    """Dev mode is required - without it, even operator gets 403."""
+def test_dev_mode_is_not_required() -> None:
+    """FAR-2595: System Maps authoring works in a non-dev-mode deployment.
+
+    The gate is the ``system_maps`` feature flag + operator/admin role +
+    ``system_maps_access`` grant. Developer mode must no longer bounce an
+    authorised operator, so the Beta-preview surface can be dogfooded on a
+    self-hosted Alpha deployment (which runs with dev mode off).
+    """
     from farna.api.dependencies import _require_internal_system_maps_access
     from farna.auth.jwt import TenantPrincipal
     from farna.settings import Settings
@@ -554,11 +560,7 @@ def test_dev_mode_required() -> None:
         client_kind="test",
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        _require_internal_system_maps_access(principal, settings=settings)
-
-    assert exc_info.value.status_code == 403
-    assert "developer mode" in exc_info.value.detail
+    assert _require_internal_system_maps_access(principal, settings=settings) is principal
 
 
 # ─── SystemMap CRUD tests ───

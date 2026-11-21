@@ -21,14 +21,13 @@ from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
-from farna.api.constants import PERM_SYSTEM_CONFIG_MANAGE, SYSTEM_MAPS_FLAG
+from farna.api.constants import PERM_SYSTEM_CONFIG_MANAGE
 from farna.api.db_error_handling import (
     handle_db_errors,
     raise_lock_timeout_conflict_if,
     raise_session_contract_error,
 )
 from farna.api.dependencies import (
-    _require_internal_system_maps_access,
     get_db_session,
     require_in_dev_operator,
     require_system_permission,
@@ -150,7 +149,7 @@ async def _invalidate_cache(settings: Settings, org_id: str | uuid.UUID) -> None
     redis: Redis | None = None
     try:
         redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2.0, socket_timeout=2.0)
-        await redis.delete(f"feature-flags:{org_id}:public", f"feature-flags:{org_id}:internal")
+        await redis.delete(_feature_flag_cache_key(org_id))
     except Exception:
         logger.warning("feature-flags.cache_invalidate_failed", exc_info=True)
     finally:
@@ -158,18 +157,15 @@ async def _invalidate_cache(settings: Settings, org_id: str | uuid.UUID) -> None
             await redis.aclose()
 
 
-def _feature_flag_cache_key(
-    org_id: str | uuid.UUID | None,
-    *,
-    internal_system_maps_access: bool,
-) -> str:
-    """Build the cache key scoped to the caller's flag-visibility class.
+def _feature_flag_cache_key(org_id: str | uuid.UUID | None) -> str:
+    """Build the org-scoped cache key for the feature-flag catalogue.
 
-    The visibility gate is part of the key so an internal response can never be
-    served to an ordinary caller (and vice versa).
+    FAR-2595: the catalogue is now caller-class independent — the last flag
+    hidden by caller class (``system_maps``) is a normal default-OFF
+    community flag, and retired flags are filtered for every caller — so one
+    key per org is sufficient.
     """
-    visibility = "internal" if internal_system_maps_access else "public"
-    return f"feature-flags:{org_id}:{visibility}"
+    return f"feature-flags:{org_id}"
 
 
 async def _read_org_overrides(session: AsyncSession, org_id: uuid.UUID) -> dict[str, bool]:
@@ -230,45 +226,21 @@ def _require_internal_flag_access_if_needed(
         client_kind=current_user.client_kind,
         key_grants=current_user.key_grants,
     )
-    if flag_name == SYSTEM_MAPS_FLAG:
-        _require_internal_system_maps_access(principal, settings=settings)
-    else:
-        require_in_dev_operator(
-            principal,
-            "library.search.in_dev",
-            require_dev_mode=True,
-            settings=settings,
-        )
-
-
-def _internal_system_maps_access(
-    current_user: AuthenticatedPrincipal,
-    settings: Settings,
-) -> bool:
-    """Return whether the caller may see the internal System Maps flag."""
-    principal = TenantPrincipal(
-        username=current_user.username,
-        organisation_id=current_user.organisation_id,
-        account_id=current_user.account_id,
-        org_role=current_user.org_role or "",
-        is_system_admin=current_user.is_system_admin,
-        via_api_key=current_user.via_api_key,
-        client_kind=current_user.client_kind,
-        key_grants=current_user.key_grants,
+    require_in_dev_operator(
+        principal,
+        "library.search.in_dev",
+        require_dev_mode=True,
+        settings=settings,
     )
-    try:
-        _require_internal_system_maps_access(principal, settings=settings)
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_403_FORBIDDEN:
-            return False
-        raise
-    return True
 
 
-def _flag_visible_to_caller(flag_name: str, *, internal_system_maps_access: bool) -> bool:
-    """Return whether ``flag_name`` belongs in this caller's flag catalogue."""
-    if flag_name == SYSTEM_MAPS_FLAG:
-        return internal_system_maps_access
+def _flag_visible_to_caller(flag_name: str) -> bool:
+    """Return whether ``flag_name`` belongs in the caller's flag catalogue.
+
+    Only retired internal flags stay hidden from every caller; FAR-2595 removed
+    the last caller-class (``system_maps``) special case, so a flag is either
+    retired-and-hidden or normal-and-visible.
+    """
     return flag_name not in RETIRED_INTERNAL_FLAGS
 
 
@@ -395,16 +367,12 @@ async def list_feature_flags(
     session: AsyncSession = Depends(get_db_session),
     current_user: AuthenticatedPrincipal = require_system_permission(PERM_SYSTEM_CONFIG_MANAGE),  # type: ignore[assignment]
 ) -> Response | dict[str, Any]:
-    internal_system_maps_access = _internal_system_maps_access(current_user, settings)
-    # Attempt Redis cache read. The visibility gate is part of the cache key so
-    # an internal response can never be served to an ordinary caller.
+    # Attempt Redis cache read. One key per org: the catalogue no longer varies
+    # by caller class (FAR-2595).
     redis: Redis | None = None
     try:
         redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2.0, socket_timeout=2.0)
-        cache_key = _feature_flag_cache_key(
-            current_user.organisation_id,
-            internal_system_maps_access=internal_system_maps_access,
-        )
+        cache_key = _feature_flag_cache_key(current_user.organisation_id)
         cached = await redis.get(cache_key)
         if cached:
             return cast("dict[str, Any]", json.loads(cached))
@@ -416,7 +384,6 @@ async def list_feature_flags(
 
     try:
         registry = await _build_registry(settings, session, current_user)
-        internal_system_maps_access = _internal_system_maps_access(current_user, settings)
 
         # Apply the org's per-flag overrides to the payload so an org-level
         # enable (admin Feature Flags UI) takes effect app-wide — the whole app
@@ -448,7 +415,7 @@ async def list_feature_flags(
                     "depends_on": f.depends_on,
                 }
                 for f in registry.list_flags()
-                if _flag_visible_to_caller(f.name, internal_system_maps_access=internal_system_maps_access)
+                if _flag_visible_to_caller(f.name)
             ],
             "would_activate": [
                 {
@@ -458,7 +425,7 @@ async def list_feature_flags(
                     "depends_on": f.depends_on,
                 }
                 for f in registry.tier_gap_flags()
-                if _flag_visible_to_caller(f.name, internal_system_maps_access=internal_system_maps_access)
+                if _flag_visible_to_caller(f.name)
                 if f.name not in org_overrides
             ],
         }
@@ -466,10 +433,7 @@ async def list_feature_flags(
         # Write to Redis cache (best-effort, 60s TTL)
         try:
             redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2.0, socket_timeout=2.0)
-            cache_key = _feature_flag_cache_key(
-                current_user.organisation_id,
-                internal_system_maps_access=internal_system_maps_access,
-            )
+            cache_key = _feature_flag_cache_key(current_user.organisation_id)
             await redis.setex(cache_key, 60, json.dumps(response_data, default=str))
         except Exception:
             logger.warning("feature-flags.cache_write_failed", exc_info=True)

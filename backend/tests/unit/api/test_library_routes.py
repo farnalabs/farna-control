@@ -26,7 +26,7 @@ from farna.api.main import app
 from farna.auth.dependencies import get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
 from farna.core.library_service import (
-    CommunityPrimitiveReadOnlyError,
+    BuiltinPrimitiveReadOnlyError,
 )
 from farna.db.crud.base import PageResult
 from farna.settings import Settings, get_settings
@@ -604,13 +604,13 @@ def test_copy_to_adapt_returns_200(client: TestClient) -> None:
     assert resp.status_code == 200, resp.text
 
 
-def test_copy_to_adapt_community_read_only_returns_403(client: TestClient) -> None:
+def test_copy_to_adapt_builtin_read_only_returns_403(client: TestClient) -> None:
     with (
         patch("farna.api.routes.library.get_library_primitive", new_callable=AsyncMock, return_value=None),
         patch(
             "farna.api.routes.library.copy_to_adapt",
             new_callable=AsyncMock,
-            side_effect=CommunityPrimitiveReadOnlyError("read only"),
+            side_effect=BuiltinPrimitiveReadOnlyError("read only"),
         ),
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
         patch("farna.api.routes.library.set_rls_user_context", new_callable=AsyncMock),
