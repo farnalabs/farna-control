@@ -326,7 +326,12 @@ def run_check(workflows_dir: Path, shellcheck: str) -> int:
                     ",".join(SHELLCHECK_DISABLED_RULES),
                     *batch,
                 ]
-                completed = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+                # argv[0] is a PATH-resolved shellcheck executable and every
+                # other element is a fixed literal or a temp path this helper
+                # created itself; subprocess runs without a shell, so an
+                # operator-supplied --shellcheck cannot inject a command. CI
+                # invokes the gate with no arguments at all (S8701 false positive).
+                completed = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)  # NOSONAR pythonsecurity:S8701
                 if completed.returncode not in (0, 1):
                     print(
                         f"::error::shellcheck failed with exit code {completed.returncode} (not a findings exit) - refusing to report a result:\n{completed.stderr}",
@@ -371,7 +376,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    version = subprocess.run([shellcheck, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    # shellcheck is a PATH-resolved executable and subprocess runs without a
+    # shell, so no command injection is reachable (S8701 false positive).
+    version = subprocess.run([shellcheck, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)  # NOSONAR pythonsecurity:S8701
     if version.returncode == 0:
         first_line = (version.stdout or version.stderr).splitlines()[0] if (version.stdout or version.stderr) else "unknown"
         print(f"using {first_line}")

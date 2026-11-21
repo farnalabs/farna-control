@@ -130,7 +130,10 @@ jobs:
           else
             # Ubuntu's system python is PEP 668 externally managed and the
             # runner is ephemeral, so installing into it is the supported path.
-            python3 -m pip install --quiet --disable-pip-version-check --break-system-packages 'PyYAML==6.0.2'
+            # --only-binary :all: refuses any source distribution, so pip never
+            # runs a dependency's setup script; PyYAML 6.0.2 ships manylinux
+            # wheels for every runner architecture this job uses.
+            python3 -m pip install --quiet --disable-pip-version-check --break-system-packages --only-binary :all: 'PyYAML==6.0.2'
             python3 -c 'import yaml; print("PyYAML", yaml.__version__, "installed")'
           fi
 
