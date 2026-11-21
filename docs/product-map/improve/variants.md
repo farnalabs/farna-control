@@ -73,8 +73,8 @@ by the `variant_batch_compare` feature flag.
       comparisons" (plus a capped-list notice at 100) because the endpoint
       returns a bare array with no total; a pipeline-name read failure is
       surfaced rather than silently degrading to ids. A row selects the
-      comparison IN PLACE — the per-node comparison table and output diff viewer
-      render below it — and never navigates to the batch-detail route; the
+      comparison IN PLACE – the per-node comparison table and output diff viewer
+      render below it – and never navigates to the batch-detail route; the
       `pipeline_id` deep link still opens the builder, and the page selects the
       first visible row so it never lands empty-handed
       (`VariantCompareView.vue`, `VariantCompareView.spec.ts`,

@@ -931,7 +931,7 @@
                   </button>
                   <button
                     type="button"
-                    v-if="deletingEvalId !== ev.id"
+                    v-if="canDeleteEval && deletingEvalId !== ev.id"
                     data-testid="eval-editor-delete"
                     :aria-label="$t('common.delete')"
                     class="rounded p-1 text-destructive hover:bg-destructive/10"
@@ -940,7 +940,7 @@
                   >
                     <Trash2 class="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <div v-else class="flex items-center gap-1">
+                  <div v-else-if="canDeleteEval" class="flex items-center gap-1">
                     <button
                       type="button"
                       :disabled="deleting"
@@ -985,6 +985,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { usePlanStore } from '../stores/planStore'
+import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Button from 'primevue/button'
@@ -1021,7 +1022,28 @@ const evalPageTabs = computed(() => [
 ])
 
 const planStore = usePlanStore()
+const { orgRole, jwtPayload } = useCurrentUser()
 const { track } = useProductAnalytics()
+
+// FAR-2620: `DELETE /api/v1/evals/{eval_id}` enforces TWO gates — the route
+// permission `eval.definition.delete` (operator floor, resolved live by the
+// server into `planStore.userPermissions`) AND an in-body
+// `principal.org_role != "admin"` rejection. The editor route only requires
+// create/update (operator), so an operator reaches this page; the delete
+// affordance must mirror the endpoint's real condition, not the editor's, or
+// it offers an action that answers 403.
+//
+// Both halves are load-bearing: a scoped API key can hold the permission
+// without the admin org role, and a system admin can resolve admin-floor
+// permissions while carrying a non-admin org role — the endpoint refuses both,
+// so the client gate must too. Either half missing or unresolved (fail closed)
+// hides the action.
+const EVAL_DEFINITION_DELETE_PERMISSION = 'eval.definition.delete'
+const canDeleteEval = computed(
+  () =>
+    orgRole.value === 'admin' &&
+    planStore.userPermissions.includes(EVAL_DEFINITION_DELETE_PERMISSION),
+)
 
 interface PipelineItem {
   id: string
@@ -2150,6 +2172,12 @@ async function retryPolicyGate() {
 
 onMounted(async () => {
   planStore.fetchPlan()
+  // FAR-2620: resolve the caller's live permission list so the delete
+  // affordance mirrors the endpoint. Deduped by the store and fail closed —
+  // an unresolved list simply keeps the destructive action hidden. Only when
+  // this session has an authenticated principal: with no token the read is a
+  // guaranteed 401 and every gate below already denies.
+  if (jwtPayload.value !== null) void planStore.fetchPermissions()
   // The typed builder's backing axis needs the org's model backends. A failure
   // is non-fatal: the select stays empty and shows an inline message.
   void loadModelBackends()
