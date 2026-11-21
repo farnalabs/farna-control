@@ -13,17 +13,20 @@
  *
  * The arithmetic the ratified shape rests on:
  *
- * - 47 rendered grouped rows (the 49 nav rows of the ticket minus the pinned
+ * - 49 rendered grouped rows (the 49 nav rows of the ticket minus the pinned
  *   Dashboard, then the merged FAR-2597 change folds the separate Eval Editor
- *   and Eval Proposals rows into the single `/evals` list row),
+ *   and Eval Proposals rows into the single `/evals` list row, then FAR-2619
+ *   gives the two previously URL-only system pages — `/admin/system/config`
+ *   and `/admin/system/orgs` — a home in the SYSTEM group),
  * - + 3 detail routes that must keep a `sidebar_group` so the manifest
  *   validators resolve (`/runs/:id`, `/admin/errors/:id`,
  *   `/variants/compare/:batchId`) — they are skipped from rendering by
  *   `type: detail_page`,
- * - = 50 routes carrying a `sidebar_group`,
- * - + 1 pinned route (`/`) = 51 accounted routes,
- * - of which 47 + 1 pinned = 48 are rendered rows: the 51 live rows the nav
- *   had before FAR-2605 minus the 2 removals below, adjusted for FAR-2597.
+ * - = 52 routes carrying a `sidebar_group`,
+ * - + 1 pinned route (`/`) = 53 accounted routes,
+ * - of which 49 + 1 pinned = 50 are rendered rows: the 51 live rows the nav
+ *   had before FAR-2605 minus the 2 removals below, adjusted for FAR-2597,
+ *   then plus the 2 FAR-2619 system pages.
  */
 import { describe, it, expect } from 'vitest'
 import manifest from '../manifest.yaml'
@@ -46,7 +49,7 @@ const routes = (manifest as { routes: Record<string, ManifestRouteEntry> }).rout
 const groups = (manifest as { sidebar_groups: Record<string, ManifestGroupEntry> }).sidebar_groups
 
 /**
- * The rendered rows of each group, in `sidebar_order` order. 47 paths.
+ * The rendered rows of each group, in `sidebar_order` order. 49 paths.
  * Rendered order is asserted because the ticket ratifies "most-used first".
  */
 const EXPECTED_GROUPED_ROWS: Record<string, string[]> = {
@@ -108,6 +111,8 @@ const EXPECTED_GROUPED_ROWS: Record<string, string[]> = {
     '/admin/run-retention',
     '/admin/housekeeping',
     '/settings/monitoring',
+    '/admin/system/config',
+    '/admin/system/orgs',
   ],
 }
 
@@ -122,7 +127,7 @@ const EXPECTED_DETAIL_GROUP_ROUTES: Record<string, string[]> = {
   runs: ['/admin/errors/:id', '/variants/compare/:batchId'],
 }
 
-/** Every route path carrying a `sidebar_group` — 47 rendered + 3 detail. */
+/** Every route path carrying a `sidebar_group` — 49 rendered + 3 detail. */
 const EXPECTED_GROUPED_PATHS = Object.keys(EXPECTED_GROUPED_ROWS).reduce<string[]>(
   (paths, group) => paths.concat(EXPECTED_GROUPED_ROWS[group], EXPECTED_DETAIL_GROUP_ROUTES[group] ?? []),
   [],
@@ -146,7 +151,7 @@ function detailRoutesInGroup(group: string): string[] {
 }
 
 describe('manifest nav membership (FAR-2605)', () => {
-  it('renders exactly the ratified 47 rows, in order, across the 6 groups', () => {
+  it('renders exactly the ratified 49 rows, in order, across the 6 groups', () => {
     for (const [group, expected] of Object.entries(EXPECTED_GROUPED_ROWS)) {
       expect(routesInGroup(group), `rendered rows of sidebar group '${group}'`).toEqual(expected)
     }
@@ -158,17 +163,17 @@ describe('manifest nav membership (FAR-2605)', () => {
     }
   })
 
-  it('carries a sidebar_group on exactly the expected 50 routes', () => {
+  it('carries a sidebar_group on exactly the expected 52 routes', () => {
     const actual = Object.entries(routes)
       .filter(([, route]) => Boolean(route.sidebar_group))
       .map(([path]) => path)
       .sort()
 
     expect(actual).toEqual([...EXPECTED_GROUPED_PATHS].sort())
-    // 47 rendered rows + 3 detail references = 50; a future regroup that drops
+    // 49 rendered rows + 3 detail references = 52; a future regroup that drops
     // a shipped page fails here rather than silently leaving the sidebar.
-    expect(actual).toHaveLength(50)
-    expect(EXPECTED_GROUPED_PATHS).toHaveLength(50)
+    expect(actual).toHaveLength(52)
+    expect(EXPECTED_GROUPED_PATHS).toHaveLength(52)
   })
 
   it('pins exactly the Dashboard, and nothing else', () => {
@@ -213,15 +218,16 @@ describe('manifest nav membership (FAR-2605)', () => {
     expect(unresolved).toEqual([])
   })
 
-  it('accounts for every nav row: 47 grouped + 1 pinned = 48 rows, next to 50 group-carrying routes', () => {
+  it('accounts for every nav row: 49 grouped + 1 pinned = 50 rows, next to 52 group-carrying routes', () => {
     const renderedGroupedRows = Object.values(EXPECTED_GROUPED_ROWS).reduce((sum, rows) => sum + rows.length, 0)
     const detailGroupRoutes = Object.values(EXPECTED_DETAIL_GROUP_ROUTES).reduce((sum, rows) => sum + rows.length, 0)
     const pinnedRows = Object.entries(routes).filter(([, route]) => route.sidebar_pinned === true).length
 
     // The ticket's 51 live rows before FAR-2605, minus the 2 removals, then
-    // FAR-2597 folded the two eval rows into the single `/evals` row.
-    expect(renderedGroupedRows + pinnedRows).toBe(48)
-    // 47 rendered + 3 detail references = the 50 routes carrying a group.
-    expect(renderedGroupedRows + detailGroupRoutes).toBe(50)
+    // FAR-2597 folded the two eval rows into the single `/evals` row, then
+    // FAR-2619 added the two system pages.
+    expect(renderedGroupedRows + pinnedRows).toBe(50)
+    // 49 rendered + 3 detail references = the 52 routes carrying a group.
+    expect(renderedGroupedRows + detailGroupRoutes).toBe(52)
   })
 })
