@@ -163,6 +163,9 @@ function adminToken(): string {
 describe('router permission navigation guard', () => {
   it('allows the compliance evidence index route when its permission exists', async () => {
     setAccessToken(adminToken())
+    // The route is a private_preview surface (FAR-2615): developer mode must be on
+    // so the only thing under test here is the permission check, not the gate.
+    planStore.devMode = true
     planStore.userPermissions = ['compliance.evidence_index.read']
 
     await router.push({ name: 'admin-compliance-evidence-index' })
@@ -199,6 +202,9 @@ describe('router permission navigation guard', () => {
 
   it('redirects the compliance evidence index route when its permission is missing', async () => {
     setAccessToken(adminToken())
+    // Developer mode on so private_preview gating (FAR-2615) cannot be the reason
+    // for the bounce: the refusal must be attributable to the missing permission.
+    planStore.devMode = true
     planStore.userPermissions = []
     await router.push({ name: 'dashboard' })
 
