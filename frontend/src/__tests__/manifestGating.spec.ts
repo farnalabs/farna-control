@@ -104,13 +104,15 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
   })
 
   it('/system-maps published reads are authenticated viewer routes, not anonymous public routes (FAR-2363)', () => {
-    // FAR-2638 splits the visibility: the LIST route is private_preview until
-    // System Maps ships at Beta, while the DETAIL route keeps `public` (a
-    // detail page is never rendered as a sidebar row). The tier/role/
-    // permission floor is unchanged on both.
+    // FAR-2363 made these published reads viewer-readable rather than
+    // anonymous. FAR-2638 then moved System Maps to Beta and hid it from
+    // customers and the read-only demo, so BOTH the list and the detail route
+    // are now `private_preview` (a public detail page for a release-gated
+    // feature would still be reachable by URL). The tier/role/permission floor
+    // is unchanged on both.
     const expectedVisibility: Record<string, string> = {
       '/system-maps': 'private_preview',
-      '/system-maps/:id': 'public',
+      '/system-maps/:id': 'private_preview',
     }
     for (const path of ['/system-maps', '/system-maps/:id']) {
       const route = routes[path]
@@ -186,6 +188,9 @@ describe('release-gated surfaces stay out of the alpha nav (FAR-2638)', () => {
   const routes = loadManifest().routes
   const RELEASE_GATED_ROUTES = [
     { path: '/system-maps', release: 'Beta' },
+    // The detail route is release-gated too: a public detail page would stay
+    // reachable by URL even with the list hidden (FAR-2638).
+    { path: '/system-maps/:id', release: 'Beta' },
     { path: '/determination', release: 'GA' },
   ] as const
 
