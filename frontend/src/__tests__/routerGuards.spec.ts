@@ -38,17 +38,17 @@ it('registers the risk assessment route in the real router', () => {
 
 describe('document title', () => {
   it('prefixes the manifest title with the product name', () => {
-    expect(documentTitleFor({ title: 'Pipelines' })).toBe('Pipelines | Modulo')
+    expect(documentTitleFor({ title: 'Pipelines' })).toBe('Pipelines | Farna Control')
   })
 
   it('uses the manifest breadcrumb when the route carries no title', () => {
-    expect(documentTitleFor({ breadcrumb: 'Runs' })).toBe('Runs | Modulo')
+    expect(documentTitleFor({ breadcrumb: 'Runs' })).toBe('Runs | Farna Control')
   })
 
-  it('falls back to the bare product name rather than "Modulo | Modulo"', () => {
+  it('falls back to the bare product name rather than "Farna Control | Farna Control"', () => {
     // A bare route (e.g. /assistant) has neither meta.title nor a manifest
-    // breadcrumb; the old template produced "Modulo | Modulo".
-    expect(documentTitleFor({})).toBe('Modulo')
+    // breadcrumb; repeating the product name in that case would be redundant.
+    expect(documentTitleFor({})).toBe('Farna Control')
   })
 })
 

@@ -165,12 +165,12 @@ export function focusRouteContent() {
 /**
  * The `document.title` for a navigated route.
  *
- * A route with neither a manifest `title` nor a breadcrumb label used to render
- * "Modulo | Modulo"; it now falls back to the bare product name.
+ * A route with neither a manifest `title` nor a breadcrumb label falls back to
+ * the bare product name rather than repeating it as "<product> | <product>".
  */
 export function documentTitleFor(meta: RouteMeta): string {
   const pageTitle = meta.title ?? meta.breadcrumb
-  return pageTitle ? `${pageTitle} | Modulo` : 'Modulo'
+  return pageTitle ? `${pageTitle} | Farna Control` : 'Farna Control'
 }
 
 const router = createRouter({
