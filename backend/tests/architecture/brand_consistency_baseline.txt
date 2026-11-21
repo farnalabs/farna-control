@@ -35,7 +35,7 @@
 .github/workflows/pr-conflict-reconcile.yml	9
 .github/workflows/pr-review.yml	6
 .github/workflows/publish-images.yml	2
-.github/workflows/rc-validate.yml	5
+.github/workflows/rc-validate.yml	11
 .github/workflows/release-unified.yml	19
 .github/workflows/schemathesis-nightly.yml	7
 .github/workflows/web-watchdog.yml	4
@@ -1228,7 +1228,7 @@ backend/tests/unit/test_model_backend_presets.py	1
 backend/tests/unit/test_multi_backend_config.py	18
 backend/tests/unit/test_pipeline_execution.py	1
 backend/tests/unit/test_pr_conflict_reconcile_workflow.py	9
-backend/tests/unit/test_release_workflow_contract.py	17
+backend/tests/unit/test_release_workflow_contract.py	30
 backend/tests/unit/test_request_timeout.py	2
 backend/tests/unit/test_run_admission.py	8
 backend/tests/unit/test_runner_bindings.py	7
