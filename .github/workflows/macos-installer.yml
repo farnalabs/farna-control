@@ -1456,13 +1456,54 @@ jobs:
           fi
           printf 'pre_smoke: finder_layout_status=%s\n' "$finder_layout_status"
           test -L "$DMG_STAGING/Applications"
-          # shellcheck disable=SC2016
-
-          run_pre_smoke dmg_create bash -c '
-            set -euo pipefail
-            hdiutil create -volname "Farna Control $1" -srcfolder "$2" -ov -format UDZO "$3"
-            mv -f "$3" "$4"
-          ' bash "$VERSION_NUM" "$DMG_STAGING" "$DMG_TEMP" "$DMG"
+          # FAR-2629: `hdiutil create` intermittently failed on the GitHub macOS
+          # runners with
+          #   hdiutil: create failed - Resource busy
+          # while the freshly copied staging tree was still settling, which
+          # blocked a release cut. Retry ONLY that verdict, at most three
+          # attempts with a short pause; every other hdiutil diagnostic (bad
+          # format, no space, an unreadable source folder) still fails on the
+          # first attempt with its captured output. Each attempt logs its
+          # number, exit code and the first lines of the output, so a run log
+          # proves whether the retry executed. Bash 3.2 + `set -u` on macOS, so
+          # no arrays and no bash-4 constructs (FAR-2588).
+          # BEGIN dmg_create_with_resource_busy_retry (extracted verbatim by test_macos_installer_normalize)
+          dmg_create_attempts="${DMG_CREATE_MAX_ATTEMPTS:-3}"
+          dmg_create_retry_delay="${DMG_CREATE_RETRY_DELAY:-5}"
+          dmg_create_attempt=1
+          while :; do
+            dmg_create_exit=0
+            # shellcheck disable=SC2016
+            run_pre_smoke dmg_create bash -c '
+              set -euo pipefail
+              hdiutil create -volname "Farna Control $1" -srcfolder "$2" -ov -format UDZO "$3"
+              mv -f "$3" "$4"
+            ' bash "$VERSION_NUM" "$DMG_STAGING" "$DMG_TEMP" "$DMG" || dmg_create_exit=$?
+            printf 'dmg_create: attempt=%d/%d exit=%d\n' "$dmg_create_attempt" "$dmg_create_attempts" "$dmg_create_exit"
+            if [[ -s "$DATA/pre-smoke-dmg_create.log" ]]; then
+              printf 'dmg_create: attempt=%d/%d first lines of output:\n' "$dmg_create_attempt" "$dmg_create_attempts"
+              redact_pre_smoke_output <"$DATA/pre-smoke-dmg_create.log" | sed -n '1,5p'
+            fi
+            if [[ "$dmg_create_exit" -eq 0 ]]; then
+              break
+            fi
+            dmg_create_resource_busy=0
+            if [[ -s "$DATA/pre-smoke-dmg_create.log" ]] && grep -Fq 'Resource busy' "$DATA/pre-smoke-dmg_create.log"; then
+              dmg_create_resource_busy=1
+            fi
+            if [[ "$dmg_create_resource_busy" -ne 1 ]]; then
+              printf 'dmg_create: attempt=%d/%d failed for a reason other than Resource busy; not retried\n' "$dmg_create_attempt" "$dmg_create_attempts" >&2
+              exit "$dmg_create_exit"
+            fi
+            if [[ "$dmg_create_attempt" -ge "$dmg_create_attempts" ]]; then
+              printf 'dmg_create: Resource busy persisted through %d attempt(s)\n' "$dmg_create_attempts" >&2
+              exit "$dmg_create_exit"
+            fi
+            dmg_create_attempt=$((dmg_create_attempt + 1))
+            printf 'dmg_create: retrying in %ss (Resource busy)\n' "$dmg_create_retry_delay" >&2
+            sleep "$dmg_create_retry_delay"
+          done
+          # END dmg_create_with_resource_busy_retry
           rm -rf "$DMG_STAGING"
 
           # shellcheck disable=SC2016
