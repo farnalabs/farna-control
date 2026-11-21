@@ -3077,3 +3077,180 @@ def test_macos_bundle_build_ends_with_the_launcher_identity_checks() -> None:
         '"${BUNDLE_ROOT}/redis/redis-server" --version',
         '"${APP_ROOT}/Contents/MacOS/modulo" --help >/dev/null',
     ]
+
+
+# ---------------------------------------------------------------------------
+# FAR-2629: `hdiutil create` intermittently failed on the GitHub macOS runners
+# with "hdiutil: create failed - Resource busy" while the freshly copied
+# staging tree was still settling, blocking a release cut. The retry block is
+# extracted verbatim from the workflow and executed against a stubbed hdiutil,
+# so the classification these tests pin is the code the macOS job runs.
+# ---------------------------------------------------------------------------
+
+_HDIUTIL_RESOURCE_BUSY = "hdiutil: create failed - Resource busy"
+
+#: Stand-in `hdiutil`. It fails with a configurable message/status for the
+#: first FAKE_HDIUTIL_FAILURES calls, then creates its output target (the last
+#: argument) so the workflow's `mv -f` has something to move. Call counts live
+#: in a file because the workflow invokes it from a child `bash -c`.
+_FAKE_HDIUTIL = """#!/usr/bin/env bash
+set -u
+target=""
+for candidate in "$@"; do target="$candidate"; done
+calls_file="${FAKE_HDIUTIL_CALLS:?}"
+count=1
+if [[ -f "$calls_file" ]]; then
+  count=$(( $(cat "$calls_file") + 1 ))
+fi
+printf '%s\\n' "$count" >"$calls_file"
+if [[ "$count" -le "${FAKE_HDIUTIL_FAILURES:-0}" ]]; then
+  printf 'hdiutil: create failed - %s\\n' "${FAKE_HDIUTIL_MESSAGE:-Resource busy}" >&2
+  exit "${FAKE_HDIUTIL_STATUS:-1}"
+fi
+printf 'created dmg\\n' >"$target"
+exit 0
+"""
+
+
+def _workflow_bash_function(build_run: str, name: str) -> str:
+    """Slice one workflow-defined bash function (``name() {`` through its ``}``)."""
+    lines = build_run.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.strip() == f"{name}() {{")
+    end = next(index for index in range(start + 1, len(lines)) if lines[index].strip() == "}")
+    return "\n".join(lines[start : end + 1])
+
+
+def _dmg_create_harness(build_run: str) -> str:
+    """Run the extracted retry block with the workflow's own run_pre_smoke."""
+    block = _extract_marked_bash(build_run, "dmg_create_with_resource_busy_retry")
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            # The injected stub directory must be a POSIX path: bash does not
+            # translate a PATH value it sets itself (see _posix_path).
+            'PATH="$1:$PATH"',
+            "export PATH",
+            'work="$2"',
+            'DATA="$(mktemp -d)"',
+            'VERSION_NUM="0.3.999"',
+            'DMG_STAGING="$work/staging"',
+            'DMG_TEMP="$work/dmg-temp.dmg"',
+            'DMG="$work/FarnaControl.dmg"',
+            'mkdir -p "$DMG_STAGING"',
+            "printf 'payload\\n' >\"$DMG_STAGING/placeholder.txt\"",
+            _workflow_bash_function(build_run, "redact_pre_smoke_output"),
+            _workflow_bash_function(build_run, "run_pre_smoke"),
+            block,
+            "printf 'REACHED_AFTER_DMG_CREATE\\n'",
+            "",
+        ]
+    )
+
+
+def _run_dmg_create_harness(harness: str, args: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    """Run an extracted workflow block from stdin under the host bash."""
+    raw = subprocess.run(  # noqa: S603 - fixed interpreter and repository-owned workflow text
+        [_bash_executable(), "--noprofile", "--norc", "-s", "--", *args],
+        input=harness.encode("utf-8"),
+        capture_output=True,
+        timeout=120,
+        check=False,
+        env={**os.environ, **(env or {})},
+    )
+    return subprocess.CompletedProcess(
+        raw.args,
+        raw.returncode,
+        raw.stdout.decode("utf-8", "replace").replace("\r\n", "\n"),
+        raw.stderr.decode("utf-8", "replace").replace("\r\n", "\n"),
+    )
+
+
+def _run_dmg_create(tmp_path: Path, **env_overrides: str) -> tuple[subprocess.CompletedProcess[str], int, Path]:
+    """Execute the workflow's DMG creation block against the stub hdiutil."""
+    _step, build_run = _native_installer_step()
+    stub_dir = tmp_path / "stub-bin"
+    calls_file = tmp_path / "hdiutil-calls"
+    _write_executable(stub_dir / "hdiutil", _FAKE_HDIUTIL)
+    work = tmp_path / "work"
+    work.mkdir()
+    env = {"FAKE_HDIUTIL_CALLS": _posix_path(calls_file), "DMG_CREATE_RETRY_DELAY": "0"}
+    env.update(env_overrides)
+
+    result = _run_dmg_create_harness(
+        _dmg_create_harness(build_run),
+        [_posix_path(stub_dir), work.as_posix()],
+        env=env,
+    )
+    calls = int(calls_file.read_text(encoding="utf-8").strip()) if calls_file.is_file() else 0
+    return result, calls, work / "FarnaControl.dmg"
+
+
+def test_macos_dmg_create_retries_the_resource_busy_failure_then_accepts(tmp_path: Path) -> None:
+    """FAR-2629: one Resource busy attempt is retried and the next success ships."""
+    result, calls, dmg = _run_dmg_create(tmp_path, FAKE_HDIUTIL_FAILURES="1")
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "REACHED_AFTER_DMG_CREATE" in result.stdout
+    assert calls == 2
+    assert "dmg_create: attempt=1/3 exit=1" in result.stdout
+    assert "first lines of output" in result.stdout
+    assert _HDIUTIL_RESOURCE_BUSY in result.stdout
+    assert "dmg_create: retrying in 0s (Resource busy)" in result.stderr
+    assert "dmg_create: attempt=2/3 exit=0" in result.stdout
+    assert dmg.is_file()
+
+
+def test_macos_dmg_create_never_retries_another_hdiutil_failure(tmp_path: Path) -> None:
+    """FAR-2629: only Resource busy is retried; any other verdict fails at once.
+
+    The stub would succeed on a second call, so a regression that retried the
+    wrong diagnostic would pass the job instead of failing it here.
+    """
+    result, calls, dmg = _run_dmg_create(tmp_path, FAKE_HDIUTIL_FAILURES="1", FAKE_HDIUTIL_MESSAGE="No space left on device", FAKE_HDIUTIL_STATUS="42")
+
+    assert result.returncode == 42
+    assert calls == 1
+    assert "failed for a reason other than Resource busy; not retried" in result.stderr
+    assert "retrying in" not in result.stderr
+    assert "REACHED_AFTER_DMG_CREATE" not in result.stdout
+    assert not dmg.exists()
+
+
+def test_macos_dmg_create_stops_at_the_bounded_attempt_cap(tmp_path: Path) -> None:
+    """FAR-2629: a persistent Resource busy fails the step after three attempts."""
+    result, calls, dmg = _run_dmg_create(tmp_path, FAKE_HDIUTIL_FAILURES="99")
+
+    assert result.returncode == 1
+    assert calls == 3
+    assert "dmg_create: Resource busy persisted through 3 attempt(s)" in result.stderr
+    assert "REACHED_AFTER_DMG_CREATE" not in result.stdout
+    assert not dmg.is_file()
+
+
+def test_macos_dmg_create_retry_wraps_the_single_creation_call() -> None:
+    """FAR-2629: the retry surrounds the one DMG creation and stays bash-3.2 safe."""
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "dmg_create_with_resource_busy_retry")
+
+    assert "run_pre_smoke dmg_create bash -c" in block
+    assert build_run.count("# BEGIN dmg_create_with_resource_busy_retry") == 1
+    # Exactly one DMG creation in the whole job, and it is this one.
+    creation_lines = [line.strip() for line in _code_only(build_run).splitlines() if "hdiutil create" in line]
+    assert len(creation_lines) == 1
+    assert creation_lines[0].startswith("hdiutil create -volname")
+    # Production bounds: 3 attempts, a 5s pause between them.
+    assert "DMG_CREATE_MAX_ATTEMPTS:-3" in block
+    assert "DMG_CREATE_RETRY_DELAY:-5" in block
+    assert '-ge "$dmg_create_attempts"' in block
+    # Only the Resource busy verdict is retried.
+    assert re.findall(r"grep -Fq '([^']*)'", block) == ["Resource busy"]
+    # The retry reads the log run_pre_smoke writes for this very call.
+    assert '"$DATA/pre-smoke-dmg_create.log"' in block
+    assert "pre-smoke-${name}.log" in _workflow_bash_function(build_run, "run_pre_smoke")
+    # Bash 3.2 + `set -u` on macOS (FAR-2588): no array expansions, no bash-4
+    # constructs.
+    assert not _unguarded_array_expansions(block)
+    assert not [name for name, pattern in _BASH4_ONLY.items() if pattern.search(_code_only(block))]
+    # The staging tree is still removed, and only after creation finishes.
+    after_retry = build_run[build_run.index("# END dmg_create_with_resource_busy_retry") :]
+    assert 'rm -rf "$DMG_STAGING"' in after_retry
