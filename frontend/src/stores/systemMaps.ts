@@ -72,6 +72,27 @@ function thrownMessage(error: unknown, fallback: string): string {
 }
 
 /**
+ * Whether a manifest route's `visibility` value is release-gated out of the
+ * alpha. `private_preview` and `in_dev` need developer mode; a missing route
+ * entry fails closed (with no manifest route there is no nav row either, so
+ * there is no surface the card could legitimately open), while a present entry
+ * with no `visibility` is public — exactly how the sidebar treats it.
+ *
+ * Exported so its branches can be exercised directly: the production value is
+ * read once from static manifest data, so the alternative arms are otherwise
+ * unreachable at import time.
+ */
+export function isReleaseGatedVisibility(
+  route: { visibility?: string | null } | null | undefined,
+): boolean {
+  return (
+    route == null ||
+    route.visibility === 'private_preview' ||
+    route.visibility === 'in_dev'
+  )
+}
+
+/**
  * System Maps ships at Beta, so its routes carry `visibility: private_preview`
  * until they are promoted. Read once: `visibility` is static manifest data,
  * not runtime state.
@@ -82,19 +103,11 @@ function thrownMessage(error: unknown, fallback: string): string {
  * sidebar's visibility context, so it reads the SAME manifest route entry and
  * applies the SAME rule — no parallel gate on a different signal.
  */
-const systemMapsReleaseGated = (() => {
-  const route = (manifest as {
+const systemMapsReleaseGated = isReleaseGatedVisibility(
+  (manifest as {
     routes?: Record<string, { visibility?: string | null } | null>
-  }).routes?.['/system-maps']
-  // Fail closed on a missing entry: with no manifest route there is no nav row
-  // either, so there is no surface the card could legitimately open. A present
-  // entry with no `visibility` is public, exactly as the sidebar treats it.
-  return (
-    route == null ||
-    route.visibility === 'private_preview' ||
-    route.visibility === 'in_dev'
-  )
-})()
+  }).routes?.['/system-maps'],
+)
 
 // The store is not a component, so it cannot call useI18n(). Use the shared
 // i18n instance directly so error strings stay translatable and consistent.
