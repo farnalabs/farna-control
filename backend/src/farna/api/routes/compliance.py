@@ -128,7 +128,7 @@ async def get_evidence_index_endpoint(
     the release SBOM and the build identity. It does not list every artefact the
     pack maps: a row resting on ``customer_records`` (policies, risk assessments,
     internal-audit reports, incident and restore-test records) is the customer's
-    own evidence, produced outside Modulo, and the index produces no entry for
+    own evidence, produced outside Farna Control, and the index produces no entry for
     that type - so those rows are not returned here in any form. The shipped
     mapping documentation (``docs/security/compliance-control-mapping.md``)
     lists them for the customer instead.

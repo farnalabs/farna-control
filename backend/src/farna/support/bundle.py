@@ -1492,7 +1492,7 @@ def _bundle_ref_tokens(members: Mapping[str, bytes]) -> frozenset[str]:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m modulo.support.bundle",
-        description="Build, inspect, or text-redact a Modulo support bundle.",
+        description="Build, inspect, or text-redact a Farna Control support bundle.",
         epilog=("--redact-stdin reads UTF-8 text on stdin and writes the redacted text on stdout, using the same redaction layers and fail-closed gate as a bundle build. It exits non-zero, writing nothing on stdout, when the gate finds an unclassified high-entropy token."),
     )
     parser.add_argument("--out", type=Path, default=None, metavar="PATH", help="Bundle zip path.")

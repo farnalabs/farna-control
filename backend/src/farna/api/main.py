@@ -864,7 +864,7 @@ def _configure_license_and_otel(settings: Settings) -> None:
         logger.warning("startup.sqlite_mode")
 
     if not settings.redis_url:
-        raise RuntimeError("REDIS_URL is required. Modulo uses Redis for event coordination, rate limiting, caching, and session state. Provision Upstash Redis and set REDIS_URL in fly.toml.")
+        raise RuntimeError("REDIS_URL is required. Farna Control uses Redis for event coordination, rate limiting, caching, and session state. Provision Upstash Redis and set REDIS_URL in fly.toml.")
     setup_otel(
         service_name=settings.modulo_otel_service_name,
         telemetry_enabled=is_telemetry_enabled(),

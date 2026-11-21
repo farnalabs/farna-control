@@ -93,7 +93,7 @@ _KEY_ID_NEXT = "modulo-2026-a-next"
 # Signing never reads a private key from this module.
 _TRUST_ROWS: dict[str, tuple[str, str]] = {
     _KEY_ID_CURRENT: (
-        "Modulo production release signing key (2026-A)",
+        "Farna Control production release signing key (2026-A)",
         "73f7dd1483fff0c0df45d706ae9ce7a68151942b8e2e8bc715b5d9beb719b5b0",
     ),
 }

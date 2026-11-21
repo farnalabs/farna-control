@@ -1152,7 +1152,7 @@ def test_run_response_populates_seam_coverage(client: TestClient) -> None:
             "seam": "runtime_loop",
             "state": "not_applicable",
             "provenance": "derived",
-            "reason": "runtime does not expose a tool-event contract Modulo can verify",
+            "reason": "runtime does not expose a tool-event contract Farna Control can verify",
         },
     ]
     with (
@@ -1176,7 +1176,7 @@ def test_run_response_populates_seam_coverage(client: TestClient) -> None:
     assert coverage[1]["provenance"] == "attested"
     assert coverage[2]["state"] == "not_applicable"
     assert coverage[2]["provenance"] == "derived"
-    assert coverage[2]["reason"] == "runtime does not expose a tool-event contract Modulo can verify"
+    assert coverage[2]["reason"] == "runtime does not expose a tool-event contract Farna Control can verify"
 
 
 def test_run_response_seam_coverage_none_when_absent(client: TestClient) -> None:
@@ -1241,7 +1241,7 @@ def test_run_response_seam_coverage_runtime_loop_cannot_be_enforced(client: Test
     runtime_loop = next(statement for statement in coverage if statement["seam"] == "runtime_loop")
     assert runtime_loop["state"] == "not_applicable"
     assert runtime_loop["provenance"] == "derived"
-    assert runtime_loop["reason"] == "runtime does not expose a tool-event contract Modulo can verify"
+    assert runtime_loop["reason"] == "runtime does not expose a tool-event contract Farna Control can verify"
 
 
 def test_run_response_gate_fired_true_on_idempotency_gate_code(client: TestClient) -> None:
