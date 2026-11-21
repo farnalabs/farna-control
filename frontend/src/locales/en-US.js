@@ -730,6 +730,7 @@ export default {
       "publishing": "Publishing...",
       "dismiss": "Dismiss",
       "dismissing": "Dismissing...",
+      "readonly_notice": "Read-only view. Only operators and admins can publish or dismiss a proposal.",
       "publish_success": "Proposal published. Eval definition created.",
       "dismissed": "Proposal dismissed.",
       "publish_failed": "Publish failed:",

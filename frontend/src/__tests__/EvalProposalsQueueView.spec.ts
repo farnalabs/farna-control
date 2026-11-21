@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 
-const { sampleResponse, mockGet, mockPatch, mockPost, loadingState } = vi.hoisted(() => {
+const { sampleResponse, mockGet, mockPatch, mockPost, loadingState, mockPlanStore } = vi.hoisted(() => {
   const makeItem = (id: string, feedback_status: string, producing_node_id: string) => ({
     id,
     run_id: 'run-1',
@@ -37,6 +37,14 @@ const { sampleResponse, mockGet, mockPatch, mockPost, loadingState } = vi.hoiste
     mockPatch: vi.fn(),
     mockPost: vi.fn(),
     loadingState: { value: false },
+    // FAR-2621: the view derives each action's capability from the caller-scoped
+    // permission list (the same registry the endpoints enforce). Every existing
+    // case below runs as an operator holding all three action permissions; the
+    // permission-shape cases override this list.
+    mockPlanStore: {
+      userPermissions: ['feedback.review', 'gate.create', 'feedback.update'] as string[],
+      fetchPermissions: vi.fn(async () => {}),
+    },
   }
 })
 
@@ -52,6 +60,8 @@ vi.mock('../lib/api/client', () => ({
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
+
+vi.mock('../stores/planStore', () => ({ usePlanStore: () => mockPlanStore }))
 
 // Mirror AdminUsersView.spec.ts: the writable `proposalsResp` computed is driven
 // by useDataFetch's load() so the seeded proposal list is visible to the view.
@@ -102,6 +112,7 @@ describe('EvalProposalsQueueView', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     loadingState.value = false
+    mockPlanStore.userPermissions = ['feedback.review', 'gate.create', 'feedback.update']
     mockGet.mockResolvedValue({ data: sampleResponse, error: undefined })
     mockPatch.mockResolvedValue({ data: {}, error: undefined })
     mockPost.mockResolvedValue({ data: {}, error: undefined })
@@ -432,5 +443,78 @@ describe('EvalProposalsQueueView', () => {
     await nextTick()
 
     expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true)
+  })
+
+  // FAR-2621: the queue reads with `feedback.list` but each action is gated on
+  // exactly what its own endpoint enforces. These cases pin that agreement:
+  //   publish -> feedback.review AND gate.create
+  //   dismiss -> feedback.update
+  describe('action permissions (FAR-2621)', () => {
+    it('shows both actions and no read-only notice to a fully privileged caller', async () => {
+      const wrapper = mountView()
+      await flush()
+
+      expect(wrapper.findAll('[data-testid="proposal-publish"]').length).toBe(3)
+      expect(wrapper.findAll('[data-testid="proposal-dismiss"]').length).toBe(3)
+      expect(wrapper.find('[data-testid="proposal-readonly-notice"]').exists()).toBe(false)
+      // The capability list is resolved from the server, never assumed.
+      expect(mockPlanStore.fetchPermissions).toHaveBeenCalled()
+    })
+
+    it('renders the queue read-only for a viewer holding only the list permission', async () => {
+      mockPlanStore.userPermissions = ['feedback.list']
+
+      const wrapper = mountView()
+      await flush()
+
+      // The read itself still fully renders - a viewer keeps the useful part.
+      expect(wrapper.findAll('[data-testid^="proposal-card-"]').length).toBe(3)
+      expect(wrapper.find('[data-testid="proposal-publish"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="proposal-dismiss"]').exists()).toBe(false)
+      const notice = wrapper.find('[data-testid="proposal-readonly-notice"]')
+      expect(notice.exists()).toBe(true)
+      expect(notice.text()).toBe('views.EvalProposalsQueueView.readonly_notice')
+    })
+
+    it('hides publish without gate.create but keeps dismiss (mirrors each endpoint exactly)', async () => {
+      // feedback.review alone admits the route dependency but the publish
+      // handler ALSO enforces gate.create, so the button must stay hidden.
+      mockPlanStore.userPermissions = ['feedback.list', 'feedback.review', 'feedback.update']
+
+      const wrapper = mountView()
+      await flush()
+
+      expect(wrapper.find('[data-testid="proposal-publish"]').exists()).toBe(false)
+      expect(wrapper.findAll('[data-testid="proposal-dismiss"]').length).toBe(3)
+      expect(wrapper.find('[data-testid="proposal-readonly-notice"]').exists()).toBe(false)
+    })
+
+    it('hides dismiss without feedback.update but keeps publish', async () => {
+      mockPlanStore.userPermissions = ['feedback.list', 'feedback.review', 'gate.create']
+
+      const wrapper = mountView()
+      await flush()
+
+      expect(wrapper.findAll('[data-testid="proposal-publish"]').length).toBe(3)
+      expect(wrapper.find('[data-testid="proposal-dismiss"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="proposal-readonly-notice"]').exists()).toBe(false)
+    })
+
+    it('offers no read-only notice when no proposal is actionable', async () => {
+      mockPlanStore.userPermissions = ['feedback.list']
+      mockGet.mockResolvedValue({
+        data: {
+          ...sampleResponse,
+          items: sampleResponse.items.map((item) => ({ ...item, feedback_status: 'resolved' })),
+        },
+        error: undefined,
+      })
+
+      const wrapper = mountView()
+      await flush()
+
+      expect(wrapper.findAll('[data-testid^="proposal-card-"]').length).toBe(3)
+      expect(wrapper.find('[data-testid="proposal-readonly-notice"]').exists()).toBe(false)
+    })
   })
 })

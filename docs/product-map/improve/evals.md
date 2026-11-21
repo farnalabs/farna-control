@@ -198,6 +198,20 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       offers publish / dismiss actions, but its publish only marks the proposal
       `resolved` – creating the eval definition is the API/BDD path, not yet wired
       from the view
+- [x] The proposal queue's audience is permissions, not a role check (FAR-2621):
+      the `/evals/proposals` route declares `required_permissions:
+      [feedback.list]` — exactly the read `GET /api/v1/feedback/proposals`
+      enforces (viewer floor) — so a read-only caller keeps the useful view of
+      which eval gaps were detected. Each action renders only for a caller
+      holding the permission its own endpoint enforces: publish requires
+      `feedback.review` AND `gate.create` (the route dependency plus the
+      in-handler gate check in `publish_eval_proposal`) and dismiss requires
+      `feedback.update` (`PATCH /api/v1/feedback/{record_id}/status`). The names
+      resolve from the server permission registry (the same one
+      `require_permission` compares against), so the view cannot drift into a
+      parallel hand-maintained role check; a caller who holds neither sees one
+      read-only notice (`proposal-readonly-notice`) instead of buttons the API
+      would 403
 - [x] The `/evals/editor` view authors evals against a pipeline + node with a
       type selector, JSON config editor, and pass threshold, save / edit /
       delete
@@ -211,6 +225,19 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
   triggered/run via the suite machinery, not a standalone cron in the eval API.
 
 ## QA History
+- 2026-11-21: **product-map review pass** – closed the `/evals/proposals`
+      permission gap (FAR-2621): the route declared no `required_permissions`
+      while its publish/dismiss buttons were rendered for every reader, so a
+      caller who could read the queue could press an action the API refuses.
+      Verified each endpoint's real guard in `backend/src/farna/api/routes/
+      feedback.py` rather than inferring from names — list is `feedback.list`
+      (viewer), publish is `feedback.review` + the in-handler `gate.create`
+      check, dismiss is `feedback.update` (via `PATCH /feedback/{id}/status`).
+      The route now declares `[feedback.list]`, the actions are hidden per
+      permission, and a read-only notice replaces them for a caller holding
+      neither; the new static `proposal-readonly-notice` testid is registered in
+      the manifest `elements:` inventory so the reverse testid-coverage guard
+      still holds.
 - 2026-11-21: **FAR-2609 permission-gate fix** – `/evals/editor` was gated on
   `[eval.list, gate.create, gate.edit]`, and the router admits on ANY of those,
   so `eval.list` (viewer) let a viewer open the editor and 403 on save. The
