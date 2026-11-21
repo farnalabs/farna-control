@@ -58,9 +58,16 @@ test.describe('Real-stack journeys: eval definition lifecycle', { tag: '@regress
       await loginAsAdmin(page, env)
       await page.goto('/evals/editor')
 
-      // Select OUR pipeline through the real select.
+      // Select OUR pipeline through the real select. The pipeline change resets
+      // the editor form (and loads the pipeline's nodes/evals). That reset is
+      // applied on the same update as the selection, so wait for the URL to
+      // carry the pipeline_id (written AFTER the reset) before typing —
+      // otherwise the deferred reset can clear the Name field after it is
+      // filled.
       await page.getByTestId('eval-editor-pipeline').click()
       await page.locator(`[data-value="${pipeline.id}"]`).first().click()
+      await expect.poll(async () => page.url(), { timeout: 30_000 })
+        .toContain(`pipeline_id=${pipeline.id}`)
 
       // Create through the real form: name + the lightweight regex type
       // (the default model_judge judge-config placeholder stays untouched).

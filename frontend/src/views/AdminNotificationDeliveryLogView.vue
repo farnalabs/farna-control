@@ -230,7 +230,7 @@
     />
 
     <template v-else>
-      <div class="table-wrapper">
+      <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" role="region" tabindex="0" :aria-label="$t('components.DataTable.scroll_region_label')"> <!-- NOSONAR: a named, focusable scroll region keeps the wide delivery table keyboard-reachable (axe scrollable-region-focusable), including when there are no rows. -->
         <table class="w-full">
           <thead>
             <tr>
