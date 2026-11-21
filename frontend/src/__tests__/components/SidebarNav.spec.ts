@@ -173,7 +173,7 @@ describe('SidebarNav', () => {
     expect(hrefs).toContain('/admin/notification-delivery')
   })
 
-  it('shows the Webhook Notifications item when the community flag is explicitly enabled (FAR-656)', async () => {
+  it('shows the Webhook Deliveries item when the community flag is explicitly enabled (FAR-656)', async () => {
     const { wrapper, store } = mountSidebar({ isSystemAdmin: true, userRole: 'admin' })
     store.currentTier = 'team'
     store.features['webhook_notification_log'] = true
@@ -181,7 +181,7 @@ describe('SidebarNav', () => {
     const links = wrapper.findAll('a[data-testid="router-link-stub"]')
     const webhookLog = links.find((l) => l.attributes('href') === '/admin/notification-delivery')
     expect(webhookLog).toBeDefined()
-    expect(webhookLog!.text()).toContain('Webhook Notifications')
+    expect(webhookLog!.text()).toContain('Webhook Deliveries')
   })
 
   it('hides the flag-gated Webhook Notifications item from viewers even when the flag is enabled (FAR-656)', async () => {
