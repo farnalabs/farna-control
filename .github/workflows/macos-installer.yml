@@ -268,6 +268,10 @@ jobs:
           bash -n scripts/macos/macho-inventory.sh
           grep -q 'nested_binary_discovery bash scripts/macos/macho-inventory.sh discover' .github/workflows/macos-installer.yml
           grep -q 'nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit' .github/workflows/macos-installer.yml
+          # A Gatekeeper rejection must name the offending file (FAR-2593).
+          test -x scripts/macos/signature-diagnostics.sh
+          shellcheck scripts/macos/signature-diagnostics.sh
+          bash -n scripts/macos/signature-diagnostics.sh
           grep -q 'notarytool submit' scripts/macos/notarize-and-verify.sh
           grep -q -- '--output-format json' scripts/macos/notarize-and-verify.sh
           grep -q 'dmg_notary_submit bash scripts/macos/notarize-and-verify.sh' .github/workflows/macos-installer.yml
@@ -939,10 +943,47 @@ jobs:
               "$output_file"
           }
 
+          # FAR-2593: every codesign attempt is time-bounded. Run 44743991976
+          # sat in `codesign --timestamp` on the DMG for 2h16m (the runner
+          # finally killed the orphan codesign at cancel): a stalled timestamp
+          # request never fails, so without a bound it can never reach the
+          # retry above. A watchdog in plain bash (3.2-safe, and it keeps shell
+          # functions visible, which a timeout/perl wrapper would not)
+          # terminates an attempt that outlives CODESIGN_ATTEMPT_TIMEOUT and
+          # reports exit 124 so the caller retries it like a transient failure.
+          # Cross-reference: run_bounded in scripts/macos/signature-diagnostics.sh
+          # is the same watchdog shape; a change to either timeout/terminate
+          # policy belongs in both.
+          codesign_attempt_bounded() {
+            local timeout_secs="$1" output_file="$2"
+            shift 2
+            local pid status started
+            codesign "$@" >"$output_file" 2>&1 &
+            pid=$!
+            started=$SECONDS
+            while kill -0 "$pid" 2>/dev/null; do
+              if [[ $(( SECONDS - started )) -ge "$timeout_secs" ]]; then
+                pkill -TERM -P "$pid" 2>/dev/null || true
+                kill -TERM "$pid" 2>/dev/null || true
+                sleep 2
+                pkill -KILL -P "$pid" 2>/dev/null || true
+                kill -KILL "$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+                printf 'codesign attempt exceeded %ss and was terminated\n' "$timeout_secs" >>"$output_file"
+                return 124
+              fi
+              sleep 0.2
+            done
+            status=0
+            wait "$pid" || status=$?
+            return "$status"
+          }
+
           codesign_with_timestamp_retry() {
             local label="$1"
             shift
             local max_attempts="${CODESIGN_TIMESTAMP_MAX_ATTEMPTS:-5}"
+            local attempt_timeout="${CODESIGN_ATTEMPT_TIMEOUT:-300}"
             local base_delay="${CODESIGN_TIMESTAMP_BASE_DELAY:-10}"
             local max_delay="${CODESIGN_TIMESTAMP_MAX_DELAY:-120}"
             local attempt=1 exit_code=0 wait_time=0 jitter=0
@@ -951,11 +992,13 @@ jobs:
 
             while [[ "$attempt" -le "$max_attempts" ]]; do
               exit_code=0
-              codesign "$@" >"$output_file" 2>&1 || exit_code=$?
+              codesign_attempt_bounded "$attempt_timeout" "$output_file" "$@" || exit_code=$?
 
               class=success
               if [[ "$exit_code" -ne 0 ]]; then
-                if codesign_failure_is_transient_timestamp "$output_file"; then
+                if [[ "$exit_code" -eq 124 ]] && grep -Fq 'codesign attempt exceeded' "$output_file"; then
+                  class=timeout
+                elif codesign_failure_is_transient_timestamp "$output_file"; then
                   class=transient
                 else
                   class=non-transient
@@ -974,7 +1017,7 @@ jobs:
                 rm -f "$output_file"
                 return 0
               fi
-              if [[ "$class" != transient ]]; then
+              if [[ "$class" != transient && "$class" != timeout ]]; then
                 rm -f "$output_file"
                 codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s outcome=failed (non-transient; not retried)' "$label")"
                 return "$exit_code"
@@ -993,7 +1036,7 @@ jobs:
               if [[ "$jitter" -gt 0 ]]; then
                 wait_time=$(( wait_time + RANDOM % (2 * jitter + 1) - jitter ))
               fi
-              codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s attempt=%d/%d retrying in %ds (transient timestamp failure)' "$label" "$attempt" "$max_attempts" "$wait_time")"
+              codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s attempt=%d/%d retrying in %ds (%s: transient timestamp failure or stalled attempt)' "$label" "$attempt" "$max_attempts" "$wait_time" "$class")"
               if [[ "$wait_time" -gt 0 ]]; then
                 sleep "$wait_time"
               fi
@@ -1001,7 +1044,7 @@ jobs:
             done
 
             rm -f "$output_file"
-            codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s outcome=failed (transient timestamp failure persisted through %d attempt(s))' "$label" "$max_attempts")"
+            codesign_retry_log_line "$(printf 'codesign_with_timestamp_retry: label=%s outcome=failed (transient timestamp failure or stalled attempt persisted through %d attempt(s))' "$label" "$max_attempts")"
             return "$exit_code"
           }
           # END codesign_with_timestamp_retry
@@ -1296,6 +1339,7 @@ jobs:
           export -f codesign_with_timestamp_retry
           export -f codesign_failure_is_transient_timestamp
           export -f codesign_retry_log_line
+          export -f codesign_attempt_bounded
           NESTED_BINARIES=()
           while IFS= read -r nested_binary_line; do
             [[ -n "$nested_binary_line" ]] && NESTED_BINARIES+=("$nested_binary_line")
@@ -1350,6 +1394,14 @@ jobs:
           # single nested file that does not, so a gap fails here naming the file.
           run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"
           tail -n 1 "$DATA/pre-smoke-nested_macho_signature_audit.log"
+          # FAR-2593: quick Gatekeeper evidence for the signed bundle before it
+          # is staged (codesign verify + one assessment, each time-bounded), so
+          # a later mounted-app rejection can be compared against the bundle as
+          # signed. The slow whole-bundle scans run only on the failure path.
+          # Diagnostics only - the helper always exits 0.
+          echo '::group::signature diagnostics (signed bundle, pre-DMG)'
+          bash scripts/macos/signature-diagnostics.sh --quick pre_dmg "$APP"
+          echo '::endgroup::'
 
 
           DMG="build/FarnaControl-${VERSION_NUM}-macos-${MACOS_ARCH}.dmg"
@@ -1584,7 +1636,47 @@ jobs:
             echo '::warning::Mounted-app Gatekeeper assessment deferred because the DMG notarization ticket was unavailable from Apple CloudKit; mounted-app codesign remains a hard gate.'
           else
             # shellcheck disable=SC2016
-            run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"
+            # FAR-2593: bounded retry for an Intel-runner Gatekeeper flake, NOT
+            # a relaxation of the gate. On the macos-15 Intel runner the FIRST
+            # syspolicyd assessment of this bundle intermittently returns
+            # "a sealed resource is missing or invalid" (MacOS error -67054)
+            # while the identical, unchanged bundle passes the next assessment
+            # (run 44735390410: attempt 1 -67054, attempts 2 and 3 the normal
+            # verdict; codesign --deep --strict and syspolicy_check find no
+            # defect; arm64 never shows it). Only that exact verdict is re-assessed, at most
+            # three times with a short pause; every verdict is logged, any
+            # other rejection fails at once, and three sealed-resource
+            # verdicts in a row still fail the job hard after printing the
+            # signature diagnostics.
+            # BEGIN mounted_app_spctl_with_retry (extracted verbatim by test_macos_installer_normalize)
+            mounted_app_spctl_attempts=3
+            mounted_app_spctl_attempt=1
+            mounted_app_spctl_passed=0
+            while :; do
+              # shellcheck disable=SC2016
+              if run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"; then
+                mounted_app_spctl_passed=1
+                printf 'mounted_app_spctl: attempt=%d/%d verdict=accepted\n' "$mounted_app_spctl_attempt" "$mounted_app_spctl_attempts"
+                break
+              fi
+              if ! grep -Fq 'a sealed resource is missing or invalid' "$DATA/pre-smoke-mounted_app_spctl.log"; then
+                printf 'mounted_app_spctl: attempt=%d/%d verdict=rejected (not the known sealed-resource flake; not retried)\n' "$mounted_app_spctl_attempt" "$mounted_app_spctl_attempts" >&2
+                break
+              fi
+              printf 'mounted_app_spctl: attempt=%d/%d verdict=sealed-resource rejection\n' "$mounted_app_spctl_attempt" "$mounted_app_spctl_attempts" >&2
+              if [[ "$mounted_app_spctl_attempt" -ge "$mounted_app_spctl_attempts" ]]; then
+                break
+              fi
+              mounted_app_spctl_attempt=$((mounted_app_spctl_attempt + 1))
+              sleep 10
+            done
+            if [[ "$mounted_app_spctl_passed" -ne 1 ]]; then
+              echo '::group::signature diagnostics (mounted app, Gatekeeper rejected)'
+              bash scripts/macos/signature-diagnostics.sh mounted_app "$MOUNTED_APP" "$APP"
+              echo '::endgroup::'
+              exit 1
+            fi
+            # END mounted_app_spctl_with_retry
           fi
           # shellcheck disable=SC2016
           run_pre_smoke mounted_app_help "$MOUNTED_APP/Contents/MacOS/modulo" --help

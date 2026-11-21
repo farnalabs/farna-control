@@ -6,6 +6,7 @@ import http.server
 import io
 import json
 import os
+import plistlib
 import re
 import shlex
 import shutil
@@ -803,10 +804,20 @@ def _codesign_retry_driver(tmp_path: Path) -> Path:
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         + block
         + """
-fake_codesign_calls=0
+# Each bounded attempt runs codesign in a background subshell (FAR-2593), so
+# the call count lives in a file rather than a shell variable.
+fake_codesign_calls_file="$(mktemp)"
+printf '0\\n' >"$fake_codesign_calls_file"
 codesign() {
-  fake_codesign_calls=$((fake_codesign_calls + 1))
-  if [[ "$fake_codesign_calls" -le "${FAKE_CODESIGN_FAILURES:-0}" ]]; then
+  local calls
+  calls=$(( $(cat "$fake_codesign_calls_file") + 1 ))
+  printf '%d\\n' "$calls" >"$fake_codesign_calls_file"
+  if [[ "$calls" -le "${FAKE_CODESIGN_STALLS:-0}" ]]; then
+    # A stalled timestamp request: never returns on its own within the bound.
+    sleep 6
+    return 0
+  fi
+  if [[ "$calls" -le $(( ${FAKE_CODESIGN_STALLS:-0} + ${FAKE_CODESIGN_FAILURES:-0} )) ]]; then
     printf 'build/FarnaControl.app/Contents/MacOS/modulo: %s\\n' "${FAKE_CODESIGN_MESSAGE:-}" >&2
     return "${FAKE_CODESIGN_STATUS:-1}"
   fi
@@ -816,7 +827,7 @@ codesign() {
 
 status=0
 codesign_with_timestamp_retry fixture --force --timestamp --sign "Developer ID Application: Fixture (AAAAAAAAAA)" build/FarnaControl.app || status=$?
-printf 'fake_codesign_calls=%d\\n' "$fake_codesign_calls"
+printf 'fake_codesign_calls=%d\\n' "$(cat "$fake_codesign_calls_file")"
 exit "$status"
 """,
         encoding="utf-8",
@@ -971,6 +982,51 @@ def test_macos_codesign_retry_stops_at_the_bounded_attempt_cap(tmp_path: Path) -
     assert result.returncode == 1
     assert "fake_codesign_calls=3" in result.stdout
     assert "persisted through 3 attempt(s)" in result.stderr
+
+
+def test_macos_codesign_retry_terminates_a_stalled_attempt_and_retries_it(tmp_path: Path) -> None:
+    """FAR-2593: run 44743991976 sat in `codesign --timestamp` on the DMG for
+    2h16m. A stalled attempt is now terminated at its bound and retried."""
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(CODESIGN_ATTEMPT_TIMEOUT="1", FAKE_CODESIGN_STALLS="1"),
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "fake_codesign_calls=2" in result.stdout
+    assert "attempt=1/3 exit=124 class=timeout" in result.stderr
+    assert "codesign attempt exceeded 1s and was terminated" in result.stderr
+    assert "class=success" in result.stderr
+
+
+def test_macos_codesign_retry_bounds_a_codesign_that_always_stalls(tmp_path: Path) -> None:
+    driver = _codesign_retry_driver(tmp_path)
+    result = _run_bash_file(
+        driver,
+        [],
+        cwd=tmp_path,
+        env=_codesign_retry_env(CODESIGN_TIMESTAMP_MAX_ATTEMPTS="2", CODESIGN_ATTEMPT_TIMEOUT="1", FAKE_CODESIGN_STALLS="99"),
+    )
+
+    assert result.returncode == 124
+    assert "fake_codesign_calls=2" in result.stdout
+    assert "persisted through 2 attempt(s)" in result.stderr
+
+
+def test_macos_codesign_attempts_carry_a_production_time_bound() -> None:
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "codesign_with_timestamp_retry")
+
+    assert "CODESIGN_ATTEMPT_TIMEOUT:-300" in block
+    assert 'codesign_attempt_bounded "$attempt_timeout" "$output_file" "$@"' in block
+    # Inside the helper, codesign itself is only ever invoked by the bounded runner.
+    bare_calls = [line.strip() for line in block.splitlines() if re.match(r"\s*codesign\s", line)]
+    assert bare_calls == ['codesign "$@" >"$output_file" 2>&1 &']
+    # The nested-binary signer runs in a `bash -c` child, so it must be exported.
+    assert "export -f codesign_attempt_bounded" in build_run
 
 
 # ---------------------------------------------------------------------------
@@ -2542,6 +2598,50 @@ def test_macos_bash_scanner_flags_the_run_44680480922_expansion() -> None:
     assert _BASH4_ONLY["mapfile/readarray"].search("mapfile -t LINES < file")
 
 
+def test_macos_gatekeeper_rejection_prints_signature_diagnostics_before_failing() -> None:
+    """FAR-2593: a mounted-app spctl rejection names the offending file instead
+    of only "a sealed resource is missing or invalid"."""
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "mounted_app_spctl_with_retry")
+
+    assert 'run_pre_smoke mounted_app_spctl spctl --assess --type execute "$MOUNTED_APP"' in block
+    assert 'bash scripts/macos/signature-diagnostics.sh mounted_app "$MOUNTED_APP" "$APP"' in block
+    assert re.search(r"signature-diagnostics\.sh mounted_app[^\n]*\n[^\n]*endgroup[^\n]*\n\s+exit 1\n", block)
+    # The retry block is the only Gatekeeper assessment of the mounted app.
+    assert build_run.count("run_pre_smoke mounted_app_spctl spctl --assess --type execute") == 1
+
+
+def _spctl_retry_harness(block: str) -> str:
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            'DATA="$(mktemp -d)"',
+            "MOUNTED_APP=/mnt/app",
+            "APP=build/app",
+            'VERDICTS="$1"',
+            # Stub the pause and the diagnostics helper so the harness only
+            # observes what the retry block asks for.
+            "sleep() { printf 'SLEPT %s\\n' \"$1\"; }",
+            "bash() { printf 'DIAGNOSTICS %s\\n' \"$*\"; }",
+            "run_pre_smoke() {",
+            '  local name="$1" verdict',
+            '  verdict="${VERDICTS%%,*}"',
+            '  if [[ "$VERDICTS" == *,* ]]; then VERDICTS="${VERDICTS#*,}"; else VERDICTS=""; fi',
+            "  printf 'CALL %s\\n' \"$name\"",
+            '  case "$verdict" in',
+            "    ok) printf 'accepted\\n' >\"$DATA/pre-smoke-$name.log\"; return 0 ;;",
+            '    sealed) printf \'%s: a sealed resource is missing or invalid\\n\' "$MOUNTED_APP" >"$DATA/pre-smoke-$name.log"; return 1 ;;',
+            '    unnotarized) printf \'%s: rejected\\nsource=Unnotarized Developer ID\\n\' "$MOUNTED_APP" >"$DATA/pre-smoke-$name.log"; return 3 ;;',
+            "    *) printf 'harness: no verdict left\\n' >&2; return 99 ;;",
+            "  esac",
+            "}",
+            block,
+            "printf 'REACHED_AFTER_GATE\\n'",
+            "",
+        ]
+    )
+
+
 # --- FAR-2589: the macOS app reports its build version ------------------------
 
 
@@ -2645,6 +2745,247 @@ def _macho_harness(run_assertion_block: str, macho_block: str) -> str:
             "",
         ]
     )
+
+
+def _run_spctl_retry(flavour: str, verdicts: str) -> subprocess.CompletedProcess[str]:
+    _step, build_run = _native_installer_step()
+    block = _extract_marked_bash(build_run, "mounted_app_spctl_with_retry")
+    return _run_bash_stdin(flavour, _spctl_retry_harness(block), [verdicts])
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_retries_the_sealed_resource_flake_then_passes(flavour: str) -> None:
+    """FAR-2593: the Intel first-assessment flake (run 44735390410) is re-assessed and the gate passes."""
+    result = _run_spctl_retry(flavour, "sealed,ok")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 2
+    assert "mounted_app_spctl: attempt=2/3 verdict=accepted" in result.stdout
+    assert "attempt=1/3 verdict=sealed-resource rejection" in result.stderr
+    assert "SLEPT 10" in result.stdout
+    assert "DIAGNOSTICS" not in result.stdout
+    assert "REACHED_AFTER_GATE" in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_accepts_on_the_first_attempt_without_pausing(flavour: str) -> None:
+    result = _run_spctl_retry(flavour, "ok")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 1
+    assert "mounted_app_spctl: attempt=1/3 verdict=accepted" in result.stdout
+    assert "SLEPT" not in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_still_fails_hard_when_every_attempt_is_rejected(flavour: str) -> None:
+    """The retry is bounded: three sealed-resource verdicts fail the job, and a fourth is never requested."""
+    result = _run_spctl_retry(flavour, "sealed,sealed,sealed,ok")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 3
+    assert result.stdout.count("SLEPT 10") == 2
+    assert "DIAGNOSTICS scripts/macos/signature-diagnostics.sh mounted_app /mnt/app build/app" in result.stdout
+    assert "REACHED_AFTER_GATE" not in result.stdout
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_mounted_app_spctl_never_retries_any_other_rejection(flavour: str) -> None:
+    """Only the known sealed-resource verdict is re-assessed; an unnotarized verdict fails at once."""
+    result = _run_spctl_retry(flavour, "unnotarized,ok")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.count("CALL mounted_app_spctl") == 1
+    assert "not the known sealed-resource flake; not retried" in result.stderr
+    assert "SLEPT" not in result.stdout
+    assert "DIAGNOSTICS" in result.stdout
+    assert "REACHED_AFTER_GATE" not in result.stdout
+
+
+def test_macos_signed_bundle_is_diagnosed_before_it_is_staged() -> None:
+    _step, build_run = _native_installer_step()
+
+    order = [
+        'run_pre_smoke nested_macho_signature_audit bash scripts/macos/macho-inventory.sh audit "$APP"',
+        'bash scripts/macos/signature-diagnostics.sh --quick pre_dmg "$APP"',
+        "run_pre_smoke dmg_create bash -c",
+    ]
+    positions = [build_run.index(command) for command in order]
+    assert positions == sorted(positions)
+
+
+def test_macos_mounted_app_codesign_agrees_with_gatekeeper_strictness() -> None:
+    _step, build_run = _native_installer_step()
+
+    assert 'run_pre_smoke mounted_app_codesign codesign --verify --deep --strict "$MOUNTED_APP"' in build_run
+    assert 'run_pre_smoke app_codesign_verify codesign --verify --deep --strict --verbose=2 "$APP"' in build_run
+
+
+def test_macos_signature_diagnostics_helper_never_fails_its_caller() -> None:
+    helper = (REPO_ROOT / "scripts" / "macos" / "signature-diagnostics.sh").read_text(encoding="utf-8")
+    code = _code_only(helper)
+
+    assert "set -e" not in code.replace("set -uo pipefail", "")
+    assert code.rstrip().endswith("exit 0")
+    assert "codesign --verify --deep --strict --verbose=4" in code
+    assert "spctl -a -vvv -t exec" in code
+    assert "SecStaticCodeCheckValidityWithErrors" in code
+
+
+def _signature_diagnostics_helper() -> str:
+    return (REPO_ROOT / "scripts" / "macos" / "signature-diagnostics.sh").read_text(encoding="utf-8")
+
+
+_DIAGNOSTIC_TOOLS = ("codesign", "spctl", "syspolicy_check", "xcrun", "log", "python3", "xattr", "diff", "find", "lipo")
+
+
+def test_macos_signature_diagnostics_bound_every_external_tool_call() -> None:
+    """FAR-2593: a stalled tool must never hang the job, so no diagnostic tool
+    is invoked except through the time-bounded runner."""
+    code = _code_only(_signature_diagnostics_helper())
+    tool = "|".join(_DIAGNOSTIC_TOOLS)
+    unbounded = [line.strip() for line in code.splitlines() if re.match(rf"\s*(?:if\s+!?\s*)?(?:{tool})\s", line)]
+    assert not unbounded, unbounded
+    assert re.search(r"run_bounded \d+ codesign --verify --deep --strict --verbose=4", code)
+    assert re.search(r"run_bounded \d+ spctl -a -vvv -t exec", code)
+    assert re.search(r'run_bounded \d+ python3 -I "\$work_dir/scan.py"', code)
+    # The per-file lipo loop took 20 minutes in run 44743991976; fat Mach-O
+    # detection is now part of the single-pass scan.
+    assert "lipo" not in code
+
+
+def test_macos_signature_diagnostics_quick_mode_skips_the_whole_bundle_scans() -> None:
+    code = _signature_diagnostics_helper()
+    quick_branch = code.index('if [[ "$mode" == quick ]]; then')
+    quick_exit = code.index("exit 0", quick_branch)
+
+    for heavy in ("for attempt in 1 2 3", "syspolicy_check distribution", "xcrun swiftc", "log show", 'scan.py"', "xattr -r", "diff -rq"):
+        assert code.index(heavy) > quick_exit, heavy
+
+
+def _embedded_bundle_scan() -> str:
+    """Return the Python scanner embedded in signature-diagnostics.sh."""
+    helper = _signature_diagnostics_helper()
+    opener = "cat >\"$work_dir/scan.py\" <<'PY'\n"
+    start = helper.index(opener) + len(opener)
+    end = helper.index("\nPY\n", start)
+    return helper[start:end] + "\n"
+
+
+def _run_embedded_bundle_scan(app: Path) -> subprocess.CompletedProcess[str]:
+    scan = app.parent / "scan.py"
+    scan.write_text(_embedded_bundle_scan(), encoding="utf-8")
+    return subprocess.run(  # noqa: S603 - repository-owned scanner and a temp bundle
+        [sys.executable, "-I", scan.as_posix(), app.as_posix()],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+def _sealed_bundle(tmp_path: Path, *, sealed_bytes: bytes, stored_bytes: bytes) -> Path:
+    app = tmp_path / "Farna Control.app"
+    contents = app / "Contents"
+    (contents / "_CodeSignature").mkdir(parents=True)
+    (contents / "Info.plist").write_bytes(sealed_bytes)
+    (contents / "_CodeSignature" / "CodeResources").write_bytes(plistlib.dumps({"files2": {"Info.plist": stored_bytes}}))
+    return app
+
+
+@pytest.mark.parametrize("shape", ["raw-bytes", "dict-hash2"])
+def test_macos_bundle_scan_flags_a_tampered_sealed_file(tmp_path: Path, shape: str) -> None:
+    """FAR-2593 review: Apple stores an ordinary sealed file as a raw <data>
+    digest directly under files2[path] (plistlib returns bytes), not only the
+    dict hash2 form. Both shapes must be hashed and compared, naming a file
+    whose contents no longer match its seal."""
+    info = b"sealed contents\n"
+    expected = hashlib.sha256(info).digest()
+    stored = expected if shape == "raw-bytes" else {"hash2": expected}
+    app = _sealed_bundle(tmp_path, sealed_bytes=info + b"tampered\n", stored_bytes=stored)
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert "seal_hash_mismatch Info.plist" in result.stdout, result.stdout
+    assert "seal_entries=1 seal_problems=1" in result.stdout
+
+
+def test_macos_bundle_scan_accepts_a_matching_raw_digest_sealed_file(tmp_path: Path) -> None:
+    info = b"sealed contents\n"
+    app = _sealed_bundle(tmp_path, sealed_bytes=info, stored_bytes=hashlib.sha256(info).digest())
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert "seal_hash_mismatch" not in result.stdout, result.stdout
+    assert "seal_entries=1 seal_problems=0" in result.stdout
+
+
+@pytest.mark.parametrize("tampered", [False, True])
+def test_macos_bundle_scan_checks_a_legacy_sha1_raw_digest_with_sha1(tmp_path: Path, tampered: bool) -> None:
+    """A raw <data> digest is the legacy 20-byte SHA-1 form; hashing it as
+    SHA-256 would report every such file as tampered."""
+    info = b"sealed contents\n"
+    on_disk = info + b"tampered\n" if tampered else info
+    app = _sealed_bundle(tmp_path, sealed_bytes=on_disk, stored_bytes=hashlib.sha1(info).digest())  # noqa: S324 - mirrors Apple's legacy seal digest
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert ("seal_hash_mismatch Info.plist" in result.stdout) is tampered, result.stdout
+    assert f"seal_entries=1 seal_problems={int(tampered)}" in result.stdout
+
+
+def test_macos_bundle_scan_reports_a_digest_it_cannot_check(tmp_path: Path) -> None:
+    app = _sealed_bundle(tmp_path, sealed_bytes=b"sealed contents\n", stored_bytes=b"\x00" * 7)
+
+    result = _run_embedded_bundle_scan(app)
+
+    assert result.returncode == 0, result.stderr
+    assert "seal_unrecognised_digest Info.plist" in result.stdout, result.stdout
+    assert "seal_entries=1 seal_problems=1" in result.stdout
+
+
+def _run_bounded_harness(helper: str) -> str:
+    start = helper.index("run_bounded() {")
+    function = helper[start : helper.index("\n}\n", start) + 3]
+    return "\n".join(
+        [
+            "set -uo pipefail",
+            function,
+            "started=$SECONDS",
+            'run_bounded "$1" sleep 8',
+            'printf "rc=%d elapsed=%d\\n" "$?" "$(( SECONDS - started ))"',
+            'run_bounded 5 sh -c "exit 7"',
+            'printf "fast_rc=%d\\n" "$?"',
+            "",
+        ]
+    )
+
+
+@pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
+def test_macos_signature_diagnostics_runner_terminates_a_stalled_tool(flavour: str) -> None:
+    result = _run_bash_stdin(flavour, _run_bounded_harness(_signature_diagnostics_helper()), ["1"])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(r"rc=(\d+) elapsed=(\d+)", result.stdout)
+    assert match, result.stdout
+    assert match.group(1) == "124"
+    assert int(match.group(2)) < 6
+    assert "sleep exceeded 1s and was terminated" in result.stdout
+    # A tool that finishes inside its bound keeps its own exit status.
+    assert "fast_rc=7" in result.stdout
+
+
+def test_macos_contract_gates_the_signature_diagnostics_helper() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "macos-installer.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build"]["steps"]
+    contract = next(step["run"] for step in steps if step.get("name") == "Validate workflow contract")
+
+    assert "test -x scripts/macos/signature-diagnostics.sh" in contract
+    assert "shellcheck scripts/macos/signature-diagnostics.sh" in contract
+    assert "bash -n scripts/macos/signature-diagnostics.sh" in contract
 
 
 @pytest.mark.parametrize("flavour", _BASH_FLAVOURS)
