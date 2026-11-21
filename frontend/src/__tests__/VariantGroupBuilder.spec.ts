@@ -35,6 +35,7 @@ type BuilderVm = {
   showFireDialog: boolean
   fireError: string | null
   selectedPipelineId: string
+  degradedEvals: boolean
   fireBatch: () => Promise<void>
 }
 
@@ -332,6 +333,61 @@ describe('VariantGroupBuilder', () => {
     await nextTick()
     return wrapper
   }
+
+  /**
+   * FAR-2611: the group-level degraded_evals control must round-trip the
+   * operator's choice into CreateVariantGroupRequest.degraded_evals. Default
+   * OFF — the flag must never be silently enabled or silently dropped.
+   */
+  function mockSuccessfulFire() {
+    vi.mocked(api.POST as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return Promise.resolve({ data: { id: 'g1' }, error: undefined })
+      }
+      if (url === '/api/v1/variant-groups/{group_id}/batch-run') {
+        return Promise.resolve({ data: { runs: [], count: 2 }, error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+  }
+
+  function createGroupCall(): { body: { degraded_evals?: boolean } } {
+    const calls = (api.POST as unknown as ReturnType<typeof vi.fn>).mock.calls as Array<[string, { body: { degraded_evals?: boolean } }]>
+    const createCall = calls.find(c => c[0] === '/api/v1/variant-groups')
+    expect(createCall).toBeDefined()
+    return createCall![1]
+  }
+
+  it('sends degraded_evals false unless the operator enables it', async () => {
+    const wrapper = await mountTwoValidVariants()
+    mockSuccessfulFire()
+
+    await (wrapper.vm as unknown as BuilderVm).fireBatch()
+
+    expect((wrapper.vm as unknown as BuilderVm).degradedEvals).toBe(false)
+    expect(createGroupCall().body.degraded_evals).toBe(false)
+  })
+
+  it('sends degraded_evals true when the operator enables the control', async () => {
+    const wrapper = await mountTwoValidVariants()
+    mockSuccessfulFire()
+    await wrapper.find('[data-testid="variant-builder-degraded-evals"]').setValue(true)
+    expect((wrapper.vm as unknown as BuilderVm).degradedEvals).toBe(true)
+
+    await (wrapper.vm as unknown as BuilderVm).fireBatch()
+
+    expect(createGroupCall().body.degraded_evals).toBe(true)
+  })
+
+  it('describes the degraded evals flag truthfully and links the help text', async () => {
+    const wrapper = await mountBuilder()
+    const checkbox = wrapper.find('#variant-builder-degraded-evals')
+    expect(checkbox.attributes('aria-describedby')).toBe('variant-builder-degraded-evals-help')
+    const help = wrapper.find('#variant-builder-degraded-evals-help').text()
+    expect(help).toContain('_degraded_evals: true')
+    // The flag is not an eval-skipping switch: the copy must say so.
+    expect(help).toContain('Modulo still runs every eval')
+  })
 
   it('surfaces a create-group error from the API', async () => {
     const wrapper = await mountTwoValidVariants()

@@ -765,6 +765,10 @@ describe('VariantCompareView', () => {
     expect(wrapper.find('[title="views.variantCompare.declaredEvalsTooltip"]').exists()).toBe(true)
     expect(rows[0].variants_count).toBe(2)
     expect(rows[0].pipeline).toBe('Alpha pipeline')
+    // FAR-2611: the badge is driven by the group's degraded_evals field coming
+    // back from the API, and its tooltip states what the flag actually does.
+    expect(rows[0].degraded).toBe(true)
+    expect(wrapper.find('[title="views.variantCompare.degradedTooltip"]').exists()).toBe(true)
     expect(rows[1].degraded).toBe(false)
   })
 
