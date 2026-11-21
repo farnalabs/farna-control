@@ -53,13 +53,15 @@ section() {
 # is the same watchdog shape for the codesign retry. Either is fine for one
 # call site, but a change to the timeout/terminate policy belongs in both.
 run_bounded() {
-  local timeout_secs="$1" pid status started
+  local timeout_secs="$1" pid status ticks=0 max_ticks
   shift
+  # Count 0.2s ticks so the bound elapses in full: integer SECONDS can fire up to
+  # a second early (see codesign_attempt_bounded for the same reasoning).
+  max_ticks=$(( timeout_secs * 5 ))
   "$@" &
   pid=$!
-  started=$SECONDS
   while kill -0 "$pid" 2>/dev/null; do
-    if [[ $(( SECONDS - started )) -ge "$timeout_secs" ]]; then
+    if [[ "$ticks" -ge "$max_ticks" ]]; then
       pkill -TERM -P "$pid" 2>/dev/null || true
       kill -TERM "$pid" 2>/dev/null || true
       sleep 1
@@ -70,6 +72,7 @@ run_bounded() {
       return 124
     fi
     sleep 0.2
+    ticks=$(( ticks + 1 ))
   done
   status=0
   wait "$pid" || status=$?
