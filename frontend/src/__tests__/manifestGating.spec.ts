@@ -16,10 +16,18 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import yaml from 'js-yaml'
 import { hydrateManifestMeta } from '../router'
+import {
+  getNavGroups,
+  isNavItemVisible,
+  type NavItem,
+  type NavVisibilityContext,
+} from '../config/navigation'
 
 const MANIFEST_PATH = resolve(__dirname, '../manifest.yaml')
 
 interface ManifestRoute {
+  name?: string | null
+  visibility?: string | null
   required_tier?: string | null
   required_roles?: string[] | null
   required_permissions?: string[] | null
@@ -149,4 +157,82 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
     expect(route.meta.requiresSystemAdmin).toBeTruthy()
     expect(route.meta.requiredRoles).toBeFalsy()
   })
+})
+
+describe('Beta surfaces stay out of the alpha nav (FAR-2615)', () => {
+  // Risk Assessment and Compliance Evidence Index were ratified as BETA
+  // surfaces, so neither may appear in an alpha instance's nav. Both are
+  // gated the same way the other preview routes are: `visibility:
+  // private_preview`, which the sidebar (isNavItemVisible) and the router
+  // (enforceRoleTierVisibility) both read — hidden for every customer and the
+  // read-only demo, reachable only with developer mode on. They are promoted
+  // to `public` when Beta enables them.
+  //
+  // This spec drives the REAL derivation: the routes come from the manifest
+  // parsed off disk by js-yaml, and the visibility decision comes from the
+  // shipping navigation code — not a source-text scrape and not a mock.
+  const routes = loadManifest().routes
+  const BETA_PREVIEW_ROUTES = ['/risk-assessment', '/admin/compliance/evidence-index'] as const
+
+  function navItemFor(path: string): NavItem | undefined {
+    for (const group of getNavGroups()) {
+      const item = group.items.find((candidate) => candidate.to === path)
+      if (item) return item
+    }
+    return undefined
+  }
+
+  function visibilityContext(overrides: Partial<NavVisibilityContext> = {}): NavVisibilityContext {
+    return {
+      isSystemAdmin: true,
+      userRole: 'admin',
+      // The most permissive context that still exercises the devMode gate:
+      // every role/tier/permission requirement these routes could carry is
+      // satisfied, so only `visibility` can hide them.
+      userPermissions: ['compliance.evidence_index.read'],
+      devMode: false,
+      tierInfoLoaded: true,
+      isAtMinimumTier: () => true,
+      isDemoSession: false,
+      isFeatureEnabled: () => true,
+      ...overrides,
+    }
+  }
+
+  for (const path of BETA_PREVIEW_ROUTES) {
+    it(`${path} is declared private_preview in the manifest`, () => {
+      const route = routes[path]
+      expect(route, `${path} must exist in the manifest`).toBeDefined()
+      expect(
+        route.visibility,
+        `${path} must be private_preview so it stays out of the alpha nav (FAR-2615)`,
+      ).toBe('private_preview')
+    })
+
+    it(`${path} is hidden from the sidebar while developer mode is off`, () => {
+      const item = navItemFor(path)
+      // Vacuity guard: a route that is not a sidebar item at all would pass
+      // the hidden assertion for the wrong reason.
+      if (!item) throw new Error(`${path} must be a sidebar item (with dev mode on)`)
+      expect(
+        isNavItemVisible(item, visibilityContext()),
+        `${path} must be hidden from the sidebar when developer mode is off (FAR-2615)`,
+      ).toBe(false)
+      expect(
+        isNavItemVisible(item, visibilityContext({ devMode: true })),
+        `${path} must be reachable with developer mode on (FAR-2615)`,
+      ).toBe(true)
+    })
+
+    it(`${path} hydrates the router's visibility gate as private_preview`, () => {
+      const routeName = routes[path].name
+      expect(typeof routeName, `${path} must carry a route name`).toBe('string')
+      const route = { name: routeName, meta: {} as Record<string, unknown> }
+      hydrateManifestMeta(route as never)
+      expect(
+        route.meta.visibility,
+        `${path} must bounce to the dashboard while developer mode is off (FAR-2615)`,
+      ).toBe('private_preview')
+    })
+  }
 })
