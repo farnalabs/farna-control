@@ -78,6 +78,16 @@ def _encrypt(secret: str) -> bytes:
     return Fernet(_KEY.encode()).encrypt(secret.encode())
 
 
+async def _no_sleep(_delay: float) -> None:
+    """Stand in for the retry backoff where the delay VALUE is not under test.
+
+    The live schedule (``RETRY_DELAYS``) is 36 s of real wall clock per failing
+    dispatch, which starved the per-test timeout under full-suite load
+    (FAR-2662). Tests that assert the schedule itself capture the delays
+    instead of using this.
+    """
+
+
 def _fake_endpoint(
     *,
     events: list[str] | None = None,
@@ -370,11 +380,23 @@ async def test_dispatch_successful_delivery(notifier: Notifier) -> None:
 
 
 async def test_dispatch_retries_then_dead_letters(notifier: Notifier) -> None:
+    """A 500 on every attempt walks the WHOLE backoff schedule, then dead-letters.
+
+    The retry sleeps are captured rather than waited: the real schedule is 36 s
+    of wall clock, which starved the per-test timeout under full-suite load
+    (FAR-2662). The captured delays must equal the live schedule pinned below,
+    so dropping a retry or retuning the backoff still fails this test.
+    """
     ep = _fake_endpoint()
+    sleeps: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
 
     with (
         patch.object(notifier, "_record_delivery", AsyncMock()),
         patch.object(notifier, "_increment_dead_letter", AsyncMock()) as mock_dead,
+        patch("farna.core.notifier.asyncio.sleep", _fake_sleep),
     ):
         async with respx.mock:
             respx.post(ep.url).mock(Response(500, text="Server Error"))
@@ -382,15 +404,26 @@ async def test_dispatch_retries_then_dead_letters(notifier: Notifier) -> None:
 
     assert result.status == "dead_lettered"
     assert result.attempt_count == MAX_ATTEMPTS
+    assert result.response_code == 500
+    assert len(sleeps) == MAX_ATTEMPTS - 1
+    # The live schedule, pinned literally: a change to the retry policy must
+    # fail this test, so the expectation is not derived from RETRY_DELAYS.
+    assert sleeps == [1.0, 5.0, 30.0]
     mock_dead.assert_called_once()
 
 
 async def test_dispatch_network_failure_then_dead_letters(notifier: Notifier) -> None:
+    """A connection error on every attempt retries the full schedule, then dead-letters."""
     ep = _fake_endpoint()
+    sleeps: list[float] = []
+
+    async def _fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
 
     with (
         patch.object(notifier, "_record_delivery", AsyncMock()),
         patch.object(notifier, "_increment_dead_letter", AsyncMock()),
+        patch("farna.core.notifier.asyncio.sleep", _fake_sleep),
     ):
         async with respx.mock:
             respx.post(ep.url).mock(side_effect=httpx.ConnectError("Connection refused"))
@@ -398,6 +431,10 @@ async def test_dispatch_network_failure_then_dead_letters(notifier: Notifier) ->
 
     assert result.status == "dead_lettered"
     assert result.response_code is None
+    assert result.attempt_count == MAX_ATTEMPTS
+    assert len(sleeps) == MAX_ATTEMPTS - 1
+    # Pinned literally, as above: a retry-policy change must fail this test.
+    assert sleeps == [1.0, 5.0, 30.0]
 
 
 async def test_dispatch_masks_secrets_in_response_body(notifier: Notifier, caplog: pytest.LogCaptureFixture) -> None:
@@ -409,6 +446,7 @@ async def test_dispatch_masks_secrets_in_response_body(notifier: Notifier, caplo
     with (
         patch.object(notifier, "_record_delivery", AsyncMock()) as mock_record,
         patch.object(notifier, "_increment_dead_letter", AsyncMock()),
+        patch("farna.core.notifier.asyncio.sleep", _no_sleep),
         caplog.at_level(logging.WARNING, logger="farna.core.notifier"),
     ):
         async with respx.mock:
@@ -448,6 +486,7 @@ async def test_dispatch_masks_secrets_in_request_error(notifier: Notifier, caplo
     with (
         patch.object(notifier, "_record_delivery", AsyncMock()) as mock_record,
         patch.object(notifier, "_increment_dead_letter", AsyncMock()),
+        patch("farna.core.notifier.asyncio.sleep", _no_sleep),
         caplog.at_level(logging.WARNING, logger="farna.core.notifier"),
     ):
         async with respx.mock:

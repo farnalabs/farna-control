@@ -27,7 +27,7 @@ import signal
 import sys
 import time
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from subprocess import Popen
 from typing import Any
@@ -327,6 +327,24 @@ def test_child_shim_env_restores_relocated_bundle_import_paths_without_caller_pa
     assert pythonpath.split(os.pathsep)[0] == str(Path(supervisor_module.__file__).resolve().parents[2])
     assert "/untrusted" not in pythonpath
     assert env["PATH"] == "/usr/bin"
+
+
+@pytest.fixture(autouse=True)
+def _restore_shim_signal_handlers() -> Iterator[None]:
+    """child_shim_main installs SIGTERM/SIGINT handlers in-process; undo them.
+
+    The handlers are never uninstalled by production (the shim is a process
+    entry point that exits with them in place). A test that calls
+    ``child_shim_main`` directly therefore leaves them installed for the REST
+    of the pytest process. When a later SIGTERM arrives, the leaked handler
+    dereferences this test's ``_CompletedChild`` fake (no ``.pid``) and raises
+    ``AttributeError`` out of the signal handler into whichever test is then
+    running (FAR-2662). Mirrors the same fixture in test_supervisor.py.
+    """
+    saved = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+    yield
+    for sig, handler in saved.items():
+        signal.signal(sig, handler)
 
 
 def test_child_shim_main_preserves_pythonpath_for_python_child(
