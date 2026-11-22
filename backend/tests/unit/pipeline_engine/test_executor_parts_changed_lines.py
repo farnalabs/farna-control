@@ -15,9 +15,10 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, Self
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -528,3 +529,233 @@ def test_accumulate_llm_tokens_ignores_non_dict_usage():
     node_token_usage: dict[str, dict[str, int]] = {}
     _accumulate_llm_tokens(event, node_token_usage, None, None)
     assert node_token_usage == {}
+
+
+# ---------------------------------------------------------------------------
+# executor_parts.finalize._sandbox_failure_scan_views — every artifact shape
+# ---------------------------------------------------------------------------
+
+
+def test_sandbox_failure_scan_views_covers_every_artifact_shape() -> None:
+    scan = PipelineExecutor._sandbox_failure_scan_views
+
+    # A non-dict body contributes no views at all.
+    assert scan("not-a-dict") == []
+
+    # New telemetry channel, legacy outer ``output`` and the first artifact's
+    # inner ``output`` are each a view when they are dicts.
+    rich = {
+        "telemetry": {"t": 1},
+        "output": {"o": 1},
+        "artifacts": [{"output": {"inner": 1}}],
+    }
+    rich_views = scan(rich)
+    assert {"t": 1} in rich_views
+    assert {"o": 1} in rich_views
+    assert {"inner": 1} in rich_views
+    assert len(rich_views) == 4
+
+    # ``artifacts`` present but not a list -> short-circuits before indexing.
+    assert scan({"artifacts": {"output": {"x": 1}}}) == [{"artifacts": {"output": {"x": 1}}}]
+    # Empty ``artifacts`` list -> the truthiness guard short-circuits.
+    assert scan({"artifacts": []}) == [{"artifacts": []}]
+    # First artifact not a dict -> the isinstance guard short-circuits.
+    assert scan({"artifacts": ["x"]}) == [{"artifacts": ["x"]}]
+    # First artifact is a dict but its ``output`` is not -> inner view skipped.
+    assert scan({"artifacts": [{"output": "str"}]}) == [{"artifacts": [{"output": "str"}]}]
+
+
+# ---------------------------------------------------------------------------
+# executor_parts.finalize._load_stored_node_columns — guard and row branches
+# ---------------------------------------------------------------------------
+
+
+async def test_load_stored_node_columns_returns_empty_without_a_session_factory() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    executor._session_factory = None
+
+    assert await executor._load_stored_node_columns(run_id=uuid.uuid4(), org_id=uuid.uuid4()) == ({}, {})
+
+
+async def test_load_stored_node_columns_returns_empty_when_the_run_is_missing() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    executor._session_factory = _session_factory(_fake_session())
+
+    with (
+        patch.object(executor_mod, "set_rls_org", new=AsyncMock()),
+        patch.object(executor_mod, "set_rls_execution_context", new=AsyncMock()),
+        patch.object(executor_mod, "get_run", new=AsyncMock(return_value=None)),
+    ):
+        assert await executor._load_stored_node_columns(run_id=uuid.uuid4(), org_id=uuid.uuid4()) == ({}, {})
+
+
+async def test_load_stored_node_columns_returns_the_blob_dicts_when_the_run_exists() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    executor._session_factory = _session_factory(_fake_session())
+    blobs = SimpleNamespace(outputs={"a": 1}, telemetry={"b": 2})
+
+    with (
+        patch.object(executor_mod, "set_rls_org", new=AsyncMock()),
+        patch.object(executor_mod, "set_rls_execution_context", new=AsyncMock()),
+        patch.object(executor_mod, "get_run", new=AsyncMock(return_value=object())),
+        patch.object(executor_mod, "read_run_blobs", new=AsyncMock(return_value=blobs)),
+    ):
+        outputs, telemetry = await executor._load_stored_node_columns(run_id=uuid.uuid4(), org_id=uuid.uuid4())
+
+    assert outputs == {"a": 1}
+    assert telemetry == {"b": 2}
+
+
+# ---------------------------------------------------------------------------
+# executor_parts.finalize._seal_run_teardown — no-session guard
+# ---------------------------------------------------------------------------
+
+
+async def test_seal_run_teardown_is_a_noop_without_a_session_factory() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    executor._session_factory = None
+
+    with patch("farna.core.run_teardown.seal_run_teardown", new=AsyncMock()) as seal:
+        await executor._seal_run_teardown(run_id=uuid.uuid4(), org_id=uuid.uuid4())
+
+    seal.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# executor_parts.telemetry._compute_token_costs — None usage guard
+# ---------------------------------------------------------------------------
+
+
+def test_compute_token_costs_returns_nones_for_missing_usage() -> None:
+    assert PipelineExecutor._compute_token_costs(None, Decimal("0.1"), Decimal("0.2")) == (None, None, None)
+
+
+# ---------------------------------------------------------------------------
+# executor_parts.telemetry._get_evidence_provider — injected vs default
+# ---------------------------------------------------------------------------
+
+
+def test_get_evidence_provider_returns_the_injected_provider() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    provider = object()
+    executor._evidence_provider = provider
+
+    assert executor._get_evidence_provider(uuid.uuid4()) is provider
+
+
+def test_get_evidence_provider_builds_the_default_when_none_is_injected() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    executor._evidence_provider = None
+    executor._session_factory = MagicMock(name="session_factory")
+    built = object()
+
+    with patch.object(executor_mod, "build_default_evidence_provider", new=MagicMock(return_value=built)) as build:
+        assert executor._get_evidence_provider(uuid.uuid4()) is built
+
+    build.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# executor_parts.telemetry._run_post_terminal_evidence_probes — failed probe
+# ---------------------------------------------------------------------------
+
+
+async def test_post_terminal_evidence_probes_survives_a_failed_probe() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    executor._session_factory = MagicMock()
+    executor._evidence_provider = object()
+
+    async def _boom(**_kwargs: Any) -> None:
+        raise RuntimeError("probe failed")
+
+    with (
+        patch.object(executor_mod, "evidence_enabled", return_value=True),
+        patch.object(executor_mod, "node_declared_success", return_value=True),
+        patch.object(executor_mod, "run_evidence_probe", new=_boom),
+        patch.object(executor_mod, "_log", new=MagicMock()) as log,
+    ):
+        await executor._run_post_terminal_evidence_probes(
+            run_id=uuid.uuid4(),
+            org_id=uuid.uuid4(),
+            final_status="complete",
+            completed_node_outputs={"n1": {"output": {"x": 1}}},
+        )
+
+    log.warning.assert_called_with(
+        "heuristic.probe_task_failed",
+        extra={"run_id": ANY, "node_id": "n1"},
+        exc_info=ANY,
+    )
+
+
+# ---------------------------------------------------------------------------
+# executor._compensate_blocked_run_best_effort — hub-present/hub-missing arms
+# ---------------------------------------------------------------------------
+
+
+async def _run_compensation(executor: PipelineExecutor, *, hub: Any = None, init_error: BaseException | None = None) -> AsyncMock:
+    executor._session_factory = _session_factory(_fake_session())
+    if init_error is not None:
+        executor._init_connector_hub = AsyncMock(side_effect=init_error)
+    else:
+        executor._init_connector_hub = AsyncMock(return_value=hub)
+
+    with (
+        patch.object(executor_mod, "set_rls_org", new=AsyncMock()),
+        patch.object(executor_mod, "set_rls_execution_context", new=AsyncMock()),
+        patch.object(executor_mod, "get_run", new=AsyncMock(return_value=SimpleNamespace(error_detail="blocked"))),
+        patch("farna.core.guardrails.compensation.compensate_blocked_run", new=AsyncMock()),
+        patch.object(executor_mod, "_teardown_hub", new=AsyncMock()) as teardown,
+        patch.object(executor_mod, "set_connector_hub") as set_connector,
+        patch.object(executor_mod, "_log", new=MagicMock()),
+    ):
+        await executor._compensate_blocked_run_best_effort(
+            org_id=uuid.uuid4(),
+            run_id=uuid.uuid4(),
+            executed_nodes={},
+        )
+
+    set_connector.assert_called_once_with(None)
+    return teardown
+
+
+async def test_compensate_blocked_run_tears_down_a_present_hub() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+    hub = object()
+
+    teardown = await _run_compensation(executor, hub=hub)
+
+    teardown.assert_awaited_once_with(hub)
+
+
+async def test_compensate_blocked_run_skips_teardown_when_hub_init_fails() -> None:
+    executor = PipelineExecutor.__new__(PipelineExecutor)
+
+    teardown = await _run_compensation(executor, init_error=RuntimeError("hub down"))
+
+    teardown.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# executor._prepare_and_stream — interactive branch with no phase tracker
+# ---------------------------------------------------------------------------
+
+
+async def test_prepare_and_stream_interactive_without_a_tracker_skips_phase_marks() -> None:
+    executor, compiled = _preparable_executor(tracker=None, checkpointer_conn_string="postgresql://db")
+    scope, config = _scope_and_config()
+    saver = object()
+
+    @asynccontextmanager
+    async def _fake_scope(*_args: Any, **_kwargs: Any):
+        yield saver
+
+    with (
+        patch.object(executor_mod, "_graph_is_interactive", return_value=True),
+        patch.object(executor_mod, "_checkpointer_scope", new=_fake_scope),
+        patch("farna.settings.get_settings", return_value=SimpleNamespace(fernet_key="k")),
+    ):
+        result = await executor._prepare_and_stream(scope=scope, config=config)
+
+    assert result == ("complete", None, None, {})
+    assert compiled.checkpointer is saver
