@@ -18,7 +18,11 @@ from tests.unit.api.mock_session import configure_mock_session
 
 from farna.api.dependencies import _get_engine, get_db_session
 from farna.api.main import app
-from farna.auth.dependencies import get_current_tenant_user, get_current_user
+from farna.auth.dependencies import (
+    get_current_tenant_user,
+    get_current_tenant_user_or_api_key,
+    get_current_user,
+)
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.settings import Settings, get_settings
 
@@ -133,6 +137,14 @@ def client() -> Generator[TestClient, None, None]:
         org_role="admin",
     )
     app.dependency_overrides[get_current_tenant_user] = lambda: TenantPrincipal(
+        username="testuser",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="admin",
+    )
+    # FAR-2681: the composite READ routes accept a JWT or an ``mk_`` org API key
+    # via the any-credential dependency; this fixture drives the JWT flavour.
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(
         username="testuser",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,
