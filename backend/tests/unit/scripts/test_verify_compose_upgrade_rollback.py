@@ -295,6 +295,21 @@ def test_backend_child_log_poll_waits_for_the_crash_loop(tmp_path: Path, monkeyp
     assert evidence.attempts == 3
 
 
+def test_backend_child_log_poll_stops_at_the_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A silent crash-loop is not polled forever: the deadline ends the read."""
+    monkeypatch.setattr(module, "_CHILD_LOG_POLL_INITIAL_SECONDS", 0.01)
+    monkeypatch.setattr(module, "_CHILD_LOG_POLL_MAX_SECONDS", 0.01)
+    monkeypatch.setattr(module, "_CHILD_LOG_MINIMUM_WAIT_SECONDS", 0.0)
+
+    def runner(argv: list[str], **kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    evidence = _matrix(tmp_path, runner, timeout=0)._capture_backend_child_logs()
+
+    assert module._INVALID_SECRET_KEY_FAILURE not in evidence.text
+    assert evidence.attempts >= 1
+
+
 def test_evidence_redacts_secret_literals(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(

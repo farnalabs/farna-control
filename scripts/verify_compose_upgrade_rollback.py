@@ -463,11 +463,12 @@ class Matrix:
             attempt += 1
             evidence = ChildLogEvidence(reads=self._read_backend_child_logs(attempt), attempts=attempt)
             if _INVALID_SECRET_KEY_FAILURE in evidence.text:
-                return evidence
+                break
             if time.monotonic() >= deadline:
-                return evidence
+                break
             time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
             interval = min(interval * 2, _CHILD_LOG_POLL_MAX_SECONDS)
+        return evidence
 
     def _assert_failed_upgrade_startup_failure(self, child_logs: ChildLogEvidence, container_log: CommandResult) -> None:
         """Require the invalid-SECRET_KEY startup failure in the backend child log.
