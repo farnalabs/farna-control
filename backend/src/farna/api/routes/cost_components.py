@@ -6,7 +6,7 @@ on the write routes AND the GET list. Save-time 422 validation is the ONLY
 validation path — there is NO validate-formula endpoint (the frontend's inline
 UI validation round-trips through the save endpoint's 422).
 
-Layer rule: ``modulo.db`` may not import ``modulo.core``, so ALL
+Layer rule: ``farna.db`` may not import ``farna.core``, so ALL
 core-dependent validation (formula engine, param registry, constants) and the
 audit-event emission live HERE in the route layer; the CRUD module performs
 only the DB-level checks (org cap, duplicate pre-check, last-calculated

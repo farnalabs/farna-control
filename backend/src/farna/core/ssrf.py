@@ -413,7 +413,7 @@ def default_trust_env() -> bool:
     for every connector; unset/other keeps the safe-by-default ``False`` so a
     proxy env var does not silently defeat pinning).
 
-    Public so the shared egress pool factory (``modulo.connectors._egress``)
+    Public so the shared egress pool factory (``farna.connectors._egress``)
     builds the cached TLS context with the SAME ``trust_env`` the pinned
     transport resolves — a single implementation that cannot drift.
     """

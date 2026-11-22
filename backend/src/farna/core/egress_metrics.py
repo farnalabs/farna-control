@@ -1,7 +1,7 @@
 """OpenTelemetry metrics for the shared egress layer (FAR-526D).
 
-Mirrors the ``modulo.core.error_tracking.metrics`` /
-``modulo.connectors.rest.rest_metrics`` pattern: module-level handles
+Mirrors the ``farna.core.error_tracking.metrics`` /
+``farna.connectors.rest.rest_metrics`` pattern: module-level handles
 initialised lazily from OTel's ``get_meter_provider()``, every operation no-ops
 when no meter provider is configured or the SDK does not support an instrument,
 and every call is exception-swallowed so a metric can never surface as an egress
@@ -22,7 +22,7 @@ REASON TAXONOMY (stable, closed)
     validate fail-closed; also malformed host / embedded userinfo / non-canonical
     IP literal).
 ``unpinned``   — the pinned transport refused a host outside its pin map
-    (:class:`modulo.core.ssrf.UnpinnedHostError`) — e.g. a redirect hop.
+    (:class:`farna.core.ssrf.UnpinnedHostError`) — e.g. a redirect hop.
 ``dns-timeout``— DNS resolution exceeded ``SSRF_DNS_TIMEOUT`` (fail-closed).
 ``dns-failed`` — DNS resolution failed with an ``OSError`` (fail-closed).
 ``bad-scheme`` — the URL used a non-http(s) scheme.

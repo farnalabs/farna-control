@@ -2,7 +2,7 @@
 
 This is the *wiring* layer that turns a ``run_kind='suite_run'`` trigger into an
 end-to-end ``SuiteRun`` execution. It REUSES the behaviour layer in
-``modulo.core.eval_engine.suite_run`` (baseline resolution, comparison, spend,
+``farna.core.eval_engine.suite_run`` (baseline resolution, comparison, spend,
 notification) and the existing ``EvalEngine.evaluate`` for per-case scoring —
 it does NOT reimplement any comparison or scoring logic.
 

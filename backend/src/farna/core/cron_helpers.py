@@ -50,7 +50,7 @@ from farna.connectors._rate_bucket import SharedBudgetUnavailableError
 from farna.connectors.base import ConnectorPermissionError
 
 # FAR-1649: the durable "first node STARTED" phase label. It lives in the
-# dependency-free leaf ``modulo.core.dispatch_phases`` (a module import with NO
+# dependency-free leaf ``farna.core.dispatch_phases`` (a module import with NO
 # imports of its own) so this API-facing seam can branch on it without
 # importing ``pipeline_execution`` — which reaches langgraph at module level
 # and would otherwise need an import-linter whitelist edge here (the lazy shim
@@ -117,7 +117,7 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # System / no-tenant sentinel org (SYSTEM_ORG_ID) is imported from
-# modulo.db.models.organisation at module top — the single canonical
+# farna.db.models.organisation at module top — the single canonical
 # definition. Do NOT re-type the nil-UUID literal here (FAR-1505).
 
 # Per-item fire job knobs (plan F5): timeout=300, retries=2 (ONE retry),
@@ -145,7 +145,7 @@ _LOG_PIPELINE_NOT_RUNNABLE_SKIP = "pipeline.not_runnable.skip trigger=%s org=%s 
 #   2. A bounded catch-up scan re-fires a consumed epoch whose ``last_fired_at``
 #      is genuinely behind (see ``_fire_missed_cron_epochs``).
 # The grace/bound semantics mirror the hourly missed-fire alert
-# (``SAQ_MISSED_FIRE_GRACE_SECONDS = 300`` in modulo.core.error_tracking).
+# (``SAQ_MISSED_FIRE_GRACE_SECONDS = 300`` in farna.core.error_tracking).
 CATCHUP_GRACE_SECONDS = 300  # a fire more than cadence + grace behind is "missed"
 CATCHUP_BOUND_SECONDS = 48 * 3600  # only re-fire misses within the last 48h
 _CATCHUP_MARKER_PREFIX = "saq:cron:catchup"
@@ -369,7 +369,7 @@ _RETRY_BUDGET_EXHAUSTED_ERROR_CODE = _CODE_HARNESS_RETRY_BUDGET_EXHAUSTED
 # Synthetic error_detail for the genuinely detail-less failure writers (P7'):
 # applied ONLY where detail is currently NULL — never overwrites real detail.
 # Derived from the ERROR_CODE_REGISTRY guidance in
-# ``modulo.core.pipeline_engine.error_codes``. (The age gate's supersede
+# ``farna.core.pipeline_engine.error_codes``. (The age gate's supersede
 # detail retired with FAR-1329 — it never described that gate's predicate;
 # genuinely superseded runs carry the executor's own scrubbed detail, and a
 # NULL one presents through the registry guidance.)
@@ -506,7 +506,7 @@ _NO_PROGRESS_ERROR_DETAIL_PREFIX_FMT = "No node progress within the {age}m age b
 # evidence) are bookkeeping rows of the same kind.
 #
 # The reserved ``__``-prefixed sentinel namespace is defined ONCE in
-# :data:`modulo.db.models.run_node_outputs.SENTINEL_NODE_ID_PREFIX`; the graph
+# :data:`farna.db.models.run_node_outputs.SENTINEL_NODE_ID_PREFIX`; the graph
 # validator REJECTS any node id using that prefix (``DB_SENTINEL_NODE_ID_PREFIX``
 # in ``core/graph_validator``), so a genuine node id can never be excluded here.
 # ``substr`` rather than ``LIKE '__%'``: ``_`` is a LIKE wildcard, so that
@@ -1168,7 +1168,7 @@ async def _set_org_statement_timeout(session: AsyncSession) -> None:
     bound is a safety improvement, never a correctness requirement.
 
     An expired bound raises SQLSTATE 57014 (``query_canceled``), which
-    :func:`modulo.db.sqlstates.is_statement_timeout` classifies so the
+    :func:`farna.db.sqlstates.is_statement_timeout` classifies so the
     reconcile body can skip that ONE org with a WARNING + stage attribution
     instead of letting it silently consume the org's time slice.
     """
@@ -1185,7 +1185,7 @@ async def _count_active_runs(session: AsyncSession, trigger_id: uuid.UUID) -> in
     FAR-1999: a ``pending`` run (accepted but not yet dispatched — queued or
     capacity-deferred) counts only inside the create→dispatch grace window,
     not for its whole time in the queue. Delegates to the shared
-    :func:`modulo.core.run_admission.count_trigger_slot_occupancy` — one
+    :func:`farna.core.run_admission.count_trigger_slot_occupancy` — one
     implementation for every trigger lane, so the grace semantics cannot drift
     between cron and the other dispatch paths.
     """
@@ -1200,7 +1200,7 @@ async def _count_ongoing_runs(session: AsyncSession, trigger_id: uuid.UUID) -> i
     """Count a trigger's in-flight runs for the ``ongoing`` top-up (FAR-158).
 
     Status-only count over ``ONGOING_ACTIVE_STATUSES`` (pending/running/claimed
-    — see the set's comment in ``modulo.db.models.run`` for why awaiting_human
+    — see the set's comment in ``farna.db.models.run`` for why awaiting_human
     is excluded: a never-answered HITL gate must not permanently starve the
     pool). DELIBERATELY NO ``cancellation_requested`` filter — unlike
     ``_count_active_runs``, a run whose cancellation was requested has already
@@ -2210,7 +2210,7 @@ async def fire_report_trigger(*, report_id: uuid.UUID, org_id: uuid.UUID, epoch:
     """Fire one scheduled report — generate, format, deliver (SAQ bounded job).
 
     Delegates the fire mechanics to the shared core
-    (:func:`modulo.core.reports.scheduler._fire_scheduled_report`), which holds
+    (:func:`farna.core.reports.scheduler._fire_scheduled_report`), which holds
     the ``ScheduledReport`` row lock only for its two short read/stamp sections
     and runs generation/delivery OUTSIDE it (FAR-1822). This wrapper owns the
     SAQ-specific failure policy: Plan F1 report delivery (timeout=300 /
@@ -3400,7 +3400,7 @@ def _catchup_advance_stmt() -> Any:
 def _cron_cadence_seconds(cron_expression: str, cron_timezone: str | None, now: datetime) -> int | None:
     """Cadence (seconds) between two consecutive fires of a cron expression.
 
-    Reuses the cadence helper from ``modulo.core.error_tracking`` — the same
+    Reuses the cadence helper from ``farna.core.error_tracking`` — the same
     computation the hourly missed-fire alert probe uses — so the catch-up scan
     and the alert agree on what "behind schedule" means. Imported lazily (the
     module chain is heavy and only needed on the catch-up path); it does not
@@ -4751,7 +4751,7 @@ def _final_row_absent_expr() -> Any:
     inputs were merely resolved read as already-progressing (the zero-progress
     shape then excluded it from the nodeless repairs and the FAR-1999
     node-deadline reaper). The prefix comes from
-    :data:`modulo.db.models.run_node_outputs.SENTINEL_NODE_ID_PREFIX` — the
+    :data:`farna.db.models.run_node_outputs.SENTINEL_NODE_ID_PREFIX` — the
     graph validator rejects it for real node ids — and ``substr`` is used rather
     than ``LIKE '__%'`` because ``_`` is a LIKE wildcard that would match any
     two leading characters. The raw-SQL twin is
@@ -5594,7 +5594,7 @@ def _should_redispatch_nodeless(row: Any) -> bool:
     resolution the in-execute path and watchdog kills use —
     ``pipeline_engine.watchdog_retry``). FAR-2076: the attempt count is the
     durable ``runs.execution_attempt_count`` via the shared
-    :func:`modulo.core.retry_budget.retry_executions_consumed`, so nodeless
+    :func:`farna.core.retry_budget.retry_executions_consumed`, so nodeless
     zombie deaths under a stall-covered policy are re-dispatched on exactly the
     same cycle the watchdog would allow — and never on a ``claim_count``
     derivation that counted capacity-demoted / resume claims as executions.
@@ -5620,7 +5620,7 @@ def _should_redispatch_nodeless(row: Any) -> bool:
         FAR-525 GUI's no-op panel save ``{on: [], max_retries: 0,
         backoff_schedule: {...}}``) and ``{"max_retries": 0}`` — is still a
         budget: use the SHARED ``1 + max_retries`` ceiling
-        (:func:`modulo.core.retry_budget.retry_budget_exhausted`). A saveable
+        (:func:`farna.core.retry_budget.retry_budget_exhausted`). A saveable
         policy with ``max_retries: 0`` authorises exactly ONE execution, never
         the configurable default's five.
       * ``retry_policy`` absent/None, a non-dict, or the EMPTY ``{}`` column
@@ -7218,7 +7218,7 @@ def _saq_run_claim_cap() -> int:
     pipeline_execution (import-linter: api must not reach langgraph transitively
     through pipeline_execution -> executor): the one label it needed from there
     — ``PHASE_FIRST_NODE_DISPATCHED`` — now lives in the dependency-free leaf
-    ``modulo.core.dispatch_phases`` (FAR-1649), so no lazy shim and no
+    ``farna.core.dispatch_phases`` (FAR-1649), so no lazy shim and no
     whitelist edge are required.
     """
     return int(get_settings().saq_run_claim_cap)
@@ -8392,8 +8392,8 @@ def _heartbeat_liveness_seconds(
     not a shared synthetic value.)
 
     FAR-1914: the implementation now lives in the langgraph-free leaf
-    :mod:`modulo.core.agent_event_evidence` so the cancel path (reachable from
-    ``modulo.api`` via ``cost_controller.finalize``) can share ONE definition
+    :mod:`farna.core.agent_event_evidence` so the cancel path (reachable from
+    ``farna.api`` via ``cost_controller.finalize``) can share ONE definition
     without importing this module (which transits LangGraph). Behaviour is
     unchanged; this name remains the cron-side entry point.
     """
@@ -11035,7 +11035,7 @@ async def _override_resume_checkpoint_present(
 ) -> bool:
     """FAR-1728 per-row precondition: the row's thread carries a root checkpoint.
 
-    The SAME predicate :func:`modulo.core.pipeline_engine.recovery
+    The SAME predicate :func:`farna.core.pipeline_engine.recovery
     ._run_has_resumable_checkpoint` enforces at override-flip time (FAR-1711
     M1) — one definition of "resumable", so the flip and the self-heal can
     never disagree. A ``first_node_dispatched`` thread with no root checkpoint

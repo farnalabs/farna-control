@@ -298,7 +298,7 @@ async def _select_candidate_rows(
     context silently dropped the exact rows the predicate must judge (a
     Team-A member binding Team-B's connector looked "absent" and was skipped).
     The widened read lives in ``db.crud.team_scope.team_blind_org_scope`` (the
-    db-layer seam both ``modulo.db`` and ``modulo.core`` may import), and an id
+    db-layer seam both ``farna.db`` and ``farna.core`` may import), and an id
     the widened read still cannot resolve is a named refusal rather than a
     skip (see ``find_connector_team_mismatches``).
     """

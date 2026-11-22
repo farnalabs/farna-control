@@ -1,7 +1,7 @@
 """Worker-side Redis event subscription (FAR-250).
 
 SAQ workers connect and subscribe to the org resource channels but NEVER
-relay: only the web process runs the :mod:`modulo.core.events.relay` pump
+relay: only the web process runs the :mod:`farna.core.events.relay` pump
 that re-injects messages into an in-memory EventBus (only the web process
 serves SSE). The worker subscription is a persistent, consume-and-drop
 subscription that verifies the pub/sub leg at boot and re-attempts with

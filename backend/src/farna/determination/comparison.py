@@ -1,7 +1,7 @@
 """Deterministic comparison of two determination proposals.
 
 :func:`compare_proposals` takes a *base* side and a *target* side - each a
-:class:`~modulo.determination.models.ProposalContract` plus the draft nodes and
+:class:`~farna.determination.models.ProposalContract` plus the draft nodes and
 edges generated with it - and returns a :class:`ProposalComparison`. It is pure
 and side-effect free: nothing here reads or writes a database, activates a
 pipeline or persists the comparison. The route is a thin adapter over this

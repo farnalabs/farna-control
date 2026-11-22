@@ -123,9 +123,9 @@ class WorkItemRefsRequiredError(Exception):
 # logical idempotency identity ``<pipeline_id>:<run_number>`` (NOT a per-replay
 # ``run_id`` — a fresh UUID fork would mint a new key on every re-run and
 # silently defeat dedupe). These helpers live HERE (the DB layer owns the run
-# record) because import-linter forbids ``modulo.db`` importing ``modulo.core``;
+# record) because import-linter forbids ``farna.db`` importing ``farna.core``;
 # the derivation + dedupe that CONSUME the persisted value live in
-# ``modulo.core.pipeline_engine.idempotency``. The ``<id>:<number>`` shape regex
+# ``farna.core.pipeline_engine.idempotency``. The ``<id>:<number>`` shape regex
 # mirrors ``_RUN_REF_RE`` there; the two copies are a deliberate layering
 # trade-off (DB cannot import core, so they cannot share one definition).
 _RUN_IDEMPOTENCY_REF_RE = re.compile(r"^[A-Za-z0-9_-]+:\d+$")
@@ -154,7 +154,7 @@ def run_idempotency_key(run_ref: str) -> str:
     return run_ref
 
 
-# Legacy underscore alias for the neutral helper (see modulo.db.unique_violation).
+# Legacy underscore alias for the neutral helper (see farna.db.unique_violation).
 _is_unique_violation = is_unique_violation
 
 
@@ -636,7 +636,7 @@ _AGENT_SOURCE = "agent"
 
 # ── Org-scoped agent-minting flag (FAR-795 slice B, db-layer mirror) ────────
 # The flag key lives in ``Organisation.settings_json`` — the same JSONB
-# surface ``modulo.core.runtime_config.org_flags`` reads. The db layer cannot
+# surface ``farna.core.runtime_config.org_flags`` reads. The db layer cannot
 # import core (the ``db-does-not-import-core`` import-linter contract), so the
 # read is mirrored here with the SAME resolution rules: strictly ``True``
 # (json bool) enables, everything else disables, ANY read error fail-closes
@@ -656,7 +656,7 @@ def clear_agent_mint_flag_cache() -> None:  # vulture: ignore (test isolation)
 async def _agent_minting_enabled(session: AsyncSession, org_id: uuid.UUID) -> bool:
     """Fail-closed read of the org's agent-sourced minting flag (FAR-795).
 
-    Mirrors :func:`modulo.core.runtime_config.org_flags.is_org_flag_enabled`
+    Mirrors :func:`farna.core.runtime_config.org_flags.is_org_flag_enabled`
     byte-for-byte in semantics: only an explicit json ``True`` enables; a
     missing org, malformed settings, or a DB error all mean OFF. Agent minting
     must never be enabled while its enablement state is unknown.
@@ -680,12 +680,12 @@ async def _agent_minting_enabled(session: AsyncSession, org_id: uuid.UUID) -> bo
 
 # Observability event names emitted through the ``lifecycle_refs`` counter
 # hook (the db layer cannot import core, so the OTel counters live in
-# ``modulo.core.lifecycle_map.reconcile``, whose sink keys on these strings).
+# ``farna.core.lifecycle_map.reconcile``, whose sink keys on these strings).
 _REFS_EVENT_AGENT_MINTED = "agent_minted"
 _REFS_EVENT_AGENT_MINT_SUPPRESSED = "agent_mint_suppressed_by_flag"
 # FAR-795 budget cap: agent mints denied by the per-org budget (must match the
 # ``REFS_EVENT_AGENT_MINT_BUDGET_EXCEEDED`` sink key in
-# ``modulo.core.lifecycle_map.reconcile``).
+# ``farna.core.lifecycle_map.reconcile``).
 _REFS_EVENT_AGENT_MINT_BUDGET_EXCEEDED = "agent_mint_budget_exceeded"
 
 
@@ -997,7 +997,7 @@ async def _enforce_pipeline_state_gate(session: AsyncSession, pipeline_id: uuid.
     return a quiet typed skip (``PIPELINE_NOT_RUNNABLE_SKIP_REASON`` — a
     state-agnostic reason, so ``paused`` needs NO new vocabulary value and no
     fire-job change) — a paused pipeline with a still-active trigger is a
-    per-tick skip, never a job that fails forever. See ``modulo.core.
+    per-tick skip, never a job that fails forever. See ``farna.core.
     cron_helpers`` / ``trigger_engine.agent_signal`` for those handlers.
 
     Reads the columns directly (never the ORM identity map) so a freshly
@@ -1119,8 +1119,8 @@ async def _enforce_pause_gate(
     run — benign, matches GitHub disable-workflow semantics. Deliberately NO
     row locks (reviewed decision). Read failures PROPAGATE — a DB error is
     never fabricated into "paused". ``create_run`` calls
-    ``ensure_triggers_resumable`` (modulo.db.settings_resolver), which raises
-    ``TriggersPausedError`` (modulo.core.exceptions); that db->core edge is
+    ``ensure_triggers_resumable`` (farna.db.settings_resolver), which raises
+    ``TriggersPausedError`` (farna.core.exceptions); that db->core edge is
     exempted under the ``db-does-not-import-core`` contract in ``.importlinter``.
     """
     if trigger_id is None or trigger_type in PAUSE_EXEMPT_TRIGGER_TYPES:
@@ -3545,7 +3545,7 @@ async def _classify_terminal_run(session: AsyncSession, run: Run) -> None:
 #: ``pipeline_engine.node_runner._PR_URL_PATTERN`` so the detector and the
 #: raw-output ``pr_url`` extractor agree on what counts as a PR URL — copies
 #: are the same deliberate layering trade-off recorded for the
-#: idempotency-ref regex above (``modulo.db`` may not import ``modulo.core``:
+#: idempotency-ref regex above (``farna.db`` may not import ``farna.core``:
 #: import-linter contract ``db-does-not-import-core``). A shared constant is
 #: not reachable from every consumer (``sandbox_policy`` must also stay
 #: dependency-free), so every copy — pattern AND flags — is pinned by
@@ -3751,8 +3751,8 @@ async def _record_duplicate_pr_notification(session: AsyncSession, run: Run, pr_
 
     Created through the db-layer ``create_notification`` (NOT the core
     ``Notifier``) for two reasons: the terminalization chokepoint lives here in
-    ``modulo.db`` and the import-linter contract forbids ``modulo.db`` importing
-    ``modulo.core``; and creating the row in the CALLER'S transaction makes the
+    ``farna.db`` and the import-linter contract forbids ``farna.db`` importing
+    ``farna.core``; and creating the row in the CALLER'S transaction makes the
     alert atomic with the terminal status write — a rolled-back terminalization
     can never leave a phantom alert behind (the Notifier opens its own session).
     The caller (:func:`_enforce_one_pr_per_run`) runs this inside a SAVEPOINT,
@@ -3985,12 +3985,12 @@ def _apply_run_output_fields(run: Run, update: _RunStatusUpdate) -> None:
 # DualWriteError (the caller's full rollback + orchestration is the correct
 # recovery for them). Hard errors (42501 RLS, 23503 FK, 23505 unique) also
 # fail immediately. qa iteration 2: hoisted to the shared leaf
-# :mod:`modulo.db.sqlstates` (the node-runner marker classification consumes
+# :mod:`farna.db.sqlstates` (the node-runner marker classification consumes
 # the same vocabulary module); imported, never forked.
 _DUAL_WRITE_RETRYABLE_SQLSTATES = DUAL_WRITE_RETRYABLE_SQLSTATES
 
 # qa iteration 2 (Major 2): the SQLSTATE extractor lives in the shared leaf
-# :mod:`modulo.db.sqlstates` — the bounded ``__context__`` walk is what keeps
+# :mod:`farna.db.sqlstates` — the bounded ``__context__`` walk is what keeps
 # a savepoint's 25P02 rollback-wrapper failure from masking the ORIGINAL
 # error's SQLSTATE (40P01 etc.) as DualWriteError.sqlstate.
 _sqlstate_of = sqlstate_of
@@ -4207,13 +4207,13 @@ async def update_run_status(
     (:func:`write_run_outputs_from_run` — B1 contract cut: the legacy ``runs``
     blob columns are no longer written and their ORM mapping is gone) — which
     makes this function raise
-    :class:`~modulo.db.crud.run_node_outputs.DualWriteError` when the
+    :class:`~farna.db.crud.run_node_outputs.DualWriteError` when the
     store leg fails (qa M16 guard obligation): the caller's transaction
     must be rolled back cleanly (fail-closed abort) and the run terminalized
     ``dual_write_failed`` by the core orchestrator.
 
     GUARD OBLIGATION — every blobs-passing call site MUST wrap the call in
-    :func:`modulo.core.run_outputs_dualwrite.guard_dual_write` (catch →
+    :func:`farna.core.run_outputs_dualwrite.guard_dual_write` (catch →
     rollback → orchestrate → re-raise). The sanctioned wrapped sites:
 
     * ``core.cost_controller.finalize._write_finalized_run`` (the single
@@ -4614,10 +4614,10 @@ async def request_cancellation(
     """Flag *run_id* cancellation-requested and terminalise it ``cancelled``.
 
     FAR-1233: the WHY/WHO are persisted in the SAME write — ``reason`` must be
-    one of :data:`~modulo.db.models.run.CANCEL_REASON_VALUES` (a closed
+    one of :data:`~farna.db.models.run.CANCEL_REASON_VALUES` (a closed
     vocabulary the DB also backstops with ``ck_runs_cancel_reason``) and
     ``actor`` is the acting account id, defaulting to
-    :data:`~modulo.db.models.run.CANCELLED_BY_SYSTEM` when the caller has no
+    :data:`~farna.db.models.run.CANCELLED_BY_SYSTEM` when the caller has no
     authenticated account in scope.
 
     Because ``cancellation_requested`` is written ONLY here, every later
@@ -4915,7 +4915,7 @@ async def count_active_runner_dispatches_for_org(
     Docker-tier default; the
     provider is attributed from the marker's JSON ``"provider"`` key, with
     legacy tier-less markers attributed to ``runner_docker`` (fail-safe — see
-    ``modulo.core.runner_capacity``).
+    ``farna.core.runner_capacity``).
     """
     stmt = (
         select(func.count())

@@ -28,7 +28,7 @@ reserved-env-var denylist) — in addition to riding on the returned credential
 handle.
 
 Dependency-light by design: stdlib, typing, and the dependency-free
-``modulo.util`` leaf at import time; the DB / auth modules are imported lazily
+``farna.util`` leaf at import time; the DB / auth modules are imported lazily
 inside the provider methods so this module can be imported from the
 dependency-light dispatch path without pulling them in.
 """

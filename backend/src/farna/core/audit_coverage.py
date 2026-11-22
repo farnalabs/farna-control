@@ -58,7 +58,7 @@ Both shapes work with FastAPI, but only the dependency fits this codebase:
 Fresh session, never the route's session
 ----------------------------------------
 The append runs on its OWN session taken from the process-shared engine
-(``modulo.db.session.get_shared_engine``), the same pattern
+(``farna.db.session.get_shared_engine``), the same pattern
 ``core.hitl_email_alerts`` uses for a post-commit side effect. Consequences:
 
 * it can neither roll back nor be blocked by the business transaction — they
@@ -76,8 +76,8 @@ Principal resolution
 --------------------
 The resolver is a REQUIRED argument (``principal_dep=``) rather than a default,
 for a layering reason: the natural default, ``auth.dependencies.get_current_tenant_user``,
-transitively reaches ``modulo.api.dependencies``, and the ``core-does-not-import-api``
-contract (``backend/.importlinter``) forbids that chain from ``modulo.core``.
+transitively reaches ``farna.api.dependencies``, and the ``core-does-not-import-api``
+contract (``backend/.importlinter``) forbids that chain from ``farna.core``.
 Passing the resolver from the route module keeps the import in the API layer,
 where it already lives — and it also makes each route state the auth mode its
 audit event is tied to::
@@ -142,7 +142,7 @@ Same isolated-append path, with two differences that keep provenance honest:
   handler calls ``bind_audit_org(request, org_id)`` at the point the tenant
   becomes known — and, for ingress that admits no tenant yet, with the
   unattributed sentinel org
-  (``modulo.db.models.organisation.SYSTEM_ORG_ID``) so the attempt is still
+  (``farna.db.models.organisation.SYSTEM_ORG_ID``) so the attempt is still
   recorded; rebind the real org the moment it resolves. With no org published
   there is nowhere honest to record the event, so it is logged
   (``audit_coverage.<event_type>.no_org_context``) and skipped — the wrapper
@@ -210,7 +210,7 @@ def _shared_session_factory() -> async_sessionmaker[AsyncSession]:
     the SAQ worker share — with the same knobs ``api.dependencies``
     ``get_or_create_session_factory`` uses. The import is lazy for the same
     reason ``core.hitl_email_alerts._dispatch_session_factory`` keeps it lazy:
-    importing ``modulo.db.session`` builds the process engine as a module-level
+    importing ``farna.db.session`` builds the process engine as a module-level
     side effect, which must not happen at *our* import time.
     """
     from farna.db.session import get_shared_engine

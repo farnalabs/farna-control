@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { getAccessToken } from '../lib/api/client'
@@ -75,6 +75,15 @@ vi.mock('../lib/api/client', () => ({
   // useEventStream registers a module-scope re-arm listener on import (FAR-1842).
   onAuthChange: vi.fn(() => vi.fn()),
 }))
+
+// FAR-2664: the token-spend destination reads the Costs nav item's gates. The
+// real manifest always gates Costs, but the component must tolerate an item
+// with no role/tier gate; `groups` substitutes the nav for those cases only.
+const navState = vi.hoisted(() => ({ groups: null as null | unknown[] }))
+vi.mock('../config/navigation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config/navigation')>()
+  return { ...actual, getNavGroups: () => navState.groups ?? actual.getNavGroups() }
+})
 
 import DashboardView from '../views/DashboardView.vue'
 import StatCard from '../components/StatCard.vue'
@@ -324,6 +333,95 @@ describe('DashboardView', () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
     expect(wrapper.text()).not.toContain('Team Breakdown')
+  })
+
+  // FAR-2664: the token-spend card must never lead to a silent dashboard
+  // bounce. Costs is Team + admin; a below-tier admin follows the link into the
+  // router guard's locked page, and a caller whose ROLE the route refuses goes
+  // straight to the same locked page with reason=role.
+  describe('token-spend card destination (FAR-2664)', () => {
+    afterEach(() => {
+      vi.mocked(getAccessToken).mockReturnValue('mock-token')
+      navState.groups = null
+    })
+
+    it('treats a Costs item with no role gate as reachable for any role', async () => {
+      navState.groups = [
+        {
+          id: 'test',
+          label: 'Test',
+          defaultCollapsed: false,
+          items: [{ to: '/admin/costs', icon: 'Coins', label: 'Costs', labelKey: 'k' }],
+        },
+      ]
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
+
+    it('omits the tier on the role lock when the Costs item carries none', async () => {
+      navState.groups = [
+        {
+          id: 'test',
+          label: 'Test',
+          defaultCollapsed: false,
+          items: [
+            { to: '/admin/costs', icon: 'Coins', label: 'Costs', labelKey: 'k', requiredRoles: ['admin'] },
+          ],
+        },
+      ]
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('reason=role')
+      expect(href).not.toContain('tier=')
+    })
+
+    it('links an admin straight at Costs', async () => {
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('admin'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
+
+    it('sends a role the Costs route refuses to the honest lock, not the Dashboard', async () => {
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('from=%2Fadmin%2Fcosts')
+      expect(href).toContain('reason=role')
+      expect(href).not.toBe('/')
+    })
+
+    it('treats a readable token with an empty org_role claim as a refusal, not an unknown', async () => {
+      // An empty claim is a KNOWN role that is not allowed — it must not take
+      // the unreadable-token path and let the guard bounce silently.
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser(''))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('reason=role')
+      expect(href).not.toBe('/')
+    })
+
+    it('keeps the plain destination when the token has no readable claims', async () => {
+      vi.mocked(getAccessToken).mockReturnValue('opaque-token')
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
   })
 
   it('renders the run activity trend section by default', async () => {

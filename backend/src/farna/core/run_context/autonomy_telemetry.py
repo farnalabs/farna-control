@@ -20,11 +20,11 @@ evaluated at runtime, recording:
 
 Emission is **fail-open**: a telemetry failure must never break a pipeline
 run, only log. The event is appended to the tamper-evident ``audit_events``
-chain (see ``modulo.core.audit_logger``), so the evidence record is the same
+chain (see ``farna.core.audit_logger``), so the evidence record is the same
 cryptographic audit trail that backs every other governance action in Modulo.
 
 The event type is also registered in
-``modulo.core.product_analytics.metrics_constants.VALID_EVENT_TYPES`` so it
+``farna.core.product_analytics.metrics_constants.VALID_EVENT_TYPES`` so it
 flows through product-analytics ingest and can be surfaced in dashboards.
 
 Data model

@@ -1,4 +1,4 @@
-"""Backward-compatibility shim -- prefer ``modulo.util.uuid`` for new code."""
+"""Backward-compatibility shim -- prefer ``farna.util.uuid`` for new code."""
 
 from farna.util.uuid import coerce_uuid
 

@@ -21,9 +21,9 @@ format.
 Distinct protocol — do NOT conflate with the vendor batch signer
 ----------------------------------------------------------------
 This module is the signer/verifier for the inbound *rotation-request* protocol
-(see :mod:`modulo.api.routes.product_analytics_identity`).  It is **NOT**
+(see :mod:`farna.api.routes.product_analytics_identity`).  It is **NOT**
 interchangeable with ``sign_outbound_batch`` in
-:mod:`modulo.core.product_analytics.vendor_client`, which signs outbound metrics
+:mod:`farna.core.product_analytics.vendor_client`, which signs outbound metrics
 batches with the ``<payload><timestamp>:<sequence>`` format.  The two protocols
 intentionally use different wire formats and must never be cross-used.
 """
@@ -50,7 +50,7 @@ def sign_rotation_request(
     This is the canonical signer for rotation requests verified by
     :func:`verify_hmac`.  It is NOT interchangeable with
     ``sign_outbound_batch`` in
-    :mod:`modulo.core.product_analytics.vendor_client` — see the module
+    :mod:`farna.core.product_analytics.vendor_client` — see the module
     docstring for the distinct wire formats of the two protocols.
     """
     message = _build_message(payload_bytes, timestamp, sequence)

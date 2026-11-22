@@ -5,8 +5,8 @@ in-flight (active or queued) runs. Its configuration is validated IDENTICALLY
 at every write surface:
 
 * REST ``POST /pipelines/{id}/triggers`` + ``PUT /triggers/{id}``
-  (``modulo.api.routes.triggers``)
-* MCP ``create_trigger`` / ``update_trigger`` (``modulo.api.mcp_server``)
+  (``farna.api.routes.triggers``)
+* MCP ``create_trigger`` / ``update_trigger`` (``farna.api.mcp_server``)
 * ``PATCH /triggers/{id}/ongoing`` (via the same helper)
 
 Sharing the validator here (rather than importing from ``api.routes.triggers``)

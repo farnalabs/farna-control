@@ -28,23 +28,23 @@ The overlay is OFF by default (the `runner` compose profile). Enabling it:
 
 1. Adds `docker-socket-proxy` – the filtered Docker endpoint (socket mounted
    read-only, digest-pinned image, `restart: unless-stopped`, no host ports).
-2. Sets `MODULO_DOCKER_HOST=tcp://docker-socket-proxy:2375` on `backend`,
+2. Sets `FARNA_CONTROL_DOCKER_HOST=tcp://docker-socket-proxy:2375` on `backend`,
    `saq-runner`, and `saq-system` (the documented 4-step endpoint chain:
-   `MODULO_DOCKER_HOST` → `DOCKER_HOST` → local socket).
+   `FARNA_CONTROL_DOCKER_HOST` → `DOCKER_HOST` → local socket).
 3. Declares + references the dedicated `modulo-runner-workspace` bridge
    network (compose does not create unreferenced networks under `--profile`,
    so the holder service must exist – phase-0 spike finding).
 
 **Docker endpoint env chain** (documented precedence everywhere the backend
-touches Docker): constructor arg → `MODULO_DOCKER_HOST` → `DOCKER_HOST` →
+touches Docker): constructor arg → `FARNA_CONTROL_DOCKER_HOST` → `DOCKER_HOST` →
 local socket. The raw socket is an operator override – prefer the proxy.
 
 **Registration matrix**: the Bundled Runner provider (`runner_docker`)
-registers when a Docker endpoint (`MODULO_DOCKER_HOST` or `DOCKER_HOST`) is
-set. An unrelated `MODULO_RUNNER_*` variable (for example
-`MODULO_RUNNER_MACHINE_ID`) does NOT register it (FAR-996). With no endpoint
+registers when a Docker endpoint (`FARNA_CONTROL_DOCKER_HOST` or `DOCKER_HOST`) is
+set. An unrelated `FARNA_CONTROL_RUNNER_*` variable (for example
+`FARNA_CONTROL_RUNNER_MACHINE_ID`) does NOT register it (FAR-996). With no endpoint
 set, it does not register – binding a profile to it then raises a typed
-dispatch error naming `MODULO_DOCKER_HOST` (remediation copy), never a
+dispatch error naming `FARNA_CONTROL_DOCKER_HOST` (remediation copy), never a
 silent fallback.
 
 ## 3. The runner image + digest pinning
@@ -156,7 +156,7 @@ compute lives; T4 swaps in the customer's agent image.
 | -- | -- | -- |
 | **T1** Bundled Runner (self-hosted Docker) – this guide | simplest, self-contained; **deliberately permissive networking** – bounded egress is the customer's cluster's job, not a bespoke module of ours | shipped + hardened |
 | **T2a** Managed sandbox (E2B, and the adapter pattern for Daytona et al.) | zero-setup external compute | E2B shipped |
-| **T2b** Bundled Runner on rented compute (Hetzner/Ubicloud/any Docker host) | *not a new tier* – T1 on rented metal, works via `MODULO_DOCKER_HOST`; needs validation + docs, not an adapter | doc/validation |
+| **T2b** Bundled Runner on rented compute (Hetzner/Ubicloud/any Docker host) | *not a new tier* – T1 on rented metal, works via `FARNA_CONTROL_DOCKER_HOST`; needs validation + docs, not an adapter | doc/validation |
 | **T3** Farna Control runner on Kubernetes | **most recommended shape** – inherits the customer's RBAC (role-based access control), admission policy, NetworkPolicy and workload identity; bounded by *their* controls | shipped (FAR-1051); kind conformance gate green (FAR-1053) – workload identity / NetworkPolicy enforcement not exercised by the gate, managed leg pending |
 | **T4** Bring-your-own agent image | Farna Control provisions the workspace, runs **the customer's** agent image; same machinery, different payload + result contract | to build, after T3 |
 | **Dispatch** | govern an agent you already run – external CI triggers and customer-hosted agent endpoints | separate spike; connectors story, not a runner tier |
@@ -171,9 +171,9 @@ and enforce with your own NetworkPolicy; the managed-sandbox tier
 A system cron sweeps labelled workspace containers every 5 min:
 
 - Machine-scoped by the deployment-identity label (`modulo.machine.id`, set
-  from `MODULO_RUNNER_MACHINE_ID`, hostname fallback) – two deployments
+  from `FARNA_CONTROL_RUNNER_MACHINE_ID`, hostname fallback) – two deployments
   sharing one engine never destroy each other's workspaces. Set
-  `MODULO_RUNNER_MACHINE_ID` when you run more than one deployment against
+  `FARNA_CONTROL_RUNNER_MACHINE_ID` when you run more than one deployment against
   a shared engine.
 - Orphans (run no longer active) are destroyed after a 5-minute grace
   period; the destroy path re-checks run status first and aborts with
@@ -203,11 +203,11 @@ A system cron sweeps labelled workspace containers every 5 min:
    RETRYABLE – never as a completed run with a fabricated zero exit.
 4. Docker-marked acceptance suite (requires a live engine):
    `uv run pytest tests/docker -m docker -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings` from `backend/`
-   (`MODULO_RUNNER_DIND_TESTS=1` adds the dind engine-kill strip, ~560 MB).
+   (`FARNA_CONTROL_RUNNER_DIND_TESTS=1` adds the dind engine-kill strip, ~560 MB).
 
 ## 8. Remote engine
 
-Point `MODULO_DOCKER_HOST` at a remote engine's TCP endpoint and deploy the
+Point `FARNA_CONTROL_DOCKER_HOST` at a remote engine's TCP endpoint and deploy the
 same socket proxy in front of it (the overlay's proxy is host-agnostic).
 Everything else – hardening, labels, reconciler scoping – behaves
 identically; the reconciler's machine-identity label isolates multiple
@@ -243,13 +243,13 @@ network:
 No TLS configuration is needed for these. `DOCKER_HOST=tcp://localhost:2375`
 works out of the box.
 
-### Escape hatch: `MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT`
+### Escape hatch: `FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT`
 
 For operators who need a non-loopback, non-TLS endpoint (e.g. a socket proxy
 on a private bridge at a hostname other than `docker-socket-proxy`), set:
 
 ```bash
-export MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT=1
+export FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT=1
 ```
 
 This bypasses the TLS check but **logs a prominent warning** at provider
@@ -257,7 +257,7 @@ construction:
 
 ```
 WARNING: INSECURE: Docker endpoint 'tcp://my-proxy:2375' accepted without TLS
-(MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT is set) - credentials will be
+(FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT is set) - credentials will be
 transmitted in cleartext
 ```
 
@@ -287,7 +287,7 @@ cp ca.pem cert.pem key.pem /etc/modulo/docker-certs/
 # 3. Set environment variables (in your .env, docker-compose.yml, or systemd unit)
 export DOCKER_TLS_VERIFY=1
 export DOCKER_CERT_PATH=/etc/modulo/docker-certs
-export MODULO_DOCKER_HOST=tcp://remote-engine-host:2376
+export FARNA_CONTROL_DOCKER_HOST=tcp://remote-engine-host:2376
 ```
 
 **Server TLS** (one-way): only `ca.pem` is required in `DOCKER_CERT_PATH`.
@@ -316,7 +316,7 @@ and typically listens on port 2376 (TLS) instead of 2375 (plaintext).
 ## 10. Health probe (Runners page status strip)
 
 A per-machine system cron (`runner_health_probe`, every 60s) probes the
-engine THROUGH the same endpoint chain (`MODULO_DOCKER_HOST` →
+engine THROUGH the same endpoint chain (`FARNA_CONTROL_DOCKER_HOST` →
 `DOCKER_HOST` → local socket) and caches per-(org, machine) results in
 the `runner_probe_cache` table: engine reachability, pinned-image
 presence, and the engine's `/info` CPU/memory. **The Runners page reads
@@ -341,7 +341,7 @@ org's machine rows:
 | State | Meaning | Remediation |
 |---|---|---|
 | ✓ healthy | Engine reachable, pinned image present | – |
-| ⚠ engine unreachable | The engine did not answer | Check `docker-socket-proxy` is running and `MODULO_DOCKER_HOST` resolves; the probe error text (scrubbed of any URL credentials) is shown inline |
+| ⚠ engine unreachable | The engine did not answer | Check `docker-socket-proxy` is running and `FARNA_CONTROL_DOCKER_HOST` resolves; the probe error text (scrubbed of any URL credentials) is shown inline |
 | ⚠ image not pulled | A non-placeholder pinned digest has no image on the engine | Pull the pinned image on this machine (`deploy/docker/runner-opencode.Dockerfile`) or advance the digest (/§3) |
 | stale | The cache is older than 2x the probe interval – the probe itself is suspended, the state is **never green** | Restart the SAQ system worker; the advisory `runner_health_probe` readiness check alerts too |
 

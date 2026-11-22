@@ -9,7 +9,7 @@ from farna.db.models.base import OrgScoped
 class ConnectorProfile(OrgScoped):
     """Structured runtime profile for a generic REST connector instance (FAR-412).
 
-    1:1 with :class:`~modulo.db.models.connector_instance.ConnectorInstance`. The
+    1:1 with :class:`~farna.db.models.connector_instance.ConnectorInstance`. The
     declarative endpoint (base_url, method, path, headers, params, body,
     records_path) lives in ``connector_instances.config_json``; the credential
     secret (token / api_key / password) lives ONLY in

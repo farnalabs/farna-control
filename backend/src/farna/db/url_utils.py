@@ -39,7 +39,7 @@ TLS), so :func:`split_postgres_sslmode` REJECTS them at boot instead.
 One deliberate narrowing: the historical deploy variant rewrote
 ``postgres://`` wherever it first appeared in the string (``str.replace``),
 while this implementation only rewrites a ``postgres://`` PREFIX (matching the
-historical ``modulo.settings`` variant, which used ``startswith``). A URL with
+historical ``farna.settings`` variant, which used ``startswith``). A URL with
 ``postgres://`` embedded after the scheme (e.g. inside a password) is not a
 real Postgres URL; prefix-only rewriting is strictly safer and matches the
 Settings contract.

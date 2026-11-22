@@ -452,7 +452,7 @@ def _deadline_triage_from_markers(
     keeps the attempt that really ran, and ``node_id`` is always read from the
     payload. Preferring the payload keeps this projection's identifiers
     mutually consistent and matches
-    :func:`modulo.core.run_log_correlation.marker_tail_entries`; reporting the
+    :func:`farna.core.run_log_correlation.marker_tail_entries`; reporting the
     storage key here would render a synthetic attempt key beside a real node id
     (``RunDetailView`` shows the value verbatim).
 
@@ -3139,7 +3139,7 @@ async def list_run_attempts(
     """Return the durable per-attempt execution history of a run (FAR-2078).
 
     Attempts are ordered by ``attempt_index`` ascending (0-based, per run,
-    contiguous — see ``modulo.db.models.run_attempt``). ``items`` is capped at
+    contiguous — see ``farna.db.models.run_attempt``). ``items`` is capped at
     100 rows; ``total`` carries the run's true attempt count.
 
     Org-scoped like every other run child read: the run is loaded through
@@ -4344,7 +4344,7 @@ async def diff_node_output(
 
     Accepts two (run_id, node_id) pairs, fetches each node's output,
     applies sensitive masking, and returns a structured line-level diff
-    via the shared modulo.core.line_diff helper.
+    via the shared farna.core.line_diff helper.
     """
     try:
         async with session.begin():
@@ -4547,7 +4547,7 @@ def _strip_full_attempt_suffix(attempt_key: str) -> str | None:
     DIFFERENT synthetic family from the marker attempt keys the FAR-2084 rule
     governs (``run:<run>:node:<node>:<any-shape>``). Requiring it to be numeric
     is correct for this family, so it is deliberately not routed through
-    :func:`modulo.db.crud.run_node_outputs.marker_attempt_suffix`.
+    :func:`farna.db.crud.run_node_outputs.marker_attempt_suffix`.
     """
     parts = attempt_key.rsplit(":", 2)
     if len(parts) != 3 or parts[1] != "full":

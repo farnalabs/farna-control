@@ -300,7 +300,7 @@ def retry_after_policy(
     re-dispatches nodeless zombies on the SAME cycle the watchdog would allow.
     FAR-2076: the attempt count on every path is the durable
     ``runs.execution_attempt_count`` (via
-    ``modulo.core.retry_budget.retry_executions_consumed``) — never
+    ``farna.core.retry_budget.retry_executions_consumed``) — never
     ``claim_count``, which grows on capacity-demoted and resume claims.
 
     FAR-649: an ABSENT ``on`` key (key missing or explicitly ``null``) with a
@@ -866,7 +866,7 @@ def _transient_retry_allowance(configured: int, retry_policy: Any) -> int:
     """Bound the in-execute transient retry by the pipeline's policy (FAR-2076).
 
     ``_can_fenced_requeue`` is fed ``runs.execution_attempt_count`` (via
-    ``modulo.core.retry_budget.retry_executions_consumed``) and ``retries`` used
+    ``farna.core.retry_budget.retry_executions_consumed``) and ``retries`` used
     to be ``settings.saq_run_retries`` ONLY — so the in-execute transient path
     could grant executions the pipeline's ``retry_policy`` had already refused
     (the run-level policy path and the transport were each counting a different

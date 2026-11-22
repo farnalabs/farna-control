@@ -1,11 +1,11 @@
 """Ed25519 signing of the evidence manifest (FAR-1697).
 
-Reuses the established Ed25519 primitives — ``modulo.registry.crypto.sign`` /
+Reuses the established Ed25519 primitives — ``farna.core.crypto.sign`` /
 ``verify`` (PEM keys, base64 signatures) — the same machinery the community
 registry and the hosted-library manifest already use. No new crypto: the pack
 adds a canonical payload and a published key, not a signing algorithm.
 
-Key policy (mirrors :mod:`modulo.core.license_signing`): the signing key is
+Key policy (mirrors :mod:`farna.core.license_signing`): the signing key is
 resolved from ``MODULO_EVIDENCE_SIGNING_KEY`` (a PEM-encoded Ed25519 private
 key). It is never hardcoded, and signing FAILS CLOSED when no key is
 configured — an instance that has not opted in cannot emit signed evidence.

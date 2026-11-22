@@ -454,7 +454,6 @@ import FilterBar from '../components/shared/FilterBar.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import { useDataFetch } from '../composables/useDataFetch'
-import { usePlanStore } from '../stores/planStore'
 import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { ChevronRight, Folder, FolderOpen, MoreVertical, FileStack } from '@lucide/vue'
@@ -504,7 +503,6 @@ interface PipelineListResponse {
 }
 
 const router = useRouter()
-const planStore = usePlanStore()
 const { t } = useI18n()
 const { get, patch: patchUntyped } = useApi()
 
@@ -918,9 +916,9 @@ const actionMenuItems = computed<ActionMenuItem[]>(() => {
         }]
       : [{ label: t('views.PipelineListView.pause'), command: () => handlePause(p) }]),
     { label: t('views.PipelineListView.move_to_folder'), command: () => openMoveToFolder(p) },
-    ...(planStore.featureEnabled('pipeline_delete')
-      ? [{ label: t('common.delete'), class: 'text-destructive', command: () => openDelete(p) }]
-      : []),
+    // Deletion is guarded by the pipeline.delete RBAC permission, not a plan
+    // feature: the flag that once hid this row was retired (FAR-2663).
+    { label: t('common.delete'), class: 'text-destructive', command: () => openDelete(p) },
   ]
 })
 

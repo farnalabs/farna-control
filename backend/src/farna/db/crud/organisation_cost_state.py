@@ -1,8 +1,8 @@
 """CRUD for the per-organisation cost-state row (FAR-1833).
 
-Plain data access only: no advisory locking and no import of ``modulo.core``.
+Plain data access only: no advisory locking and no import of ``farna.core``.
 The per-org advisory lock that serialises ceiling writes against accrual lives
-in ``modulo.core.runner_capacity.lock_org_cost_state``; a caller holds that lock
+in ``farna.core.runner_capacity.lock_org_cost_state``; a caller holds that lock
 and then uses these functions inside the same transaction.
 """
 

@@ -1,7 +1,7 @@
 """Audit coverage for mutating MCP tools (FAR-1472, sweep 7 of 7).
 
 The REST surface records its audit events through the ``audited(...)`` route
-dependency in ``modulo.core.audit_coverage``. MCP tools never pass through
+dependency in ``farna.core.audit_coverage``. MCP tools never pass through
 FastAPI: they call their ``_*_impl`` / CRUD helpers directly, so the route-layer
 dependency never fires for them and most mutating tools wrote nothing at all.
 ``mcp_audited`` is the MCP counterpart — one coarse audit event per tool call::
@@ -41,7 +41,7 @@ Deliberately coarse and identical for every annotated tool::
     {"tool": "delete_pipeline", "outcome": "success" | "error"}
 
 
-Failure policy — mirrors ``modulo.core.audit_coverage``
+Failure policy — mirrors ``farna.core.audit_coverage``
 -------------------------------------------------------
 * **Establishing the audit transaction** (fresh session + RLS context) is
   always logged-and-continued for both policies. It runs *after* the tool's

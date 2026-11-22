@@ -35,7 +35,7 @@ see an excerpt is partial.
 Redaction (FAR-188): artifacts, ``reason`` and the matched condition value are
 derived from NODE OUTPUTS / run STATE (LLM / connector content), so they run
 through the shared redaction primitive
-(:func:`modulo.core.pipeline_engine.error_codes.sanitize_error_text`) BEFORE
+(:func:`farna.core.pipeline_engine.error_codes.sanitize_error_text`) BEFORE
 truncation — credentials must never enter persistence unmasked. The condition
 value is redacted capture-side (``node_runner._serialize_condition_value``)
 because it rides in the interrupt payload (which the checkpointer persists);

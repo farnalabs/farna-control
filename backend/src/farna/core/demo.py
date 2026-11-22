@@ -1,10 +1,10 @@
 """Demo auto-login gate (FAR-535) — neutral configuration surface.
 
 Lives outside the API and DB layers so both the auth route
-(``modulo.api.routes.auth``) and the boot seed (``modulo.db.seed_demo``)
+(``farna.api.routes.auth``) and the boot seed (``farna.db.seed_demo``)
 share ONE definition of the feature gate and the demo-org identity
 constants. Pure config: imports nothing from the DB or API layers and
-reads nothing but ``modulo.settings`` — no secrets are logged here.
+reads nothing but ``farna.settings`` — no secrets are logged here.
 """
 
 from farna.settings import Settings

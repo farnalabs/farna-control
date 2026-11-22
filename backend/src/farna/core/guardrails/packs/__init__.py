@@ -2,7 +2,7 @@
 
 Each submodule ships the concrete controls and guardrail mappings for one
 compliance bundle (SOC 2, GDPR, ...). The pack framework (validation, CI gate,
-warn-mode-first rollout) lives in :mod:`modulo.core.guardrails.policy_pack`
+warn-mode-first rollout) lives in :mod:`farna.core.guardrails.policy_pack`
 (FAR-216 PR A) — this package is content only, never framework.
 """
 

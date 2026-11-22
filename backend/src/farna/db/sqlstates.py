@@ -14,7 +14,7 @@ two byte-identical private copies is exactly the drift this module prevents.
 classified its own cancel with a private copy of both the SQLSTATE and the
 predicate. Deliberately leaf (imports
 nothing from modulo) so both consumers import it without a cycle; the model
-module (:mod:`modulo.db.models.run_node_outputs`) hosts other shared
+module (:mod:`farna.db.models.run_node_outputs`) hosts other shared
 constants, but this is DB-layer, not schema — a sibling leaf keeps the
 vocabulary next to the extraction logic.
 
@@ -24,7 +24,7 @@ INSIDE a SQLAlchemy savepoint makes the savepoint's ``__aexit__`` raise the
 ROLLBACK-TO-SAVEPOINT failure (SQLSTATE 25P02 — "in_failed_sql_transaction")
 chained to the ORIGINAL driver error via ``__context__``. An extraction that
 only inspects ``.orig``/``__cause__`` sees 25P02 and never the original
-state — which misattributed :class:`~modulo.db.crud.run_node_outputs.
+state — which misattributed :class:`~farna.db.crud.run_node_outputs.
 DualWriteError.sqlstate` and made the node-runner's transaction-aborting
 classification (deadlock 40P01, shutdown, connection loss) dead code on the
 exact failure it exists for.
@@ -189,7 +189,7 @@ def is_lock_abort(exc: BaseException) -> bool:
     deliberately NOT included: it is a retry-hint in some isolation levels but
     is not a lock abort, and the finalisation ownership layer does not own a
     retry for it. Deliberately distinct from
-    :func:`modulo.core.cost_controller.finalize._is_abort_error`, which is the
+    :func:`farna.core.cost_controller.finalize._is_abort_error`, which is the
     broader DBAPI-class-name classification the reduced escape uses.
     """
     return sqlstate_of(exc) in (DEADLOCK_DETECTED_SQLSTATE, LOCK_NOT_AVAILABLE_SQLSTATE)

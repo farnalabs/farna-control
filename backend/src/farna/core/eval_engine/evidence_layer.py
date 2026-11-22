@@ -57,7 +57,7 @@ KEY_NAMESPACE_OWNERSHIP: dict[str, set[str]] = {
     "policy_gate": {"gate_"},
     # FAR-1691: the ``derived`` producer owns the changed-set facts — the
     # resolved set is DERIVED from the platform-observed and agent-reported
-    # sets (see ``modulo.core.eval_engine.changed_sets``).
+    # sets (see ``farna.core.eval_engine.changed_sets``).
     "derived": {"changed_set_"},
 }
 

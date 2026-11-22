@@ -478,7 +478,7 @@ async def _aggregate_run_stats(
     # "complete" is the success signal; per the raw-status-complete guard
     # (agent-failure UX design §15.2) it must not be treated as a bare
     # status comparison. Derive it as the complement of the other terminal
-    # statuses (single source of truth: modulo.db.models.run.TERMINAL_STATUSES)
+    # statuses (single source of truth: farna.db.models.run.TERMINAL_STATUSES)
     # rather than matching the success literal directly.
     _non_complete_terminal = tuple(TERMINAL_STATUSES - {"complete"})
 

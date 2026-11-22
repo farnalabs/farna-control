@@ -3,7 +3,7 @@
 The EventBus broadcasts every local event to Redis one-way; until now nothing
 subscribed to ``modulo:events:resource:{org_id}``. This pump is that missing
 consumer — **web process only**. SAQ workers hold a subscription too (see
-:mod:`modulo.core.events.worker_subscription`) but never relay: only the web
+:mod:`farna.core.events.worker_subscription`) but never relay: only the web
 process serves SSE, so only the web process re-injects.
 
 Design:

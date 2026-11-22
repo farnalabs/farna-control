@@ -78,7 +78,7 @@ __all__ = [
 RETRY_EVENTS: frozenset[str] = frozenset({"timeout", "error", "stall"})
 
 # Hard bound on per-node / per-edge ``max_attempts``. Derived from the ONE
-# run-level retry bound in ``modulo.core.retry_budget`` (not a second literal):
+# run-level retry bound in ``farna.core.retry_budget`` (not a second literal):
 # the node ceiling and the run ceiling must not drift apart.
 RETRY_MAX_ATTEMPTS_BOUND = RETRY_POLICY_MAX_RETRIES
 
@@ -254,7 +254,7 @@ def _policy_from_pipeline_default(pipeline_retry_policy: Any) -> NodeRetryPolicy
     explicit empty list (``on: []``), a malformed non-list non-null ``on``
     (e.g. a string), and a malformed / out-of-bounds budget all fail-closed to
     no node retry (unchanged). The budget itself is read through the shared
-    :func:`modulo.core.retry_budget.retry_policy_max_retries`, whose bound is
+    :func:`farna.core.retry_budget.retry_policy_max_retries`, whose bound is
     the same :data:`RETRY_MAX_ATTEMPTS_BOUND` this module exposes.
     """
     if not isinstance(pipeline_retry_policy, dict):

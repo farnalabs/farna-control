@@ -280,7 +280,7 @@ async def _resolve_prompt_template_override(
     Keying by agent (instead of a single run-wide template) means one agent's
     template can never clobber another's in a multi-agent snapshot. This
     mirrors the version resolution in
-    ``modulo.api.routes.agents._resolve_prompt_template``.
+    ``farna.api.routes.agents._resolve_prompt_template``.
     """
     snap_result = await session.execute(select(PipelineSnapshot.id).where(PipelineSnapshot.id == snapshot_id))
     if snap_result.scalar_one_or_none() is None:

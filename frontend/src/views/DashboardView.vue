@@ -97,7 +97,7 @@
            </div>
         </router-link>
         <!-- Token spend card -->
-        <router-link to="/admin/costs" class="card card-hover p-4 block" data-testid="dashboard-token-spend">
+        <router-link :to="costsDestination" class="card card-hover p-4 block" data-testid="dashboard-token-spend">
           <p class="text-sm font-medium text-muted-foreground mb-2">{{ spendLabel }}</p>
           <template v-if="hasSpendData">
             <div class="flex items-baseline gap-2">
@@ -277,6 +277,8 @@ import { RUN_STATUS } from '../constants/filters'
 import { formatMoney } from '../lib/money'
 import { runStatusBadgeClass, runStatusLabel, formatRunDate, isDispatchedRun } from '../utils/runUtils'
 import { useOrgCurrency } from '../composables/useOrgCurrency'
+import { useCurrentUser } from '../composables/useCurrentUser'
+import { getNavGroups, nonTierRefusal } from '../config/navigation'
 
 const { t } = useI18n()
 
@@ -297,6 +299,43 @@ const hasSpendData = computed(() => totalSpend.value > 0)
 const periodRefreshing = computed(() => dashboardStore.periodRefreshing)
 
 const isTeam = computed(() => planStore.isTeam)
+
+const { jwtPayload, isSystemAdmin, orgRole } = useCurrentUser()
+const costsNavItem = getNavGroups()
+  .flatMap((group) => group.items)
+  .find((item) => item.to === '/admin/costs')
+
+/**
+ * Where the token-spend card leads (FAR-2664).
+ *
+ * The card used to link at /admin/costs unconditionally, so a caller the route
+ * refuses was bounced to the Dashboard with no message — the card looked
+ * broken. Costs is role-gated (admin) and tier-gated (Team):
+ *
+ *  - a caller who passes the ROLE gate links straight at Costs; a below-tier
+ *    caller lands on the locked page naming the capability (the router guard's
+ *    FAR-2664 tier lock);
+ *  - a caller who does NOT pass it links at the same locked page with
+ *    `reason=role`, because no licence upgrade can grant them access.
+ *
+ * The non-tier refusal is decided by the SAME helper the capacity banner uses
+ * (`nonTierRefusal`), so the two audited links cannot diverge. The role comes
+ * synchronously from the access token: an unreadable token keeps the plain
+ * destination and lets the guard be the authority, while a readable token
+ * whose `org_role` is empty is a refusal — not an unknown.
+ */
+const costsDestination = computed(() => {
+  if (!costsNavItem) return '/admin/costs'
+  const refusal = nonTierRefusal(costsNavItem, {
+    hasReadableToken: jwtPayload.value !== null,
+    isSystemAdmin: isSystemAdmin.value,
+    orgRole: orgRole.value,
+  })
+  if (!refusal) return '/admin/costs'
+  const params = new URLSearchParams({ from: costsNavItem.to, reason: refusal })
+  if (costsNavItem.requiredTier) params.set('tier', costsNavItem.requiredTier)
+  return `/locked?${params.toString()}`
+})
 
 const recentRunColumns = computed<Column[]>(() => [
   { key: 'pipeline_name', label: t('views.DashboardView.pipeline') },
