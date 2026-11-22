@@ -1093,26 +1093,56 @@ def test_no_live_process_excludes_the_upgrading_process_itself(tmp_path, monkeyp
         live_child.wait(timeout=10)
 
 
+def _seed_verified_snapshot(data_dir: Path, *, schema_versions: list[str] | None = None) -> Path:
+    """An intact pre-upgrade snapshot under *data_dir* (what `--skip-backup` needs).
+
+    Mirrors the manifest pair `take_upgrade_snapshot` writes and
+    `snapshot_is_intact` verifies: a pg_dump completion trailer plus matching
+    sha256 in both manifests.
+    """
+    import hashlib
+
+    snapshot = data_dir / f"{upgrade_module.SNAPSHOT_PREFIX}seeded"
+    snapshot.mkdir()
+    payload = b"-- the seeded dump\n-- PostgreSQL database dump complete\n"
+    (snapshot / "database.sql").write_bytes(payload)
+    checksum = hashlib.sha256(payload).hexdigest()
+    manifest = {
+        "snapshot_for_upgrade": True,
+        "dump_name": "database.sql",
+        "dump_bytes": len(payload),
+        "dump_sha256": checksum,
+    }
+    restore_manifest: dict[str, Any] = {"file_checksums": {"database.sql": checksum}}
+    if schema_versions is not None:
+        manifest["schema_heads"] = list(schema_versions)
+        restore_manifest["schema_versions"] = list(schema_versions)
+    (snapshot / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (snapshot / "backup-info.json").write_text(json.dumps(restore_manifest), encoding="utf-8")
+    return snapshot
+
+
 def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched_trust_store):
-    """Finding 6: --skip-backup falls back to the LIVE _alembic_heads()
-    probe and NEVER runs the dump again (a stopped stack cannot be dumped)."""
+    """--skip-backup skips the DUMP but requires a VERIFIED snapshot already on
+    disk (the live first pass took it); it never re-dumps."""
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
     monkeypatch.setattr(upgrade_module, "stop_running_stack", lambda data_dir, **kwargs: None)
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
+    monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _data_dir: ["3ab2c1d"])
 
-    def _dump_must_not_run(_data_dir, *, bin_dir=None):
+    def _dump_must_not_run(_data_dir, *, bin_dir=None, **_kwargs):
         raise AssertionError("skip_backup must NEVER call pre_upgrade_dump")
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump_must_not_run)
-    monkeypatch.setattr(upgrade_module, "_alembic_heads", lambda: ["3ab2c1d"])
 
     data_dir = tmp_path / "data"
     install_root = tmp_path / "install-root"
     _upgrade_seed_data_dir(data_dir)
     _upgrade_seed_install_root(install_root, previous_version="1.2.0")
+    existing_snapshot = _seed_verified_snapshot(data_dir, schema_versions=["3ab2c1d"])
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
@@ -1124,25 +1154,27 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
         fetch=_upgrade_fetch_seam(release_fixture),
         boot=lambda boot_argv, *, api_port: 0,
     )
-    assert result.snapshot is None
+    assert result.snapshot == existing_snapshot
     marker = json.loads((data_dir / upgrade_module.UPGRADE_MARKER_FILENAME).read_text(encoding="utf-8"))
-    assert marker["pre_upgrade_snapshot"] is None
+    assert marker["pre_upgrade_snapshot"] == str(existing_snapshot)
 
 
 def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch, patched_trust_store):
-    """Finding 6: a skip-backup run whose live probe reads "unknown" REFUSES -
-    never a silent 'unknown == known' pass-through."""
+    """A skip-backup run whose live probe reads "unknown" and whose snapshot
+    records no schema versions REFUSES - never a silent 'unknown == known'
+    pass-through."""
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
     monkeypatch.setattr(upgrade_module, "stop_running_stack", lambda data_dir, **kwargs: None)
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
-    monkeypatch.setattr(upgrade_module, "_alembic_heads", lambda: ["unknown"])
+    monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _data_dir: ["unknown"])
     data_dir = tmp_path / "data"
     install_root = tmp_path / "install-root"
     _upgrade_seed_data_dir(data_dir)
     _upgrade_seed_install_root(install_root, previous_version="1.2.0")
+    _seed_verified_snapshot(data_dir)  # intact, but records NO schema versions
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
@@ -2467,7 +2499,7 @@ class TestRunBootHealthy:
         with (
             patch("farna.launcher.upgrade.subprocess.Popen", return_value=mock_process),
             patch("farna.launcher.upgrade.tempfile.TemporaryFile", return_value=stderr_file),
-            patch("farna.launcher.upgrade.urllib.request.urlopen", return_value=mock_response),
+            patch("urllib.request.urlopen", return_value=mock_response),
             patch("farna.launcher.upgrade._terminate_boot_process_group"),
             patch("farna.launcher.upgrade.time.sleep"),
             patch("farna.launcher.upgrade.time.monotonic", side_effect=clock_steps(0.0, 0.1, 0.2)),
@@ -2538,7 +2570,7 @@ class TestRunBootHealthy:
         with (
             patch("farna.launcher.upgrade.subprocess.Popen", return_value=mock_process),
             patch("farna.launcher.upgrade.tempfile.TemporaryFile", return_value=stderr_file),
-            patch("farna.launcher.upgrade.urllib.request.urlopen", return_value=bad_response),
+            patch("urllib.request.urlopen", return_value=bad_response),
             patch("farna.launcher.upgrade._terminate_boot_process_group"),
             patch("farna.launcher.upgrade.time.sleep"),
             patch("farna.launcher.upgrade.time.monotonic", side_effect=clock_steps(0.0, 0.1, 10.0)),
