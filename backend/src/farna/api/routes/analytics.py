@@ -1,7 +1,7 @@
 """GET /api/v1/analytics/query + /export — typed-params analytics over run_daily_facts (ADR 020).
 
 The backend is the SOLE bucketing authority: day/hour/ISO-week bucketing and
-zero-fill happen in the shared service (``modulo.core.analytics.service``),
+zero-fill happen in the shared service (``farna.core.analytics.service``),
 never on the client. Tenant isolation relies on the EXPLICIT
 ``organisation_id = :org`` predicate injected by the SQL builder (farna_control_app is
 NOBYPASSRLS on Postgres and the ORM tenant filter is NOT registered there) — RLS
@@ -912,7 +912,7 @@ async def _scan_body(
     """Chunk the primed scan generator into the wire format (NDJSON or CSV).
 
     A thin format adapter over the shared
-    :func:`modulo.api.db_error_handling.reemit_primed_stream` — the
+    :func:`farna.api.db_error_handling.reemit_primed_stream` — the
     first-item-then-the-rest loop lives in ONE place for all three streaming
     exports. ``first`` is the row already fetched by the route to surface
     pre-stream errors (validation/rate-limit/migration/database) as a proper
@@ -926,7 +926,7 @@ async def _scan_body(
 def _map_analytics_domain_error(exc: Exception) -> HTTPException | None:
     """Preserve the typed analytics service verdict ahead of the shared classifier.
 
-    Returned to :func:`~modulo.api.db_error_handling.prime_stream` as its
+    Returned to :func:`~farna.api.db_error_handling.prime_stream` as its
     ``map_domain_error`` seam: a typed ``AnalyticsError`` keeps its existing
     REST mapping (rate-limit -> 429, validation -> 422, migration -> 501,
     timeout/database -> 503); anything else returns ``None`` so the shared DB

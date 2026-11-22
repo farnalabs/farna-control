@@ -4,92 +4,32 @@ Mirrors ``test_admin_sandbox_concurrency.py`` for the ``run_concurrency_limit``
 org setting. The two caps are independent org settings that both produce the
 ``org_capacity_limited`` marker on deferred runs, but they are configured via
 distinct endpoints.
+
+The mocked org session and the authenticated clients are shared with the
+sandbox-concurrency contract in ``org_settings_concurrency_harness``; the
+endpoint, payloads and expected bodies stay here.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from unittest.mock import patch
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 
-from farna.api.dependencies import get_db_session, get_plan_context
-from farna.api.main import app
-from farna.auth.dependencies import get_current_tenant_user
-from farna.auth.jwt import TenantPrincipal
-from tests.unit.api.mock_session import configure_rls_preamble
+# ``mock_session`` / ``client_admin`` / ``client_viewer`` / ``org_settings`` are
+# pytest fixtures, collected from this module's NAMESPACE - importing them is
+# what makes the pair share one definition instead of two copies. The tuple
+# below keeps the imports referenced for ruff (they otherwise appear only in
+# test signatures) and doubles as the list of what is pulled in.
+from tests.unit.api.org_settings_concurrency_harness import (
+    ORG_ID,
+    client_admin,
+    client_viewer,
+    mock_session,
+    org_settings,
+    raise_from,
+)
 
-ORG_ID = uuid4()
-USER_ID = uuid4()
-
-
-def _admin(role: str = "admin") -> TenantPrincipal:
-    return TenantPrincipal(
-        username="admin@test",
-        organisation_id=ORG_ID,
-        account_id=USER_ID,
-        org_role=role,
-    )
-
-
-@pytest.fixture
-def org_settings():
-    return {}
-
-
-@pytest.fixture
-def mock_session(org_settings):
-    """Mock session whose org row exposes a mutable settings_json."""
-    org = MagicMock()
-    org.id = ORG_ID
-    org.settings_json = org_settings
-
-    result = MagicMock()
-    result.scalar_one_or_none.return_value = org
-
-    session = configure_rls_preamble(AsyncMock())
-    # Real SQLAlchemy sessions expose ``info`` as a dict; the route binds RLS
-    # via ``set_rls_org`` which stores the org id here on generic backends, and
-    # the FAR-1830 patch helper reads it back through its strict tenant guard.
-    session.info = {}
-    begin_cm = MagicMock()
-    begin_cm.__aenter__ = AsyncMock(return_value=None)
-    begin_cm.__aexit__ = AsyncMock(return_value=False)
-    nested_cm = MagicMock()
-    nested_cm.__aenter__ = AsyncMock(return_value=None)
-    nested_cm.__aexit__ = AsyncMock(return_value=False)
-    session.begin = MagicMock(return_value=begin_cm)
-    session.begin_nested = MagicMock(return_value=nested_cm)
-    session.execute.return_value = result
-    session.flush = AsyncMock()
-    return session
-
-
-def _make_client(mock_session, role: str):
-    mock_plan = MagicMock()
-    mock_plan.feature_enabled.return_value = True
-
-    async def _override_tenant() -> TenantPrincipal:
-        return _admin(role)
-
-    app.dependency_overrides[get_plan_context] = lambda: mock_plan
-    app.dependency_overrides[get_db_session] = lambda: mock_session
-    app.dependency_overrides[get_current_tenant_user] = _override_tenant
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
-
-
-@pytest.fixture
-def client_admin(mock_session):
-    client = _make_client(mock_session, role="admin")
-    yield client
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def client_viewer(mock_session):
-    client = _make_client(mock_session, role="viewer")
-    yield client
-    app.dependency_overrides.clear()
+_HARNESS_FIXTURES = (client_admin, client_viewer, mock_session, org_settings)
 
 
 @pytest.mark.anyio
@@ -186,19 +126,12 @@ async def test_viewer_forbidden_on_put(client_viewer):
     assert resp.status_code == 403
 
 
-def _raise(exc: Exception):
-    async def _raises(*_args, **_kwargs):
-        raise exc
-
-    return _raises
-
-
 @pytest.mark.anyio
 async def test_get_programming_error_returns_501(client_admin):
     """Migration-required errors on GET surface as 501."""
     with patch(
         "farna.api.routes.admin.get_org_run_concurrency_limit",
-        new=_raise(ProgrammingError("stmt", {}, Exception("missing table"))),
+        new=raise_from(ProgrammingError("stmt", {}, Exception("missing table"))),
     ):
         resp = await client_admin.get("/api/v1/admin/org/run-concurrency")
     assert resp.status_code == 501
@@ -209,7 +142,7 @@ async def test_get_sqlalchemy_error_returns_503(client_admin):
     """Generic SQLAlchemy errors on GET surface as 503."""
     with patch(
         "farna.api.routes.admin.get_org_run_concurrency_limit",
-        new=_raise(SQLAlchemyError("mock", {}, "")),
+        new=raise_from(SQLAlchemyError("mock", {}, "")),
     ):
         resp = await client_admin.get("/api/v1/admin/org/run-concurrency")
     assert resp.status_code == 503
@@ -220,7 +153,7 @@ async def test_get_integrity_error_returns_503_not_409(client_admin):
     """The read-only GET has no IntegrityError→409 'already exists' mapping."""
     with patch(
         "farna.api.routes.admin.get_org_run_concurrency_limit",
-        new=_raise(IntegrityError("stmt", {}, Exception("fk violation"))),
+        new=raise_from(IntegrityError("stmt", {}, Exception("fk violation"))),
     ):
         resp = await client_admin.get("/api/v1/admin/org/run-concurrency")
     assert resp.status_code == 503

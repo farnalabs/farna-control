@@ -1,9 +1,9 @@
 """SOC 2 policy pack content — Trust Services Criteria controls mapped to guardrails.
 
 FAR-216 PR B. The pack framework ships in
-:mod:`modulo.core.guardrails.policy_pack` (PR A); this module is the SOC 2
+:mod:`farna.core.guardrails.policy_pack` (PR A); this module is the SOC 2
 CONTENT — the concrete TSC controls and their guardrail mappings, expressed as
-a CI-ready :class:`~modulo.core.guardrails.policy_pack.PolicyPack`.
+a CI-ready :class:`~farna.core.guardrails.policy_pack.PolicyPack`.
 
 The pack covers the input-side data-safety controls that deterministic
 guardrails can enforce (regex / json_schema detection only — no LLM judges):
@@ -22,7 +22,7 @@ guardrails can enforce (regex / json_schema detection only — no LLM judges):
 
 Every control is mapped and the pack passes ``assert_pack_ci_ready`` — zero
 unmapped, zero uninstantiable. Roll it out warn-mode-first with
-:func:`~modulo.core.guardrails.policy_pack.pack_rollout_config`.
+:func:`~farna.core.guardrails.policy_pack.pack_rollout_config`.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from farna.core.guardrails.config import GuardrailConfigItem, GuardrailDetection
 from farna.core.guardrails.policy_pack import PolicyControl, PolicyPack
 
 # CC6.1 — AWS access-key identifiers (AKIA/ASIA prefix) are sourced from the
-# canonical shared list in :mod:`modulo.core.secret_patterns` so the
+# canonical shared list in :mod:`farna.core.secret_patterns` so the
 # secret-format knowledge is never duplicated or drifted across redaction sites.
 # ``GuardrailDetection`` requires a *string* pattern, so we use the compiled
 # pattern's ``.pattern`` source string rather than the compiled object.

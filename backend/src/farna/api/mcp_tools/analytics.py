@@ -315,7 +315,7 @@ async def _query_analytics_impl(input: _AnalyticsQueryInput) -> dict[str, Any]:
         "and error_code for filtering/grouping by failure code. `dimension` groups the "
         "series by a key — `trigger_type`, `trigger_id`, `status`, `pipeline`, `folder`, "
         "`team`, `error_code` or `execution_origin` — which is how per-trigger latency is "
-        "read, and how a dispatched run is told apart from one Modulo executed "
+        "read, and how a dispatched run is told apart from one Farna Control executed "
         "(`execution_origin` groups on the FAR-1141 run provenance column: `dispatched` "
         "vs NULL). The result "
         "also carries a `deep_link` to the /analytics view pre-filtered with the same "

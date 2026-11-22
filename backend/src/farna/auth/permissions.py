@@ -6,7 +6,7 @@ it rather than duplicating roles.
 
 ``PERMISSIONS`` maps ``"resource.operation"`` keys to the minimum org role
 required to perform them. Roles resolve through ``ORG_ROLE_HIERARCHY`` from
-``modulo.auth.team_rbac`` (viewer < runner < operator < admin).
+``farna.auth.team_rbac`` (viewer < runner < operator < admin).
 """
 
 from __future__ import annotations

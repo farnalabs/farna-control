@@ -14,8 +14,8 @@ NOTE (persistence): the derived key is meant to be stored on the run record so
 an operator re-run can READ it back. The run-record column
 (``runs.idempotency_key``, migration 0156, FAR-438) now lands it: the run stores
 its stable logical identity ``<pipeline_id>:<run_number>`` (built + validated in
-``modulo.db.crud.run`` — the DB layer owns the run-record storage contract, per
-the import-linter layering that forbids ``modulo.db`` importing ``modulo.core``),
+``farna.db.crud.run`` — the DB layer owns the run-record storage contract, per
+the import-linter layering that forbids ``farna.db`` importing ``farna.core``),
 and a re-run that restores the SAME run reads it back and recomputes the
 identical per-node keys via :func:`node_idempotency_key`. The derivation
 primitive (:func:`stable_idempotency_key`) is the delivered contract;
@@ -66,7 +66,7 @@ _IDEMPOTENCY_NAMESPACE = "modulo"
 # defeating the idempotency contract. Validate the ``<id>:<number>`` shape here
 # so a naive ``run_id`` fails loudly instead of silently breaking dedupe.
 # NOTE: this regex is mirrored by ``_RUN_IDEMPOTENCY_REF_RE`` in
-# ``modulo.db.crud.run`` (the DB layer cannot import this module, so the two
+# ``farna.db.crud.run`` (the DB layer cannot import this module, so the two
 # copy the shape deliberately). ``test_idempotency`` asserts both accept/reject
 # the same samples so the mirror cannot drift from this definition.
 _RUN_REF_RE = re.compile(r"^[A-Za-z0-9_-]+:\d+$")
@@ -135,8 +135,8 @@ def stable_idempotency_key(
 
 # FAR-438: the run-record persistence boundary. ``stable_idempotency_key`` is the
 # derivation primitive; the run-storage helpers (run-ref building + validation)
-# live in the DB layer (``modulo.db.crud.run``) because import-linter forbids
-# ``modulo.db`` importing ``modulo.core`` and the run record is a DB concern. The
+# live in the DB layer (``farna.db.crud.run``) because import-linter forbids
+# ``farna.db`` importing ``farna.core`` and the run record is a DB concern. The
 # helpers here (``node_idempotency_key`` + ``read_before_write_suppression``) are
 # the CORE side: they derive a per-node key FROM the persisted run value and
 # decide whether a re-run reusing the same key must suppress a duplicate write.

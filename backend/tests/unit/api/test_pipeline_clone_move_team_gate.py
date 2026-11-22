@@ -42,54 +42,40 @@ Tests (mocked session, real FastAPI dependency stack):
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator, Generator
-from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastapi.testclient import TestClient
-from sqlalchemy.sql import Select
+from tests.unit.api.pipeline_team_gate_harness import (
+    NON_MEMBER_DETAIL,
+    ORG_ID,
+    PIPELINE_ID,
+    PREFIX,
+    TEAM_ID,
+    USER_ID,
+    client_for,
+    make_gate_session,
+    patched,
+    result,
+)
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
-from farna.api.main import app
-from farna.auth.dependencies import get_current_user
-from farna.auth.jwt import AuthenticatedPrincipal
-from farna.settings import Settings, get_settings
-from tests.unit.api.mock_session import configure_rls_preamble
-
-_VALID_32 = "a" * 32
-_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
-_PIPELINE_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 _FOLDER_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
-_TEAM_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 #: The team the CLONE lands on in the clone-target test - deliberately not
 #: ``_TEAM_ID``, so the target re-check has a real denial to raise.
 _OTHER_TEAM = uuid.UUID("77777777-7777-7777-7777-777777777777")
-_PREFIX = "farna.api.routes.pipelines."
 _NOW = datetime(2025, 1, 1, tzinfo=UTC)
 
-_NON_MEMBER_DETAIL = "Not a member of the team that owns this resource"
-
-
-def _make_settings() -> Settings:
-    return Settings(
-        database_url="postgresql+asyncpg://localhost/test",
-        secret_key=_VALID_32,
-        fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-    )
-
-
-def _result(*, first: Any = None, scalar_one_or_none: Any = None) -> MagicMock:
-    result = MagicMock()
-    result.first.return_value = first
-    result.scalar_one_or_none.return_value = scalar_one_or_none
-    scalars = MagicMock()
-    scalars.all.return_value = []
-    result.scalars.return_value = scalars
-    return result
+# The harness defines these once; the underscored local spellings are what this
+# module's bodies use.
+_ORG_ID = ORG_ID
+_USER_ID = USER_ID
+_PIPELINE_ID = PIPELINE_ID
+_TEAM_ID = TEAM_ID
+_PREFIX = PREFIX
+_NON_MEMBER_DETAIL = NON_MEMBER_DETAIL
+_client_for = client_for
+_patched = patched
+_result = result
 
 
 def _pipeline_row(*, visibility: str, owner_team_id: uuid.UUID | None) -> MagicMock:
@@ -139,70 +125,13 @@ def _make_team_session(*, is_member: bool) -> AsyncMock:
     ``.first()``) and clone's ``get_pipeline`` (full entity, read via
     ``.scalar_one_or_none()``) - one result object answers both accessors.
     """
-    session = AsyncMock()
-    configure_rls_preamble(session)
-    begin_cm = AsyncMock()
-    begin_cm.__aenter__ = AsyncMock(return_value=None)
-    begin_cm.__aexit__ = AsyncMock(return_value=False)
-    session.begin = MagicMock(return_value=begin_cm)
-    session.begin_nested = MagicMock(return_value=begin_cm)
-    session.in_transaction = MagicMock(return_value=True)
-    session.info = {}
-    bind = MagicMock()
-    bind.dialect.name = "sqlite"
-    session.get_bind = MagicMock(return_value=bind)
-
     gate_row = _pipeline_row(visibility="team", owner_team_id=_TEAM_ID)
-
-    async def _execute(stmt: object, *_args: Any, **_kwargs: Any) -> MagicMock:
-        sql = str(stmt)
-        if "set_config" in sql:
-            return _result()
-        if "authz_enforce" in sql:
-            return _result(scalar_one_or_none=None)
-        if "team_memberships" in sql:
-            return _result(first=uuid.uuid4() if is_member else None)
-        if "FROM pipelines" in sql:
-            if isinstance(stmt, Select) and "FOR UPDATE" in sql.upper():
-                return _result(scalar_one_or_none=gate_row)
-            both = _result(first=(_TEAM_ID, "team"))
-            both.scalar_one_or_none.return_value = gate_row
-            return both
-        return _result()
-
-    session.execute = AsyncMock(side_effect=_execute)
-    return session
-
-
-@contextmanager
-def _client_for(session: AsyncMock, role: str) -> Generator[TestClient, None, None]:
-    async def override_session() -> AsyncGenerator[AsyncMock, None]:
-        yield session
-
-    app.dependency_overrides[get_settings] = _make_settings
-    app.dependency_overrides[get_db_session] = override_session
-    app.dependency_overrides[_get_engine] = lambda: MagicMock()
-    app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
-        username=f"{role}@test",
-        organisation_id=_ORG_ID,
-        account_id=_USER_ID,
-        org_role=role,
+    return make_gate_session(
+        is_member=is_member,
+        resolver_scope=(_TEAM_ID, "team"),
+        locked_row=gate_row,
+        resolver_row=gate_row,
     )
-    mock_plan = MagicMock()
-    mock_plan.feature_enabled.return_value = True
-    app.dependency_overrides[get_plan_context] = lambda: mock_plan
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-@contextmanager
-def _patched(patches: list) -> Generator[None, None, None]:
-    with ExitStack() as stack:
-        for p in patches:
-            stack.enter_context(p)
-        yield
 
 
 def _cloned_row(*, visibility: str = "org", owner_team_id: uuid.UUID | None = None) -> MagicMock:

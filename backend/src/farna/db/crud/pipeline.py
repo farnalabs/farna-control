@@ -1658,11 +1658,11 @@ def graph_update_audit_payload(
 # The per-eval advisory lock is SHARED with the FAR-1106 authoring routes:
 # both the declarative translation here and the in-product
 # ``/evals/{eval_id}/policy-gate`` writers reach
-# ``modulo.db.crud._gate_advisory_lock.with_gate_advisory_lock`` — the SAME
+# ``farna.db.crud._gate_advisory_lock.with_gate_advisory_lock`` — the SAME
 # ``policy_gate:<eval_id>`` key through ``hashtext``. The helper lives in a
 # neutral ``db``-side module (FAR-1688) because the
 # ``db-does-not-import-core`` import-linter contract forbids
-# ``modulo.db`` -> ``modulo.api``, so neither layer may own the other's copy;
+# ``farna.db`` -> ``farna.api``, so neither layer may own the other's copy;
 # a duplicate on either side would let an edit silently desynchronise the key.
 
 _POLICY_GATE_ACTIONS = ("warn", "block")
@@ -2488,7 +2488,7 @@ async def set_earned_autonomy_level(
     """Set (or clear) a pipeline's runtime ``earned_autonomy_level`` (FAR-1175).
 
     Called by the manual promote/demote API + MCP surfaces. ``level`` must be a
-    canonical :class:`~modulo.core.run_context.autonomy.AutonomyLevel` value (or
+    canonical :class:`~farna.core.run_context.autonomy.AutonomyLevel` value (or
     ``None`` to clear) — the caller validates/clamps against the pipeline's
     ``max_autonomy_level``; this function only writes. Returns the refreshed
     pipeline, or ``None`` when it does not exist in the org.

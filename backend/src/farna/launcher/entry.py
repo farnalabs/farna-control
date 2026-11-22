@@ -466,6 +466,9 @@ def _run_foreground(
             )
             _ensure_app_database(launcher_state, secrets)
             _prepare_database_env(composed)
+            alignment_exit = _refuse_on_database_ahead(supervisor, ready_fd)
+            if alignment_exit is not None:
+                return alignment_exit
             settings = _build_settings()
             _add_saq_children(supervisor, settings, composed)
             return _serve_until_shutdown(
@@ -660,6 +663,45 @@ def _build_settings() -> Any:
     from farna.settings import get_settings
 
     return get_settings()
+
+
+def _refuse_on_database_ahead(supervisor: Any, ready_fd: int | None) -> int | None:
+    """FAR-2659 startup guard: refuse a database from a newer release.
+
+    Runs BEFORE the API's lifespan migrations and before the SAQ children are
+    registered, so a database ahead of this release is never touched.  The
+    check itself is the shared ``farna.db.alignment`` function (the container
+    entrypoints call the same one); this wrapper only turns its verdict into
+    the launcher's exit path.
+
+    Returns ``alignment.EXIT_DATABASE_AHEAD`` when the caller must return that
+    status, or ``None`` to proceed.  A check that cannot run at all fails OPEN
+    (logged): a transient database blip must not block a normal forward
+    upgrade, and the lifespan migration runner reports the real fault.
+    """
+    from farna.db import alignment
+
+    database_url = alignment.database_url_from_env()
+    if database_url is None:
+        _log.warning("entry.database_alignment_skipped reason=no_database_url")
+        return None
+    try:
+        alignment.ensure_release_aligned(database_url)
+    except alignment.DatabaseAheadError as exc:
+        message = str(exc)
+        # The refusal is the operator-facing one line; the detached-boot
+        # handshake gets it too so a `--detach` caller reports the real cause
+        # instead of "died before signalling readiness".
+        sys.stderr.write(f"{message}\n")
+        sys.stderr.flush()
+        if ready_fd is not None:
+            with contextlib.suppress(OSError):
+                os.write(ready_fd, f"failed: {message}\n".encode())
+        _shutdown_supervisor_after_boot_error(supervisor)
+        return alignment.EXIT_DATABASE_AHEAD
+    except alignment.AlignmentCheckError as exc:
+        _log.warning("entry.database_alignment_skipped error=%s", exc)
+    return None
 
 
 # The composed keys every SAQ child receives. SAQ_AUTH_USERNAME/PASSWORD are

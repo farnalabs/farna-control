@@ -75,7 +75,7 @@ from farna.api.middleware.sensitive_mask import merge_masked_graph_nodes  # noqa
 # REST approve route does. Reuse that route's executor builder (notifier-wired)
 # and its capacity-deferred response body rather than duplicating either — the
 # established sibling-route-module import pattern (`evals`, `triggers` above).
-# ``modulo.api.routes.hitl`` imports nothing from ``mcp_server``, so there is
+# ``farna.api.routes.hitl`` imports nothing from ``mcp_server``, so there is
 # no circular-import risk.
 from farna.api.routes.hitl import (
     _build_resume_executor,  # noqa: F401

@@ -23,8 +23,8 @@ result, so the prior (observed) side can never be read as the fresh side.
 
 Relationship to ``comparison.py``
 ---------------------------------
-:mod:`modulo.determination.comparison` compares the *draft graph* of two
-proposals - ``compare_proposals`` over two :class:`~modulo.determination.comparison.ProposalComparisonSide`
+:mod:`farna.determination.comparison` compares the *draft graph* of two
+proposals - ``compare_proposals`` over two :class:`~farna.determination.comparison.ProposalComparisonSide`
 values, reporting added/removed/changed nodes and edges, changed properties and
 approval/automation behaviour. This module compares two *attempts' inferences*
 (derived elements) and the sampled *inputs* that produced them, which that
@@ -35,11 +35,11 @@ remain separate modules with separate versioned contracts
 (``alpha.determination-rerun.v1`` vs ``alpha.determination-comparison.v1``) and
 no shared DTO: :class:`RerunAttemptSummary` carries the attempt status and
 source inventory a rerun must show, while
-:class:`~modulo.determination.comparison.ProposalSideSummary` carries the review
+:class:`~farna.determination.comparison.ProposalSideSummary` carries the review
 state, ``activation_status`` and ``side`` a comparison must show - neither shape
 is a subset of the other. No helper is forked: both correction application
 (``review._apply_corrections``) and per-fact correction
-(``review._corrected_fact``) are imported from :mod:`modulo.determination.review`,
+(``review._corrected_fact``) are imported from :mod:`farna.determination.review`,
 so a rerun and a review can never disagree about which corrections are valid.
 """
 

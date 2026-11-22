@@ -5,8 +5,8 @@ custom eval functions, and custom schema field types via standard
 Python ``importlib.metadata.entry_points`` (setuptools entry points).
 
 Entry point groups:
-    - ``modulo.connectors`` — provides ``(config, creds) -> ConnectorBase`` builders
-    - ``modulo.model_backends`` — provides ``(api_key, model_id, **default_params)``
+    - ``farna.connectors`` — provides ``(config, creds) -> ConnectorBase`` builders
+    - ``farna.model_backends`` — provides ``(api_key, model_id, **default_params)``
       ``-> ModelBackendBase`` builders
     - ``modulo.evals`` — provides ``(config) -> EvalDefinition`` builders
       for custom eval types

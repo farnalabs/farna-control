@@ -125,7 +125,7 @@ class EvidenceProvider(Protocol):
 
 # --- §15.14 metrics (evidence subset) ----------------------------------------
 # Module-level handles, lazy-init against the OTel meter provider (house
-# pattern — ``modulo.core.cost_controller.breakdown.metrics``). Every record
+# pattern — ``farna.core.cost_controller.breakdown.metrics``). Every record
 # function is a silent no-op when no meter provider is wired, so the probe
 # path can never break because telemetry is absent.
 

@@ -140,7 +140,7 @@ never initiates external connections without configuration.
 
 ```bash
 # Check if telemetry is enabled
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep MODULO_TELEMETRY
+docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep FARNA_CONTROL_TELEMETRY_ENABLED
 
 # Check if OTLP endpoint is configured
 docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep OTEL_EXPORTER_OTLP

@@ -283,7 +283,7 @@ async def _apply_guardrail_upserts(
     """Add missing guardrail rows and upsert the ones config-as-code owns.
 
     Thin route wrapper over
-    :func:`modulo.core.guardrails.materialise.upsert_org_guardrail_rows` — the
+    :func:`farna.core.guardrails.materialise.upsert_org_guardrail_rows` — the
     SAME implementation the pipeline-creation seed (FAR-1593) uses, so the
     apply/import fan-out and creation-time materialisation can never diverge
     on how an org-level row is built.

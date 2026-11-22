@@ -250,7 +250,7 @@ async def _resolve_sso_client_secret(
 ) -> str | None:
     """Resolve a ``secretref://<key>`` SSO ``client_secret`` (FAR-1640).
 
-    Reuses the shared :func:`modulo.core.secrets_backend.resolve_credential`
+    Reuses the shared :func:`farna.core.secrets_backend.resolve_credential`
     seam (the same one model backends and connectors use) rather than adding a
     parallel mechanism. A literal secret — and ``None`` — pass through untouched
     (no secrets backend is constructed, so the common path is byte-identical

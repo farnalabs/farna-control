@@ -1,6 +1,6 @@
 """Readiness-degradation email alerts for the operator (FAR-1446, in-app half).
 
-Modulo already had a rich health surface (``/healthz/ready`` and its ~14
+Farna Control already had a rich health surface (``/healthz/ready`` and its ~14
 sub-checks) and a working SMTP path (``core.email_service``), but nothing
 connected them: when the app degraded *while still up*, nobody was emailed.
 This module closes that gap from the existing system-cron path
@@ -10,7 +10,7 @@ Design decisions (each mirrors something the repo already does rather than
 inventing a mechanism):
 
 * **Reuse, not reimplement.** The health evaluation is
-  ``modulo.api.routes.health.evaluate_readiness`` — the SAME code the
+  ``farna.api.routes.health.evaluate_readiness`` — the SAME code the
   ``/healthz/ready`` route runs — imported lazily inside the default observer
   (a ``core`` module must not import ``api`` at module-import time:
   ``api.routes.health`` imports ``core.cron_helpers``). The alert therefore
@@ -625,7 +625,7 @@ class HealthObservation:
         ``unavailable`` when the aggregate is unavailable; otherwise
         ``degraded`` when the observation is alerting (the aggregate is ``ok``
         but a real-failure advisory check, or a SEVERE event-loop stall, is
-        broken — the subject must NOT read ``[Modulo] Readiness ok``);
+        broken — the subject must NOT read ``[Farna Control] Readiness ok``);
         otherwise ``ok`` (no alert fires).
         """
         if self.status == "unavailable":

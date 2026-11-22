@@ -1,8 +1,8 @@
 """Connector-local per-destination rate limiting buckets (FAR-411 / FAR-439).
 
 The REST connector's per-destination outbound rate limit lives here rather than
-reaching into ``modulo.core`` — the import-linter contract forbids connectors
-importing core, so ``modulo.core.rate_limiter.TokenBucket`` cannot be reused.
+reaching into ``farna.core`` — the import-linter contract forbids connectors
+importing core, so ``farna.core.rate_limiter.TokenBucket`` cannot be reused.
 Semantics mirror the core bucket: continuous refill up to ``burst``, guarded by
 an ``asyncio.Lock`` so concurrent tasks never go below zero tokens.
 

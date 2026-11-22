@@ -6,6 +6,11 @@ python -m farna.db.bootstrap_role
 
 echo "Running database migrations..."
 
+# FAR-2659: refuse a database from a newer release BEFORE any migration runs.
+# One shared Python check (the native launcher calls the same function); a
+# non-zero exit is the legible refusal, and `set -e` stops the script there.
+python -m farna.db.alignment
+
 # Phase 1: apply the initial schema (creates version table with VARCHAR(32))
 alembic upgrade 0001_v2_identity_org
 

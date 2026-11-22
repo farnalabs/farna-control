@@ -3,7 +3,7 @@
 A policy pack is a compliance bundle (SOC 2, GDPR, ...) expressed as code:
 a versioned ``PolicyPack`` whose ``controls`` are the individual compliance
 controls (e.g. SOC2 ``CC6.1``, GDPR ``art.32``). Each control MAY carry a
-concrete :class:`~modulo.core.guardrails.config.GuardrailConfigItem` — the
+concrete :class:`~farna.core.guardrails.config.GuardrailConfigItem` — the
 control→guardrail mapping. The framework guarantees that every MAPPED control
 instantiates to a schema-valid guardrail config and that a pack with
 unmapped or uninstantiable controls FAILS CI (a pack author cannot merge a
@@ -14,7 +14,7 @@ The layers provided here:
 * **Pack schema** — :class:`PolicyPack` / :class:`PolicyControl` with a
   ``mapped`` flag (a supplied ``guardrail`` implies the mapping).
 * **Instantiation** — :func:`instantiate_pack` builds a
-  :class:`~modulo.core.guardrails.config.GuardrailConfigSet` from every
+  :class:`~farna.core.guardrails.config.GuardrailConfigSet` from every
   MAPPED control's guardrail, validating each against the shipped
   ``validate_config_set``. An uninstantiable control (one whose guardrail
   fails validation, or whose guardrail id duplicates another control's)
@@ -25,9 +25,9 @@ The layers provided here:
   ``uninstantiable`` counts, the unmapped control ids, the uninstantiable
   control ids WITH their validation error, and a flat ``errors`` list.
 * **CI gate** — :func:`assert_pack_ci_ready` raises
-  :class:`~modulo.core.guardrails.GuardrailConfigError` when a pack has any
+  :class:`~farna.core.guardrails.GuardrailConfigError` when a pack has any
   unmapped or uninstantiable control. A CLI entry
-  (``python -m modulo.core.guardrails.policy_pack <pack.yaml>``) wires the
+  (``python -m farna.core.guardrails.policy_pack <pack.yaml>``) wires the
   gate into CI: exit 0 when ready, 1 when gapped.
 * **Warn-mode-first rollout** — :func:`pack_rollout_config` returns the
   instantiated set with every guardrail's action forced to the rollout mode.
@@ -73,7 +73,7 @@ class PolicyControl(BaseModel):
 
     ``id`` is the control reference (SOC2 ``CC6.1``, GDPR ``art.32``).
     ``guardrail`` is the concrete
-    :class:`~modulo.core.guardrails.config.GuardrailConfigItem` this control
+    :class:`~farna.core.guardrails.config.GuardrailConfigItem` this control
     instantiates to — the mapping. ``mapped`` records whether the control has
     a concrete mapping: a supplied ``guardrail`` implies ``mapped=True``; a
     control explicitly marked ``mapped=True`` without a guardrail is
@@ -332,7 +332,7 @@ def load_pack_file(path: str) -> PolicyPack:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for the pack CI gate.
 
-    ``python -m modulo.core.guardrails.policy_pack <pack.yaml>`` loads the
+    ``python -m farna.core.guardrails.policy_pack <pack.yaml>`` loads the
     pack, runs :func:`assert_pack_ci_ready`, prints the gap report when not
     ready, and exits 0 (ready) or 1 (gapped). Wire this into CI so a pack
     with unmapped or uninstantiable controls fails the build.

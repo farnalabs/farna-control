@@ -24,6 +24,7 @@ from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.core.exceptions import OrgDeletedError, PipelineNotRunnableError, RateLimitConflictError
 from farna.core.pipeline_engine.recovery import (
+    ConcurrentRecoveryError,
     GuardrailOverrideError,
     GuardrailOverrideNoCheckpointError,
     GuardrailOverrideRejectedError,
@@ -1152,7 +1153,7 @@ def test_run_response_populates_seam_coverage(client: TestClient) -> None:
             "seam": "runtime_loop",
             "state": "not_applicable",
             "provenance": "derived",
-            "reason": "runtime does not expose a tool-event contract Modulo can verify",
+            "reason": "runtime does not expose a tool-event contract Farna Control can verify",
         },
     ]
     with (
@@ -1176,7 +1177,7 @@ def test_run_response_populates_seam_coverage(client: TestClient) -> None:
     assert coverage[1]["provenance"] == "attested"
     assert coverage[2]["state"] == "not_applicable"
     assert coverage[2]["provenance"] == "derived"
-    assert coverage[2]["reason"] == "runtime does not expose a tool-event contract Modulo can verify"
+    assert coverage[2]["reason"] == "runtime does not expose a tool-event contract Farna Control can verify"
 
 
 def test_run_response_seam_coverage_none_when_absent(client: TestClient) -> None:
@@ -1241,7 +1242,7 @@ def test_run_response_seam_coverage_runtime_loop_cannot_be_enforced(client: Test
     runtime_loop = next(statement for statement in coverage if statement["seam"] == "runtime_loop")
     assert runtime_loop["state"] == "not_applicable"
     assert runtime_loop["provenance"] == "derived"
-    assert runtime_loop["reason"] == "runtime does not expose a tool-event contract Modulo can verify"
+    assert runtime_loop["reason"] == "runtime does not expose a tool-event contract Farna Control can verify"
 
 
 def test_run_response_gate_fired_true_on_idempotency_gate_code(client: TestClient) -> None:
@@ -2701,6 +2702,28 @@ def test_guardrail_override_non_guardrail_run_rejected_409(client: TestClient) -
         )
 
     assert resp.status_code == 409
+    mock_dispatch.assert_not_called()
+
+
+def test_guardrail_override_concurrent_recovery_rejected_409(client: TestClient) -> None:
+    """A concurrent recovery race that loses surfaces as 409 and never
+    dispatches (FAR-208 remediation)."""
+    with (
+        patch("farna.api.routes.runs.set_rls_org"),
+        patch(
+            "farna.api.routes.runs.guardrail_override",
+            new_callable=AsyncMock,
+            side_effect=ConcurrentRecoveryError(_RUN_ID),
+        ),
+        patch("farna.api.routes.runs.dispatch_run", new_callable=AsyncMock) as mock_dispatch,
+    ):
+        resp = client.post(
+            f"/api/v1/runs/{_RUN_ID}/guardrail-override",
+            json={"input_data": {"body": "clean"}},
+        )
+
+    assert resp.status_code == 409
+    assert "Concurrent recovery attempt" in resp.json()["detail"]
     mock_dispatch.assert_not_called()
 
 

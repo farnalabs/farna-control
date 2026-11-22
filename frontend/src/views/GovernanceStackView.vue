@@ -201,6 +201,11 @@ const LEVEL_DEFS: LevelDef[] = [
     countLabelKey: 'views.GovernanceStackView.level_tools_count',
     gateKey: 'views.GovernanceStackView.gate_tools',
     featureName: 'plugin_management',
+    // This level is the CONNECTORS surface ("Tools" -> /admin/connectors), not
+    // the Plugins page: connecting external tools is a first-run requirement,
+    // so it stays open on Community as FAR-2604 requires. `plugin_management`
+    // is broader than the pages it gates (it is Team-tier); FAR-2665 narrows
+    // it. The /admin/connectors route and API carry no feature gate.
     requiredTier: 'community',
     links: [{ to: '/admin/connectors', labelKey: 'views.GovernanceStackView.level_tools_link' }],
   },

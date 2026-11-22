@@ -64,7 +64,7 @@ class SoftDeleteMixin:
     """Mixin that adds soft-delete support. Set deleted_at to mark as deleted.
 
     A global ORM ``do_orm_execute`` listener (registered by
-    :func:`~modulo.db.soft_delete.register_soft_delete_filter`) automatically
+    :func:`~farna.db.soft_delete.register_soft_delete_filter`) automatically
     applies ``WHERE deleted_at IS NULL`` to every SELECT that targets a model
     inheriting this mixin. Call sites that legitimately need to see soft-deleted
     rows (restore, purge, historical lookups, version resolution) must opt out::

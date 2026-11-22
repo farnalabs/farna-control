@@ -112,10 +112,10 @@ def _instance_default_review_window_seconds() -> int:
     settings.hitl_review_cancel_grace_seconds`` (= 4500s / 75 min at the
     shipped defaults). The env default itself is NOT changed by FAR-1257.
 
-    ``HITL_CLAIM_TTL_SECONDS`` is imported from ``modulo.settings``, NOT from
+    ``HITL_CLAIM_TTL_SECONDS`` is imported from ``farna.settings``, NOT from
     ``core.hitl_manager``: this module is in the DB layer, which the
     import-linter contract ``db-does-not-import-core`` forbids from importing
-    ``modulo.core`` at all. Settings is a near-leaf both layers may read, so
+    ``farna.core`` at all. Settings is a near-leaf both layers may read, so
     the one TTL value still serves ``create_gate``'s ``expires_at`` and this
     window without any possibility of drift.
     """

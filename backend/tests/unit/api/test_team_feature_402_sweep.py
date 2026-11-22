@@ -108,7 +108,6 @@ TEAM_ROUTES: list[tuple[str, str, str]] = [
     ("plugin_management", "get", "/api/v1/plugins"),
     ("admin_run_retention", "get", "/api/v1/admin/runs/retention"),
     ("error_forwarders", "get", "/api/v1/errors/forwarders"),
-    ("schema_version_history", "get", f"/api/v1/schemas/{_SCHEMA_ID}/versions"),
     ("runtime_config", "get", "/api/v1/admin/runtime-config"),
     ("rate_limits", "get", "/api/v1/admin/rate-limits"),
     ("observability", "get", "/api/v1/settings/observability"),
@@ -117,12 +116,16 @@ TEAM_ROUTES: list[tuple[str, str, str]] = [
 ]
 
 
-# FAR-2604: features lowered to the community tier. A real Community plan has
-# these active without a licence, so they must NEVER be in TEAM_ROUTES (which
-# asserts a 402 on the community plan).
+# Features lowered to the community tier. A real Community plan has these
+# active without a licence, so they must NEVER be in TEAM_ROUTES (which asserts
+# a 402 on the community plan).
+#   FAR-2604: environment_profiles, email_config
+#   FAR-2663: schema_version_history (schema versioning is provenance, and
+#             gating it withheld the publish path from Community authors)
 COMMUNITY_ROUTES: list[tuple[str, str, str]] = [
     ("environment_profiles", "get", "/api/v1/environment-profiles"),
     ("email_config", "get", f"/api/v1/admin/org/{_DUMMY_UUID}/email-settings"),
+    ("schema_version_history", "get", f"/api/v1/schemas/{_SCHEMA_ID}/versions"),
 ]
 
 

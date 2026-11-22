@@ -11,7 +11,7 @@ It also owns the ONE deployment-environment send gate
 (``alerting_enabled_for_environment`` — the ``ALERT_ENVIRONMENTS``
 allowlist), for the same drift-prevention reason.
 
-Deliberately a leaf: it imports only ``modulo.settings`` (plus stdlib
+Deliberately a leaf: it imports only ``farna.settings`` (plus stdlib
 ``html``), so neither import-linter contract is broken by either alert module
 depending on it.
 """

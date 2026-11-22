@@ -78,7 +78,7 @@ class SsoCallbackError(HTTPException):
     redirect, so the ``audited_system("saml_acs_attempted", ...)`` dependency
     observes the failure and records ``outcome="error"`` for a failed sign-in
     rather than a dishonest ``"success"`` (FAR-1791). The registered handler
-    (``modulo.api.exception_handlers.sso_callback_error_handler``) turns it into
+    (``farna.api.exception_handlers.sso_callback_error_handler``) turns it into
     the actual 303 response.
 
     Subclasses ``HTTPException`` — deliberately NOT ``ValueError``:

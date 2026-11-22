@@ -5,7 +5,7 @@ recovery-plan.md v17): reject any mutation that would leave an org with zero
 ACTIVE, non-break-glass admins.
 
 Serialization uses the same TWO-INT4 MD5 advisory-lock key derivation as
-``modulo.db.repositories.locks`` (key = ``str(org_id)`` verbatim — a prefixed
+``farna.db.repositories.locks`` (key = ``str(org_id)`` verbatim — a prefixed
 key silently re-creates the disjoint-keyspace bug). One lock mode is pinned:
 ``pg_try_advisory_xact_lock`` in a polling loop, auto-released when the
 surrounding transaction ends (the count and the mutation share the same

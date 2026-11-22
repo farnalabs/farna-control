@@ -221,7 +221,7 @@ def _parse_eval_ref_ids(
 async def _load_eval_def(s: AsyncSession, org_id: uuid.UUID, eid: uuid.UUID) -> Any:
     """Load an org-scoped ``Eval`` row; ``None`` when the row does not exist.
 
-    Return type is ``Eval | None`` (from ``modulo.db.models.eval``); written
+    Return type is ``Eval | None`` (from ``farna.db.models.eval``); written
     as ``Any`` because the import is deferred inside the function body.
 
     Consolidated single loader (chunk 3b cutover): reads from the ``evals``

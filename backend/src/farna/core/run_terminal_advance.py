@@ -170,7 +170,7 @@ async def record_terminal_failed_fact(
     the RLS org context, re-selects the Run ORM (a pre-update entity would
     record ``status='running'`` with a NULL ``completed_at``), and records the
     daily fact via the shared
-    :func:`modulo.core.analytics.record_fact_for_terminal_failed_run` wrapper.
+    :func:`farna.core.analytics.record_fact_for_terminal_failed_run` wrapper.
 
     None-guarded and fail-open: any failure logs and is swallowed — it must
     never roll back or fail the already-committed terminal write. There is

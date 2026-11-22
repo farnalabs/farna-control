@@ -1,9 +1,9 @@
 """Auditable self-test ("drill") for the org guardrail kill-switch (FAR-1707).
 
 The kill-switch already exists: ``organisations.guardrails_kill_switch`` is read
-at run start by :func:`modulo.db.crud.run._read_guardrails_kill_switch`
+at run start by :func:`farna.db.crud.run._read_guardrails_kill_switch`
 (fail-closed → OFF on read error) and applied by
-:func:`modulo.db.crud.run._downgrade_guardrails_to_observe` (downgrades every
+:func:`farna.db.crud.run._downgrade_guardrails_to_observe` (downgrades every
 bound guardrail to ``observe``). What was missing is a periodic, durable
 *attestation* that the control's two load-bearing invariants actually hold, so
 ``kill_switch_tested`` is a recorded fact rather than an assumption.
@@ -22,7 +22,7 @@ downgrade check operates on synthetic in-memory definitions, and the read check'
 session fails before any query reaches a database.
 
 The scheduled entry point is :func:`run_kill_switch_drill`, registered as a
-system cron in :func:`modulo.core.saq_worker._system_cron_jobs`. It appends
+system cron in :func:`farna.core.saq_worker._system_cron_jobs`. It appends
 exactly one record per run to the org-independent ``system_audit_events`` ledger
 (migration 0285 — free-text ``event_type``, so this is migration-free) with
 ``event_type="kill_switch_drill"``. A failed *invariant* is a recorded fact
@@ -119,7 +119,7 @@ def verify_kill_switch_invariants() -> DrillOutcome:
     Builds a synthetic guardrail set carrying each action, asserts the
     pre-downgrade set contains at least one ``block``/``redact`` (the non-vacuity
     guard — otherwise an all-observe input would prove nothing), applies the real
-    :func:`modulo.db.crud.run._downgrade_guardrails_to_observe`, and asserts every
+    :func:`farna.db.crud.run._downgrade_guardrails_to_observe`, and asserts every
     resulting definition resolves to ``observe``.
     """
     from farna.core.guardrails import GuardrailAction

@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
@@ -452,7 +452,7 @@ def _deadline_triage_from_markers(
     keeps the attempt that really ran, and ``node_id`` is always read from the
     payload. Preferring the payload keeps this projection's identifiers
     mutually consistent and matches
-    :func:`modulo.core.run_log_correlation.marker_tail_entries`; reporting the
+    :func:`farna.core.run_log_correlation.marker_tail_entries`; reporting the
     storage key here would render a synthetic attempt key beside a real node id
     (``RunDetailView`` shows the value verbatim).
 
@@ -1403,6 +1403,50 @@ def _attached_snapshot_version(run: Any) -> Any:
     return getattr(loaded, "snapshot_version", None)
 
 
+def _resolve_known_fixes(error_detail: Any, run: Any) -> list[dict[str, Any]]:
+    """Serialise the curated known-fixes KB matches for *error_detail* (FAR-706).
+
+    ``match_known_fixes`` is fail-safe (never raises); serialisation is
+    additionally defended here so a malformed entry can never 500 the run
+    detail endpoint.
+    """
+    try:
+        return [{"fix_id": fix.fix_id, "title": fix.title, "body": fix.body, "link": fix.link} for fix in match_known_fixes(error_detail)]
+    except Exception:
+        _log.warning("runs.known_fixes_serialise_failed", extra={"run_id": str(getattr(run, "id", ""))}, exc_info=True)
+        return []
+
+
+def _resolve_snapshot_display(run: Any) -> tuple[Any, Any]:
+    """Return ``(snapshot_id, snapshot_version)`` with defensive coercion.
+
+    FAR-490: ``snapshot_id`` must be a UUID/str or None; a MagicMock (e.g. in
+    test fakes) or any other non-UUID value must never 500 the run detail
+    endpoint.
+
+    FAR-1838: the version is read from the snapshot object ALREADY loaded on
+    the run (the rerun/manual-trigger paths attach the snapshot they just
+    loaded; the detail path eager-loads it in the run-load transaction) —
+    never a second fetch, never a lazy load. NULL exactly when snapshot_id is
+    NULL; a non-int/MagicMock never leaks.
+    """
+    raw_snapshot_id = getattr(run, "snapshot_id", None)
+    snapshot_id = raw_snapshot_id if isinstance(raw_snapshot_id, (uuid.UUID, str)) else None
+    snapshot_version = _coerce_snapshot_version(_attached_snapshot_version(run)) if snapshot_id is not None else None
+    return snapshot_id, snapshot_version
+
+
+def _resolve_masked_input_payload(run: Any) -> dict[str, Any] | None:
+    """The run's input payload, masked, or None when absent/non-dict.
+
+    Mirrors the list shape (``_build_list_item``). Same defensive coercion as
+    ``run_classification``/``snapshot_id``: a non-dict column value (or a
+    MagicMock in test fakes) degrades to None, never a 500.
+    """
+    raw_input_payload = getattr(run, "input_payload", None)
+    return _mask_output_value(raw_input_payload) if isinstance(raw_input_payload, dict) and raw_input_payload else None
+
+
 def _build_run_response(
     run: Any,
     ctx: _RunDisplayContext | None = None,
@@ -1434,42 +1478,16 @@ def _build_run_response(
     own_cost = run.total_cost_usd if run.total_cost_usd is not None else _COST_ROLLUP_ZERO
 
     error_code, error_detail = present_error(run.error_code, run.error_detail, limit=5000)
+    known_fixes = _resolve_known_fixes(error_detail, run)
 
-    # FAR-706: match the curated known-fixes KB over the raw error detail.
-    # match_known_fixes is fail-safe (never raises); serialise defensively so a
-    # malformed entry can never 500 the run detail endpoint.
-    try:
-        known_fixes = [{"fix_id": fix.fix_id, "title": fix.title, "body": fix.body, "link": fix.link} for fix in match_known_fixes(error_detail)]
-    except Exception:
-        _log.warning("runs.known_fixes_serialise_failed", extra={"run_id": str(getattr(run, "id", ""))}, exc_info=True)
-        known_fixes = []
-
-    # FAR-228: defensive coercion — the run_classification JSON column could
+    # FAR-228 / FAR-213: defensive column coercions — the JSON column could
     # hold any JSON value (or a MagicMock in tests); a non-dict is surfaced as
     # None, never a 500. gate_fired is derived in _run_gate_fired (also guarded).
     run_classification = run.run_classification if isinstance(run.run_classification, dict) else None
-
-    # FAR-213: same defensive coercion for the blocked_partial_summary column.
     blocked_partial_summary = run.blocked_partial_summary if isinstance(run.blocked_partial_summary, dict) else None
 
-    # FAR-490: defensive coercion — snapshot_id must be a UUID/str or None; a
-    # MagicMock (e.g. in test fakes) or any other non-UUID value must never 500
-    # the run detail endpoint.
-    _raw_snapshot_id = getattr(run, "snapshot_id", None)
-    snapshot_id = _raw_snapshot_id if isinstance(_raw_snapshot_id, (uuid.UUID, str)) else None
-
-    # FAR-1838: the version of the snapshot this run executed, read from the
-    # snapshot object ALREADY loaded on the run (the rerun/manual-trigger paths
-    # attach the snapshot they just loaded; the detail path eager-loads it in
-    # the run-load transaction) — never a second fetch, never a lazy load. NULL
-    # exactly when snapshot_id is NULL; a non-int/MagicMock never leaks.
-    snapshot_version = _coerce_snapshot_version(_attached_snapshot_version(run)) if snapshot_id is not None else None
-
-    # Masked input payload, mirroring the list shape (_build_list_item). Same
-    # defensive coercion as run_classification/snapshot_id above: a non-dict
-    # column value (or a MagicMock in test fakes) degrades to None, never a 500.
-    _raw_input_payload = getattr(run, "input_payload", None)
-    input_payload = _mask_output_value(_raw_input_payload) if isinstance(_raw_input_payload, dict) and _raw_input_payload else None
+    snapshot_id, snapshot_version = _resolve_snapshot_display(run)
+    input_payload = _resolve_masked_input_payload(run)
 
     return RunResponse(
         run_id=run.id,
@@ -1695,6 +1713,45 @@ async def _create_manual_run(
     return run
 
 
+def _org_deleted_http(exc: OrgDeletedError) -> HTTPException:
+    """Map an ``OrgDeletedError`` to 409 (deleted) or 404 (not found).
+
+    Shared by the manual-trigger and rerun paths, which each carried an
+    identical copy of this two-branch mapping.
+    """
+    if exc.deleted:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot create run: organisation {exc.org_id} is deleted",
+        )
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Cannot create run: organisation {exc.org_id} not found",
+    )
+
+
+def _raise_snapshot_lock_unavailable(exc: SnapshotLockNotAvailableError) -> NoReturn:
+    """Map an exhausted per-pipeline snapshot-lock wait to a truthful 503.
+
+    FAR-1625: ``exc`` means CONTENTION, not an unexpected fault — a retryable
+    503 (matching the webhook and MCP trigger paths), so a lost race can be
+    retried rather than surfacing as a generic 500. Both bounded waits on the
+    snapshot path report here: the graph-copy advisory lock's acquisition
+    budget and the allocation row lock's transaction-scoped ``lock_timeout``.
+    """
+    _log.warning("runs.trigger_run snapshot_lock_busy: %s", exc)
+    log_service_unavailable(
+        "snapshot_lock_unavailable",
+        exc,
+        route=_CODE_RUNS_TRIGGER_RUN,
+        detail="snapshot lock unavailable; retry the trigger",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Pipeline snapshot lock unavailable - retry the trigger",
+    ) from None
+
+
 @router.post(
     "",
     status_code=status.HTTP_202_ACCEPTED,
@@ -1768,15 +1825,7 @@ async def trigger_run(
 
     except OrgDeletedError as exc:
         _log.exception(_CODE_RUNS_TRIGGER_RUN)
-        if exc.deleted:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Cannot create run: organisation {exc.org_id} is deleted",
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cannot create run: organisation {exc.org_id} not found",
-        ) from None
+        raise _org_deleted_http(exc) from None
 
     except PipelineNotRunnableError as exc:
         # FAR-1528: archived/soft-deleted pipeline refused at the create_run
@@ -1799,24 +1848,7 @@ async def trigger_run(
         ) from None
 
     except SnapshotLockNotAvailableError as exc:
-        # FAR-1625: a per-pipeline snapshot lock's bounded wait was exhausted
-        # under concurrent triggers. That is CONTENTION, not an unexpected fault
-        # — a truthful, retryable 503 (matching the webhook and MCP trigger
-        # paths), so a lost race can be retried rather than surfacing as a
-        # generic 500. Both bounded waits on the snapshot path report here: the
-        # graph-copy advisory lock's acquisition budget and the allocation row
-        # lock's transaction-scoped lock_timeout.
-        _log.warning("runs.trigger_run snapshot_lock_busy: %s", exc)
-        log_service_unavailable(
-            "snapshot_lock_unavailable",
-            exc,
-            route=_CODE_RUNS_TRIGGER_RUN,
-            detail="snapshot lock unavailable; retry the trigger",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Pipeline snapshot lock unavailable - retry the trigger",
-        ) from None
+        _raise_snapshot_lock_unavailable(exc)
 
     except StorageExhaustedError:
         raise
@@ -1981,15 +2013,7 @@ async def trigger_rerun(
 
     except OrgDeletedError as exc:
         _log.exception(_CODE_RUNS_TRIGGER_RERUN)
-        if exc.deleted:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Cannot create run: organisation {exc.org_id} is deleted",
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cannot create run: organisation {exc.org_id} not found",
-        ) from None
+        raise _org_deleted_http(exc) from None
 
     except PipelineNotRunnableError as exc:
         # FAR-1528: a rerun of a run whose pipeline has since been archived or
@@ -3139,7 +3163,7 @@ async def list_run_attempts(
     """Return the durable per-attempt execution history of a run (FAR-2078).
 
     Attempts are ordered by ``attempt_index`` ascending (0-based, per run,
-    contiguous — see ``modulo.db.models.run_attempt``). ``items`` is capped at
+    contiguous — see ``farna.db.models.run_attempt``). ``items`` is capped at
     100 rows; ``total`` carries the run's true attempt count.
 
     Org-scoped like every other run child read: the run is loaded through
@@ -3493,6 +3517,58 @@ async def _recover_node_or_http_error(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
+async def _resume_recovered_node(
+    *,
+    run_id: uuid.UUID,
+    org_id: uuid.UUID,
+    action: str,
+    input_data: dict[str, Any] | None,
+    stamp_review_id: str | None,
+) -> None:
+    """Re-dispatch a recovered run as a graph resume (FAR-541).
+
+    ``dispatch_run`` enqueues ``resume_run`` to SAQ (the recover-node path); a
+    resume failure surfaces as 500 rather than a fire-and-forget 200. The
+    recovery payload is stamped with the run's pending claim-row gate id so the
+    per-consumer stamp checks accept it: the manual-node consumer (stamp ==
+    node id), the conformance consumer (stamp == the block's guardrail gate
+    id), and the gate consumer (stamp == its own gate id) all verify it; a run
+    parked at a real HITL gate was already 422'd by the caller.
+    """
+    resume_data: dict[str, Any] = {"action": action, "output": input_data}
+    if stamp_review_id is not None:
+        resume_data["review_id"] = stamp_review_id
+
+    try:
+        outcome, _job_id = await dispatch_run(
+            str(run_id),
+            str(org_id),
+            queue="runs",
+            job_type="resume_run",
+            resume_data=resume_data,
+        )
+    except Exception as exc:
+        _log.exception("run.recover_node.resume_failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resume pipeline after node recovery",
+        ) from exc
+
+    # 'resumed' (shadow inline) and 'enqueued'/'deduped' (SAQ accepted) both
+    # leave the run resuming. 'deferred' (capacity-blocked) and
+    # 'enqueue_failed' (final enqueue failure after retries) mean the resume
+    # was NOT actually dispatched — surface them instead of silently dropping
+    # the recovery: the run is left pending and would later be re-dispatched by
+    # dispatcher_reconcile as execute_run with resume_data=None, losing the
+    # user's replay/skip recovery and any supplied input_data (the run would
+    # re-execute from scratch instead of resuming at the recovered node).
+    if outcome in ("deferred", "enqueue_failed"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enqueue pipeline resume after node recovery",
+        )
+
+
 @router.post(
     "/{run_id}/nodes/{node_id}/recover",
     status_code=status.HTTP_200_OK,
@@ -3581,47 +3657,13 @@ async def recover_run_node(
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
     action = "skip" if req.input_data is None else "replay"
-
-    # Resume the graph with the recovery data. dispatch_run enqueues resume_run
-    # to SAQ (the recover-node path); a resume failure surfaces here as 500
-    # rather than fire-and-forget 200.
-    resume_data: dict[str, Any] = {"action": action, "output": req.input_data}
-    if stamp_review_id is not None:
-        # FAR-541 (iteration 3, FIX 3): stamped with the pending claim row's
-        # gate id — the manual-node consumer (stamp == node id), the
-        # conformance consumer (stamp == the block's guardrail gate id), and
-        # the gate consumer (stamp == its own gate id) all verify this stamp;
-        # a run parked at a real HITL gate was already 422'd above.
-        resume_data["review_id"] = stamp_review_id
-
-    try:
-        outcome, _job_id = await dispatch_run(
-            str(run_id),
-            str(principal.organisation_id),
-            queue="runs",
-            job_type="resume_run",
-            resume_data=resume_data,
-        )
-    except Exception as exc:
-        _log.exception("run.recover_node.resume_failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to resume pipeline after node recovery",
-        ) from exc
-
-    # 'resumed' (shadow inline) and 'enqueued'/'deduped' (SAQ accepted) both
-    # leave the run resuming. 'deferred' (capacity-blocked) and
-    # 'enqueue_failed' (final enqueue failure after retries) mean the resume
-    # was NOT actually dispatched — surface them instead of silently dropping
-    # the recovery: the run is left pending and would later be re-dispatched by
-    # dispatcher_reconcile as execute_run with resume_data=None, losing the
-    # user's replay/skip recovery and any supplied input_data (the run would
-    # re-execute from scratch instead of resuming at the recovered node).
-    if outcome in ("deferred", "enqueue_failed"):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to enqueue pipeline resume after node recovery",
-        )
+    await _resume_recovered_node(
+        run_id=run_id,
+        org_id=principal.organisation_id,
+        action=action,
+        input_data=req.input_data,
+        stamp_review_id=stamp_review_id,
+    )
 
     return NodeRecoverResponse(
         run_id=run_id,
@@ -3645,6 +3687,84 @@ class GuardrailOverrideResponse(BaseModel):
     run_id: uuid.UUID
     status: str
     action: str = "override"
+
+
+async def _do_guardrail_override(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    run_id: uuid.UUID,
+    input_data: dict[str, Any],
+) -> Run:
+    """Apply the guardrail override inside the caller's open transaction.
+
+    Persists the post-redaction payload and flips the run (FAR-208 /
+    FAR-1711), mapping every domain failure to its HTTP contract. The caller
+    keeps only the transaction's DB-error mapping.
+    """
+    await set_rls_org(session, principal.organisation_id)
+    await set_rls_user_context(session, principal.account_id, principal.org_role)
+    try:
+        return await guardrail_override(
+            session,
+            org_id=principal.organisation_id,
+            run_id=run_id,
+            input_data=input_data,
+            actor_id=principal.account_id,
+        )
+    except GuardrailOverrideRejectedError as exc:
+        # Still-violating supplied input — re-block safe default. The
+        # run stays terminal eval_failed; 422 = the supplied input is
+        # unprocessable for this run.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)[:200]) from exc
+    except GuardrailOverrideNoCheckpointError as exc:
+        # FAR-1711 (M1) fail-closed: the run started a node but has no
+        # resumable checkpoint, so a ``resume_run`` would re-execute it
+        # (FAR-1649). The run stays terminal eval_blocked and the
+        # operator gets a distinct 409 rather than a silently-burned
+        # run. Re-calling this endpoint returns the SAME 409 — a
+        # ``first_node_dispatched`` thread with no root checkpoint
+        # never grows one — so the true remediation is a NEW run
+        # against the pipeline, not another override attempt.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)[:200]) from exc
+    except GuardrailOverrideError as exc:
+        # Not a guardrail-blocked terminal run — nothing to override.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)[:200]) from exc
+    except ConcurrentRecoveryError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+async def _redispatch_guardrail_override(*, run_id: uuid.UUID, org_id: uuid.UUID, run: Run) -> None:
+    """Re-dispatch an overridden run on the job type the override chose.
+
+    FAR-1711: the re-dispatch job type is the ONE shared predicate
+    ``guardrail_override`` owns (it also chose the flip target), so the route
+    never re-derives it from a magic status string. A node-STARTED eval-blocked
+    run was left ``running`` (the recover-node lock status) and must be
+    re-dispatched as ``resume_run`` — checkpoint resume, never re-execution
+    (FAR-1649). The genuine zero-node block stays ``pending`` and is
+    re-dispatched from run start (execute_run) with no resume data — no node
+    ever ran, so there is nothing to resume.
+    """
+    job_type = guardrail_override_job_type(run)
+    try:
+        outcome, _job_id = await dispatch_run(
+            str(run_id),
+            str(org_id),
+            queue="runs",
+            job_type=job_type,
+        )
+    except Exception as exc:
+        _log.exception("run.guardrail_override_dispatch_failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to dispatch pipeline after guardrail override",
+        ) from exc
+
+    if outcome in ("deferred", "enqueue_failed"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enqueue pipeline after guardrail override",
+        )
 
 
 @router.post(
@@ -3709,36 +3829,7 @@ async def guardrail_override_run(
 
     try:
         async with session.begin():
-            await set_rls_org(session, principal.organisation_id)
-            await set_rls_user_context(session, principal.account_id, principal.org_role)
-            try:
-                run = await guardrail_override(
-                    session,
-                    org_id=principal.organisation_id,
-                    run_id=run_id,
-                    input_data=req.input_data,
-                    actor_id=principal.account_id,
-                )
-            except GuardrailOverrideRejectedError as exc:
-                # Still-violating supplied input — re-block safe default. The
-                # run stays terminal eval_failed; 422 = the supplied input is
-                # unprocessable for this run.
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)[:200]) from exc
-            except GuardrailOverrideNoCheckpointError as exc:
-                # FAR-1711 (M1) fail-closed: the run started a node but has no
-                # resumable checkpoint, so a ``resume_run`` would re-execute it
-                # (FAR-1649). The run stays terminal eval_blocked and the
-                # operator gets a distinct 409 rather than a silently-burned
-                # run. Re-calling this endpoint returns the SAME 409 — a
-                # ``first_node_dispatched`` thread with no root checkpoint
-                # never grows one — so the true remediation is a NEW run
-                # against the pipeline, not another override attempt.
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)[:200]) from exc
-            except GuardrailOverrideError as exc:
-                # Not a guardrail-blocked terminal run — nothing to override.
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)[:200]) from exc
-            except ConcurrentRecoveryError as exc:
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+            run = await _do_guardrail_override(session, principal, run_id, req.input_data)
     except IntegrityError:
         _log.exception("runs.guardrail_override")
         raise HTTPException(
@@ -3769,34 +3860,7 @@ async def guardrail_override_run(
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
 
-    # FAR-1711: the re-dispatch job type is the ONE shared predicate
-    # ``guardrail_override`` owns (it also chose the flip target), so the
-    # route never re-derives it from a magic status string. A node-STARTED
-    # eval-blocked run was left ``running`` (the recover-node lock status)
-    # and must be re-dispatched as ``resume_run`` — checkpoint resume, never
-    # re-execution (FAR-1649). The genuine zero-node block stays ``pending``
-    # and is re-dispatched from run start (execute_run) with no resume data —
-    # no node ever ran, so there is nothing to resume.
-    job_type = guardrail_override_job_type(run)
-    try:
-        outcome, _job_id = await dispatch_run(
-            str(run_id),
-            str(principal.organisation_id),
-            queue="runs",
-            job_type=job_type,
-        )
-    except Exception as exc:
-        _log.exception("run.guardrail_override_dispatch_failed")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to dispatch pipeline after guardrail override",
-        ) from exc
-
-    if outcome in ("deferred", "enqueue_failed"):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to enqueue pipeline after guardrail override",
-        )
+    await _redispatch_guardrail_override(run_id=run_id, org_id=principal.organisation_id, run=run)
 
     return GuardrailOverrideResponse(run_id=run_id, status=run.status)
 
@@ -4344,7 +4408,7 @@ async def diff_node_output(
 
     Accepts two (run_id, node_id) pairs, fetches each node's output,
     applies sensitive masking, and returns a structured line-level diff
-    via the shared modulo.core.line_diff helper.
+    via the shared farna.core.line_diff helper.
     """
     try:
         async with session.begin():
@@ -4547,7 +4611,7 @@ def _strip_full_attempt_suffix(attempt_key: str) -> str | None:
     DIFFERENT synthetic family from the marker attempt keys the FAR-2084 rule
     governs (``run:<run>:node:<node>:<any-shape>``). Requiring it to be numeric
     is correct for this family, so it is deliberately not routed through
-    :func:`modulo.db.crud.run_node_outputs.marker_attempt_suffix`.
+    :func:`farna.db.crud.run_node_outputs.marker_attempt_suffix`.
     """
     parts = attempt_key.rsplit(":", 2)
     if len(parts) != 3 or parts[1] != "full":

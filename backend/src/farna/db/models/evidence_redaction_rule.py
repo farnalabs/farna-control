@@ -4,7 +4,7 @@ The redaction boundary (§2.2) is a server-side rule that decides which fields o
 an evidence row are visible to which role. This table is the configuration that
 feeds it: for a given ``(role, key_pattern)`` it declares the redaction CLASSES
 (``sensitive_output`` / ``internal_metadata`` — see
-:mod:`modulo.core.evidence_redaction`) whose fields are replaced with the
+:mod:`farna.core.evidence_redaction`) whose fields are replaced with the
 ``"[REDACTED]"`` sentinel before the payload is serialised.
 
 This is a small configuration table (tens of rows), not an append-only fact
@@ -46,7 +46,7 @@ class EvidenceRedactionRule(SoftDeleteMixin, OrgScoped):
     """A redaction declaration for one ``(organisation, key_pattern, role)``.
 
     ``redacted_fields`` stores redaction CLASS names (not raw JSON keys) — the
-    class -> field mapping lives in :data:`modulo.core.evidence_redaction.REDACTION_CLASS_FIELDS`.
+    class -> field mapping lives in :data:`farna.core.evidence_redaction.REDACTION_CLASS_FIELDS`.
     """
 
     __tablename__ = "evidence_redaction_rules"

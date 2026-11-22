@@ -59,6 +59,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from farna.db.alignment import EXIT_DATABASE_AHEAD
 from farna.launcher import policy
 from farna.launcher.platform import is_windows
 
@@ -238,7 +239,7 @@ def render_unit(executable: Path) -> str:
     """
     lines = [
         "[Unit]",
-        "Description=Modulo single-install launcher (bundled Postgres/Redis + API)",
+        "Description=Farna Control single-install launcher (bundled Postgres/Redis + API)",
         "After=network-online.target",
         "Wants=network-online.target",
         "# Co-designed with the launcher's own crash cap (farna.launcher.policy): the",
@@ -259,6 +260,11 @@ def render_unit(executable: Path) -> str:
         "# purpose; listing it as success makes systemd leave the service STOPPED instead",
         "# of fighting the launcher's own cap. Resume with `farna-control start --clear-degraded`.",
         f"SuccessExitStatus={int(policy.DEGRADED_EXIT_CODE)}",
+        # FAR-2659: a database from a newer release is refused with its own
+        # status. Retrying cannot fix a mismatched database/app pairing, so
+        # systemd must NOT restart the launcher into the same refusal: the
+        # unit is left FAILED (not "success") until the operator resolves it.
+        f"RestartPreventExitStatus={int(EXIT_DATABASE_AHEAD)}",
         "KillSignal=SIGTERM",
         "TimeoutStopSec=90s",
         "",

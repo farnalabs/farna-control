@@ -181,7 +181,7 @@ class DualWriteError(RuntimeError):
     the legacy run row is never half-written.
 
     Carries the orchestration context so the core-side orchestrator
-    (:mod:`modulo.core.run_outputs_dualwrite`) can terminalize the run and
+    (:mod:`farna.core.run_outputs_dualwrite`) can terminalize the run and
     emit the failure event without re-deriving it. ``sqlstate`` is the
     SQLSTATE of the LAST failure (None for non-SQL failures, e.g. a dialect
     guard or an RLS org mismatch surfacing through the savepoint).
@@ -1285,7 +1285,7 @@ async def _read_run_markers_fenced_rows(
     no-status-predicate semantics — a concurrent cancel still serves the
     suppression evidence instead of a fence-miss None). The id + org
     predicates are ALWAYS applied.     reconciliation). B2c: the legacy joined blob leg is removed — the
-    runs row is fetched through the ORM (:class:`modulo.db.models.run.Run`),
+    runs row is fetched through the ORM (:class:`farna.db.models.run.Run`),
     whose status/claim_token/organisation_id columns are ordinary
     non-blob columns.
 
@@ -1489,7 +1489,7 @@ async def read_node_output_blob_bytes(
     """Per-run summed blob bytes for retention accounting — EXCLUDES metadata
     rows (the flags payload overhead would skew the accounting). One batched
     query; Python-side ``len(json.dumps(value, default=str))`` per present
-    side (the shared :func:`modulo.db.models.run_node_outputs.json_bytes`
+    side (the shared :func:`farna.db.models.run_node_outputs.json_bytes`
     formula, also used by ``crud.run_retention``)."""
     if not run_ids:
         return {}
@@ -1519,7 +1519,7 @@ async def read_audit_row_outputs_json(
 ) -> dict[str, Any] | None:
     """Read the ``outputs_json`` column for a single audit sentinel row.
 
-    Used by :func:`modulo.core.cron_helpers._sweep_workspace_input_drift_flags`
+    Used by :func:`farna.core.cron_helpers._sweep_workspace_input_drift_flags`
     to check for ``drift_detected`` in the workspace-inputs audit payload
     without directly touching the ORM blob column (FAR-583 read-switch).
 

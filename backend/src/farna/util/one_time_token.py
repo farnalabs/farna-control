@@ -7,9 +7,9 @@ SHA-256 hex hash, so a database leak does not leak usable tokens. The token
 format must never change — existing un-consumed tokens are only recoverable
 via their plaintexts.
 
-Lives in ``modulo.util`` because both the db layer (invitations) and core
+Lives in ``farna.util`` because both the db layer (invitations) and core
 (mcp_setup_handoff) depend on it and the import-linter contract keeps
-``modulo.db`` free of ``modulo.core`` imports.
+``farna.db`` free of ``farna.core`` imports.
 """
 
 import hashlib

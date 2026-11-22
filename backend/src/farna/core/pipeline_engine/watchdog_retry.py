@@ -38,7 +38,7 @@ function ONLY): ``claim_resume_run_async`` cannot re-claim a run reset to
 ``pending`` (it claims awaiting_human/claimed/hitl_parked/stale-running
 only), so a watchdog retry there would strand the run until the durable
 sweeps recover it. Resume runs keep today's unconditional terminal fail.
-Runtime SAQ job functions are FULLY-QUALIFIED (``modulo.core.saq_worker.
+Runtime SAQ job functions are FULLY-QUALIFIED (``farna.core.saq_worker.
 resume_run``, see ``dispatch.py``), so the check matches with the same
 ``endswith`` pattern ``error_tracking.saq_hooks`` uses and fails CLOSED:
 ``job=None`` (``resume_run``'s default) or an unknown function shape
@@ -292,7 +292,7 @@ async def _attempt_count_if_retryable(
 
     FAR-2076: the budget is measured against the durable
     ``runs.execution_attempt_count`` (via
-    ``modulo.core.retry_budget.retry_executions_consumed``) — the count of
+    ``farna.core.retry_budget.retry_executions_consumed``) — the count of
     EXECUTION attempts of the graph, stamped when the attempt is admitted. It
     therefore bounds PRE-node hangs (hub init / graph compile — the exact hang
     sites the zombie watchdog exists for), which neither the old

@@ -29,8 +29,8 @@ second-guessed, and when nothing resolves the monitor reports
 
 The platform probe is INJECTED (see :func:`set_platform_capacity_probe`) rather
 than imported: its concrete providers live in the infra/provider layer
-(``modulo.core.capacity_providers``) so ``modulo.db`` keeps its zero-import
-contract with ``modulo.core``.
+(``farna.core.capacity_providers``) so ``farna.db`` keeps its zero-import
+contract with ``farna.core``.
 
 Resilience is the first constraint, not the second: a failed capacity query or
 a failed probe must NEVER crash a run dispatch or a health probe. Any
@@ -88,9 +88,9 @@ class PlatformCapacityProbe(Protocol):
     A provider-agnostic capability: return the byte capacity of the volume that
     holds the application database, or ``None`` when the provider cannot resolve
     one (credentials/config absent, volume ambiguous, API error). Implementations
-    live in the infra/provider layer (``modulo.core.capacity_providers``) and are
+    live in the infra/provider layer (``farna.core.capacity_providers``) and are
     installed at application startup via :func:`set_platform_capacity_probe` —
-    ``modulo.db`` itself never imports that layer, preserving the ``db → core``
+    ``farna.db`` itself never imports that layer, preserving the ``db → core``
     import-linter contract.
 
     ``probe_capacity_bytes`` MUST be fail-open: any failure returns ``None``
@@ -117,7 +117,7 @@ def set_platform_capacity_probe(probe: PlatformCapacityProbe | None) -> None:
     """Install (or clear) the process-wide provider/platform capacity probe.
 
     Called at application startup (the API lifespan and the SAQ worker startup
-    hook) with a probe built by ``modulo.core.capacity_providers``. Passing
+    hook) with a probe built by ``farna.core.capacity_providers``. Passing
     ``None`` clears it. This is the ONLY seam by which the ``platform`` source
     becomes available; the DB layer stays free of any provider import.
     """

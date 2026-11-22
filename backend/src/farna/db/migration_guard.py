@@ -80,6 +80,17 @@ def _revision_ids_from_script(script: ScriptDirectory) -> set[str]:
     return all_revisions
 
 
+def release_revision_ids() -> set[str]:
+    """Every revision id this release's migration tree ships.
+
+    The public, RAISING counterpart of the fail-open memoised
+    :func:`_load_repo_revisions`: a caller that must distinguish "the tree
+    loaded and contains these revisions" from "the tree could not be read"
+    (the FAR-2659 startup alignment guard) needs the failure, not an empty set.
+    """
+    return _revision_ids_from_script(_script_directory())
+
+
 def _load_repo_revisions() -> set[str]:
     """Load all revision IDs from the repo's migration tree.
 

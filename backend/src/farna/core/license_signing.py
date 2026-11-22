@@ -1,7 +1,7 @@
 """Team license signing — generate Ed25519-signed license keys.
 
 Keys produced by :func:`encode_license_key` / :func:`generate_team_license`
-round-trip through ``modulo.core.license.parse_and_verify``: the payload is
+round-trip through ``farna.core.license.parse_and_verify``: the payload is
 canonical JSON, signed with the configured Ed25519 private key, and encoded as
 ``<base64(payload)>.<base64(signature)>`` — exactly the format
 ``parse_and_verify`` decodes.
@@ -29,7 +29,7 @@ from farna.settings import get_settings
 _log = logging.getLogger(__name__)
 
 # The license payload tier that activates Team feature gates. See
-# ``modulo.core.feature_flags.TIER_RANK`` — "team" is the only paid tier.
+# ``farna.core.feature_flags.TIER_RANK`` — "team" is the only paid tier.
 LICENSE_TIER = "team"
 
 # Feature flag names granted to team licences. These are the real flag
@@ -64,7 +64,7 @@ def encode_license_key(payload: dict[str, Any], private_key_hex: str) -> str:
     """Sign *payload* with an Ed25519 private key and encode to a license key.
 
     Produces ``<base64(payload)>.<base64(signature)>`` using URL-safe base64
-    without padding, which ``modulo.core.license._decode_license_key`` accepts
+    without padding, which ``farna.core.license._decode_license_key`` accepts
     (it re-pads before decoding).
     """
     payload_bytes = _canonical_json(payload)
