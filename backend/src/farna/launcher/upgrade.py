@@ -1119,6 +1119,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.db_url is not None:
             assert args.output_dir is not None  # parser-enforced
+            # The compose path passes a SQLAlchemy asyncpg URL; psycopg and
+            # pg_dump require the libpq form. take_upgrade_snapshot normalises
+            # (and strips the password) in the ONE shared place, so the probes
+            # here go through the same helper rather than a second rewrite.
             if args.skip_if_pristine and _database_is_pristine(args.db_url):
                 print("Fresh database (no application tables) — no pre-upgrade snapshot needed.", file=sys.stderr)  # noqa: T201
                 return 0

@@ -383,6 +383,64 @@ class TestRunPgDump:
         assert mock_run.call_args[1]["timeout"] == 600
 
 
+class TestStripUnsupportedPreambleSettings:
+    """The FAR-2667 compatibility rewrite streams the body instead of reading
+    the whole dump into memory twice (which doubled peak memory on a
+    multi-GB database)."""
+
+    def _write(self, tmp_path: Path, payload: bytes) -> Path:
+        dump = tmp_path / "database.sql"
+        dump.write_bytes(payload)
+        return dump
+
+    def test_no_removal_leaves_the_file_byte_for_byte(self, tmp_path: Path) -> None:
+        from farna.db import plain_dump
+
+        payload = b"--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\n\nSELECT 1;\n"
+        dump = self._write(tmp_path, payload)
+        assert not plain_dump.strip_unsupported_preamble_settings(dump, {"statement_timeout"})
+        assert dump.read_bytes() == payload
+
+    def test_removal_streams_the_body_unchanged(self, tmp_path: Path) -> None:
+        from farna.db import plain_dump
+
+        body = b"SELECT 1;\n" + (b"-- body line\n" * 1000)
+        payload = b"--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\nSET transaction_timeout = 0;\n\n" + body
+        dump = self._write(tmp_path, payload)
+
+        removed = plain_dump.strip_unsupported_preamble_settings(dump, {"statement_timeout"})
+
+        assert removed == ["transaction_timeout"]
+        assert dump.read_bytes() == b"--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\n\n" + body
+        assert not list(tmp_path.glob(".*preamble-rewrite"))
+
+    def test_preamble_only_dump_is_rewritten_without_a_body(self, tmp_path: Path) -> None:
+        from farna.db import plain_dump
+
+        payload = b"-- PostgreSQL database dump\nSET transaction_timeout = 0;\n-- PostgreSQL database dump complete\n"
+        dump = self._write(tmp_path, payload)
+
+        removed = plain_dump.strip_unsupported_preamble_settings(dump, set())
+
+        assert removed == ["transaction_timeout"]
+        assert dump.read_bytes() == b"-- PostgreSQL database dump\n-- PostgreSQL database dump complete\n"
+
+    def test_replace_failure_cleans_up_the_temp_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.db import plain_dump
+
+        dump = self._write(tmp_path, b"--\nSET transaction_timeout = 0;\n\nSELECT 1;\n")
+        before = sorted(p.name for p in tmp_path.iterdir())
+
+        def _boom(_self: Path, _target: Any) -> None:
+            raise OSError("replace failed")
+
+        monkeypatch.setattr(Path, "replace", _boom)
+        with pytest.raises(plain_dump.DumpError, match="could not be rewritten"):
+            plain_dump.strip_unsupported_preamble_settings(dump, {"statement_timeout"})
+        # No temp file (or any other debris) survives the failed rewrite.
+        assert sorted(p.name for p in tmp_path.iterdir()) == before
+
+
 # ── _run_psql ─────────────────────────────────────────────────────────────────
 
 

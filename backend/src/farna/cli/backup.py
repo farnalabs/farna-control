@@ -1609,16 +1609,16 @@ def _run_restore(opts: _RestoreOptions) -> None:
 
     ORDERING: every read-only verification runs FIRST — including the
     ``--dry-run`` short-circuit — and only then are the writers stopped and the
-    data-dir lock taken. A preview must have NO side effects: stopping a live
-    launcher to print a plan would be a side effect the operator never agreed
-    to. After the lock: the pre-restore safety dump, the database-cluster
-    restore (SQL dump, checkpoint JSON exports, credential re-encryption,
-    collation drift check), launcher data-dir adoption, and the promoted
-    bootstrap role-posture re-run. The app role is never derived from the
-    restore target URL, and a posture failure FAILS the restore. Any failure is
-    logged, echoed, and re-raised as a ClickException; a data-dir lock is
-    always released. On success the exact START command is printed and nothing
-    is auto-restarted.
+    data-dir lock taken. A preview or validation failure must have NO side
+    effects: stopping a live launcher to print a plan would be a side effect
+    the operator never agreed to. After the lock: the pre-restore safety dump,
+    the database-cluster restore (SQL dump, checkpoint JSON exports, credential
+    re-encryption, collation drift check), launcher data-dir adoption, and the
+    promoted bootstrap role-posture re-run. The app role is never derived from
+    the restore target URL, and a posture failure FAILS the restore. Any
+    failure is logged, echoed, and re-raised as a ClickException; a data-dir
+    lock is always released. On success the exact START command is printed and
+    nothing is auto-restarted.
     """
     raw_url = _resolve_url(opts.db_url)
     settings = get_settings()
@@ -1647,12 +1647,13 @@ def _run_restore(opts: _RestoreOptions) -> None:
     lock = None
     stopped = False
     if opts.data_dir is not None:
-        # FAR-2667 item 5: restore STOPS the writers itself (it never asks the
-        # operator to remember a stop) and leaves them stopped. Taking the
-        # data-dir lock afterwards is what proves they really are gone.
+        # FAR-2667 item 5: a VIABLE restore stops the writers itself (it never
+        # asks the operator to remember a stop) and leaves them stopped. This
+        # runs only after the read-only verification above, so a validation
+        # failure or a preview never leaves a running launcher stopped.
+        # Taking the data-dir lock afterwards is what proves they really are
+        # gone.
         stopped = _stop_launcher_writers(opts.data_dir)
-        # Restore-while-running refuses BEFORE anything is verified as
-        # writable, let alone wiped (ADR 031 data-dir lock contract).
         lock = _acquire_data_lock(opts.data_dir, mode="restore")
 
     try:
@@ -2226,9 +2227,10 @@ def restore(
     manifest must checksum ``database.sql``, and an archive that attested
     dump-time completeness is re-verified now. With --dry-run, validates
     integrity and previews every step without touching the database. Against
-    a launcher data dir, STOPS a running launcher itself, takes the exclusive
-    lock, and leaves the stack stopped: on success it prints the exact start
-    command and never auto-restarts.
+    a launcher data dir, once validation passes it STOPS a running launcher
+    itself, takes the exclusive lock, and leaves the stack stopped: on success
+    it prints the exact start command and never auto-restarts. A --dry-run
+    preview or a failed validation never stops a running launcher.
     """
     _run_restore(
         _RestoreOptions(

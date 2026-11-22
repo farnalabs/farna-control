@@ -53,11 +53,12 @@ _APP_SERVICE = "modulo"
 #: field-name spelling ``ENVIRONMENT``. ``MODULO_ENV`` was a legacy alias that the
 #: alias-set removal dropped; no code reads it.
 _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
-    # FAR-2667: read by the container ENTRYPOINT (shell), not by Settings:
+    # FAR-2667: read by the container ENTRYPOINTS (shell), not by Settings:
     # FARNA_CONTROL_SNAPSHOT_DIR names the pre-upgrade snapshot directory and
-    # FARNA_CONTROL_VERSION is recorded in the snapshot's directory name.
-    "FARNA_CONTROL_SNAPSHOT_DIR": ("deploy/supervisor/entrypoint.sh",),
-    "FARNA_CONTROL_VERSION": ("deploy/supervisor/entrypoint.sh",),
+    # FARNA_CONTROL_VERSION is recorded in the snapshot's directory name. Both
+    # entrypoints read them; the supervisor one is the shipped image's.
+    "FARNA_CONTROL_SNAPSHOT_DIR": ("entrypoint.sh", "deploy/supervisor/entrypoint.sh"),
+    "FARNA_CONTROL_VERSION": ("entrypoint.sh", "deploy/supervisor/entrypoint.sh"),
     "DATABASE_ADMIN_URL": (
         "src/farna/db/bootstrap.py",
         "src/farna/db/migrations/env.py",

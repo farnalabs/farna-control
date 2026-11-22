@@ -272,5 +272,5 @@ volumes:
   postgres_data:
   redis_data:
   # Pre-upgrade snapshot volume (FAR-2667). Image-initialised so /backups is
-  # owned by the container user; see the modulo service's volume comment.
+  # owned by the container user; see the application service's volume comment.
   snapshot_data:

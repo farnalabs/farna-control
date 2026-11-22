@@ -18,7 +18,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -232,6 +232,17 @@ class TestTakeUpgradeSnapshot:
             take_upgrade_snapshot(_DB_URL, tmp_path)
         assert not list(tmp_path.glob(f"{SNAPSHOT_PREFIX}*"))
 
+    def test_missing_pg_dump_leaves_no_snapshot_directory(self, tmp_path: Path, small_database: None) -> None:
+        """Resolving pg_dump happens inside the guarded block, so a missing
+        client sweeps the just-created directory instead of leaving an empty one
+        that looks like a snapshot."""
+        with (
+            patch.object(upgrade_module, "_resolve_pg_dump", side_effect=UpgradeError("no pg_dump found")),
+            pytest.raises(UpgradeError, match="no pg_dump found"),
+        ):
+            take_upgrade_snapshot(_DB_URL, tmp_path)
+        assert not list(tmp_path.glob(f"{SNAPSHOT_PREFIX}*"))
+
     def test_incomplete_dump_never_prunes_an_existing_snapshot(self, tmp_path: Path, small_database: None) -> None:
         """ORDERING: a failed dump must not delete anything — the existing
         recovery points are still the only ones the operator has."""
@@ -297,6 +308,86 @@ class TestPruneSnapshots:
         snapshot = _take(tmp_path)
         (snapshot.directory / _RESTORE_MANIFEST_NAME).write_text(json.dumps({"file_checksums": {}}), encoding="utf-8")
         assert snapshot_is_intact(snapshot.directory) is False
+
+
+class TestDbUrlNormalisation:
+    """The compose entrypoint passes SQLAlchemy asyncpg URLs; psycopg and
+    pg_dump only accept the libpq form, so both the pristine probe and pg_dump
+    must receive ``postgresql://`` (FAR-2667)."""
+
+    _ASYNC_URL = "postgresql+asyncpg://owner:secret@127.0.0.1:15432/farna_control"
+
+    def test_take_normalises_asyncpg_url_for_pg_dump(self, tmp_path: Path, small_database: None) -> None:
+        seen: list[list[str]] = []
+
+        def _run(argv: list[str], stdout: Any = None, **kwargs: Any) -> MagicMock:
+            seen.append(argv)
+            if stdout is not None:
+                stdout.write(_COMPLETE_PAYLOAD)
+            return MagicMock(returncode=0, stderr=b"")
+
+        with patch("farna.launcher.upgrade.subprocess.run", new=_run):
+            take_upgrade_snapshot(self._ASYNC_URL, tmp_path)
+        url_arg = seen[0][-1]
+        assert url_arg.startswith("postgresql://")
+        assert "asyncpg" not in url_arg
+
+    def test_pristine_probe_receives_the_normalised_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The probe may be HANDED the asyncpg URL; what must be normalised is
+        the connection STRING psycopg actually gets (normalisation lives in the
+        one shared psycopg_connect_args helper, not in a second rewrite)."""
+        import psycopg
+
+        seen_dsn: list[str] = []
+
+        class _Cursor:
+            def __enter__(self) -> Self:
+                return self
+
+            def __exit__(self, *_exc: object) -> None:
+                return None
+
+            def execute(self, *_args: Any) -> None:
+                return None
+
+            def fetchone(self) -> tuple[int]:
+                return (1,)
+
+        class _Conn:
+            def __enter__(self) -> Self:
+                return self
+
+            def __exit__(self, *_exc: object) -> None:
+                return None
+
+            def cursor(self) -> _Cursor:
+                return _Cursor()
+
+        def _connect(dsn: str, **_kwargs: Any) -> _Conn:
+            seen_dsn.append(dsn)
+            return _Conn()
+
+        monkeypatch.setattr(psycopg, "connect", _connect)
+        assert upgrade_module._database_is_pristine(self._ASYNC_URL) is False
+        assert seen_dsn
+        assert seen_dsn[0].startswith("postgresql://")
+        assert "asyncpg" not in seen_dsn[0]
+
+    def test_entrypoint_mode_normalises_asyncpg_url_for_pg_dump(self, tmp_path: Path, small_database: None) -> None:
+        seen: list[list[str]] = []
+
+        def _run(argv: list[str], stdout: Any = None, **kwargs: Any) -> MagicMock:
+            seen.append(argv)
+            if stdout is not None:
+                stdout.write(_COMPLETE_PAYLOAD)
+            return MagicMock(returncode=0, stderr=b"")
+
+        with patch("farna.launcher.upgrade.subprocess.run", new=_run):
+            code = upgrade_module.main(["--db-url", self._ASYNC_URL, "--output-dir", str(tmp_path)])
+        assert code == 0
+        url_arg = seen[0][-1]
+        assert url_arg.startswith("postgresql://")
+        assert "asyncpg" not in url_arg
 
 
 class TestResolvePgDump:

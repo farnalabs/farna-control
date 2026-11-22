@@ -27,6 +27,9 @@
 # needs at exactly the moment they need it.
 set -Eeuo pipefail
 
+# The compose service that runs the application (and the only writer).
+app_service="${FARNA_CONTROL_APP_SERVICE:-modulo}"
+
 usage() {
   printf 'usage: %s --confirm <snapshot-dir> [compose-file]\n' "$(basename "$0")" >&2
   printf '  <snapshot-dir> is the path the upgrade printed, e.g.\n' >&2
@@ -98,7 +101,7 @@ fi
 
 print_start_command() {
   printf '\nStart the previous release with:\n'
-  printf '  TAG=<previous-version> docker compose -f %s up -d modulo\n' "$compose_file"
+  printf '  TAG=<previous-version> docker compose -f %s up -d %s\n' "$compose_file" "$app_service"
   printf 'No automatic restart was performed.\n'
 }
 
@@ -127,10 +130,10 @@ printf 'Verifying snapshot %s before touching anything...\n' "$container_snapsho
 # WITHOUT touching the database, stopping the writers or taking the data-dir
 # lock. A corrupt, foreign or missing snapshot dies here.
 # shellcheck disable=SC2016  # the single-quoted script is executed INSIDE the container
-compose run --rm --no-deps --entrypoint sh modulo -c \
+compose run --rm --no-deps --entrypoint sh "$app_service" -c \
   'test -d "$1" || { echo "refusing to restore: no snapshot directory at $1" >&2; exit 1; }' \
   sh "$container_snapshot"
-compose run --rm --no-deps modulo \
+compose run --rm --no-deps "$app_service" \
   restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run >/dev/null
 
 printf 'Verifying the TARGET database matches the snapshot...\n'
@@ -138,12 +141,12 @@ printf 'Verifying the TARGET database matches the snapshot...\n'
 # equivalent guard verifies the TARGET's recorded schema against the snapshot's:
 # a database that is not the one this snapshot came from (different revision,
 # or not a bootstrapped Farna Control database at all) is refused.
-compose run --rm --no-deps modulo \
+compose run --rm --no-deps "$app_service" \
   restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run \
   --verify-target-schema >/dev/null
 
-printf 'Stopping the writers (compose service "modulo")...\n'
-compose stop modulo
+printf 'Stopping the writers (compose service "%s")...\n' "$app_service"
+compose stop "$app_service"
 
 printf 'Restoring %s ...\n' "$container_snapshot"
 # --yes here is the INNER confirmation; the operator's confirmation is the
@@ -151,7 +154,7 @@ printf 'Restoring %s ...\n' "$container_snapshot"
 # is already running; do not restart it. --safety-dump-dir /backups keeps the
 # pre-restore safety dump of the CURRENT database on the volume instead of
 # inside the disposable container.
-compose run --rm --no-deps modulo \
+compose run --rm --no-deps "$app_service" \
   restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" \
   --yes --verify-target-schema --safety-dump-dir /backups
 

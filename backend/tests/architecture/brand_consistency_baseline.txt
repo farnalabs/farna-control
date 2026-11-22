@@ -936,7 +936,7 @@ backend/tests/unit/cli/test_apply_run_enabled.py	2
 backend/tests/unit/cli/test_apply_settings_lazy.py	8
 backend/tests/unit/cli/test_apply_trigger.py	11
 backend/tests/unit/cli/test_backfill_model_backend_base_url.py	1
-backend/tests/unit/cli/test_backup.py	8
+backend/tests/unit/cli/test_backup.py	10
 backend/tests/unit/cli/test_backup_restore_semantics.py	15
 backend/tests/unit/cli/test_break_glass_cli.py	9
 backend/tests/unit/cli/test_break_glass_core.py	16
@@ -1314,7 +1314,7 @@ docs/investigations/far-2380-prompt-to-pr-worker-lost.md	15
 docs/modulo-apply-github-actions.md	6
 docs/offline-verifiable-evidence.md	1
 docs/operations/admin-bypass.md	4
-docs/operations/backup.md	16
+docs/operations/backup.md	17
 docs/operations/bundled-runner-rented-compute.md	19
 docs/operations/far-1511-worker-event-loop-stalls.md	2
 docs/operations/far-1524-pg-connection-drops.md	1
@@ -1556,6 +1556,7 @@ scripts/backup.py	7
 scripts/bump-version.py	4
 scripts/bundle-versions.env	1
 scripts/check_doc_validity.py	21
+scripts/compose-restore.sh	2
 scripts/create-macos-info-plist.sh	3
 scripts/dispatch_with_retry.sh	7
 scripts/install.sh	30
@@ -1566,7 +1567,7 @@ scripts/macos/build-native-bundle.sh	13
 scripts/macos/install-pinned-shellcheck.sh	1
 scripts/macos/install.sh	11
 scripts/macos/signature-diagnostics.sh	1
-scripts/package_compose_release.py	17
+scripts/package_compose_release.py	18
 scripts/render_validation_compose.py	1
 scripts/restore.py	7
 scripts/run_check_e2e_route_methods.py	8
