@@ -66,7 +66,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from farna.cli.apply import register_apply
-from farna.db.url_utils import _POSTGRES_ASYNC_PREFIX
+from farna.db.url_utils import _POSTGRES_ASYNC_PREFIX, to_psycopg_url
 from farna.settings import get_settings
 
 _log = logging.getLogger(__name__)
@@ -118,10 +118,7 @@ __all__ = ["MANIFEST_VERSION", "backup", "cli", "restore"]
 def _resolve_url(db_url: str | None) -> str:
     """Resolve a raw PostgreSQL connection string from --db-url or settings."""
     raw = db_url or get_settings().database_url
-    for prefix in (_POSTGRES_ASYNC_PREFIX, "postgresql+psycopg://"):
-        if raw.startswith(prefix):
-            raw = "postgresql://" + raw[len(prefix) :]
-    return raw
+    return to_psycopg_url(raw)
 
 
 # ── Fernet helpers ───────────────────────────────────────────────────────────
@@ -1410,9 +1407,11 @@ def _run_restore(opts: _RestoreOptions) -> None:
     Both connection URLs are resolved first (the target from ``--db-url`` /
     settings, the APP role from ``--app-db-url`` / ``DATABASE_URL``), so a
     configuration typo fails BEFORE anything destructive happens. Then, in
-    order: stop the writers (a live launcher is stopped here, never left for
-    the operator to remember), validate targets (verify-before-wipe checks,
-    then the --dry-run preview short-circuit), the pre-restore safety dump,
+    order: validate targets (verify-before-wipe checks, then the --dry-run
+    preview short-circuit — a preview or validation failure never stops a
+    running launcher), stop the writers (a viable restore stops a live
+    launcher here, never leaving it for the operator to remember), the
+    pre-restore safety dump,
     the database-cluster restore (SQL dump, checkpoint JSON exports,
     credential re-encryption, collation drift check), launcher data-dir
     adoption, and the promoted bootstrap role-posture re-run. The app role is
@@ -1442,18 +1441,21 @@ def _run_restore(opts: _RestoreOptions) -> None:
 
     lock = None
     stopped = False
-    if opts.data_dir is not None:
-        # FAR-2667 item 5: restore STOPS the writers itself (it never asks the
-        # operator to remember a stop) and leaves them stopped. Taking the
-        # data-dir lock afterwards is what proves they really are gone.
-        stopped = _stop_launcher_writers(opts.data_dir)
-        # Restore-while-running refuses BEFORE anything is verified as
-        # writable, let alone wiped (ADR 031 data-dir lock contract).
-        lock = _acquire_data_lock(opts.data_dir, mode="restore")
-
     try:
+        # Validate — and short-circuit a --dry-run preview — BEFORE stopping the
+        # writers. A validation failure or a preview must never leave a running
+        # launcher stopped (FAR-2667): the stop has an externally visible side
+        # effect, so it happens only once the restore is known to be viable.
         if not _validate_targets(opts, manifest, raw_url, settings):
             return
+
+        if opts.data_dir is not None:
+            # FAR-2667 item 5: a viable restore STOPS the writers itself (it
+            # never asks the operator to remember a stop) and leaves them
+            # stopped. Taking the data-dir lock afterwards is what proves they
+            # really are gone.
+            stopped = _stop_launcher_writers(opts.data_dir)
+            lock = _acquire_data_lock(opts.data_dir, mode="restore")
 
         _safety_dump(opts, raw_url)
         _restore_cluster(opts, manifest, raw_url, settings)
@@ -1960,9 +1962,10 @@ def restore(
     manifest must checksum ``database.sql``, and an archive that attested
     dump-time completeness is re-verified now. With --dry-run, validates
     integrity and previews every step without touching the database. Against
-    a launcher data dir, STOPS a running launcher itself, takes the exclusive
-    lock, and leaves the stack stopped: on success it prints the exact start
-    command and never auto-restarts.
+    a launcher data dir, once validation passes it STOPS a running launcher
+    itself, takes the exclusive lock, and leaves the stack stopped: on success
+    it prints the exact start command and never auto-restarts. A --dry-run
+    preview or a failed validation never stops a running launcher.
     """
     _run_restore(
         _RestoreOptions(

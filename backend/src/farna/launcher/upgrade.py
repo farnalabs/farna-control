@@ -49,6 +49,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from farna.db.url_utils import to_psycopg_url
 from farna.launcher import manifest as manifest_module
 from farna.launcher.entry import APP_DB_NAME
 from farna.launcher.env_safety import scrub_os_environment
@@ -519,6 +520,12 @@ def take_upgrade_snapshot(
     """
     import shutil
 
+    # The container entrypoint passes DATABASE_ADMIN_URL / DATABASE_URL, which
+    # are SQLAlchemy asyncpg URLs. psycopg.connect() and pg_dump only accept
+    # the libpq form, so normalise ONCE here — the disk guard, the GUC probe
+    # and the dump all consume the same value (FAR-2667).
+    db_url = to_psycopg_url(db_url)
+
     output_dir.mkdir(parents=True, exist_ok=True)  # NOSONAR pythonsecurity:S8707 — operator-chosen snapshot dir
     enforce_snapshot_disk_headroom(db_url, output_dir)
 
@@ -531,18 +538,21 @@ def take_upgrade_snapshot(
         snapshot_dir = output_dir / f"{stamp_prefix}{stamp}-{counter}"
     snapshot_dir.mkdir(parents=True, exist_ok=False)
 
-    dump_url, postgres_password = _decredential_url(db_url)
     dump_path = snapshot_dir / _DUMP_NAME
-    argv = [
-        _resolve_pg_dump(bin_dir),
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        "--format=plain",
-        dump_url,
-    ]
     try:
+        # Resolution and argv construction happen INSIDE the guarded block: a
+        # missing pg_dump must leave no empty snapshot directory behind, so the
+        # failure has to reach the cleanup handlers below.
+        dump_url, postgres_password = _decredential_url(db_url)
+        argv = [
+            _resolve_pg_dump(bin_dir),
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-acl",
+            "--format=plain",
+            dump_url,
+        ]
         _run_dump(argv, dump_path, child_env=_pg_child_env(postgres_password))
         # pg_dump writes the CLIENT's settings as a preamble; a client newer
         # than the server emits GUCs the server rejects, which would make this
@@ -788,10 +798,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.db_url is not None:
             assert args.output_dir is not None  # parser-enforced
-            if args.skip_if_pristine and _database_is_pristine(args.db_url):
+            # The compose path passes a SQLAlchemy asyncpg URL; psycopg and
+            # pg_dump require the libpq form (FAR-2667).
+            db_url = to_psycopg_url(args.db_url)
+            if args.skip_if_pristine and _database_is_pristine(db_url):
                 print("Fresh database (no application tables) — no pre-upgrade snapshot needed.", file=sys.stderr)  # noqa: T201
                 return 0
-            snapshot = take_upgrade_snapshot(args.db_url, args.output_dir, release=args.release, bin_dir=args.bin_dir)
+            snapshot = take_upgrade_snapshot(db_url, args.output_dir, release=args.release, bin_dir=args.bin_dir)
         else:
             assert args.data_dir is not None  # parser-enforced
             snapshot = pre_upgrade_dump(args.data_dir, bin_dir=args.bin_dir, release=args.release)

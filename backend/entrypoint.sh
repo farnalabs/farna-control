@@ -9,10 +9,18 @@ set -e
 # exits non-zero and no migration is applied.
 if [ -n "${FARNA_CONTROL_SNAPSHOT_DIR:-}" ]; then
   echo "Pre-upgrade database snapshot (FAR-2667)..."
-  snapshot="$(python -m farna.launcher.upgrade \
-    --db-url "${DATABASE_ADMIN_URL:-$DATABASE_URL}" \
-    --output-dir "$FARNA_CONTROL_SNAPSHOT_DIR" \
-    --skip-if-pristine)"
+  if [ -n "${FARNA_CONTROL_VERSION:-}" ]; then
+    snapshot="$(python -m farna.launcher.upgrade \
+      --db-url "${DATABASE_ADMIN_URL:-$DATABASE_URL}" \
+      --output-dir "$FARNA_CONTROL_SNAPSHOT_DIR" \
+      --release "$FARNA_CONTROL_VERSION" \
+      --skip-if-pristine)"
+  else
+    snapshot="$(python -m farna.launcher.upgrade \
+      --db-url "${DATABASE_ADMIN_URL:-$DATABASE_URL}" \
+      --output-dir "$FARNA_CONTROL_SNAPSHOT_DIR" \
+      --skip-if-pristine)"
+  fi
   if [ -n "$snapshot" ]; then
     echo "Pre-upgrade snapshot verified: $snapshot"
     echo "  Restore a bad release with: scripts/compose-restore.sh $snapshot"

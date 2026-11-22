@@ -81,6 +81,27 @@ _PLAINTEXT_SSLMODES = frozenset({"disable"})
 
 _POSTGRES_PREFIX = "postgres://"
 _POSTGRES_ASYNC_PREFIX = "postgresql+asyncpg://"
+#: SQLAlchemy Postgres driver schemes that libpq tools (psycopg, pg_dump,
+#: psql) do not understand; they accept only ``postgresql://``.
+_PSYCOPG_DRIVER_PREFIXES = (_POSTGRES_ASYNC_PREFIX, "postgresql+psycopg://")
+
+
+def to_psycopg_url(url: str) -> str:
+    """Rewrite a SQLAlchemy Postgres driver URL to the libpq (psycopg) form.
+
+    ``psycopg.connect()``, ``pg_dump`` and ``psql`` accept ``postgresql://``
+    but reject the SQLAlchemy driver schemes ``postgresql+asyncpg://`` and
+    ``postgresql+psycopg://``. Any boot path that hands a ``DATABASE_URL`` /
+    ``DATABASE_ADMIN_URL`` to one of those tools must normalise it first
+    (FAR-2667). Only the scheme prefix is rewritten, so credentials, host,
+    database and query parameters (for example ``sslmode``) are preserved
+    verbatim. A URL already in the libpq form is returned unchanged, which
+    makes the helper idempotent.
+    """
+    for prefix in _PSYCOPG_DRIVER_PREFIXES:
+        if url.startswith(prefix):
+            return "postgresql://" + url[len(prefix) :]
+    return url
 
 
 def fix_database_url(url: str) -> str:

@@ -23,8 +23,10 @@ FAR-2667. Two concerns live here because BOTH dump producers
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import BinaryIO
 
@@ -94,17 +96,22 @@ def strip_unsupported_preamble_settings(dump_path: Path, supported: set[str]) ->
     Returns the removed GUC names (empty when the dump needed no rewrite, which
     is the normal case for a client whose major matches the server). The file
     is rewritten only when something was removed, byte-for-byte otherwise.
+
+    Only the PREAMBLE is scanned and buffered; the body is streamed when a
+    rewrite is needed, so a multi-GB dump is never read into memory twice
+    (the previous ``read_bytes`` + ``join`` doubled peak memory and could OOM
+    on a large database). Once the first real statement is reached the
+    preamble is over and the remaining bytes are copied unchanged.
     """
-    raw = dump_path.read_bytes()
-    if b"SET " not in raw:
-        return []
     kept: list[bytes] = []
     removed: list[str] = []
-    in_preamble = True
-    for line in raw.splitlines(keepends=True):
-        stripped = line.strip()
-        if in_preamble:
-            is_preamble_line = not stripped or stripped.startswith(_PREAMBLE_PREFIXES) or stripped.startswith(_PREAMBLE_SELECT)
+    body_offset: int | None = None
+    with dump_path.open("rb") as source:
+        while True:
+            line = source.readline()
+            if not line:
+                break
+            stripped = line.strip()
             match = _PREAMBLE_SET.match(stripped)
             if match is not None:
                 name = match.group(1).decode("ascii")
@@ -113,15 +120,34 @@ def strip_unsupported_preamble_settings(dump_path: Path, supported: set[str]) ->
                     continue
                 kept.append(line)
                 continue
+            is_preamble_line = not stripped or stripped.startswith(_PREAMBLE_PREFIXES) or stripped.startswith(_PREAMBLE_SELECT)
             if not is_preamble_line:
-                in_preamble = False
-        kept.append(line)
+                # First real statement: remember where the body begins so the
+                # rewrite can stream it without a second in-memory copy.
+                body_offset = source.tell() - len(line)
+                break
+            kept.append(line)
     if not removed:
         return []
-    payload = b"".join(kept)
-    fd = _open_private(dump_path)
-    with fd:
-        fd.write(payload)
+    preamble = b"".join(kept)
+    if body_offset is None:
+        # The whole file was preamble; rewriting it is just the kept lines.
+        with _open_private(dump_path) as dest:
+            dest.write(preamble)
+        return removed
+    # Write to a sibling temp file and atomically replace: the body is streamed
+    # from the ORIGINAL, which must still exist while it is being copied.
+    tmp_path = dump_path.with_name(f".{dump_path.name}.preamble-rewrite")
+    try:
+        with dump_path.open("rb") as source, _open_private(tmp_path) as dest:
+            dest.write(preamble)
+            source.seek(body_offset)
+            shutil.copyfileobj(source, dest)
+        tmp_path.replace(dump_path)
+    except OSError:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
+        raise
     return removed
 
 

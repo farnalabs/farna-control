@@ -521,6 +521,36 @@ def test_restore_declined_confirmation_reaches_no_psql(tmp_path: Path) -> None:
     assert psql_mock.called is False
 
 
+def test_restore_dry_run_does_not_stop_the_launcher(tmp_path: Path) -> None:
+    """A --dry-run preview must not stop a running launcher (FAR-2667): the
+    stop is an externally visible side effect and validation/dry-run returns
+    before it."""
+    data_dir = _seed_data_dir(tmp_path)
+    archive = _make_archive(tmp_path, MANIFEST_VERSION, _target_mac(data_dir))
+    with contextlib.ExitStack() as stack:
+        _enter_restore_patches(stack, lock=MagicMock())
+        stop = stack.enter_context(patch("farna.cli.backup._stop_launcher_writers"))
+        args = ["restore", str(archive), "--dry-run", "--data-dir", str(data_dir)]
+        result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    stop.assert_not_called()
+
+
+def test_restore_validation_failure_does_not_stop_the_launcher(tmp_path: Path) -> None:
+    """A validation refusal (instance identity mismatch) must leave the
+    launcher running, not stopped-but-unrestored."""
+    data_dir = _seed_data_dir(tmp_path)
+    archive = _make_archive(tmp_path, MANIFEST_VERSION, "bb" * 32)
+    with contextlib.ExitStack() as stack:
+        _enter_restore_patches(stack, lock=MagicMock())
+        stop = stack.enter_context(patch("farna.cli.backup._stop_launcher_writers"))
+        args = ["restore", str(archive), "--yes", "--data-dir", str(data_dir)]
+        result = CliRunner().invoke(cli, args)
+    assert result.exit_code != 0
+    assert "Instance identity MISMATCH" in result.output
+    stop.assert_not_called()
+
+
 def test_restore_collation_drift_prints_hard_warning(tmp_path: Path) -> None:
     archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
     collation_conn = _make_collation_connection([("en_US.UTF-8", "2.28", "2.35", "c")])
