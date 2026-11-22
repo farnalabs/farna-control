@@ -723,6 +723,7 @@ backend/tests/unit/api/test_break_glass_guardrails.py	1
 backend/tests/unit/api/test_break_glass_login.py	3
 backend/tests/unit/api/test_break_glass_rotation_mint_deny.py	8
 backend/tests/unit/api/test_clone_lock_timeout_order.py	1
+backend/tests/unit/api/test_composite_read_any_credential.py	1
 backend/tests/unit/api/test_composite_templates_api.py	1
 backend/tests/unit/api/test_connectors_endpoint.py	3
 backend/tests/unit/api/test_contributions.py	1
