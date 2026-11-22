@@ -15021,6 +15021,12 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                     asyncio.shield(_bridge_server.close()),
                     timeout=_OUTPUT_READ_TIMEOUT,
                 )
+            # Same cancellation discipline as the receipt harvest above: a
+            # cancel landing here is RECORDED (first one wins) and the
+            # remaining teardown still runs; it is re-raised at the end.
+            except asyncio.CancelledError as _cancel_exc:  # NOSONAR S7497
+                if _gh_settle_cancelled is None:
+                    _gh_settle_cancelled = _cancel_exc
             except Exception:
                 _log.exception(
                     "sandbox_agent.loop_intercept_teardown_failed",
@@ -15055,6 +15061,11 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                     ),
                     timeout=_OUTPUT_READ_TIMEOUT,
                 )
+            # As above: record a cancellation (first one wins) rather than
+            # unwinding — the provider close and the marker clear still follow.
+            except asyncio.CancelledError as _cancel_exc:  # NOSONAR S7497
+                if _gh_settle_cancelled is None:
+                    _gh_settle_cancelled = _cancel_exc
             except Exception:
                 _log.exception(
                     "sandbox_agent.kill_failed",
@@ -15067,8 +15078,10 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # empty workspace map (no second API round trip).
             try:
                 await asyncio.wait_for(_dispatch_provider.close(), timeout=_OUTPUT_READ_TIMEOUT)
-            except asyncio.CancelledError:
-                raise
+            # A cancel here must not skip the route-hub close / marker clear.
+            except asyncio.CancelledError as _cancel_exc:  # NOSONAR S7497
+                if _gh_settle_cancelled is None:
+                    _gh_settle_cancelled = _cancel_exc
             except Exception:
                 _log.exception(
                     "sandbox_agent.dispatch_provider_close_failed",
@@ -15082,8 +15095,10 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # tracks). Bounded + best-effort, same contract as above.
             try:
                 await asyncio.wait_for(_route_hub.aclose(), timeout=_ROUTE_HUB_CLOSE_TIMEOUT)
-            except asyncio.CancelledError:
-                raise
+            # A cancel here must not skip the marker clear below.
+            except asyncio.CancelledError as _cancel_exc:  # NOSONAR S7497
+                if _gh_settle_cancelled is None:
+                    _gh_settle_cancelled = _cancel_exc
             except Exception:
                 _log.exception(
                     "sandbox_agent.route_hub_aclose_failed",
@@ -15096,16 +15111,18 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         if dispatch_marker_set:
             try:
                 await _exec_clear_dispatch_marker(_exec_ctx)
-            except asyncio.CancelledError:
-                raise
+            except asyncio.CancelledError as _cancel_exc:  # NOSONAR S7497
+                if _gh_settle_cancelled is None:
+                    _gh_settle_cancelled = _cancel_exc
             except Exception:
                 _log.exception(
                     "sandbox_agent.dispatch_marker_clear_failed",
                     extra={"node_id": node_id, "run_id": run_id},
                 )
         # FAR-1315 (re-gate MAJOR 1): every teardown step above has now run —
-        # deliver the cancellation that landed during the receipt harvest, so
-        # the caller still sees a cancelled task rather than a swallowed one.
+        # deliver the FIRST cancellation that landed during the receipt harvest
+        # or any teardown step, so the caller still sees a cancelled task rather
+        # than a swallowed one.
         if _gh_settle_cancelled is not None:
             raise _gh_settle_cancelled
 
