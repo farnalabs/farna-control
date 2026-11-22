@@ -172,20 +172,49 @@ operator-facing contract lives in `docs/operations/backup.md`.
       (`backend/src/farna/db/plain_dump.py`, `cli/backup.py`;
       `test_upgrade_snapshot.py::TestVerifyDumpComplete`,
       `test_backup.py::TestRestoreDumpIntegrity`).
-- [x] Retention keeps the two most recent VERIFIED snapshots and never prunes
-      before the new snapshot verifies: dump, verify, then prune; a snapshot
-      that is not intact is swept, and the last surviving snapshot is never
-      deleted (`launcher/upgrade.py::prune_snapshots`;
+- [x] Retention keeps the two most recent VERIFIED snapshots at the current
+      schema and never prunes a snapshot whose recorded schema PRECEDES the
+      database's current head (that is the recovery point the current state
+      depends on), and never prunes before the new snapshot verifies: dump,
+      verify, then prune. A directory another live process is writing (its
+      in-progress marker names a live pid) is never touched; pruning and
+      snapshotting serialise on a per-directory lock. A snapshot that is not
+      intact — including one whose dump checksum no longer matches — is
+      swept, so the corrupt one is pruned rather than the good one beside it
+      (`launcher/upgrade.py::prune_snapshots`, `snapshot_is_intact`;
       `test_upgrade_snapshot.py::TestPruneSnapshots`,
-      `::test_incomplete_dump_never_prunes_an_existing_snapshot`).
+      `::TestRetentionKeepsTheRecoveryPoint`,
+      `::TestRetentionVerifiesTheChecksum`, `::TestInFlightSnapshots`).
+- [x] The snapshot only happens when a migration is PENDING: a database already
+      at the code's migration head takes no snapshot, so a release that
+      migrates and then crash-loops cannot rotate its own pre-upgrade recovery
+      point away on restart
+      (`launcher/upgrade.py::migration_pending`;
+      `test_upgrade_snapshot.py::TestMigrationPendingDecision`,
+      `::test_the_pre_upgrade_snapshot_survives_two_failed_restarts`).
+- [x] The disk guard accounts for the snapshots retention KEEPS, not just the
+      new dump, so it cannot pass and then hit ENOSPC
+      (`launcher/upgrade.py::enforce_snapshot_disk_headroom`;
+      `test_upgrade_snapshot.py::TestDiskHeadroomCountsRetainedSnapshots`).
+- [x] Both dump producers run ONE shared pipeline
+      (`farna.db.plain_dump.dump_plain_sql`): pinned argv, 0600 creation, the
+      replay rewrite, then the completeness proof. The URL is normalised to a
+      libpq scheme (``postgresql+asyncpg://`` is what the container is
+      configured with, and libpq rejects it) in one shared place
+      (`farna.db.url_utils.normalise_libpq_url`), and the password is lifted out
+      of the DSN so a connection error can never quote it
+      (`test_plain_dump.py::TestSharedPipeline`,
+      `test_url_utils.py::test_both_url_forms_reach_a_working_psycopg_connection_string`).
 - [x] A dump is replayable by the release that took it: pg_dump emits the
       client's settings as a preamble, so a client newer than the server writes
-      GUCs the server rejects (pg_dump 17 writes `SET transaction_timeout`,
-      PostgreSQL 16 refuses it). The preamble is rewritten to drop settings the
-      target server does not know; the rewrite stops at the first real
-      statement so function bodies are never touched
-      (`backend/src/farna/db/plain_dump.py`;
-      `test_backup.py::TestRunPgDump::test_preamble_settings_the_server_lacks_are_dropped`).
+      GUCs the server rejects (pg_dump 17 writes `SET transaction_timeout` /
+      `SELECT pg_catalog.set_config('transaction_timeout', ...)`, PostgreSQL 16
+      refuses it) and wraps the dump in `\restrict` / `\unrestrict` meta-commands
+      an older psql rejects. The preamble is rewritten to drop unknown settings
+      and those meta-commands; the rewrite STREAMS (a multi-GB dump is never
+      read into memory) and stops at the first real statement so function bodies
+      are never touched (`backend/src/farna/db/plain_dump.py`;
+      `test_plain_dump.py::TestPreambleRewrite`).
 - [x] Restore stops the writers itself and leaves them stopped: with
       `--data-dir` it stops a live launcher (refusing when it survives the stop
       request), takes the exclusive lock, and on success prints the exact
@@ -194,11 +223,48 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `--safety-dump-dir` keeps the pre-restore safety dump on a persistent
       path when restore runs in a disposable container (`cli/backup.py`;
       `test_backup.py::TestRestoreStartGuidance`).
+- [x] Restore refuses a MISSING dump when the archive describes one (a silent
+      no-op restore is worse than a refusal), refuses a manifest filename that
+      escapes the archive directory (absolute, `..`, or a symlink — the
+      checksum loop would otherwise hash an arbitrary file), runs psql with
+      `-X` so a `~/.psqlrc` cannot disable `ON_ERROR_STOP`, and its disk
+      pre-flight measures the DATABASE's filesystem (`--target-fs` /
+      `DB_CAPACITY_PATH`) rather than the archive's. `--dry-run` has no side
+      effects: it validates before the writers are stopped or the data-dir lock
+      is taken (`cli/backup.py`; `test_backup_restore_semantics.py::
+      TestMissingDumpFailsClosed`, `::TestManifestContainment`,
+      `::TestDryRunHasNoSideEffects`, `::TestDiskPreflightTarget`,
+      `test_backup.py::TestRunPsql`).
+- [x] The compose path's recovery VERIFIES before it destroys: the helper
+      requires an explicit `--confirm` argument, verifies the archive with a
+      side-effect-free `restore --dry-run`, and refuses unless the TARGET
+      database records exactly the schema revisions the snapshot was taken from
+      (`--verify-target-schema`) — the stand-in for the data-dir instance
+      identity guard, which the old no-`--data-dir` invocation skipped
+      entirely. The exact start command is printed on failure as well as
+      success (`scripts/compose-restore.sh`,
+      `test_backup_restore_semantics.py::TestVerifyTargetSchema`).
+- [x] `--skip-backup` skips the DUMP, not the recovery point: it refuses unless
+      an INTACT snapshot already exists under the data dir, and it reads the
+      LIVE database's revisions (not the old bundle's script heads) so an
+      already-migrated-ahead database is still detected
+      (`launcher/upgrade.py::_require_existing_snapshot`,
+      `live_database_revisions`; `test_upgrade_skip_backup.py`).
 - [x] The compose release bundle ships `compose-restore.sh` — the one documented
       recovery command for that path — which stops the application, restores
       through a one-off container, and prints the exact start command without
       starting anything (`scripts/compose-restore.sh`,
       `scripts/package_compose_release.py`).
+
+## Accepted Residuals
+
+- The pre-upgrade dump is written by the tenant-serving application container,
+  so that process can read and write its own disaster-recovery point. Accepted
+  deliberately: the same container already holds the owner/superuser DB URL and
+  can read every row, and an unskippable snapshot is worth more than the
+  marginal confidentiality gain. Recorded in
+  `docs/deployment-security.md` §3.6; the follow-up (a separate one-off
+  snapshot container) is out of scope here.
 
 ## Known Gaps
 - The in-product `farna-control backup` directory is written unencrypted. An
@@ -219,6 +285,21 @@ operator-facing contract lives in `docs/operations/backup.md`.
   release.
 
 ## QA History
+
+- 2026-11-22 (FAR-2667 review round): fixed the findings from the five-lens
+  review. The compose snapshot could not run at all (libpq rejects the
+  `postgresql+asyncpg://` scheme the compose file exports; the `/backups` bind
+  directory was root-owned while the image runs as `www-data`), the
+  snapshot-on-every-boot plus two-snapshot retention could delete the only real
+  recovery point (now: only when a migration is pending, and an older-head
+  snapshot is never pruned), the FAR-2659 alignment guard was dropped from both
+  entrypoints (restored, guard -> snapshot -> migrate), and restore reported
+  success when `database.sql` was absent (now fails closed). Also hardened:
+  the shared dump pipeline's completeness rule (final non-empty line, streamed
+  rewrite, set_config / `\restrict` handling), the workspace-vs-retained
+  disk guard, snapshot locking, release-segment validation, manifest path
+  containment, `psql -X`, the dry-run's side effects, the skip-backup live DB
+  probe, and the compose recovery's confirmation/verification contract.
 
 - 2026-11-22 (FAR-2667): made the pre-upgrade snapshot real on both deployment
   paths and made the documented recovery work end to end. Added the disk guard,

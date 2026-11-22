@@ -124,26 +124,34 @@ than the default `~/.local/opt/farna-control`. The built-in default and
 
 `farna-control upgrade` flow:
 
-1. **Enforced pre-upgrade dump.** The bundled pg_dump writes a versioned
-   snapshot dir beside the cluster (`pre-upgrade-dump-<version>-<ts>/`, a
-   sibling of `pgdata/`, never inside it) with a restore manifest. The dump is
-   proven complete at dump time (pg_dump's completion trailer), checksummed,
-   and the two most recent verified snapshots are kept. The disk guard refuses
-   the upgrade when the output filesystem has less than
-   `max(2 GB, 1.25 x database size)` free. A failed or unverified dump aborts
-   the upgrade - NO binary swap happens without a verified snapshot. The dump
-   needs the bundled Postgres reachable, so run the upgrade command while the
-   stack is running.
+1. **Enforced pre-upgrade dump — only when a migration is pending.** The
+   bundled pg_dump writes a versioned snapshot dir beside the cluster
+   (`pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/`, never inside
+   it) with a restore manifest. The dump is proven complete at dump time
+   (pg_dump's completion marker as the final non-empty line), checksummed, and
+   the database's revision(s) are recorded as the snapshot's schema. A database
+   already at the target bundle's head cannot be changed by the boot, so no
+   snapshot is taken and one line says so. Retention keeps the two newest
+   snapshots at the current schema and never prunes a snapshot recording an
+   older head — that is the recovery point the current data depends on. The
+   disk guard refuses the upgrade when the output filesystem has less than
+   `max(2 GB, 1.25 x database size)` free plus the snapshots retention keeps.
+   A failed or unverified dump aborts the upgrade - NO binary swap happens
+   without a verified snapshot. The dump needs the bundled Postgres reachable,
+   so run the upgrade command while the stack is running.
 2. Stop + swap. The data dir must not be locked for the swap; the command
    stops the stack, re-points `current` to the new bundle, then boots the
    new bundle's migrations and gates on health.
 3. Failure output carries the snapshot path and the EXACT manual restore
-   command - v1 does NOT auto-restore on a failed upgrade.
+   command - v1 does NOT auto-restore on a failed upgrade. When no snapshot was
+   needed, the guidance says so and re-points the binary only.
 
-`--skip-backup` skips the enforced dump. This flag is the loud, explicit
-acknowledgement that a verified snapshot already exists (the
-stop-then-rerun flow used by the published installer); the upgrade
-refuses when no snapshot is present.
+`--skip-backup` skips the enforced dump, not the recovery point. This flag is
+the loud, explicit acknowledgement that a verified snapshot already exists (the
+stop-then-rerun flow used by the published installer); the upgrade **refuses
+when no intact snapshot is present** under the data dir, and it probes the LIVE
+database for its revision(s) rather than the old bundle's script heads, so a
+database already migrated ahead is still detected.
 
 ### Signed-manifest provisioning state (honest note)
 
@@ -235,40 +243,61 @@ curl http://localhost:80/healthz/ready
 #### The pre-upgrade snapshot is automatic (FAR-2667)
 
 The container entrypoint takes a verified `pg_dump` snapshot of the database
-**immediately before** `alembic upgrade heads` runs, while the application is
-still stopped and the database is up. It is not a step the operator can
-forget, and it is not skippable:
+**immediately before** `alembic upgrade heads` runs, but only when a migration
+is actually pending. Order is fixed: the release-alignment guard
+(`python -m farna.db.alignment`, FAR-2659) runs first, then the snapshot, then
+the migrations.
 
-- the snapshot lands in `deploy/compose/backups/pre-upgrade-dump-<TAG>-<UTC
-  timestamp>/` on the host (bind-mounted at `/backups`), never inside the
+- **Only when a migration is pending.** The database's recorded revision(s)
+  are compared with the revisions this image ships. A database already at head
+  is not changed by this boot, so no snapshot is taken and one line says so.
+  That is what stops a release that migrates and then crash-loops from
+  rotating its own recovery point away on every restart.
+- the snapshot lands in the `snapshot_data` volume at
+  `/backups/pre-upgrade-dump-<TAG>-<UTC timestamp>/`, never inside the
   `postgres_data` volume — so it survives image replacement and
-  `docker compose down`, and it is readable while Postgres is stopped;
-- the dump is proven complete at dump time (pg_dump's completion trailer),
-  checksummed, and recorded in both `manifest.json` and the
-  restore-compatible `backup-info.json`;
-- the two most recent verified snapshots are kept (dump, verify, then prune;
-  nothing is deleted before its replacement verifies);
+  `docker compose down`, and it is readable while Postgres is stopped. The
+  volume is created from the image, so it is owned by the container user; only
+  `docker compose down -v` deletes it (which also deletes the database);
+- the dump is proven complete at dump time (pg_dump's completion marker as the
+  final non-empty line), checksummed, and recorded in both `manifest.json` and
+  the restore-compatible `backup-info.json`;
+- retention keeps the two most recent snapshots **at the current schema** and
+  never prunes a snapshot whose recorded schema precedes the database's current
+  head — that older snapshot is the only way back to the release that owns the
+  current data. Nothing is deleted before its replacement verifies;
 - the guard refuses to run the upgrade at all when the output filesystem has
-  less than `max(2 GB, 1.25 x database size)` free, naming the required
-  space, the available space and that nothing has been changed. A refused
-  snapshot aborts the boot, so no migration is applied;
+  less than `max(2 GB, 1.25 x database size)` free **plus the snapshots
+  retention keeps**, naming the required space, the available space and that
+  nothing has been changed. A refused snapshot aborts the boot, so no migration
+  is applied;
 - a first start against an empty database is not an upgrade: nothing is
-  dumped and the boot proceeds.
+  dumped and the boot proceeds;
+- `DATABASE_ADMIN_URL` is required for the dump. There is no fallback to
+  `DATABASE_URL`: the application role is `NOBYPASSRLS`, so a dump through it
+  would be trailer-complete but row-partial.
 
 The entrypoint prints the snapshot path it took. Record it.
 
 #### If the new release fails: restore the snapshot
 
-Run the recovery helper that ships beside the compose file:
+Run the recovery helper that ships beside the compose file. It requires an
+explicit `--confirm` (it never confirms itself) and verifies before it
+destroys:
 
 ```bash
-./compose-restore.sh /backups/pre-upgrade-dump-<TAG>-<UTC timestamp>
+./compose-restore.sh --confirm /backups/pre-upgrade-dump-<TAG>-<UTC timestamp>
 ```
 
-It stops the application, verifies the snapshot's manifest and checksums,
-refuses a corrupt or foreign dump *before* touching the database, restores
-the dump, re-applies the application role's grants, and then **stops** — it
-prints the exact start command and never restarts the stack:
+1. **Verify the archive** — `restore --dry-run` in a one-off container checks
+   the manifest, checksum coverage, every checksum and the dump's completeness.
+2. **Verify the target** — `--verify-target-schema` refuses unless the target
+   database records exactly the schema revisions the snapshot was taken from,
+   so a wrong `DATABASE_ADMIN_URL` cannot wipe an unrelated cluster.
+3. **Stop, restore, stop.** It stops the application, restores the dump,
+   re-applies the application role's grants, and then **stops** — it prints the
+   exact start command (on failure as well as success) and never restarts the
+   stack:
 
 ```bash
 TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo
@@ -277,7 +306,7 @@ TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo
 Start the previous release only after reading the restore output. Rolling the
 database backwards (`alembic downgrade`) is not supported; the snapshot is the
 way back. The pre-restore safety dump of the database you are replacing is
-written into `backups/` next to the snapshot.
+written into the same snapshot volume, next to the snapshot.
 
 The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) rehearses this on
 a disposable host. Its rollback leg must assert this documented path — restore

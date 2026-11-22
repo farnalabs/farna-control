@@ -161,26 +161,38 @@ recovery point that does not depend on the operator remembering a command:
 
 | Path | Who takes the snapshot | Where it lands |
 |------|------------------------|----------------|
-| Container (compose) | the image entrypoint, before `alembic upgrade heads` | `/backups/pre-upgrade-dump-<TAG>-<ts>/` (the `backups/` bind mount beside the compose file) |
+| Container (compose) | the image entrypoint, immediately before `alembic upgrade heads` and only when a migration is pending | `/backups/pre-upgrade-dump-<TAG>-<ts>/` in the `snapshot_data` volume |
 | Native bundle | `farna-control upgrade` / the installer, before the binary swap | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
 
 Both paths call the same helper and share the same guarantees:
 
+- **Only when a migration is pending.** A database already at the code's
+  migration head cannot be changed by the boot, so no snapshot is taken (one
+  line says so). This is what stops a release that migrates and then
+  crash-loops from replacing its own pre-upgrade recovery point on each
+  restart.
 - **Proven complete at dump time.** A plain SQL dump that is cut short still
   replays as a shorter script, so the snapshot is accepted only if pg_dump's
-  completion trailer is present and the dump checksums. An incomplete dump is
-  swept and the upgrade is refused.
+  completion marker is the final non-empty line of the file and the dump
+  checksums. An incomplete dump is swept and the upgrade is refused.
 - **Refused when there is no room.** The output filesystem must have at least
-  `max(2 GB, 1.25 x pg_database_size(current_database()))` free. Otherwise the
-  upgrade refuses and says so; nothing is changed.
-- **Two verified snapshots, in order.** The new snapshot is dumped, verified,
-  and only then is the oldest pruned. Nothing is deleted before its
-  replacement verifies, and the last surviving snapshot is never deleted.
+  `max(2 GB, 1.25 x pg_database_size(current_database()))` free, plus the bytes
+  of the snapshots retention keeps. Otherwise the upgrade refuses and says so;
+  nothing is changed.
+- **Retention keeps the recovery points that matter.** Dump, verify, then
+  prune. The two newest snapshots at the current schema are kept, and a
+  snapshot recording an OLDER schema is never pruned — it is the only way back
+  to the release that owns the current data. Nothing is deleted before its
+  replacement verifies, and a corrupt (checksum-mismatched) snapshot is the one
+  that is pruned, not the good one beside it.
 - **Replayable by the release that took it.** pg_dump emits the settings of the
   *client* it came from; a client newer than the server writes settings the
-  server rejects (pg_dump 17 writes `SET transaction_timeout`, PostgreSQL 16
-  refuses it). The dump's preamble is rewritten to drop settings the target
-  server does not know, so the snapshot restores into the server it came from.
+  server rejects (pg_dump 17 writes `SET transaction_timeout` /
+  `SELECT pg_catalog.set_config('transaction_timeout', ...)`, PostgreSQL 16
+  refuses it) and wraps the dump in `\restrict` / `\unrestrict` meta-commands an
+  older psql rejects. The dump's preamble is rewritten to drop settings the
+  target server does not know and those meta-commands, so the snapshot restores
+  into the server it came from.
 
 The manual dump below remains the out-of-band fallback (for example when the
 stack is stopped, or to keep a recovery point on separate media).
@@ -267,15 +279,33 @@ uv run farna-control restore /backups/pre-upgrade-<timestamp> --db-url "$DATABAS
 ```
 
 `restore` verifies every file against the manifest's checksums before it
-touches the database; `--dry-run` performs those checks and stops. It also
+touches the database; `--dry-run` performs those checks and stops, with no side
+effects (it does not stop the launcher or take the data-dir lock). It also
 refuses, loudly and before anything is written, a dump that:
 
+- is **missing** while the manifest describes one (a manifest entry that
+  records a `database.sql` checksum, or an upgrade snapshot, must have the file
+  on disk — a silent no-op restore is worse than a refusal);
 - the manifest records **no checksum** for (a foreign or hand-assembled
   archive cannot be proven to belong to this backup);
-- fails pg_dump's completion-trailer re-check, when the manifest attested
-  completeness at dump time (a file truncated after the manifest was written);
+- fails pg_dump's completion re-check, when the manifest attested completeness
+  at dump time (a file truncated after the manifest was written). The marker
+  must be the final non-empty line, not merely present somewhere in the tail;
 - is a pg_dump **custom-format** (`-Fc`) archive, which this restore path
   cannot replay.
+
+A manifest filename that escapes the archive directory (an absolute path, `..`,
+or a symlink) is refused as well: the checksum loop would otherwise hash an
+arbitrary file and print its digest. psql runs with `-X`, so an operator's
+`~/.psqlrc` cannot turn `ON_ERROR_STOP` off and let a rolled-back restore exit
+zero.
+
+`--verify-target-schema` is the compose path's stand-in for the data-dir
+instance identity: it refuses unless the TARGET database records exactly the
+schema revisions the archive was taken from. `--replace-cluster` overrides it.
+The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
+set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
+on a different volume from the database.
 
 Because `database.sql` is a dump of the whole database, restoring it also
 restores the pre-upgrade `alembic_version` row, leaving the database recorded
