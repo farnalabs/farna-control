@@ -75,7 +75,7 @@ organization's plan or tier.
       `PUT /api/v1/product-analytics/instance-switch` (audited in the
       org-independent system ledger) or the switch control on the admin page.
       `consent.resolve_instance_analytics_switch` applies the precedence:
-      stored operator value -> `MODULO_PRODUCT_ANALYTICS_ENABLED` (honored
+      stored operator value -> `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED` (honored
       only when no stored value exists) -> the license's
       `product_analytics_required` claim (default ON) -> OFF. An explicit
       operator value always wins, including OFF over a license, and the
@@ -104,7 +104,7 @@ organization's plan or tier.
       posture, every field sourced from state a feature actually writes:
       `instance_enabled` / `instance_switch_source` / `licence_requires_analytics`
       via `consent.resolve_instance_analytics_switch` (fail-closed coercion - a
-      stored `"false"` is OFF - with the `MODULO_PRODUCT_ANALYTICS_ENABLED` env
+      stored `"false"` is OFF - with the `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED` env
       fallback and the license-derived default), `last_successful_dump_at` /
       `dump_count_total` from the keys the
       metrics dump writes (`constants.DUMP_WATERMARK_KEY`,
@@ -241,7 +241,7 @@ intentional, not an open question:
   OFF); deleted `license_enforcement.py`, the kill switch, the carve-out helper
   and the unreachable dump branch; replaced the mocked-predicate test with real
   precedence tests plus a real-path proof that the dump never runs when the
-  effective switch is OFF. Documented `MODULO_PRODUCT_ANALYTICS_ENABLED` in the
+  effective switch is OFF. Documented `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED` in the
   configuration reference.
 - 2026-10-19: **Improve Architecture product-map walk** - fixed MAJOR
   (behavior-adversarial / Lens 9 List B - *listed but vacuously covered*): the
@@ -345,7 +345,7 @@ intentional, not an open question:
   fail-hard contract with negative tests, and aligned `_check_instance_switch` with
   `consent.is_instance_analytics_enabled` - a stored string `"false"` previously read
   as truthy and ran the dump while the consent surface reported the switch OFF
-  (fail-open), and the `MODULO_PRODUCT_ANALYTICS_ENABLED` fallback the surface honors
+  (fail-open), and the `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED` fallback the surface honors
   was ignored. Corrected the Known-Gaps key count (five, not four) and the
   license/plan-gating behavior claim (module has no production call site).
 - 2026-10-03: **Improve Architecture product-map walk** - closed the CISO

@@ -164,8 +164,8 @@ detection work.
 | `FERNET_KEY_OLD` | No | – | Previous Fernet key for no-downtime rotation; decrypt falls back to this when `FERNET_KEY` is rotated |
 | `FARNA_CONTROL_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
 | `FARNA_CONTROL_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `FARNA_CONTROL_ADMIN_PASSWORD` or `FARNA_CONTROL_USERS` must be set) |
-| `MODULO_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool) |
-| `MODULO_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class) |
+| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool). The legacy `MODULO_ADMIN_SECRET` spelling is still read as a fallback. |
+| `FARNA_CONTROL_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class). The `--token` flag takes precedence. |
 | `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `GUARDRAIL_DESTROY_PEPPER` | For destroy-mode redaction | `""` | HMAC pepper used by guardrails in `destroy` redaction mode to key replacement tokens. Empty (the default) leaves it unset, and a guardrail that declares a destroy-mode redaction rule then fails closed - the rule is rejected at save time and the block is terminal at the edge. Never logged. Rotating it breaks cross-run linkage of already-destroyed tokens by design. |
 | `INVITATION_EXPIRY_HOURS` | No | `72` | How long an in-app invitation token stays consumable |
@@ -417,7 +417,7 @@ Controls runner-slot reservation for sandbox-agent dispatches (FAR-594 D8).
 | `RUNNER_MARKER_STALE_SECONDS` | No | `90000` | Stale threshold for runner dispatch markers (marker `written_at`, legacy tier-less fall back to `runs.updated_at`). Markers older than this are cleared by the reconciliation sweep. Min 3600, max 604800. |
 | `RUNNER_MARKER_SWEEP_LOCK_TIMEOUT_SECONDS` | No | `5` | Lock timeout in seconds for the runner marker sweep transaction. Min 1, max 30. |
 | `RUNNER_RECONCILER_DESTROY_ENABLED` | No | `false` | Enable the runner workspace orphan reconciler destroy path. When OFF (default), the reconciler runs in log-only soak mode and does not destroy orphaned workspace containers. |
-| `MODULO_RUNNER_MACHINE_ID` | No | `""` | Deployment-identity label for the runner workspace reconciler. When empty, falls back to the machine hostname. Used to scope container orphan sweeps to a single deployment. |
+| `FARNA_CONTROL_RUNNER_MACHINE_ID` | No | `""` | Deployment-identity label for the runner workspace reconciler. When empty, falls back to the machine hostname. Used to scope container orphan sweeps to a single deployment. |
 
 ---
 
@@ -483,15 +483,15 @@ Rate limiting uses Redis sliding window (ZADD + ZREMRANGEBYSCORE). Falls back to
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_DOCKER_HOST` | No | unset (provider does not register) | Docker daemon endpoint for the `runner_docker` runtime provider (`docker` / `local_docker` aliases), the bundled-runner reconciler and its health probe. Setting it (or `DOCKER_HOST`) registers the provider; an unrelated `MODULO_RUNNER_*` variable does NOT (FAR-996). An explicitly constructed provider falls back to the local socket when unset. |
-| `DOCKER_HOST` | No | unset | Fallback Docker endpoint consulted after `MODULO_DOCKER_HOST`; setting it also registers the `runner_docker` provider. |
+| `FARNA_CONTROL_DOCKER_HOST` | No | unset (provider does not register) | Docker daemon endpoint for the `runner_docker` runtime provider (`docker` / `local_docker` aliases), the bundled-runner reconciler and its health probe. Setting it (or `DOCKER_HOST`) registers the provider; an unrelated `FARNA_CONTROL_RUNNER_*` variable does NOT (FAR-996). An explicitly constructed provider falls back to the local socket when unset. |
+| `DOCKER_HOST` | No | unset | Fallback Docker endpoint consulted after `FARNA_CONTROL_DOCKER_HOST`; setting it also registers the `runner_docker` provider. |
 | `DOCKER_TLS_VERIFY` | No | unset | Set to `1` to use TLS for the Docker endpoint. A non-loopback `tcp://` endpoint is rejected at provider registration unless `DOCKER_TLS_VERIFY` or `DOCKER_CERT_PATH` is truthy, or the insecure escape hatch below is set (FAR-1038). |
 | `DOCKER_CERT_PATH` | No | unset | Directory holding `ca.pem` (server TLS) and optionally `cert.pem` / `key.pem` (mutual TLS). A truthy value also satisfies the remote-endpoint TLS gate. |
-| `MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT` | No | unset | Escape hatch: set to a non-empty, non-false value to allow a remote `tcp://` Docker endpoint without TLS. Logs a prominent warning at provider construction; not for a public-IP endpoint. |
-| `MODULO_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider (read directly from env, not via Settings) |
-| `MODULO_KUBERNETES_ENABLED` | For Kubernetes | – | Registers the `kubernetes`/`k8s` runtime provider when set to any value except an explicit negative (`0`, `false`, `no`, `off`); unset/falsy leaves it unregistered. In-cluster auth is used when `KUBERNETES_SERVICE_HOST` is set, otherwise the standard kubeconfig chain (`KUBECONFIG` / default path). |
-| `MODULO_KUBERNETES_NAMESPACE` | No | `modulo` | Namespace the provider creates workspace pods in. |
-| `MODULO_KUBERNETES_SERVICE_ACCOUNT` | No | `default` | ServiceAccount the workspace pods run under. |
+| `FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT` | No | unset | Escape hatch: set to a non-empty, non-false value to allow a remote `tcp://` Docker endpoint without TLS. Logs a prominent warning at provider construction; not for a public-IP endpoint. |
+| `FARNA_CONTROL_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider (read directly from env, not via Settings, through the runtime-config bridge). Provider registration and `E2BRuntimeProvider` construction require this variable (or a runtime override); the upstream `E2B_API_KEY` spelling is honoured only as a fallback in the log-tail probe and node-runner enforcement, not for registration. |
+| `FARNA_CONTROL_KUBERNETES_ENABLED` | For Kubernetes | – | Registers the `kubernetes`/`k8s` runtime provider when set to any value except an explicit negative (`0`, `false`, `no`, `off`); unset/falsy leaves it unregistered. In-cluster auth is used when `KUBERNETES_SERVICE_HOST` is set, otherwise the standard kubeconfig chain (`KUBECONFIG` / default path). |
+| `FARNA_CONTROL_KUBERNETES_NAMESPACE` | No | `modulo` | Namespace the provider creates workspace pods in. |
+| `FARNA_CONTROL_KUBERNETES_SERVICE_ACCOUNT` | No | `default` | ServiceAccount the workspace pods run under. |
 | `FARNA_CONTROL_MAX_LOCAL_CONCURRENCY` | No | `2` | Max concurrent local agents (LocalRuntimeProvider) |
 | `E2B_SANDBOX_USD_PER_HOUR` | No | `0.13` | Hourly USD rate for an E2B sandbox, used to estimate per-run agent runtime cost from wall-clock time; default reflects the opencode template (2 vCPU / 2 GiB) rate; set to your E2B sandbox rate. |
 | `RUN_API_KEY_DEFAULT_TTL_SECONDS` | No | `900` | Per-run agent runtime API key TTL floor (min 300, max 86400) |
@@ -508,14 +508,14 @@ Settings load (fail-fast) – a bad env value blocks boot with a recovery messag
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_MAX_REPORTABLE_USD_MIN` | No | `0.000001` | The floor: a self-reported `model_cost_usd` below this is NOT a report (closes the spend-evasion hole), except an EXACT `0` that the producer proves is genuine (all-zero `token_usage`, FAR-653), which IS a real report rendering `$0.00` with no warning. Sub-floor non-zero values stay rejected. `ge=0.000001` – a sub-floor knob is rejected. |
-| `MODULO_MAX_SELF_REPORTED_USD` | No | `10000.0` | The per-node clamp for an absurd single-node report. The write-path effective value is min-capped at `99999999.999999` (the run column cap), so a `1e9` env value cannot silently disable the clamp. `ge=0.000001`. |
-| `MODULO_MAX_REPORTABLE_BAND_USD` | No | `50.0` | The band ceiling – the trust boundary for self-reported model cost at the backend extraction boundary. Any producer is clamped here; a value above the band carries the `model_cost_out_of_band_high` marker. Must be `<= MODULO_MAX_SELF_REPORTED_USD` (else boot-fatal). |
-| `MODULO_MAX_RATE_USD` | No | `100000.0` | Dynamic upper bound for a component's `rate_usd` on writes. The write-path effective value is min-capped at `999999999999.999999` (the rate column cap). Lowering it does NOT affect existing components – the knob moves the write-path boundary only; existing rows are still evaluated at finalization at their stored rate. |
+| `FARNA_CONTROL_MAX_REPORTABLE_USD_MIN` | No | `0.000001` | The floor: a self-reported `model_cost_usd` below this is NOT a report (closes the spend-evasion hole), except an EXACT `0` that the producer proves is genuine (all-zero `token_usage`, FAR-653), which IS a real report rendering `$0.00` with no warning. Sub-floor non-zero values stay rejected. `ge=0.000001` – a sub-floor knob is rejected. |
+| `FARNA_CONTROL_MAX_SELF_REPORTED_USD` | No | `10000.0` | The per-node clamp for an absurd single-node report. The write-path effective value is min-capped at `99999999.999999` (the run column cap), so a `1e9` env value cannot silently disable the clamp. `ge=0.000001`. |
+| `FARNA_CONTROL_MAX_REPORTABLE_BAND_USD` | No | `50.0` | The band ceiling – the trust boundary for self-reported model cost at the backend extraction boundary. Any producer is clamped here; a value above the band carries the `model_cost_out_of_band_high` marker. Must be `<= FARNA_CONTROL_MAX_SELF_REPORTED_USD` (else boot-fatal). |
+| `FARNA_CONTROL_MAX_RATE_USD` | No | `100000.0` | Dynamic upper bound for a component's `rate_usd` on writes. The write-path effective value is min-capped at `999999999999.999999` (the rate column cap). Lowering it does NOT affect existing components – the knob moves the write-path boundary only; existing rows are still evaluated at finalization at their stored rate. |
 
 The knobs are Decimal-typed; all comparisons are Decimal (a float/Decimal
 `min()` mismatch is a bug). The ordering invariant
-(`MODULO_MAX_REPORTABLE_USD_MIN < MODULO_MAX_SELF_REPORTED_USD`), the
+(`FARNA_CONTROL_MAX_REPORTABLE_USD_MIN < FARNA_CONTROL_MAX_SELF_REPORTED_USD`), the
 floor-vs-band guard, and the knob-below-band guard are enforced at Settings
 LOAD.
 
@@ -526,8 +526,8 @@ LOAD.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `FARNA_CONTROL_WORK_ITEM_REFS_CAP` | No | `100` | Unified cap (clamped to `[1, 100000]`) on work-item references carried through the refs pipeline: self-report normalization, the finalize merge, and node-input injection all read this one value. When more refs are supplied, drops drain lowest-provenance first (agent → derived → caller, then array position) and are counted. A pipeline declaring `work_item_refs_required: true` in its `run_context_defaults` refuses a delivery that supplied no refs: HTTP 422 with a `work_item_refs_required` error on the MCP and webhook paths, and a 422 with a prose detail (`This pipeline requires work_item_refs but none were supplied`) on the REST path. |
-| `MODULO_AGENT_MINT_BUDGET_LIMIT` | No | `500` | Maximum agent-sourced work items that may mint journey rows per organization in one rolling budget window. Read per call, so a change applies without a restart. Only consulted when the org setting `work_item_agent_minting_enabled` is on. Malformed or out-of-range values fall back to the default; the budget guard itself fails open (an error allows the mint and logs) so a cost cap never blocks run finalization. |
-| `MODULO_AGENT_MINT_BUDGET_WINDOW_MINUTES` | No | `60` | Length in minutes of the rolling agent-mint budget window. Read per call alongside `MODULO_AGENT_MINT_BUDGET_LIMIT`; malformed or out-of-range values fall back to the default. |
+| `FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT` | No | `500` | Maximum agent-sourced work items that may mint journey rows per organization in one rolling budget window. Read per call, so a change applies without a restart. Only consulted when the org setting `work_item_agent_minting_enabled` is on. Malformed or out-of-range values fall back to the default; the budget guard itself fails open (an error allows the mint and logs) so a cost cap never blocks run finalization. |
+| `FARNA_CONTROL_AGENT_MINT_BUDGET_WINDOW_MINUTES` | No | `60` | Length in minutes of the rolling agent-mint budget window. Read per call alongside `FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT`; malformed or out-of-range values fall back to the default. |
 
 ---
 
@@ -540,15 +540,15 @@ LOAD.
 | `FARNA_CONTROL_IDEMPOTENCY_GATE_ENABLED` | No | `true` | Enable sandbox idempotency gate (re-run skip for single sandbox nodes) |
 | `FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED` | No | `false` | Enable connector-write idempotency gate (skip byte-identical re-executed writes) |
 | `FARNA_CONTROL_SEED_DEMO_ORGS` | No | `false` | Seed demo organizations with signed licenses on boot (gated framework) |
-| `MODULO_PRODUCT_ANALYTICS_ENDPOINT_URL` | No | `""` | Endpoint URL for opt-in aggregate product analytics. Empty disables. |
-| `MODULO_PRODUCT_ANALYTICS_INSTANCE_SECRET` | No | `""` | Instance secret for HMAC signing product analytics. Empty disables. |
-| `MODULO_PRODUCT_ANALYTICS_ENABLED` | No | unset | Explicit instance-level product-analytics switch (`1`/`true`/`yes` = ON; `false`/`0`/`no` = OFF; a set-but-blank value reads OFF). `core/product_analytics/consent.resolve_instance_analytics_switch` resolves it in this order, first match wins: (1) the stored `system_config.product_analytics_enabled` value, written or cleared by a system admin via `PUT /api/v1/product-analytics/instance-switch` (or the switch on `/admin/product-analytics`); (2) this variable, honored only when no stored value exists; (3) the installed license's `product_analytics_required` claim, which sets the default ON; (4) otherwise OFF. An explicit operator value always wins – including OFF over a license that requires analytics – because the license claim is a partner expectation (a contractual default), never a control. `GET /api/v1/product-analytics/transparency` reports the effective switch and its source (`operator` / `environment` / `licence` / `default`), so an operator can always see why analytics is on and turn it off. Analytics never changes an organization's plan or tier. `MODULO_PRODUCT_ANALYTICS_ENDPOINT_URL` and `MODULO_PRODUCT_ANALYTICS_INSTANCE_SECRET` are the transport settings alongside this switch: either being empty disables delivery. |
+| `FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL` | No | `""` | Endpoint URL for opt-in aggregate product analytics. Empty disables. |
+| `FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET` | No | `""` | Instance secret for HMAC signing product analytics. Empty disables. |
+| `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED` | No | unset | Explicit instance-level product-analytics switch (`1`/`true`/`yes` = ON; `false`/`0`/`no` = OFF; a set-but-blank value reads OFF). `core/product_analytics/consent.resolve_instance_analytics_switch` resolves it in this order, first match wins: (1) the stored `system_config.product_analytics_enabled` value, written or cleared by a system admin via `PUT /api/v1/product-analytics/instance-switch` (or the switch on `/admin/product-analytics`); (2) this variable, honored only when no stored value exists; (3) the installed license's `product_analytics_required` claim, which sets the default ON; (4) otherwise OFF. An explicit operator value always wins – including OFF over a license that requires analytics – because the license claim is a partner expectation (a contractual default), never a control. `GET /api/v1/product-analytics/transparency` reports the effective switch and its source (`operator` / `environment` / `licence` / `default`), so an operator can always see why analytics is on and turn it off. Analytics never changes an organization's plan or tier. `FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL` and `FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET` are the transport settings alongside this switch: either being empty disables delivery. |
 | `FARNA_CONTROL_MONITOR_DOMAINS` | No | `""` | Space-separated CSP connect-src expressions (e.g. custom Grafana Faro collectors) |
 | `FARNA_CONTROL_ARTIFACTS_ENABLED` | No | `true` | Enable pipeline artifact storage |
 | `FARNA_CONTROL_ARTIFACTS_DIR` | No | `""` | Base directory for artifact files. Empty defaults to `<backend>/.data/artifacts` resolved by the store factory. |
 | `FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED` | No | `false` | Managed workspace inputs (MWI) kill-switch. When OFF (default), a `sandbox_agent` node that declares `workspace_inputs` short-circuits with `sandbox.workspace_inputs_disabled` and provisions nothing; existing sandbox behavior is unchanged. Operators enable it explicitly once MWI is ready for production use |
 | `FARNA_CONTROL_MULTI_ORG_ENABLED` | No | `false` | Multi-organization mode. OFF (the single-org default for self-hosted, ADR 005) blocks org creation, rejects org-slug login and makes the login-context endpoint always report single-org. ON enables multi-org behavior and the org-slug login path. A multi-org deployment also refuses a globally scoped secrets backend (e.g. Vault) for credential references rather than risk a cross-org read |
-| `MODULO_SCHEMA_VALIDATOR_MODE` | No | `lenient` | Schema-validator strictness, one of `lenient` or `strict`; any other value resolves to `lenient`. Read directly from the environment as a **first-boot seed only**: once the effective setting exists in the DB (per-org `settings_json`, then the instance-wide `system_config` row) that value wins. See [`docs/configuration-precedence.md`](./configuration-precedence.md) |
+| `FARNA_CONTROL_SCHEMA_VALIDATOR_MODE` | No | `lenient` | Schema-validator strictness, one of `lenient` or `strict`; any other value resolves to `lenient`. Read directly from the environment as a **first-boot seed only**: once the effective setting exists in the DB (per-org `settings_json`, then the instance-wide `system_config` row) that value wins. See [`docs/configuration-precedence.md`](./configuration-precedence.md) |
 
 ---
 
@@ -562,9 +562,9 @@ per-trigger `config_json` values (`max_no_delivery_streak`,
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_STREAK_DEACTIVATE_KILL_SWITCH` | No | `true` | Gates only the deactivate + notify side-effect of the streak sweep; classification always persists. Any of `0`, `false`, `off`, `no` disables the side-effect, any other value leaves it enabled |
-| `MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS` | No | `24` | Deployment default minimum wall-clock window (hours) before an `ongoing` trigger's no-delivery streak may fire; `0` removes the window so a fast-moving repo's quiet stretch still deactivates the pool. Invalid values fall back to the default |
-| `MODULO_CRON_STREAK_MIN_WINDOW_HOURS` | No | `48` | Same window for `cron` triggers, kept separate from the ongoing default: two full daily periods, so a single missed day never trips while a broken intraday cron still surfaces within two days. `0` removes the window. Invalid values fall back to the default |
+| `FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH` | No | `true` | Gates only the deactivate + notify side-effect of the streak sweep; classification always persists. Any of `0`, `false`, `off`, `no` disables the side-effect, any other value leaves it enabled |
+| `FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS` | No | `24` | Deployment default minimum wall-clock window (hours) before an `ongoing` trigger's no-delivery streak may fire; `0` removes the window so a fast-moving repo's quiet stretch still deactivates the pool. Invalid values fall back to the default |
+| `FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS` | No | `48` | Same window for `cron` triggers, kept separate from the ongoing default: two full daily periods, so a single missed day never trips while a broken intraday cron still surfaces within two days. `0` removes the window. Invalid values fall back to the default |
 
 ---
 
@@ -616,7 +616,7 @@ via the admin API. Unknown/absent keys default to safe values.
 |-----|------|---------|-------------|
 | `sandbox_concurrency_limit` | `int` (0–100) or `null` | `4` when the key is absent | Max concurrently `running` sandbox-agent runs for the org across all pipelines. An absent key resolves to the Docker-tier default of `4`, not unlimited; only an explicit `null` means unlimited. `0` is meaningful (deny-all), so the clamp range is `[0, 100]`. Runs beyond the cap stay `pending` with `error_code='org_capacity_limited'` and are retried by the background accelerator. Managed via `GET`/`PUT /api/v1/admin/org/sandbox-concurrency`. |
 | `run_concurrency_limit` | `int` (1–100) or `null` | `null` (unlimited) | Max concurrently executing/claimed runs for the org across ALL pipelines (sandbox-agent and otherwise). Runs dispatched while the org is at this cap are deferred back to `pending` with `error_code='org_capacity_limited'` and retried by the background accelerator. Independent of `sandbox_concurrency_limit` – both are org-wide caps, and both produce the same `org_capacity_limited` marker on deferred runs. Managed via `GET`/`PUT /api/v1/admin/org/run-concurrency`. |
-| `work_item_agent_minting_enabled` | `bool` | `false` (fail-closed) | Allow agent-sourced work-item refs to mint journey rows at run finalize. When off, agent refs are only confirmed against existing journey rows and never mint; a missing row is counted as a suppressed mint. When on, a missing row mints with `provenance='agent'` while the per-org budget (`MODULO_AGENT_MINT_BUDGET_LIMIT` / `MODULO_AGENT_MINT_BUDGET_WINDOW_MINUTES`) allows it. Any read error resolves to off. Managed via `GET`/`PUT /api/v1/admin/org/work-item-agent-minting`. |
+| `work_item_agent_minting_enabled` | `bool` | `false` (fail-closed) | Allow agent-sourced work-item refs to mint journey rows at run finalize. When off, agent refs are only confirmed against existing journey rows and never mint; a missing row is counted as a suppressed mint. When on, a missing row mints with `provenance='agent'` while the per-org budget (`FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT` / `FARNA_CONTROL_AGENT_MINT_BUDGET_WINDOW_MINUTES`) allows it. Any read error resolves to off. Managed via `GET`/`PUT /api/v1/admin/org/work-item-agent-minting`. |
 | `hitl_review_window_seconds` | `int` (60–604800) or `null` | `null` (instance default) | Org default HITL review window: how long a fired review may sit unclaimed/undecided before the run is terminalized `cancelled` / `hitl_review_expired`. A pipeline-level `hitl_review_window_seconds` wins over this; `null` clears the key and inherits the instance default. The terminalizer itself has no per-org opt-out and no "0 = disabled". Managed via `GET`/`PUT /api/v1/admin/org/hitl-review-window`, where an omitted field is a 422 and only an explicit `null` clears the org default |
 
 ---
@@ -625,7 +625,7 @@ via the admin API. Unknown/absent keys default to safe values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length) |
+| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). The legacy `MODULO_BACKUP_PASSPHRASE` spelling is still read as a fallback. |
 
 See [`docs/operations/backup.md`](./operations/backup.md) for backup configuration.
 
@@ -861,8 +861,8 @@ is best-effort and never gates readiness: it is skipped when no `GITHUB_TOKEN` /
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MODULO_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool |
-| `MODULO_ADMIN_TOKEN` | For CLI | – | Admin JWT for `farna-control migrate` CLI tool |
+| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool (legacy `MODULO_ADMIN_SECRET` still read as a fallback) |
+| `FARNA_CONTROL_ADMIN_TOKEN` | For CLI | – | Admin JWT for `farna-control migrate` CLI tool |
 
 ---
 

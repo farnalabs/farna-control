@@ -1314,6 +1314,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-apt-distribution](infra/apt-distribution.md) => PRD N/A
 - [feat-backup-restore](infra/backup-restore.md) => PRD N/A
 - [feat-infra-health](infra/health-checks.md) => PRD N/A
+- [feat-native-single-install](infra/native-single-install.md) => PRD N/A
 - [feat-support](infra/support-diagnostics.md) => PRD N/A
 
 ### Library
