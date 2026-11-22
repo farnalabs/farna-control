@@ -400,10 +400,15 @@ pulls) and install the plugin into that image's own virtualenv. The image puts
 `/app/.venv` first on `PATH` and runs the app from it, so a plain `pip install`
 into the system interpreter installs a package the app never imports.
 
+The image ends with `USER www-data`, but `/app/.venv` is owned by root, so switch
+back to root for the install and restore the runtime user afterwards:
+
 ```dockerfile
 # In your Dockerfile
 FROM ghcr.io/farnalabs/farna-control:<version>
+USER root
 RUN uv pip install --python /app/.venv/bin/python modulo-connector-slack==0.1.0
+USER www-data
 ```
 
 ### Environment variables
