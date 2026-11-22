@@ -1,7 +1,7 @@
 """Architecture test: the production compose speaks Settings' env dialect.
 
 FAR-1506. ``deploy/compose/docker-compose.prod.yml`` shipped passing
-``FARNA_CONTROL_SECRET_KEY`` and ``FARNA_CONTROL_REDIS_URL`` - names no code reads - and did
+``MODULO_SECRET_KEY`` and ``MODULO_REDIS_URL`` - names no code reads - and did
 not pass ``FERNET_KEY`` at all. ``Settings`` reads ``SECRET_KEY``,
 ``FERNET_KEY`` (both required, no default) and ``REDIS_URL``, so a fresh
 bring-up raised a ``ValidationError`` at boot and crash-looped the backend,
@@ -201,7 +201,7 @@ def test_every_env_var_passed_to_the_app_is_read_by_the_app():
         f"{unknown} (Settings reads {len(known)} names; {len(_NON_SETTINGS_ENV)} more are read "
         "straight from os.environ)\n"
         "A name Settings does not read is silently ignored at boot - this is exactly how "
-        "FARNA_CONTROL_SECRET_KEY / FARNA_CONTROL_REDIS_URL shipped and the backend crash-looped (FAR-1506). "
+        "MODULO_SECRET_KEY / MODULO_REDIS_URL shipped and the backend crash-looped (FAR-1506). "
         "If one of these is read straight from os.environ instead, add it to _NON_SETTINGS_ENV "
         "with the source file that reads it."
     )
@@ -239,7 +239,7 @@ def test_compose_environment_constructs_settings(monkeypatch: pytest.MonkeyPatch
     the result as the process environment, and constructs ``Settings`` - the
     real boot path. This fails on the pre-fix file two ways over: the missing
     ``SECRET_KEY``/``FERNET_KEY`` raise, and a stale name such as
-    ``FARNA_CONTROL_REDIS_URL`` leaves ``redis_url`` at its localhost default.
+    ``MODULO_REDIS_URL`` leaves ``redis_url`` at its localhost default.
     """
     compose = _load_compose()
     environment = {name: _interpolate(value) for name, value in _app_environment(compose).items()}
@@ -273,7 +273,7 @@ def test_env_example_documents_the_required_secrets():
 def test_no_compose_variable_has_a_silent_default():
     """FAR-1509: a production secret may never fall back to a known string.
 
-    ``FARNA_CONTROL_DB_PASSWORD:-changeme`` used to interpolate the public string
+    ``MODULO_DB_PASSWORD:-changeme`` used to interpolate the public string
     `changeme` into ``POSTGRES_PASSWORD`` AND into both database URLs, so a
     production stack whose operator never set the variable came up fully
     working with a publicly-known password. Required variables must use
@@ -284,7 +284,7 @@ def test_no_compose_variable_has_a_silent_default():
     secrets = sorted(name for name in defaulted if name in _OPERATOR_VALUES)
 
     assert not secrets, f"{_PROD_COMPOSE.relative_to(_REPO_ROOT)} interpolates required variable(s) {secrets} with a `:-` default - compose would start a production stack without them, silently. Use `${{VAR:?...}}` naming the variable and how to set it (see SECRET_KEY / FERNET_KEY)."
-    # The prod compose now uses FARNA_CONTROL_DB_PASSWORD (not FARNA_CONTROL_DB_PASSWORD)
+    # The prod compose now uses FARNA_CONTROL_DB_PASSWORD (not MODULO_DB_PASSWORD)
     assert compose.count("${FARNA_CONTROL_DB_PASSWORD:?") >= 3, "FARNA_CONTROL_DB_PASSWORD must be required at every reference (POSTGRES_PASSWORD, DATABASE_URL, DATABASE_ADMIN_URL) - one defaulting reference is enough to reintroduce the silent `changeme` password"
 
 

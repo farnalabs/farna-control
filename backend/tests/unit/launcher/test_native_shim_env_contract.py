@@ -5,13 +5,14 @@ Third occurrence of one drift class. The rebrand moved the readers onto the
 pre-rebrand name, and a launcher export nothing reads is silent:
 the value is dropped and the app falls back to its default.
 
-* FAR-2554 — ``FARNA_CONTROL_BUNDLED_BIN_DIR``: the resolver never saw the bin dir,
+* FAR-2554 — ``MODULO_BUNDLED_BIN_DIR``: the resolver never saw the bin dir,
   so first boot looked in ``<sys.prefix>/bundled/bin`` and failed.
 * FAR-2561 — the app database name: the API connected to a database first
   boot never created.
-* FAR-2564 — ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST``: ``main.py`` read
-  ``FARNA_CONTROL_*``, kept the API mount at ``/``, and the installed app
-  answered the SPA's root URL with API JSON (release recut 44261486386,
+* FAR-2564 — ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST``: ``main.py`` read
+  ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST``, kept the API
+  mount at ``/``, and the installed app answered the SPA's root URL with API
+  JSON (release recut 44261486386,
   ``spa_root_html=FAILED``). The macOS shim exported the pre-rebrand spelling;
   the Linux bundle launcher exported NEITHER name, so the shipped
   ``linux-amd64`` bundle had the same symptom with no drift to blame — a

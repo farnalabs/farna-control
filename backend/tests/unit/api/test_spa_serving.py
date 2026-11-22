@@ -181,14 +181,15 @@ def test_mount_reads_the_registry_not_a_private_literal() -> None:
     assert main_module._FRONTEND_DIST_ENV == env_contract.FRONTEND_DIST_ENV
 
 
-def test_legacy_producer_names_still_mount_the_spa(tmp_path: Path) -> None:
-    """FAR-2563 regression: the pre-rebrand export names must still serve the SPA.
+def test_canonical_producer_names_mount_the_spa(tmp_path: Path) -> None:
+    """FAR-2563 regression: the canonical export names must serve the SPA.
 
-    The shipped bundle launchers exported ``FARNA_CONTROL_SERVE_SPA`` /
-    ``FARNA_CONTROL_FRONTEND_DIST`` while this module read the ``FARNA_CONTROL_``
-    spelling, so the built SPA was never mounted and ``/`` 404'd on every
-    installed app. A bundle installed before the rename keeps the legacy export,
-    so the reader must accept it.
+    The shipped bundle launchers exported the pre-rebrand ``MODULO_*`` spelling
+    while this module read ``FARNA_CONTROL_SERVE_SPA`` /
+    ``FARNA_CONTROL_FRONTEND_DIST``, so the built SPA was never mounted and ``/``
+    404'd on every installed app. There is no legacy fallback now: the launchers
+    and this reader both use the canonical names, and the reader must mount the
+    SPA when they are set.
     """
     dist = _dist(tmp_path)
     app = _plain_api_app()

@@ -365,9 +365,9 @@ def test_replay_webhook_github_signature_over_other_body_returns_401(client: Tes
     assert engine.await_count == 0
 
 
-def test_replay_webhook_modulo_header_blocks_github_fallback(client: TestClient) -> None:
-    """Any Modulo header present means the Modulo scheme is used; a valid GitHub
-    signature must not rescue a Modulo-scheme failure."""
+def test_replay_webhook_farna_control_header_blocks_github_fallback(client: TestClient) -> None:
+    """Any Farna Control header present means the Farna Control scheme is used; a
+    valid GitHub signature must not rescue a Farna Control-scheme failure."""
     ts = int(time.time())
     headers = {"X-Farna-Control-Timestamp": str(ts), "X-Hub-Signature-256": _gh_replay_signature()}
     resp, engine = _replay_unauthenticated(client, headers)
