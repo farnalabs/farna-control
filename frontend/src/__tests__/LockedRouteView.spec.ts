@@ -61,6 +61,9 @@ describe('LockedRouteView', () => {
     expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(true)
     // No "try again" link: a retry cannot help before an upgrade.
     expect(wrapper.find('[data-testid="locked-route-open"]').exists()).toBe(false)
+    // But the caller is never stranded: the tier-lock branch still offers the
+    // way back to the Dashboard.
+    expect(wrapper.get('[data-testid="locked-route-dashboard"]').attributes('href')).toBe('/')
   })
 
   it('resolves the capability from the sidebar label when the guard passed no name', () => {
@@ -98,7 +101,8 @@ describe('LockedRouteView', () => {
     expect(wrapper.get('[data-testid="locked-route-header"]').text()).toContain(
       'Your role cannot open Costs',
     )
-    expect(wrapper.find('[data-testid="locked-route-closed"]').exists()).toBe(true)
+    const closed = wrapper.get('[data-testid="locked-route-closed"]')
+    expect(closed.text()).toContain('needs a role change from your organisation administrator')
     expect(wrapper.find('[data-testid="feature-gate"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="locked-route-dashboard"]').attributes('href')).toBe('/')
   })
@@ -115,7 +119,12 @@ describe('LockedRouteView', () => {
     expect(wrapper.get('[data-testid="locked-route-header"]').text()).toContain(
       'instance administrators',
     )
-    expect(wrapper.find('[data-testid="locked-route-closed"]').exists()).toBe(true)
+    const closed = wrapper.get('[data-testid="locked-route-closed"]')
+    // An instance-level restriction names the system administrator, not the
+    // organisation administrator (who cannot grant it).
+    expect(closed.text()).toContain('system administrator can lift')
+    expect(closed.text()).not.toContain('needs a role change')
+    expect(closed.text()).toContain('organisation administrator cannot grant it')
   })
 
   it('shows the capability as available once the licence covers it', () => {

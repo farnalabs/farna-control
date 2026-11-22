@@ -66,7 +66,8 @@ export default {
       "role_subtitle": "Ask an organisation administrator to give you the role that includes it.",
       "system_admin_heading": "{capability} is restricted to instance administrators",
       "system_admin_subtitle": "Only an instance system administrator can open this page. Ask them for access.",
-      "permission_body": "A plan upgrade will not change this - it needs a role change from your organisation administrator.",
+      "role_body": "A plan upgrade will not change this - it needs a role change from your organisation administrator.",
+      "system_admin_body": "A plan upgrade will not change this - it is an instance-level restriction only a system administrator can lift. Your organisation administrator cannot grant it.",
       "available_body": "Your licence now covers {capability}.",
       "open_capability": "Open {capability}",
       "back_to_dashboard": "Back to the Dashboard"

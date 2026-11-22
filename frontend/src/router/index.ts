@@ -772,12 +772,14 @@ const router = createRouter({
       redirect: '/admin/assistant',
     },
     {
-      // FAR-2664: the locked page a below-tier deep link lands on. Deliberately
-      // UNNAMED and absent from the product map — it is the refusal surface for
-      // a capability the caller cannot open, not a navigable product page, so
-      // it renders no sidebar entry and needs no element inventory. The guard
-      // (and a denied view link) targets it by path, never by name.
+      // FAR-2664: the locked page a below-tier deep link lands on. It is the
+      // refusal surface for a capability the caller cannot open, not a
+      // navigable product page, so it renders no sidebar entry and needs no
+      // element inventory. It IS named so the product-map guard enumerates it,
+      // and the name is recorded in the backend suite's NON_PRODUCT_ROUTES —
+      // the exclusion is codified rather than implicit in an unnamed route.
       path: '/locked',
+      name: 'locked-route',
       component: LockedRouteView,
       meta: { title: 'Locked' },
     },

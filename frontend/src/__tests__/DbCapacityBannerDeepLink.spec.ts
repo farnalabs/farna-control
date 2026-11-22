@@ -95,6 +95,15 @@ describe('DbCapacityBanner remediation links (FAR-2664)', () => {
     )
   })
 
+  it('treats an empty org_role claim on a readable token as a role refusal', async () => {
+    vi.mocked(getAccessToken).mockReturnValue(jwt({ is_system_admin: true, org_role: '' }))
+    const wrapper = await mountBanner()
+
+    const retention = wrapper.get('[data-testid="db-capacity-run-retention-link"]').attributes('href')
+    expect(retention).toContain('/locked?')
+    expect(retention).toContain('reason=role')
+  })
+
   it('keeps the plain destinations when the token is unreadable', async () => {
     // An opaque/absent token cannot render this banner inside the authenticated
     // shell; guessing a refusal would only hide the operator's remediation

@@ -69,7 +69,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { fetchDbCapacity, type DbCapacityInfo } from '../lib/api/dbCapacity'
 import { formatBytes } from '../lib/formatBytes'
-import { getNavGroups, type NavItem } from '../config/navigation'
+import { getNavGroups, nonTierRefusal, type NavItem, type NonTierRefusal } from '../config/navigation'
 import { useCurrentUser } from '../composables/useCurrentUser'
 
 const POLL_INTERVAL_MS = 60_000
@@ -168,7 +168,7 @@ const { jwtPayload, isSystemAdmin, orgRole } = useCurrentUser()
  */
 const navItems = getNavGroups().flatMap((group) => group.items)
 
-function lockedDestination(item: NavItem, reason: 'role' | 'system_admin'): string {
+function lockedDestination(item: NavItem, reason: NonTierRefusal): string {
   const params = new URLSearchParams({ from: item.to, reason })
   if (item.requiredTier) params.set('tier', item.requiredTier)
   return `/locked?${params.toString()}`
@@ -176,15 +176,13 @@ function lockedDestination(item: NavItem, reason: 'role' | 'system_admin'): stri
 
 function destinationFor(path: string): string {
   const item = navItems.find((navItem) => navItem.to === path)
-  if (!item || !jwtPayload.value) return path
-  if (item.systemAdminOnly && !isSystemAdmin.value) {
-    return lockedDestination(item, 'system_admin')
-  }
-  const requiredRoles = item.requiredRoles
-  if (requiredRoles?.length && !requiredRoles.includes(orgRole.value ?? '')) {
-    return lockedDestination(item, 'role')
-  }
-  return path
+  if (!item) return path
+  const refusal = nonTierRefusal(item, {
+    hasReadableToken: jwtPayload.value !== null,
+    isSystemAdmin: isSystemAdmin.value,
+    orgRole: orgRole.value,
+  })
+  return refusal ? lockedDestination(item, refusal) : path
 }
 
 const retentionDestination = computed(() => destinationFor('/admin/run-retention'))

@@ -33,16 +33,19 @@
          can and offer the way back rather than a plan upgrade. -->
     <div v-else class="card mt-6 p-6" data-testid="locked-route-closed">
       <p class="text-sm text-muted-foreground">
-        {{ $t('views.LockedRoute.permission_body') }}
+        {{ $t(refusalBodyKey) }}
       </p>
-      <router-link
-        to="/"
-        class="mt-3 inline-block text-sm font-semibold text-primary-text hover:underline"
-        data-testid="locked-route-dashboard"
-      >
-        {{ $t('views.LockedRoute.back_to_dashboard') }}
-      </router-link>
     </div>
+
+    <!-- The way back belongs on every branch: a tier lock offers the upgrade
+         CTA but still leaves the caller somewhere to go. -->
+    <router-link
+      to="/"
+      class="mt-4 inline-block text-sm font-semibold text-primary-text hover:underline"
+      data-testid="locked-route-dashboard"
+    >
+      {{ $t('views.LockedRoute.back_to_dashboard') }}
+    </router-link>
   </div>
 </template>
 
@@ -85,6 +88,14 @@ const reason = computed<'tier' | 'role' | 'system_admin'>(() => {
 })
 
 const isTierLock = computed(() => reason.value === 'tier')
+
+// A role refusal is fixable by the organisation; an instance-admin restriction
+// is not, so the body must name the right person (FAR-2664 review).
+const refusalBodyKey = computed(() =>
+  reason.value === 'system_admin'
+    ? 'views.LockedRoute.system_admin_body'
+    : 'views.LockedRoute.role_body',
+)
 
 /**
  * Only an in-app absolute path is a safe navigation target. `//host` is a

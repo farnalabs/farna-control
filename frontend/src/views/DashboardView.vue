@@ -278,7 +278,7 @@ import { formatMoney } from '../lib/money'
 import { runStatusBadgeClass, runStatusLabel, formatRunDate, isDispatchedRun } from '../utils/runUtils'
 import { useOrgCurrency } from '../composables/useOrgCurrency'
 import { useCurrentUser } from '../composables/useCurrentUser'
-import { getNavGroups } from '../config/navigation'
+import { getNavGroups, nonTierRefusal } from '../config/navigation'
 
 const { t } = useI18n()
 
@@ -300,7 +300,7 @@ const periodRefreshing = computed(() => dashboardStore.periodRefreshing)
 
 const isTeam = computed(() => planStore.isTeam)
 
-const { orgRole } = useCurrentUser()
+const { jwtPayload, isSystemAdmin, orgRole } = useCurrentUser()
 const costsNavItem = getNavGroups()
   .flatMap((group) => group.items)
   .find((item) => item.to === '/admin/costs')
@@ -318,16 +318,22 @@ const costsNavItem = getNavGroups()
  *  - a caller who does NOT pass it links at the same locked page with
  *    `reason=role`, because no licence upgrade can grant them access.
  *
- * The role comes synchronously from the access token; an opaque/absent token
- * keeps the plain destination and lets the guard be the authority.
+ * The non-tier refusal is decided by the SAME helper the capacity banner uses
+ * (`nonTierRefusal`), so the two audited links cannot diverge. The role comes
+ * synchronously from the access token: an unreadable token keeps the plain
+ * destination and lets the guard be the authority, while a readable token
+ * whose `org_role` is empty is a refusal — not an unknown.
  */
 const costsDestination = computed(() => {
-  const requiredRoles = costsNavItem?.requiredRoles
-  if (!requiredRoles?.length) return '/admin/costs'
-  const role = orgRole.value
-  if (!role || requiredRoles.includes(role)) return '/admin/costs'
-  const params = new URLSearchParams({ from: '/admin/costs', reason: 'role' })
-  if (costsNavItem?.requiredTier) params.set('tier', costsNavItem.requiredTier)
+  if (!costsNavItem) return '/admin/costs'
+  const refusal = nonTierRefusal(costsNavItem, {
+    hasReadableToken: jwtPayload.value !== null,
+    isSystemAdmin: isSystemAdmin.value,
+    orgRole: orgRole.value,
+  })
+  if (!refusal) return '/admin/costs'
+  const params = new URLSearchParams({ from: costsNavItem.to, reason: refusal })
+  if (costsNavItem.requiredTier) params.set('tier', costsNavItem.requiredTier)
   return `/locked?${params.toString()}`
 })
 

@@ -401,6 +401,27 @@ describe('DashboardView', () => {
       expect(href).toContain('reason=role')
       expect(href).not.toBe('/')
     })
+
+    it('treats a readable token with an empty org_role claim as a refusal, not an unknown', async () => {
+      // An empty claim is a KNOWN role that is not allowed — it must not take
+      // the unreadable-token path and let the guard bounce silently.
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser(''))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('reason=role')
+      expect(href).not.toBe('/')
+    })
+
+    it('keeps the plain destination when the token has no readable claims', async () => {
+      vi.mocked(getAccessToken).mockReturnValue('opaque-token')
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
   })
 
   it('renders the run activity trend section by default', async () => {
