@@ -1342,6 +1342,7 @@ docs/product-map/improve/variants.md	1
 docs/product-map/infra/apt-distribution.md	1
 docs/product-map/infra/backup-restore.md	2
 docs/product-map/infra/health-checks.md	1
+docs/product-map/infra/native-single-install.md	6
 docs/product-map/infra/support-diagnostics.md	2
 docs/product-map/library/library.md	4
 docs/product-map/licensing/license.md	1
