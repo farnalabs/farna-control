@@ -185,6 +185,7 @@ from farna.db.models.schema import Schema
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.soft_delete import include_soft_deleted
 from farna.util import sanitise_log_value as _sanitise_log_value
+from farna.util.uuid import coerce_uuid
 
 # FAR-2008: the FAR-488a Agent-row sync lives in ``modulo.core`` (bundle import
 # must reach it without importing the API layer). These module-level aliases
@@ -2498,16 +2499,6 @@ class PipelineGraphResponse(PipelineGraphUpdate):
         return [strip_unset_connector_binding_inputs(node.model_dump(mode="json")) for node in nodes]
 
 
-def _coerce_optional_uuid(raw: Any) -> uuid.UUID | None:
-    """Best-effort UUID coercion; ``None`` when the value is absent or malformed."""
-    if raw is None:
-        return None
-    try:
-        return uuid.UUID(str(raw))
-    except (ValueError, TypeError):
-        return None
-
-
 async def _agent_backend_providers(
     session: AsyncSession,
     agent_ids: set[uuid.UUID],
@@ -2564,7 +2555,7 @@ async def _resolve_node_providers(
     ``include_schema_warnings`` flag is set).  Nodes with no agent/backend are
     simply absent from the mapping and fall back to advisory-only warnings.
     """
-    agent_ids = {agent_id for node in nodes if (agent_id := _coerce_optional_uuid(node.get("agent_id"))) is not None}
+    agent_ids = {agent_id for node in nodes if (agent_id := coerce_uuid(node.get("agent_id"))) is not None}
     if not agent_ids:
         return {}
 
@@ -2572,7 +2563,7 @@ async def _resolve_node_providers(
     providers: dict[str, str] = {}
     for node in nodes:
         raw_node_id = node.get("id")
-        agent_uuid = _coerce_optional_uuid(node.get("agent_id"))
+        agent_uuid = coerce_uuid(node.get("agent_id"))
         if raw_node_id is None or agent_uuid is None:
             continue
         provider = agent_provider.get(agent_uuid)

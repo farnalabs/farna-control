@@ -2839,12 +2839,12 @@ def test_save_edit_snapshot_lock_busy_maps_503(client: tuple[TestClient, AsyncMo
 # ---------------------------------------------------------------------------
 
 
-def test_coerce_optional_uuid_returns_none_for_malformed_value() -> None:
-    """A non-UUID agent id is dropped rather than raising (best-effort coercion)."""
-    from farna.api.routes.pipelines import _coerce_optional_uuid
+def test_coerce_uuid_handles_malformed_and_int_values() -> None:
+    """Malformed agent ids drop to None; canonical coerce_uuid coerces int/bytes."""
+    from farna.util.uuid import coerce_uuid
 
-    assert _coerce_optional_uuid("not-a-uuid") is None
-    assert _coerce_optional_uuid(12345) is None
+    assert coerce_uuid("not-a-uuid") is None
+    assert coerce_uuid(12345) == uuid.UUID(int=12345)
 
 
 async def test_resolve_node_providers_returns_empty_when_no_valid_agent_ids() -> None:
