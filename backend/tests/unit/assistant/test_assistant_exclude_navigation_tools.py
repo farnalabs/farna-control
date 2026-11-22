@@ -152,7 +152,7 @@ async def _run_stream(
 
     principal = _make_principal(account_id, organisation_id)
     request = _make_request(exclude_navigation_tools=exclude_navigation_tools)
-    settings = SimpleNamespace(modulo_public_url="http://test", fernet_key="unused")
+    settings = SimpleNamespace(public_url="http://test", fernet_key="unused")
 
     tool_defs_mock = MagicMock(side_effect=None)
     if captured_tool_defs is not None:

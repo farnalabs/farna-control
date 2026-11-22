@@ -25,7 +25,7 @@ The split is deliberate and mirrors production posture:
 
 Scenario 1 needs only a reachable local engine (the autouse ``_require_engine``
 skip below). Scenarios 2 and 3 additionally need the runner-ci compose rig
-(``MODULO_RUNNER_HARNESS_PROXY_HOST`` / ``MODULO_RUNNER_HARNESS_DIND_HOST``)
+(``FARNA_CONTROL_RUNNER_HARNESS_PROXY_HOST`` / ``FARNA_CONTROL_RUNNER_HARNESS_DIND_HOST``)
 and skip cleanly without it.
 """
 
@@ -360,10 +360,10 @@ async def client(
         database_url=migrated_db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:

@@ -73,7 +73,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
 - [x] Error ingestion: two ingest surfaces with different trust boundaries. The
       authenticated `POST /api/v1/errors/ingest` requires a per-session HMAC key
       (`POST /api/v1/errors/session-key`, 1-hour TTL) with the HMAC-SHA256 of
-      the raw body sent as `X-Modulo-Error-Token`; a missing or invalid signature
+      the raw body sent as `X-Farna-Control-Error-Token`; a missing or invalid signature
       is a 401 and the middleware caps callers at 10 requests/minute. The
       unauthenticated `POST /api/v1/errors/ingest/public` deliberately takes NO
       HMAC: it accepts only `source == "frontend"` and non-critical levels,

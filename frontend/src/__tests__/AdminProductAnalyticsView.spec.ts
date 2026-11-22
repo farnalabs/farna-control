@@ -571,7 +571,7 @@ describe('AdminProductAnalyticsView', () => {
     await nextTick()
 
     expect(wrapper.find('[data-testid="instance-switch-source"]').text()).toContain(
-      'MODULO_PRODUCT_ANALYTICS_ENABLED',
+      'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED',
     )
     // An env-sourced switch has no stored system_config row, so a reset would
     // be a silent backend no-op while the copy claims an effect. Never render it.

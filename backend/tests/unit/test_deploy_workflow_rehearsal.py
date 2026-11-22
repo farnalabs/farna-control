@@ -1076,7 +1076,7 @@ def test_release_pr_driving_steps_use_the_trusted_bot_token() -> None:
         assert "GITHUB_TOKEN" not in env, f"{label} must keep the branch push on the checkout github.token credential"
         script = cast(str, step["run"])
         assert "github.token" not in script
-        assert "MODULO_RELEASE_PR_TOKEN" in script, f"{label} must fail closed with an ::error:: naming MODULO_RELEASE_PR_TOKEN"
+        assert "FARNA_CONTROL_RELEASE_PR_TOKEN" in script, f"{label} must fail closed with an ::error:: naming FARNA_CONTROL_RELEASE_PR_TOKEN"
         assert '[ -z "${GH_TOKEN:-}" ]' in script, f"{label} must reject an empty GH_TOKEN"
         guard_index = script.index('[ -z "${GH_TOKEN:-}" ]')
         first_gh = min(script.index(command) for command in _RELEASE_PR_DRIVING_COMMANDS if command in script)
@@ -1088,7 +1088,7 @@ def test_release_pr_driving_steps_use_the_trusted_bot_token() -> None:
 #: The repository secret holding a vault-sourced PAT for the trusted bot
 #: identity (`farnalabs`). ``github.token`` cannot be used for release PRs: it
 #: authors as ``github-actions[bot]`` with ``author_association: NONE``.
-_RELEASE_PR_TOKEN_SECRET = "${{ secrets.MODULO_RELEASE_PR_TOKEN }}"
+_RELEASE_PR_TOKEN_SECRET = "${{ secrets.FARNA_CONTROL_RELEASE_PR_TOKEN }}"
 
 #: Commands that author, poll, or drive the release PR. A ``github.token`` PR is
 #: authored by ``github-actions[bot]`` with ``author_association: NONE``, which
@@ -1569,7 +1569,7 @@ def test_protected_cut_fails_closed_without_the_release_pr_token(tmp_path: Path,
         env["GH_TOKEN"] = token
     result = _run_bash(_release_job_run("Prepare exact cut commit through protected main (cut only)"), cwd=repo, env=env)
     assert result.returncode != 0
-    assert "MODULO_RELEASE_PR_TOKEN" in result.stdout + result.stderr
+    assert "FARNA_CONTROL_RELEASE_PR_TOKEN" in result.stdout + result.stderr
     assert not log.exists() or "gh " not in log.read_text(encoding="utf-8")
 
 
@@ -2250,7 +2250,7 @@ def test_release_promote_fails_closed_without_the_release_pr_token(tmp_path: Pat
         timeout=30,
     )
     assert result.returncode != 0
-    assert "MODULO_RELEASE_PR_TOKEN" in result.stdout + result.stderr
+    assert "FARNA_CONTROL_RELEASE_PR_TOKEN" in result.stdout + result.stderr
 
 
 def test_release_promote_uses_a_single_protected_pr_and_exact_merged_sha() -> None:

@@ -5,9 +5,9 @@
  * Demonstrates pipeline list, create, get, update, and delete.
  *
  * Usage:
- *   export MODULO_URL=http://localhost:8000
- *   export MODULO_EMAIL=admin@example.com
- *   export MODULO_PASSWORD=changeme
+ *   export FARNA_CONTROL_URL=http://localhost:8000
+ *   export FARNA_CONTROL_EMAIL=admin@example.com
+ *   export FARNA_CONTROL_PASSWORD=changeme
  *   node pipelines/js.js
  */
 

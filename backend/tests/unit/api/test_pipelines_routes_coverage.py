@@ -71,7 +71,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -528,7 +528,7 @@ def test_graph_node_validator_matrix() -> None:
             "template_id": "opencode",
             "agent_prompt": "Analyse the repo",
             "agent_commands": ["run analysis"],
-            "env_vars": {"MODULO_SECRET": "x"},
+            "env_vars": {"FARNA_CONTROL_SECRET": "x"},
         },
         "reserved prefix",
     )

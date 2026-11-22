@@ -662,7 +662,7 @@ class TestTeamGateBoundedLockWait:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_admin_password="test",
+            admin_password="test",
         )
         assert settings.mutation_row_lock_timeout_ms == 5000
 

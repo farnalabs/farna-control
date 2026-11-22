@@ -1,6 +1,6 @@
-"""System seeding: system schemas (org creation) + MODULO_USERS boot seeding.
+"""System seeding: system schemas (org creation) + FARNA_CONTROL_USERS boot seeding.
 
-The MODULO_USERS seeder was promoted from ``farna.api.main`` (FAR-671 /
+The FARNA_CONTROL_USERS seeder was promoted from ``farna.api.main`` (FAR-671 /
 ADR 031 Decision 2) so the native launcher and the container boot share one
 implementation. The DB layer stays free of api imports (import-linter
 ``db-does-not-import-core``): the ORCHESTRATOR takes an already-built session
@@ -37,7 +37,7 @@ from farna.db.rls import set_rls_org
 
 _log = logging.getLogger(__name__)
 
-#: ``audit_events.actor_source`` stamped on every MODULO_USERS seed append —
+#: ``audit_events.actor_source`` stamped on every FARNA_CONTROL_USERS seed append —
 #: the honest machine actor for a grant made with no HTTP principal in scope.
 _SEED_ACTOR_SOURCE = "boot_seed"
 _SEED_AUDIT_LOG_KEY = "db.seed.boot_user_audit_failed"
@@ -166,7 +166,7 @@ async def seed_bundled_runner_profile(session: AsyncSession, org_id: uuid.UUID, 
     )
 
 
-#: The tenant organisation a fresh install gets (API boot, MODULO_USERS seeding
+#: The tenant organisation a fresh install gets (API boot, FARNA_CONTROL_USERS seeding
 #: and ``farna-control users add`` all resolve it through
 #: :func:`ensure_default_organisation`).
 DEFAULT_ORG_NAME = "Default Organisation"
@@ -205,7 +205,7 @@ async def ensure_default_organisation(session: Any) -> tuple[Any, bool]:
 
     The single implementation of "a fresh install gets a Default
     Organisation" shared by the API boot (``_ensure_default_org``), the
-    MODULO_USERS boot seeder and the ``users add`` CLI, so a first admin can
+    FARNA_CONTROL_USERS boot seeder and the ``users add`` CLI, so a first admin can
     never land in a sentinel org whichever path creates it.
     """
     from farna.db.models.organisation import Organisation
@@ -220,24 +220,24 @@ async def ensure_default_organisation(session: Any) -> tuple[Any, bool]:
     return org, True
 
 
-async def seed_modulo_users(session_factory: Callable[[], Any], modulo_users: str) -> None:
-    """Seed MODULO_USERS env var entries into the account + membership tables.
+async def seed_modulo_users(session_factory: Callable[[], Any], users: str) -> None:
+    """Seed FARNA_CONTROL_USERS env var entries into the account + membership tables.
 
     Accepts both bcrypt hashes (user1:$2b$12$hash) and plaintext passwords
     (admin:admin). Plaintext passwords are auto-hashed with bcrypt at seed
-    time. Skips when *modulo_users* is empty. Users land in the oldest TENANT
+    time. Skips when *users* is empty. Users land in the oldest TENANT
     organisation (never a sentinel org), created on demand (FAR-2581).
 
     Takes the session FACTORY (not Settings) so this DB-layer module never
     imports the API layer — the API boot wrapper and the native launcher each
     resolve their own engine/factory (FAR-671).
     """
-    if not modulo_users:
+    if not users:
         return
 
     async with session_factory() as session, session.begin():
         org, _created = await ensure_default_organisation(session)
-        for entry in modulo_users.split(","):
+        for entry in users.split(","):
             await seed_modulo_user(session, org, entry)
 
 
@@ -309,7 +309,7 @@ async def append_user_grant_audit(
 
 
 async def seed_modulo_user(session: Any, org: Any, entry: str) -> None:
-    """Seed a single MODULO_USERS entry (``email:password``) into the account + membership tables.
+    """Seed a single FARNA_CONTROL_USERS entry (``email:password``) into the account + membership tables.
 
     Accepts both bcrypt hashes (user1:$2b$12$hash) and plaintext passwords
     (admin:admin). Plaintext passwords are auto-hashed with bcrypt at seed time.

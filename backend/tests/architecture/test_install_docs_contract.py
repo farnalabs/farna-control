@@ -66,9 +66,8 @@ def test_production_docs_document_a_login_verification() -> None:
 
 def test_production_docs_document_the_readiness_requirement() -> None:
     text = _read(_DEPLOYMENT_DOC)
-    # The docs name the canonical ``FARNA_CONTROL_`` spelling; the bare
-    # ``MODULO_`` alias is still accepted by Settings but is not what an
-    # operator should be told to set.
+    # The docs name the canonical ``FARNA_CONTROL_`` spelling, which is the
+    # only one Settings accepts.
     assert "FARNA_CONTROL_SYSTEM_DATABASE_URL" in text
     assert "dispatcher_reconcile" in text
 

@@ -1095,7 +1095,7 @@ def test_persist_degraded_includes_launcher_log_if_exists(tmp_path: Path) -> Non
 
 
 def test_pause_at_active_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When MODULO_TEST_PAUSE_AT matches the gate, it writes PAUSED to stderr."""
+    """When FARNA_CONTROL_TEST_PAUSE_AT matches the gate, it writes PAUSED to stderr."""
     import io
 
     from farna.launcher.supervisor import _PAUSE_ENV_VAR, GATE_SUPERVISOR_PRE_TEARDOWN
@@ -1114,7 +1114,7 @@ def test_pause_at_active_gate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_pause_at_inactive_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When MODULO_TEST_PAUSE_AT doesn't match, _pause_at is a no-op."""
+    """When FARNA_CONTROL_TEST_PAUSE_AT doesn't match, _pause_at is a no-op."""
     import io
 
     from farna.launcher.supervisor import _PAUSE_ENV_VAR

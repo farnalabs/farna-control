@@ -28,7 +28,7 @@ def test_reserved_env_vars_contains_critical_entries():
 
 
 def test_reserved_env_var_prefixes():
-    assert RESERVED_ENV_VAR_PREFIXES == ("MODULO_", "APP_MODULO_", "GIT_")
+    assert RESERVED_ENV_VAR_PREFIXES == ("FARNA_CONTROL_", "GIT_")
 
 
 def test_known_source_fields_default_is_api_key():
@@ -40,11 +40,11 @@ def test_known_source_fields_default_is_api_key():
 class TestIsReservedEnvVar:
     def test_exact_match_case_insensitive(self):
         assert is_reserved_env_var("github_token")
-        assert is_reserved_env_var("  MODULO_API_KEY  ")
+        assert is_reserved_env_var("  FARNA_CONTROL_API_KEY  ")
 
     def test_prefix_match_case_insensitive(self):
         assert is_reserved_env_var("FARNA_CONTROL_RUN_ID")
-        assert is_reserved_env_var("app_modulo_opencode_api_key")
+        assert is_reserved_env_var("farna_control_opencode_api_key")
         assert is_reserved_env_var("GIT_PROXY_COMMAND")
         assert is_reserved_env_var("git_ssh_command")
 

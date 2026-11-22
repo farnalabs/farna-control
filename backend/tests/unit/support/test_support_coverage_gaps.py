@@ -104,7 +104,7 @@ def test_resolve_licence_uses_the_settings_key_when_no_stored_licence(
     monkeypatch.setattr(licence_module, "verify_license_key", lambda _key: _Licence())
 
     class _Settings:
-        modulo_license_key = "KEY"
+        license_key = "KEY"
 
     payload = bundle.resolve_licence(_Settings())
 

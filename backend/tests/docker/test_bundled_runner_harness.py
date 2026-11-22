@@ -29,7 +29,7 @@ CI job boots:
      running must fail the client immediately, never ``ExecResult(0)``
      (spike (d) — the committed CI mechanism);
   6. the workspace-network rig guard: a missing compose workspace network
-     must SKIP only on a plain local engine      (``MODULO_RUNNER_HARNESS_NETWORK`` unset)
+     must SKIP only on a plain local engine      (``FARNA_CONTROL_RUNNER_HARNESS_NETWORK`` unset)
      and FAIL LOUDLY when the env var is explicitly set (CI always sets it
      — a missing network there is a real rig failure, never a skip);
   7. the composition guards (pure file-text, no engine): the overlay holds
@@ -337,7 +337,7 @@ def _workspace_network_exists(network: str) -> bool:
 def _require_workspace_network_rig(network: str) -> None:
     """The compose workspace network must exist to run the round-trip.
 
-    Fail/skip split (FAR-773 QA fix F3): ``MODULO_RUNNER_HARNESS_NETWORK``
+    Fail/skip split (FAR-773 QA fix F3): ``FARNA_CONTROL_RUNNER_HARNESS_NETWORK``
     EXPLICITLY SET (the CI job always sets it) + missing network = a REAL rig
     failure -> ``pytest.fail`` naming the env var and the overlay file;
     never a silent skip. The skip branch applies only on a plain local
@@ -476,7 +476,7 @@ async def test_nested_roundtrip_through_proxy_and_completeness() -> None:
 
 
 def test_workspace_network_guard_fails_loud_when_env_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    """F3 branch 1 (pure logic — no engine): ``MODULO_RUNNER_HARNESS_NETWORK``
+    """F3 branch 1 (pure logic — no engine): ``FARNA_CONTROL_RUNNER_HARNESS_NETWORK``
     EXPLICITLY SET (CI always sets it) + missing network must FAIL loudly
     naming the env var and the overlay file — never skip."""
     monkeypatch.setattr(sys.modules[__name__], "_workspace_network_exists", lambda _network: False)

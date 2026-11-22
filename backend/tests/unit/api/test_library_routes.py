@@ -57,8 +57,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_dev_mode=True,
+        admin_password="testpass",
+        dev_mode=True,
     )
 
 
@@ -249,7 +249,7 @@ def _create_payload(**overrides: Any) -> dict[str, Any]:
 def test_get_lifecycle_map_primitive_returns_404_when_dev_mode_off(client: TestClient) -> None:
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_primitive", new_callable=AsyncMock, return_value=prim),
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
         patch("farna.api.routes.library.set_rls_user_context", new_callable=AsyncMock),
@@ -260,7 +260,7 @@ def test_get_lifecycle_map_primitive_returns_404_when_dev_mode_off(client: TestC
 
 def test_create_lifecycle_map_primitive_returns_403_when_dev_mode_off(client: TestClient) -> None:
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_primitive_by_slug", new_callable=AsyncMock, return_value=None),
         patch("farna.api.routes.library.create_library_primitive", new_callable=AsyncMock) as create_mock,
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -286,7 +286,7 @@ def test_create_lifecycle_map_primitive_rejects_ordinary_operator(operator_clien
 def test_create_lifecycle_map_primitive_allows_internal_operator(client: TestClient) -> None:
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=True)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=True)),
         patch("farna.api.routes.library.get_primitive_by_slug", new_callable=AsyncMock, return_value=None),
         patch("farna.api.routes.library.create_library_primitive", new_callable=AsyncMock, return_value=prim),
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -379,7 +379,7 @@ def test_create_composite_with_graph_content_json_returns_201(client: TestClient
 def test_update_lifecycle_map_primitive_returns_404_when_dev_mode_off(client: TestClient) -> None:
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_library_primitive", new_callable=AsyncMock, return_value=prim),
         patch("farna.api.routes.library.update_library_primitive", new_callable=AsyncMock, return_value=prim) as update_mock,
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -482,7 +482,7 @@ def test_update_content_json_missing_primitive_returns_404(client: TestClient) -
 def test_delete_lifecycle_map_primitive_returns_404_when_dev_mode_off(client: TestClient) -> None:
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_library_primitive", new_callable=AsyncMock, return_value=prim),
         patch("farna.api.routes.library.soft_delete_library_primitive", new_callable=AsyncMock, return_value=prim) as delete_mock,
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -519,7 +519,7 @@ def test_delete_primitive_missing_returns_404(client: TestClient) -> None:
 def test_restore_lifecycle_map_primitive_returns_404_when_dev_mode_off(client: TestClient) -> None:
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_library_primitive", new_callable=AsyncMock, return_value=prim),
         patch("farna.api.routes.library.restore_library_primitive", new_callable=AsyncMock) as restore_mock,
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -538,7 +538,7 @@ def test_restore_lifecycle_map_gate_reads_through_include_deleted(client: TestCl
     """
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_library_primitive", new_callable=AsyncMock, return_value=prim) as get_mock,
         patch("farna.api.routes.library.restore_library_primitive", new_callable=AsyncMock),
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -594,7 +594,7 @@ def test_restore_primitive_without_existing_row_skips_gate(client: TestClient) -
 def test_copy_to_adapt_lifecycle_map_primitive_returns_404_when_dev_mode_off(client: TestClient) -> None:
     prim = _make_listable_primitive(primitive_type="lifecycle_map")
     with (
-        patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+        patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=False)),
         patch("farna.api.routes.library.get_library_primitive", new_callable=AsyncMock, return_value=prim),
         patch("farna.api.routes.library.copy_to_adapt", new_callable=AsyncMock, return_value=prim) as copy_mock,
         patch("farna.api.routes.library.set_rls_org", new_callable=AsyncMock),
@@ -1057,8 +1057,8 @@ def test_lifecycle_map_ratings_are_hidden_from_ordinary_callers(client: TestClie
                 database_url="postgresql+asyncpg://localhost/test",
                 secret_key=_VALID_32,
                 fernet_key=_VALID_32,
-                modulo_admin_password="testpass",
-                modulo_dev_mode=False,
+                admin_password="testpass",
+                dev_mode=False,
             ),
         ),
     ):
@@ -1156,8 +1156,8 @@ def test_lifecycle_map_abuse_reports_are_hidden_from_ordinary_callers(client: Te
                 database_url="postgresql+asyncpg://localhost/test",
                 secret_key=_VALID_32,
                 fernet_key=_VALID_32,
-                modulo_admin_password="testpass",
-                modulo_dev_mode=False,
+                admin_password="testpass",
+                dev_mode=False,
             ),
         ),
     ):

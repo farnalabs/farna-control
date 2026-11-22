@@ -95,7 +95,7 @@ def client() -> Generator[TestClient, None, None]:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_admin_password="testpass",
+            admin_password="testpass",
         )
 
     app.dependency_overrides[get_settings] = override_settings
@@ -114,7 +114,7 @@ def unauth_client() -> Generator[TestClient, None, None]:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
     mock_plan = MagicMock()
     mock_plan.feature_enabled.return_value = True
@@ -135,7 +135,7 @@ def operator_client() -> Generator[TestClient, None, None]:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_admin_password="testpass",
+            admin_password="testpass",
         )
 
     app.dependency_overrides[get_settings] = override_settings

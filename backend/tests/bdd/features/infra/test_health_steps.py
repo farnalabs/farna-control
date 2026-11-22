@@ -27,8 +27,8 @@ _HEALTH_SETTINGS = Settings(
     database_url="postgresql+asyncpg://localhost/test",
     secret_key="a" * 32,
     fernet_key="a" * 32,
-    modulo_admin_password="testpass",
-    modulo_csrf_enabled=False,
+    admin_password="testpass",
+    csrf_enabled=False,
 )
 
 #: Every ``_check_*`` probe the readiness endpoint runs, keyed by the name the

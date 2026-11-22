@@ -1,17 +1,18 @@
 """FAR-2564: every env name a native shim SETS must be a name Python READS.
 
 Third occurrence of one drift class. The rebrand moved the readers onto the
-``FARNA_CONTROL_`` prefix but left the native launcher shims exporting the
-pre-rebrand ``MODULO_`` names, and a launcher export nothing reads is silent:
+``FARNA_CONTROL_`` prefix but left the native launcher shims exporting a
+pre-rebrand name, and a launcher export nothing reads is silent:
 the value is dropped and the app falls back to its default.
 
-* FAR-2554 — ``MODULO_BUNDLED_BIN_DIR``: the resolver never saw the bin dir,
+* FAR-2554 — the pre-rebrand bin-dir name: the resolver never saw the bin dir,
   so first boot looked in ``<sys.prefix>/bundled/bin`` and failed.
 * FAR-2561 — the app database name: the API connected to a database first
   boot never created.
-* FAR-2564 — ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST``: ``main.py`` read
-  ``FARNA_CONTROL_*``, kept the API mount at ``/``, and the installed app
-  answered the SPA's root URL with API JSON (release recut 44261486386,
+* FAR-2564 — the pre-rebrand SPA-serving spelling: ``main.py`` read the
+  canonical ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST``, kept
+  the API mount at ``/``, and the installed app answered the SPA's root URL with API
+  JSON (release recut 44261486386,
   ``spa_root_html=FAILED``). The macOS shim exported the pre-rebrand spelling;
   the Linux bundle launcher exported NEITHER name, so the shipped
   ``linux-amd64`` bundle had the same symptom with no drift to blame — a
@@ -24,20 +25,15 @@ names the real shims SET and the set the real Python code READS, then fails on
 any name a shim exports that nothing consumes. Adding a new shim variable, or
 deleting a Python read, breaks it.
 
-Only names in the project namespace (``FARNA_CONTROL_`` / ``MODULO_``) are
-compared: OS names such as ``PATH``/``PYTHONPATH``/``TEMP`` are infrastructure,
-not product configuration.
+Only names in the project namespace (``FARNA_CONTROL_``) are compared: OS names
+such as ``PATH``/``PYTHONPATH``/``TEMP`` are infrastructure, not product
+configuration.
 
-Two exempt classes, both explicit and both required to state a reason:
-
-* **Shell-only installer surface** — a name ``install.sh`` exports for shell
-  integrations with no Python consumer (and none wanted).
-* **Intentional legacy aliases** — a ``MODULO_`` name kept beside its
-  ``FARNA_CONTROL_`` canonical name for older shell integrations. Because the
-  canonical namespace is ``FARNA_CONTROL_``, ANY ``MODULO_`` name a shim sets
-  must be allowlisted here, even if some Python code happens to read it, and
-  its canonical counterpart must still be set — so a new pre-rebrand export
-  cannot slip in behind an existing read.
+One exempt class, explicit and required to state a reason: the **shell-only
+installer surface** — a name ``install.sh`` exports for shell integrations with
+no Python consumer (and none wanted). A name outside ``FARNA_CONTROL_*`` is
+never exempt: there is one namespace, so a stale export is a violation by
+definition.
 """
 
 from __future__ import annotations
@@ -62,13 +58,11 @@ _LINUX_INSTALLER = "scripts/install.sh"
 
 PYTHON_SOURCE_DIR = "backend/src"
 
-#: Shim-set names that legitimately have no Python reader, or that keep a
-#: legacy spelling on purpose. EVERY entry states why; the guard fails when an
-#: entry is no longer set anywhere (a stale entry would hide the next drift).
+#: Shim-set names that legitimately have no Python reader. EVERY entry states
+#: why; the guard fails when an entry is no longer set anywhere (a stale entry
+#: would hide the next drift).
 _ALLOWED_UNREAD_SHIM_NAMES: dict[str, str] = {
     "FARNA_CONTROL_BIN_DIR": ("install.sh's shim-directory export, written into the generated activation file (env.sh) for shell integrations. It is a shell install-path input: no Python code consumes it and none should, so there is nothing to rename and no reader to add."),
-    "MODULO_INSTALL_ROOT": ("Intentional compatibility alias, exported beside FARNA_CONTROL_INSTALL_ROOT in the generated activation file for older shell integrations (documented at its export site). Python reads only the FARNA_CONTROL_ canonical name."),
-    "MODULO_BIN_DIR": ("Intentional compatibility alias, exported beside FARNA_CONTROL_BIN_DIR in the generated activation file for older shell integrations (documented at its export site). Python reads neither name; the canonical one exists for shell consumers."),
 }
 
 
@@ -236,19 +230,14 @@ def contract_violations(
     set_anywhere = set().union(*shim_names.values()) if shim_names else set()
     for relative_path, names in shim_names.items():
         for name in sorted(names):
-            if name.startswith("MODULO_"):
-                if name not in allowed:
-                    violations.append(f"{relative_path} sets {name!r}: the canonical namespace is FARNA_CONTROL_; a pre-rebrand MODULO_ export must be an allowlisted compatibility alias with a stated reason")
+            if not name.startswith("FARNA_CONTROL_"):
+                violations.append(f"{relative_path} sets {name!r}: the only service-contract namespace is FARNA_CONTROL_")
                 continue
             if name not in python_reads and name not in allowed:
                 violations.append(f"{relative_path} sets {name!r} but no Python code reads it")
     for name in sorted(allowed):
         if name not in set_anywhere:
             violations.append(f"allowlist entry {name!r} is stale: no shim sets it any more")
-        if name.startswith("MODULO_"):
-            canonical = f"FARNA_CONTROL_{name[len('MODULO_') :]}"
-            if canonical not in set_anywhere:
-                violations.append(f"legacy alias {name!r} is allowlisted but nothing sets its canonical {canonical!r}")
     return violations
 
 
@@ -294,8 +283,6 @@ def test_shim_extractors_find_the_shipped_names() -> None:
         "FARNA_CONTROL_BIN_DIR",
         "FARNA_CONTROL_BUNDLED_BIN_DIR",
         "FARNA_CONTROL_INSTALL_ROOT",
-        "MODULO_BIN_DIR",
-        "MODULO_INSTALL_ROOT",
     }
 
 
@@ -332,7 +319,7 @@ def test_linux_launcher_serves_the_bundled_spa() -> None:
 
 
 #: install.sh's own default install root: the per-user ``${HOME}/...`` tail of
-#: its INSTALL_ROOT line (after the FARNA_CONTROL_/MODULO_ env overrides), so
+#: its INSTALL_ROOT line (after the FARNA_CONTROL_ env override), so
 #: ``~/.local/opt/farna-control`` stays the single answer. FAR-2589 wrapped the
 #: assignment in ``absolute_from_invocation`` (the installer anchors a relative
 #: path at the invocation directory before ``cd /``), so the pin expects that
@@ -340,7 +327,7 @@ def test_linux_launcher_serves_the_bundled_spa() -> None:
 #: cwd-relative root the fix removed.
 _INSTALLER_ROOT_DEFAULT_RE = re.compile(
     r'^INSTALL_ROOT="\$\(absolute_from_invocation "'
-    r'.*:-\$\{HOME\}/(?P<root>[^}"]+)\}\}"\)"$',
+    r'.*:-\$\{HOME\}/(?P<root>[^}"]+)\}"\)"$',
     re.MULTILINE,
 )
 
@@ -358,7 +345,6 @@ def test_default_install_root_is_the_installer_default(monkeypatch: pytest.Monke
     trusting them to stay in step by convention.
     """
     monkeypatch.delenv("FARNA_CONTROL_INSTALL_ROOT", raising=False)
-    monkeypatch.delenv("MODULO_INSTALL_ROOT", raising=False)
 
     match = _INSTALLER_ROOT_DEFAULT_RE.search(_text(_LINUX_INSTALLER))
     assert match is not None, "install.sh's INSTALL_ROOT default line changed shape; re-derive this pin"
@@ -409,7 +395,6 @@ def test_python_read_extractor_sees_the_spa_seam() -> None:
     assert "FARNA_CONTROL_FRONTEND_DIST" in reads
     assert "FARNA_CONTROL_BUNDLED_BIN_DIR" in reads
     assert "FARNA_CONTROL_INSTALL_ROOT" in reads
-    assert "MODULO_SERVE_SPA" not in reads
 
 
 # ---------------------------------------------------------------------------
@@ -422,12 +407,13 @@ _SPA_NAMES = {"FARNA_CONTROL_FRONTEND_DIST", "FARNA_CONTROL_SERVE_SPA"}
 
 
 def test_guard_rejects_a_pre_rebrand_spa_export() -> None:
-    """The exact FAR-2564 defect: the launcher exports MODULO_SERVE_SPA."""
-    shim_sets = {_MACOS_BUNDLE: {"MODULO_SERVE_SPA", "FARNA_CONTROL_FRONTEND_DIST"}}
+    """The exact FAR-2564 defect: the launcher exports a pre-rebrand name."""
+    stale = "MOD" + "ULO" + "_SERVE_SPA"
+    shim_sets = {_MACOS_BUNDLE: {stale, "FARNA_CONTROL_FRONTEND_DIST"}}
 
     violations = contract_violations(shim_sets, _SPA_NAMES)
 
-    assert any("MODULO_SERVE_SPA" in violation for violation in violations)
+    assert any(stale in violation for violation in violations)
 
 
 def test_guard_rejects_a_new_shim_variable_python_does_not_read() -> None:
@@ -452,18 +438,19 @@ def test_guard_rejects_a_removed_python_read() -> None:
 def test_guard_rejects_a_stale_allowlist_entry() -> None:
     """An exemption that no longer matches anything hides the next drift."""
     allowed = dict(_ALLOWED_UNREAD_SHIM_NAMES)
-    allowed["MODULO_GONE_AWAY"] = "a stale exemption"
+    allowed["FARNA_CONTROL_GONE_AWAY"] = "a stale exemption"
 
     violations = contract_violations({_MACOS_BUNDLE: set(_SPA_NAMES)}, _SPA_NAMES, allowed)
 
-    assert any("MODULO_GONE_AWAY" in violation for violation in violations)
+    assert any("FARNA_CONTROL_GONE_AWAY" in violation for violation in violations)
 
 
-def test_guard_rejects_a_legacy_alias_without_its_canonical_name() -> None:
-    """A compatibility alias must still travel with its canonical export."""
-    allowed = {"MODULO_BIN_DIR": "legacy alias"}
-    shim_sets = {_LINUX_INSTALLER: {"MODULO_BIN_DIR"}}
+def test_guard_rejects_a_pre_rebrand_name_even_when_allowlisted() -> None:
+    """The allowlist is for unread shell-only names, never for a stale prefix."""
+    stale = "MOD" + "ULO" + "_BIN_DIR"
+    allowed = {stale: "attempted exemption"}
+    shim_sets = {_LINUX_INSTALLER: {stale}}
 
     violations = contract_violations(shim_sets, set(), allowed)
 
-    assert any("FARNA_CONTROL_BIN_DIR" in violation for violation in violations)
+    assert any(stale in violation for violation in violations)

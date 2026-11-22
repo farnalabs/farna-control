@@ -304,12 +304,12 @@ def build_compose_release(
     compose_transformed = transform_compose_content(compose_raw, valid_tag)
 
     # Read env file and canonicalise the database password key. Older source
-    # examples used MODULO_DB_PASSWORD; the shipped compose contract uses the
+    # examples used FARNA_CONTROL_DB_PASSWORD; the shipped compose contract uses the
     # FARNA_CONTROL_* namespace, while the application still accepts the old
     # spelling as a fallback.
     env_content = src_env.read_text(encoding="utf-8")
     env_content = re.sub(
-        r"(?m)^MODULO_DB_PASSWORD=",
+        r"(?m)^FARNA_CONTROL_DB_PASSWORD=",
         "FARNA_CONTROL_DB_PASSWORD=",
         env_content,
     )

@@ -158,7 +158,7 @@ class TestResolvePlanContext:
         """
         session = AsyncMock()
         settings = MagicMock()
-        settings.modulo_license_key = settings_license_key
+        settings.license_key = settings_license_key
         db_ctx = object()
 
         def _parse_and_verify(_key: str) -> LicenseValidation:

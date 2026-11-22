@@ -861,7 +861,7 @@ def _make_app(*, org_role: str = "admin") -> FastAPI:
         org_role=org_role,
     )
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: _make_internal_principal(org_role=org_role)
-    app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
+    app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
     return app
 
 
@@ -1390,7 +1390,7 @@ def _make_self_report_app(*, org_role: str = "runner") -> FastAPI:
         org_role="operator" if org_role == "runner" else org_role,
         key_grants=None,
     )
-    app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
+    app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
     return app
 
 
@@ -1536,7 +1536,7 @@ def _make_real_app(
         org_role="operator" if org_role == "runner" else org_role,
         key_grants=None,
     )
-    app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
+    app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:
         maker = async_sessionmaker(engine, expire_on_commit=False, autobegin=False)

@@ -273,8 +273,8 @@ describe('SettingsLicenseView', () => {
     // the instance-wide key in system_config, so neither note claims memory-only.
     expect(text).toContain('survives a restart or redeploy')
     expect(text).not.toContain('held in memory only')
-    // MODULO_LICENSE_KEY survives only as the deployment-wide alternative.
-    expect(text).toContain('MODULO_LICENSE_KEY')
+    // FARNA_CONTROL_LICENSE_KEY survives only as the deployment-wide alternative.
+    expect(text).toContain('FARNA_CONTROL_LICENSE_KEY')
   })
 
   it('the apply dialog states durability for the ORGANISATION scope', async () => {
@@ -297,7 +297,7 @@ describe('SettingsLicenseView', () => {
     expect(description).not.toContain('held in memory only')
   })
 
-  it('the apply dialog states the SYSTEM scope is durable and names MODULO_LICENSE_KEY', async () => {
+  it('the apply dialog states the SYSTEM scope is durable and names FARNA_CONTROL_LICENSE_KEY', async () => {
     const { api } = await import('../lib/api/client')
     mockApiResponses(api.GET, mockLicenseTeam, mockFlagsTeam, SYSTEM_PERMISSIONS)
 
@@ -313,7 +313,7 @@ describe('SettingsLicenseView', () => {
     const description = wrapper.find('.formdialog-description').text()
     expect(description).toContain('instance-wide license key')
     expect(description).toContain('survives a restart or redeploy')
-    expect(description).toContain('MODULO_LICENSE_KEY')
+    expect(description).toContain('FARNA_CONTROL_LICENSE_KEY')
     expect(description).not.toContain('held in memory only')
     expect(description).not.toContain('requires a server restart')
   })

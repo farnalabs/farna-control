@@ -558,7 +558,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > network-free and DB-free (real `LocalRuntimeProvider` / `DockerRuntimeProvider`
 > / `E2BRuntimeProvider(api_key=...)` constructors open no connections): the
 > env-gated registration matrix (local always; e2b / docker family gated on
-> their documented signals; an unrelated `MODULO_RUNNER_*` var never registers
+> their documented signals; an unrelated `FARNA_CONTROL_RUNNER_*` var never registers
 > Docker – FAR-996), the deterministic resolve matrix (hint-wins,
 > docker-family aliases share one provider, known-but-unregistered →
 > `ProviderNotConfiguredError` naming the remediation env var, unknown →
@@ -1313,6 +1313,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 ### Infra
 - [feat-apt-distribution](infra/apt-distribution.md) => PRD N/A
 - [feat-backup-restore](infra/backup-restore.md) => PRD N/A
+- [feat-container-deployment](infra/container-deployment.md) => PRD N/A
 - [feat-infra-health](infra/health-checks.md) => PRD N/A
 - [feat-native-single-install](infra/native-single-install.md) => PRD N/A
 - [feat-support](infra/support-diagnostics.md) => PRD N/A

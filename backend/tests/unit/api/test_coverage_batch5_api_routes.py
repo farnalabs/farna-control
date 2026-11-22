@@ -35,9 +35,9 @@ def _settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_scim_token=_SCIM_TOKEN,
-        modulo_public_url="http://localhost:8000",
+        admin_password="testpass",
+        scim_token=_SCIM_TOKEN,
+        public_url="http://localhost:8000",
     )
 
 

@@ -44,10 +44,10 @@ def _override(**kwargs: object) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_license_key": "test-license",
-        "modulo_public_url": "https://modulo.example.com",
-        "modulo_saml_enabled": True,
-        "modulo_oidc_providers": json.dumps(
+        "license_key": "test-license",
+        "public_url": "https://modulo.example.com",
+        "saml_enabled": True,
+        "oidc_providers": json.dumps(
             [
                 {
                     "provider_id": "google",
@@ -93,11 +93,11 @@ async def test_apply_group_mappings_non_dict_mapping() -> None:
 
 
 def test_parse_oidc_providers_empty() -> None:
-    assert not _parse_oidc_providers(_override(modulo_oidc_providers=""))
+    assert not _parse_oidc_providers(_override(oidc_providers=""))
 
 
 def test_parse_oidc_providers_not_array() -> None:
-    assert not _parse_oidc_providers(_override(modulo_oidc_providers=json.dumps(123)))
+    assert not _parse_oidc_providers(_override(oidc_providers=json.dumps(123)))
 
 
 # ---------------------------------------------------------------------------

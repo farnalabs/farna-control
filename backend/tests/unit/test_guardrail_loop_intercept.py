@@ -487,7 +487,7 @@ def test_bridge_client_source_reads_sandbox_script():
     # The generated sandbox client reads the marker emitted by the wrapped
     # agent process. This protocol variable is intentionally unprefixed so the
     # stdlib-only script and its shell wrapper share the same contract.
-    assert "MODULO_BRIDGE_EVENT" in source
+    assert "FARNA_CONTROL_BRIDGE_EVENT" in source
 
 
 async def test_callback_server_returns_pass_for_unknown_path():
@@ -510,7 +510,7 @@ async def test_callback_server_returns_pass_for_unknown_path():
 
 
 # ---------------------------------------------------------------------------
-# Bridge CLI / --wrap mode (MODULO_BRIDGE_EVENT / MODULO_BRIDGE_BLOCKED)
+# Bridge CLI / --wrap mode (FARNA_CONTROL_BRIDGE_EVENT / FARNA_CONTROL_BRIDGE_BLOCKED)
 # ---------------------------------------------------------------------------
 
 
@@ -547,10 +547,10 @@ class _FakeProc:
 
 def test_wrap_command_block_kills_child_and_emits_marker(monkeypatch, capsys):
     """A 'before' block decision from the Modulo side KILLS the wrapped child
-    and writes a MODULO_BRIDGE_BLOCKED marker + non-zero exit (3)."""
+    and writes a FARNA_CONTROL_BRIDGE_BLOCKED marker + non-zero exit (3)."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
 
@@ -567,7 +567,7 @@ def test_wrap_command_block_kills_child_and_emits_marker(monkeypatch, capsys):
     assert code == 3
     assert proc.killed is True
     out = capsys.readouterr().out
-    assert "MODULO_BRIDGE_BLOCKED:git push" in out
+    assert "FARNA_CONTROL_BRIDGE_BLOCKED:git push" in out
 
 
 def test_wrap_command_allowed_event_passes_through(monkeypatch, capsys):
@@ -575,7 +575,7 @@ def test_wrap_command_allowed_event_passes_through(monkeypatch, capsys):
     through unchanged; the child is NOT killed."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
     proc = _FakeProc([b"agent says hello", event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     monkeypatch.setattr(
@@ -599,7 +599,7 @@ def test_wrap_command_bridge_failure_is_fail_open(monkeypatch, capsys):
     command — the child runs to completion (best-effort fail-open)."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
 
@@ -616,11 +616,11 @@ def test_wrap_command_bridge_failure_is_fail_open(monkeypatch, capsys):
 
 
 def test_wrap_command_redact_emits_redacted_marker(monkeypatch, capsys):
-    """A redact decision emits a MODULO_BRIDGE_REDACTED line (masked args) and
+    """A redact decision emits a FARNA_CONTROL_BRIDGE_REDACTED line (masked args) and
     the child is allowed to proceed."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "https://x-access-token:ghp_aaaaaaaaaaaaaaaaaaaaaaaa@github.com/a/b.git"}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "https://x-access-token:ghp_aaaaaaaaaaaaaaaaaaaaaaaa@github.com/a/b.git"}, "direction": "before"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     monkeypatch.setattr(
@@ -635,7 +635,7 @@ def test_wrap_command_redact_emits_redacted_marker(monkeypatch, capsys):
     assert code == 0
     assert proc.killed is False
     out = capsys.readouterr().out
-    assert "MODULO_BRIDGE_REDACTED:" in out
+    assert "FARNA_CONTROL_BRIDGE_REDACTED:" in out
     assert "REDACTED" in out
 
 
@@ -746,7 +746,7 @@ def test_wrap_command_downgraded_block_does_not_kill(monkeypatch, capsys):
     must NOT kill the wrapped child — the call proceeds (record-only)."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     # The Modulo side downgrades the block (blocked=false) for this before-call.
@@ -846,7 +846,7 @@ def test_wrap_command_malformed_event_forwards_empty_tool(monkeypatch, capsys):
     forwarded with an empty tool name, fail-open, and never echoed to stdout."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b"MODULO_BRIDGE_EVENT: {broken json"
+    event_line = b"FARNA_CONTROL_BRIDGE_EVENT: {broken json"
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     seen: list[tuple[str, dict]] = []
@@ -872,7 +872,7 @@ def test_wrap_command_after_event_notifies_and_continues(monkeypatch, capsys):
     and the child continues — the event line is never echoed to stdout."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "after", "result_summary": "pushed ok"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "after", "result_summary": "pushed ok"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     decided: list[tuple[str, dict]] = []
@@ -905,7 +905,7 @@ def test_wrap_command_non_dict_event_is_ignored(monkeypatch, capsys):
     as no event: nothing is forwarded or echoed, the child continues."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b"MODULO_BRIDGE_EVENT: [1, 2, 3]"
+    event_line = b"FARNA_CONTROL_BRIDGE_EVENT: [1, 2, 3]"
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     decided: list[tuple[str, dict]] = []
@@ -1216,7 +1216,7 @@ def test_bridge_client_source_ships_escalate_protocol():
     """The sandbox-side source written by ``bridge_client_source`` carries the
     escalate marker + decision handling (single source of truth)."""
     source = bridge_client_source()
-    assert "MODULO_BRIDGE_ESCALATED" in source
+    assert "FARNA_CONTROL_BRIDGE_ESCALATED" in source
     assert "ESCALATED_EXIT_CODE" in source
     assert '"escalate"' in source
 
@@ -1240,11 +1240,11 @@ def test_decide_before_escalate_always_refuses(monkeypatch):
 
 def test_wrap_command_escalate_kills_child_and_emits_typed_marker(monkeypatch, capsys):
     """An ``escalate`` decision kills the wrapped child, emits a
-    ``MODULO_BRIDGE_ESCALATED:<json>`` marker carrying the escalation context,
+    ``FARNA_CONTROL_BRIDGE_ESCALATED:<json>`` marker carrying the escalation context,
     and exits with the dedicated escalate exit code (distinct from block)."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {"url": "x"}, "direction": "before"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     monkeypatch.setattr(
@@ -1275,7 +1275,7 @@ def test_wrap_command_escalate_leaves_no_blocked_marker(monkeypatch, capsys):
     """An escalate must not masquerade as a block (no BLOCKED marker on stdout)."""
     import farna.core.guardrails.sandbox_bridge as sb
 
-    event_line = b'MODULO_BRIDGE_EVENT: {"tool_name": "git push", "args": {}, "direction": "before"}'
+    event_line = b'FARNA_CONTROL_BRIDGE_EVENT: {"tool_name": "git push", "args": {}, "direction": "before"}'
     proc = _FakeProc([event_line], wait_code=0)
     monkeypatch.setattr(sb.subprocess, "Popen", lambda *a, **k: proc)
     monkeypatch.setattr(

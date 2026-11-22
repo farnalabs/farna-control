@@ -790,7 +790,7 @@ REST_INTEGRATION: dict[str, Any] = {
                     "SAME unchanged write finds a prior attempt whose delivery "
                     "could not be confirmed (ambiguous). This does NOT govern "
                     "response-shape or records extraction. Inert unless the opt-in "
-                    "MODULO_CONNECTOR_WRITE_GATE_ENABLED killswitch is enabled."
+                    "FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED killswitch is enabled."
                 ),
                 "help": (
                     "fail_open (default): re-fire the unconfirmed write on ambiguous "
@@ -800,7 +800,7 @@ REST_INTEGRATION: dict[str, Any] = {
                     "silent miss the operator must reconcile; a confirmed-delivered "
                     "write is still suppressed. off: bypass the gate entirely — "
                     "writes always fire, never deduped. Only takes effect when the "
-                    "MODULO_CONNECTOR_WRITE_GATE_ENABLED killswitch is enabled; "
+                    "FARNA_CONTROL_CONNECTOR_WRITE_GATE_ENABLED killswitch is enabled; "
                     "otherwise all connector writes fire normally."
                 ),
             },

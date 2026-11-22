@@ -369,7 +369,7 @@ async def deliver_quality_report(
 
     Optional ``recipient_config`` keys:
       - ``signing_secret``: when set, the payload is HMAC-SHA256 signed and the
-        signature sent as ``X-Modulo-Signature`` (PRD 8.11 webhook signing).
+        signature sent as ``X-Farna-Control-Signature`` (PRD 8.11 webhook signing).
       - ``timeout``: per-request timeout in seconds (default 30s).
 
     """

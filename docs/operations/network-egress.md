@@ -146,10 +146,10 @@ docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep 
 docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep OTEL_EXPORTER_OTLP
 
 # List all active connector instances (API)
-curl -H "Authorization: Bearer $TOKEN" "$MODULO_URL/api/v1/connectors"
+curl -H "Authorization: Bearer $TOKEN" "$FARNA_CONTROL_URL/api/v1/connectors"
 
 # List all configured webhook endpoints
-curl -H "Authorization: Bearer $TOKEN" "$MODULO_URL/api/v1/admin/notifications"
+curl -H "Authorization: Bearer $TOKEN" "$FARNA_CONTROL_URL/api/v1/admin/notifications"
 
 # Verify no unexpected egress (requires host firewall / network policy monitoring)
 docker compose -f deploy/compose/docker-compose.prod.yml exec modulo netstat -tlnp  # listening only

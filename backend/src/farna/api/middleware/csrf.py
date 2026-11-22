@@ -48,8 +48,8 @@ class CsrfMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         resolved = settings or get_settings()
-        self._enabled = resolved.modulo_csrf_enabled
-        raw_exempt = resolved.modulo_csrf_exempt_paths or ""
+        self._enabled = resolved.csrf_enabled
+        raw_exempt = resolved.csrf_exempt_paths or ""
         self._exempt_paths = [p.strip() for p in raw_exempt.split(",") if p.strip()]
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:

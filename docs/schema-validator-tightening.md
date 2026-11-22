@@ -87,7 +87,7 @@ API accepts any key: `PUT /api/v1/system-admin/config/{key}` (requires the
 instance operator can set it with a JSON string body:
 
 ```bash
-curl -X PUT "$MODULO_URL/api/v1/system-admin/config/schema_validator_mode" \
+curl -X PUT "$FARNA_CONTROL_URL/api/v1/system-admin/config/schema_validator_mode" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"value": "strict"}'

@@ -18,7 +18,7 @@ These are end-to-end pins: a real pytest subprocess loads the real hook (and the
 real terminal-summary renderer) from the integration conftest into a scratch
 rootdir. A leak in test A must leave the downstream tests green and name A; a
 collateral unraisable in test C must fail C, not D; and
-``MODULO_INTEGRATION_STRICT_CONNECTION_LEAKS=1`` must fail the leaking test.
+``FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS=1`` must fail the leaking test.
 
 Prove-it-fails: replacing the chained hook with ``sys.unraisablehook =
 captured.append`` makes ``test_collateral_unraisable_fails_the_leaking_test``
@@ -99,7 +99,7 @@ def _run_pytest(rootdir: Path, target: str, *extra_args: str, **extra_env: str) 
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(BACKEND), env.get("PYTHONPATH")]))
     env.pop("FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS", None)
-    env.pop("MODULO_INTEGRATION_STRICT_CONNECTION_LEAKS", None)
+    env.pop("FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS", None)
     env.update(extra_env)
 
     return subprocess.run(  # noqa: S603 — fixed argv, sys.executable, no untrusted input

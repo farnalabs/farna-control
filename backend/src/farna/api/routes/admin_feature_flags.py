@@ -91,7 +91,7 @@ async def _build_registry(settings: Settings, session: AsyncSession, current_use
     lic = get_license()
     # FAR-1733: the env-var key is only counted after verification — never on
     # mere presence (mirrors rung 3 of the canonical licence ladder).
-    has_key = verify_license_key(getattr(settings, "modulo_license_key", "") or "") is not None or lic is not None
+    has_key = verify_license_key(getattr(settings, "license_key", "") or "") is not None or lic is not None
 
     if not has_key and current_user.organisation_id is not None:
         async with session.begin():
@@ -121,7 +121,7 @@ async def _license_is_valid(settings: Settings, session: AsyncSession, org_id: u
     """
     if get_license() is not None:
         return True
-    if verify_license_key(getattr(settings, "modulo_license_key", "") or "") is not None:
+    if verify_license_key(getattr(settings, "license_key", "") or "") is not None:
         return True
     if org_id is None:
         return False
@@ -405,7 +405,7 @@ async def list_feature_flags(
                 "has_license_key": registry.has_license_key,
                 "is_valid": await _license_is_valid(settings, session, current_user.organisation_id),
             },
-            "dev_mode": settings.modulo_dev_mode,
+            "dev_mode": settings.dev_mode,
             "flags": [
                 {
                     "name": f.name,

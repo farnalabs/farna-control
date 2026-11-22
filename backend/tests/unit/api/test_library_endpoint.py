@@ -31,7 +31,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -335,7 +335,7 @@ def test_list_libraries_singular_lifecycle_map_filter_is_hidden_for_ordinary_use
 
 def test_list_libraries_dev_mode_viewer_still_excludes_lifecycle_maps(viewer_client: TestClient) -> None:
     """Developer mode alone is not the grant: a viewer stays below the operator floor."""
-    with patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=True)):
+    with patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=True)):
         mock_list = _stub_list_call(client=viewer_client, primitive_type="lifecycle_map")
 
     assert mock_list.await_args is not None
@@ -354,7 +354,7 @@ def test_list_libraries_multi_type_only_lifecycle_map_is_hidden(viewer_client: T
 
 
 def test_list_libraries_internal_operator_keeps_requested_types(client: TestClient) -> None:
-    with patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=True)):
+    with patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=True)):
         mock_list = _stub_list_call(client=client, primitive_types="workflow,lifecycle_map")
 
     assert mock_list.await_args is not None
@@ -364,7 +364,7 @@ def test_list_libraries_internal_operator_keeps_requested_types(client: TestClie
 
 
 def test_list_libraries_internal_operator_singular_type_passes_through(client: TestClient) -> None:
-    with patch("farna.api.routes.library.get_settings", return_value=MagicMock(modulo_dev_mode=True)):
+    with patch("farna.api.routes.library.get_settings", return_value=MagicMock(dev_mode=True)):
         mock_list = _stub_list_call(client=client, primitive_type="lifecycle_map")
 
     assert mock_list.await_args is not None

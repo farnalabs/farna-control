@@ -18,9 +18,9 @@
  * `document.cookie` for XSRF-TOKEN.
  *
  * Usage:
- *   export MODULO_URL=http://localhost:8000
- *   export MODULO_EMAIL=admin@example.com
- *   export MODULO_PASSWORD=changeme
+ *   export FARNA_CONTROL_URL=http://localhost:8000
+ *   export FARNA_CONTROL_EMAIL=admin@example.com
+ *   export FARNA_CONTROL_PASSWORD=changeme
  *   node auth-login/js.js
  */
 

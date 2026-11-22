@@ -6,7 +6,7 @@ Three DB-direct commands on the native-launcher surface:
 * ``modulo users list``
 * ``modulo users reset-password <email> [--password <pw> | prompt]``
 
-Creation and password RESEEDING reuse the promoted MODULO_USERS seeder
+Creation and password RESEEDING reuse the promoted FARNA_CONTROL_USERS seeder
 (``farna.db.seed.seed_modulo_user`` — the same creation path the boot
 seeder runs) and the auth password machinery (``hash_password``); session
 invalidation on reset reuses the token-family helpers the admin reset
@@ -20,10 +20,10 @@ DATABASE URL resolution (never prompts for stored credentials):
 2. otherwise the standard operator path: ``DATABASE_URL`` via Settings
    (env / pinned config.env).
 
-MODULO_USERS guard: when ``MODULO_USERS`` is set, its entries are
+FARNA_CONTROL_USERS guard: when ``FARNA_CONTROL_USERS`` is set, its entries are
 re-applied on every boot — but ONLY for accounts whose stored hash is
 missing or already non-bcrypt (plaintext); a bcrypt hash written by this
-CLI is NOT reverted, and accounts not listed in MODULO_USERS are never
+CLI is NOT reverted, and accounts not listed in FARNA_CONTROL_USERS are never
 touched. The guard still refuses loudly by default (an operator should
 know before any local-account write) with ``--force`` to proceed.
 
@@ -169,7 +169,7 @@ def _resolve_database_url(data_dir: Path | None, *, readonly: bool = False) -> s
 
 
 # ---------------------------------------------------------------------------
-# MODULO_USERS guard
+# FARNA_CONTROL_USERS guard
 # ---------------------------------------------------------------------------
 
 
@@ -178,10 +178,10 @@ def _guard_modulo_users(force: bool) -> None:
     from farna.settings import get_settings
 
     try:
-        modulo_users = get_settings().modulo_users
+        users = get_settings().users
     except Exception:
-        modulo_users = ""
-    if not modulo_users:
+        users = ""
+    if not users:
         return
     message = (
         "WARNING: FARNA_CONTROL_USERS is set — the boot seeder re-applies its entries on every boot, "
@@ -439,7 +439,7 @@ def users() -> None:
 @click.argument("email")
 @click.option("--admin", is_flag=True, default=False, help="Grant the admin role in the primary org.")
 @click.option("--password", "password_option", default=None, help="Password (prompted, hidden, when omitted).")
-@click.option("--force", is_flag=True, default=False, help="Proceed despite MODULO_USERS being set.")
+@click.option("--force", is_flag=True, default=False, help="Proceed despite FARNA_CONTROL_USERS being set.")
 @click.option("--data-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
 def add(email: str, admin: bool, force: bool, password_option: str | None, data_dir: Path | None) -> None:
     """Create a local user with the same creation path the boot seeder uses."""
@@ -458,7 +458,7 @@ def add(email: str, admin: bool, force: bool, password_option: str | None, data_
 @users.command("reset-password")
 @click.argument("email")
 @click.option("--password", "password_option", default=None, help="Password (prompted, hidden, when omitted).")
-@click.option("--force", is_flag=True, default=False, help="Proceed despite MODULO_USERS being set.")
+@click.option("--force", is_flag=True, default=False, help="Proceed despite FARNA_CONTROL_USERS being set.")
 @click.option("--data-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
 def reset_password(email: str, force: bool, password_option: str | None, data_dir: Path | None) -> None:
     """Reset a user's password hash and sign out their active sessions.

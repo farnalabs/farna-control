@@ -30,8 +30,8 @@ def test_system_registration_includes_demo_daily_refresh() -> None:
 
 def _settings(system_url: str = "") -> SimpleNamespace:
     return SimpleNamespace(
-        modulo_system_database_url=system_url,
-        modulo_db="postgres",
+        system_database_url=system_url,
+        db="postgres",
         saq_worker_db_pool_size=7,
         saq_worker_concurrency=2,
         db_pool_recycle_seconds=1500,
@@ -48,7 +48,7 @@ def reset_system_engine(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_demo_daily_refresh_is_disabled_without_demo_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sw, "get_settings", lambda: SimpleNamespace(modulo_demo_enabled=False))
+    monkeypatch.setattr(sw, "get_settings", lambda: SimpleNamespace(demo_enabled=False))
     result = await sw.demo_daily_refresh({})
     assert result == {"status": "disabled"}
 
@@ -58,7 +58,7 @@ async def test_demo_daily_refresh_runs_seed_when_enabled(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         sw,
         "get_settings",
-        lambda: SimpleNamespace(modulo_demo_enabled=True, modulo_db="sqlite"),
+        lambda: SimpleNamespace(demo_enabled=True, db="sqlite"),
     )
     monkeypatch.setattr(sw, "_make_session_factory", MagicMock(return_value=MagicMock()))
     seed = AsyncMock(return_value="org=demo user=demo@example.com")
@@ -104,13 +104,13 @@ def test_fails_closed_when_unset(reset_system_engine, monkeypatch: pytest.Monkey
     errors: list[tuple[object, object]] = []
     monkeypatch.setattr(sw._log, "error", lambda msg, extra=None: errors.append((msg, extra)))
 
-    with pytest.raises(RuntimeError, match="MODULO_SYSTEM_DATABASE_URL"):
+    with pytest.raises(RuntimeError, match="FARNA_CONTROL_SYSTEM_DATABASE_URL"):
         sw._get_system_async_engine()
 
     assert len(errors) == 1
     msg, extra = errors[0]
     assert msg == "saq_worker.system_engine_misconfigured"
-    assert "MODULO_SYSTEM_DATABASE_URL not set" in extra["reason"]
+    assert "FARNA_CONTROL_SYSTEM_DATABASE_URL not set" in extra["reason"]
 
 
 # ---------------------------------------------------------------------------

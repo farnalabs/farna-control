@@ -433,7 +433,7 @@ class TestLadderHonoursStartsAt:
             private_key_hex=kp["private_key"],
             starts_at=start,
         )
-        settings = SimpleNamespace(modulo_license_key=key)
+        settings = SimpleNamespace(license_key=key)
 
         assert resolve_effective_license(settings, None) is None
 
@@ -451,7 +451,7 @@ class TestLadderHonoursStartsAt:
         store_license("active", active)
         start = frozen_now + timedelta(days=30)
         future_key = generate_team_license("Acme", private_key_hex=kp["private_key"], starts_at=start)
-        settings = SimpleNamespace(modulo_license_key=future_key)
+        settings = SimpleNamespace(license_key=future_key)
 
         # The future env-var rung falls through; the active in-memory licence wins.
         assert resolve_effective_license(settings, None) is active

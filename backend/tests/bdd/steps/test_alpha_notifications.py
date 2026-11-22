@@ -264,7 +264,7 @@ def webhook_from_org(org: str, secret: str, request):
     pass
 
 
-@then(parsers.parse('the request includes header "X-Modulo-Timestamp"'))
+@then(parsers.parse('the request includes header "X-Farna-Control-Timestamp"'))
 def request_includes_timestamp(request):
     pass
 

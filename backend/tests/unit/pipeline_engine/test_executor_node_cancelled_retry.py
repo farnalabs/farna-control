@@ -1300,7 +1300,7 @@ async def test_execute_gate_suppresses_retry_when_delivery_marked():
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
     broker = registry.get_or_create.return_value
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1351,7 +1351,7 @@ async def test_execute_gate_suppresses_retry_when_retries_exhausted():
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
     broker = registry.get_or_create.return_value
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1393,7 +1393,7 @@ async def test_execute_gate_magicmock_markers_skips_gate():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1416,7 +1416,7 @@ async def test_execute_gate_magicmock_markers_skips_gate():
 
 
 async def test_execute_gate_kill_switch_off_disables_gate():
-    """FAR-228 kill-switch: modulo_idempotency_gate_enabled=False means the gate
+    """FAR-228 kill-switch: idempotency_gate_enabled=False means the gate
     never fires even with a delivery marker — the transient retry proceeds."""
     from farna.core.pipeline_engine.node_runner import SandboxNodeFailedError
 
@@ -1429,7 +1429,7 @@ async def test_execute_gate_kill_switch_off_disables_gate():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=False)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=False)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1465,7 +1465,7 @@ async def test_execute_gate_node_id_none_disables_gate():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled"))  # NO node_id
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1502,7 +1502,7 @@ async def test_execute_gate_marker_absent_preserves_retry_path():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1540,7 +1540,7 @@ async def test_execute_gate_superseded_never_suppresses():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1588,7 +1588,7 @@ async def test_execute_gate_multi_node_inert():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-b"))
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),
@@ -1629,7 +1629,7 @@ async def test_execute_gate_prove_the_fix_suppression_requires_decision():
     factory = _make_session_factory(session)
     compiled = _mock_compiled_raising(SandboxNodeFailedError("stalled", node_id="node-a"))
     registry = _mock_registry()
-    settings = MagicMock(saq_run_retries=5, modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(saq_run_retries=5, idempotency_gate_enabled=True)
 
     with (
         patch("farna.core.pipeline_engine.executor.async_sessionmaker", return_value=factory),

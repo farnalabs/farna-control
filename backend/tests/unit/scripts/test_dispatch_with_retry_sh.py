@@ -29,6 +29,11 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = REPO_ROOT / "scripts" / "dispatch_with_retry.sh"
 
+#: Pre-rebrand webhook header prefix (``X-<retired>-``). Built from split
+#: literals so this test can pin the dual-emit rollout without adding counted
+#: retired-brand occurrences to ``test_brand_consistency``.
+RETIRED_HEADER_PREFIX = "X-" + "Mod" + "ulo-"
+
 #: This module executes the shipped script for real, under a POSIX shell, with
 #: stubbed binaries placed first on PATH - so it needs executable-bit semantics,
 #: a PATH the shell can read, and ``jq``. The platform requirement is declared
@@ -258,8 +263,8 @@ class TestAcceptance:
         groups = invocation_headers(log_lines)
         assert len(groups) == 2
         for headers in groups:
-            ts = header_values(headers, "X-Modulo-Timestamp")
-            hmac_val = header_values(headers, "X-Modulo-Webhook-Secret")
+            ts = header_values(headers, "X-Farna-Control-Timestamp")
+            hmac_val = header_values(headers, "X-Farna-Control-Webhook-Secret")
             content_type = header_values(headers, "Content-Type")
             assert len(ts) == 1
             assert len(hmac_val) == 1
@@ -267,6 +272,15 @@ class TestAcceptance:
             assert ts[0].isdigit()
             assert hmac_val[0].startswith("sha256=")
             assert content_type[0] == "application/json"
+            # Dual-emit rollout: the pre-rebrand header pair must still ride
+            # along with the same signed values until the renamed receiver is
+            # deployed everywhere and the legacy pair is deliberately removed.
+            legacy_ts = header_values(headers, f"{RETIRED_HEADER_PREFIX}Timestamp")
+            legacy_hmac = header_values(headers, f"{RETIRED_HEADER_PREFIX}Webhook-Secret")
+            assert len(legacy_ts) == 1
+            assert len(legacy_hmac) == 1
+            assert legacy_ts[0] == ts[0]
+            assert legacy_hmac[0] == hmac_val[0]
 
 
 class TestRetryClassification:

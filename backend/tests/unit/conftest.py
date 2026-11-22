@@ -158,7 +158,7 @@ class _ProvisionedSystemSettings:
     touching the lru-cached real :class:`Settings`.
     """
 
-    modulo_system_database_url = "postgresql+asyncpg://localhost/modulo-system-unit-test"
+    system_database_url = "postgresql+asyncpg://localhost/modulo-system-unit-test"
     # FAR-1524: get_or_create_system_engine passes this to create_async_engine
     # as pool_recycle; the stub must expose it just like the real Settings.
     db_pool_recycle_seconds = 1500
@@ -584,7 +584,7 @@ def _far681_any_credential_default(request: pytest.FixtureRequest) -> None:
 # ``RuntimeWarning`` fire later and fail an innocent test, which is the exact
 # mis-attribution this hook exists to remove.
 #
-# ``MODULO_TEST_COROUTINE_ATTRIBUTION=0`` disables the instrumentation for a
+# ``FARNA_CONTROL_TEST_COROUTINE_ATTRIBUTION=0`` disables the instrumentation for a
 # local debugging session. It is ON by default, so the CI unit run (``pytest
 # tests/unit/``) always has it without extra wiring.
 _ATTRIBUTION_ENV = "FARNA_CONTROL_TEST_COROUTINE_ATTRIBUTION"

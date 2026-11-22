@@ -19,7 +19,7 @@ def _make_settings(redis_url: str | None = "") -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
         redis_url=redis_url,
     )
 

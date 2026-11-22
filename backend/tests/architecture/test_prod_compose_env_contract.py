@@ -1,8 +1,8 @@
 """Architecture test: the production compose speaks Settings' env dialect.
 
 FAR-1506. ``deploy/compose/docker-compose.prod.yml`` shipped passing
-``MODULO_SECRET_KEY`` and ``MODULO_REDIS_URL`` - names no code reads - and did
-not pass ``FERNET_KEY`` at all. ``Settings`` reads ``SECRET_KEY``,
+pre-rebrand-prefixed ``SECRET_KEY`` and ``REDIS_URL`` names - names no code
+reads - and did not pass ``FERNET_KEY`` at all. ``Settings`` reads ``SECRET_KEY``,
 ``FERNET_KEY`` (both required, no default) and ``REDIS_URL``, so a fresh
 bring-up raised a ``ValidationError`` at boot and crash-looped the backend,
 while the Redis URL silently fell back to ``redis://localhost:6379/0``. A
@@ -48,10 +48,11 @@ _APP_SERVICE = "modulo"
 #: through ``Settings`` - with the source files that read them, asserted to
 #: exist and to mention the name, so an allowlist entry cannot outlive the code
 #: that justifies it. Anything else the compose passes MUST be a Settings name.
-#: ``MODULO_ENV`` is deliberately absent: the app reads only ``FARNA_CONTROL_ENV``
-#: (the ``environment`` field's canonical ``validation_alias``) plus its bare
-#: field-name spelling ``ENVIRONMENT``. ``MODULO_ENV`` was a legacy alias that the
-#: alias-set removal dropped; no code reads it.
+#: The pre-rebrand environment alias is deliberately absent: the app reads only
+#: ``FARNA_CONTROL_ENV`` (the ``environment`` field's canonical
+#: ``validation_alias``). That pre-rebrand spelling was dropped with the
+#: alias-set removal, and the bare field name ``ENVIRONMENT`` is not an env
+#: spelling either (``validate_by_name`` is off, FAR-2650); no code reads either.
 _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
     "DATABASE_ADMIN_URL": (
         "src/farna/db/bootstrap.py",
@@ -200,7 +201,7 @@ def test_every_env_var_passed_to_the_app_is_read_by_the_app():
         f"{unknown} (Settings reads {len(known)} names; {len(_NON_SETTINGS_ENV)} more are read "
         "straight from os.environ)\n"
         "A name Settings does not read is silently ignored at boot - this is exactly how "
-        "MODULO_SECRET_KEY / MODULO_REDIS_URL shipped and the backend crash-looped (FAR-1506). "
+        "pre-rebrand-prefixed SECRET_KEY / REDIS_URL shipped and the backend crash-looped (FAR-1506). "
         "If one of these is read straight from os.environ instead, add it to _NON_SETTINGS_ENV "
         "with the source file that reads it."
     )
@@ -237,8 +238,8 @@ def test_compose_environment_constructs_settings(monkeypatch: pytest.MonkeyPatch
     Resolves the compose's `${...}` references the way compose does, installs
     the result as the process environment, and constructs ``Settings`` - the
     real boot path. This fails on the pre-fix file two ways over: the missing
-    ``SECRET_KEY``/``FERNET_KEY`` raise, and a stale name such as
-    ``MODULO_REDIS_URL`` leaves ``redis_url`` at its localhost default.
+    ``SECRET_KEY``/``FERNET_KEY`` raise, and a stale pre-rebrand-prefixed
+    ``REDIS_URL`` leaves ``redis_url`` at its localhost default.
     """
     compose = _load_compose()
     environment = {name: _interpolate(value) for name, value in _app_environment(compose).items()}
@@ -272,8 +273,9 @@ def test_env_example_documents_the_required_secrets():
 def test_no_compose_variable_has_a_silent_default():
     """FAR-1509: a production secret may never fall back to a known string.
 
-    ``MODULO_DB_PASSWORD:-changeme`` used to interpolate the public string
-    `changeme` into ``POSTGRES_PASSWORD`` AND into both database URLs, so a
+    A pre-rebrand-prefixed ``DB_PASSWORD`` with a ``:-changeme`` default used to
+    interpolate the public string `changeme` into ``POSTGRES_PASSWORD`` AND into both
+    database URLs, so a
     production stack whose operator never set the variable came up fully
     working with a publicly-known password. Required variables must use
     ``${VAR:?...}``, never ``${VAR:-...}``.
@@ -283,7 +285,7 @@ def test_no_compose_variable_has_a_silent_default():
     secrets = sorted(name for name in defaulted if name in _OPERATOR_VALUES)
 
     assert not secrets, f"{_PROD_COMPOSE.relative_to(_REPO_ROOT)} interpolates required variable(s) {secrets} with a `:-` default - compose would start a production stack without them, silently. Use `${{VAR:?...}}` naming the variable and how to set it (see SECRET_KEY / FERNET_KEY)."
-    # The prod compose now uses FARNA_CONTROL_DB_PASSWORD (not MODULO_DB_PASSWORD)
+    # The prod compose now uses FARNA_CONTROL_DB_PASSWORD (not a pre-rebrand spelling)
     assert compose.count("${FARNA_CONTROL_DB_PASSWORD:?") >= 3, "FARNA_CONTROL_DB_PASSWORD must be required at every reference (POSTGRES_PASSWORD, DATABASE_URL, DATABASE_ADMIN_URL) - one defaulting reference is enough to reintroduce the silent `changeme` password"
 
 

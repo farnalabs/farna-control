@@ -146,12 +146,12 @@ class TestScimDatabaseErrors:
 
 
 class TestGetBaseUrl:
-    """_get_base_url raises 500 when modulo_public_url is not configured."""
+    """_get_base_url raises 500 when public_url is not configured."""
 
     @pytest.fixture
     def client(self, scim_client: Callable[..., TestClient]) -> TestClient:
         return scim_client(
-            settings=lambda: make_settings(modulo_public_url=""),
+            settings=lambda: make_settings(public_url=""),
             plan_context=_override_plan_context,
         )
 

@@ -175,9 +175,9 @@ _MEMBER_PURPOSE: dict[str, str] = {
 #: else is emitted as a key plus ``set``/``unset`` only.
 SAFE_SETTINGS_VALUE_FIELDS: frozenset[str] = frozenset(
     {
-        "modulo_db",
-        "modulo_public_url",
-        "modulo_frontend_url",
+        "db",
+        "public_url",
+        "frontend_url",
         "saq_worker_concurrency",
         "saq_worker_lost_window",
         "saq_worker_db_pool_size",
@@ -567,7 +567,7 @@ def resolve_licence(settings: object | None) -> dict[str, Any]:
 
         data = get_license()
         if data is None and settings is not None:
-            raw_key = getattr(settings, "modulo_license_key", "") or ""
+            raw_key = getattr(settings, "license_key", "") or ""
             if raw_key:
                 data = verify_license_key(raw_key)
     except Exception:

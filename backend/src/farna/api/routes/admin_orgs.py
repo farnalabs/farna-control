@@ -216,7 +216,7 @@ async def admin_create_org(
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_db_session),
 ) -> CreateOrgResponse:
-    if not settings.modulo_multi_org_enabled:
+    if not settings.multi_org_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Multi-org is not enabled for this deployment",

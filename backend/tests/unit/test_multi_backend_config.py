@@ -22,10 +22,8 @@ def _base_env(monkeypatch: pytest.MonkeyPatch, **overrides: str) -> None:
     system_url = overrides.pop("FARNA_CONTROL_SYSTEM_DATABASE_URL", None)
     if system_url is None:
         monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-        monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
     else:
         monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", system_url)
-        monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
     for k, v in overrides.items():
         monkeypatch.setenv(k, v)
 
@@ -51,7 +49,7 @@ class TestMultiBackendCustomValidators:
     def test_sqlite_mode_accepted_with_the_test_only_opt_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(monkeypatch, FARNA_CONTROL_DB="sqlite", FARNA_CONTROL_ALLOW_SQLITE="1")
         settings = Settings()
-        assert settings.modulo_db == "sqlite"
+        assert settings.db == "sqlite"
         assert settings.allow_sqlite is True
 
     def test_sqlite_mode_auto_sets_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -72,7 +70,7 @@ class TestMultiBackendCustomValidators:
     def test_modulo_db_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(monkeypatch, FARNA_CONTROL_DB="SQLite", FARNA_CONTROL_ALLOW_SQLITE="1")
         settings = Settings()
-        assert settings.modulo_db == "sqlite"
+        assert settings.db == "sqlite"
 
     def test_postgres_mode_preserves_given_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(
@@ -89,7 +87,7 @@ class TestMultiBackendCustomValidators:
 class TestDsnSchemeGuard:
     """The guard inspects the DSN scheme, not only ``FARNA_CONTROL_DB``.
 
-    A SQLite DSN under ``modulo_db=postgres`` selects the Postgres repository
+    A SQLite DSN under ``db=postgres`` selects the Postgres repository
     (no injected tenant filter) against a SQLite engine while
     ``register_tenant_filter`` skips — the unscoped-worker posture ADR 068
     forbids. Every half-configured combination must fail at Settings
@@ -125,7 +123,7 @@ class TestDsnSchemeGuard:
             FARNA_CONTROL_ALLOW_SQLITE="1",
         )
         settings = Settings()
-        assert settings.modulo_db == "sqlite"
+        assert settings.db == "sqlite"
         assert settings.database_url == "sqlite+aiosqlite:///./accepted-test.db"
 
     def test_mysql_dsn_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,11 +149,11 @@ class TestDsnSchemeGuard:
             FARNA_CONTROL_SYSTEM_DATABASE_URL="sqlite+aiosqlite:///./accepted-system-test.db",
         )
         settings = Settings()
-        assert settings.modulo_system_database_url == "sqlite+aiosqlite:///./accepted-system-test.db"
+        assert settings.system_database_url == "sqlite+aiosqlite:///./accepted-system-test.db"
 
     def test_postgres_system_dsn_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _base_env(
             monkeypatch,
             FARNA_CONTROL_SYSTEM_DATABASE_URL="postgresql+asyncpg://farna_control_system:pw@localhost:5432/farna_control",
         )
-        assert Settings().modulo_db == "postgres"
+        assert Settings().db == "postgres"

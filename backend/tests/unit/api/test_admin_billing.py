@@ -73,7 +73,7 @@ def _session() -> AsyncMock:
 async def _invoke(org: MagicMock, *, license_key: str = "") -> BillingOverviewResponse:
     org_id = uuid.uuid4()
     settings = MagicMock()
-    settings.modulo_license_key = license_key
+    settings.license_key = license_key
     with (
         patch("farna.api.routes.admin.set_rls_org"),
         patch("farna.api.routes.admin.get_organisation", new_callable=AsyncMock, return_value=org),
@@ -105,7 +105,7 @@ class TestBillingOverviewPlanTier:
         org = _org("team")
         org_id = uuid.uuid4()
         settings = MagicMock()
-        settings.modulo_license_key = "env-key"
+        settings.license_key = "env-key"
         session = _session()
         with (
             patch("farna.api.routes.admin.set_rls_org"),

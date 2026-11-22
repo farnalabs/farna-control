@@ -145,7 +145,7 @@ class TestSignThenVerifyWithDefaultKey:
         result = parse_and_verify(_build_signed_key(payload, kp["private_key"]))
         assert result.valid is False
         assert result.reason == REASON_ANCHOR_MISMATCH
-        assert "MODULO_LICENSE_PUBLIC_KEY" in (result.hint or "")
+        assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in (result.hint or "")
 
     def test_in_debug_a_bad_signature_still_reports_signature_failure(self) -> None:
         """With debug's opt-in the anchor verifies, so bad signatures surface normally."""
@@ -185,7 +185,7 @@ class TestDevAnchorIsNotATrustAnchorOutsideDebug:
         from farna.core.feature_flags import resolve_effective_license
 
         clear_license()
-        settings = SimpleNamespace(modulo_license_key=_team_licence(dev_anchor))
+        settings = SimpleNamespace(license_key=_team_licence(dev_anchor))
         assert resolve_effective_license(settings, None) is None
 
     def test_debug_opt_in_restores_verification(self, dev_anchor: dict) -> None:
@@ -212,9 +212,9 @@ class TestDevAnchorIsNotATrustAnchorOutsideDebug:
         assert result.license_data is not None
 
     def test_refusal_and_startup_error_name_the_missing_configuration(self) -> None:
-        assert "MODULO_LICENSE_PUBLIC_KEY" in DEV_ANCHOR_NOT_TRUSTED_ERROR
+        assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in DEV_ANCHOR_NOT_TRUSTED_ERROR
         assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in DEV_ANCHOR_STARTUP_ERROR
-        assert "MODULO_LICENSE_KEY" in DEV_ANCHOR_STARTUP_ERROR
+        assert "FARNA_CONTROL_LICENSE_KEY" in DEV_ANCHOR_STARTUP_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -224,13 +224,13 @@ class TestDevAnchorIsNotATrustAnchorOutsideDebug:
 
 def _startup_settings(**overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
-        "modulo_public_url": "https://app.example.com",
-        "modulo_license_public_key": "",
-        "modulo_license_key": "",
+        "public_url": "https://app.example.com",
+        "license_public_key": "",
+        "license_key": "",
         "debug": False,
-        "modulo_db": "postgres",
+        "db": "postgres",
         "redis_url": "redis://localhost:6379/0",
-        "modulo_otel_service_name": "modulo-test",
+        "otel_service_name": "modulo-test",
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -241,13 +241,13 @@ class TestStartupFailsClosedOnLicenceWithoutProductionKey:
         from farna.api import main as main_module
 
         with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
-            main_module._configure_license_and_otel(_startup_settings(modulo_license_key="a.b"))
+            main_module._configure_license_and_otel(_startup_settings(license_key="a.b"))
 
     def test_explicitly_configured_dev_key_fails_startup(self) -> None:
         from farna.api import main as main_module
 
         with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
-            main_module._configure_license_and_otel(_startup_settings(modulo_license_key="a.b", modulo_license_public_key=_ORIGINAL_KEY))
+            main_module._configure_license_and_otel(_startup_settings(license_key="a.b", license_public_key=_ORIGINAL_KEY))
 
     def test_community_boot_without_a_licence_key_is_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The ticket's hard constraint: unlicensed Community self-hosting still boots."""
@@ -265,7 +265,7 @@ class TestStartupFailsClosedOnLicenceWithoutProductionKey:
         mock_setup_otel = MagicMock()
         monkeypatch.setattr(main_module, "setup_otel", mock_setup_otel)
         monkeypatch.setattr(main_module, "is_telemetry_enabled", MagicMock(return_value=False))
-        main_module._configure_license_and_otel(_startup_settings(debug=True, modulo_license_key="a.b"))
+        main_module._configure_license_and_otel(_startup_settings(debug=True, license_key="a.b"))
         mock_setup_otel.assert_called_once()
 
     def test_production_key_with_a_licence_key_boots(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -274,7 +274,7 @@ class TestStartupFailsClosedOnLicenceWithoutProductionKey:
         monkeypatch.setattr(main_module, "setup_otel", lambda **_kwargs: None)
         monkeypatch.setattr(main_module, "is_telemetry_enabled", lambda: False)
         kp = generate_keypair()
-        main_module._configure_license_and_otel(_startup_settings(modulo_license_key="a.b", modulo_license_public_key=kp["public_key"]))
+        main_module._configure_license_and_otel(_startup_settings(license_key="a.b", license_public_key=kp["public_key"]))
         assert is_dev_anchor_in_use() is False
 
 
@@ -607,7 +607,7 @@ class TestCheckProductionPublicKey:
             check_production_public_key(SimpleNamespace(debug=False))
         assert "LICENSE_CRITICAL" in caplog.text
         assert "DEVELOPMENT licence anchor" in caplog.text
-        assert "MODULO_LICENSE_PUBLIC_KEY" in caplog.text
+        assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in caplog.text
 
     def test_dev_key_silent_when_debug(self, caplog: pytest.LogCaptureFixture) -> None:
         set_public_key(_ORIGINAL_KEY)

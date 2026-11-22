@@ -56,7 +56,7 @@ def test_auto_login_pair_requires_both_values() -> None:
 
 
 def test_auto_login_org_slug_is_forwarded_when_supplied() -> None:
-    """FAR-865: MODULO_AUTO_LOGIN_ORG_SLUG binds the session to that org."""
+    """FAR-865: FARNA_CONTROL_AUTO_LOGIN_ORG_SLUG binds the session to that org."""
     payload = build_runtime_config_payload(
         {
             "FARNA_CONTROL_AUTO_LOGIN_USERNAME": "demo",

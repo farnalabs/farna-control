@@ -5,7 +5,7 @@ The published console script is ``farna.cli.main:cli``. Importing
 always executes the parent package), so anything this module imports at
 module scope lands on EVERY console-script invocation — including
 ``modulo apply``, which only talks to a remote instance over
-``MODULO_URL`` + ``MODULO_API_KEY`` and needs neither the database nor
+``FARNA_CONTROL_URL`` + ``FARNA_CONTROL_API_KEY`` and needs neither the database nor
 the settings graph.
 
 FAR-1586: ``migrate_org`` imported ``farna.db.session`` at module scope,

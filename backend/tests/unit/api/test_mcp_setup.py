@@ -36,8 +36,8 @@ def _make_settings(*, fernet_key: str = _FERNET_KEY) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key=fernet_key,
-        modulo_admin_password="testpass",
-        modulo_public_url="https://app.example.com",
+        admin_password="testpass",
+        public_url="https://app.example.com",
     )
 
 

@@ -102,7 +102,7 @@ def get_public_url(settings: Settings) -> str:
     that inject a Settings instance keep working, and an admin override
     (``PUT /api/v1/admin/runtime-config``) wins only when one is set.
     """
-    return override_or("FARNA_CONTROL_PUBLIC_URL", settings.modulo_public_url)
+    return override_or("FARNA_CONTROL_PUBLIC_URL", settings.public_url)
 
 
 #: The Settings/runtime-store default for ``FARNA_CONTROL_PUBLIC_URL``. It is a

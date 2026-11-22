@@ -325,7 +325,7 @@ async def test_killswitch_enabled_allows_workspace_inputs() -> None:
     """
     from farna.settings import get_settings
 
-    assert get_settings().modulo_workspace_inputs_enabled is True
+    assert get_settings().workspace_inputs_enabled is True
 
     fn = make_sandbox_agent_fn(_workspace_node_def())
     sandbox = _script_sandbox_mock()

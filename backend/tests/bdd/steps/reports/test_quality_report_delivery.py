@@ -138,18 +138,18 @@ def delivery_sent_via_json(request) -> None:
     assert "json" in call.kwargs, "expected json= payload for unsigned delivery"
 
 
-@then("the delivery request includes an X-Modulo-Signature header")
+@then("the delivery request includes an X-Farna-Control-Signature header")
 def delivery_has_signature_header(request) -> None:
     call = request.node._delivery_client.post.await_args
     assert call is not None
-    assert "X-Modulo-Signature" in call.kwargs["headers"]
+    assert "X-Farna-Control-Signature" in call.kwargs["headers"]
 
 
-@then("the delivery request does not include an X-Modulo-Signature header")
+@then("the delivery request does not include an X-Farna-Control-Signature header")
 def delivery_has_no_signature_header(request) -> None:
     call = request.node._delivery_client.post.await_args
     assert call is not None
-    assert "X-Modulo-Signature" not in call.kwargs["headers"]
+    assert "X-Farna-Control-Signature" not in call.kwargs["headers"]
 
 
 @then(parsers.parse('the signature matches an HMAC-SHA256 of the sent bytes computed with "{secret}"'))
@@ -161,7 +161,7 @@ def delivery_signature_matches(secret: str, request) -> None:
     body_bytes = call.kwargs["content"]
     assert body_bytes == _serialize_json_body(json.loads(body_bytes))
     expected = _sign_payload(secret, body_bytes)
-    assert call.kwargs["headers"]["X-Modulo-Signature"] == expected
+    assert call.kwargs["headers"]["X-Farna-Control-Signature"] == expected
 
 
 @then(parsers.parse("the delivery client used a timeout of {timeout:d} seconds"))

@@ -82,15 +82,15 @@ esac
   echo "ERROR: mounted app architecture mismatch: host=$HOST_ARCH app=$APP_ARCH" >&2
   exit 1
 }
-if [[ "${MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET:-}" == '1' && "${MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON:-}" == 'apple_cloudkit_ticket_unavailable' ]]; then
+if [[ "${FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET:-}" == '1' && "${FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON:-}" == 'apple_cloudkit_ticket_unavailable' ]]; then
   printf '%s\n' '::warning::Rehearsal-only: deferring mounted-app Gatekeeper assessment because the Apple CloudKit notarization ticket is unavailable.' >&2
-elif [[ "${MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET:-}" == '1' && "${MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON:-}" == 'apple_notarization_pending' ]]; then
+elif [[ "${FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET:-}" == '1' && "${FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON:-}" == 'apple_notarization_pending' ]]; then
   # FAR-2577: Apple is still processing the submission, so no ticket exists yet.
   printf '%s\n' '::warning::Rehearsal-only: deferring mounted-app Gatekeeper assessment because Apple notarization is still pending.' >&2
 else
   spctl --assess --type execute "$APP"
 fi
-INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-$HOME/Library/Application Support/Modulo}}"
+INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT:-$HOME/Library/Application Support/Modulo}"
 mkdir -p "$INSTALL_ROOT"
 TARGET="$INSTALL_ROOT/$(basename "$APP")"
 rm -rf "$TARGET"
@@ -102,7 +102,7 @@ env -u PYTHONPATH -u PYTHONHOME \
   -c 'import farna.launcher.supervisor'
 mkdir -p "$HOME/Library/LaunchAgents"
 PLIST="$HOME/Library/LaunchAgents/run.modulo.launcher.plist"
-DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR:-$HOME/Library/Application Support/Modulo/data}}"
+DATA_DIR="${FARNA_CONTROL_DATA_DIR:-$HOME/Library/Application Support/Modulo/data}"
 PYTHONPATH="$TARGET/Contents/Resources/bundle/backend/src:$TARGET/Contents/Resources/bundle/backend/.venv/lib/python3.12/site-packages" \
   "$TARGET/Contents/Resources/bundle/runtime/bin/python3" - "$TARGET" "$PLIST" "$DATA_DIR" <<'PY'
 import sys

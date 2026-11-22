@@ -101,7 +101,7 @@ def _make_settings(**overrides: Any) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
         **overrides,
     )
 
@@ -149,7 +149,7 @@ def _build_app(
 
     app.add_middleware(
         RateLimitMiddleware,
-        settings=_make_settings(modulo_ratelimit_bypass_token=bypass_token),
+        settings=_make_settings(ratelimit_bypass_token=bypass_token),
         registry=registry,
     )
     return app

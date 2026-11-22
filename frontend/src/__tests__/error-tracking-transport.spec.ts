@@ -88,7 +88,7 @@ describe('transport happy path', () => {
     expect(opts.method).toBe('POST')
     expect(opts.headers['Content-Type']).toBe('application/json')
     expect(opts.headers.Authorization).toBe('Bearer tok-123')
-    expect(opts.headers['X-Modulo-Error-Token']).toMatch(/^[0-9a-f]{64}$/)
+    expect(opts.headers['X-Farna-Control-Error-Token']).toMatch(/^[0-9a-f]{64}$/)
     const body = JSON.parse(opts.body) as { events: Array<{ message: string }> }
     expect(body.events.map((e) => e.message)).toEqual(
       Array.from({ length: 10 }, (_, i) => `error-${i}`),
@@ -357,7 +357,7 @@ describe('transport signing fallback', () => {
     }
     await vi.waitFor(() => expect(ingestCalls()).toHaveLength(1))
     const [, opts] = ingestCalls()[0] as [string, { headers: Record<string, string> }]
-    expect(opts.headers['X-Modulo-Error-Token']).toMatch(/^[0-9a-f]{64}$/)
+    expect(opts.headers['X-Farna-Control-Error-Token']).toMatch(/^[0-9a-f]{64}$/)
     expect(console.warn).toHaveBeenCalledWith(
       '[error-tracking] HMAC sign failed, falling back to SHA-256:',
       expect.any(Error),
@@ -373,7 +373,7 @@ describe('transport signing fallback', () => {
     }
     await vi.waitFor(() => expect(ingestCalls()).toHaveLength(1))
     const [, opts] = ingestCalls()[0] as [string, { headers: Record<string, string> }]
-    expect(opts.headers['X-Modulo-Error-Token']).toBeUndefined()
+    expect(opts.headers['X-Farna-Control-Error-Token']).toBeUndefined()
     expect(console.warn).toHaveBeenCalledWith(
       '[error-tracking] SHA-256 digest fallback also failed:',
       expect.any(Error),

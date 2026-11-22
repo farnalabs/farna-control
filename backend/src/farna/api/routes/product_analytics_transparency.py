@@ -52,7 +52,7 @@ class TransparencyResponse(BaseModel):
     consent_level: str = LEVEL_OFF
     instance_enabled: bool = False
     #: Where ``instance_enabled`` came from: ``operator`` (stored setting),
-    #: ``environment`` (MODULO_PRODUCT_ANALYTICS_ENABLED), ``licence`` (the
+    #: ``environment`` (FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED), ``licence`` (the
     #: installed licence requires analytics) or ``default`` (off).
     instance_switch_source: str = SWITCH_SOURCE_DEFAULT
     #: True when the installed licence carries ``product_analytics_required``.
@@ -165,7 +165,7 @@ async def _build_transparency(
       * instance_enabled / instance_switch_source / licence_requires_analytics -
         consent.resolve_instance_analytics_switch, the SAME helper the dump gate
         uses. Precedence: explicit operator value (stored system_config, then
-        MODULO_PRODUCT_ANALYTICS_ENABLED) -> licence-required default -> OFF.
+        FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED) -> licence-required default -> OFF.
       * last_successful_dump_at / dump_count_total - the keys the metrics dump
         actually writes (constants.DUMP_WATERMARK_KEY / DUMP_COUNT_KEY, which
         live in the langgraph-free constants module so the API can import them

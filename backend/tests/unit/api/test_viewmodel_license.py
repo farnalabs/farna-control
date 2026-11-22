@@ -34,13 +34,13 @@ _TEST_PRIV = _TEST_KP["private_key"]
 _TEST_PUB = _TEST_KP["public_key"]
 
 
-def _make_settings(modulo_license_key: str = "") -> Settings:
+def _make_settings(license_key: str = "") -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=modulo_license_key,
+        admin_password="testpass",
+        license_key=license_key,
     )
 
 
@@ -117,7 +117,7 @@ class TestLicenseInfo:
         FAR-1720 prove-the-fix: the old code trusted mere presence and reported
         ``tier="team"`` / ``is_valid=True`` for any non-empty env-var key.
         """
-        resp = _get_with_settings(client, _make_settings(modulo_license_key="not-a-valid-key"))
+        resp = _get_with_settings(client, _make_settings(license_key="not-a-valid-key"))
         assert resp.status_code == 200
         body = resp.json()
         assert body["tier"] == "community"
@@ -127,7 +127,7 @@ class TestLicenseInfo:
     def test_valid_env_key_reports_verified_tier_and_features(self, client: TestClient) -> None:
         """A signed env-var key verifies -> its tier/features, is_valid=True."""
         key = _sign_license_payload(_valid_payload(features=["sso", "audit_viewer"]))
-        resp = _get_with_settings(client, _make_settings(modulo_license_key=key))
+        resp = _get_with_settings(client, _make_settings(license_key=key))
         assert resp.status_code == 200
         body = resp.json()
         assert body["tier"] == "team"
@@ -162,7 +162,7 @@ class TestLicenseInfo:
 
         # Invalid env key present: old code reported team/[notifications]/True
         # from presence alone; the stored licence still wins with real features.
-        resp = _get_with_settings(client, _make_settings(modulo_license_key="not-a-valid-key"))
+        resp = _get_with_settings(client, _make_settings(license_key="not-a-valid-key"))
         assert resp.status_code == 200
         body = resp.json()
         assert body["tier"] == "team"
@@ -185,7 +185,7 @@ class TestResolveTier:
     """``viewmodel._resolve_tier`` mirrors the canonical licence ladder.
 
     FAR-1720 review follow-up: the in-file sibling still trusted
-    ``settings.modulo_license_key`` on mere presence, so it could disagree
+    ``settings.license_key`` on mere presence, so it could disagree
     with the now-verified ``_resolve_license_info`` for the same deployment
     state. It now verifies the key via ``parse_and_verify`` like the sibling
     and the canonical ladder (org key -> in-memory licence -> env key).
@@ -196,12 +196,12 @@ class TestResolveTier:
 
         The pre-change resolver returned ``"team"`` for any non-empty key.
         """
-        assert _resolve_tier(_make_settings(modulo_license_key="not-a-valid-key")) == "community"
+        assert _resolve_tier(_make_settings(license_key="not-a-valid-key")) == "community"
 
     def test_valid_env_key_reports_verified_tier(self) -> None:
         """A signed env key verifies -> its own tier."""
         key = _sign_license_payload(_valid_payload(tier="team"))
-        assert _resolve_tier(_make_settings(modulo_license_key=key)) == "team"
+        assert _resolve_tier(_make_settings(license_key=key)) == "team"
 
     def test_no_license_is_community(self) -> None:
         """No in-memory licence and no env key -> community."""
@@ -218,14 +218,14 @@ class TestResolveTier:
             raw_key="stored-key",
         )
         store_license("stored-key", stored)
-        assert _resolve_tier(_make_settings(modulo_license_key="not-a-valid-key")) == "team"
+        assert _resolve_tier(_make_settings(license_key="not-a-valid-key")) == "team"
 
     def test_org_key_takes_precedence(self) -> None:
         """A valid org-level key (rung 1) is resolved before the env-var rung."""
         org = MagicMock()
         org.id = "test-org"  # matches the signed key's org_id claim (FAR-2060)
         org.settings_json = {"license_key": _sign_license_payload(_valid_payload(tier="team"))}
-        assert _resolve_tier(_make_settings(modulo_license_key="not-a-valid-key"), org=org) == "team"
+        assert _resolve_tier(_make_settings(license_key="not-a-valid-key"), org=org) == "team"
 
     def test_invalid_org_key_falls_through(self) -> None:
         """An unverifiable org key is not trusted; resolution falls through."""
@@ -237,4 +237,4 @@ class TestResolveTier:
         """An org present but carrying no license_key resolves via the deployment rungs."""
         org = MagicMock()
         org.settings_json = {}
-        assert _resolve_tier(_make_settings(modulo_license_key="not-a-valid-key"), org=org) == "community"
+        assert _resolve_tier(_make_settings(license_key="not-a-valid-key"), org=org) == "community"

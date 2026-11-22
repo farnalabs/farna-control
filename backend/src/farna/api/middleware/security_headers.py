@@ -26,8 +26,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         csp_connect = "'self' *.ingest.sentry.io *.datadoghq.com *.dd.dg *.rum.browserevents.com"
         if self._debug:
             csp_connect += " ws: wss:"
-        if settings.modulo_monitor_domains:
-            csp_connect += " " + settings.modulo_monitor_domains
+        if settings.monitor_domains:
+            csp_connect += " " + settings.monitor_domains
         csp_directives = [
             "default-src 'self'",
             f"connect-src {csp_connect}",

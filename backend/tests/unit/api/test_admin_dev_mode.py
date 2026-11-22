@@ -20,7 +20,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -66,7 +66,7 @@ class TestGetDevMode:
 
     def test_env_var_returns_true(self, client: TestClient) -> None:
         settings = _make_settings()
-        settings.modulo_dev_mode = True
+        settings.dev_mode = True
         app.dependency_overrides[get_settings] = lambda: settings
         with patch("farna.api.routes.admin_dev_mode.get_config", return_value=None):
             resp = client.get("/api/v1/admin/dev-mode")
@@ -101,7 +101,7 @@ class TestGetDevMode:
 
     def test_db_error_falls_back(self, client: TestClient) -> None:
         settings = _make_settings()
-        settings.modulo_dev_mode = True
+        settings.dev_mode = True
         app.dependency_overrides[get_settings] = lambda: settings
         with patch("farna.api.routes.admin_dev_mode.get_config", side_effect=RuntimeError("DB error")):
             resp = client.get("/api/v1/admin/dev-mode")

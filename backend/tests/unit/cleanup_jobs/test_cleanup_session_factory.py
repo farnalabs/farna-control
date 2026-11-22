@@ -25,7 +25,7 @@ class TestCleanupSessionFactory:
         sentinel = MagicMock(name="system_factory")
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=sentinel) as mock_system,
         ):
             factory = sw._cleanup_session_factory()
@@ -38,7 +38,7 @@ class TestCleanupSessionFactory:
         sentinel = MagicMock(name="plain_factory")
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db=non_pg_db)),
+            patch.object(sw, "get_settings", return_value=MagicMock(db=non_pg_db)),
             patch.object(sw, "_make_session_factory", return_value=sentinel) as mock_plain,
             patch.object(sw, "_make_system_session_factory") as mock_system,
         ):
@@ -52,14 +52,14 @@ class TestCleanupSessionFactory:
         """The PG fail-closed path is preserved: an unset
         ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` raises RuntimeError instead of silently
         running the cross-org purge as farna_control_app."""
-        settings = MagicMock(modulo_db="postgres")
-        settings.modulo_system_database_url = ""
+        settings = MagicMock(db="postgres")
+        settings.system_database_url = ""
 
         with (
             patch.object(sw, "get_settings", return_value=settings),
             patch.object(sw, "_SYSTEM_ASYNC_ENGINE", None),
             patch.object(sw, "_make_session_factory") as mock_plain,
-            pytest.raises(RuntimeError, match="MODULO_SYSTEM_DATABASE_URL"),
+            pytest.raises(RuntimeError, match="FARNA_CONTROL_SYSTEM_DATABASE_URL"),
         ):
             sw._cleanup_session_factory()
 

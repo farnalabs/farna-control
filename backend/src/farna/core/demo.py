@@ -21,10 +21,10 @@ def demo_login_config(settings: Settings) -> tuple[str, str] | None:
     ``None`` when the kill switch is off or either credential env var is empty —
     both the demo endpoint and the seed treat that identically (feature absent).
     """
-    if not settings.modulo_demo_enabled:
+    if not settings.demo_enabled:
         return None
-    email = settings.modulo_demo_user.strip()
-    password = settings.modulo_demo_password
+    email = settings.demo_user.strip()
+    password = settings.demo_password
     if not email or not password:
         return None
     return (email, password)
