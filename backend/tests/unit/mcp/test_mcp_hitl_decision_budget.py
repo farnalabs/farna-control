@@ -23,6 +23,12 @@ _PLACEHOLDER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _PLACEHOLDER_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 _PLACEHOLDER_KEY_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 _REVIEW_ID = "gate-1"
+#: Refill rate for the budget registries under test. Effectively zero: the
+#: tests assert on ``burst`` exhaustion, so a non-trivial rate lets a >1 s
+#: scheduling stall (memory-bound shard, contended runner) refill a token and
+#: flip an "exhausted" assertion to "allowed". The burst=1 dispatch tests are
+#: the only ones that a ~1 s stall can flip, so they were the flaky victims.
+_REFILL_RATE = 1e-9
 
 
 class _AuthContext:
@@ -86,7 +92,7 @@ class TestHitlDecisionClientKey(_AuthContext):
 
 class TestHitlDecisionBudgetAllowed(_AuthContext):
     def _burst3(self) -> TokenBucketRegistry:
-        return TokenBucketRegistry(rate=1.0, burst=3)
+        return TokenBucketRegistry(rate=_REFILL_RATE, burst=3)
 
     def _exhausted(self) -> TokenBucketRegistry:
         return TokenBucketRegistry(rate=0.0, burst=1)
@@ -134,7 +140,7 @@ class TestDispatchHitlActionBudget(_AuthContext):
         mgr.approve = AsyncMock()
         with patch(
             "farna.api.mcp_server._hitl_decision_limiter",
-            TokenBucketRegistry(rate=1.0, burst=1),
+            TokenBucketRegistry(rate=_REFILL_RATE, burst=1),
         ) as limiter:
             await limiter.consume(_hitl_decision_client_key())
             result = await _dispatch_hitl_action(
@@ -158,7 +164,7 @@ class TestDispatchHitlActionBudget(_AuthContext):
         mgr.deliver_manual = AsyncMock()
         with patch(
             "farna.api.mcp_server._hitl_decision_limiter",
-            TokenBucketRegistry(rate=1.0, burst=1),
+            TokenBucketRegistry(rate=_REFILL_RATE, burst=1),
         ) as limiter:
             await limiter.consume(_hitl_decision_client_key())
             result = await _dispatch_hitl_action(
@@ -190,7 +196,7 @@ class TestDispatchHitlActionBudget(_AuthContext):
 
         with patch(
             "farna.api.mcp_server._hitl_decision_limiter",
-            TokenBucketRegistry(rate=1.0, burst=1),
+            TokenBucketRegistry(rate=_REFILL_RATE, burst=1),
         ):
             claimed = await _dispatch_hitl_action(
                 mgr,
