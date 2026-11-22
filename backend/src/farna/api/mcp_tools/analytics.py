@@ -28,13 +28,14 @@ from urllib.parse import urlencode
 
 from sqlalchemy.exc import ProgrammingError
 
-from farna.api.mcp_server import _MSG_DB_MIGRATION_REQUIRED, _MSG_TOKEN_REVOKED, _RETRY_DB, _ctx_team_id_val, _log, _tool_auth_error, _tool_exception_error, mcp
+from farna.api.mcp_server import _MSG_DB_MIGRATION_REQUIRED, _MSG_TOKEN_REVOKED, _RETRY_DB, _ctx_team_id_val, _tool_auth_error, _tool_exception_error, mcp
 from farna.api.mcp_tools._patch_surface import (
     _check_agent_tool_scope,
     _ctx_org_id_val,
     _ctx_role_val,
     _ctx_user_id_val,
     _get_session_factory,
+    _log,
     _require_plan_feature,
     get_settings,
     run_analytics_query,

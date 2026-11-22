@@ -41,7 +41,6 @@ from farna.api.mcp_server import (
     _hitl_decision_budget_allowed,
     _hitl_decision_rate_limited_response,
     _iso_or_none,
-    _log,
     _resource_node_scope_error,
     _team_scope_error,
     _team_scope_error_str,
@@ -57,6 +56,7 @@ from farna.api.mcp_tools._patch_surface import (
     _ctx_org_id_val,
     _ctx_role_val,
     _ctx_user_id_val,
+    _log,
     _parse_uuid_param,
     _pipeline_owner_team_id,
     _restore_failed_mcp_resume_for_reconcile,
@@ -67,6 +67,7 @@ from farna.api.mcp_tools._patch_surface import (
     get_or_create_engine,
     get_run,
     get_settings,
+    patchable_local,
     validate_current_auth,
     validate_hitl_answer,
 )
@@ -1313,3 +1314,14 @@ async def resource_hitl_review(run_id: str, review_id: str) -> str:
         context=context,
     )
     return "\n".join(parts)
+
+
+# Keep the suite's `patch("farna.api.mcp_server.<helper>")` bindings live for the
+# helpers THIS module defines and calls: each call re-resolves the helper from
+# `mcp_server`, which re-exports this module's original through PEP 562.
+# Without these rebinds a bare-name call here would resolve this module's global
+# directly, the mcp_server patch would miss it, and the test would pass
+# vacuously (the exact failure mode `_patch_surface` exists to prevent).
+_load_hitl_run = patchable_local("_load_hitl_run", _load_hitl_run)
+_load_pending_hitl_reviews = patchable_local("_load_pending_hitl_reviews", _load_pending_hitl_reviews)
+_validate_mcp_choice_answer = patchable_local("_validate_mcp_choice_answer", _validate_mcp_choice_answer)

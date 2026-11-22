@@ -1002,3 +1002,110 @@ def test_unified_registry_entries_are_internally_consistent() -> None:
         else:
             assert key not in sv.READ_ONLY_TOOLS, f"mapped key '{key}' must not be read-only"
     assert not (sv.READ_ONLY_TOOLS & set(sv.TOOL_SCOPE_REQUIREMENTS))
+
+
+# ---------------------------------------------------------------------------
+# Patch-contract guard: a relocated helper must still observe a patch applied
+# on ``farna.api.mcp_server``.
+#
+# The suite pins the MCP spine by STRING PATH (``mock.patch("farna.api.
+# mcp_server.<name>")``). ``mock.patch`` rebinds an attribute on the module
+# object, and a function resolves its globals from the DEFINING module's
+# ``__dict__`` -- so once a helper (or its caller) moves into
+# ``api/mcp_tools/<domain>.py``, a bare-name call there keeps calling the
+# original object and the test silently passes vacuously.
+#
+# ``mcp_tools/_patch_surface.py`` exists to prevent exactly that. These two
+# shapes are the ones that lose interception, and both are mechanically
+# detectable:
+#   1. a domain module that IMPORTS a patched name straight from
+#      ``farna.api.mcp_server`` instead of from ``_patch_surface``;
+#   2. a domain module that DEFINES a patched name and calls it by bare name
+#      without rebinding it through ``patchable_local(...)``.
+# ---------------------------------------------------------------------------
+
+_PATCH_TARGET_RE = re.compile(r"farna\.api\.mcp_server\.([A-Za-z_][A-Za-z0-9_]*)")
+_TESTS_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _patched_mcp_server_names() -> set[str]:
+    """Every name the suite patches via ``farna.api.mcp_server.<name>``.
+
+    Reads the test tree, which is the only place the patch contract is
+    declared. ``patch.object(mcp_server, "<name>")`` is not used in this suite;
+    if that form appears, teach this helper about it rather than weakening the
+    guard.
+    """
+    names: set[str] = set()
+    for path in _TESTS_ROOT.rglob("*.py"):
+        names.update(_PATCH_TARGET_RE.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return names
+
+
+@dataclass(frozen=True)
+class _ModuleBindings:
+    defined_here: frozenset[str]
+    imported_from_mcp_server: frozenset[str]
+    imported_from_patch_surface: frozenset[str]
+    patchable_local: frozenset[str]
+    bare_name_calls: frozenset[str]
+
+
+def _module_bindings(path: Path) -> _ModuleBindings:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    from_mcp_server: set[str] = set()
+    from_patch_surface: set[str] = set()
+    patchable: set[str] = set()
+    defined: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined.add(node.name)
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "patchable_local":
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    patchable.add(target.id)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module == "farna.api.mcp_server":
+            from_mcp_server.update(alias.asname or alias.name for alias in node.names)
+        elif node.module == "farna.api.mcp_tools._patch_surface":
+            from_patch_surface.update(alias.asname or alias.name for alias in node.names)
+    bare_calls = {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    return _ModuleBindings(
+        defined_here=frozenset(defined),
+        imported_from_mcp_server=frozenset(from_mcp_server),
+        imported_from_patch_surface=frozenset(from_patch_surface),
+        patchable_local=frozenset(patchable),
+        bare_name_calls=frozenset(bare_calls),
+    )
+
+
+def test_relocated_helpers_keep_their_mcp_server_patch_contract() -> None:
+    """A patch on ``farna.api.mcp_server.<name>`` must still reach every
+    extracted module that imports or calls ``<name>``.
+
+    A direct ``from farna.api.mcp_server import <name>`` freezes the original
+    object into the domain module's globals, and a bare-name call to a helper
+    the module itself defines bypasses the ``mcp_server`` attribute entirely.
+    Either way the patch is missed and the guarding test runs against the real
+    helper -- a vacuous pass. Fix by importing from ``_patch_surface`` or by
+    rebinding through ``patchable_local(...)``.
+    """
+    patched = _patched_mcp_server_names()
+    assert patched, "no `farna.api.mcp_server.<name>` patch targets found - is the tests root right?"
+
+    violations: list[str] = []
+    for path in sorted(_MCP_TOOLS_SRC.glob("*.py")):
+        if path.name in ("__init__.py", "_patch_surface.py"):
+            continue
+        bindings = _module_bindings(path)
+        for name in sorted(patched & bindings.imported_from_mcp_server):
+            if name in bindings.imported_from_patch_surface:
+                continue  # same module imports it via the forwarder too; patch resolves there
+            violations.append(f"{path.name}: imports '{name}' directly from farna.api.mcp_server - import it from mcp_tools._patch_surface so mock.patch('farna.api.mcp_server.{name}') intercepts")
+        for name in sorted(patched & bindings.defined_here & bindings.bare_name_calls):
+            if name in bindings.patchable_local:
+                continue
+            violations.append(f"{path.name}: calls '{name}' by bare name without patchable_local - rebind it at module end so mock.patch('farna.api.mcp_server.{name}') intercepts")
+    assert not violations, "extracted MCP modules no longer honour the farna.api.mcp_server patch contract:\n" + "\n".join(violations)
