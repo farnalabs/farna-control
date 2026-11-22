@@ -540,7 +540,7 @@ def test_sandbox_failure_scan_views_covers_every_artifact_shape() -> None:
     scan = PipelineExecutor._sandbox_failure_scan_views
 
     # A non-dict body contributes no views at all.
-    assert scan("not-a-dict") == []
+    assert not scan("not-a-dict")
 
     # New telemetry channel, legacy outer ``output`` and the first artifact's
     # inner ``output`` are each a view when they are dicts.
