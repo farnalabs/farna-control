@@ -71,7 +71,7 @@ AUTH_TYPE_JWT = "jwt"
 AUTH_TYPE_OAUTH = "oauth"
 
 #: Caller-scope value that marks a per-user (human-linked) ``mk_`` key. Mirrors
-#: ``modulo.auth.api_key.KEY_SCOPE_USER``; kept local so this pure resolver does
+#: ``farna.auth.api_key.KEY_SCOPE_USER``; kept local so this pure resolver does
 #: not import the key-mint module (which pulls the feature-flag registry).
 USER_KEY_SCOPE = "user"
 

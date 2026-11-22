@@ -6,8 +6,8 @@ module is the SINGLE source of truth for that derivation so the API response,
 the OTel span context seeded before graph execution, and error-tracking event
 contexts all agree byte-for-byte.
 
-Import contract (enforced by import-linter): ``modulo.otel_bridge`` must not
-import ``modulo.core.pipeline_engine``, ``hitl_manager``, or ``eval_engine``.
+Import contract (enforced by import-linter): ``farna.otel_bridge`` must not
+import ``farna.core.pipeline_engine``, ``hitl_manager``, or ``eval_engine``.
 This module imports only the standard library.
 """
 

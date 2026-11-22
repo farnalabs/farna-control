@@ -4,7 +4,7 @@ FastAPI auto-declares a ``422`` response for every operation that has request
 validation, pointing at its own ``HTTPValidationError`` shape — ``detail`` as an
 array of Pydantic errors. This app never sends that body: the
 ``RequestValidationError`` handler renders RFC 9457 Problem Details
-(``modulo.api.models.problem``), where ``detail`` is a human-readable string.
+(``farna.api.models.problem``), where ``detail`` is a human-readable string.
 
 The document is therefore the defect, not the response: the Problem Details
 envelope is the contract the frontend already consumes, and rewriting the wire

@@ -52,7 +52,7 @@ def _build_polling_connector(
 ) -> ConnectorBase:
     """Build a one-shot connector for polling queries.
 
-    Mirrors ``modulo.core.connector_hub._build_connector()`` but does not
+    Mirrors ``farna.core.connector_hub._build_connector()`` but does not
     wrap in a ``_TracedConnector`` since polling runs outside a normal run context.
 
     When ``redis_client`` and ``tenant_id`` (the organisation id) are supplied the
@@ -174,7 +174,7 @@ async def enforce_polling_team_scope(
 
     Scope rule: a TEAM-PRIVATE connector is only usable by a pipeline owned by
     the SAME team — the shared
-    :func:`modulo.core.team_visibility.connector_team_mismatch` predicate, so
+    :func:`farna.core.team_visibility.connector_team_mismatch` predicate, so
     this gate cannot drift from the graph-save rule. An ORG-visible connector
     never mismatches here: polling is a system-level read with no caller
     visibility scope (``enforce_polling_read_acl`` deliberately normalises
@@ -437,7 +437,7 @@ async def _count_active_runs(session: AsyncSession, trigger_id: uuid.UUID) -> in
 
     FAR-1999: a ``pending`` run counts only inside the create→dispatch grace
     window. Delegates to the shared
-    :func:`modulo.core.run_admission.count_trigger_slot_occupancy`, so polling
+    :func:`farna.core.run_admission.count_trigger_slot_occupancy`, so polling
     shares one implementation of the grace semantics with every other lane.
     """
     return await count_trigger_slot_occupancy(session, trigger_id)

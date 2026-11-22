@@ -12,15 +12,14 @@ from farna.core.feature_flags import _KNOWN_FLAGS
 from farna.core.seed_data.catalog import FLAGS
 
 # Flags added to the seed catalog in FAR-114 (previously absent from the DB seed).
-# ``pipeline_diff_rollback`` was retired (FAR-1819) and dropped from this set
-# with the registry.
+# ``pipeline_diff_rollback`` was retired (FAR-1819) and ``pipeline_delete`` was
+# retired (FAR-2663) — both dropped from this set with the registry.
 _SYNCED_FLAGS: set[str] = {
     "error_tracking",
     "runtime_config",
     "rate_limits",
     "email_config",
     "scim",
-    "pipeline_delete",
     "web_vitals_analytics",
 }
 
@@ -60,7 +59,6 @@ class TestFar114SyncedFlags:
             "runtime_config",
             "rate_limits",
             "scim",
-            "pipeline_delete",
         }
         community_flags = _SYNCED_FLAGS - team_flags
         for name in team_flags:

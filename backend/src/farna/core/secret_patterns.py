@@ -4,13 +4,13 @@ The secret-VALUE redaction knowledge — the gitleaks-style
 ``SECRET_VALUE_PATTERNS`` list and the shared ``AWS_ACCESS_KEY_PATTERN`` /
 ``GITHUB_PAT_PATTERN`` raw patterns — is defined ONCE here so the AWS-key and
 fine-grained-GitHub-PAT coverage is never duplicated or drifted across
-redaction sites. Agent-output masking (:mod:`modulo.api.routes.runs`) and the
-API-layer :mod:`modulo.api.middleware.sensitive_mask` import these names
+redaction sites. Agent-output masking (:mod:`farna.api.routes.runs`) and the
+API-layer :mod:`farna.api.middleware.sensitive_mask` import these names
 directly.
 
 Key-NAME detection (matching config/env keys such as ``token`` / ``password``)
 also lives here — :func:`is_sensitive_key` / :func:`is_sensitive_env_key`,
-re-exported by :mod:`modulo.api.middleware.sensitive_mask` so API-layer callers
+re-exported by :mod:`farna.api.middleware.sensitive_mask` so API-layer callers
 keep importing from their documented home while core export paths
 (``workflow_import_export``, FAR-1181) can share the SAME classifier without
 breaching the ``core-does-not-import-api`` contract. The specialised key
@@ -24,10 +24,10 @@ The canonical trigger-config secret-key VOCABULARY
 cross-contract reason: the API write path, the core rotation service and the
 migration-0305 parity test share one definition instead of three literals.
 
-This module lives in ``modulo.core`` (a leaf with no ``modulo.*`` imports) so
+This module lives in ``farna.core`` (a leaf with no ``farna.*`` imports) so
 that core redaction sites can use it without violating the
 ``core-does-not-import-api`` architecture contract. The API-layer
-:mod:`modulo.api.middleware.sensitive_mask` re-exports ``SENSITIVE_VALUE_MASK``
+:mod:`farna.api.middleware.sensitive_mask` re-exports ``SENSITIVE_VALUE_MASK``
 so callers in the API layer keep importing from the documented location.
 """
 
@@ -211,7 +211,7 @@ def is_sensitive_field_name(name: str) -> bool:
 # (``api.routes.triggers._encrypt_trigger_config_secrets``), the Fernet
 # rotation service (``core.fernet_rotation._rotate_triggers``) and the
 # migration-0305 parity test all pin THIS set. It lives in this leaf module
-# (no ``modulo.*`` imports) so the core rotation service can share the exact
+# (no ``farna.*`` imports) so the core rotation service can share the exact
 # write-path vocabulary without breaching the ``core-does-not-import-api``
 # contract — a second copy in either layer is exactly how a future third
 # secret key would silently escape rotation or encryption.

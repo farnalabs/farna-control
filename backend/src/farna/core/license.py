@@ -684,7 +684,7 @@ def clear_license() -> None:
 # Instance-scope persistence (FAR-2153)
 #
 # The functions below are the ONLY DB access in this module (lazy imports keep
-# ``modulo.core.license`` importable without the ORM). They are deliberately
+# ``farna.core.license`` importable without the ORM). They are deliberately
 # separate from the memory setters above: a caller persists the target state
 # FIRST and installs it into memory only once the write has committed, so a
 # failed write can never leave this process believing in a licence that will
@@ -760,12 +760,12 @@ async def read_persisted_license_state(session: Any) -> PersistedLicenseState:
 async def _write_persisted_license_state(session: Any, state: PersistedLicenseState, *, updated_by: uuid.UUID | None = None) -> None:
     """Upsert the persisted instance licence through the shared atomic crud path.
 
-    Delegates to :func:`modulo.db.crud.system_config.update_config`, whose
+    Delegates to :func:`farna.db.crud.system_config.update_config`, whose
     single ``INSERT ... ON CONFLICT DO UPDATE`` is race-free: two concurrent
     first-installs cannot both observe ``row is None`` and race a unique(key)
     ``IntegrityError`` on commit (the select-then-add-or-update pattern the crud
     docstring warns against). Imported lazily, the same rationale as the model
-    import it replaces, so ``modulo.core.license`` stays importable without the
+    import it replaces, so ``farna.core.license`` stays importable without the
     ORM.
     """
     from farna.db.crud.system_config import update_config

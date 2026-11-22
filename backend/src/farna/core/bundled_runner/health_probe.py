@@ -4,7 +4,7 @@ Every 60 seconds (per-machine SAQ system cron, ``runner_health_probe``) the
 deployment probes its Docker engine THROUGH the socket-proxy — engine
 reachability, the pinned runner image presence, and the engine's reported
 resources (``/info`` CPU/memory for the engine-resource preflight) — and
-upserts one :class:`~modulo.db.models.runner_probe_cache.RunnerProbeCache`
+upserts one :class:`~farna.db.models.runner_probe_cache.RunnerProbeCache`
 row per (organisation, machine).
 
 The Runners page + node editor read ONLY this cache; a synchronous probe
@@ -14,7 +14,7 @@ aggregates worst-of across the org's rows.
 
 Cross-surface (D5): a healthy→unreachable transition emits BOTH an
 error-dashboard entry (``signal=runner_unavailable`` via
-:func:`modulo.core.error_tracking.emit_signal_event`) and an in-app
+:func:`farna.core.error_tracking.emit_signal_event`) and an in-app
 notification (``runner.*`` namespace, category ``runner``). Transitions are
 detected against the PREVIOUS cached row, so a dead probe can never loop
 alerts, and an unreachable state that persists re-alerts only after a

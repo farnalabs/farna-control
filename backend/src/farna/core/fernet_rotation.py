@@ -149,7 +149,7 @@ def _rotated_trigger_secrets(
     """Return ``{config_key: re-encrypted token}`` for every secret that rotates.
 
     Iterates the CANONICAL shared key set
-    (:data:`modulo.core.secret_patterns.TRIGGER_CONFIG_SECRET_KEYS`) — never a
+    (:data:`farna.core.secret_patterns.TRIGGER_CONFIG_SECRET_KEYS`) — never a
     module-local list — so no secret key can drift out of rotation's reach.
     Non-secret, non-string, empty and legacy-plaintext values are omitted;
     broken ciphertext propagates :class:`InvalidToken` via
@@ -190,14 +190,14 @@ async def _rotate_triggers(
 ) -> int:
     """Re-encrypt HMAC/signing secrets inside triggers.config_json (FAR-1732).
 
-    Classification is the :func:`modulo.auth.secret_storage.is_encrypted_secret`
+    Classification is the :func:`farna.auth.secret_storage.is_encrypted_secret`
     DECRYPTABILITY probe (FAR-1735), never the ``gAAAA`` prefix heuristic:
 
     * a value that decrypts under the new key — or under the rotation
       window's old key — rotates;
     * a value that decrypts under NEITHER key but is a structurally complete
       Fernet token
-      (:func:`modulo.auth.secret_storage._is_complete_fernet_token`) is a
+      (:func:`farna.auth.secret_storage._is_complete_fernet_token`) is a
       broken ciphertext: it fails LOUD (:class:`InvalidToken` propagates) —
       rotation surfaces an unreadable ciphertext row instead of silently
       leaving it behind;
@@ -207,7 +207,7 @@ async def _rotate_triggers(
       can never be fed to the decryptor and abort the whole rotation run.
 
     The candidate keys are the CANONICAL shared set
-    (:data:`modulo.core.secret_patterns.TRIGGER_CONFIG_SECRET_KEYS`, the same
+    (:data:`farna.core.secret_patterns.TRIGGER_CONFIG_SECRET_KEYS`, the same
     object the write path persists through). The SELECT is deliberately NOT
     narrowed by a key list in SQL: a second, module-local key list is exactly
     how a future secret key escapes — it would sit in the rotation loop while

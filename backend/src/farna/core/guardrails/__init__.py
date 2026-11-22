@@ -1,6 +1,6 @@
 """Guardrails — structured-credential boundary data-safety at the ingestion edge.
 
-A guardrail is an :class:`~modulo.core.eval_engine.EvalDefinition` with
+A guardrail is an :class:`~farna.core.eval_engine.EvalDefinition` with
 ``eval_type="guardrail"``. Detection is DETERMINISTIC and PURE — only the
 ``regex`` and ``json_schema`` eval types may be used as guardrail detection;
 ``model_judge`` and ``custom_function`` are never guardrail detection (the
@@ -26,7 +26,7 @@ A built-in allowlist of never-touch system fields is always honoured.
 The transform/drop modes are masks-only: the transform token is fixed and
 never derived from payload content. The ``destroy`` mode (FAR-209 Track B)
 replaces each detected candidate with a deterministic key-derived HMAC token
-(:mod:`modulo.core.guardrails.redaction_mode`) — it is keyed by the
+(:mod:`farna.core.guardrails.redaction_mode`) — it is keyed by the
 deployment's destroy pepper and is the ONLY non-masks-only redaction mode.
 A destroy policy that cannot run (unset pepper, unusable pattern) fails
 closed: :class:`GuardrailRedactionMechanismError` escapes the redaction phase
@@ -104,7 +104,7 @@ class FieldRedactionMode(StrEnum):
     ``transform``/``drop`` are masks-only. ``destroy`` (FAR-209 Track B)
     replaces each detected candidate with a keyed HMAC token derived from the
     deployment's destroy pepper — see
-    :mod:`modulo.core.guardrails.redaction_mode`. ``block`` fires as a
+    :mod:`farna.core.guardrails.redaction_mode`. ``block`` fires as a
     detection-style verdict when the guarded field is present.
     """
 
@@ -443,7 +443,7 @@ def apply_redaction_masks(
     True. A ``destroy`` policy replaces each candidate (the detection
     *detection_pattern*'s matches inside a string leaf, else the whole leaf)
     with a keyed HMAC token; it raises
-    :class:`~modulo.core.guardrails.redaction_mode.GuardrailRedactionMechanismError`
+    :class:`~farna.core.guardrails.redaction_mode.GuardrailRedactionMechanismError`
     when the deployment pepper is unset.
 
     *detection_pattern* feeds destroy candidate generation; it is ignored by
@@ -1464,8 +1464,8 @@ def _bare_registered_capability_map(registered: dict[str, bool | None]) -> dict[
     ``docker``, ...) pass through untouched.
 
     The bare-reduction and the collision fold are the mid-run matcher's OWN
-    helpers (:func:`~modulo.core.guardrails.conformance._bare_capability` /
-    :func:`~modulo.core.guardrails.conformance._merge_states`) reused here, so
+    helpers (:func:`~farna.core.guardrails.conformance._bare_capability` /
+    :func:`~farna.core.guardrails.conformance._merge_states`) reused here, so
     the run-creation seam and the mid-run matcher can never diverge — the same
     one-vocabulary invariant FAR-1615 enforces elsewhere. Imported lazily
     because ``conformance`` imports this package, so a module-level import

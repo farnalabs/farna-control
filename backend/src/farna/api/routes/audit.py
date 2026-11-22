@@ -310,7 +310,7 @@ async def _scan_body(
     """Chunk the primed scan generator into the wire format (NDJSON or CSV).
 
     A thin format adapter over the shared
-    :func:`modulo.api.db_error_handling.reemit_primed_stream` — the
+    :func:`farna.api.db_error_handling.reemit_primed_stream` — the
     first-item-then-the-rest loop lives in ONE place for all three streaming
     exports. ``first`` is the row already fetched by the route to surface
     pre-stream errors (validation/permission/database) as a proper HTTP status;

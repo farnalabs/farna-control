@@ -30,7 +30,7 @@ from farna.settings import Settings
 _log = logging.getLogger(__name__)
 
 # The RLS tenant key the generic backend (SQLite, test-only) stores in
-# ``session.info`` — mirrors ``modulo.db.rls._TENANT_KEY`` (kept local so the
+# ``session.info`` — mirrors ``farna.db.rls._TENANT_KEY`` (kept local so the
 # strict read here does not depend on the module-private constant).
 _RLS_TENANT_KEY = "org_id"
 

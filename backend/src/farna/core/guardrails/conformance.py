@@ -82,7 +82,7 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 #
 # ``canonical_capability`` / ``canonical_capability_set`` / ``qualified_capability``
-# now live in ``modulo.connectors.base`` — the stdlib-only leaf ``ConnectorACL``
+# now live in ``farna.connectors.base`` — the stdlib-only leaf ``ConnectorACL``
 # lives in — and are imported here rather than kept as a private mapper: the ACL
 # and this reader must reduce a stored value to the SAME vocabulary or they give
 # opposite answers for it (FAR-1594 defect (a): a stored ``["github.read"]`` was

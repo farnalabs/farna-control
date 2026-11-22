@@ -26,7 +26,7 @@ deliberately NOT a verdict:
   check is what confines it to the expiry class.
 
 Every append goes through
-:func:`modulo.core.audit_logger.background.append_background_audit_event`,
+:func:`farna.core.audit_logger.background.append_background_audit_event`,
 the SYSTEM-actor background-audit machinery: no fabricated user, an honest
 ``actor_source``, and fail-open WITH a log. This runs after the sweep's
 transactions have committed — an audit failure must never undo the

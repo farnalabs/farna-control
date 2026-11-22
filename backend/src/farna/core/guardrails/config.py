@@ -1,7 +1,7 @@
 """Guardrail config-as-code — versioned, hashed, PR-gated org configuration.
 
 T3 of the phase-guardrails epic (FAR-219) layers a git-style authoring and
-review workflow on top of the shipped T1 engine (:mod:`modulo.core.guardrails`).
+review workflow on top of the shipped T1 engine (:mod:`farna.core.guardrails`).
 
 An org's guardrail configuration is expressed as a
 :class:`GuardrailConfigSet` — a versioned YAML document whose entries map

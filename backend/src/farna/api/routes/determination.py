@@ -391,7 +391,7 @@ async def compare_determination_proposals(
 
     Each side carries its proposal contract plus the draft nodes and edges it
     was generated with. The comparison is pure and deterministic
-    (``modulo.determination.comparison``): it reports added, removed and
+    (``farna.determination.comparison``): it reports added, removed and
     changed nodes and edges with stable ids, names every changed property with
     its base and target values, carries each side's provenance onto its items,
     and reports only the approval/HITL and automation categories the draft

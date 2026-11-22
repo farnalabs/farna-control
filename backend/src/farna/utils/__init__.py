@@ -1,6 +1,6 @@
-"""Backward-compatibility shim -- prefer ``modulo.util`` for new code.
+"""Backward-compatibility shim -- prefer ``farna.util`` for new code.
 
-This package is deprecated; all utilities live in ``modulo.util`` now.
+This package is deprecated; all utilities live in ``farna.util`` now.
 """
 
 from farna.util.uuid import coerce_uuid

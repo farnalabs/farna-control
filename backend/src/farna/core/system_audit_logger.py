@@ -1,6 +1,6 @@
 """Durable, org-independent audit records for org-lifecycle events (FAR-1517).
 
-``modulo.core.audit_logger`` appends to ``audit_events``, which is org-scoped
+``farna.core.audit_logger`` appends to ``audit_events``, which is org-scoped
 by an ``ON DELETE CASCADE`` FK — a hard-deleted organisation takes that whole
 chain with it, and a post-commit append can never satisfy the FK afterwards.
 This module writes the same evidence to ``system_audit_events``, which carries

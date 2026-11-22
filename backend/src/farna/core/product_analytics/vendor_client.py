@@ -40,7 +40,7 @@ def sign_outbound_batch(secret: str, payload: bytes, timestamp: float, sequence:
     This is the canonical signer for batches posted to the metrics vendor via
     :meth:`VendorClient.post_batch`.  It is **NOT** interchangeable with the
     rotation-request signer in
-    :mod:`modulo.core.product_analytics.hmac_verify`: that module signs with a
+    :mod:`farna.core.product_analytics.hmac_verify`: that module signs with a
     ``|<timestamp:.6f>|<sequence>`` format under a fixed-precision cross-SDK
     contract.  The two protocols intentionally use different wire formats — never
     reuse this helper to sign or verify rotation requests, and never reuse the

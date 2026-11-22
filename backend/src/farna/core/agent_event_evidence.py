@@ -1,9 +1,9 @@
 """Langgraph-free evidence readers shared by the node runner and cost finalize.
 
-This module is deliberately a LEAF (precedent: ``modulo/core/node_output_split.py``):
-it is imported by both ``modulo.core.pipeline_engine.node_runner`` (which pulls
-LangGraph) and ``modulo.core.cost_controller.finalize`` (which is reachable from
-``modulo.api`` and therefore must not transit LangGraph). A single copy of each
+This module is deliberately a LEAF (precedent: ``farna/core/node_output_split.py``):
+it is imported by both ``farna.core.pipeline_engine.node_runner`` (which pulls
+LangGraph) and ``farna.core.cost_controller.finalize`` (which is reachable from
+``farna.api`` and therefore must not transit LangGraph). A single copy of each
 reader lives here so the two call sites cannot drift apart.
 
 Two readers live here:
@@ -19,7 +19,7 @@ Two readers live here:
   and accepting it would keep a wrong parser alive.
 * :func:`heartbeat_liveness_seconds` — the liveness-PROVEN wall-clock window
   of a run, from its ``started_at`` / ``heartbeat_at`` / ``completed_at``
-  stamps. Shared with ``modulo.core.cron_helpers`` (which re-exports it) so the
+  stamps. Shared with ``farna.core.cron_helpers`` (which re-exports it) so the
   age gate and the cancel path use one definition.
 """
 

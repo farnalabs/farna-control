@@ -15,7 +15,7 @@ viewer floor of reads: audit.list, dashboard.*, analytics.query, ...):
   runner   — the viewer floor, plus run trigger/list/cancel/evals,
              api_key.create/update/revoke, hitl.claim/list and library.copy.
 
-The registry in ``modulo.auth.permissions`` (``PERMISSIONS``) is the source of
+The registry in ``farna.auth.permissions`` (``PERMISSIONS``) is the source of
 truth; this block is a terse mnemonic, not an exhaustive scope list.
 
 Team-scoped enforcement:
@@ -456,7 +456,7 @@ async def revoke_run_api_key_sweep(
     are TERMINAL but were terminalized by a NON-executor path (dispatcher_reconcile
     raw-SQL terminalizers, saq_hooks._mark_run_failed, transition_run,
     request_cancellation). For each such run it drives the single sealed terminal
-    step :func:`modulo.core.run_teardown.seal_run_teardown` — revoke the run's
+    step :func:`farna.core.run_teardown.seal_run_teardown` — revoke the run's
     credential(s), destroy every workspace labelled ``modulo.run.id``, and write
     ONE ``run.teardown_sealed`` fact — so the compensating path seals exactly as
     the executor path does (FAR-1690 D2: one choke point, one sweep, not two).

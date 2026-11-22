@@ -273,7 +273,7 @@ def _workspace_network_policy_deployed() -> bool:
     """Whether the chart's workspace-egress NetworkPolicy is actually deployed.
 
     Single source of truth is
-    :func:`modulo.core.pipeline_engine.egress.workspace_network_policy_deployed`
+    :func:`farna.core.pipeline_engine.egress.workspace_network_policy_deployed`
     (the resolver gates on the same signal). Imported lazily: the
     ``pipeline_engine`` package ``__init__`` pulls the engine, so a
     module-load import here would create a runtime_provider <-> engine cycle.

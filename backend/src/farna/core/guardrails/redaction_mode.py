@@ -26,7 +26,7 @@ for block/redact guardrails, never a silent masks-only fallback and never an
 unredacted persist.
 
 The pepper live-wires from the organisation settings
-(``modulo.settings.get_settings().guardrail_destroy_pepper``) at apply time —
+(``farna.settings.get_settings().guardrail_destroy_pepper``) at apply time —
 rotating the pepper breaks cross-run linkage of previously destroyed values
 (documented in ``docs/product-map/configure/guardrails.md``); callers that
 need a fixed pepper for tests pass it explicitly.
@@ -50,7 +50,7 @@ class GuardrailRedactionMechanismError(Exception):
 
     Raised when a ``destroy`` policy fires and the deployment pepper is
     missing/unset, or the policy's candidate pattern is not a usable regex.
-    Deliberately NOT a :class:`~modulo.core.guardrails.GuardrailBlockedError`
+    Deliberately NOT a :class:`~farna.core.guardrails.GuardrailBlockedError`
     subclass: the calling seam's mechanism-error handler (which merges any
     redaction/destroy failure into the fail-closed ``blocked`` decision) is
     the intended destination — never the in-phase block merge.

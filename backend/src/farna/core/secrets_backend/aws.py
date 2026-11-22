@@ -23,7 +23,7 @@ _TIMEOUT: float = 30.0
 _DEFAULT_REGION: str = "us-east-1"
 _RECOVERY_WINDOW_DAYS: int = 7
 _FORCE_DELETE_WITHOUT_RECOVERY: bool = False
-_SECRET_DESCRIPTION: str = "Modulo secret"
+_SECRET_DESCRIPTION: str = "Farna Control secret"
 
 _MODULE_AVAILABLE: bool = True
 _boto3: Any = None

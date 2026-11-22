@@ -783,7 +783,7 @@ async def kubernetes_endpoint_skip_reason() -> str | None:
 
     FAR-1051: the sweep is applicable exactly when the deployment would
     REGISTER the Kubernetes runtime provider, so the check delegates to the
-    registration matrix itself (:func:`modulo.core.runtime_provider.build_hub`
+    registration matrix itself (:func:`farna.core.runtime_provider.build_hub`
     — ``FARNA_CONTROL_KUBERNETES_ENABLED`` gating plus the kubernetes-asyncio SDK
     presence) instead of re-implementing the flag semantics here and letting
     the two drift. That is also why an unregistered provider is a SKIP and
@@ -821,7 +821,7 @@ async def e2b_endpoint_skip_reason() -> str | None:
     FAR-1275: the non-Docker orphan-reclamation tier is applicable exactly
     when the deployment would REGISTER the E2B runtime provider, so the
     check delegates to the registration matrix itself
-    (:func:`modulo.core.runtime_provider.build_hub` — the
+    (:func:`farna.core.runtime_provider.build_hub` — the
     ``FARNA_CONTROL_E2B_API_KEY`` gate via the key bridge) instead of
     re-implementing the flag semantics here and letting the two drift. That
     is also why an unregistered provider is a SKIP and not a failure: no

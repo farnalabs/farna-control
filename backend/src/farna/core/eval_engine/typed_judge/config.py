@@ -22,7 +22,7 @@ Two invariants are deliberately NOT schema concerns:
   bumps ``version``; the schema only guarantees they are present and unique.
 
 Validation is pure (it never mutates or normalises the stored dict) and raises
-:class:`~modulo.core.eval_engine.typed_judge.errors.JudgeConfigWriteError` with
+:class:`~farna.core.eval_engine.typed_judge.errors.JudgeConfigWriteError` with
 a stable code, so every write surface gets the same typed 422.
 """
 

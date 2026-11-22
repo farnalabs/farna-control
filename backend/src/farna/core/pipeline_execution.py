@@ -17,7 +17,7 @@ Staleness constants (plan F4 / F1 ordering):
     RUN_HEARTBEAT_SECONDS   = 30   DB heartbeat cadence
 
 Staleness values are configurable via settings (see the F4 Settings section in
-:mod:`modulo.settings`). The legacy sweep windows default to
+:mod:`farna.settings`). The legacy sweep windows default to
 never_dispatched=300 / worker_lost=600 (today's beat-sweep values, 5 and 10
 minutes) and stay decoupled from ``RUN_CLAIM_STALE_SECONDS``.
 """
@@ -40,7 +40,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, async_sessionmaker
 
 # FAR-1649: the ``PHASE_*`` label values themselves live in the
-# dependency-free leaf ``modulo.core.dispatch_phases``. They moved there so
+# dependency-free leaf ``farna.core.dispatch_phases``. They moved there so
 # ``cron_helpers`` / ``run_admission`` can branch on them without importing
 # THIS module, which reaches langgraph at module level. Every
 # ``pipeline_execution.PHASE_*`` name keeps resolving here for every existing
@@ -103,7 +103,7 @@ _log = logging.getLogger(__name__)
 # stuck — not just THAT it is stuck.
 #
 # FAR-1649: the ``PHASE_*`` label values themselves live in the
-# dependency-free leaf ``modulo.core.dispatch_phases`` and are re-exported
+# dependency-free leaf ``farna.core.dispatch_phases`` and are re-exported
 # from the import block above — see the note there.
 
 # Attribute name used to attach the DispatchPhaseTracker to the executor instance.
@@ -932,7 +932,7 @@ def _claim_params(
 # FAR-2076 — the durable EXECUTION-ATTEMPT counter.
 #
 # ``runs.execution_attempt_count`` is the single authority for "executions
-# used" (see ``modulo.core.retry_budget``). It is incremented EXACTLY ONCE per
+# used" (see ``farna.core.retry_budget``). It is incremented EXACTLY ONCE per
 # execution attempt of the graph, and deliberately NOT by the claim UPDATE:
 #
 #   * ``_CLAIM_UPDATE_SQL*`` increments ``claim_count`` on EVERY claim —
@@ -1004,7 +1004,7 @@ async def _maybe_alert_retry_storm(aengine: AsyncEngine, run_id: str, org_id: st
 
     Fires an error_event (source='saq') when a re-claim pushes the run's
     ``claim_count`` past the threshold in
-    :func:`modulo.core.error_tracking.emit_saq_retry_storm_alert`. Runs only
+    :func:`farna.core.error_tracking.emit_saq_retry_storm_alert`. Runs only
     after a successful claim and never breaks the claim path (best-effort).
     """
     try:
@@ -1097,7 +1097,7 @@ async def claim_run_async(
 async def set_rls_org(session: Any, org_id: uuid.UUID) -> None:
     """Set the RLS org context for the session (transaction-scoped on Postgres).
 
-    Delegates to the canonical helper in ``modulo.db.rls`` so the tenant-filter
+    Delegates to the canonical helper in ``farna.db.rls`` so the tenant-filter
     key (``org_id``) stays consistent with every other writer. Previously this
     copy wrote ``session.info["organisation_id"]`` which never activated the
     generic-backend tenant filter (the listener reads ``org_id``), leaving the
@@ -1161,7 +1161,7 @@ async def _read_current_claim_token(aeng: AsyncEngine, run_id: str, org_id: str)
 # sweeps, operators).
 #
 # The fence is an ALLOWLIST of ``ACTIVE_RUN_STATUSES`` (single source of
-# truth: ``modulo.db.models.run``) rather than a denylist of terminal
+# truth: ``farna.db.models.run``) rather than a denylist of terminal
 # statuses, so a terminal status added later is fenced without editing this
 # file. Legitimate in-flight heartbeats are unaffected: a live run is always
 # in an ACTIVE_RUN_STATUSES state, and a run that races into a terminal state
@@ -2548,7 +2548,7 @@ async def _salvage_cancelled_run_cost(aengine: AsyncEngine, run_id: str, org_id:
       terminal ``failed`` status via a raw writer with no cost columns and does
       not call this salvage.
 
-    :func:`modulo.core.cost_controller.finalize.finalize_cancelled_run` names
+    :func:`farna.core.cost_controller.finalize.finalize_cancelled_run` names
     the same two skip points on the request-path side.
 
     Fail-open: any failure logs and is swallowed so the already-terminal

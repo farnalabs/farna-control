@@ -1,6 +1,6 @@
 """Shared analytics query execution service (ADR 020, FAR-102).
 
-The REST route (``modulo.api.routes.analytics``) and the ``query_analytics``
+The REST route (``farna.api.routes.analytics``) and the ``query_analytics``
 MCP tool both funnel through this service so the org predicate, rate limit,
 statement timeout, validation, bucketing, and error semantics stay identical
 across surfaces.
@@ -11,7 +11,7 @@ filter is NOT registered on Postgres — the explicit ``organisation_id = :org``
 predicate injected by the builder is the PRIMARY isolation control (RLS also
 enforces org scoping). ``set_rls_org`` remains defense-in-depth. The ``factory``
 (sessionmaker over the shared engine) is supplied by
-the caller so this core module never imports ``modulo.api`` (import-linter).
+the caller so this core module never imports ``farna.api`` (import-linter).
 
 The service never raises FastAPI exceptions — it raises the typed
 ``AnalyticsError`` subclasses below, which each caller maps to its surface

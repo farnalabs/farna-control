@@ -152,6 +152,21 @@ function isManifest(obj: unknown): obj is Manifest {
   )
 }
 
+/**
+ * Runtime check for one route entry. The manifest is YAML, so a null or scalar
+ * entry survives `isManifest` (which only shapes the top-level object) and any
+ * dereference of it throws — at module init for the route-name map, which took
+ * down every consumer of this module. Every per-entry loop skips a non-entry
+ * the same way `buildSidebarGroups` skips a route with no sidebar group.
+ */
+function isManifestEntry(entry: unknown): entry is ManifestRoute {
+  return (
+    typeof entry === 'object'
+    && entry !== null
+    && typeof (entry as ManifestRoute).name === 'string'
+  )
+}
+
 function resolveSystemAdminOnly(
   route: ManifestRoute,
   group: ManifestSidebarGroup,
@@ -186,7 +201,9 @@ const manifestRouteTable: Record<string, ManifestRoute> = isManifest(manifest)
   : {}
 
 const manifestPathByName = new Map<string, string>(
-  Object.entries(manifestRouteTable).map(([path, entry]): [string, string] => [entry.name, path]),
+  Object.entries(manifestRouteTable)
+    .filter(([, entry]) => isManifestEntry(entry))
+    .map(([path, entry]): [string, string] => [entry.name, path]),
 )
 
 function escapeRegExp(value: string): string {
@@ -275,7 +292,8 @@ function resolveOwnerForPath(path: string): string | undefined {
   let current: string | undefined = path
   while (current !== undefined) {
     if (current === '/') return path === '/' ? '/' : undefined
-    const entry: ManifestRoute = manifestRouteTable[current]
+    const entry: ManifestRoute | null | undefined = manifestRouteTable[current]
+    if (!isManifestEntry(entry)) return undefined
     if (isManifestNavItem(entry)) return current
     current = entry.parent ?? undefined
   }
@@ -358,7 +376,7 @@ function toNavItem(
 function buildPinnedNavItem(): NavItem | null {
   if (!isManifest(manifest)) return null
   const pinned = Object.entries(manifest.routes)
-    .filter(([, route]) => route.sidebar_pinned === true)
+    .filter(([, route]) => isManifestEntry(route) && route.sidebar_pinned === true)
     .sort(([, a], [, b]) => (a.sidebar_order ?? 0) - (b.sidebar_order ?? 0))
   const first = pinned[0]
   if (!first) return null
@@ -378,6 +396,7 @@ function buildSidebarGroups(): NavGroup[] {
   const itemsByGroup: Record<string, NavItem[]> = {}
 
   for (const [path, route] of Object.entries(m.routes)) {
+    if (!isManifestEntry(route)) continue
     if (!route.sidebar_group) continue
     if (route.type === 'detail_page') continue
     if (!isManifestRoute(route)) continue
@@ -418,6 +437,36 @@ function buildSidebarGroups(): NavGroup[] {
       systemAdminOnly: sg.system_admin_only ?? undefined,
     }))
     .filter((g) => g.items.length > 0)
+}
+
+/** Claims a link-decision reads from the caller's access token. */
+export interface RouteGateUser {
+  /** False when the token is opaque/absent — no claims could be read. */
+  hasReadableToken: boolean
+  isSystemAdmin: boolean
+  orgRole: string | null
+}
+
+/** A refusal no licence upgrade can fix — only a role or instance admin can. */
+export type NonTierRefusal = 'role' | 'system_admin'
+
+/**
+ * The non-tier reason `item` is refused for `user`, or null when it is not.
+ *
+ * Tier gates are deliberately out of scope: a below-tier caller still follows
+ * the link, and the router guard lands them on the locked page with the
+ * upgrade path. Only a role / system-admin refusal is decided up front, so a
+ * view can point the caller at the refusal that a purchase cannot fix.
+ *
+ * An unreadable token yields null — nothing can be known, so the guard stays
+ * the authority. A READABLE token with an empty/absent `org_role` is a
+ * refusal: the role is known and it is not one of the required ones.
+ */
+export function nonTierRefusal(item: NavItem, user: RouteGateUser): NonTierRefusal | null {
+  if (!user.hasReadableToken) return null
+  if (item.systemAdminOnly && !user.isSystemAdmin) return 'system_admin'
+  if (item.requiredRoles?.length && !item.requiredRoles.includes(user.orgRole ?? '')) return 'role'
+  return null
 }
 
 export function canSeeItem(

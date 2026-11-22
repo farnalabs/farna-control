@@ -1,6 +1,6 @@
 """Typed-judge write errors and shared dialects constants (ADR 066 D4/D8).
 
-Kept separate from :mod:`~modulo.core.eval_engine.typed_judge.config` so the
+Kept separate from :mod:`~farna.core.eval_engine.typed_judge.config` so the
 legacy-freeze module and the schema module can share one error vocabulary
 without importing each other (the write chokepoint needs both).
 

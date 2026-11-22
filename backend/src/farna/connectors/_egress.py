@@ -1,7 +1,7 @@
 """Shared TLS-context factory for connector egress clients (FAR-1650).
 
 Every connector builds a fresh ``httpx.AsyncClient`` per call through
-``modulo.core.ssrf.pinned_async_client_sync``. That factory is deliberately
+``farna.core.ssrf.pinned_async_client_sync``. That factory is deliberately
 un-cached: the pinned transport, its resolved address set and its connection
 pool are per-request. But the TLS context httpx builds *inside* that transport
 is not per-request at all — ``ssl.create_default_context(cafile=certifi.where())``
@@ -43,7 +43,7 @@ def egress_ssl_context(connector: ConnectorBase) -> ssl.SSLContext:
 
     The context is built exactly as httpx would build it for ``verify=True``
     with the transport's resolved ``trust_env`` (see
-    ``default_trust_env`` in ``modulo.core.ssrf`` — the shared ``SSRF_TRUST_PROXY``
+    ``default_trust_env`` in ``farna.core.ssrf`` — the shared ``SSRF_TRUST_PROXY``
     resolver this module imports, so the CA-bundle selection cannot drift from
     the pinned transport's), so swapping a per-call build for this cached
     one changes only the construction count. Callers pass the result as

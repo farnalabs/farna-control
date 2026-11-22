@@ -2,7 +2,7 @@
 
 Composite template sub-graphs and top-level pipeline graphs store configured
 environment values in plaintext at rest and mask them on every READ surface.
-The read mask writes :data:`modulo.core.secret_patterns.SENSITIVE_VALUE_MASK`
+The read mask writes :data:`farna.core.secret_patterns.SENSITIVE_VALUE_MASK`
 into serialised copies only - the sentinel must NEVER be what a write path
 persists, and it must NEVER reach a run snapshot (the node would execute with
 ``GITHUB_TOKEN=......`` and clobber a working host-injected credential with a

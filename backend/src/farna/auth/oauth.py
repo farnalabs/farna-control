@@ -58,7 +58,7 @@ _CONSENT_STATE_TTL_MINUTES = 15
 # ---------------------------------------------------------------------------
 
 #: Legacy MCP OAuth scopes accepted on the wire, each resolving to exactly ONE
-#: key in :data:`~modulo.auth.permissions.PERMISSIONS` — the key that gates the
+#: key in :data:`~farna.auth.permissions.PERMISSIONS` — the key that gates the
 #: MCP tool the legacy scope was named for, so a pre-FAR-1476 client keeps a
 #: well-defined meaning instead of an open-ended role. Aliases are ACCEPTED
 #: INPUT only: they are not advertised in ``scopes_supported`` and never
@@ -73,7 +73,7 @@ SCOPE_ALIASES: dict[str, str] = {
 }
 
 #: The advertised/grantable scope vocabulary: every ``PERMISSIONS`` key
-#: :func:`~modulo.auth.permissions.is_delegable` accepts. This is what the
+#: :func:`~farna.auth.permissions.is_delegable` accepts. This is what the
 #: OAuth metadata documents advertise as ``scopes_supported`` — the legacy
 #: aliases are deliberately absent (deprecated input spellings of the
 #: canonical keys). Computed once at import from the registry; the ENFORCEMENT
@@ -1101,7 +1101,7 @@ def normalize_scopes(requested: str) -> list[str]:
     """Parse a space-separated scope string into canonical registry keys.
 
     Every entry must resolve to exactly one DELEGABLE
-    :data:`~modulo.auth.permissions.PERMISSIONS` key — the legacy aliases in
+    :data:`~farna.auth.permissions.PERMISSIONS` key — the legacy aliases in
     :data:`SCOPE_ALIASES` are canonicalised first. An unknown scope, or a
     scope in the registry's exclusion set (``org.delete``, break-glass,
     ``api_key.*`` / ``oauth.client.*`` / ``system.*``), raises

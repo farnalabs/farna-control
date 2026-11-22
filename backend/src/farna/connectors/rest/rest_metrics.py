@@ -1,6 +1,6 @@
 """OpenTelemetry metrics for the generic REST connector (FAR-413).
 
-Mirrors the ``modulo.core.error_tracking.metrics`` pattern: module-level
+Mirrors the ``farna.core.error_tracking.metrics`` pattern: module-level
 handles initialised lazily from the OTel ``get_meter_provider()``, every
 operation no-ops when no meter provider is configured or the SDK does not
 support an instrument, and every call is exception-swallowed so metrics can

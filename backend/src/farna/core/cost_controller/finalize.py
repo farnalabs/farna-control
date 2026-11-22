@@ -21,9 +21,9 @@ path (§4.2). It:
   never-fail envelope, §1.5) — persisting the UN-ENRICHED merged set with a
   wall-clock-only total that DE-TRUSTS agent ``cost_estimate_usd``.
 
-The module is importable from both the executor (``modulo.core``) and the
-route layer that owns ``request_cancellation`` (``modulo.api``); it never
-imports ``modulo.api`` or ``modulo.db.crud.run``'s caller graph.
+The module is importable from both the executor (``farna.core``) and the
+route layer that owns ``request_cancellation`` (``farna.api``); it never
+imports ``farna.api`` or ``farna.db.crud.run``'s caller graph.
 """
 
 from __future__ import annotations
@@ -1994,7 +1994,7 @@ async def _confirm_reported_refs(
     A self-reported claim (``source="agent"``) can only CONFIRM / MATCH an
     existing journey keyed by the same canonical ``(org, kind, ref)``; it can
     NEVER mint one (minting is owned by the create-time
-    ``INSERT ... ON CONFLICT DO NOTHING`` path in ``modulo.db.crud.run``).
+    ``INSERT ... ON CONFLICT DO NOTHING`` path in ``farna.db.crud.run``).
     The match itself keys on ``(org, kind, ref)`` only and is source-agnostic;
     ``entries`` are already canonicalised (kind/ref/source="agent") by
     ``validate_and_normalise_reported_refs``. Org-scoped SELECT EXISTS per
@@ -3094,7 +3094,7 @@ async def salvage_cancelled_run_cost(
     The derived sandbox line is written ONLY when the run has a retained
     sandbox attempt AND its ``heartbeat_at`` proves a positive liveness window
     (``started_at < heartbeat_at``; see
-    :func:`modulo.core.agent_event_evidence.heartbeat_liveness_seconds`). A
+    :func:`farna.core.agent_event_evidence.heartbeat_liveness_seconds`). A
     missing heartbeat means NO sandbox duration — never ``completed_at`` or
     ``now()``. Nothing provable ⇒ nothing written.
 
@@ -3167,7 +3167,7 @@ def _salvage_from_markers(markers: dict[str, Any] | None) -> _SalvagedAttemptEvi
     """Recover the killed attempt's own spend from retained markers.
 
     Every retained marker's ``raw_output`` is parsed by the SHARED, langgraph-free
-    :func:`modulo.core.agent_event_evidence.parse_step_finish_evidence` — the
+    :func:`farna.core.agent_event_evidence.parse_step_finish_evidence` — the
     same reader the node runner uses, reading the ``part``-nested shape the
     shipped CLI emits. Costs are SUMMED across attempts: each attempt really
     did burn them. Tokens are intentionally discarded (see the dataclass).
