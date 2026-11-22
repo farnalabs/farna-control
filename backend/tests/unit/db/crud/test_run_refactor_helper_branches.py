@@ -22,6 +22,11 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from farna.core.pipeline_engine.classify import (
+    RunClassificationValue,
+    classify_run,
+    normalize_benign_signatures,
+)
 from farna.db.crud.run import (
     _consume_agent_mint_budget_or_drop,
     _drop_dismissed_agent_entries,
@@ -29,6 +34,7 @@ from farna.db.crud.run import (
     _runs_list_attribute_filters,
     _success_rate,
 )
+from farna.db.models.run import ACTIVE_RUN_STATUSES, SUCCESS_STATUSES, TERMINAL_STATUSES
 
 _ORG_ID = uuid.uuid4()
 _AGENT_ENTRIES = [{"kind": "issue", "ref": "FAR-1"}]
@@ -54,6 +60,28 @@ def test_success_rate_counts_non_benign_share() -> None:
         SimpleNamespace(status="failed", run_classification=None),
     ]
     assert _success_rate(runs) == 0.5
+
+
+def test_benign_run_statuses_are_disjoint_from_success_statuses() -> None:
+    """Pin the invariant that keeps ``_success_rate`` at or below 1.0 (FAR-707).
+
+    The rate divides the count of ``SUCCESS_STATUSES`` runs by the count of
+    NON-benign runs, so it can only stay <= 1.0 while a run the classifier
+    marks ``benign`` can never also be a success. ``benign`` is produced
+    solely by the COUNTABLE-failure arm of ``classify_run``; sweep every run
+    status the DB CHECK constraint allows (``TERMINAL_STATUSES`` +
+    ``ACTIVE_RUN_STATUSES``) through it with a matching signature and assert
+    the benign verdicts never touch the success set. A future change that
+    routes a success status into that arm fails here instead of silently
+    pushing the reported success rate above 100%.
+    """
+    signatures = normalize_benign_signatures([{"error_code": "agent.failed"}])
+    benign_statuses = {status for status in TERMINAL_STATUSES | ACTIVE_RUN_STATUSES if classify_run(status, "agent.failed", benign_signatures=signatures).value is RunClassificationValue.benign}
+    # Non-vacuous: the sweep must actually reach a benign verdict, otherwise the
+    # disjointness assertion below could pass while pinning nothing.
+    assert benign_statuses, "no status classifies as benign - the sweep no longer exercises the invariant"
+    overlapping = benign_statuses & SUCCESS_STATUSES
+    assert not overlapping, f"a benign run can be a success status: {sorted(overlapping)}"
 
 
 # ---------------------------------------------------------------------------

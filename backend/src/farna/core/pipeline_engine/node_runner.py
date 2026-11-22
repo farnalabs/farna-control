@@ -13074,7 +13074,8 @@ async def _sandbox_retain_stall_evidence(  # NOSONAR S3776 - one contiguous stal
     # The E2B kill reason only lives in the sandbox logs, and the logs
     # endpoint only serves live sandboxes — fetch the tail BEFORE the
     # kill below (FAR-97 observability).
-    _sandbox_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
+    # Deliberately fire-and-forget: the tail is not consumed here; the pre-kill probe is the FAR-97 observability contract.
+    await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
     # The command stalled or timed out. Kill the sandbox BEFORE
     # reading output.json: the interrupted-but-alive process could
     # otherwise write a fabricated completion in the grace window
@@ -14537,7 +14538,6 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
     _stdout_len = 0
     _stderr_len = 0
     _sandbox_id: str | None = None
-    _sandbox_log_tail: str = ""
     agent_stdout: str = ""
     agent_stderr: str = ""
     output_json: Any = None
@@ -14815,7 +14815,6 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         _exc_output_json = output_json
         # Best-effort sandbox trace on the generic-exception path too — the
         # sandbox may already be dead, in which case the helper returns "".
-        from farna.settings import get_settings
 
         _exc_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
         _cost_estimate_usd = _compute_sandbox_cost(elapsed, _exc_output_json)
