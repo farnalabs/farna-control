@@ -68,6 +68,8 @@ _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
         "src/farna/core/error_tracking/saq_hooks.py",
         "src/farna/core/error_tracking/__init__.py",
     ),
+    "FARNA_CONTROL_SNAPSHOT_DIR": ("entrypoint.sh",),
+    "FARNA_CONTROL_VERSION": ("entrypoint.sh",),
 }
 
 #: The values an operator supplies in ``deploy/compose/.env`` for the compose's

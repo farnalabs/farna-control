@@ -393,7 +393,7 @@ class TestStripUnsupportedPreambleSettings:
 
         payload = b"--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\n\nSELECT 1;\n"
         dump = self._write(tmp_path, payload)
-        assert plain_dump.strip_unsupported_preamble_settings(dump, {"statement_timeout"}) == []
+        assert not plain_dump.strip_unsupported_preamble_settings(dump, {"statement_timeout"})
         assert dump.read_bytes() == payload
 
     def test_removal_streams_the_body_unchanged(self, tmp_path: Path) -> None:
