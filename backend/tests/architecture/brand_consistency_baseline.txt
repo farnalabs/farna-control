@@ -649,6 +649,7 @@ backend/tests/unit/api/middleware/test_catch_all.py	2
 backend/tests/unit/api/middleware/test_request_timeout.py	1
 backend/tests/unit/api/middleware/test_security_headers.py	5
 backend/tests/unit/api/models/test_problem.py	12
+backend/tests/unit/api/pipeline_team_gate_harness.py	1
 backend/tests/unit/api/routes/test_admin_capacity.py	1
 backend/tests/unit/api/routes/test_admin_dev_mode.py	2
 backend/tests/unit/api/routes/test_composite_authoring.py	1
