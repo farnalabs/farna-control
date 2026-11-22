@@ -45,6 +45,7 @@ real Postgres URL; prefix-only rewriting is strictly safer and matches the
 Settings contract.
 """
 
+import os
 from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
 
 # ---------------------------------------------------------------------------
@@ -156,6 +157,22 @@ def split_postgres_credentials(url: str) -> tuple[str, str | None]:
     if parts.port is not None:
         netloc += f":{parts.port}"
     return urlunsplit(parts._replace(netloc=netloc)), unquote(password)
+
+
+def pg_child_env(password: str | None) -> dict[str, str]:
+    """Child-scoped environment for pg_dump/psql: the password ONLY as PGPASSWORD.
+
+    The companion to :func:`split_postgres_credentials`: the credential-free URL
+    is the argv element, and the password travels here, in the child's
+    environment, so it never appears in a world-readable ``/proc/<pid>/cmdline``.
+    Any inherited ``PGPASSWORD`` is dropped first so an unrelated one cannot leak
+    into the child. The ONE implementation every dump/restore producer calls.
+    """
+    env = dict(os.environ)
+    env.pop("PGPASSWORD", None)
+    if password is not None:
+        env["PGPASSWORD"] = password
+    return env
 
 
 def psycopg_connect_args(url: str) -> tuple[str, str | None]:

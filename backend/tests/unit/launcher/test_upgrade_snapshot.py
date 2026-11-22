@@ -332,7 +332,7 @@ class TestDbUrlNormalisation:
         assert url_arg.startswith("postgresql://")
         assert "asyncpg" not in url_arg
 
-    def test_pristine_probe_receives_the_normalised_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_pristine_probe_receives_the_normalised_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The probe may be HANDED the asyncpg URL; what must be normalised is
         the connection STRING psycopg actually gets (normalisation lives in the
         one shared psycopg_connect_args helper, not in a second rewrite)."""

@@ -108,7 +108,7 @@ class TestPreambleRewrite:
     def test_a_set_inside_a_function_body_is_never_touched(self, tmp_path: Path) -> None:
         payload = b"--\n-- PostgreSQL database dump\n--\n\nCREATE FUNCTION f() RETURNS void AS $$\nSET transaction_timeout = 0;\n$$ LANGUAGE sql;\n" + _TRAILER
         path = _dump(tmp_path, payload)
-        assert strip_unsupported_preamble_settings(path, set()) == []
+        assert not strip_unsupported_preamble_settings(path, set())
         assert b"SET transaction_timeout = 0;" in path.read_bytes()
 
     def test_the_rewrite_streams_and_never_reads_the_whole_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

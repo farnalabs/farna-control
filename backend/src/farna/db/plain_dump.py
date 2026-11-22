@@ -319,15 +319,6 @@ def _open_private(path: Path) -> BinaryIO:
     return os.fdopen(handle_fd, "wb")
 
 
-def _pg_child_env(password: str | None) -> dict[str, str]:
-    """Child-scoped env for pg_dump: the password ONLY as PGPASSWORD."""
-    env = dict(os.environ)
-    env.pop("PGPASSWORD", None)
-    if password is not None:
-        env["PGPASSWORD"] = password
-    return env
-
-
 def dump_plain_sql(
     db_url: str,
     output: Path,
@@ -343,7 +334,7 @@ def dump_plain_sql(
     scheme and stripped of its password (it goes to the child as ``PGPASSWORD``
     only), so a SQLAlchemy ``postgresql+asyncpg://`` URL works here too.
     """
-    from farna.db.url_utils import normalise_libpq_url, split_postgres_credentials
+    from farna.db.url_utils import normalise_libpq_url, pg_child_env, split_postgres_credentials
 
     executable = resolve_pg_dump(pg_dump)
     dsn, password = split_postgres_credentials(normalise_libpq_url(db_url))
@@ -357,7 +348,7 @@ def dump_plain_sql(
                 stderr=subprocess.PIPE,
                 check=False,
                 timeout=timeout_seconds,
-                env=_pg_child_env(password),
+                env=pg_child_env(password),
             )
     except subprocess.TimeoutExpired as exc:
         raise DumpError(f"pg_dump timed out after {timeout_seconds}s") from exc

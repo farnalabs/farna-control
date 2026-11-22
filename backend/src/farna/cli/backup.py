@@ -276,7 +276,8 @@ def _decredential_url(raw_url: str) -> tuple[str, str | None]:
     Returns ``(url_without_password, password)``. pg_dump/psql must never
     receive the password as an argv element: argv is world-readable via
     ``/proc/<pid>/cmdline`` while the child runs. The password travels in the
-    child-scoped ``PGPASSWORD`` env var instead (see _pg_child_env).
+    child-scoped ``PGPASSWORD`` env var instead (see
+    :func:`farna.db.url_utils.pg_child_env`).
 
     Delegates to :func:`farna.db.url_utils.split_postgres_credentials` — the
     ONE implementation the pre-upgrade snapshot shares, so a password holding
@@ -286,15 +287,6 @@ def _decredential_url(raw_url: str) -> tuple[str, str | None]:
     from farna.db.url_utils import split_postgres_credentials
 
     return split_postgres_credentials(raw_url)
-
-
-def _pg_child_env(password: str | None) -> dict[str, str]:
-    """Child-scoped env for pg_dump/psql: the password ONLY as PGPASSWORD."""
-    env = dict(os.environ)
-    env.pop("PGPASSWORD", None)
-    if password is not None:
-        env["PGPASSWORD"] = password
-    return env
 
 
 def _run_pg_dump(raw_url: str, output: Path, timeout: int = 300) -> None:
@@ -331,6 +323,8 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
 
 def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     _check_tool("psql")
+    from farna.db.url_utils import pg_child_env
+
     url_without_password, password = _decredential_url(raw_url)
     # -X (no ~/.psqlrc): an operator's psqlrc could `\set ON_ERROR_STOP off`,
     # and psql would then exit 0 after a rolled-back restore. The explicit
@@ -344,7 +338,7 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     try:
         with input_path.open("rb") as f:
             result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
-                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=_pg_child_env(password)
+                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
             )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"psql restore timed out after {timeout}s") from exc
