@@ -154,3 +154,81 @@ async def test_first_cancellation_is_the_one_reraised_when_a_later_step_also_can
     # ...and it did not stop the teardown reaching the later step that cancelled.
     assert "destroy_by_ref" in dispatch.events, dispatch.events
     assert cleared == ["cleared"]
+
+
+async def test_cancellation_in_sandbox_destroy_still_closes_the_provider_and_clears_the_marker(monkeypatch: pytest.MonkeyPatch, fake_file_io: FakeFileIOProvider) -> None:
+    """A cancel on the sandbox-destroy await must not skip the later steps.
+
+    The destroy is the teardown-of-record for the workspace, but a cancel here
+    must still run the provider close and the fenced marker clear, then re-raise
+    — otherwise a cancelled run strands the provider client and the capacity
+    reservation.
+    """
+    _install_log_tail(monkeypatch)
+    fake_file_io.files["/home/user/output.json"] = _COMPLETED_OUTPUT.encode()
+    dispatch = install_fake_dispatch(monkeypatch, ref="sbx-destroy-cancel", exit_code=0)
+    dispatch.destroy_workspace_by_ref = AsyncMock(side_effect=asyncio.CancelledError("cancelled during sandbox destroy"))  # type: ignore[method-assign]
+    cleared = _spy_marker_clear(monkeypatch)
+
+    fn = make_sandbox_agent_fn(_node_def())
+    with pytest.raises(asyncio.CancelledError):
+        await fn(_run_state())
+
+    assert "close" in dispatch.events, dispatch.events
+    assert cleared == ["cleared"]
+
+
+async def test_every_teardown_step_cancelling_keeps_the_first_and_still_clears_the_marker(monkeypatch: pytest.MonkeyPatch, fake_file_io: FakeFileIOProvider) -> None:
+    """When several teardown steps cancel, the FIRST is delivered but every
+    later step still runs — the ``_gh_settle_cancelled is None`` guard's false
+    arm (a cancel recorded earlier is not overwritten) on the sandbox destroy
+    and the provider close."""
+    _install_log_tail(monkeypatch)
+    fake_file_io.files["/home/user/output.json"] = _COMPLETED_OUTPUT.encode()
+    dispatch = install_fake_dispatch(monkeypatch, ref="sbx-all-steps-cancel", exit_code=0)
+    bridge_cancellation = asyncio.CancelledError("first: bridge close")
+    dispatch.destroy_workspace_by_ref = AsyncMock(side_effect=asyncio.CancelledError("second: sandbox destroy"))  # type: ignore[method-assign]
+    dispatch.close = AsyncMock(side_effect=asyncio.CancelledError("third: provider close"))  # type: ignore[method-assign]
+    bridge = _install_bridge(monkeypatch, bridge_cancellation)
+    cleared = _spy_marker_clear(monkeypatch)
+
+    fn = make_sandbox_agent_fn(_node_def())
+    with pytest.raises(asyncio.CancelledError):
+        await fn(_run_state())
+
+    bridge.close.assert_awaited_once()
+    # The later cancels did not unwind the finally: the marker clear still ran.
+    assert cleared == ["cleared"]
+
+
+async def test_cancellation_recorded_before_the_bridge_close_is_not_overwritten(monkeypatch: pytest.MonkeyPatch, fake_file_io: FakeFileIOProvider) -> None:
+    """An EARLIER cancellation (the synchronous settle) is kept when the bridge
+    close then cancels too — the ``_gh_settle_cancelled is None`` guard's false
+    arm on the bridge close, and the first-wins ordering the whole teardown
+    relies on."""
+    import farna.core.pipeline_engine.sandbox_policy as sandbox_policy
+    from farna.core.pipeline_engine.sandbox_policy import reset_run_pr_guard_claims
+
+    settle_cancellation = asyncio.CancelledError("first: settle")
+
+    def _cancel_settle(*_args: Any, **_kwargs: Any) -> None:
+        raise settle_cancellation
+
+    monkeypatch.setattr(sandbox_policy, "settle_run_pr_guard", _cancel_settle)
+    reset_run_pr_guard_claims()
+    _install_log_tail(monkeypatch)
+    fake_file_io.files["/home/user/output.json"] = _COMPLETED_OUTPUT.encode()
+    install_fake_dispatch(monkeypatch, ref="sbx-settle-then-bridge-cancel", exit_code=0)
+    bridge = _install_bridge(monkeypatch, asyncio.CancelledError("second: bridge close"))
+
+    fn = make_sandbox_agent_fn(dict(_node_def(), single_pr_per_run=True))
+    try:
+        with pytest.raises(asyncio.CancelledError) as excinfo:
+            await fn(_run_state())
+    finally:
+        reset_run_pr_guard_claims()
+
+    # The settle cancellation is the first, so it is the one delivered...
+    assert excinfo.value is settle_cancellation
+    # ...and the bridge close still ran.
+    bridge.close.assert_awaited_once()
