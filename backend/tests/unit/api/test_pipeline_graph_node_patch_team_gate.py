@@ -35,39 +35,35 @@ as ``test_pipeline_node_conversion_team_gate.py``):
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator, Generator
-from contextlib import ExitStack, contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastapi.testclient import TestClient
-from sqlalchemy.sql import Select
+from tests.unit.api.pipeline_team_gate_harness import (
+    NON_MEMBER_DETAIL,
+    ORG_ID,
+    PIPELINE_ID,
+    PREFIX,
+    TEAM_ID,
+    USER_ID,
+    client_for,
+    make_gate_session,
+    patched,
+    result,
+)
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
-from farna.api.main import app
-from farna.auth.dependencies import get_current_user
-from farna.auth.jwt import AuthenticatedPrincipal
-from farna.settings import Settings, get_settings
-from tests.unit.api.mock_session import configure_rls_preamble
-
-_VALID_32 = "a" * 32
-_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
-_PIPELINE_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 _NODE_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
-_TEAM_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
-_PREFIX = "farna.api.routes.pipelines."
 
-_NON_MEMBER_DETAIL = "Not a member of the team that owns this resource"
-
-
-def _make_settings() -> Settings:
-    return Settings(
-        database_url="postgresql+asyncpg://localhost/test",
-        secret_key=_VALID_32,
-        fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-    )
+# The harness defines these once; the underscored local spellings are what this
+# module's bodies use.
+_ORG_ID = ORG_ID
+_USER_ID = USER_ID
+_PIPELINE_ID = PIPELINE_ID
+_TEAM_ID = TEAM_ID
+_PREFIX = PREFIX
+_NON_MEMBER_DETAIL = NON_MEMBER_DETAIL
+_client_for = client_for
+_patched = patched
+_result = result
 
 
 def _stored_node(node_id: uuid.UUID = _NODE_ID) -> dict[str, Any]:
@@ -90,14 +86,13 @@ def _stored_node(node_id: uuid.UUID = _NODE_ID) -> dict[str, Any]:
     }
 
 
-def _result(*, first: Any = None, scalar_one_or_none: Any = None) -> MagicMock:
-    result = MagicMock()
-    result.first.return_value = first
-    result.scalar_one_or_none.return_value = scalar_one_or_none
-    scalars = MagicMock()
-    scalars.all.return_value = []
-    result.scalars.return_value = scalars
-    return result
+def _edges_result(_stmt: object, sql: str) -> MagicMock | None:
+    """``FROM pipeline_edges``: the graph read's edge rows (none stored here)."""
+    if "FROM pipeline_edges" in sql:
+        edges = _result()
+        edges.scalars.return_value = []
+        return edges
+    return None
 
 
 def _make_session(
@@ -116,25 +111,14 @@ def _make_session(
       ``FOR UPDATE``) serves ``resolver_scope``;
     * the in-txn ``SELECT ... FOR UPDATE`` row serves ``locked`` +
       ``nodes`` (``graph_nodes_json``);
-    * ``team_memberships`` serves ``member``.
+    * ``team_memberships`` serves ``member`` (and is counted in
+      ``session.membership_query_count``, so a test can prove WHICH layer
+      queried - an org-visible request-time scope runs none, so a count there
+      is the in-txn gate's probe).
 
     Dialect reports ``sqlite`` (so the Postgres-only ``set_config`` lock-timeout
     statement is not issued — that path has its own test).
     """
-    session = AsyncMock()
-    configure_rls_preamble(session)
-    begin_cm = AsyncMock()
-    begin_cm.__aenter__ = AsyncMock(return_value=None)
-    begin_cm.__aexit__ = AsyncMock(return_value=False)
-    session.begin = MagicMock(return_value=begin_cm)
-    session.begin_nested = MagicMock(return_value=begin_cm)
-    session.in_transaction = MagicMock(return_value=True)
-    session.info = {}
-    bind = MagicMock()
-    bind.dialect.name = "sqlite"
-    session.get_bind = MagicMock(return_value=bind)
-    session.add = MagicMock()
-
     pipeline_row = MagicMock()
     visibility, owner_team_id = locked
     pipeline_row.visibility = visibility
@@ -142,63 +126,12 @@ def _make_session(
     pipeline_row.deleted_at = None
     pipeline_row.graph_nodes_json = nodes
 
-    #: How many ``team_memberships`` probes the session answered — lets a test
-    #: prove WHICH layer queried (an org-visible request-time scope runs none,
-    #: so a count there is the in-txn gate's probe).
-    session.membership_query_count = 0
-
-    async def _execute(stmt: object, *_args: Any, **_kwargs: Any) -> MagicMock:
-        sql = str(stmt)
-        if "set_config" in sql:
-            return _result()
-        if "authz_enforce" in sql:
-            return _result(scalar_one_or_none=None)
-        if "team_memberships" in sql:
-            session.membership_query_count += 1
-            return _result(first=uuid.uuid4() if member else None)
-        if "FROM pipelines" in sql:
-            if isinstance(stmt, Select) and "FOR UPDATE" in sql.upper():
-                return _result(scalar_one_or_none=pipeline_row)
-            return _result(first=resolver_scope)
-        if "FROM pipeline_edges" in sql:
-            result = _result()
-            result.scalars.return_value = []
-            return result
-        return _result()
-
-    session.execute = AsyncMock(side_effect=_execute)
-    return session
-
-
-@contextmanager
-def _client_for(session: AsyncMock, role: str) -> Generator[TestClient, None, None]:
-    async def override_session() -> AsyncGenerator[AsyncMock, None]:
-        yield session
-
-    app.dependency_overrides[get_settings] = _make_settings
-    app.dependency_overrides[get_db_session] = override_session
-    app.dependency_overrides[_get_engine] = lambda: MagicMock()
-    app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
-        username=f"{role}@test",
-        organisation_id=_ORG_ID,
-        account_id=_USER_ID,
-        org_role=role,
+    return make_gate_session(
+        is_member=member,
+        resolver_scope=resolver_scope,
+        locked_row=pipeline_row,
+        extra_queries=_edges_result,
     )
-    mock_plan = MagicMock()
-    mock_plan.feature_enabled.return_value = True
-    app.dependency_overrides[get_plan_context] = lambda: mock_plan
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-@contextmanager
-def _patched(patches: list) -> Generator[None, None, None]:
-    with ExitStack() as stack:
-        for p in patches:
-            stack.enter_context(p)
-        yield
 
 
 def _patch_url(node_id: uuid.UUID = _NODE_ID) -> str:

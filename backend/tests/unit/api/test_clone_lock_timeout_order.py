@@ -23,52 +23,45 @@ inference:
 The real-contention half of FAR-1313 (a held name-row lock degrading to the
 mapped 409 inside the bound) is covered against real Postgres by
 ``tests/integration/test_pipeline_mutation_lock_timeout.py``.
+
+The principal/settings/session arrangement is shared with the sibling team-gate
+contracts in ``pipeline_team_gate_harness``; this module keeps the two ordering
+observations it exists to make.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncGenerator, Generator
-from contextlib import ExitStack, contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from fastapi.testclient import TestClient
 from sqlalchemy.sql import Select
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
-from farna.api.main import app
 from farna.api.routes.pipelines import _reapply_team_gate_inside_mutation_txn
-from farna.auth.dependencies import get_current_user
-from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
-from farna.settings import Settings, get_settings
+from farna.auth.jwt import TenantPrincipal
+from tests.unit.api.pipeline_team_gate_harness import (
+    ORG_ID,
+    PIPELINE_ID,
+    PREFIX,
+    TEAM_ID,
+    USER_ID,
+    client_for,
+    make_session,
+    patched,
+    result,
+)
 from tests.unit.api.test_pipelines_endpoint import _make_pipeline
 
-_VALID_32 = "a" * 32
-_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
-_PIPELINE_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
-_TEAM_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
-_PREFIX = "farna.api.routes.pipelines."
-
-
-def _make_settings() -> Settings:
-    return Settings(
-        database_url="postgresql+asyncpg://localhost/test",
-        secret_key=_VALID_32,
-        fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-    )
-
-
-def _result(*, first: Any = None, scalar_one_or_none: Any = None) -> MagicMock:
-    result = MagicMock()
-    result.first.return_value = first
-    result.scalar_one_or_none.return_value = scalar_one_or_none
-    scalars = MagicMock()
-    scalars.all.return_value = []
-    result.scalars.return_value = scalars
-    return result
+# Local aliases keep the module-local spellings its two ordering observations
+# were written with; the definitions themselves live in the shared harness.
+_ORG_ID = ORG_ID
+_PIPELINE_ID = PIPELINE_ID
+_PREFIX = PREFIX
+_TEAM_ID = TEAM_ID
+_USER_ID = USER_ID
+_client_for = client_for
+_patched = patched
+_result = result
 
 
 def _recording_session() -> tuple[AsyncMock, list[str]]:
@@ -77,17 +70,7 @@ def _recording_session() -> tuple[AsyncMock, list[str]]:
     Recording is the point: the ordering the fix establishes is only proven by
     observing the statement sequence, not by reading the code that emits it.
     """
-    session = AsyncMock()
-    begin_cm = AsyncMock()
-    begin_cm.__aenter__ = AsyncMock(return_value=None)
-    begin_cm.__aexit__ = AsyncMock(return_value=False)
-    session.begin = MagicMock(return_value=begin_cm)
-    session.begin_nested = MagicMock(return_value=begin_cm)
-    session.in_transaction = MagicMock(return_value=True)
-    session.info = {}
-    bind = MagicMock()
-    bind.dialect.name = "postgresql"
-    session.get_bind = MagicMock(return_value=bind)
+    session = make_session(dialect="postgresql")
 
     executed: list[str] = []
 
@@ -109,37 +92,6 @@ def _recording_session() -> tuple[AsyncMock, list[str]]:
 
     session.execute = AsyncMock(side_effect=_execute)
     return session, executed
-
-
-@contextmanager
-def _client_for(session: AsyncMock, role: str) -> Generator[TestClient, None, None]:
-    async def override_session() -> AsyncGenerator[AsyncMock, None]:
-        yield session
-
-    app.dependency_overrides[get_settings] = _make_settings
-    app.dependency_overrides[get_db_session] = override_session
-    app.dependency_overrides[_get_engine] = lambda: MagicMock()
-    app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
-        username=f"{role}@test",
-        organisation_id=_ORG_ID,
-        account_id=_USER_ID,
-        org_role=role,
-    )
-    mock_plan = MagicMock()
-    mock_plan.feature_enabled.return_value = True
-    app.dependency_overrides[get_plan_context] = lambda: mock_plan
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-@contextmanager
-def _patched(patches: list) -> Generator[None, None, None]:
-    with ExitStack() as stack:
-        for p in patches:
-            stack.enter_context(p)
-        yield
 
 
 def _lock_timeout_indexes(executed: list[str]) -> list[int]:
