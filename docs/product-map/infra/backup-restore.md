@@ -5,8 +5,12 @@ adr: []
 code:
   - backend/src/farna/cli/backup.py
   - backend/src/farna/cli/main.py
+  - backend/src/farna/db/plain_dump.py
+  - backend/src/farna/launcher/upgrade.py
+  - deploy/supervisor/entrypoint.sh
   - scripts/backup.py
   - scripts/restore.py
+  - scripts/compose-restore.sh
   - scripts/backup-prune.py
   - scripts/verify_backup_restore.py
   - .github/workflows/backup-restore-nightly.yml
@@ -16,6 +20,8 @@ unit-tests:
   - backend/tests/unit/cli/test_backup_paths.py
   - backend/tests/unit/cli/test_backup_refactor_branches.py
   - backend/tests/unit/cli/test_backup_restore_semantics.py
+  - backend/tests/unit/launcher/test_upgrade.py
+  - backend/tests/unit/launcher/test_upgrade_snapshot.py
   - backend/tests/unit/launcher/test_cross_machine_restore.py
   - backend/tests/unit/scripts/test_backup.py
   - backend/tests/unit/scripts/test_restore.py
@@ -141,8 +147,60 @@ operator-facing contract lives in `docs/operations/backup.md`.
       scratch or `--allow-role-reset` is passed
       (`scripts/verify_backup_restore.py`, `.github/workflows/backup-restore-nightly.yml`).
 
-## Known Gaps
+- [x] Both upgrade paths take a pre-upgrade snapshot immediately before the
+      migrations run, through one shared callable
+      (`launcher/upgrade.py::take_upgrade_snapshot`): the container entrypoint
+      (`deploy/supervisor/entrypoint.sh`) writes to the `/backups` bind mount
+      and aborts the boot when no verified snapshot can be produced, and the
+      native launcher writes beside the cluster (a sibling of `pgdata/`, never
+      inside it). A pristine database (first install) is a no-op
+      (`deploy/supervisor/entrypoint.sh`, `launcher/upgrade.py`;
+      `test_upgrade_snapshot.py::TestEntrypointMode`).
+- [x] The snapshot refuses the upgrade before writing anything when the output
+      filesystem has less than `max(2 GB, 1.25 x pg_database_size)` free,
+      naming the required space, the available space and that nothing has been
+      changed; an unmeasurable database fails closed
+      (`launcher/upgrade.py::enforce_snapshot_disk_headroom`;
+      `test_upgrade_snapshot.py::TestDiskGuard`).
+- [x] A dump is accepted only when it is PROVEN complete at dump time:
+      pg_dump's completion trailer must be present (a truncated plain dump
+      would otherwise replay as a shorter valid script), a `-Fc` archive in the
+      plain-SQL path is refused by name, and the dump is checksummed and
+      recorded in both manifests. The same gate exists at restore time when the
+      manifest attested completeness, and an archive that records no checksum
+      for `database.sql` is refused as foreign
+      (`backend/src/farna/db/plain_dump.py`, `cli/backup.py`;
+      `test_upgrade_snapshot.py::TestVerifyDumpComplete`,
+      `test_backup.py::TestRestoreDumpIntegrity`).
+- [x] Retention keeps the two most recent VERIFIED snapshots and never prunes
+      before the new snapshot verifies: dump, verify, then prune; a snapshot
+      that is not intact is swept, and the last surviving snapshot is never
+      deleted (`launcher/upgrade.py::prune_snapshots`;
+      `test_upgrade_snapshot.py::TestPruneSnapshots`,
+      `::test_incomplete_dump_never_prunes_an_existing_snapshot`).
+- [x] A dump is replayable by the release that took it: pg_dump emits the
+      client's settings as a preamble, so a client newer than the server writes
+      GUCs the server rejects (pg_dump 17 writes `SET transaction_timeout`,
+      PostgreSQL 16 refuses it). The preamble is rewritten to drop settings the
+      target server does not know; the rewrite stops at the first real
+      statement so function bodies are never touched
+      (`backend/src/farna/db/plain_dump.py`;
+      `test_backup.py::TestRunPgDump::test_preamble_settings_the_server_lacks_are_dropped`).
+- [x] Restore stops the writers itself and leaves them stopped: with
+      `--data-dir` it stops a live launcher (refusing when it survives the stop
+      request), takes the exclusive lock, and on success prints the exact
+      `farna-control start --data-dir <dir>` command; without `--data-dir` it
+      prints the compose start command. Nothing is auto-restarted, and
+      `--safety-dump-dir` keeps the pre-restore safety dump on a persistent
+      path when restore runs in a disposable container (`cli/backup.py`;
+      `test_backup.py::TestRestoreStartGuidance`).
+- [x] The compose release bundle ships `compose-restore.sh` — the one documented
+      recovery command for that path — which stops the application, restores
+      through a one-off container, and prints the exact start command without
+      starting anything (`scripts/compose-restore.sh`,
+      `scripts/package_compose_release.py`).
 
+## Known Gaps
 - The in-product `farna-control backup` directory is written unencrypted. An
   operator who needs encryption at rest must use the `scripts/backup.py`
   archive or store the backup directory on encrypted media.
@@ -162,6 +220,16 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## QA History
 
+- 2026-11-22 (FAR-2667): made the pre-upgrade snapshot real on both deployment
+  paths and made the documented recovery work end to end. Added the disk guard,
+  the dump-time completeness proof, two-snapshot retention, the shared
+  `take_upgrade_snapshot` callable, the container entrypoint snapshot, the
+  restore-side corrupt/foreign refusal, stop-writers-and-leave-stopped
+  semantics, and the client-newer-than-server replay rewrite. Verified with a
+  real Docker end-to-end: snapshot from PostgreSQL 16, damage the database,
+  restore through the documented command and get the rows back; a truncated
+  dump and a foreign dump are both refused; the disk guard refuses on a 1 MB
+  filesystem; retention keeps the newest two.
 - 2026-11-22: Added this tracker after walking the product map and finding the
   shipped backup/restore surface had no entry in either product-map layer.
   Verified each behaviour against `backend/src/farna/cli/backup.py`, the
