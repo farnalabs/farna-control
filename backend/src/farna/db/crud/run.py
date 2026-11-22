@@ -760,11 +760,30 @@ async def _compute_agent_mint_plan(
     agent_entries = [e for e in (refs or []) if isinstance(e, dict) and e.get("source") == _AGENT_SOURCE]
     if not agent_entries:
         return False, 0, 0, []
-    agent_mint_enabled = await _agent_minting_enabled(session, org_id)
-    if not agent_mint_enabled:
-        if agent_entries:
-            notify_refs_event(_REFS_EVENT_AGENT_MINT_SUPPRESSED, count=len(agent_entries))
+    if not await _agent_minting_enabled(session, org_id):
+        notify_refs_event(_REFS_EVENT_AGENT_MINT_SUPPRESSED, count=len(agent_entries))
         return False, 0, len(agent_entries), []
+    probe_pairs, dismissed_pairs = await _probe_agent_journey_pairs(session, org_id, agent_entries)
+    newly = [e for e in agent_entries if (str(e["kind"]), str(e["ref"])) not in probe_pairs]
+    agent_minted = len(newly)
+    agent_suppressed = len(agent_entries) - len(newly)
+    if dismissed_pairs:
+        newly, agent_minted = _drop_dismissed_agent_entries(newly, dismissed_pairs, agent_minted)
+    newly, agent_minted = await _consume_agent_mint_budget_or_drop(session, org_id, newly, agent_minted)
+    return True, agent_minted, agent_suppressed, newly
+
+
+async def _probe_agent_journey_pairs(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    agent_entries: list[dict[str, Any]],
+) -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
+    """Probe the agent refs' canonical journey rows (FAR-795 existence check).
+
+    Returns ``(existing_pairs, dismissed_pairs)``. Fail-open: a failed probe
+    yields two empty sets, which the caller reads as "every entry is fresh" —
+    an unreadable existence check must never deny a legitimate agent mint.
+    """
     try:
         fresh_pairs = [(str(e["kind"]), str(e["ref"])) for e in agent_entries]
         result = await session.execute(
@@ -774,41 +793,55 @@ async def _compute_agent_mint_plan(
             )
         )
         probe_rows = result.all()
-        probe_pairs = {(str(r[0]), str(r[1])) for r in probe_rows if r[2] is None}
+        existing_pairs = {(str(r[0]), str(r[1])) for r in probe_rows if r[2] is None}
         dismissed_pairs = {(str(r[0]), str(r[1])) for r in probe_rows if r[2] is not None}
     except asyncio.CancelledError:
         raise
     except Exception:
         _log.exception("journey agent-mint existence probe failed for org %s", org_id)
-        probe_pairs = set()
-        dismissed_pairs = set()
-    newly = [e for e in agent_entries if (str(e["kind"]), str(e["ref"])) not in probe_pairs]
-    agent_minted = len(newly)
-    agent_suppressed = len(agent_entries) - len(newly)
-    if dismissed_pairs:
-        # FAR-795 slice C: agent entries whose canonical row is a tombstone are
-        # DISMISSAL-suppressed, not flag-suppressed — counted separately, never
-        # as minted, and dropped from the batch (the row's conflict arm would
-        # refuse the write anyway).
-        dropped = [e for e in newly if (str(e["kind"]), str(e["ref"])) in dismissed_pairs]
-        newly = [e for e in newly if (str(e["kind"]), str(e["ref"])) not in dismissed_pairs]
-        agent_minted -= len(dropped)
-        if dropped:
-            notify_refs_event(REFS_EVENT_DISMISSAL_SUPPRESSED, count=len(dropped))
-    if agent_minted > 0:
-        # FAR-795 budget cap: fresh agent mints must clear the per-org budget
-        # before they are written. consume_agent_mint_budget is fail-open
-        # internally (errors / guard outage allow), so only a genuine
-        # within-window over-spend denies — and then the fresh agent mints are
-        # suppressed exactly like the flag-OFF path.
-        from farna.core.runtime_config.mint_budget import consume_agent_mint_budget
+        return set(), set()
+    return existing_pairs, dismissed_pairs
 
-        budget_ok = await consume_agent_mint_budget(session, org_id, n=agent_minted)
-        if not budget_ok:
-            notify_refs_event(_REFS_EVENT_AGENT_MINT_BUDGET_EXCEEDED, count=agent_minted)
-            newly = []
-            agent_minted = 0
-    return True, agent_minted, agent_suppressed, newly
+
+def _drop_dismissed_agent_entries(
+    newly: list[dict[str, Any]],
+    dismissed_pairs: set[tuple[str, str]],
+    agent_minted: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Drop tombstoned entries from the fresh-mint batch (FAR-795 slice C).
+
+    Agent entries whose canonical row is a tombstone are DISMISSAL-suppressed,
+    not flag-suppressed — counted separately, never as minted, and dropped from
+    the batch (the row's conflict arm would refuse the write anyway).
+    """
+    dropped = [e for e in newly if (str(e["kind"]), str(e["ref"])) in dismissed_pairs]
+    remaining = [e for e in newly if (str(e["kind"]), str(e["ref"])) not in dismissed_pairs]
+    if dropped:
+        notify_refs_event(REFS_EVENT_DISMISSAL_SUPPRESSED, count=len(dropped))
+    return remaining, agent_minted - len(dropped)
+
+
+async def _consume_agent_mint_budget_or_drop(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    newly: list[dict[str, Any]],
+    agent_minted: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Gate the fresh agent mints on the per-org budget (FAR-795 budget cap).
+
+    Fresh agent mints must clear the per-org budget before they are written.
+    ``consume_agent_mint_budget`` is fail-open internally (errors / guard
+    outage allow), so only a genuine within-window over-spend denies — and then
+    the fresh agent mints are suppressed exactly like the flag-OFF path.
+    """
+    if agent_minted <= 0:
+        return newly, agent_minted
+    from farna.core.runtime_config.mint_budget import consume_agent_mint_budget
+
+    if await consume_agent_mint_budget(session, org_id, n=agent_minted):
+        return newly, agent_minted
+    notify_refs_event(_REFS_EVENT_AGENT_MINT_BUDGET_EXCEEDED, count=agent_minted)
+    return [], 0
 
 
 _ATOMIC_RUN_NUMBER_SQL = text(
@@ -1621,6 +1654,21 @@ class _PinnedGuardrailState:
     saved_fingerprint: str | None
 
 
+@dataclass
+class _GuardrailEnforcement:
+    """State produced by the kill-switch / conformance / interception stages."""
+
+    guardrail_defs: list[Any]
+    payload: dict[str, Any]
+    results: list[Any]
+    redactions: list[Any]
+    blocked: bool
+    block_message: str
+    blocking_eval_name: str
+    skipped_guardrails: list[Any]
+    observed_by_eval: dict[uuid.UUID, bool]
+
+
 async def _resolve_pinned_guardrail_state(
     session: AsyncSession,
     request: _InterceptionRequest,
@@ -1662,6 +1710,106 @@ async def _resolve_pinned_guardrail_state(
     )
 
 
+async def _enforce_guardrail_definitions(
+    session: AsyncSession,
+    request: _InterceptionRequest,
+    guardrail_defs: list[Any],
+    *,
+    pinned: _PinnedGuardrailState,
+) -> _GuardrailEnforcement:
+    """Kill-switch, conformance and interception stages of the enforcement gate.
+
+    Item 9 — kill-switch: downgrade EVERY bound guardrail to observe
+    (shadow-only — compute + log, never block, never redact). Never a
+    full disable: observe mode still computes and logs.
+
+    Conformance enforcement (FAR-223 item 7 "Plus"): a block-action
+    guardrail carrying required_capabilities that the org cannot
+    satisfy blocks (fail closed — absent AND unknown) and fires a
+    paging Notification via the alert path. The derivation helper is
+    shipped; this is its dispatch-time wiring. Only applied when a
+    conformance block actually fires — a clean conformance result must
+    never clear a block already set by the pin-fingerprint check.
+    """
+    from farna.core.guardrails import GuardrailAction
+
+    org_id = request.org_id
+    run_id = request.run_id
+    payload = request.payload
+    skipped_guardrails = pinned.skipped_guardrails
+
+    if request.guardrails_kill_switch:
+        guardrail_defs = _downgrade_guardrails_to_observe(guardrail_defs)
+        _log.warning("guardrails.kill_switch_active", extra={"org_id": str(org_id)})
+
+    observed_by_eval = {d.id: d.config.get("action") == GuardrailAction.OBSERVE for d in guardrail_defs}
+    conformance_blocked, conformance_message = await _enforce_guardrail_conformance(
+        session,
+        org_id=org_id,
+        run_id=run_id,
+        guardrail_defs=guardrail_defs,
+    )
+    blocked = pinned.blocked or conformance_blocked
+    block_message = conformance_message if conformance_blocked else pinned.block_message
+
+    results: list[Any] = []
+    redactions: list[Any] = []
+    blocking_eval_name = ""
+    if not blocked:
+        (
+            payload,
+            results,
+            redactions,
+            blocked,
+            block_message,
+            skipped_guardrails,
+            blocking_eval_name,
+        ) = await _run_guardrail_interception_pass(
+            _GuardrailPassRequest(
+                org_id=org_id,
+                guardrail_defs=guardrail_defs,
+                payload=payload,
+                is_replay=request.is_replay,
+                skipped_guardrails=skipped_guardrails,
+                any_guarding=any(not d.is_muted and d.config.get("action") in (GuardrailAction.BLOCK, GuardrailAction.REDACT) for d in guardrail_defs),
+                detection_only=False,
+            )
+        )
+    elif conformance_blocked:
+        # A conformance block is decided before enforcement. Still run every
+        # definition in detection-only mode so muted siblings retain their
+        # evidence, without allowing detection to clear or weaken the block.
+        _, results, redactions, _, _, skipped_guardrails, _ = await _run_guardrail_interception_pass(
+            _GuardrailPassRequest(
+                org_id=org_id,
+                guardrail_defs=guardrail_defs,
+                payload=payload,
+                is_replay=request.is_replay,
+                skipped_guardrails=skipped_guardrails,
+                any_guarding=False,
+                detection_only=True,
+            )
+        )
+    # NOTE (item 10 invariant): a conformance block (``blocked`` True via
+    # the block above) must NOT clear the accumulated pin-skips collected
+    # earlier in this seam — they survive the conformance path and are
+    # still audited + alerted just below. The pass only ever replaces
+    # ``skipped_guardrails`` with its own carried skips (via
+    # ``outcome.skipped``), so there is no stale-skip case to clear.
+
+    return _GuardrailEnforcement(
+        guardrail_defs=guardrail_defs,
+        payload=payload,
+        results=results,
+        redactions=redactions,
+        blocked=blocked,
+        block_message=block_message,
+        blocking_eval_name=blocking_eval_name,
+        skipped_guardrails=skipped_guardrails,
+        observed_by_eval=observed_by_eval,
+    )
+
+
 async def _run_guardrail_gate(
     session: AsyncSession,
     request: _InterceptionRequest,
@@ -1678,19 +1826,12 @@ async def _run_guardrail_gate(
     telemetry. See :func:`_intercept_guardrails` for the documented invariants
     each stage preserves.
     """
-    from farna.core.guardrails import GuardrailAction, guardrail_cap_violation
+    from farna.core.guardrails import guardrail_cap_violation
 
     org_id = request.org_id
     run_id = request.run_id
-    payload = request.payload
-    skipped_guardrails = pinned.skipped_guardrails
 
     guardrail_defs = _select_guardrail_definitions(guardrail_rows, pinned.pinned_defs, pinned.snap_pins, pinned.saved_fingerprint)
-
-    observed_by_eval: dict[uuid.UUID, bool] = {}
-    results: list[Any] = []
-    redactions: list[Any] = []
-    blocking_eval_name = ""
 
     # Item 7 — cap enforcement (fail closed): a single node binding more
     # than the per-node guardrail cap is a mechanism error. Graph-save
@@ -1698,74 +1839,19 @@ async def _run_guardrail_gate(
     cap_violation = guardrail_cap_violation(guardrail_defs)
     if cap_violation:
         _log.warning("guardrails.cap_violation", extra={"org_id": str(org_id), "detail": cap_violation})
-        blocked = True
-        block_message = f"guardrail mechanism error: {cap_violation}"
-    else:
-        # Item 9 — kill-switch: downgrade EVERY bound guardrail to observe
-        # (shadow-only — compute + log, never block, never redact). Never a
-        # full disable: observe mode still computes and logs.
-        if request.guardrails_kill_switch:
-            guardrail_defs = _downgrade_guardrails_to_observe(guardrail_defs)
-            _log.warning("guardrails.kill_switch_active", extra={"org_id": str(org_id)})
-
-        observed_by_eval = {d.id: d.config.get("action") == GuardrailAction.OBSERVE for d in guardrail_defs}
-        # Conformance enforcement (FAR-223 item 7 "Plus"): a block-action
-        # guardrail carrying required_capabilities that the org cannot
-        # satisfy blocks (fail closed — absent AND unknown) and fires a
-        # paging Notification via the alert path. The derivation helper is
-        # shipped; this is its dispatch-time wiring. Only applied when a
-        # conformance block actually fires — a clean conformance result must
-        # never clear a block already set by the pin-fingerprint check.
-        conformance_blocked, conformance_message = await _enforce_guardrail_conformance(
-            session,
-            org_id=org_id,
-            run_id=run_id,
+        enforcement = _GuardrailEnforcement(
             guardrail_defs=guardrail_defs,
+            payload=request.payload,
+            results=[],
+            redactions=[],
+            blocked=True,
+            block_message=f"guardrail mechanism error: {cap_violation}",
+            blocking_eval_name="",
+            skipped_guardrails=pinned.skipped_guardrails,
+            observed_by_eval={},
         )
-        blocked = pinned.blocked or conformance_blocked
-        block_message = conformance_message if conformance_blocked else pinned.block_message
-
-        if not blocked:
-            (
-                payload,
-                results,
-                redactions,
-                blocked,
-                block_message,
-                skipped_guardrails,
-                blocking_eval_name,
-            ) = await _run_guardrail_interception_pass(
-                _GuardrailPassRequest(
-                    org_id=org_id,
-                    guardrail_defs=guardrail_defs,
-                    payload=payload,
-                    is_replay=request.is_replay,
-                    skipped_guardrails=skipped_guardrails,
-                    any_guarding=any(not d.is_muted and d.config.get("action") in (GuardrailAction.BLOCK, GuardrailAction.REDACT) for d in guardrail_defs),
-                    detection_only=False,
-                )
-            )
-        elif conformance_blocked:
-            # A conformance block is decided before enforcement. Still run every
-            # definition in detection-only mode so muted siblings retain their
-            # evidence, without allowing detection to clear or weaken the block.
-            _, results, redactions, _, _, skipped_guardrails, _ = await _run_guardrail_interception_pass(
-                _GuardrailPassRequest(
-                    org_id=org_id,
-                    guardrail_defs=guardrail_defs,
-                    payload=payload,
-                    is_replay=request.is_replay,
-                    skipped_guardrails=skipped_guardrails,
-                    any_guarding=False,
-                    detection_only=True,
-                )
-            )
-        # NOTE (item 10 invariant): a conformance block (``blocked`` True via
-        # the block above) must NOT clear the accumulated pin-skips collected
-        # earlier in this seam — they survive the conformance path and are
-        # still audited + alerted just below. The pass only ever replaces
-        # ``skipped_guardrails`` with its own carried skips (via
-        # ``outcome.skipped``), so there is no stale-skip case to clear.
+    else:
+        enforcement = await _enforce_guardrail_definitions(session, request, guardrail_defs, pinned=pinned)
 
     # Item 10 — audit + alert skipped pinned guardrails (best-effort: the
     # skip is the policy; a failed audit/alert never breaks the run).
@@ -1776,7 +1862,7 @@ async def _run_guardrail_gate(
         session,
         org_id=org_id,
         run_id=run_id,
-        skipped_guardrails=skipped_guardrails,
+        skipped_guardrails=enforcement.skipped_guardrails,
     )
 
     # Item 11 — guardrail_summary telemetry snapshot + per-pattern
@@ -1791,22 +1877,61 @@ async def _run_guardrail_gate(
     summary_json = _derive_guardrail_summary(
         org_id=org_id,
         run_id=run_id,
-        guardrail_defs=guardrail_defs,
-        guardrail_results=results,
-        guardrail_redactions=redactions,
-        skipped_guardrails=skipped_guardrails,
-        guardrail_observed_by_eval=observed_by_eval,
+        guardrail_defs=enforcement.guardrail_defs,
+        guardrail_results=enforcement.results,
+        guardrail_redactions=enforcement.redactions,
+        skipped_guardrails=enforcement.skipped_guardrails,
+        guardrail_observed_by_eval=enforcement.observed_by_eval,
     )
 
     return _GuardrailInterception(
-        payload=payload,
-        results=results,
-        redactions=redactions,
-        blocked=blocked,
-        block_message=block_message,
-        blocking_eval_name=blocking_eval_name,
-        observed_by_eval=observed_by_eval,
+        payload=enforcement.payload,
+        results=enforcement.results,
+        redactions=enforcement.redactions,
+        blocked=enforcement.blocked,
+        block_message=enforcement.block_message,
+        blocking_eval_name=enforcement.blocking_eval_name,
+        observed_by_eval=enforcement.observed_by_eval,
         summary_json=summary_json,
+    )
+
+
+async def _verify_snapshot_policy_gate(
+    session: AsyncSession,
+    request: _InterceptionRequest,
+) -> tuple[bool, str]:
+    """Verify the run's policy-gate pin fingerprint at run start (FAR-967 chunk 10).
+
+    Spec §3.4 / criteria 4 + 16: verified at RUN START — whenever the run
+    carries a snapshot_id, not only on replay.  A fresh snapshot's
+    fingerprint matches trivially (the pins + digest are written
+    atomically at creation), so this is a cheap integrity read for every
+    run; a genuine mismatch blocks the run before ANY evaluation happens
+    (the run is stamped terminal eval_failed below and never dispatched).
+
+    The operator control (§5, disabled-gate exclusion) is deliberately NOT
+    re-implemented here: enforcement lives exclusively in the executor's
+    per-gate eval-def build (``eval_defs.gate_disabled_excluded``), which
+    is the authoritative record (FAR-967 F8 — no duplicate filter copy).
+
+    Returns ``(blocked, block_message)``; ``(False, "")`` for a run with no
+    snapshot to verify.
+    """
+    if request.snapshot_id is None:
+        return False, ""
+    (
+        pg_snap_pins,
+        pg_saved_fp,
+        pg_snapshot_version,
+    ) = await _load_snapshot_policy_gate_pins(session, request.org_id, request.snapshot_id)
+    return _verify_policy_gate_pin_fingerprint(
+        org_id=request.org_id,
+        run_id=request.run_id,
+        snapshot_id=request.snapshot_id,
+        snap_pins=pg_snap_pins,
+        saved_fingerprint=pg_saved_fp,
+        pipeline_id=request.pipeline_id,
+        snapshot_version=pg_snapshot_version,
     )
 
 
@@ -1854,34 +1979,7 @@ async def _intercept_guardrails(
     )
 
     # ── FAR-967 chunk 10: policy-gate pin fingerprint verification ────────
-    # Spec §3.4 / criteria 4 + 16: verified at RUN START — whenever the run
-    # carries a snapshot_id, not only on replay.  A fresh snapshot's
-    # fingerprint matches trivially (the pins + digest are written
-    # atomically at creation), so this is a cheap integrity read for every
-    # run; a genuine mismatch blocks the run before ANY evaluation happens
-    # (the run is stamped terminal eval_failed below and never dispatched).
-    #
-    # The operator control (§5, disabled-gate exclusion) is deliberately NOT
-    # re-implemented here: enforcement lives exclusively in the executor's
-    # per-gate eval-def build (``eval_defs.gate_disabled_excluded``), which
-    # is the authoritative record (FAR-967 F8 — no duplicate filter copy).
-    policy_gate_blocked = False
-    policy_gate_block_message = ""
-    if request.snapshot_id is not None:
-        (
-            pg_snap_pins,
-            pg_saved_fp,
-            pg_snapshot_version,
-        ) = await _load_snapshot_policy_gate_pins(session, request.org_id, request.snapshot_id)
-        policy_gate_blocked, policy_gate_block_message = _verify_policy_gate_pin_fingerprint(
-            org_id=request.org_id,
-            run_id=request.run_id,
-            snapshot_id=request.snapshot_id,
-            snap_pins=pg_snap_pins,
-            saved_fingerprint=pg_saved_fp,
-            pipeline_id=request.pipeline_id,
-            snapshot_version=pg_snapshot_version,
-        )
+    policy_gate_blocked, policy_gate_block_message = await _verify_snapshot_policy_gate(session, request)
 
     # If the policy-gate fingerprint mismatched, block immediately — do not
     # proceed to the guardrail interception pass.
@@ -2283,6 +2381,68 @@ class CreateRunOptions(TypedDict, total=False):
     thread_id: str | None
 
 
+@dataclass(frozen=True)
+class _CreateRunIdentity:
+    """Identity state resolved at run creation (thread, number, anchor, refs)."""
+
+    thread_id: str
+    run_number: int
+    idempotency_key: str
+    work_item_id: uuid.UUID | None
+    work_item_refs: list[dict[str, Any]] | None
+    owner_team_id: uuid.UUID | None
+
+
+@dataclass(frozen=True)
+class _CreateRunOptionsView:
+    """The declared :class:`CreateRunOptions` values, read once per create."""
+
+    account_id: uuid.UUID | None
+    trigger_id: uuid.UUID | None
+    owner_team_id: uuid.UUID | None
+    parent_run_id: uuid.UUID | None
+    rate_limit_key: str | None
+    work_item_id: uuid.UUID | None
+    work_item_refs: list[dict[str, Any]] | None
+    is_replay: bool | None
+    variant_group_id: uuid.UUID | None
+    batch_id: uuid.UUID | None
+    variant_config_snapshot: dict[str, Any] | None
+    feedback_correction: dict[str, Any] | None
+    coalesce_key: str | None
+    ci_failure_coalesce_key: str | None
+    run_group_id: uuid.UUID | None
+    run_group_kind: str | None
+    thread_id: str | None
+
+
+def _read_create_run_options(options: CreateRunOptions) -> _CreateRunOptionsView:
+    """Read every declared option into one immutable view.
+
+    ``total=False`` models the defaults, so an unset option resolves to ``None``
+    here exactly as the per-name ``options.get(name)`` reads did.
+    """
+    return _CreateRunOptionsView(
+        account_id=options.get("account_id"),
+        trigger_id=options.get("trigger_id"),
+        owner_team_id=options.get("owner_team_id"),
+        parent_run_id=options.get("parent_run_id"),
+        rate_limit_key=options.get("rate_limit_key"),
+        work_item_id=options.get("work_item_id"),
+        work_item_refs=options.get("work_item_refs"),
+        is_replay=options.get("is_replay"),
+        variant_group_id=options.get("variant_group_id"),
+        batch_id=options.get("batch_id"),
+        variant_config_snapshot=options.get("variant_config_snapshot"),
+        feedback_correction=options.get("feedback_correction"),
+        coalesce_key=options.get("coalesce_key"),
+        ci_failure_coalesce_key=options.get("ci_failure_coalesce_key"),
+        run_group_id=options.get("run_group_id"),
+        run_group_kind=options.get("run_group_kind"),
+        thread_id=options.get("thread_id"),
+    )
+
+
 async def create_run(
     session: AsyncSession,
     *,
@@ -2294,87 +2454,25 @@ async def create_run(
     **options: Unpack[CreateRunOptions],
 ) -> Run:
     """Create a run; optional run metadata rides on :class:`CreateRunOptions`."""
-    account_id = options.get("account_id")
-    trigger_id = options.get("trigger_id")
-    owner_team_id = options.get("owner_team_id")
-    parent_run_id = options.get("parent_run_id")
-    rate_limit_key = options.get("rate_limit_key")
-    work_item_id = options.get("work_item_id")
-    work_item_refs = options.get("work_item_refs")
-    is_replay = options.get("is_replay")
-    variant_group_id = options.get("variant_group_id")
-    batch_id = options.get("batch_id")
-    variant_config_snapshot = options.get("variant_config_snapshot")
-    feedback_correction = options.get("feedback_correction")
-    coalesce_key = options.get("coalesce_key")
-    ci_failure_coalesce_key = options.get("ci_failure_coalesce_key")
-    run_group_id = options.get("run_group_id")
-    run_group_kind = options.get("run_group_kind")
-    thread_id = options.get("thread_id")
     _reject_unknown_options(options, CreateRunOptions.__annotations__, "create_run")
+    opts = _read_create_run_options(options)
     # FAR-153 / §15.1 — validate the grouping kwargs at the persist boundary
     # BEFORE any DB write (the ``run_idempotency_key`` fail-loud pattern).
-    # Extracted into ``_validate_run_grouping_kwargs`` to keep this function's
-    # cognitive complexity within the Sonar S3776 threshold; semantics are
-    # unchanged.
     await _validate_run_grouping_kwargs(
         session,
         org_id=org_id,
-        parent_run_id=parent_run_id,
-        run_group_id=run_group_id,
-        run_group_kind=run_group_kind,
-        thread_id=thread_id,
+        parent_run_id=opts.parent_run_id,
+        run_group_id=opts.run_group_id,
+        run_group_kind=opts.run_group_kind,
+        thread_id=opts.thread_id,
     )
 
-    # Soft-deleted-org guard — a run must never be created in an org whose
-    # deletion flow has set status='deleted' (or in a hard-deleted org).
-    await _ensure_org_not_deleted(session, org_id)
-
-    # DB capacity hard-stop (FAR-426): refuse a NEW run when a *fixed* DB is
-    # at/over the 98% threshold. This is the boundary where a run is created —
-    # a resume, retention sweep or admin operation never reaches it. Fail-open:
-    # a broken capacity probe can never block run creation (it allows the run).
-    # Raises ``StorageExhaustedError`` (modulo.db.capacity); the API layer maps
-    # it to HTTP 503 ``urn:problem:modulo:storage_exhausted`` so the transaction
-    # here rolls back and no phantom run is persisted.
-    from farna.db.capacity import enforce_capacity_gate
-
-    await enforce_capacity_gate()
-
-    # Pipeline lifecycle state gate (FAR-1528) — the SINGLE authority check
-    # for "may this pipeline start a run at all". Archived, soft-deleted and
-    # Paused (FAR-1530: run_enabled = FALSE) pipelines must not start runs
-    # from ANY origin (REST manual + rerun, MCP trigger_pipeline, webhook,
-    # replay, cron, polling, agent_signal, slack, variant, correction) — they
-    # all converge here, so this one gate covers them; never add a per-path
-    # pipeline-state check upstream. Read failures propagate (fail closed),
-    # same discipline as the pause gate below. Raises PipelineNotRunnableError
-    # (modulo.core.exceptions); the db->core edge is exempted under the
-    # db-does-not-import-core contract. Callers map it themselves: REST/MCP
-    # answer 409, the SAQ fire jobs (cron/polling/ongoing) and agent_signal
-    # return a typed skip. Note that most origins only REACH this gate for rows
-    # they can still see — SoftDeleteMixin already filters soft-deleted
-    # pipelines from REST/rerun entry reads (404 upstream), so this gate's
-    # reliable subjects are ARCHIVED and PAUSED pipelines (both stay visible).
-    await _enforce_pipeline_state_gate(session, pipeline_id, org_id)
-
-    # Deployment drain is an instance-wide admission freeze for sandbox work.
-    await _enforce_deployment_drain_gate(session, snapshot_id)
-
-    # Guardrails kill-switch (FAR-223 item 9) — pinned at run start alongside
-    # the guardrail rows, never re-read mid-run. Defaults to OFF on read
-    # failure (the fail-closed direction for a data-safety control).
-    guardrails_kill_switch = await _read_guardrails_kill_switch(session, org_id)
-
-    # Org-wide pause kill-switch — the SINGLE authority gate for
-    # trigger-initiated runs (webhook, replay, cron, polling, agent_signal).
-    # Manual runs (POST /runs, MCP trigger_pipeline), test_trigger
-    # (trigger_type="manual"), feedback correction, and variant runs pass
-    # (trigger_id None or an exempt type).
-    await _enforce_pause_gate(
+    guardrails_kill_switch = await _enforce_run_creation_gates(
         session,
-        org_id,
-        trigger_id=trigger_id,
+        org_id=org_id,
+        pipeline_id=pipeline_id,
+        snapshot_id=snapshot_id,
+        trigger_id=opts.trigger_id,
         trigger_type=trigger_type,
     )
 
@@ -2384,82 +2482,249 @@ async def create_run(
     # alter the run's hash, and the STRIPPED payload is what gets stored.
     stored_payload = _strip_reserved_keys(input_payload)
 
-    # Guardrail interception (FAR-208 item 2) — the ingestion edge. The
-    # two-phase pass runs BEFORE the run's input_payload is persisted, so
-    # persisted state is post-redaction. A block outcome creates the run as a
-    # TERMINAL eval_failed run instead of a pending/executable one. Replays
-    # (is_replay=True) are detection-only — no act, no re-block (item 10).
     run_id = uuid.uuid4()
+    interception, seam_coverage = await _run_ingestion_guardrails(
+        session,
+        org_id=org_id,
+        pipeline_id=pipeline_id,
+        run_id=run_id,
+        payload=stored_payload,
+        is_replay=opts.is_replay,
+        snapshot_id=snapshot_id,
+        guardrails_kill_switch=guardrails_kill_switch,
+    )
+    stored_payload = _inject_engine_payload_keys(
+        interception.payload,
+        opts.feedback_correction,
+        opts.coalesce_key,
+        opts.ci_failure_coalesce_key,
+    )
+
+    identity = await _resolve_run_creation_identity(
+        session,
+        stored_payload=stored_payload,
+        org_id=org_id,
+        pipeline_id=pipeline_id,
+        run_id=run_id,
+        trigger_type=trigger_type,
+        parent_run_id=opts.parent_run_id,
+        work_item_id=opts.work_item_id,
+        work_item_refs=opts.work_item_refs,
+        thread_id=opts.thread_id,
+        owner_team_id=opts.owner_team_id,
+    )
+    # FAR-1141 / ADR-042: the run executes its FROZEN snapshot, so the origin
+    # classification reads THAT snapshot's graph.
+    execution_origin = await _read_run_execution_origin(session, snapshot_id)
+
+    run = _build_created_run(
+        run_id=run_id,
+        org_id=org_id,
+        pipeline_id=pipeline_id,
+        snapshot_id=snapshot_id,
+        trigger_type=trigger_type,
+        execution_origin=execution_origin,
+        stored_payload=stored_payload,
+        identity=identity,
+        options=opts,
+        interception=interception,
+        seam_coverage=seam_coverage,
+    )
+    await _insert_created_run(session, run, pipeline_id=pipeline_id, rate_limit_key=opts.rate_limit_key)
+    await _finalise_created_run(
+        session,
+        run,
+        org_id=org_id,
+        run_id=run_id,
+        interception=interception,
+        canonical_refs=identity.work_item_refs,
+    )
+    return run
+
+
+async def _enforce_run_creation_gates(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    pipeline_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    trigger_id: uuid.UUID | None,
+    trigger_type: str,
+) -> bool:
+    """Run every pre-insert admission gate; returns the guardrails kill-switch.
+
+    Soft-deleted-org guard — a run must never be created in an org whose
+    deletion flow has set status='deleted' (or in a hard-deleted org).
+
+    DB capacity hard-stop (FAR-426): refuse a NEW run when a *fixed* DB is
+    at/over the 98% threshold. This is the boundary where a run is created —
+    a resume, retention sweep or admin operation never reaches it. Fail-open:
+    a broken capacity probe can never block run creation (it allows the run).
+    Raises ``StorageExhaustedError`` (modulo.db.capacity); the API layer maps
+    it to HTTP 503 ``urn:problem:modulo:storage_exhausted`` so the transaction
+    here rolls back and no phantom run is persisted.
+
+    Pipeline lifecycle state gate (FAR-1528) — the SINGLE authority check
+    for "may this pipeline start a run at all". Archived, soft-deleted and
+    Paused (FAR-1530: run_enabled = FALSE) pipelines must not start runs
+    from ANY origin (REST manual + rerun, MCP trigger_pipeline, webhook,
+    replay, cron, polling, agent_signal, slack, variant, correction) — they
+    all converge here, so this one gate covers them; never add a per-path
+    pipeline-state check upstream. Read failures propagate (fail closed),
+    same discipline as the pause gate below. Raises PipelineNotRunnableError
+    (modulo.core.exceptions); the db->core edge is exempted under the
+    db-does-not-import-core contract. Callers map it themselves: REST/MCP
+    answer 409, the SAQ fire jobs (cron/polling/ongoing) and agent_signal
+    return a typed skip. Note that most origins only REACH this gate for rows
+    they can still see — SoftDeleteMixin already filters soft-deleted
+    pipelines from REST/rerun entry reads (404 upstream), so this gate's
+    reliable subjects are ARCHIVED and PAUSED pipelines (both stay visible).
+
+    Deployment drain is an instance-wide admission freeze for sandbox work.
+
+    Guardrails kill-switch (FAR-223 item 9) — pinned at run start alongside
+    the guardrail rows, never re-read mid-run. Defaults to OFF on read
+    failure (the fail-closed direction for a data-safety control).
+
+    Org-wide pause kill-switch — the SINGLE authority gate for
+    trigger-initiated runs (webhook, replay, cron, polling, agent_signal).
+    Manual runs (POST /runs, MCP trigger_pipeline), test_trigger
+    (trigger_type="manual"), feedback correction, and variant runs pass
+    (trigger_id None or an exempt type).
+
+    The ORDER is load-bearing (cheapest and most authoritative first) and the
+    kill-switch read sits before the pause gate, exactly as it did inline.
+    """
+    await _ensure_org_not_deleted(session, org_id)
+
+    from farna.db.capacity import enforce_capacity_gate
+
+    await enforce_capacity_gate()
+
+    await _enforce_pipeline_state_gate(session, pipeline_id, org_id)
+    await _enforce_deployment_drain_gate(session, snapshot_id)
+    guardrails_kill_switch = await _read_guardrails_kill_switch(session, org_id)
+    await _enforce_pause_gate(
+        session,
+        org_id,
+        trigger_id=trigger_id,
+        trigger_type=trigger_type,
+    )
+    return guardrails_kill_switch
+
+
+async def _run_ingestion_guardrails(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    pipeline_id: uuid.UUID,
+    run_id: uuid.UUID,
+    payload: dict[str, Any],
+    is_replay: bool | None,
+    snapshot_id: uuid.UUID,
+    guardrails_kill_switch: bool,
+) -> tuple[_GuardrailInterception, list[Any]]:
+    """Ingestion-edge guardrail interception + exhaustive per-seam coverage.
+
+    Guardrail interception (FAR-208 item 2) — the ingestion edge. The
+    two-phase pass runs BEFORE the run's input_payload is persisted, so
+    persisted state is post-redaction. A block outcome creates the run as a
+    TERMINAL eval_failed run instead of a pending/executable one. Replays
+    (is_replay=True) are detection-only — no act, no re-block (item 10).
+
+    FAR-2054: exhaustive per-seam guardrail coverage, from what Modulo
+    actually did at this seam. ``enforced`` is only reachable for a seam
+    Modulo itself acted on (attested); a runtime-sourced fact never is.
+    Enforcement suppression (kill-switch observe mode / detection-only replay)
+    downgrades a controlled seam to ``degraded`` — evaluating without acting
+    is not enforcement. A run blocked before dispatch (ingestion guardrail or
+    policy-gate pin fingerprint) never reaches the runtime, so every seam is
+    not_applicable (the policy-gate block path carries the same semantics:
+    both surface as ``interception.blocked``).
+    """
     interception = await _intercept_guardrails(
         session,
         _InterceptionRequest(
             org_id=org_id,
             pipeline_id=pipeline_id,
             run_id=run_id,
-            payload=stored_payload,
+            payload=payload,
             is_replay=is_replay,
             snapshot_id=snapshot_id,
             guardrails_kill_switch=guardrails_kill_switch,
         ),
     )
-    stored_payload = interception.payload
-    guardrail_results = interception.results
-    guardrail_blocked = interception.blocked
-    guardrail_block_message = interception.block_message
-    guardrail_blocking_eval_name = interception.blocking_eval_name
-    guardrail_observed_by_eval = interception.observed_by_eval
-    guardrail_summary_dict = interception.summary_json
-    # FAR-2054: exhaustive per-seam guardrail coverage, from what Modulo
-    # actually did at this seam. ``enforced`` is only reachable for a seam
-    # Modulo itself acted on (attested); a runtime-sourced fact never is.
-    # Enforcement suppression (kill-switch observe mode / detection-only replay)
-    # downgrades a controlled seam to ``degraded`` — evaluating without acting
-    # is not enforcement. A run blocked before dispatch (ingestion guardrail or
-    # policy-gate pin fingerprint) never reaches the runtime, so every seam is
-    # not_applicable (the policy-gate block path carries the same semantics:
-    # both surface as ``interception.blocked``).
     from farna.core.guardrails.coverage import derive_seam_coverage
 
     suppression_reason = _guardrail_suppression_reason(is_replay=is_replay, kill_switch=guardrails_kill_switch)
     seam_coverage = derive_seam_coverage(
-        blocked_before_runtime=guardrail_blocked,
-        ingestion_summary=guardrail_summary_dict,
+        blocked_before_runtime=interception.blocked,
+        ingestion_summary=interception.summary_json,
         output_guardrail_count=interception.output_guardrail_count,
         enforcement_suppressed_reason=suppression_reason,
     )
+    return interception, seam_coverage
 
-    stored_payload = _inject_engine_payload_keys(
-        stored_payload,
-        feedback_correction,
-        coalesce_key,
-        ci_failure_coalesce_key,
-    )
 
-    # FAR-153 / §15.1 — thread resolution: the resume path passes its
-    # parent's thread via the ``thread_id`` override so the child CONTINUES
-    # the parent's checkpoint; every other caller leaves the kwarg unset and
-    # gets the default fresh thread (a retry therefore runs its graph CLEAN).
+async def _resolve_run_creation_identity(
+    session: AsyncSession,
+    *,
+    stored_payload: dict[str, Any],
+    org_id: uuid.UUID,
+    pipeline_id: uuid.UUID,
+    run_id: uuid.UUID,
+    trigger_type: str,
+    parent_run_id: uuid.UUID | None,
+    work_item_id: uuid.UUID | None,
+    work_item_refs: list[dict[str, Any]] | None,
+    thread_id: str | None,
+    owner_team_id: uuid.UUID | None,
+) -> _CreateRunIdentity:
+    """Resolve the run's identity and canonical work-item refs at creation.
+
+    MUTATES *stored_payload* in place (the run's ``input_hash`` is computed
+    over the result): the wire ref channel is removed and the canonical set
+    re-stamped, exactly as the inline create path did.
+
+    FAR-153 / §15.1 — thread resolution: the resume path passes its parent's
+    thread via the ``thread_id`` override so the child CONTINUES the parent's
+    checkpoint; every other caller leaves the kwarg unset and gets the default
+    fresh thread (a retry therefore runs its graph CLEAN).
+
+    Per-org atomic counter (FAR-168) — never MAX(run_number)+1 on Postgres,
+    which races under concurrent trigger dispatches.
+
+    FAR-438 idempotency-key persistence: the run's STABLE logical identity
+    (<pipeline_id>:<run_number>) is written once at create so a re-run that
+    restores THIS run can READ it back and reuse the identical derived per-node
+    keys (UNKNOWN-recovery dedupe). It is NEVER a per-replay run_id (a fresh
+    UUID fork would mint a new key every re-run). run_idempotency_key validates
+    the <id>:<number> shape so a buggy identity fails loudly at the persist
+    boundary rather than silently storing a value that mints fresh keys. These
+    helpers are local (DB layer) — the derivation that CONSUMES the stored value
+    lives in modulo.core.pipeline_engine.idempotency (a module the DB layer
+    must not import, per import-linter).
+
+    Create-time journey stamping (FAR-142): resolve the chain anchor
+    (explicit > adopted-from-parent > deterministic floor), canonicalise the
+    work-item refs, and carry is_replay / variant_group_id verbatim. None of
+    this is read back out of input_payload — system data flows via kwargs.
+
+    FAR-794 slice 2a — refs supply channels + engine-assigned provenance.
+    Precedence: explicit ``work_item_refs`` kwarg (trigger-engine extraction)
+    > payload ``_work_item_refs`` carrier > the unprefixed wire alias. The
+    wire ``source`` is NEVER trusted: every surviving entry is re-stamped
+    with the channel's engine-assigned source (caller for manual/rerun,
+    derived for every extraction-driven channel).
+
+    Required-refs gate (FAR-794 slice 2a): a pipeline that declares
+    ``work_item_refs_required`` refuses a delivery that supplied none. The
+    flag is only queried when the canonical set is empty, so the hot path
+    (refs present) pays no extra round-trip.
+    """
     resolved_thread_id = thread_id if thread_id is not None else f"{org_id}:{run_id}"
-    # Per-org atomic counter (FAR-168) — never MAX(run_number)+1 on Postgres,
-    # which races under concurrent trigger dispatches.
     run_number = await _allocate_run_number(session, org_id)
-
-    # FAR-438 idempotency-key persistence: the run's STABLE logical identity
-    # (<pipeline_id>:<run_number>) is written once at create so a re-run that
-    # restores THIS run can READ it back and reuse the identical derived per-node
-    # keys (UNKNOWN-recovery dedupe). It is NEVER a per-replay run_id (a fresh
-    # UUID fork would mint a new key every re-run). run_idempotency_key validates
-    # the <id>:<number> shape so a buggy identity fails loudly at the persist
-    # boundary rather than silently storing a value that mints fresh keys. These
-    # helpers are local (DB layer) — the derivation that CONSUMES the stored value
-    # lives in modulo.core.pipeline_engine.idempotency (a module the DB layer
-    # must not import, per import-linter).
     idempotency_key = run_idempotency_key(run_idempotency_ref(pipeline_id, run_number))
-
-    # Create-time journey stamping (FAR-142): resolve the chain anchor
-    # (explicit > adopted-from-parent > deterministic floor), canonicalise the
-    # work-item refs, and carry is_replay / variant_group_id verbatim. None of
-    # this is read back out of input_payload — system data flows via kwargs.
     resolved_work_item_id = await _resolve_work_item_id(
         session,
         org_id=org_id,
@@ -2468,12 +2733,6 @@ async def create_run(
         explicit=work_item_id,
     )
 
-    # FAR-794 slice 2a — refs supply channels + engine-assigned provenance.
-    # Precedence: explicit ``work_item_refs`` kwarg (trigger-engine extraction)
-    # > payload ``_work_item_refs`` carrier > the unprefixed wire alias. The
-    # wire ``source`` is NEVER trusted: every surviving entry is re-stamped
-    # with the channel's engine-assigned source (caller for manual/rerun,
-    # derived for every extraction-driven channel).
     assigned_source = assigned_source_for_trigger(trigger_type)
     wire_refs = _harvest_wire_refs(stored_payload)
     supplied_refs = work_item_refs if work_item_refs is not None else wire_refs
@@ -2487,34 +2746,57 @@ async def create_run(
     if canonical_refs is not None:
         stored_payload[WORK_ITEM_REFS_KEY] = sort_canonical_refs(canonical_refs)
 
-    # Required-refs gate (FAR-794 slice 2a): a pipeline that declares
-    # ``work_item_refs_required`` refuses a delivery that supplied none. The
-    # flag is only queried when the canonical set is empty, so the hot path
-    # (refs present) pays no extra round-trip.
     if canonical_refs is None and await _read_work_item_refs_required(session, pipeline_id):
         raise WorkItemRefsRequiredError(pipeline_id)
 
-    owner_team_id = await _resolve_owner_team_id(session, owner_team_id, pipeline_id)
+    resolved_owner_team_id = await _resolve_owner_team_id(session, owner_team_id, pipeline_id)
+    return _CreateRunIdentity(
+        thread_id=resolved_thread_id,
+        run_number=run_number,
+        idempotency_key=idempotency_key,
+        work_item_id=resolved_work_item_id,
+        work_item_refs=canonical_refs,
+        owner_team_id=resolved_owner_team_id,
+    )
 
-    # FAR-1141 / ADR-042: run-level execution origin. The run executes its
-    # FROZEN snapshot (``snapshot_id``), never the live pipeline, so the
-    # classification reads THAT snapshot's graph — the same source every other
-    # run-scoped graph read uses (see ``_run_declares_single_pr_per_run``).
-    # Nothing else on this path already carries the node list (the guardrail /
-    # policy-gate reads above select PIN columns only), so this is one extra
-    # indexed PK SELECT per created run, not a second read of a value we
-    # already had.
-    #
-    # An absent snapshot row or an unreadable graph degrades to NULL
-    # ("origin not recorded") — an unproven origin must never be claimed as
-    # ``dispatched``. In production the row cannot be absent: ``snapshot_id``
-    # is NOT NULL with a RESTRICT FK. A DB error on the read is NOT swallowed
-    # (no silent failure path): it fails run creation loudly instead of
-    # persisting a run whose externally-executed work would read as
-    # Modulo-executed.
+
+async def _read_run_execution_origin(session: AsyncSession, snapshot_id: uuid.UUID) -> str | None:
+    """Classify the run's execution origin from its FROZEN snapshot graph (FAR-1141).
+
+    The run executes its FROZEN snapshot (``snapshot_id``), never the live
+    pipeline, so the classification reads THAT snapshot's graph — the same
+    source every other run-scoped graph read uses (see
+    ``_run_declares_single_pr_per_run``). Nothing else on this path already
+    carries the node list (the guardrail / policy-gate reads above select PIN
+    columns only), so this is one extra indexed PK SELECT per created run, not
+    a second read of a value we already had.
+
+    An absent snapshot row or an unreadable graph degrades to NULL ("origin
+    not recorded") — an unproven origin must never be claimed as
+    ``dispatched``. In production the row cannot be absent: ``snapshot_id`` is
+    NOT NULL with a RESTRICT FK. A DB error on the read is NOT swallowed (no
+    silent failure path): it fails run creation loudly instead of persisting a
+    run whose externally-executed work would read as Modulo-executed.
+    """
     snapshot_graph = (await session.execute(select(PipelineSnapshot.graph_json).where(PipelineSnapshot.id == snapshot_id))).scalar_one_or_none()
-    execution_origin = EXECUTION_ORIGIN_DISPATCHED if graph_contains_dispatch(snapshot_graph) else None
+    return EXECUTION_ORIGIN_DISPATCHED if graph_contains_dispatch(snapshot_graph) else None
 
+
+def _build_created_run(
+    *,
+    run_id: uuid.UUID,
+    org_id: uuid.UUID,
+    pipeline_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    trigger_type: str,
+    execution_origin: str | None,
+    stored_payload: dict[str, Any],
+    identity: _CreateRunIdentity,
+    options: _CreateRunOptionsView,
+    interception: _GuardrailInterception,
+    seam_coverage: list[Any],
+) -> Run:
+    """Construct the pending ``Run`` row from the resolved creation state."""
     run = Run(
         id=run_id,
         organisation_id=org_id,
@@ -2524,41 +2806,54 @@ async def create_run(
         execution_origin=execution_origin,
         input_hash=_input_hash(stored_payload),
         input_payload=stored_payload,
-        account_id=account_id,
-        trigger_id=trigger_id,
-        owner_team_id=owner_team_id,
-        langgraph_thread_id=resolved_thread_id,
-        parent_run_id=parent_run_id,
-        run_group_id=run_group_id,
-        run_group_kind=run_group_kind,
-        run_number=run_number,
-        rate_limit_key=rate_limit_key,
-        idempotency_key=idempotency_key,
-        work_item_id=resolved_work_item_id,
-        work_item_refs=canonical_refs,
-        is_replay=is_replay,
-        variant_group_id=variant_group_id,
-        batch_id=batch_id,
-        variant_config_snapshot=variant_config_snapshot,
-        guardrail_summary_json=guardrail_summary_dict,
+        account_id=options.account_id,
+        trigger_id=options.trigger_id,
+        owner_team_id=identity.owner_team_id,
+        langgraph_thread_id=identity.thread_id,
+        parent_run_id=options.parent_run_id,
+        run_group_id=options.run_group_id,
+        run_group_kind=options.run_group_kind,
+        run_number=identity.run_number,
+        rate_limit_key=options.rate_limit_key,
+        idempotency_key=identity.idempotency_key,
+        work_item_id=identity.work_item_id,
+        work_item_refs=identity.work_item_refs,
+        is_replay=options.is_replay,
+        variant_group_id=options.variant_group_id,
+        batch_id=options.batch_id,
+        variant_config_snapshot=options.variant_config_snapshot,
+        guardrail_summary_json=interception.summary_json,
         seam_coverage_json=[statement.model_dump(mode="json") for statement in seam_coverage],
     )
-    if guardrail_blocked:
-        _stamp_guardrail_blocked_run(run, guardrail_block_message)
+    if interception.blocked:
+        _stamp_guardrail_blocked_run(run, interception.block_message)
+    return run
+
+
+async def _insert_created_run(
+    session: AsyncSession,
+    run: Run,
+    *,
+    pipeline_id: uuid.UUID,
+    rate_limit_key: str | None,
+) -> None:
+    """Insert the run row inside its own SAVEPOINT.
+
+    Commit the insert inside a savepoint so that, on the async/Postgres
+    backend, a concurrent rate-limit conflict aborts only the nested
+    transaction (not the outer one). Without this the failed flush leaves
+    the outer transaction in a failed/aborted state, and the caller's
+    ``except RateLimitConflictError`` handler can no longer write its
+    rate-limit TriggerEvent (its own flush raises PendingRollbackError).
+
+    ``session.add(run)`` must live INSIDE the savepoint: a savepoint
+    rollback restores the session's pending-insert queue, so on conflict
+    the ``run`` row is dropped from the queue and the outer transaction
+    stays clean. Adding it OUTSIDE would leave the failed run pending,
+    so the caller's next flush re-inserts it, conflicts *outside* any
+    savepoint, and aborts the whole transaction (PendingRollbackError).
+    """
     try:
-        # Commit the insert inside a savepoint so that, on the async/Postgres
-        # backend, a concurrent rate-limit conflict aborts only the nested
-        # transaction (not the outer one). Without this the failed flush leaves
-        # the outer transaction in a failed/aborted state, and the caller's
-        # ``except RateLimitConflictError`` handler can no longer write its
-        # rate-limit TriggerEvent (its own flush raises PendingRollbackError).
-        #
-        # ``session.add(run)`` must live INSIDE the savepoint: a savepoint
-        # rollback restores the session's pending-insert queue, so on conflict
-        # the ``run`` row is dropped from the queue and the outer transaction
-        # stays clean. Adding it OUTSIDE would leave the failed run pending,
-        # so the caller's next flush re-inserts it, conflicts *outside* any
-        # savepoint, and aborts the whole transaction (PendingRollbackError).
         async with session.begin_nested():
             session.add(run)
             await session.flush()
@@ -2570,29 +2865,40 @@ async def create_run(
             ) from exc
         raise
 
-    if guardrail_results:
+
+async def _finalise_created_run(
+    session: AsyncSession,
+    run: Run,
+    *,
+    org_id: uuid.UUID,
+    run_id: uuid.UUID,
+    interception: _GuardrailInterception,
+    canonical_refs: list[dict[str, Any]] | None,
+) -> None:
+    """Post-insert side writes for a created run.
+
+    Guardrail evidence, then journey hydration (mint-only, fail-open: a journey
+    write failure must NEVER abort create_run — a lost create-stamp is
+    recoverable at finalise via the deterministic canonical id), then the
+    blocked-run compensation for a guardrail-blocked create.
+    """
+    if interception.results:
         await _persist_guardrail_eval_results(
             session,
             org_id=org_id,
             run_id=run_id,
-            guardrail_results=guardrail_results,
-            guardrail_observed_by_eval=guardrail_observed_by_eval,
+            guardrail_results=interception.results,
+            guardrail_observed_by_eval=interception.observed_by_eval,
         )
-
-    # Journey hydration (mint-only, fail-open). A journey write failure must
-    # NEVER abort create_run — a lost create-stamp is recoverable at finalise
-    # via the deterministic canonical id.
     await _hydrate_journeys(session, org_id, canonical_refs)
-
-    if guardrail_blocked:
+    if interception.blocked:
         await _compensate_blocked_run_best_effort(
             session,
             run,
             run_id=run_id,
-            guardrail_block_message=guardrail_block_message,
-            guardrail_blocking_eval_name=guardrail_blocking_eval_name,
+            guardrail_block_message=interception.block_message,
+            guardrail_blocking_eval_name=interception.blocking_eval_name,
         )
-    return run
 
 
 async def coalesce_pending_run(
@@ -2648,6 +2954,50 @@ async def coalesce_pending_run(
     stored_payload = _strip_reserved_keys(input_payload)
     stored_payload[_COALESCE_KEY_FIELD] = coalesce_key
 
+    run = await _find_coalesce_target(session, org_id=org_id, pipeline_id=pipeline_id, coalesce_key=coalesce_key)
+    if run is None:
+        return None
+
+    merged_refs = await _merge_coalesced_work_item_refs(
+        session,
+        run,
+        stored_payload=stored_payload,
+        pipeline_id=pipeline_id,
+        trigger_type=trigger_type,
+    )
+
+    stored_payload.pop(WORK_ITEM_REFS_KEY, None)
+    if merged_refs is not None:
+        stored_payload[WORK_ITEM_REFS_KEY] = merged_refs
+    run.input_payload = stored_payload
+    run.input_hash = _input_hash(stored_payload)
+    run.work_item_refs = merged_refs
+    run.created_at = datetime.now(UTC)
+    # Mint any newly-seen (kind, ref) from the merged set — mint-only +
+    # rank-guarded, fail-open (a journey write failure never aborts the fold).
+    await _hydrate_journeys(session, org_id, merged_refs)
+    await session.flush()
+    return run
+
+
+async def _find_coalesce_target(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    pipeline_id: uuid.UUID,
+    coalesce_key: str,
+) -> Run | None:
+    """Select the pipeline's unstarted pending run for *coalesce_key* (FAR-604).
+
+    ``FOR UPDATE SKIP LOCKED`` on PostgreSQL: a run currently being dispatched is
+    skipped and a fresh run is inserted (safe fallback, no blocked delivery).
+    Non-PostgreSQL backends match the key in Python over a bounded candidate
+    scan. The candidate match binds ``organisation_id`` explicitly (FAR-604 F7):
+    on Postgres the GUC-pinned RLS context scopes the query, but the explicit
+    org predicate means a fold can never cross tenants even if the session
+    context is wrong — and on non-PostgreSQL backends (no RLS) it is the ONLY
+    org guard.
+    """
     dialect = await _get_dialect_name(session)
     if dialect == "postgresql":
         stmt = (
@@ -2670,60 +3020,57 @@ async def coalesce_pending_run(
             .limit(1)
             .with_for_update(skip_locked=True)
         )
-        run = (await session.execute(stmt)).scalar_one_or_none()
-    else:
-        candidates = (
-            (
-                await session.execute(
-                    select(Run)
-                    .where(
-                        Run.pipeline_id == pipeline_id,
-                        Run.status == "pending",
-                        # FAR-1623: never-claimed, never-started only — see the
-                        # Postgres branch above for the rationale.
-                        Run.claim_count == 0,
-                        Run.started_at.is_(None),
-                        Run.cancellation_requested.is_(False),
-                        Run.organisation_id == org_id,
-                    )
-                    .order_by(Run.created_at.desc())
-                    .limit(_COALESCE_CANDIDATE_LIMIT)
+        return (await session.execute(stmt)).scalar_one_or_none()
+    candidates = (
+        (
+            await session.execute(
+                select(Run)
+                .where(
+                    Run.pipeline_id == pipeline_id,
+                    Run.status == "pending",
+                    # FAR-1623: never-claimed, never-started only — see the
+                    # Postgres branch above for the rationale.
+                    Run.claim_count == 0,
+                    Run.started_at.is_(None),
+                    Run.cancellation_requested.is_(False),
+                    Run.organisation_id == org_id,
                 )
+                .order_by(Run.created_at.desc())
+                .limit(_COALESCE_CANDIDATE_LIMIT)
             )
-            .scalars()
-            .all()
         )
-        run = next(
-            (r for r in candidates if getattr(r, "organisation_id", None) == org_id and getattr(r, "claim_count", 0) == 0 and getattr(r, "started_at", None) is None and read_coalesce_key(r.input_payload) == coalesce_key),
-            None,
-        )
-    if run is None:
-        return None
+        .scalars()
+        .all()
+    )
+    return next(
+        (r for r in candidates if getattr(r, "organisation_id", None) == org_id and getattr(r, "claim_count", 0) == 0 and getattr(r, "started_at", None) is None and read_coalesce_key(r.input_payload) == coalesce_key),
+        None,
+    )
 
-    # FAR-794 slice 2a — merge the surviving run's refs with the new
-    # delivery's, rank-guarded. The wire ``source`` is never trusted: the new
-    # entries are re-stamped with the channel's engine-assigned source before
-    # the union.
+
+async def _merge_coalesced_work_item_refs(
+    session: AsyncSession,
+    run: Run,
+    *,
+    stored_payload: dict[str, Any],
+    pipeline_id: uuid.UUID,
+    trigger_type: str | None,
+) -> list[dict[str, Any]] | None:
+    """Rank-guarded union of the pending run's refs with the new delivery's.
+
+    FAR-794 slice 2a — the wire ``source`` is never trusted: the new entries are
+    re-stamped with the channel's engine-assigned source before the union. The
+    pipeline's ``work_item_refs_required`` flag is evaluated against the MERGED
+    set, so a required pipeline stays satisfied as long as either delivery
+    carried refs.
+    """
     assigned_source = assigned_source_for_trigger(trigger_type)
     wire_refs = _harvest_wire_refs(stored_payload)
     new_canonical = _canonicalise_ref_entries(wire_refs, force_source=assigned_source)
     merged_refs = _merge_rank_guarded_refs(run.work_item_refs, new_canonical)
-
     if merged_refs is None and await _read_work_item_refs_required(session, pipeline_id):
         raise WorkItemRefsRequiredError(pipeline_id)
-
-    stored_payload.pop(WORK_ITEM_REFS_KEY, None)
-    if merged_refs is not None:
-        stored_payload[WORK_ITEM_REFS_KEY] = merged_refs
-    run.input_payload = stored_payload
-    run.input_hash = _input_hash(stored_payload)
-    run.work_item_refs = merged_refs
-    run.created_at = datetime.now(UTC)
-    # Mint any newly-seen (kind, ref) from the merged set — mint-only +
-    # rank-guarded, fail-open (a journey write failure never aborts the fold).
-    await _hydrate_journeys(session, org_id, merged_refs)
-    await session.flush()
-    return run
+    return merged_refs
 
 
 async def get_pipeline_queue_depth(session: AsyncSession, pipeline_id: uuid.UUID) -> tuple[int, datetime | None]:
@@ -2797,6 +3144,65 @@ _RUNS_LIST_DEFERRED_COLUMNS: tuple[str, ...] = (
 )
 
 
+def _runs_list_scope_filters(
+    *,
+    organisation_id: uuid.UUID | None,
+    team_id: uuid.UUID | None,
+    account_id: uuid.UUID | None,
+) -> list[Any]:
+    """Tenant / team boundary predicates shared by the runs list queries.
+
+    Defence-in-depth: when *organisation_id* is provided the predicate is added
+    so cross-tenant access is impossible even if RLS is misconfigured.
+
+    A team-scoped caller sees runs for its own team's pipelines plus org-level
+    pipelines (no owner team) — the same boundary the MCP guard applies. The
+    run's stamped owner is the source of truth; runs predating the create-time
+    stamp (NULL) fall back to the pipeline's owner so a NULL stamp can never
+    widen the boundary. Viewer reads are bounded by the account's team
+    memberships rather than a team-scoped credential boundary (``run.list`` is
+    viewer-reachable), using the same effective owner so a NULL run stamp can
+    never widen the boundary.
+    """
+    clauses: list[Any] = []
+    if organisation_id is not None:
+        clauses.append(Run.organisation_id == organisation_id)
+    if team_id is not None:
+        effective_owner = func.coalesce(Run.owner_team_id, Pipeline.owner_team_id)
+        clauses.append(team_scope_clause(effective_owner, team_id))
+    elif account_id is not None:
+        effective_owner = func.coalesce(Run.owner_team_id, Pipeline.owner_team_id)
+        clauses.append(account_team_scope_clause(effective_owner, account_id))
+    return clauses
+
+
+def _runs_list_attribute_filters(
+    *,
+    pipeline_id: uuid.UUID | None,
+    status: str | None,
+    trigger_type: str | None,
+    search: str | None,
+    variant_group_id: uuid.UUID | None,
+    batch_id: uuid.UUID | None,
+) -> list[Any]:
+    """Column-narrowing predicates shared by the runs list queries."""
+    clauses: list[Any] = []
+    if pipeline_id is not None:
+        clauses.append(Run.pipeline_id == pipeline_id)
+    if status is not None:
+        clauses.append(Run.status == status)
+    if trigger_type is not None:
+        clauses.append(Run.trigger_type == trigger_type)
+    if search is not None:
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        clauses.append(Pipeline.name.ilike(f"%{escaped}%", escape="\\"))
+    if variant_group_id is not None:
+        clauses.append(Run.variant_group_id == variant_group_id)
+    if batch_id is not None:
+        clauses.append(Run.batch_id == batch_id)
+    return clauses
+
+
 async def list_runs(
     session: AsyncSession,
     *,
@@ -2823,6 +3229,18 @@ async def list_runs(
     Heavy payload columns (see ``_RUNS_LIST_DEFERRED_COLUMNS``) are deferred so
     a page SELECT never detoasts megabyte-scale JSONB the responses never read.
     """
+    filters = _runs_list_scope_filters(
+        organisation_id=organisation_id,
+        team_id=team_id,
+        account_id=account_id,
+    ) + _runs_list_attribute_filters(
+        pipeline_id=pipeline_id,
+        status=status,
+        trigger_type=trigger_type,
+        search=search,
+        variant_group_id=variant_group_id,
+        batch_id=batch_id,
+    )
     q = (
         select(Run)
         .options(
@@ -2830,50 +3248,9 @@ async def list_runs(
             *(defer(getattr(Run, name)) for name in _RUNS_LIST_DEFERRED_COLUMNS),
         )
         .join(Pipeline, Run.pipeline_id == Pipeline.id, isouter=False)
-        .where(Pipeline.deleted_at.is_(None))
+        .where(Pipeline.deleted_at.is_(None), *filters)
     )
-    count_q = select(func.count()).select_from(Run).join(Pipeline, Run.pipeline_id == Pipeline.id, isouter=False).where(Pipeline.deleted_at.is_(None))
-    if organisation_id is not None:
-        q = q.where(Run.organisation_id == organisation_id)
-        count_q = count_q.where(Run.organisation_id == organisation_id)
-    if team_id is not None:
-        # A team-scoped caller sees runs for its own team's pipelines plus
-        # org-level pipelines (no owner team) — the same boundary the MCP
-        # guard applies. The run's stamped owner is the source of truth;
-        # runs predating the create-time stamp (NULL) fall back to the
-        # pipeline's owner so a NULL stamp can never widen the boundary.
-        effective_owner = func.coalesce(Run.owner_team_id, Pipeline.owner_team_id)
-        team_scope = team_scope_clause(effective_owner, team_id)
-        q = q.where(team_scope)
-        count_q = count_q.where(team_scope)
-    elif account_id is not None:
-        # Viewer reads are bounded by the account's team memberships rather
-        # than a team-scoped credential boundary (``run.list`` is
-        # viewer-reachable). Same effective owner as the team-key leg so a
-        # NULL run stamp can never widen the boundary.
-        effective_owner = func.coalesce(Run.owner_team_id, Pipeline.owner_team_id)
-        account_scope = account_team_scope_clause(effective_owner, account_id)
-        q = q.where(account_scope)
-        count_q = count_q.where(account_scope)
-    if pipeline_id is not None:
-        q = q.where(Run.pipeline_id == pipeline_id)
-        count_q = count_q.where(Run.pipeline_id == pipeline_id)
-    if status is not None:
-        q = q.where(Run.status == status)
-        count_q = count_q.where(Run.status == status)
-    if trigger_type is not None:
-        q = q.where(Run.trigger_type == trigger_type)
-        count_q = count_q.where(Run.trigger_type == trigger_type)
-    if search is not None:
-        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        q = q.where(Pipeline.name.ilike(f"%{escaped}%", escape="\\"))
-        count_q = count_q.where(Pipeline.name.ilike(f"%{escaped}%", escape="\\"))
-    if variant_group_id is not None:
-        q = q.where(Run.variant_group_id == variant_group_id)
-        count_q = count_q.where(Run.variant_group_id == variant_group_id)
-    if batch_id is not None:
-        q = q.where(Run.batch_id == batch_id)
-        count_q = count_q.where(Run.batch_id == batch_id)
+    count_q = select(func.count()).select_from(Run).join(Pipeline, Run.pipeline_id == Pipeline.id, isouter=False).where(Pipeline.deleted_at.is_(None), *filters)
 
     if cursor is not None:
         paginator = CursorPaginator()
@@ -3883,6 +4260,21 @@ async def update_run_status(
         raise ValueError("refund_claim_count requires claim_token (refund is fenced to the claim it refunds)")
     if update.claim_token is not None:
         return await _update_run_status_fenced(session, run_id, status, update=update)
+    return await _update_run_status_orm(session, run_id, status, update=update)
+
+
+async def _update_run_status_orm(
+    session: AsyncSession,
+    run_id: uuid.UUID,
+    status: str,
+    *,
+    update: _RunStatusUpdate,
+) -> Run | None:
+    """The unfenced ORM write path: row lock, field stamping, store write.
+
+    The ``SELECT ... FOR UPDATE`` row lock is what serializes the read-then-write
+    so the *not_status* guard is evaluated against the authoritative row state.
+    """
     result = await session.execute(select(Run).where(Run.id == run_id).with_for_update())
     run = result.scalar_one_or_none()
     if run is None:
@@ -4845,6 +5237,23 @@ def _failure_reason_counts(runs: list[Run]) -> dict[str, int]:
     return failure_reasons
 
 
+def _stats_window_filters(cutoff: datetime, account_id: uuid.UUID | None) -> list[Any]:
+    """Shared ``Run``/``Pipeline`` predicates for a run-stats window.
+
+    Both stats paths (generic Python and the Postgres fast path) select over the
+    same window and the same tenant boundary, so the predicate list is built
+    once here: the run's stamped owner with the pipeline's owner as the NULL
+    fallback (a pre-stamp run can never widen the boundary).
+    """
+    filters: list[Any] = [
+        Run.created_at >= cutoff,
+        Pipeline.deleted_at.is_(None),
+    ]
+    if account_id is not None:
+        filters.append(account_team_scope_clause(func.coalesce(Run.owner_team_id, Pipeline.owner_team_id), account_id))
+    return filters
+
+
 async def _get_run_stats_python(
     session: AsyncSession,
     cutoff: datetime,
@@ -4852,40 +5261,57 @@ async def _get_run_stats_python(
     account_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Generic-backend fallback: load runs into Python, compute percentiles locally."""
-    filters: list[Any] = [
-        Run.created_at >= cutoff,
-        Pipeline.deleted_at.is_(None),
-    ]
-    if account_id is not None:
-        filters.append(account_team_scope_clause(func.coalesce(Run.owner_team_id, Pipeline.owner_team_id), account_id))
-    result = await session.execute(select(Run).join(Pipeline, Run.pipeline_id == Pipeline.id).where(*filters).order_by(Run.created_at))
+    result = await session.execute(select(Run).join(Pipeline, Run.pipeline_id == Pipeline.id).where(*_stats_window_filters(cutoff, account_id)).order_by(Run.created_at))
     runs: list[Run] = list(result.scalars().all())
 
-    total = len(runs)
-    if total == 0:
+    if not runs:
         return _empty_run_stats()
+    return _python_run_stats(runs)
 
-    completed_runs = [r for r in runs if r.completed_at and r.started_at]
-    durations_ms = _completed_durations_ms(completed_runs)
 
+def _runs_with_durations(runs: list[Run]) -> list[Run]:
+    """The duration sample set: runs carrying BOTH ``started_at`` and ``completed_at``."""
+    return [r for r in runs if r.completed_at and r.started_at]
+
+
+def _success_rate(runs: list[Run]) -> float:
+    """Completed share of the NON-benign runs (FAR-707 denominator rule).
+
+    FAR-707: business-expected outcomes leave the failure rate entirely — they
+    leave the DENOMINATOR too, so an expected rebase conflict can never dilute
+    the rate. ``total_runs`` stays the raw volume (it is a count of runs, not a
+    rate); only the rate is recomputed over the non-benign set.
+    """
+    if not runs:
+        return 0.0
     success_count = sum(1 for r in runs if r.status == "complete")
-    # FAR-707: business-expected outcomes leave the failure rate entirely —
-    # they leave the DENOMINATOR too, so an expected rebase conflict can never
-    # dilute the rate. ``total_runs`` stays the raw volume (it is a count of
-    # runs, not a rate); only the rate is recomputed over the non-benign set.
-    benign_count = sum(1 for r in runs if _is_benign_run(r))
-    rate_denominator = total - benign_count
-    success_rate = round(success_count / rate_denominator, 4) if rate_denominator > 0 else 0.0
-    avg_duration = int(sum(durations_ms) / len(durations_ms)) if durations_ms else 0
+    rate_denominator = sum(1 for r in runs if not _is_benign_run(r))
+    if rate_denominator <= 0:
+        return 0.0
+    return round(success_count / rate_denominator, 4)
 
+
+def _mean_duration_ms(durations_ms: list[int]) -> int:
+    """Integer mean of the duration samples (0 for an empty sample set)."""
+    return int(sum(durations_ms) / len(durations_ms)) if durations_ms else 0
+
+
+def _python_run_stats(runs: list[Run]) -> dict[str, Any]:
+    """Build the stats response from already-loaded runs.
+
+    The SHAPE is identical to the Postgres fast path's (both return the same
+    keys), so a caller cannot tell which backend answered.
+    """
+    completed_runs = _runs_with_durations(runs)
+    durations_ms = _completed_durations_ms(completed_runs)
     by_day = _runs_by_day(runs)
     dur_by_day = _duration_by_day(completed_runs)
     failure_reasons = _failure_reason_counts(runs)
 
     return {
-        "total_runs": total,
-        "success_rate": success_rate,
-        "avg_duration_ms": avg_duration,
+        "total_runs": len(runs),
+        "success_rate": _success_rate(runs),
+        "avg_duration_ms": _mean_duration_ms(durations_ms),
         "p50_duration_ms": int(_percentile([float(x) for x in durations_ms], 50)),
         "p95_duration_ms": int(_percentile([float(x) for x in durations_ms], 95)),
         "p99_duration_ms": int(_percentile([float(x) for x in durations_ms], 99)),
@@ -4910,21 +5336,36 @@ async def _get_run_stats_postgres(
     duration); an empty percentile group yields ``None`` in the response.
     """
     duration_ms = func.extract("epoch", Run.completed_at - Run.started_at) * 1000
-    base_where: list[Any] = [
-        Run.created_at >= cutoff,
-        Pipeline.deleted_at.is_(None),
-    ]
-    if account_id is not None:
-        base_where.append(account_team_scope_clause(func.coalesce(Run.owner_team_id, Pipeline.owner_team_id), account_id))
+    base_where = _stats_window_filters(cutoff, account_id)
     day = cast(Run.created_at, Date).label("day")
 
-    # Per-day count/success/failed buckets plus per-day average duration. A day
-    # with runs but no completed durations has a NULL avg and is omitted, which
-    # matches the generic path (days only appear once they have a duration).
-    # FAR-707: ``benign_count`` is the per-day business-expected total (so the
-    # rate's denominator can be recomputed) and the ``failed`` bucket skips
-    # those rows.
-    day_rows = list(
+    day_rows = await _postgres_day_rows(session, day, duration_ms, base_where)
+
+    total = sum(int(row.run_count) for row in day_rows)
+    if total == 0:
+        return _empty_run_stats()
+
+    overall = await _postgres_duration_overall(session, duration_ms, base_where)
+    failure_rows = await _postgres_failure_rows(session, base_where)
+
+    return _postgres_run_stats_payload(day_rows, overall, failure_rows)
+
+
+async def _postgres_day_rows(
+    session: AsyncSession,
+    day: Any,
+    duration_ms: Any,
+    base_where: list[Any],
+) -> list[Any]:
+    """Per-day count/success/failed buckets plus per-day average duration.
+
+    A day with runs but no completed durations has a NULL avg and is omitted,
+    which matches the generic path (days only appear once they have a
+    duration). FAR-707: ``benign_count`` is the per-day business-expected total
+    (so the rate's denominator can be recomputed) and the ``failed`` bucket
+    skips those rows.
+    """
+    return list(
         (
             await session.execute(
                 select(
@@ -4943,14 +5384,19 @@ async def _get_run_stats_postgres(
         ).all()
     )
 
-    total = sum(int(row.run_count) for row in day_rows)
-    if total == 0:
-        return _empty_run_stats()
 
-    # Whole-window duration percentiles + mean over completed runs (both
-    # started_at and completed_at present). percentile_cont ignores NULLs and
-    # returns NULL for an empty group, so the response null-guards below.
-    overall = (
+async def _postgres_duration_overall(
+    session: AsyncSession,
+    duration_ms: Any,
+    base_where: list[Any],
+) -> Any:
+    """Whole-window duration percentiles + mean over completed runs.
+
+    Both ``started_at`` and ``completed_at`` must be present. ``percentile_cont``
+    ignores NULLs and returns NULL for an empty group, so the response
+    null-guards each percentile.
+    """
+    return (
         await session.execute(
             select(
                 func.percentile_cont(0.5).within_group(duration_ms).label("p50"),
@@ -4967,29 +5413,44 @@ async def _get_run_stats_postgres(
             )
         )
     ).one()
+
+
+async def _postgres_failure_rows(session: AsyncSession, base_where: list[Any]) -> list[Any]:
+    """Failure reason breakdown for failed / eval_failed runs carrying an error code.
+
+    FAR-707: benign (business-expected) rows are excluded so an expected
+    failure never inflates its own error-code cluster.
+    """
+    return list(
+        (
+            await session.execute(
+                select(Run.error_code, func.count())
+                .select_from(Run)
+                .join(Pipeline, Run.pipeline_id == Pipeline.id)
+                .where(
+                    *base_where,
+                    Run.status.in_(_FAILURE_REASON_STATUSES),
+                    Run.error_code.is_not(None),
+                    Run.error_code != "",
+                    _NOT_BENIGN_PREDICATE,
+                )
+                .group_by(Run.error_code)
+            )
+        ).all()
+    )
+
+
+def _postgres_run_stats_payload(
+    day_rows: list[Any],
+    overall: Any,
+    failure_rows: list[Any],
+) -> dict[str, Any]:
+    """Assemble the Postgres stats response from the three aggregate reads."""
+    total = sum(int(row.run_count) for row in day_rows)
     p50 = overall.p50
     p95 = overall.p95
     p99 = overall.p99
     avg_duration = overall.avg_duration
-
-    # Failure reason breakdown for failed / eval_failed runs carrying an error
-    # code. FAR-707: benign (business-expected) rows are excluded so an
-    # expected failure never inflates its own error-code cluster.
-    failure_rows = (
-        await session.execute(
-            select(Run.error_code, func.count())
-            .select_from(Run)
-            .join(Pipeline, Run.pipeline_id == Pipeline.id)
-            .where(
-                *base_where,
-                Run.status.in_(_FAILURE_REASON_STATUSES),
-                Run.error_code.is_not(None),
-                Run.error_code != "",
-                _NOT_BENIGN_PREDICATE,
-            )
-            .group_by(Run.error_code)
-        )
-    ).all()
 
     success_count = sum(int(row.success) for row in day_rows)
     benign_total = sum(int(row.benign_count or 0) for row in day_rows)
