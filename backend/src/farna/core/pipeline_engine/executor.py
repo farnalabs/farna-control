@@ -22,41 +22,50 @@ Architecture: see docs/architecture.md "Pipeline Executor Patterns" and "Run adm
 
 from __future__ import annotations
 
+# The ``noqa: F401`` markers in this import block keep names that moved into
+# ``executor_parts`` (or lost their last local user) importable FROM THIS MODULE.
+# ``executor.<name>`` is a live attribute for `mock.patch` targets and for
+# downstream imports, so the bindings must stay even where nothing in this file
+# still reads them. Do not "clean them up".
 import asyncio
-import hashlib
-import json
+import hashlib  # noqa: F401
+import json  # noqa: F401
 import logging
-import math
-import os
-import socket
+import math  # noqa: F401
+import os  # noqa: F401
+import socket  # noqa: F401
 import uuid
-from collections import OrderedDict
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass, field
+from collections import OrderedDict  # noqa: F401
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence  # noqa: F401
+from contextlib import asynccontextmanager, suppress  # noqa: F401
+from dataclasses import dataclass, field  # noqa: F401
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal  # noqa: F401
 from inspect import isawaitable
-from typing import Any, Literal, NamedTuple, NoReturn
+from typing import Any, Literal, NamedTuple, NoReturn  # noqa: F401
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage  # noqa: F401
 from langgraph.errors import GraphInterrupt, NodeCancelledError
 from opentelemetry import context as context_api
 from opentelemetry.trace import set_span_in_context
-from sqlalchemy import Boolean, Uuid, bindparam, func, select, text, update
+from sqlalchemy import Boolean, Uuid, bindparam, func, select, text, update  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from farna.connectors._rate_bucket import SharedBudgetUnavailableError
-from farna.connectors.base import node_fires_dispatch_job
+from farna.connectors.base import node_fires_dispatch_job  # noqa: F401
 from farna.core.audit_logger import append_audit_event
 from farna.core.audit_logger.labels import (
-    SYSTEM_ACTOR,
+    SYSTEM_ACTOR,  # noqa: F401
     compose_run_started_summary,
     resolve_run_actor,
-    short_id,
+    short_id,  # noqa: F401
 )
 from farna.core.connector_hub.locking import _uuid_to_lock_keys
-from farna.core.cost_controller.finalize import FinalizeMetricSink, derive_node_type_map, finalize_cost
+from farna.core.cost_controller.finalize import (
+    FinalizeMetricSink,  # noqa: F401
+    derive_node_type_map,
+    finalize_cost,  # noqa: F401
+)
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
 from farna.core.eval_engine import (
     EvalBlockedError,
@@ -67,27 +76,27 @@ from farna.core.eval_engine import (
 from farna.core.graph_validator import GraphValidator
 from farna.core.graph_validator._types import ValidationResult
 from farna.core.hitl_manager import HITLManager
-from farna.core.hitl_manager.gate_coalescing import SUPERSEDE_REASON, evaluate_gate_coalescing
+from farna.core.hitl_manager.gate_coalescing import SUPERSEDE_REASON, evaluate_gate_coalescing  # noqa: F401
 from farna.core.model_backend_hub import ModelBackendHub
 from farna.core.node_output_split import (
-    DEFAULT_NODE_TYPE,
-    SPLITTABLE_NODE_TYPES,
+    DEFAULT_NODE_TYPE,  # noqa: F401
+    SPLITTABLE_NODE_TYPES,  # noqa: F401
     extend_node_type_map_from_edges,
-    node_telemetry,
-    resolve_node_contract_output,
+    node_telemetry,  # noqa: F401
+    resolve_node_contract_output,  # noqa: F401
 )
 from farna.core.notifier import (
     EVENT_BUDGET_EXCEEDED,
     EVENT_EVAL_BLOCKED,
     EVENT_HITL_AWAITING,
-    EVENT_PROVIDER_FAILURE,
+    EVENT_PROVIDER_FAILURE,  # noqa: F401
     EVENT_RUN_FAILED,
     EVENT_RUN_STALLED,
 )
 from farna.core.pipeline_engine import retry_compensation as rc
 from farna.core.pipeline_engine import retry_policy as _retry_policy_module
 from farna.core.pipeline_engine.decorator import (
-    _RESERVED_RUN_CONTEXT_KEYS,
+    _RESERVED_RUN_CONTEXT_KEYS,  # noqa: F401
     RunCancelledError,
     set_audit_hook,
     set_cancellation_check,
@@ -96,15 +105,15 @@ from farna.core.pipeline_engine.decorator import (
 )
 from farna.core.pipeline_engine.error_codes import (
     _CODE_CONNECTOR_FAILED,
-    _CODE_CONNECTOR_UNKNOWN,
+    _CODE_CONNECTOR_UNKNOWN,  # noqa: F401
     _CODE_HARNESS_RETRY_BUDGET_EXHAUSTED,
-    _CODE_SANDBOX_AGENT_FAILED,
-    _CODE_SANDBOX_NO_OUTPUT_JSON,
+    _CODE_SANDBOX_AGENT_FAILED,  # noqa: F401
+    _CODE_SANDBOX_NO_OUTPUT_JSON,  # noqa: F401
     map_legacy_code,
-    sanitize_error_text,
+    sanitize_error_text,  # noqa: F401
     should_notify_terminal_failure,
 )
-from farna.core.pipeline_engine.errors import ResumeClaimSupersededError, RouterNoMatchError
+from farna.core.pipeline_engine.errors import ResumeClaimSupersededError, RouterNoMatchError  # noqa: F401
 from farna.core.pipeline_engine.eval_persist_order import (
     EvalDefDTO,
     run_evals_persist_before_decide,
@@ -112,11 +121,11 @@ from farna.core.pipeline_engine.eval_persist_order import (
 from farna.core.pipeline_engine.event_broker import RunEventBroker, get_registry
 from farna.core.pipeline_engine.evidence import (
     EvidenceProvider,
-    build_default_evidence_provider,
-    compute_work_intact,
-    evidence_enabled,
-    node_declared_success,
-    run_evidence_probe,
+    build_default_evidence_provider,  # noqa: F401
+    compute_work_intact,  # noqa: F401
+    evidence_enabled,  # noqa: F401
+    node_declared_success,  # noqa: F401
+    run_evidence_probe,  # noqa: F401
 )
 from farna.core.pipeline_engine.graph_cache import build_graph_from_json, get_or_compile, struct_hash_with_eval_defs
 from farna.core.pipeline_engine.hitl_context import HitlReviewContext, build_hitl_review_context
@@ -127,23 +136,23 @@ from farna.core.pipeline_engine.model_backend_errors import (
     classify_provider_error,
     non_retryable_provider_code,
 )
-from farna.core.pipeline_engine.modulo_saver import ModuloPostgresSaver
+from farna.core.pipeline_engine.modulo_saver import ModuloPostgresSaver  # noqa: F401
 from farna.core.pipeline_engine.node_runner import (
-    MODULO_SYNTHETIC_FAILURE_MARKER,
+    MODULO_SYNTHETIC_FAILURE_MARKER,  # noqa: F401
     ConnectorNodeFailedError,
     OutputSchemaValidationError,
     SandboxNodeFailedError,
     SandboxTierRefusedError,
     SupersededNodeError,
     _idempotency_gate_skipped_envelope,
-    _marker_delivery_done_for_node,
+    _marker_delivery_done_for_node,  # noqa: F401
     merge_recovered_token_usage,
     set_conformance_ctx,
 )
 from farna.core.pipeline_engine.output_filter import OutputRejectedError
-from farna.core.pipeline_engine.port_resolver import compute_port_topology_hash
+from farna.core.pipeline_engine.port_resolver import compute_port_topology_hash  # noqa: F401
 from farna.core.pipeline_engine.retry_policy import (
-    _ERROR_CODE_AGENT_FAILED,
+    _ERROR_CODE_AGENT_FAILED,  # noqa: F401
     _ERROR_CODE_HARNESS_IDEMPOTENCY_GATE,
     _ERROR_CODE_NODE_TIMEOUT,
     _ERROR_CODE_SANDBOX_TIER_REFUSED,
@@ -169,9 +178,9 @@ from farna.core.retry_budget import (
 )
 from farna.core.run_context.autonomy import (
     PIPELINE_EARNED_AT_START_KEY,
-    PIPELINE_MAX_AUTONOMY_KEY,
+    PIPELINE_MAX_AUTONOMY_KEY,  # noqa: F401
     AutonomyLevel,
-    autonomy_level_rank,
+    autonomy_level_rank,  # noqa: F401
 )
 from farna.core.run_provenance import run_provenance_fields
 from farna.core.spend_ceiling import ORG_CEILING_EXCEEDED, evaluate_org_spend_ceiling
@@ -197,7 +206,7 @@ from farna.db.crud.run import (
     get_sandbox_concurrency_limit,
     update_run_status,
 )
-from farna.db.crud.run_node_outputs import DualWriteError, read_run_blobs, read_run_markers
+from farna.db.crud.run_node_outputs import DualWriteError, read_run_blobs, read_run_markers  # noqa: F401
 from farna.db.models.eval import Eval
 from farna.db.models.hitl_claim import HitlClaim
 from farna.db.models.model_backend import ModelBackend
@@ -208,10 +217,204 @@ from farna.db.models.policy_gate import PolicyGate
 from farna.db.models.run import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES, Run
 from farna.db.models.run_attempt import ATTEMPT_TERMINAL_REASON_RESET
 from farna.db.rls import set_rls_execution_context, set_rls_org
-from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, is_lock_abort, sqlstate_of
-from farna.otel_bridge import LangGraphOtelBridge, trace_id_for_thread
+from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, is_lock_abort, sqlstate_of  # noqa: F401
+from farna.otel_bridge import LangGraphOtelBridge, trace_id_for_thread  # noqa: F401
 
-_WORKER_ID: str = f"{socket.gethostname()}:{os.getpid()}"
+# ---------------------------------------------------------------------------
+# Module-level helpers, value objects and private exceptions extracted into the
+# ``executor_parts`` package (GAPS-harden-w2-executor.md §5 step 1). They are
+# re-exported here so every existing import path and every
+# ``mock.patch("farna.core.pipeline_engine.executor.<name>")`` target keeps
+# resolving. Do not redefine these names in this module.
+#
+# ``_FinalizeMixin`` / ``_TelemetryMixin`` are the step 2-3 class splits: the
+# finalize and telemetry method groups moved into mixin modules, imported under
+# private aliases so they do NOT join this module's importable surface.
+# ---------------------------------------------------------------------------
+from .executor_parts.finalize import FinalizeMixin as _FinalizeMixin
+from .executor_parts.outcomes import (
+    _connector_artifact_error_code,
+    _connector_artifact_matches,
+    _connector_failure_artifact_reason,
+    _connector_failure_for_node,
+    _connector_failure_views,
+    _is_supersede_rejection,
+    _is_terminating_rejection_output,
+    _map_lg_event,
+    _node_output_agent_failure,
+    _node_output_connector_error_code,
+    _node_output_connector_failure,
+    _node_output_has_idempotency_gate,
+    _node_output_sandbox_session_lost,
+    _node_output_sandbox_session_lost_text,
+    _node_output_stall_reason,
+    _node_output_text_surfaces,
+    _record_chain_end_output,
+    _record_connector_failure,
+    _record_node_markers,
+    _sandbox_failure_class_code,
+    _should_skip_retry,
+    _stream_terminal_reason,
+    _terminal_failure,
+    _try_agent_failure_elevation,
+)
+from .executor_parts.run_shape import (
+    _ENGINE_MANAGED_SEED_KEYS,
+    _GATED_EVAL_MODES_KEY,
+    _INTERACTIVE_NODE_TYPES,
+    _SANDBOX_AGENT_CACHE,
+    _SANDBOX_AGENT_CACHE_MAX,
+    _WORKER_ID,
+    _accumulate_chat_model_tokens,
+    _accumulate_llm_tokens,
+    _accumulate_node_token_usage,
+    _all_capacities_ok,
+    _apply_frozen_eval_mode_entry,
+    _apply_work_intact,
+    _apply_work_intact_best_effort,
+    _checkpointer_scope,
+    _claim_resume_for_executor,
+    _clamp_to_ceiling,
+    _compute_otel_run_context,
+    _connector_scope_agent_ids,
+    _extract_chat_model_token_usage,
+    _extract_llm_token_usage,
+    _frozen_eval_mode_entries,
+    _governed_evaluation_mode,
+    _graph_is_idempotent,
+    _graph_is_interactive,
+    _index_dtos_by_eval_id,
+    _interrupt_condition_result,
+    _interrupt_gate_payload,
+    _interrupt_required_team_id,
+    _interrupt_subject,
+    _interrupt_subject_leaf_key,
+    _interrupt_subject_parent,
+    _reclassify_after_work_intact,
+    _resolve_post_node_eval_target,
+    _resolved_node_timeouts,
+    _sandbox_agent_for_snapshot,
+    _script_lease_probe_ok,
+    _seed_state,
+    _streamed_interrupts,
+    _teardown_hub,
+    compute_retry_aware_topology_hash,
+    org_sandbox_capacity_free,
+)
+from .executor_parts.support import (
+    AdmissionLockTimeoutError,
+    AdmissionResetState,
+    GraphValidationError,
+    RetryBudgetGateRefusedError,
+    RunNotFoundError,
+    SandboxCapacityExceededError,
+    _CapacitySnapshot,
+    _is_finalize_lock_retryable,
+    _RunScope,
+    _safe_pipeline_name,
+    _sanitize_detail,
+    _StreamConfig,
+    _StreamContext,
+    _StreamState,
+    _traceback_detail,
+)
+from .executor_parts.telemetry import TelemetryMixin as _TelemetryMixin
+
+# NOTE on the two private aliases above: ``PipelineExecutor`` gets its finalize
+# and telemetry groups as mixins (steps 2-3 of GAPS-harden-w2-executor.md §5).
+# The mixin classes are composition detail, NOT importable surface, so their
+# bindings are dropped once the class exists (see the ``del`` at the end of this
+# module) — ``dir(farna.core.pipeline_engine.executor)`` stays exactly what it
+# was before the split.
+
+# The names above are re-exports, not local definitions. ``__all__`` marks them as
+# explicitly exported so ``mypy --no-implicit-reexport`` (part of ``strict``) still
+# accepts ``from farna.core.pipeline_engine.executor import <name>`` for consumers
+# such as cron_helpers / saq_worker / worker_handoff. ``dir(executor)`` is unchanged
+# by ``__all__``; only a ``from executor import *`` would consult it, and nothing in
+# this repository star-imports the module.
+__all__ = [
+    "_ENGINE_MANAGED_SEED_KEYS",
+    "_GATED_EVAL_MODES_KEY",
+    "_INTERACTIVE_NODE_TYPES",
+    "_SANDBOX_AGENT_CACHE",
+    "_SANDBOX_AGENT_CACHE_MAX",
+    "_WORKER_ID",
+    "AdmissionLockTimeoutError",
+    "AdmissionResetState",
+    "GraphValidationError",
+    "RetryBudgetGateRefusedError",
+    "RunNotFoundError",
+    "SandboxCapacityExceededError",
+    "_CapacitySnapshot",
+    "_RunScope",
+    "_StreamConfig",
+    "_StreamContext",
+    "_StreamState",
+    "_accumulate_chat_model_tokens",
+    "_accumulate_llm_tokens",
+    "_accumulate_node_token_usage",
+    "_all_capacities_ok",
+    "_apply_frozen_eval_mode_entry",
+    "_apply_work_intact",
+    "_apply_work_intact_best_effort",
+    "_checkpointer_scope",
+    "_claim_resume_for_executor",
+    "_clamp_to_ceiling",
+    "_compute_otel_run_context",
+    "_connector_artifact_error_code",
+    "_connector_artifact_matches",
+    "_connector_failure_artifact_reason",
+    "_connector_failure_for_node",
+    "_connector_failure_views",
+    "_connector_scope_agent_ids",
+    "_extract_chat_model_token_usage",
+    "_extract_llm_token_usage",
+    "_frozen_eval_mode_entries",
+    "_governed_evaluation_mode",
+    "_graph_is_idempotent",
+    "_graph_is_interactive",
+    "_index_dtos_by_eval_id",
+    "_interrupt_condition_result",
+    "_interrupt_gate_payload",
+    "_interrupt_required_team_id",
+    "_interrupt_subject",
+    "_interrupt_subject_leaf_key",
+    "_interrupt_subject_parent",
+    "_is_finalize_lock_retryable",
+    "_is_supersede_rejection",
+    "_is_terminating_rejection_output",
+    "_map_lg_event",
+    "_node_output_agent_failure",
+    "_node_output_connector_error_code",
+    "_node_output_connector_failure",
+    "_node_output_has_idempotency_gate",
+    "_node_output_sandbox_session_lost",
+    "_node_output_sandbox_session_lost_text",
+    "_node_output_stall_reason",
+    "_node_output_text_surfaces",
+    "_reclassify_after_work_intact",
+    "_record_chain_end_output",
+    "_record_connector_failure",
+    "_record_node_markers",
+    "_resolve_post_node_eval_target",
+    "_resolved_node_timeouts",
+    "_safe_pipeline_name",
+    "_sandbox_agent_for_snapshot",
+    "_sandbox_failure_class_code",
+    "_sanitize_detail",
+    "_script_lease_probe_ok",
+    "_seed_state",
+    "_should_skip_retry",
+    "_stream_terminal_reason",
+    "_streamed_interrupts",
+    "_teardown_hub",
+    "_terminal_failure",
+    "_traceback_detail",
+    "_try_agent_failure_elevation",
+    "compute_retry_aware_topology_hash",
+    "org_sandbox_capacity_free",
+]
 
 # Backward-compatible re-exports of the retry-policy symbols extracted into
 # ``retry_policy``. Untouched consumers (watchdog_retry, cron_helpers,
@@ -251,9 +454,6 @@ _TERMINAL_STATUS_EVENTS: dict[str, str] = {
     "budget_exceeded": EVENT_BUDGET_EXCEEDED,
 }
 
-_SANDBOX_AGENT_CACHE: OrderedDict[str, bool] = OrderedDict()
-_SANDBOX_AGENT_CACHE_MAX = 512
-
 # --- Bounded whole-transaction finalisation retry (money-correctness) ---
 # A deadlock (40P01) or the bounded lock_timeout expiry (55P03) taken at the
 # org / Run finalisation locks aborts the WHOLE finalisation transaction, so it
@@ -274,25 +474,6 @@ FINALIZE_LOCK_RETRY_ATTEMPTS = 3
 _FINALIZE_LOCK_RETRY_DELAY_SECONDS = 0.1
 
 
-def _is_finalize_lock_retryable(exc: BaseException) -> bool:
-    """True for a whole-transaction finalisation lock failure worth re-running.
-
-    Covers a deadlock (40P01) and the bounded lock_timeout expiry (55P03) —
-    both abort the transaction, so the only recovery is re-running it from its
-    ownership layer. ``is_lock_abort`` recognises both SQLSTATEs across the raw
-    asyncpg ``LockNotAvailableError`` and SQLAlchemy ``OperationalError`` shapes.
-
-    EXCLUDES :class:`~farna.db.crud.run_node_outputs.DualWriteError`: it is a
-    deliberate FAIL-CLOSED abort that ``finalize_cost`` raises only AFTER the
-    run has been terminalised ``dual_write_failed``. Its ``sqlstate`` reflects
-    the underlying failure (often 40P01), so a bare SQLSTATE test would retry
-    and overwrite that truthful status — the predicate must never do so.
-    """
-    if isinstance(exc, DualWriteError):
-        return False
-    return is_lock_abort(exc)
-
-
 _log = logging.getLogger(__name__)
 
 # Guardrail eval_type value the executor splits out of the node-scoped eval defs
@@ -307,14 +488,6 @@ GUARDRAIL_EVAL_TYPE = "guardrail"
 # copy of a security-seam predicate is exactly the duplication flagged in
 # review — never reintroduce one.
 
-
-# FAR-939 chunk 12 (M4, §3.3 run-frozen): key under which the fire-time
-# evaluation modes of the gate's source node are stamped onto the claim's
-# ``gate_config_json`` (the FAR-634 fire-time review-config column), then
-# read back by ``resume()`` to re-freeze the DTO universe. Single name for
-# the write site and the read site so the stamp cannot drift.
-_GATED_EVAL_MODES_KEY = "gated_eval_modes"
-
 # The shared "no gate governs this eval" verdict of the policy-gate resolution
 # helpers — warn semantics, no PolicyGateDecision row (``policy_gate_id is None``
 # downstream). One name so every ungoverned arm returns an identical, recognisable value.
@@ -325,74 +498,6 @@ _NO_GOVERNED_GATE: tuple[str, uuid.UUID | None, int | None, uuid.UUID | None, st
     None,
     None,
 )
-
-
-def _governed_evaluation_mode(gate: PolicyGate) -> str:
-    """Normalise ``policy_gates.evaluation_mode`` to the closed DTO vocabulary.
-
-    Production rows always carry the NOT NULL column (migration
-    0316_policy_gate_evaluation_mode); the attribute fallback keeps
-    pre-0316 ORM stand-ins and legacy fixtures (no attribute at all) on
-    today's behaviour — automatic. Hoisted out of
-    ``PipelineExecutor._resolve_governed_gate`` for the cognitive-complexity
-    budget (S3776); behaviour is unchanged.
-    """
-    raw = getattr(gate, "evaluation_mode", None)
-    return "human" if raw == "human" else "automatic"
-
-
-def _sanitize_detail(detail: Any, limit: int | None = 5000) -> str:
-    """Sanitize an error detail at a write surface.
-
-    Redaction runs before any truncation so a secret straddling the cut point is
-    still removed. Pass ``limit=None`` to skip the cap — ``runs.error_detail`` was
-    widened to ``Text`` by migration, so error-detail writes no longer need
-    to be bounded. Never raises — :func:`sanitize_error_text` coerces any input
-    via ``str()`` and is a NO-OP for clean strings.
-    """
-    return sanitize_error_text(detail, limit)
-
-
-async def _safe_pipeline_name(
-    session: AsyncSession,
-    pipeline_id: uuid.UUID,
-    org_id: uuid.UUID,
-    run_id: uuid.UUID,
-) -> str | None:
-    """Best-effort pipeline name lookup for audit labelling (never raises).
-
-    A failed or missing lookup degrades the ``run_started`` summary to the
-    nameless form instead of suppressing the audit event — the event's write
-    must not depend on the label lookup succeeding.
-    """
-    try:
-        pipeline = await get_pipeline(session, pipeline_id, organisation_id=org_id)
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        _log.warning(
-            "pipeline.run_started_audit_name_lookup_failed",
-            extra={"run_id": str(run_id), "pipeline_id": str(pipeline_id)},
-            exc_info=True,
-        )
-        return None
-    return pipeline.name if pipeline is not None else None
-
-
-def _traceback_detail(exc: BaseException, limit: int = 2000) -> str:
-    """Sanitized, bounded traceback text for a caught exception.
-
-    Formats the full traceback of *exc* into a single string, sanitizes it
-    (redaction runs before truncation), and caps it at *limit* chars.
-    Shared by the generic ``except Exception`` handlers in ``execute`` /
-    ``resume`` / ``_stream_graph`` so each stays a one-liner.
-    """
-    import traceback
-
-    return _sanitize_detail(
-        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
-        limit=limit,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -447,1637 +552,7 @@ def _enrich_failure_detail(raw_detail: str, exc: BaseException) -> str:
     return enrich_error_detail(raw_detail, exc)
 
 
-class RunNotFoundError(KeyError):
-    def __init__(self, run_id: uuid.UUID) -> None:
-        super().__init__(str(run_id))
-        self.run_id = run_id
-
-
-async def _claim_resume_for_executor(
-    session: AsyncSession,
-    *,
-    run_id: uuid.UUID,
-    org_id: uuid.UUID,
-    expected_claim_token: str,
-    source_status: str,
-) -> Run:
-    """Atomically take the expected resume claim before loading/executing it.
-
-    The MCP approval path captures the run lease before committing the decision.
-    Matching both that token and the claimable source state in this UPDATE makes
-    the approval a compare-and-swap: a reconcile claim or another resume that
-    won first has already changed one of those predicates, so this path refuses
-    without changing status or starting execution. The token is deliberately
-    preserved; the caller's recovery path uses the same fence.
-    """
-    result = await session.execute(
-        update(Run)
-        .where(
-            Run.id == run_id,
-            Run.organisation_id == org_id,
-            Run.claim_token == expected_claim_token,
-            Run.status == source_status,
-        )
-        .values(
-            status="running",
-            heartbeat_at=func.now(),
-            claimed_by=_WORKER_ID,
-        )
-        .returning(Run.id)
-    )
-    if result.scalar_one_or_none() is None:
-        raise ResumeClaimSupersededError(run_id)
-    refreshed = await session.execute(select(Run).where(Run.id == run_id).execution_options(populate_existing=True))
-    run = refreshed.scalar_one_or_none()
-    if run is None:
-        raise RunNotFoundError(run_id)
-    return run
-
-
-class SandboxCapacityExceededError(Exception):
-    """Raised when the org sandbox concurrency cap blocks a resume."""
-
-    def __init__(self, org_id: uuid.UUID) -> None:
-        self.org_id = org_id
-        super().__init__(f"Sandbox concurrency limit reached for org {org_id}; gate left undecided. Retry when capacity frees up.")
-
-
-# The outcome of the fenced pending-reset that follows a two-timeout admission
-# deferral. Carried as the OUTCOME, never a bool: ``fence_lost`` (rowcount 0)
-# and ``timeout`` (``None``) were previously collapsed to ``False``, so the
-# deferral log claimed the reset had timed out on a fence loss too — a claim it
-# could not know.
-#
-# ``unknown`` covers the case the return value cannot describe: the reset
-# RAISED, so whether it landed is not knowable here. The wording names BOTH
-# possible resting states (``pending``, recovered by ``dispatcher_reconcile``;
-# ``running``, left for the nodeless/age backstop) and claims neither. There is
-# deliberately no re-read: opening a session just to look at the row is more
-# surface than the ambiguity warrants, and every attempt to add one introduced
-# its own defect.
-AdmissionResetState = Literal[
-    "confirmed",
-    "fence_lost",
-    "timeout",
-    "unknown",
-]
-
-
-class AdmissionLockTimeoutError(Exception):
-    """The claim-time admission transaction kept hitting a row lock.
-
-    Raised after the bounded retry in :meth:`PipelineExecutor._check_capacity`
-    is exhausted (two consecutive SQLSTATE 55P03 waits). The admission+bump
-    transaction rolled back BOTH times, so the run consumed **zero** executions
-    and nothing was uncounted. A transient lock wait must never terminal-fail a
-    run that never executed.
-
-    The run's resting state depends on the fenced pending-reset that follows
-    (``_fenced_pending_reset`` returns ``int | None``), carried as
-    ``reset_state`` — the OUTCOME, not a boolean, because a fence loss and a
-    timeout are different facts:
-
-    * ``"confirmed"`` — the reset landed; the run is ``pending`` and recovered
-      by ``dispatcher_reconcile``'s re-enqueue leg;
-    * ``"fence_lost"`` — the reset matched no row: a successor owns the run or
-      it has already left ``running``. Its resting state is NOT knowable here,
-      so the deferral must not describe it;
-    * ``"timeout"`` — the bounded reset itself timed out; the row was NOT reset
-      and is most likely still ``running`` under this executor's claim token,
-      left for the nodeless/age backstop;
-    * ``"unknown"`` — the reset RAISED, so whether it landed could not be
-      determined. The run may be ``pending`` (recovered by
-      ``dispatcher_reconcile``'s re-enqueue leg) or still ``running`` (left for
-      the nodeless/age backstop); the deferral names BOTH and claims neither.
-
-    Every arm maps to the SAME non-terminal outcome
-    (``pipeline_execution._handle_executor_failure`` returns
-    ``{"status": "deferred"}`` and never terminal-fails the run) — only the
-    log wording differs, and no arm asserts a resting state it cannot know.
-    Any OTHER executor exception still terminal-fails as before.
-    """
-
-    def __init__(self, run_id: uuid.UUID, attempts: int, *, reset_state: AdmissionResetState) -> None:
-        self.run_id = run_id
-        self.attempts = attempts
-        self.reset_state = reset_state
-        resting_state = {
-            "confirmed": "the fenced pending-reset was CONFIRMED, so the run was left pending for dispatcher_reconcile",
-            "fence_lost": ("the fenced pending-reset matched no row (fence lost), so the run is owned by a successor or has already left running and was left untouched"),
-            "timeout": ("the fenced pending-reset ALSO timed out, so the run was NOT reset and is left for the nodeless/age backstop"),
-            "unknown": ("the fenced pending-reset raised, so whether it landed could not be determined: if it did, the row is pending and dispatcher_reconcile will re-dispatch it; if it did not, the row is still running and falls to the nodeless/age backstop"),
-        }[reset_state]
-        super().__init__(f"Admission for run {run_id} still hit a row-lock timeout after {attempts} attempts; {resting_state}")
-
-
-class RetryBudgetGateRefusedError(Exception):
-    """The retry-ceiling gate refused admission and its terminal write lost the fence.
-
-    Raised by ``_claim_under_capacity`` when the run is at its policy ceiling,
-    the fenced ``failed`` write was rejected, and the re-read row is still
-    ``running`` — either under a SUPERSEDED claim token or with a pending
-    cancellation. Handing that row back to ``execute()`` would let it stream:
-    the caller only refuses to execute on ``status != "running"``, and such a
-    row IS running, so the graph would execute past the ceiling the gate
-    exists to enforce. Raising keeps the attempt strictly non-executing (no
-    graph/``execute_fn`` call follows) and
-    ``pipeline_execution._handle_executor_failure`` maps it to the non-terminal
-    ``deferred`` outcome: the row is owned by its successor or by the
-    cancellation machinery, never by this attempt.
-    """
-
-    def __init__(self, run_id: uuid.UUID, *, reason: str) -> None:
-        self.run_id = run_id
-        self.reason = reason
-        super().__init__(f"Admission refused for run {run_id}: the retry-budget gate's terminal write lost the fence and the row is still running ({reason}); the graph was not executed")
-
-
-async def _teardown_hub(hub: Any) -> None:
-    """Await a hub's ``__aexit__`` shielded against cancellation.
-
-    A cancellation arriving during cleanup must not abort the hub teardown —
-    ``asyncio.shield`` keeps the ``__aexit__`` coroutine running to completion
-    even when the awaiting task is cancelled (a second CancelledError cannot
-    abort the cleanup). The shielded future is re-awaited on cancellation so no
-    "Task was destroyed but it is pending" warning is emitted at loop close.
-
-    The runtime provider hub the executor built alongside the ConnectorHub is
-    aclosed here too, best-effort: workspaces tracked at teardown are destroyed.
-    A workspace whose provision was cancelled mid-create may outlive the run
-    (known gap, tracked for D4 lifecycle work).
-    """
-    shielded = asyncio.shield(hub.__aexit__(None, None, None))
-    try:
-        await shielded
-    except asyncio.CancelledError:
-        with suppress(Exception):
-            await shielded
-        raise
-    except Exception:
-        _log.exception("pipeline.hub_cleanup_failed")
-    finally:
-        # Read the runtime hub through the ConnectorHub constructor seam.
-        # Depending on construction ``_runtime_provider`` may hold
-        # a bare provider (no ``aclose`` — disposal is then driven by the
-        # hub's own ``__aexit__``) or a ``RuntimeProviderHub`` whose
-        # ``aclose()`` disposes tracked workspaces.
-        runtime_hub = getattr(hub, "_runtime_provider", None)
-        if runtime_hub is not None and hasattr(runtime_hub, "aclose"):
-            try:
-                await runtime_hub.aclose()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception("pipeline.runtime_hub_cleanup_failed")
-
-
-# Engine-managed run_context keys that a caller-supplied
-# ``snapshot.run_context_defaults`` spread must never seed. Derived from the
-# decorator's reserved-key set (imported — no cycle: decorator does not
-# import executor) UNION ``_run_overrides``, which is NOT in that set (it is
-# a node_runner override boundary key, not a context-setter write guard) but
-# is equally engine-managed: it is seeded ONLY from the run's frozen
-# ``variant_config_snapshot`` in ``_seed_state`` below.
-_ENGINE_MANAGED_SEED_KEYS: frozenset[str] = _RESERVED_RUN_CONTEXT_KEYS | {"_run_overrides"}
-
-
-class GraphValidationError(ValueError):
-    """Raised when pre-run graph validation fails with blocking errors."""
-
-    def __init__(
-        self,
-        issues: list[Any],
-        run_id: uuid.UUID,
-    ) -> None:
-        messages = [f"[{i.code}] {i.message}" for i in issues]
-        super().__init__(f"Graph validation failed for run {run_id}: {'; '.join(messages)}")
-        self.run_id = run_id
-        self.issues = issues
-
-
-def _seed_state(
-    snapshot: PipelineSnapshot,
-    input_payload: dict[str, Any],
-    variant_config_snapshot: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Build the initial LangGraph state for a run.
-
-    If *input_payload* contains a ``_feedback_correction`` key, it is
-    promoted to the top-level ``run_context`` as ``feedback_correction``
-    and removed from the input dict so the pipeline agents never see it
-    as part of their normal input.
-
-    ``_run_overrides`` is a SYSTEM-RESERVED TOP-LEVEL run_context key. It is
-    seeded ONLY from the run's frozen ``variant_config_snapshot`` (captured at
-    fire time) — NEVER from caller input or caller-controlled
-    ``run_context_defaults``. A normal run has no variant config, so a
-    caller-supplied ``_run_overrides`` inside ``input_payload`` stays DATA in
-    ``run_context["input"]`` and can never reach the node_runner's override
-    boundary (injection surface).
-
-    The same holds for the ``run_context_defaults`` spread: it is
-    unfiltered arbitrary JSON (it travels through snapshot/clone/
-    workflow-import), so every engine-managed key
-    (``_ENGINE_MANAGED_SEED_KEYS`` — the reserved set UNION
-    ``_run_overrides``) is filtered OUT of the spread before assembly.
-    Engine-owned values (``cancelled``/``input``, the snapshot-pinned
-    autonomy keys, and the variant-config ``_run_overrides``) are then set
-    exactly as before, from their authoritative sources.
-    """
-    # Copy input_payload to avoid mutating the caller's dict.
-    payload = dict(input_payload)
-    run_context_defaults: dict[str, Any] = snapshot.run_context_defaults or {}
-    # Filter the SPREAD (not the just-built dict — it already
-    # legitimately sets cancelled/input). With a NULL ceiling/default the
-    # autonomy keys stay absent and resolution falls back exactly as
-    # designed; the snapshot values pinned below are authoritative.
-    filtered_defaults = {k: v for k, v in run_context_defaults.items() if k not in _ENGINE_MANAGED_SEED_KEYS}
-    run_context: dict[str, Any] = {
-        **filtered_defaults,
-        "cancelled": False,
-        "input": payload,
-    }
-    # Promote feedback_correction from input_payload to run_context
-    # so the entire graph can access rejection metadata.
-    feedback_correction = payload.pop("_feedback_correction", None)
-    if feedback_correction:
-        run_context["feedback_correction"] = feedback_correction
-    # Seed autonomy from snapshot-level default so gate nodes can resolve it.
-    if snapshot.default_autonomy_level:
-        run_context["_pipeline_default_autonomy"] = snapshot.default_autonomy_level
-    # Pin the autonomy CEILING from the snapshot (nullable —
-    # NULL means resolution falls back to the default as the effective
-    # ceiling). isinstance-str guards non-string stand-ins (test mocks).
-    max_autonomy = getattr(snapshot, "max_autonomy_level", None)
-    if isinstance(max_autonomy, str) and max_autonomy:
-        run_context[PIPELINE_MAX_AUTONOMY_KEY] = max_autonomy
-    # Seed the system-reserved override namespace from the run's FROZEN variant
-    # config only. This is the ONLY path that populates it — a caller-supplied
-    # ``_run_overrides`` in the input payload (or in run_context_defaults,
-    # filtered out of the spread above) is never promoted here.
-    if isinstance(variant_config_snapshot, dict):
-        overrides = variant_config_snapshot.get("_run_overrides")
-        if isinstance(overrides, dict):
-            run_context["_run_overrides"] = overrides
-    return {
-        "run_context": run_context,
-        "artifacts": [],
-        # Seeded so the loop-edge counter node starts from an explicit dict
-        # (the counter node returns the incremented value as a real state
-        # update — LangGraph discards router-side in-place mutations, so the
-        # counter must live on a node, not a router).
-        "_iteration_counts": {},
-    }
-
-
-def _map_lg_event(
-    lg_event: dict[str, Any],
-    node_ids: set[str],
-) -> tuple[str, dict[str, Any]] | None:
-    """Map a LangGraph astream_events event to (event_type, payload) or None."""
-    event_kind = lg_event.get("event", "")
-    name = lg_event.get("name", "")
-
-    if name not in node_ids:
-        return None
-
-    if event_kind == "on_chain_start":
-        return "node_started", {"node_id": name}
-    if event_kind == "on_chain_end":
-        return "node_completed", {"node_id": name}
-    if event_kind == "on_chain_error":
-        data = lg_event.get("data")
-        error = data.get("error", "") if isinstance(data, dict) else ""
-        return "node_failed", {"node_id": name, "error": str(error)}
-    return None
-
-
-def _streamed_interrupts(lg_event: dict[str, Any]) -> tuple[Any, ...]:
-    """Extract native LangGraph interrupts from a top-level stream event."""
-    if lg_event.get("event") != "on_chain_stream":
-        return ()
-    data = lg_event.get("data")
-    chunk = data.get("chunk") if isinstance(data, dict) else None
-    interrupts = chunk.get("__interrupt__") if isinstance(chunk, dict) else None
-    if isinstance(interrupts, (list, tuple)):
-        return tuple(interrupts)
-    return (interrupts,) if interrupts is not None else ()
-
-
-@asynccontextmanager
-async def _checkpointer_scope(  # NOSONAR S7503 - async context-manager seam
-    conn_string: str,
-    organisation_id: uuid.UUID,
-    fernet_key: str | None = None,
-) -> AsyncIterator[ModuloPostgresSaver]:
-    """Create a ModuloPostgresSaver for the duration of a single run execution."""
-    async with ModuloPostgresSaver.from_conn_string(
-        conn_string,
-        organisation_id=organisation_id,
-        fernet_key=fernet_key,
-    ) as saver:
-        yield saver
-
-
-def _sandbox_agent_for_snapshot(snapshot_id: uuid.UUID, graph_json: dict[str, Any] | None) -> bool:
-    """Bounded per-snapshot cache over the (immutable) snapshot graph JSON."""
-    key = str(snapshot_id)
-    cached = _SANDBOX_AGENT_CACHE.get(key)
-    if cached is not None:
-        return cached
-    result = _graph_contains_sandbox_agent(graph_json)
-    if len(_SANDBOX_AGENT_CACHE) >= _SANDBOX_AGENT_CACHE_MAX:
-        _SANDBOX_AGENT_CACHE.clear()
-    _SANDBOX_AGENT_CACHE[key] = result
-    return result
-
-
-def _graph_is_idempotent(graph_json: dict[str, Any] | None) -> bool:
-    """True when every node in the graph is safe to re-run.
-
-    A node is idempotent unless it EXPLICITLY declares ``idempotent=false``:
-    the field defaults to ``true`` on the ``PipelineGraphNode`` schema, and a
-    missing/None value (legacy graphs persisted before the field existed) is
-    treated as idempotent so old graphs keep their retry behaviour unchanged.
-    Returns False when ANY node is non-idempotent — a retry re-executes the
-    whole run, so a single side-effecting node makes re-running the run unsafe.
-
-    The graph itself is also non-idempotent when it contains a binding that
-    FIRES an external job — ``operation="dispatch"`` + ``dispatch_action="trigger_run"``
-    — regardless of the stored ``idempotent`` flag. The flag is a write-path side
-    effect of the REST model, so an MCP-authored or hand-written graph could
-    carry ``idempotent=true`` (or omit it) on a job-firing node and silently
-    re-arm BOTH retry paths; the binding is the durable, writer-independent
-    truth, keyed on the same ``connector_binding_operation`` the engine routes
-    and the run classifier reads. Read-only dispatch actions
-    (``get_run_status`` / ``get_run_logs`` / ``list_runs``) stay idempotent —
-    re-running a read fires nothing.
-    """
-    if not isinstance(graph_json, dict):
-        return True
-    for node in graph_json.get("nodes", []) or []:
-        if not isinstance(node, dict):
-            continue
-        if node.get("idempotent") is False:
-            return False
-        if node_fires_dispatch_job(node):
-            return False
-    return True
-
-
-def compute_retry_aware_topology_hash(
-    graph_json: dict[str, Any] | None,
-    pipeline_retry_policy: dict[str, Any] | None,
-) -> str:
-    """Structural compile-cache hash that folds the pipeline retry policy in.
-
-    The per-node retry/compensation wrapper reads the pipeline ``retry_policy``
-    as the node default. The graph_cache key is
-    ``(pipeline_id, snapshot_id, node_timeout, struct_hash)``; folding the
-    policy into ``struct_hash`` means a PATCH to ``retry_policy`` recompiles
-    the wrapped nodes instead of serving a stale graph (the same reason
-    ``pipeline_node_timeout_seconds`` is part of the key). The per-node
-    ``retry`` blocks live in ``graph_json`` (already part of the topology hash),
-    so only the pipeline-level default needs folding here.
-    """
-    base = compute_port_topology_hash(graph_json if isinstance(graph_json, dict) else {})
-    if not isinstance(pipeline_retry_policy, dict) or not pipeline_retry_policy:
-        return base
-    policy_payload = json.dumps(pipeline_retry_policy, sort_keys=True, default=str).encode("utf-8")
-    return base + ":" + hashlib.sha256(policy_payload).hexdigest()[:16]
-
-
-# Node types that can PAUSE a run for human input and therefore REQUIRE a
-# LangGraph checkpointer to be able to resume. Any pipeline containing one is
-# "interactive". Everything else (agent / connector / sandbox_agent) is a
-# batch pipeline that never pauses, so its checkpoints are pure overhead.
-_INTERACTIVE_NODE_TYPES: frozenset[str] = frozenset({"manual"})
-
-
-def _graph_is_interactive(graph_json: dict[str, Any] | None) -> bool:
-    """True when the graph needs checkpoint persistence (HITL/interactive).
-
-    A checkpoint is only useful for a run that can PAUSE and RESUME. Two graph
-    shapes make a pipeline interactive, matching exactly the LangGraph paths
-    that call ``interrupt()`` (node_runner):
-      - an edge carrying ``hitl_review_config`` (a HITL gate is inserted between
-        source and target and interrupts for human approval / review), and
-      - a node with ``node_type == "manual"`` (a manual-input node that
-        interrupts and waits for human output).
-
-    Batch pipelines (pure ``agent`` / ``connector`` / ``sandbox_agent`` nodes,
-    no HITL gates) never pause, so persisting a checkpoint after every
-    superstep is pure overhead.
-
-    When the graph cannot be inspected (None / not a dict) we are conservative
-    and return True so a genuinely interactive pipeline is never broken by
-    lacking a checkpointer — the only caller (``_execute_stream``) always has a
-    real ``graph_json``.
-    """
-    if not isinstance(graph_json, dict):
-        return True
-    any_interactive_node = any(isinstance(node, dict) and str(node.get("node_type", "")).strip() in _INTERACTIVE_NODE_TYPES for node in graph_json.get("nodes", []) or [])
-    any_hitl_review_edge = any(isinstance(edge, dict) and edge.get("hitl_review_config") for edge in graph_json.get("edges", []) or [])
-    return any_interactive_node or any_hitl_review_edge
-
-
-def _resolved_node_timeouts(graph_json: dict[str, Any] | None, default_seconds: int) -> dict[str, int]:
-    """Resolve each graph node's effective ``timeout_seconds``.
-
-    The absolute node-deadline watchdog holds every node to its own hard
-    deadline, falling back to the pipeline-level default when a node does not
-    configure one.
-
-    Absent and explicitly-``null`` are the SAME state here: the API
-    ``PipelineGraphNode`` model defaults ``timeout_seconds`` to ``None`` and
-    serialises the key, so graphs authored through the API carry an explicit
-    ``"timeout_seconds": null``. Resolving that with ``dict.get(key, default)``
-    would return the persisted ``None`` (the key IS present) rather than the
-    default, and ``int(None)`` raises a TypeError that fails the run before any
-    node starts. Guard ``None`` explicitly so the default is always applied.
-    """
-    resolved: dict[str, int] = {}
-    for node in (graph_json or {}).get("nodes", []) or []:
-        if not isinstance(node, dict) or "id" not in node:
-            continue
-        configured = node.get("timeout_seconds")
-        resolved[str(node["id"])] = int(configured if configured is not None else default_seconds)
-    return resolved
-
-
-async def _script_lease_probe_ok(
-    session_factory: Callable[..., Any] | None,
-    run_id: str,
-    org_id: Any,
-    claim_token: str | None,
-) -> bool:
-    """Stale-claim probe: is it SAFE to requeue this run?
-
-    Reads ``runs.sandbox_dispatch_state`` for a live ``script_executing`` lease
-    (execution claimed, completion marker pending) that belongs to THIS claim.
-    A stale lease means a script PROCESS could still have been alive — requeue
-    is forbidden (exactly-once). Returns True (safe to requeue) when:
-      - no session factory / claim / org (fail-open to the normal path), or
-      - the dispatch state carries NO ``script_executing`` lease (no process
-        could have been alive for this claim).
-    Returns False (DO NOT requeue) only when a live script lease exists.
-    NEVER auto-retries a stale claim — the caller escalates to needs-human.
-    """
-    if session_factory is None or not claim_token:
-        return True
-    org_uuid: uuid.UUID | None = None
-    try:
-        org_uuid = uuid.UUID(str(org_id)) if org_id else None
-    except (TypeError, ValueError):
-        org_uuid = None
-    if org_uuid is None:
-        return True
-    try:
-        from sqlalchemy import text as _sql_text
-
-        from farna.db.rls import set_rls_execution_context, set_rls_org
-
-        async with session_factory() as session, session.begin():
-            await set_rls_org(session, org_uuid)
-            await set_rls_execution_context(session)
-            row = (
-                await session.execute(
-                    _sql_text("SELECT sandbox_dispatch_state FROM runs WHERE id=:rid AND organisation_id=:oid AND claim_token=:tok"),
-                    {"rid": run_id, "oid": str(org_uuid), "tok": claim_token},
-                )
-            ).fetchone()
-            if row is None:
-                return True
-            raw = row[0]
-            if not raw:
-                return True
-            try:
-                state = json.loads(raw)
-            except (TypeError, ValueError):
-                return True
-            return not (isinstance(state, dict) and state.get("state") == "script_executing")
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        _log.warning(
-            "script.lease_probe_failed",
-            extra={"run_id": str(run_id), "exc_type": "probe"},
-            exc_info=True,
-        )
-        # Fail-closed on a probe error: a script-mode run whose lease we cannot
-        # read is NEVER requeued (a hidden live process would double-execute).
-        return False
-
-
-def _resolve_post_node_eval_target(
-    node_id: str,
-    envelope: dict[str, Any],
-    node_type_map: dict[str, str] | None,
-) -> Any:
-    """Resolve the eval target for a completed node envelope.
-
-    Returns the node's CONTRACT output — the same pure return users see as the
-    node return — so evals validate what the agent actually produced, not the
-    telemetry-style outer ``output`` envelope. For a sandbox_agent that means
-    ``artifacts[0].output.output_json`` (which carries ``pr_url`` /
-    ``changed_files``). Unknown node types keep the legacy ``envelope["output"]``
-    read, falling back to the whole envelope if it is not a dict — preserving
-    historical behaviour for graphs without a resolved node type.
-    """
-    node_type = (node_type_map or {}).get(node_id) or DEFAULT_NODE_TYPE
-    found, contract_output = resolve_node_contract_output(envelope, node_type)
-    if found:
-        return contract_output
-    if node_type in SPLITTABLE_NODE_TYPES:
-        # Splittable type but no dict contract output (e.g. a sandbox_agent
-        # that produced no output_json) — fail closed on the whole envelope
-        # rather than silently validating telemetry.
-        _log.debug(
-            "post_node_eval.missing_contract_output",
-            extra={"node_id": node_id, "node_type": node_type},
-        )
-        return envelope
-    inner_output = envelope.get("output")
-    if isinstance(inner_output, dict):
-        return inner_output
-    return envelope
-
-
-def _node_output_stall_reason(node_output: Any) -> str | None:
-    """Return the stall_reason carried by a captured sandbox-agent node output.
-
-    NEW FORMAT (split envelope): node_output has ``telemetry`` key with
-    ``stall_reason`` directly.
-
-    LEGACY FORMAT: node_output has ``artifacts`` and ``output`` keys; the
-    inner ``output`` dict carries ``stall_reason``.
-
-    Returns None for non-dict / garbage output and for nodes that did not stall,
-    so non-sandbox node outputs are never misread.
-    """
-    if not isinstance(node_output, dict):
-        return None
-    # New split format: telemetry channel carries stall_reason
-    telemetry = node_output.get("telemetry")
-    if isinstance(telemetry, dict):
-        reason = telemetry.get("stall_reason")
-        return reason if isinstance(reason, str) and reason else None
-    # Legacy format fallback: inner output dict carries stall_reason
-    inner = node_output.get("output")
-    if not isinstance(inner, dict):
-        return None
-    reason = inner.get("stall_reason")
-    return reason if isinstance(reason, str) and reason else None
-
-
-def _node_output_agent_failure(node_output: Any) -> str | None:
-    """Return a reason string when a captured node output self-reported failure.
-
-    NEW FORMAT (split envelope): node_output has ``telemetry`` key with
-    ``agent_status``/``agent_outcome`` directly.
-
-    LEGACY FORMAT: node_output has ``artifacts`` and ``output`` keys; the
-    inner ``output`` dict carries ``agent_status``/``agent_outcome``.
-
-    A1 elevation fires when ``agent_status == "failed"`` OR ``outcome == "failed"``:
-    a self-declared failure must NEVER land the run ``complete``, regardless of
-    the exit code (§15.4). Returns None for non-dict / non-failed output, so
-    non-sandbox node outputs are never misread.
-    """
-    if not isinstance(node_output, dict):
-        return None
-    # New split format: telemetry channel carries agent_status/agent_outcome
-    telemetry = node_output.get("telemetry")
-    if isinstance(telemetry, dict):
-        if telemetry.get("agent_status") != "failed" and telemetry.get("agent_outcome") != "failed":
-            return None
-        reason = telemetry.get("error") or telemetry.get("summary")
-        if not isinstance(reason, str) or not reason:
-            return "agent self-reported failure"
-        return reason
-    # Legacy format fallback
-    inner = node_output.get("output")
-    if not isinstance(inner, dict):
-        return None
-    if inner.get("agent_status") != "failed" and inner.get("agent_outcome") != "failed":
-        return None
-    reason = inner.get("error") or inner.get("summary")
-    if not isinstance(reason, str) or not reason:
-        return "agent self-reported failure"
-    return reason
-
-
-def _connector_artifact_matches(
-    artifact: Any,
-    *,
-    marked: bool,
-    expected_node_id: str | None,
-) -> bool:
-    """Return whether an artifact is a trusted connector failure."""
-    if not isinstance(artifact, dict) or artifact.get("status") != "failed":
-        return False
-    if marked:
-        return True
-    artifact_node_id = artifact.get("node_id")
-    if expected_node_id is not None:
-        return artifact_node_id == expected_node_id
-    return isinstance(artifact_node_id, str) and bool(artifact_node_id)
-
-
-def _connector_failure_artifact_reason(
-    node_output: dict[str, Any],
-    expected_node_id: str | None = None,
-) -> str | None:
-    """Return the first failure reason from a runner-stamped connector output's artifacts."""
-    artifacts = node_output.get("artifacts")
-    if not isinstance(artifacts, list):
-        return None
-    marked = node_output.get("connector_failure") is True
-    for artifact in artifacts:
-        if not _connector_artifact_matches(
-            artifact,
-            marked=marked,
-            expected_node_id=expected_node_id,
-        ):
-            continue
-        error = artifact.get("error")
-        return error if isinstance(error, str) and error else "Connector reported failure"
-    return None
-
-
-def _connector_artifact_error_code(artifacts: Any) -> str | None:
-    """Return the first non-empty code from a failed connector artifact."""
-    if not isinstance(artifacts, list):
-        return None
-    for artifact in artifacts:
-        if not isinstance(artifact, dict) or artifact.get("status") != "failed":
-            continue
-        code = artifact.get("error_code")
-        if isinstance(code, str) and code:
-            return code
-    return None
-
-
-def _node_output_connector_error_code(node_output: Any) -> str:
-    """Return the error code for a connector failure envelope."""
-    if not isinstance(node_output, dict):
-        return _CODE_CONNECTOR_FAILED
-    code = node_output.get("error_code")
-    if isinstance(code, str) and code:
-        return code
-    return _connector_artifact_error_code(node_output.get("artifacts")) or _CODE_CONNECTOR_FAILED
-
-
-def _node_output_connector_failure(
-    node_output: Any,
-    node_type: str | None = None,
-    expected_node_id: str | None = None,
-) -> str | None:
-    """Return a connector/dispatch failure reason from a captured envelope."""
-    if not isinstance(node_output, dict):
-        return None
-    marked = node_output.get("connector_failure") is True
-    if not marked and node_type not in {"connector", "dispatch"}:
-        return None
-    return _connector_failure_artifact_reason(node_output, expected_node_id=expected_node_id) or ("Connector reported failure" if marked else None)
-
-
-def _connector_failure_views(
-    node_id: str,
-    completed_node_outputs: dict[str, Any],
-    stored_node_outputs: dict[str, Any],
-    stored_node_telemetry: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Return captured connector envelopes for one node, in precedence order."""
-    views: list[dict[str, Any]] = []
-    completed = completed_node_outputs.get(node_id)
-    if isinstance(completed, dict):
-        views.append(completed)
-    stored = node_telemetry(stored_node_telemetry, stored_node_outputs, node_id)
-    if isinstance(stored, dict):
-        views.append(stored)
-    return views
-
-
-def _connector_failure_for_node(
-    node_id: str,
-    node_type_map: dict[str, str],
-    completed_node_outputs: dict[str, Any],
-    stored_node_outputs: dict[str, Any],
-    stored_node_telemetry: dict[str, Any],
-) -> tuple[str, str] | None:
-    """Return ``(reason, code)`` for a captured connector failure, if present."""
-    node_type = node_type_map.get(node_id)
-    if node_type not in {"connector", "dispatch"}:
-        return None
-    for view in _connector_failure_views(node_id, completed_node_outputs, stored_node_outputs, stored_node_telemetry):
-        reason = _node_output_connector_failure(view, node_type, expected_node_id=node_id)
-        if reason is not None:
-            return reason, _node_output_connector_error_code(view)
-    return None
-
-
-def _record_connector_failure(
-    state: _StreamState,
-    ctx: _StreamContext,
-    node_id: str,
-    output: dict[str, Any],
-) -> None:
-    """Latch a connector failure observed in a completed node envelope."""
-    node_type = ctx.node_type_map.get(node_id) if ctx.node_type_map else None
-    reason = _node_output_connector_failure(output, node_type, expected_node_id=node_id)
-    if reason is not None:
-        state.connector_failure_reason = reason
-        state.connector_failure_code = _node_output_connector_error_code(output)
-
-
-def _node_output_sandbox_session_lost(node_output: Any) -> str | None:
-    """Return a reason string when a captured node output carries the
-    session-lost marker.
-
-    NEW FORMAT (split envelope): node_output has ``telemetry`` key with
-    ``sandbox_session_lost`` directly.
-
-    LEGACY FORMAT: node_output has ``artifacts`` and ``output`` keys; the
-    inner ``output`` dict carries ``sandbox_session_lost``.
-
-    node_runner stamps ``sandbox_session_lost: True`` on the output dict ONLY
-    for the E2B wrapper's fallback echo (a dead opencode session). It is NOT an
-    agent verdict — the agent never wrote output.json — so it must be routed to
-    the retryable ``sandbox.no_output_json``, never the non-retryable
-    ``agent.failed`` A1 elevation. Returns None for non-dict / non-marked
-    output, so ordinary node outputs are never misread.
-    """
-    if not isinstance(node_output, dict):
-        return None
-    # New split format: telemetry channel
-    telemetry = node_output.get("telemetry")
-    if isinstance(telemetry, dict):
-        if telemetry.get("sandbox_session_lost") is not True:
-            return None
-        reason = telemetry.get("error") or telemetry.get("summary")
-        if not isinstance(reason, str) or not reason:
-            return "No output from agent - session interrupted"
-        return reason
-    # Legacy format fallback
-    inner = node_output.get("output")
-    if not isinstance(inner, dict):
-        return None
-    if inner.get("sandbox_session_lost") is not True:
-        return None
-    reason = inner.get("error") or inner.get("summary")
-    if not isinstance(reason, str) or not reason:
-        return "No output from agent - session interrupted"
-    return reason
-
-
-def _node_output_text_surfaces(inner: dict[str, Any]) -> list[str]:
-    """Top-level retained text surfaces of one envelope view.
-
-    Scans the wrapper's text keys and the STRING members of ``output_json`` only
-    (the wrapper's shape, and bounded by the stdout retention cap).
-    """
-    parts: list[str] = []
-    for key in ("error", "summary", "error_message", "no_output_reason", "agent_stdout", "agent_stderr"):
-        value = inner.get(key)
-        if isinstance(value, str) and value:
-            parts.append(value)
-    output_json = inner.get("output_json")
-    if isinstance(output_json, dict):
-        parts.extend(v for v in output_json.values() if isinstance(v, str) and v)
-    return parts
-
-
-def _node_output_sandbox_session_lost_text(node_output: Any) -> str:
-    """The retained text surfaces of a session-lost envelope.
-
-    NEW FORMAT (split envelope): node_output has ``output`` (pure return) and
-    ``telemetry`` keys. The ``telemetry`` carries the text surfaces.
-
-    LEGACY FORMAT: node_output has ``artifacts`` and ``output`` keys.
-
-    ``_node_output_sandbox_session_lost`` returns the marker REASON, which for
-    the E2B wrapper's dead-session echo is the fixed PLACEHOLDER ("No output
-    from agent - session interrupted"). The terminal provider error that killed
-    the opencode session lives elsewhere in the retained text: the wrapper
-    writes ``output.json`` as ``{"status": "failed", "summary": <placeholder>,
-    "no_output_reason": <tail of the opencode output>}``, so an HTTP 402
-    "Insufficient account funds" refusal is in ``no_output_reason`` (a JSON
-    string — parsed here, so its inner quotes are real) and/or the captured
-    stdout. This helper collects those surfaces so the caller can CLASSIFY the
-    real cause instead of masking a non-retryable billing fault as the
-    retryable ``sandbox.no_output_json``.
-
-    Walks both envelope views — the telemetry channel and artifacts (legacy).
-    Only top-level STRING members of ``output_json`` are scanned (the wrapper's
-    shape, and bounded by the stdout retention cap). Returns "" for any shape
-    that carries no text, so the caller falls back to the marker reason.
-    """
-    if not isinstance(node_output, dict):
-        return ""
-    candidates: list[Any] = []
-    # New split format: telemetry channel
-    telemetry = node_output.get("telemetry")
-    if isinstance(telemetry, dict):
-        candidates.append(telemetry)
-    # Legacy format: artifacts and output
-    artifacts = node_output.get("artifacts")
-    if isinstance(artifacts, list):
-        candidates.extend(a.get("output") for a in artifacts if isinstance(a, dict))
-    legacy_output = node_output.get("output")
-    if isinstance(legacy_output, dict):
-        candidates.append(legacy_output)
-    parts: list[str] = []
-    for inner in candidates:
-        if isinstance(inner, dict):
-            parts.extend(_node_output_text_surfaces(inner))
-    return "\n".join(parts)
-
-
-def _should_skip_retry(node_id: str | None, markers: Any, run_id: Any) -> bool:
-    """Guard B decision: should a transient node failure be suppressed
-    as a retry because the run's delivery was already made?
-
-    ``node_id`` is ``exc.node_id`` (only ``SandboxNodeFailedError`` carries it)
-    or None — a None node_id (or a plain ``NodeCancelledError``) disables the
-    gate. ``markers`` is the run's ALREADY-LOADED reassembled raw-output markers
-    (the ``run_node_outputs`` store leg's markers — never
-    a fresh SELECT). Fires only when any marker whose attempt_key embeds
-    ``:node:<node_id>:`` and ``:run:<run_id>:`` (delimiters, never substring)
-    carries ``delivery_done is True``. Non-dict ``markers`` (including
-    MagicMock test doubles) are ignored — the gate stays silent.
-    """
-    if node_id is None:
-        return False
-    return _marker_delivery_done_for_node(markers, run_id, node_id)
-
-
-def _node_output_has_idempotency_gate(node_output: Any) -> bool:
-    """True when a captured node output carries the idempotency-gate
-    skip marker (``output_json.idempotency_gate``) — such a node must NOT
-    re-fire agent_signal triggers.
-
-    Keyed ONLY on the marker — never on ``status == "skipped"`` (template-error
-    skips fire today and must keep firing). Handles both the outer
-    ``{"output": {...}}`` envelope and the artifact-wrapped envelope returned by
-    the sandbox node body (guard A / guard B shape).
-    """
-    if not isinstance(node_output, dict):
-        return False
-    candidates: list[Any] = [node_output.get("output")]
-    artifacts = node_output.get("artifacts")
-    if isinstance(artifacts, list):
-        candidates.extend(a.get("output") for a in artifacts if isinstance(a, dict))
-    for inner in candidates:
-        if not isinstance(inner, dict):
-            continue
-        output_json = inner.get("output_json")
-        if isinstance(output_json, dict) and output_json.get("idempotency_gate"):
-            return True
-    return False
-
-
-async def _apply_work_intact(
-    session: AsyncSession,
-    run_id: uuid.UUID,
-    work_intact: bool,
-    *,
-    claim_token: str | None,
-) -> None:
-    """Fenced UPDATE of ``runs.work_intact`` — mirrors ``update_run_status``
-    fencing (F3a): a superseded executor's token no longer matches and the
-    write is a no-op, so it cannot stamp work_intact on a successor's run.
-    Runs INSIDE the caller's terminalization transaction.
-
-    ``run_id`` is bound with the ``Uuid`` type so the raw SQL matches the
-    stored id on every backend (SQLite stores the 32-hex form, not the
-    dashed ``str(uuid)``).
-    """
-    if claim_token is None:
-        await session.execute(
-            text("UPDATE runs SET work_intact = :wi WHERE id = :rid").bindparams(
-                bindparam("rid", type_=Uuid()),
-                bindparam("wi", type_=Boolean()),
-            ),
-            {"wi": work_intact, "rid": run_id},
-        )
-        return
-    await session.execute(
-        text("UPDATE runs SET work_intact = :wi WHERE id = :rid AND claim_token = :tok").bindparams(
-            bindparam("rid", type_=Uuid()),
-            bindparam("wi", type_=Boolean()),
-        ),
-        {"wi": work_intact, "rid": run_id, "tok": claim_token},
-    )
-
-
-async def _reclassify_after_work_intact(session: AsyncSession, run_id: uuid.UUID) -> None:
-    """Refresh + re-persist the classification record
-    after the ``work_intact`` write so the record carries the real value.
-
-    ``finalize_cost`` triggers the terminal status write → inline classify
-    BEFORE ``_apply_work_intact`` runs, so the record persists
-    ``work_intact=None`` for every executor-terminalized run — and the
-    reconciliation sweep SKIPS already-classified rows, so it never corrects
-    them. This is the only path that fixes the executor-written records.
-
-    Runs INSIDE the caller's terminalization transaction, AFTER
-    ``_apply_work_intact`` succeeded. The re-read forces a real row load
-    (``populate_existing=True``) because the work_intact write bypassed the ORM
-    identity map (a raw UPDATE); ``classify_and_persist_run`` then recomputes
-    the verdict from the fresh row and upserts it. Best-effort and NEVER
-    raises — mirrors the ``work_intact.write_failed`` wrapper so a classify or
-    persist failure can never block or fail terminalization.
-    """
-    try:
-        from farna.core.pipeline_engine.classify import classify_and_persist_run
-
-        run = await session.get(Run, run_id, populate_existing=True)
-        if run is not None:
-            await classify_and_persist_run(session, run)
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        _log.exception("work_intact.classify_refresh_failed", extra={"run_id": str(run_id)})
-
-
-async def _apply_work_intact_best_effort(
-    session: AsyncSession,
-    run_id: uuid.UUID,
-    work_intact: bool | None,
-    *,
-    claim_token: str | None,
-) -> None:
-    """Best-effort persist of ``work_intact`` inside the finalisation transaction.
-
-    ``None`` means "not computed" — nothing to persist. A non-cancelled write
-    failure is logged and swallowed so the finalisation still completes (the
-    reclassify step, which depends on a successful write, is then skipped);
-    ``CancelledError`` propagates so the ownership layer's retry owns it.
-    """
-    if work_intact is None:
-        return
-    try:
-        await _apply_work_intact(session, run_id, work_intact, claim_token=claim_token)
-        # finalize_cost's inline classify ran BEFORE this
-        # write (work_intact still NULL at classify time). Re-persist the
-        # classification with the real value — the sweep skips already-classified
-        # rows, so this is the only correction for executor-terminalized runs.
-        await _reclassify_after_work_intact(session, run_id)
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        _log.exception("work_intact.write_failed", extra={"run_id": str(run_id)})
-
-
-async def org_sandbox_capacity_free(
-    session: AsyncSession,
-    org_id: uuid.UUID,
-    run_id: uuid.UUID,
-) -> bool:
-    """True when the org's sandbox cap (if configured) can admit *run_id*.
-
-    Used by HITL routes as a PRE-approval check: the gate decision must not be
-    committed when the org is at sandbox capacity. Fail-open — any error reads
-    as ``True`` (admit) with a warning, never raises.
-
-    D8: lock-free by contract — the resume path's advisory-lock gate
-    (``_enforce_resume_sandbox_capacity``) is the enforcement point; taking
-    the advisory lock here would invert the uniform row→advisory ordering
-    (this pre-check holds no run row). Flag-on converges onto the shared
-    ``resolve_runner_capacity_decision`` reader (the narrowed running-only
-    marker population, tier-scoped Docker default, cap-None short-circuit);
-    flag-off keeps the pre-D8 graph-based count and ``enforced_cap``.
-
-    E2B carve-out omission (D8 qa F14, deliberate — mirrored by
-    ``_enforce_resume_sandbox_capacity``): this pre-check does not model the
-    dispatch gate's e2b skip. With the Docker-tier default active it counts
-    host-resource markers only, so an org whose ONLY saturation is e2b
-    markers reads as capacity-free here anyway; an org saturated on
-    host-resource markers conservatively blocks the approval even though the
-    dispatch gate would admit an e2b re-dispatch. An approval that waits for
-    host-resource capacity is never lost work.
-    """
-    try:
-        from farna.settings import get_settings
-
-        flag_on = get_settings().runner_capacity_gate_enabled
-        run = await get_run(session, run_id)
-        if run is None or run.snapshot_id is None:
-            return True
-        snap_result = await session.execute(select(PipelineSnapshot.graph_json).where(PipelineSnapshot.id == run.snapshot_id))
-        graph_json = snap_result.scalar_one_or_none()
-        if not _graph_contains_sandbox_agent(graph_json):
-            return True
-        if flag_on:
-            from farna.core.runner_capacity import resolve_runner_capacity_decision
-
-            decision = await resolve_runner_capacity_decision(session, org_id, exclude_run_id=run_id)
-            return decision.cap is None or decision.active < decision.cap
-        cap = (await get_sandbox_concurrency_limit(session, org_id)).enforced_cap
-        if cap is None:
-            return True
-        active = await count_active_sandbox_runs_for_org(session, org_id, exclude_run_id=run_id)
-        return active < cap
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        _log.warning(
-            "hitl.sandbox_capacity_check_failed",
-            extra={"org_id": str(org_id), "run_id": str(run_id)},
-            exc_info=True,
-        )
-        return True
-
-
-def _compute_otel_run_context(
-    config: dict[str, Any],
-    bridge: Any,
-) -> tuple[str | None, Any | None]:
-    """Compute the run's deterministic OTel trace id and root span.
-
-    The root span is created via the bridge (spans created by the bridge
-    inherit it). The ``context_api.attach`` is deferred to the caller so the
-    ``context_api.detach`` in the caller's ``finally`` stays balanced with the
-    attach.
-    """
-    thread_id = (config.get("configurable") or {}).get("thread_id")
-    run_trace_id = trace_id_for_thread(thread_id) if thread_id else None
-    run_root_span = None
-    if thread_id:
-        run_root_span = bridge.start_run_root(thread_id)
-    return run_trace_id, run_root_span
-
-
-def _is_supersede_rejection(claim: Any) -> bool:
-    """True for a coalesced-supersede SYSTEM rejection.
-
-    The committed ``decision_payload.reason`` is the supersede marker AND no
-    account decided it (``decided_by`` is NULL - the supersede close-out never
-    stamps one), so a human-typed reason can never spoof the label.
-    """
-    payload = claim.decision_payload
-    reason = payload.get("reason") if isinstance(payload, dict) else None
-    return reason == SUPERSEDE_REASON and claim.decided_by is None and claim.account_id is None
-
-
-def _is_terminating_rejection_output(name: str, output: Any) -> bool:
-    """True when a gate node's chain-end output is a stamped terminate-rejection.
-
-    The gate's artifact must be for THIS gate (``node_id == name``),
-    carry ``result == "rejected"`` and the compile-time
-    ``reject_disposition == "terminate"`` stamp. (A rejected gate that routes or
-    proceeds carries a different disposition and never ends the run.)
-    """
-    if not isinstance(output, dict):
-        return False
-    artifacts = output.get("artifacts")
-    if not isinstance(artifacts, list):
-        return False
-    return any(isinstance(a, dict) and a.get("node_id") == name and a.get("result") == "rejected" and a.get("reject_disposition") == "terminate" for a in artifacts)
-
-
-def _record_chain_end_output(
-    completed_node_outputs: dict[str, Any] | None,
-    name: str,
-    data: Any,
-    run_trace_id: str | None,
-    bridge: Any,
-    lg_run_id: Any,
-) -> Any | None:
-    """Stamp and store a completed node's output envelope.
-
-    Stamps the node's real OTel span id (and the run's trace id) onto a
-    shallow copy of the envelope, stores it into ``completed_node_outputs``
-    and returns the (possibly stamped) output so the caller can extract the
-    stall / agent-failure / session-lost markers. Returns ``None`` when there
-    is no envelope to capture (nothing stored).
-    """
-    if completed_node_outputs is None:
-        return None
-    output = data.get("output") if isinstance(data, dict) else None
-    if output is None:
-        return None
-    # Stamp the node's real OTel span id (and the run's trace id)
-    # onto a shallow copy of the envelope. The node_output_split splitter
-    # folds unknown top-level envelope keys into the node_telemetry entry, so
-    # these surface in the per-node span column — never in the pure return.
-    node_span_id = bridge.span_id_for_run(lg_run_id)
-    if isinstance(output, dict) and (node_span_id or run_trace_id):
-        stamped = dict(output)
-        if node_span_id:
-            stamped["otel_span_id"] = node_span_id
-        if run_trace_id:
-            stamped["otel_trace_id"] = run_trace_id
-        output = stamped
-    completed_node_outputs[name] = output
-    return output
-
-
-def _record_node_markers(
-    output: Any,
-    broker: RunEventBroker,
-    name: str,
-) -> tuple[str | None, str | None, str | None]:
-    """Extract stall / agent-failure / session-lost markers from a node output.
-
-    Publishes ``run_stalled`` when the output carries a stall reason and
-    returns the three marker reasons so the caller can latch them onto the
-    run's terminal status.
-    """
-    stall_reason = _node_output_stall_reason(output)
-    if stall_reason:
-        broker.publish(
-            "run_stalled",
-            {
-                "node_id": name,
-                "stall_reason": _sanitize_detail(stall_reason, limit=5000),
-            },
-        )
-    agent_failure = _node_output_agent_failure(output)
-    session_lost = _node_output_sandbox_session_lost(output)
-    return stall_reason, agent_failure, session_lost
-
-
-def _accumulate_node_token_usage(
-    node_name: str,
-    token_usage: dict[str, Any],
-    node_token_usage: dict[str, dict[str, int]],
-    guard: RunawayGuard | None,
-    node_token_budgets: dict[str, int] | None,
-) -> None:
-    """Accumulate token usage for a single node and enforce the per-node budget."""
-    node_data = node_token_usage.setdefault(node_name, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
-    pt = token_usage.get("input_tokens", token_usage.get("prompt_tokens", 0)) or 0
-    ct = token_usage.get("output_tokens", token_usage.get("completion_tokens", 0)) or 0
-    tt = token_usage.get("total_tokens", 0) or 0
-    node_data["input_tokens"] += pt
-    node_data["output_tokens"] += ct
-    node_data["total_tokens"] += tt
-    if guard is not None:
-        guard.record_tokens(tt)
-    if node_token_budgets is not None:
-        node_budget = node_token_budgets.get(node_name)
-        if node_budget is not None and node_data["total_tokens"] > node_budget:
-            raise RunawayRunError("token_budget", node_data["total_tokens"], node_budget)
-
-
-def _extract_chat_model_token_usage(output: Any) -> dict[str, Any]:
-    """Extract token usage from a chat model end event output."""
-    usage_metadata = getattr(output, "usage_metadata", None) if isinstance(output, BaseMessage) else None
-    if usage_metadata is not None:
-        return {
-            "input_tokens": usage_metadata.get("input_tokens", 0) or 0,
-            "output_tokens": usage_metadata.get("output_tokens", 0) or 0,
-            "total_tokens": usage_metadata.get("total_tokens", 0) or 0,
-        }
-    if isinstance(output, dict):
-        # Legacy fallback: llm_output.token_usage
-        llm_output = output.get("llm_output", {})
-        return llm_output.get("token_usage", {}) if isinstance(llm_output, dict) else {}
-    return {}
-
-
-def _extract_llm_token_usage(output: Any) -> dict[str, Any]:
-    """Extract token usage from an llm end event output (legacy interface)."""
-    llm_output = output.get("llm_output", {}) if isinstance(output, dict) else {}
-    return llm_output.get("token_usage", {}) if isinstance(llm_output, dict) else {}
-
-
-def _accumulate_chat_model_tokens(
-    lg_event: Any,
-    node_token_usage: dict[str, dict[str, int]],
-    guard: RunawayGuard | None,
-    node_token_budgets: dict[str, int] | None,
-) -> None:
-    """Accumulate token usage from an ``on_chat_model_end`` event.
-
-    Reads ``usage_metadata`` (with the legacy ``llm_output.token_usage``
-    fallback), records cumulative tokens on the guard, and enforces the
-    per-node token budget (raising ``RunawayRunError`` on breach).
-    """
-    metadata = lg_event.get("metadata") or {}
-    node_name = metadata.get("langgraph_node")
-    if node_name:
-        data = lg_event.get("data", {})
-        output = data.get("output", {}) if isinstance(data, dict) else {}
-        token_usage = _extract_chat_model_token_usage(output)
-        if isinstance(token_usage, dict):
-            _accumulate_node_token_usage(node_name, token_usage, node_token_usage, guard, node_token_budgets)
-
-
-def _accumulate_llm_tokens(
-    lg_event: Any,
-    node_token_usage: dict[str, dict[str, int]],
-    guard: RunawayGuard | None,
-    node_token_budgets: dict[str, int] | None,
-) -> None:
-    """Accumulate token usage from an ``on_llm_end`` event (legacy interface).
-
-    Reads ``llm_output.token_usage``, records cumulative tokens on the guard,
-    and enforces the per-node token budget (raising ``RunawayRunError`` on
-    breach).
-    """
-    metadata = lg_event.get("metadata") or {}
-    node_name = metadata.get("langgraph_node")
-    if node_name:
-        data = lg_event.get("data", {})
-        output = data.get("output", {}) if isinstance(data, dict) else {}
-        token_usage = _extract_llm_token_usage(output)
-        if isinstance(token_usage, dict):
-            _accumulate_node_token_usage(node_name, token_usage, node_token_usage, guard, node_token_budgets)
-
-
-def _terminal_failure(
-    broker: RunEventBroker,
-    status: str,
-    code: str,
-    detail: str,
-    node_token_usage: dict[str, Any] | None,
-) -> tuple[str, str | None, str | None, dict[str, Any] | None]:
-    """Publish ``run_failed`` and return the terminal failure 4-tuple."""
-    broker.publish("run_failed", {"error": code, "detail": detail})
-    return status, code, detail, node_token_usage or None
-
-
-def _connector_scope_agent_ids(graph_json: dict[str, Any]) -> list[uuid.UUID]:
-    """Distinct Agent ids referenced by the graph's nodes (for the fetch scope).
-
-    Non-dict nodes and unparseable agent ids are skipped — a malformed node
-    must never abort hub construction.
-    """
-    agent_ids: list[uuid.UUID] = []
-    for node in graph_json.get("nodes", []) or []:
-        if not isinstance(node, dict):
-            continue
-        agent_id = node.get("agent_id")
-        if agent_id:
-            try:
-                agent_ids.append(uuid.UUID(str(agent_id)))
-            except (TypeError, ValueError):
-                continue
-    return agent_ids
-
-
-@dataclass
-class _StreamState:
-    """Mutable per-run stream accumulators for ``_stream_graph``.
-
-    Groups the state the ``astream_events`` loop reads and mutates so the
-    per-event helper takes a single bundle instead of many loose parameters
-    (CodeScene: excess function arguments / complex method). A pure refactor —
-    no behaviour, ordering, or state-transition change.
-    """
-
-    node_token_usage: dict[str, dict[str, int]] = field(default_factory=dict)
-    segments_completed: int = 0
-    first_node_signalled: bool = False
-    # Set when a captured sandbox-agent node output carries stall_reason — a
-    # stalled node RETURNS a failed output dict instead of raising, so the run
-    # must be recorded as 'stalled', not 'complete'.
-    stall_reason: str | None = None
-    # Set when a captured sandbox-agent node output self-reported failure
-    # (agent_status=failed OR outcome=failed) — A1 elevation (agent-failure UX,
-    # phase 1): such a run must NEVER land 'complete'.
-    agent_failure_reason: str | None = None
-    connector_failure_reason: str | None = None
-    connector_failure_code: str | None = None
-    # set when a captured sandbox-agent node output carries the
-    # sandbox-session-lost marker (the E2B wrapper's fallback echo — a dead
-    # opencode session). Routes to retryable ``sandbox.no_output_json``.
-    session_lost_reason: str | None = None
-    # The envelope's retained text surfaces (output.json's
-    # ``no_output_reason`` + the captured stdout/stderr), which is where the
-    # terminal PROVIDER error that killed the session lives. The marker reason
-    # above is the wrapper's fixed placeholder, so classification must run
-    # against THIS text — a session killed by an HTTP 402 billing refusal must
-    # terminalise ``model.insufficient_funds``, not be masked as the retryable
-    # ``sandbox.no_output_json``.
-    session_lost_retained_text: str | None = None
-    # IDs of HITL gates whose REJECTED artifact was stamped
-    # ``reject_disposition == "terminate"`` in this stream. The gate's router
-    # ENDs the graph on such a rejection, which is a NORMAL stream exit, so
-    # ``_finalize_run_after_stream`` needs this (plus the committed claim row)
-    # to downgrade the would-be ``complete`` to ``rejected``.
-    terminating_rejected_gates: set[str] = field(default_factory=set)
-
-
-@dataclass
-class _StreamContext:
-    """Immutable per-run stream context shared by the ``astream_events`` handlers.
-
-    Bundles the fixed per-run values every per-event handler needs so the
-    loop body and helpers take a single bundle instead of many loose
-    parameters (CodeScene: excess function arguments). A pure refactor — no
-    behaviour, ordering, or state-transition change.
-    """
-
-    node_ids: set[str]
-    guard: RunawayGuard | None
-    completed_node_outputs: dict[str, Any] | None
-    run_trace_id: str | None
-    broker: RunEventBroker
-    run_id: uuid.UUID
-    pipeline_id: uuid.UUID | None
-    org_id: uuid.UUID | None
-    node_token_budgets: dict[str, int] | None
-    eval_definitions_by_node: dict[str, list[EvalDefDTO]] | None
-    node_type_map: dict[str, str] | None
-
-
-def _try_agent_failure_elevation(
-    broker: RunEventBroker,
-    run_id: uuid.UUID,
-    agent_failure_reason: str,
-    usage: dict[str, Any] | None,
-) -> tuple[str, str | None, str | None, dict[str, Any] | None] | None:
-    """Attempt agent failure elevation (A1); return terminal tuple or None.
-
-    Fail-open: any error logs a warning and returns None so the caller
-    continues to the next terminalization check (stall).
-    """
-    try:
-        from farna.settings import get_settings
-
-        if get_settings().modulo_agent_failure_elevation_enabled:
-            return _terminal_failure(
-                broker,
-                "failed",
-                _ERROR_CODE_AGENT_FAILED,
-                _sanitize_detail(agent_failure_reason, limit=5000),
-                usage,
-            )
-    except Exception:
-        _log.warning(
-            "agent_failure_elevation.failed_open",
-            extra={"run_id": str(run_id), "detail": agent_failure_reason},
-            exc_info=True,
-        )
-    return None
-
-
-def _stream_terminal_reason(
-    state: _StreamState,
-    broker: RunEventBroker,
-    run_id: uuid.UUID,
-) -> tuple[str, str | None, str | None, dict[str, Any] | None] | None:
-    """Return the terminal 4-tuple for a captured stall / agent-failure /
-    session-lost node, or ``None`` when the run completed normally.
-
-    Extracted from ``_stream_graph``'s post-loop tail (pure refactor). A dead
-    sandbox session routes to the retryable ``sandbox.no_output_json`` — unless
-    the envelope's retained text classifies to a provider error code
-    (``model.insufficient_funds`` for an HTTP 402 billing refusal) —
-    a self-reported agent failure elevates to ``agent.failed``, and a node that
-    stalled takes priority (existing precedence preserved). ``None`` means the
-    caller returns ``complete``; ``run_completed`` is published later, only after
-    finalize commits the terminal status, by
-    ``_finalize_then_publish_completed``.
-    """
-    usage = state.node_token_usage or None
-    if state.session_lost_reason and not state.stall_reason:
-        # The marker reason is the wrapper's fixed PLACEHOLDER, so the
-        # provider classification must run against the envelope's RETAINED text
-        # (output.json's ``no_output_reason`` / the stdout tail), falling back to
-        # the reason itself for callers that only carry that. A session killed
-        # by an HTTP 402 funds refusal is a NON-retryable billing fault — it
-        # must surface as ``model.insufficient_funds`` rather than be masked as
-        # the retryable ``sandbox.no_output_json`` (whose every retry re-hits the
-        # same wall). Fail open: no signature -> today's retryable code,
-        # unchanged.
-        _classified = classify_provider_error(state.session_lost_retained_text or state.session_lost_reason)
-        return _terminal_failure(
-            broker,
-            "failed",
-            _classified or _CODE_SANDBOX_NO_OUTPUT_JSON,
-            _sanitize_detail(state.session_lost_reason, limit=5000),
-            usage,
-        )
-    if state.connector_failure_reason and not state.stall_reason:
-        code = state.connector_failure_code or _CODE_CONNECTOR_FAILED
-        return _terminal_failure(
-            broker,
-            "failed",
-            code,
-            _sanitize_detail(state.connector_failure_reason, limit=5000),
-            usage,
-        )
-    if state.agent_failure_reason and not state.stall_reason:
-        agent_failure_result = _try_agent_failure_elevation(broker, run_id, state.agent_failure_reason, usage)
-        if agent_failure_result is not None:
-            return agent_failure_result
-    if state.stall_reason:
-        return _terminal_failure(
-            broker,
-            "stalled",
-            "executor_stalled",
-            _sanitize_detail(state.stall_reason, limit=5000),
-            usage,
-        )
-    return None
-
-
-class _CapacitySnapshot(NamedTuple):
-    """Counts and admit/reject verdicts from ONE claim-time capacity read."""
-
-    pipeline_ok: bool
-    active_count: int
-    sandbox_ok: bool
-    sandbox_count: int
-    run_ok: bool
-    run_count: int
-
-
-def _all_capacities_ok(pipeline_ok: bool, sandbox_ok: bool, run_ok: bool) -> bool:
-    """All three capacity gates (pipeline / sandbox / org-run) admit the run."""
-    return pipeline_ok and sandbox_ok and run_ok
-
-
-@dataclass(frozen=True)
-class _RunScope:
-    """Immutable per-run identity scalars for ``_prepare_and_stream``.
-
-    Bundles the fixed run-scoped values the stream preparation path needs so
-    the method takes a single bundle instead of many loose parameters
-    (SonarQube S107: too many parameters). An annotation-only public attribute
-    set; a pure refactor — no behaviour, ordering, or state-transition change.
-    """
-
-    run_id: uuid.UUID
-    org_id: uuid.UUID
-    pipeline_id: uuid.UUID
-    snapshot_id: uuid.UUID
-    thread_id: str
-
-
-@dataclass(frozen=True)
-class _StreamConfig:
-    """Immutable inputs shared by the graph stream preparation path."""
-
-    snapshot: PipelineSnapshot
-    input_payload: dict[str, Any]
-    variant_config_snapshot: dict[str, Any] | None
-    graph_json: dict[str, Any]
-    eval_defs_by_node: dict[str, list[EvalDefDTO]]
-    node_ids: set[str]
-    completed_node_outputs: dict[str, Any]
-    guard: RunawayGuard
-    node_type_map: dict[str, str]
-    pipeline_node_timeout_seconds: int
-    broker: RunEventBroker
-    pipeline_retry_policy: dict[str, Any] | None = None
-    idempotency_key: Callable[[str, dict[str, Any]], str | None] | None = None
-
-
-def _interrupt_gate_payload(interrupts: Any) -> dict[str, Any]:
-    """The gate payload carried by the first LangGraph interrupt (or ``{}``)."""
-    first_interrupt = interrupts[0] if interrupts else None
-    value = getattr(first_interrupt, "value", None)
-    return value if isinstance(value, dict) else {}
-
-
-def _interrupt_required_team_id(gate_payload: dict[str, Any]) -> uuid.UUID | None:
-    """Parse the interrupt payload's ``required_team_id`` (absent -> ``None``)."""
-    required_team_id_str = gate_payload.get("required_team_id")
-    return uuid.UUID(required_team_id_str) if required_team_id_str else None
-
-
-def _interrupt_condition_result(gate_payload: dict[str, Any]) -> dict[str, Any] | None:
-    """The interrupt payload's ``condition_result`` member, or None.
-
-    The gate node evaluates the JMESPath condition at fire time and stamps the
-    MATCHED value ({"expression", "value"}, redacted + bounded) into the
-    payload; the briefing capture stores it as PRIMARY evidence. None for
-    gates without a condition and for legacy payloads — the briefing then
-    falls back to the supplementary regex-extracted artifacts unchanged.
-    """
-    result = gate_payload.get("condition_result")
-    return result if isinstance(result, dict) else None
-
-
-def _interrupt_subject(gate_payload: dict[str, Any]) -> str | None:
-    """The interrupt payload's ``subject`` member, or None.
-
-    The gate node resolves ``subject_path`` against the run state at fire
-    time and stamps the serialised value into the payload; the briefing
-    capture stores it as the reviewer's primary focus. None for gates
-    without a ``subject_path`` or when resolution failed.
-    """
-    result = gate_payload.get("subject")
-    return result if isinstance(result, str) else None
-
-
-def _interrupt_subject_parent(gate_payload: dict[str, Any]) -> dict[str, Any] | None:
-    """The interrupt payload's ``subject_parent`` member, or None.
-
-    The gate node resolves the JMESPath prefix of ``subject_path`` to find
-    the container dict holding the subject value; the briefing capture
-    stores it so the frontend can reconstruct a shape-preserving
-    ``modified_output``. None for gates without a ``subject_path`` or when
-    the parent cannot be resolved.
-    """
-    result = gate_payload.get("subject_parent")
-    return result if isinstance(result, dict) else None
-
-
-def _interrupt_subject_leaf_key(gate_payload: dict[str, Any]) -> str | None:
-    """The interrupt payload's ``subject_leaf_key`` member, or None.
-
-    The leaf key within ``subject_parent`` whose value is the subject.
-    """
-    result = gate_payload.get("subject_leaf_key")
-    return result if isinstance(result, str) else None
-
-
-def _clamp_to_ceiling(base_level: AutonomyLevel, ceiling: str | None) -> str:
-    """Clamp ``base_level`` to a raw ceiling string, by rank.
-
-    Levels are not lexicographic, so the clamp compares ``autonomy_level_rank``.
-    An absent or unparseable ceiling imposes no constraint — the base wins.
-    """
-    if isinstance(ceiling, str) and ceiling:
-        try:
-            ceiling_level = AutonomyLevel(ceiling)
-        except ValueError:
-            ceiling_level = None
-        if ceiling_level is not None and autonomy_level_rank(ceiling_level) < autonomy_level_rank(base_level):
-            return ceiling_level.value
-    return base_level.value
-
-
-def _index_dtos_by_eval_id(eval_defs_by_node: dict[str, list[EvalDefDTO]]) -> dict[str, EvalDefDTO]:
-    """Flatten a per-node DTO universe into an id-indexed lookup.
-
-    Extracted from ``PipelineExecutor._overlay_frozen_gated_eval_modes`` for
-    the cognitive-complexity budget (S3776); behaviour unchanged. Last write
-    wins on duplicate ids, exactly as the original inline double loop.
-    """
-    by_eval_id: dict[str, EvalDefDTO] = {}
-    for dtos in eval_defs_by_node.values():
-        for dto in dtos:
-            by_eval_id[str(dto.id)] = dto
-    return by_eval_id
-
-
-def _frozen_eval_mode_entries(config: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """The ``gated_eval_modes`` stamp entries of one fired-gate config.
-
-    Extracted from ``PipelineExecutor._overlay_frozen_gated_eval_modes`` for
-    the cognitive-complexity budget (S3776); behaviour unchanged — a config
-    that is not a dict, or whose stamp key is not a list, contributes no
-    entries, and non-dict entries are dropped.
-    """
-    if not isinstance(config, dict):
-        return []
-    entries = config.get(_GATED_EVAL_MODES_KEY)
-    if not isinstance(entries, list):
-        return []
-    return [entry for entry in entries if isinstance(entry, dict)]
-
-
-def _apply_frozen_eval_mode_entry(entry: dict[str, Any], by_eval_id: dict[str, EvalDefDTO]) -> bool:
-    """Apply ONE fire-time evaluation-mode stamp to its target DTO.
-
-    Extracted from ``PipelineExecutor._overlay_frozen_gated_eval_modes`` for
-    the cognitive-complexity budget (S3776); behaviour unchanged. Returns
-    ``True`` only when a stamp was applied: the entry must carry a known
-    ``eval_id`` and a closed-vocabulary ``evaluation_mode``, the DTO must
-    exist and be gate-owned, and the stamp's ``policy_gate_id`` must match
-    the DTO's live governing gate (operator control / gate identity win over
-    the freeze). Mutates ``target_dto`` in place on success.
-    """
-    eval_id = entry.get("eval_id")
-    mode = entry.get("evaluation_mode")
-    if not eval_id or mode not in ("automatic", "human"):
-        return False
-    target_dto = by_eval_id.get(str(eval_id))
-    if target_dto is None or target_dto.policy_gate_id is None:
-        return False
-    if str(target_dto.policy_gate_id) != str(entry.get("policy_gate_id")):
-        return False
-    target_dto.policy_gate_evaluation_mode = str(mode)
-    return True
-
-
-def _sandbox_failure_class_code(exc: BaseException) -> str | None:
-    """The failure's OWN canonical sandbox class code, or None (FAR-2562).
-
-    ``sandbox_failure_error_code`` resolves the class code used by the terminal
-    write, which the registry's per-class attempt cap is keyed on. It applies
-    ONLY to a ``SandboxNodeFailedError``: a plain ``NodeCancelledError`` carries
-    no sandbox class, so its behaviour is unchanged. The FAR-136 hang death
-    ("likely hung") is also excluded — its terminal code stays the generic
-    ``node_cancelled``, so capping it under the no-output class would silently
-    change that code.
-    """
-    if not isinstance(exc, SandboxNodeFailedError):
-        return None
-    if "likely hung" in str(exc):
-        return None
-    return sandbox_failure_error_code(exc)
-
-
-class PipelineExecutor:
+class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
     """Execute a single pipeline run (HITL-aware, supports parallel fan-out).
 
     ``astream_events`` delivers every node's events (including nodes running in
@@ -2442,58 +917,68 @@ class PipelineExecutor:
             # before capacity and would charge a demoted claim — and never
             # by the resume claim (a checkpoint continuation, not a graph
             # execution).
-            from farna.core.pipeline_execution import bump_execution_attempt_count
+            await self._spend_execution_attempt(session, run_id=run_id, org_id=org_id)
+            return admitted
 
-            counted = await bump_execution_attempt_count(
-                session,
+    async def _spend_execution_attempt(
+        self,
+        session: AsyncSession,
+        *,
+        run_id: uuid.UUID,
+        org_id: uuid.UUID,
+    ) -> None:
+        """Spend ONE execution and open the matching per-attempt history row.
+
+        Called from ``_claim_under_capacity`` in the SAME transaction as the
+        admission decision, so the spend and the attempt row describe one
+        event and can never disagree.
+
+        The per-attempt row is FAIL-OPEN, inside a SAVEPOINT: diagnostics must
+        never fail the admission. A bare try/except would be wrong on Postgres
+        — a failed statement aborts the WHOLE transaction, so the caller's
+        admission commit would fail instead of the attempt write alone. The
+        savepoint rolls back just this statement. ``model_used`` is unknown at
+        admission (nodes have not run).
+        """
+        from farna.core.pipeline_execution import bump_execution_attempt_count
+
+        counted = await bump_execution_attempt_count(
+            session,
+            run_id,
+            org_id,
+            claim_token=self._claim_token,
+        )
+        if not counted:
+            # The token/status fence rejected the bump. The caller's admission
+            # branch proved the row was admissible, so this is a concurrent
+            # transition (a successor rotated the token, or the row left
+            # ``running`` in the same instant). Never let that be
+            # indistinguishable from a successful spend: WARN, and proceed
+            # only because every later write the attempt makes is itself
+            # token-fenced (a successor that took the run spent its own
+            # attempt in its own admission).
+            _log.warning(
+                "pipeline.execution_attempt_not_counted run=%s org=%s — the claim-token/status fence rejected the execution-budget bump; the attempt proceeds against a superseded or no-longer-running row (its writes remain fenced)",
                 run_id,
                 org_id,
-                claim_token=self._claim_token,
             )
-            if not counted:
-                # The token/status fence rejected the bump. The admission
-                # branch above proved the row was admissible, so this is a
-                # concurrent transition (a successor rotated the token, or
-                # the row left ``running`` in the same instant). Never let
-                # that be indistinguishable from a successful spend: WARN,
-                # and proceed only because every later write the attempt
-                # makes is itself token-fenced (a successor that took the
-                # run spent its own attempt in its own admission).
-                _log.warning(
-                    "pipeline.execution_attempt_not_counted run=%s org=%s — the claim-token/status fence rejected the execution-budget bump; the attempt proceeds against a superseded or no-longer-running row (its writes remain fenced)",
-                    run_id,
-                    org_id,
-                )
-            else:
-                # Open the durable per-attempt row at the EXACT point
-                # the retry budget is spent, in the SAME transaction — the two
-                # describe the same event, so they can never disagree, and a
-                # crash after this commit leaves both the spend and the attempt
-                # recorded. Gated on ``counted``: a fence-rejected bump opened
-                # no execution, so writing a row would make attempts OUTNUMBER
-                # ``execution_attempt_count``.
-                #
-                # FAIL-OPEN, inside a SAVEPOINT: diagnostics must never fail
-                # the admission. A bare try/except would be wrong on Postgres —
-                # a failed statement aborts the WHOLE transaction, so the
-                # caller's admission commit would fail instead of the attempt
-                # write alone. The savepoint rolls back just this statement.
-                # ``model_used`` is unknown at admission (nodes have not run).
-                try:
-                    from farna.db.crud.run_attempts import start_attempt
+            return
+        # Gated on ``counted``: a fence-rejected bump opened no execution, so
+        # writing a row would make attempts OUTNUMBER ``execution_attempt_count``.
+        try:
+            from farna.db.crud.run_attempts import start_attempt
 
-                    async with session.begin_nested():
-                        await start_attempt(session, run_id)
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    _log.warning(
-                        "pipeline.execution_attempt_row_failed run=%s org=%s — the per-attempt history row could not be written; the execution proceeds (attempt history is diagnostics, never a gate)",
-                        run_id,
-                        org_id,
-                        exc_info=True,
-                    )
-            return admitted
+            async with session.begin_nested():
+                await start_attempt(session, run_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _log.warning(
+                "pipeline.execution_attempt_row_failed run=%s org=%s — the per-attempt history row could not be written; the execution proceeds (attempt history is diagnostics, never a gate)",
+                run_id,
+                org_id,
+                exc_info=True,
+            )
 
     async def _capacity_snapshot(
         self,
@@ -4094,264 +2579,6 @@ class PipelineExecutor:
                 await _teardown_hub(hub)
             set_connector_hub(None)
 
-    def _check_db_cancellation(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-    ) -> Callable[[], Awaitable[bool]]:
-        """Build a DB-backed cancellation check closure for a run."""
-
-        async def _check() -> bool:
-            try:
-                return await asyncio.wait_for(
-                    self._do_db_cancellation_check(org_id, run_id),
-                    timeout=5.0,
-                )
-            except TimeoutError:
-                _log.warning(
-                    "run_context.cancellation_db_timeout",
-                    extra={"run_id": str(run_id)},
-                )
-                return False
-
-        return _check
-
-    async def _do_db_cancellation_check(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-    ) -> bool:
-        """Execute the DB cancellation check query."""
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            run = await get_run(session, run_id)
-            return run is not None and run.cancellation_requested
-
-    def _dispatch_context_write_audit(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-    ) -> Callable[[dict[str, Any]], Awaitable[None]]:
-        """Build the audit hook that records non-context-setter run_context writes.
-
-        Mirrors ``_check_db_cancellation``: opens a fresh session, applies RLS, and
-        appends a ``context_write_by_non_setter`` event to the org's audit chain
-        (§8.18). Failures and timeouts are logged and swallowed so the hook can
-        never mask the ContextSetterViolationError raised by the decorator.
-        """
-
-        async def _audit(payload: dict[str, Any]) -> None:
-            try:
-                await asyncio.wait_for(
-                    self._do_context_write_audit(org_id, run_id, payload),
-                    timeout=5.0,
-                )
-            except TimeoutError:
-                _log.warning(
-                    "run_context.audit_hook_timeout",
-                    extra={"run_id": str(run_id)},
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception(
-                    "run_context.audit_hook_failed",
-                    extra={"run_id": str(run_id)},
-                )
-
-        return _audit
-
-    async def _do_context_write_audit(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-        payload: dict[str, Any],
-    ) -> None:
-        """Append the ``context_write_by_non_setter`` audit event for a run."""
-        node_id = payload.get("node_id")
-        role = payload.get("role")
-        summary = f'Non-setter context write on node "{node_id}"' if node_id else "Non-setter context write"
-        if role:
-            summary += f" (role {role})"
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            await append_audit_event(
-                session,
-                org_id=org_id,
-                event_type="context_write_by_non_setter",
-                resource_type="run",
-                resource_id=run_id,
-                payload_json={
-                    "node_id": node_id,
-                    "role": role,
-                    "attempted_keys": list(payload.get("attempted_keys") or []),
-                    "actor": SYSTEM_ACTOR,
-                    "summary": summary,
-                },
-            )
-
-    @staticmethod
-    def _log_accumulation_state(
-        run_id: uuid.UUID,
-        segments_completed: int,
-        node_token_usage: dict[str, dict[str, int]] | None,
-    ) -> None:
-        """Distinguish a genuinely-empty accumulator from an upstream wiring
-        regression (§4.2). A ``{}``/``None`` accumulator is legitimate when ZERO
-        segments streamed; an EMPTY dict after ≥1 segment streamed means the
-        on_chain_end / on_chat_model_end handlers stopped populating it.
-        """
-        if segments_completed > 0 and not node_token_usage:
-            _log.warning(
-                "cost_components_accumulation_broken",
-                extra={"run_id": str(run_id), "segments_completed": segments_completed},
-            )
-        elif segments_completed == 0:
-            _log.info(
-                "cost_components_zero_nodes",
-                extra={"run_id": str(run_id)},
-            )
-
-    @staticmethod
-    def _compute_token_costs(
-        node_token_usage: dict[str, dict[str, int]] | None,
-        input_rate: Decimal,
-        output_rate: Decimal,
-    ) -> tuple[int | None, Decimal | None, dict[str, Any] | None]:
-        """Compute total tokens, total cost, and per-node cost from node token usage."""
-        if node_token_usage is None:
-            return None, None, None
-
-        total_tokens = sum(n.get("total_tokens") or 0 for n in node_token_usage.values())
-        total_cost = Decimal(0)
-        result_usage: dict[str, dict[str, Any]] = {}
-        for node_id, n_data in node_token_usage.items():
-            input_tokens = n_data.get("input_tokens")
-            output_tokens = n_data.get("output_tokens")
-            n_cost = Decimal(str(input_tokens if input_tokens is not None else 0)) * input_rate
-            n_cost += Decimal(str(output_tokens if output_tokens is not None else 0)) * output_rate
-            result_usage[node_id] = {**n_data, "cost_usd": float(n_cost)}
-            total_cost += n_cost
-
-        return total_tokens, total_cost, result_usage
-
-    @staticmethod
-    def _aggregate_sandbox_cost(completed_node_outputs: dict[str, Any] | None) -> Decimal:
-        """Sum per-node sandbox-agent cost estimates into a single Decimal.
-
-        NEW FORMAT (split envelope): each node_output has ``telemetry`` key with
-        ``cost_estimate_usd`` directly.
-
-        LEGACY FORMAT: each completed node's captured output is ``{"artifacts": [...],
-        "output": {...}}``; the inner ``output`` dict carries the numeric
-        ``cost_estimate_usd``.
-
-        Non-dict outputs, missing estimates, non-positive, and non-finite
-        values (NaN/inf, which would otherwise corrupt the run total) contribute
-        zero. Kept as a small pure helper so cost parity is testable and shared
-        between :meth:`execute` and :meth:`resume`.
-        """
-        if not completed_node_outputs:
-            return Decimal(0)
-        sandbox_cost = Decimal(0)
-        for node_output in completed_node_outputs.values():
-            if not isinstance(node_output, dict):
-                continue
-            # New split format: telemetry channel carries cost_estimate_usd
-            telemetry = node_output.get("telemetry")
-            est = None
-            if isinstance(telemetry, dict):
-                est = telemetry.get("cost_estimate_usd")
-            else:
-                # Legacy format fallback
-                out = node_output.get("output")
-                if isinstance(out, dict):
-                    est = out.get("cost_estimate_usd")
-            if isinstance(est, (int, float)) and est > 0 and math.isfinite(est):
-                sandbox_cost += Decimal(str(est))
-        return sandbox_cost
-
-    def _get_evidence_provider(self, org_id: uuid.UUID) -> EvidenceProvider:
-        """The injected evidence provider (tests) or the production
-        E2B+DB-backed provider wired for this run's org.
-        """
-        if self._evidence_provider is not None:
-            return self._evidence_provider
-        return build_default_evidence_provider(self._session_factory, org_id)
-
-    def _compute_run_work_intact(
-        self,
-        final_status: str,
-        error_code: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_ids: set[str],
-    ) -> bool | None:
-        """FAR-152 §15.3 — work_intact computed at terminalization from
-        completed-node artifacts + the full DAG ran. NOT from the async
-        evidence probe (restores the false-failure banner for #1/#3).
-
-        Returns None for non-terminal statuses (nothing to write). An
-        A1-elevated run (``failed`` + ``agent.failed``) is NOT complete — its
-        honest work verdict is False (§15.4), so the zero-work elevation banner
-        is what renders. Same for a ``sandbox.no_output_json`` session-lost run
-        (FAR-227): the agent produced no output at all, so it can never be
-        "work intact". Same for a FAR-510 downgraded run
-        (``failed`` + ``sandbox.agent_failed``): the synthetic failure envelope
-        is not a work artifact — the agent died.
-        """
-        if final_status not in _TERMINAL_STATUSES:
-            return None
-        if final_status == "failed" and error_code in (
-            "agent.failed",
-            _CODE_SANDBOX_NO_OUTPUT_JSON,
-            _CODE_SANDBOX_AGENT_FAILED,
-        ):
-            return False
-        return compute_work_intact(completed_node_outputs, node_ids)
-
-    async def _run_post_terminal_evidence_probes(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        completed_node_outputs: dict[str, Any],
-    ) -> None:
-        """FAR-152 §15.3 — post-commit async evidence probe for no-op-eligible
-        nodes (declared ``outcome:success``) on a complete run. Runs off the
-        critical path (after terminalization commits), bounded ≤3s per probe,
-        gated by the EvidenceProvider seam. Fail-open — a probe failure never
-        affects the run.
-        """
-        if final_status != "complete" or not evidence_enabled():
-            return
-        evidence_nodes = [node_id for node_id, out in completed_node_outputs.items() if node_declared_success(out)]
-        if not evidence_nodes:
-            return
-        provider = self._get_evidence_provider(org_id)
-        results = await asyncio.gather(
-            *[
-                run_evidence_probe(
-                    provider=provider,
-                    session_factory=self._session_factory,
-                    run_id=run_id,
-                    node_id=node_id,
-                    organisation_id=org_id,
-                )
-                for node_id in evidence_nodes
-            ],
-            return_exceptions=True,
-        )
-        for node_id, res in zip(evidence_nodes, results, strict=False):
-            if isinstance(res, Exception):
-                _log.warning(
-                    "heuristic.probe_task_failed",
-                    extra={"run_id": str(run_id), "node_id": node_id},
-                    exc_info=res,
-                )
-
     async def _enforce_resume_sandbox_capacity(
         self,
         session: AsyncSession,
@@ -5245,13 +3472,64 @@ class PipelineExecutor:
         )
 
         # Phase 5: Stream and handle errors
-        config = {"configurable": {"thread_id": thread_id}}
-        node_ids = {str(n["id"]) for n in graph_json.get("nodes", [])}
-        node_token_budgets = {str(n["id"]): n["token_budget"] for n in graph_json.get("nodes", []) if n.get("token_budget") is not None}
+        config, node_ids, node_token_budgets = self._resume_stream_inputs(graph_json=graph_json, thread_id=thread_id)
         # One shared instance threaded into BOTH the stream phase and finalize:
         # ``_stream_graph`` mutates it IN PLACE, so a fresh dict at finalize
         # would lose the resumed segment's outputs (FAR-505 regression).
         completed_node_outputs: dict[str, Any] = {}
+        final_status, error_code, error_detail, node_token_usage = await self._resume_stream_phase(
+            compiled=compiled,
+            config=config,
+            node_ids=node_ids,
+            broker=broker,
+            run_id=run_id,
+            pipeline_id=pipeline_id,
+            org_id=org_id,
+            resume_data=resume_data,
+            completed_node_outputs=completed_node_outputs,
+            guard=guard,
+            node_token_budgets=node_token_budgets,
+            eval_defs_by_node=eval_defs_by_node,
+            node_type_map=node_type_map,
+            model_backend_hub=model_backend_hub,
+        )
+
+        # Phase 6: Finalize
+        return await self._resume_cleanup_and_finalize(
+            final_status=final_status,
+            run_id=run_id,
+            org_id=org_id,
+            pipeline_id=pipeline_id,
+            node_type_map=node_type_map,
+            error_code=error_code,
+            error_detail=error_detail,
+            node_token_usage=node_token_usage,
+            completed_node_outputs=completed_node_outputs,
+            node_ids=node_ids,
+        )
+
+    async def _resume_stream_phase(
+        self,
+        *,
+        compiled: Any,
+        config: dict[str, Any],
+        node_ids: set[str],
+        broker: RunEventBroker,
+        run_id: uuid.UUID,
+        pipeline_id: uuid.UUID,
+        org_id: uuid.UUID,
+        resume_data: dict[str, Any],
+        completed_node_outputs: dict[str, Any],
+        guard: Any,
+        node_token_budgets: dict[str, int],
+        eval_defs_by_node: dict[str, list[EvalDefDTO]],
+        node_type_map: dict[str, str],
+        model_backend_hub: ModelBackendHub | None,
+    ) -> tuple[str, str | None, str | None, dict[str, Any] | None]:
+        """Stream the resumed graph, then tear the runtime down exactly once.
+
+        Returns ``(final_status, error_code, error_detail, node_token_usage)``.
+        """
         final_status: str = "failed"
         error_code: str | None = None
         error_detail: str | None = None
@@ -5277,705 +3555,40 @@ class PipelineExecutor:
             # re-raised non-checkpointer RuntimeError from the stream phase
             # would otherwise leak process-global contextvars and the model
             # hub (FAR-1534).
-            set_cancellation_check(None)
-            set_audit_hook(None)
-            set_model_backend_hub(None)
-            if model_backend_hub is not None:
-                await _teardown_hub(model_backend_hub)
-            if final_status not in ("awaiting_human", "complete"):
-                get_registry().close(run_id)
-
-        # Phase 6: Finalize
-        return await self._resume_cleanup_and_finalize(
-            final_status=final_status,
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            node_type_map=node_type_map,
-            error_code=error_code,
-            error_detail=error_detail,
-            node_token_usage=node_token_usage,
-            completed_node_outputs=completed_node_outputs,
-            node_ids=node_ids,
-        )
-
-    async def _record_eval_blocked_audit(
-        self,
-        *,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        error_detail: str | None,
-    ) -> None:
-        """Record an ``eval.blocked`` audit event — failure-isolated.
-
-        Runs in its own session/transaction so a blocked-eval audit failure
-        never interrupts terminalization. The payload carries the sanitized
-        detail plus the run's pipeline id so the event links back to the graph.
-        """
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            # FAR-1141 / ADR-042: the run's execution origin travels with this
-            # run-keyed payload so the audit log can tell a dispatched run from
-            # one Modulo executed. Best-effort and read INSIDE this audit's own
-            # transaction, with the serializer's ``None``-row form as the degrade
-            # arm: any read failure yields the key with NULL (logged) and never
-            # suppresses the audit event itself.
-            provenance: dict[str, Any] = run_provenance_fields(None)
-            try:
-                provenance = run_provenance_fields(await get_run(session, run_id))
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.warning(
-                    "audit.eval_blocked_origin_unavailable",
-                    extra={"run_id": str(run_id)},
-                    exc_info=True,
-                )
-            try:
-                await append_audit_event(
-                    session,
-                    org_id=org_id,
-                    event_type="eval.blocked",
-                    resource_type="run",
-                    resource_id=run_id,
-                    payload_json={
-                        "pipeline_id": str(pipeline_id),
-                        **provenance,
-                        "error_detail": _sanitize_detail(error_detail, limit=None),
-                        "actor": SYSTEM_ACTOR,
-                        "summary": f"Guardrail eval blocked the run (pipeline {short_id(pipeline_id)})",
-                    },
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception("audit.eval_blocked_failed", extra={"run_id": str(run_id)})
-
-    @staticmethod
-    def _sandbox_failure_scan_views(value: Any) -> list[dict[str, Any]]:
-        """FAR-510 — the dict views of one per-node output value that may carry
-        the sandbox envelope fields (``status`` / the synthetic-failure marker).
-
-        NEW FORMAT (split envelope): value has ``output`` (pure return) and
-        ``telemetry`` keys. The telemetry view carries the envelope fields.
-
-        LEGACY FORMAT: A full runner envelope ``{artifacts, output}`` yields the
-        value itself (flat / legacy mixed bodies), the outer ``output`` telemetry
-        view, and the first artifact's inner ``output``.
-
-        A post-P1b stored ``outputs_json`` value is the PURE agent return
-        (``None`` or agent-authored business JSON) — scanned top-level only; the
-        marker requirement in the predicate keeps agent-authored JSON
-        collision-free.
-        """
-        views: list[dict[str, Any]] = []
-        if not isinstance(value, dict):
-            return views
-        # New split format: telemetry channel
-        telemetry = value.get("telemetry")
-        if isinstance(telemetry, dict):
-            views.append(telemetry)
-        # Legacy format: artifacts and output
-        views.append(value)
-        outer = value.get("output")
-        if isinstance(outer, dict):
-            views.append(outer)
-        artifacts = value.get("artifacts")
-        if isinstance(artifacts, list) and artifacts and isinstance(artifacts[0], dict):
-            inner = artifacts[0].get("output")
-            if isinstance(inner, dict):
-                views.append(inner)
-        return views
-
-    @staticmethod
-    def _is_sandbox_synthetic_failure_view(view: dict[str, Any]) -> bool:
-        """FAR-510 — the marker-based downgrade predicate.
-
-        Requires ``status == "failed"`` AND the runner's machine marker
-        (``MODULO_SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
-        agent-authored failure shape (honest exit-code failure, business JSON
-        self-reporting failure) is never downgraded.
-        """
-        return view.get("status") == "failed" and view.get(MODULO_SYNTHETIC_FAILURE_MARKER) is True
-
-    def _downgrade_connector_failures(
-        self,
-        *,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-        stored_node_outputs: dict[str, Any] | None = None,
-        stored_node_telemetry: dict[str, Any] | None = None,
-    ) -> tuple[str, str | None, str | None]:
-        """Downgrade an explicit connector failure envelope before finalization."""
-        if final_status != "complete":
-            return final_status, error_code, error_detail
-        stored_outputs = stored_node_outputs or {}
-        stored_telemetry = stored_node_telemetry or {}
-        node_ids = set(completed_node_outputs) | set(stored_outputs) | set(stored_telemetry)
-        failures = [
-            _connector_failure_for_node(
-                node_id,
-                node_type_map,
-                completed_node_outputs,
-                stored_outputs,
-                stored_telemetry,
-            )
-            for node_id in node_ids
-        ]
-        observed = [failure for failure in failures if failure is not None]
-        if not observed:
-            return final_status, error_code, error_detail
-        details = sorted({reason for reason, _ in observed})
-        chosen_code = _CODE_CONNECTOR_UNKNOWN if any(code == _CODE_CONNECTOR_UNKNOWN for _, code in observed) else _CODE_CONNECTOR_FAILED
-        return "failed", chosen_code, "; ".join(details)
-
-    def _downgrade_masked_sandbox_failures(
-        self,
-        *,
-        run_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-        stored_node_outputs: dict[str, Any] | None = None,
-        stored_node_telemetry: dict[str, Any] | None = None,
-    ) -> tuple[str, str | None, str | None]:
-        """FAR-510 — downgrade a masked sandbox-agent failure to an honest fail.
-
-        The sandbox_agent runner's synthetic failure paths (generic exception,
-        schema validation) do NOT raise — they RETURN a failure envelope
-        stamped with the ``MODULO_SYNTHETIC_FAILURE_MARKER`` machine marker.
-        Node completion is output-presence-based, so that node counts as
-        completed and the run would finalize ``complete`` — a failed dispatch
-        masked as success.
-
-        Only a ``complete`` final_status is inspected (failed/eval_failed/etc.
-        are already honest). A match is a completed output on a node the
-        ``node_type_map`` says is ``sandbox_agent`` for which ANY scanned view
-        shows ``status == "failed"`` AND the synthetic-failure marker (see
-        :meth:`_is_sandbox_synthetic_failure_view`). Returns the inputs
-        unchanged when nothing matches.
-
-        The scan checks the per-node UNION of three views — the live
-        ``completed_node_outputs`` envelope, the run's STORED cumulative
-        ``outputs_json`` value, and the STORED ``node_telemetry_json`` view
-        (via the legacy-safe ``node_output_split.node_telemetry`` accessor,
-        which falls back to the legacy mixed-envelope inner output for pre-P1b
-        rows). A HITL resume only re-emits the resumed segment's node events,
-        so a masked failure from a PRIOR segment is only visible in the stored
-        columns — and those hold the POST-split shapes (``outputs_json`` =
-        pure return or ``None``; telemetry = the envelope fields), which are
-        DIFFERENT shapes from the live envelope by design. No view clobbers
-        another: a match in ANY view downgrades.
-        """
-        if final_status != "complete":
-            return final_status, error_code, error_detail
-        stored_outputs = stored_node_outputs or {}
-        stored_telemetry = stored_node_telemetry or {}
-        node_ids = set(completed_node_outputs) | set(stored_outputs) | set(stored_telemetry)
-        found: list[str] = []
-        for node_id in node_ids:
-            if node_type_map.get(node_id) != "sandbox_agent":
-                continue
-            views = self._sandbox_failure_scan_views(completed_node_outputs.get(node_id))
-            views.extend(self._sandbox_failure_scan_views(stored_outputs.get(node_id)))
-            views.extend(self._sandbox_failure_scan_views(node_telemetry(stored_telemetry, stored_outputs, node_id)))
-            if any(self._is_sandbox_synthetic_failure_view(view) for view in views):
-                found.append(node_id)
-        if not found:
-            return final_status, error_code, error_detail
-        _log.warning(
-            "pipeline.masked_sandbox_failure_downgraded",
-            extra={"run_id": str(run_id), "node_ids": sorted(found)},
-        )
-        return "failed", _CODE_SANDBOX_AGENT_FAILED, "Sandbox agent node(s) failed: " + ", ".join(sorted(found))
-
-    async def _load_stored_node_columns(self, *, run_id: uuid.UUID, org_id: uuid.UUID) -> tuple[dict[str, Any], dict[str, Any]]:
-        """FAR-510 — the run's STORED cumulative per-node columns.
-
-        Returns ``(outputs_json, node_telemetry_json)``. A HITL resume only
-        re-emits the resumed segment's node events, so the live
-        ``completed_node_outputs`` can miss a masked sandbox failure from a
-        prior segment; the stored row is the cumulative truth. Since the P1b
-        write-flip the two columns hold DIFFERENT shapes (pure return vs
-        telemetry envelope), so BOTH are loaded and the downgrade scans a
-        per-node view of each. Best-effort (guard-the-guard): any failure —
-        including a missing row or a non-dict column — yields empty dicts so
-        the downgrade falls back to scanning the live dict only. It must never
-        crash finalization.
-
-        FAR-583: the blobs reassemble from ``run_node_outputs`` via the repo
-        reader (with the empty/mismatch legacy fallback) inside the SAME
-        transaction that loads the run row — one batched query, never a
-        per-node lazy load.
-        """
-        if self._session_factory is None:
-            return {}, {}
-        outputs_json: dict[str, Any] = {}
-        telemetry_json: dict[str, Any] = {}
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                run = await get_run(session, run_id)
-                if run is not None:
-                    blobs = await read_run_blobs(session, run_id=run_id, organisation_id=org_id)
-                    outputs_json = dict(blobs.outputs) if isinstance(blobs.outputs, dict) else {}
-                    telemetry_json = dict(blobs.telemetry) if isinstance(blobs.telemetry, dict) else {}
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.masked_sandbox_failure_stored_scan_unavailable",
-                extra={"run_id": str(run_id)},
-                exc_info=True,
-            )
-            return {}, {}
-        return outputs_json, telemetry_json
-
-    async def _downgrade_hitl_terminate_rejection(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-    ) -> tuple[str, str | None, str | None]:
-        """Downgrade ``complete`` to ``rejected`` for a HITL terminate-rejection (FAR-1487).
-
-        Keyed on BOTH signals - never the agent's/graph's echo alone:
-
-        1. the gate artifact (``result == "rejected"`` + ``reject_disposition ==
-           "terminate"``, for the gate ids latched by the stream), AND
-        2. the COMMITTED ``hitl_claims`` row for (this run, that gate) with
-           ``decision == "rejected"``.
-
-        A coalesced-supersede system rejection (committed
-        ``decision_payload.reason == SUPERSEDE_REASON`` with NO deciding
-        account) lands as ``hitl.superseded`` - bookkeeping on an outdated work
-        item, never a human "no" - so it is not counted as a human reject.
-        Fail-safe: a lookup failure leaves the status untouched.
-        """
-        gate_ids = sorted(self._terminating_rejected_gates)
-        if not gate_ids or self._session_factory is None:
-            return final_status, error_code, error_detail
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                claims = (
-                    (
-                        await session.execute(
-                            select(HitlClaim).where(
-                                HitlClaim.run_id == run_id,
-                                HitlClaim.organisation_id == org_id,
-                                HitlClaim.review_id.in_(gate_ids),
-                                HitlClaim.decision == "rejected",
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("pipeline.hitl_reject_downgrade_lookup_failed", extra={"run_id": str(run_id)})
-            return final_status, error_code, error_detail
-        if not claims:
-            return final_status, error_code, error_detail
-        # Prefer a human rejection when several gates rejected (a human said
-        # "no" somewhere); only an all-system supersede is labelled superseded.
-        superseded_only = all(_is_supersede_rejection(c) for c in claims)
-        _log.info(
-            "pipeline.hitl_rejected",
-            extra={"run_id": str(run_id), "gates": gate_ids, "superseded": superseded_only},
-        )
-        if superseded_only:
-            return "rejected", "hitl.superseded", "Superseded by a newer version of the work item."
-        return "rejected", "hitl.rejected", "Rejected by a reviewer at a HITL gate; the run ended."
-
-    async def _finalize_then_publish_completed(self, *, defer_close: bool, **finalize_kwargs: Any) -> Run:
-        """Run ``_finalize_run_after_stream`` then publish ``run_completed`` (FAR-1534).
-
-        ``defer_close`` is True when the stream ended ``complete``: the broker
-        was deliberately left open so the event is only emitted once finalize
-        has committed the terminal status — a would-be ``complete`` that
-        finalize downgrades (FAR-1487 ``rejected``, FAR-510 ``failed``) never
-        shows live clients ``complete``. The payload stays ``{}`` for a genuine
-        ``complete`` and carries ``{"status": <final>}`` for a downgraded run.
-        The broker is always closed (even when finalize raises) so SSE
-        subscribers are released.
-        """
-        run_id: uuid.UUID = finalize_kwargs["run_id"]
-        try:
-            final_run = await self._finalize_run_after_stream(**finalize_kwargs)
-            if defer_close:
-                self._publish_run_completed(run_id, final_run.status)
-            return final_run
-        finally:
-            if defer_close:
-                get_registry().close(run_id)
-
-    @staticmethod
-    def _publish_run_completed(run_id: uuid.UUID, final_status: str) -> None:
-        """Best-effort ``run_completed`` publish carrying the committed status."""
-        broker = get_registry().get_or_create(run_id)
-        try:
-            broker.publish("run_completed", {} if final_status == "complete" else {"status": final_status})
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("pipeline.run_completed_publish_failed", extra={"run_id": str(run_id)})
-
-    async def _run_finalize_cost_transaction(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        node_token_usage: dict[str, Any] | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-        work_intact: bool | None,
-    ) -> None:
-        """Own + run the finalisation transaction, re-running it on a lock failure.
-
-        The transaction is owned HERE (``session.begin()``), so re-owning it on a
-        whole-transaction lock failure (40P01 deadlock / 55P03 lock_timeout) is
-        feasible and is the only recovery — the transaction is aborted, so a
-        retry must re-run it from the top, not attempt savepoint surgery.
-        Idempotent-safe: a rolled-back transaction commits NOTHING (including
-        the org accrual, which lives inside the ledger savepoint), so a re-run
-        cannot double-count and the ``finalize_cost`` duplicate-terminal guard
-        is re-derived from the DB each attempt.
-
-        The bounded retry rides out transient contention; if it persists, the
-        exception propagates — ``run_executor_with_watchdog`` terminal-fails the
-        run as ``executor_failed`` (truthful, non-silent), never a raw 500.
-
-        FAR-1642 retry-idempotent metrics: each attempt buffers its
-        ``limit_refused`` / ``duplicate_terminal`` counters on a FRESH
-        :class:`FinalizeMetricSink` and the sink is flushed only AFTER this
-        attempt's transaction commits — so a rolled-back attempt emits nothing
-        and a retried finalisation emits exactly one sample per event, instead
-        of one per attempt. A discarded sink (attempt failed) is simply dropped.
-        """
-        for attempt in range(1, FINALIZE_LOCK_RETRY_ATTEMPTS + 1):
-            metric_sink = FinalizeMetricSink()
-            try:
-                async with self._session_factory() as session, session.begin():
-                    await set_rls_org(session, org_id)
-                    await set_rls_execution_context(session)
-                    await finalize_cost(
-                        session,
-                        run_id=run_id,
-                        org_id=org_id,
-                        status=final_status,
-                        segment_node_token_usage=node_token_usage,
-                        segment_completed_node_outputs=completed_node_outputs,
-                        node_type_map=node_type_map,
-                        error_code=error_code,
-                        error_detail=error_detail,
-                        is_terminal=final_status in _TERMINAL_STATUSES,
-                        session_factory=self._session_factory,
-                        claim_token=self._claim_token,
-                        metric_sink=metric_sink,
-                    )
-                    await _apply_work_intact_best_effort(session, run_id, work_intact, claim_token=self._claim_token)
-                # Committed — the buffered counters are now real (exactly once).
-                metric_sink.flush()
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                if attempt < FINALIZE_LOCK_RETRY_ATTEMPTS and _is_finalize_lock_retryable(exc):
-                    _log.warning(
-                        "pipeline.finalize_lock_retry",
-                        extra={
-                            "run_id": str(run_id),
-                            "attempt": attempt,
-                            "max_attempts": FINALIZE_LOCK_RETRY_ATTEMPTS,
-                            "sqlstate": sqlstate_of(exc),
-                        },
-                    )
-                    await asyncio.sleep(_FINALIZE_LOCK_RETRY_DELAY_SECONDS * attempt)
-                    continue
-                raise
-
-    async def _finalize_run_after_stream(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        node_type_map: dict[str, str],
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        node_token_usage: dict[str, Any] | None,
-        completed_node_outputs: dict[str, Any],
-        node_ids: set[str],
-    ) -> Run:
-        """Finalize a streamed run (execute + resume share this tail).
-
-        Computes ``work_intact``, runs ``finalize_cost``, records the
-        compensating daily fact when needed, fetches the final row, and fires
-        the post-terminal evidence probes. ``final_status`` reflects the
-        terminal/awaiting_human outcome of the stream, after the FAR-510
-        masked-sandbox-failure downgrade.
-        """
-        # FAR-510: a sandbox_agent node whose dispatch died to a generic
-        # exception RETURNS a failed envelope instead of raising, and node
-        # completion is output-presence-based — so a failed dispatch would
-        # otherwise finalize the run ``complete``. Downgrade BEFORE the
-        # eval_blocked audit, work_intact, and finalize_cost so every
-        # downstream consumer sees the honest status. The scan also covers the
-        # run's STORED cumulative outputs (resume parity: a HITL resume only
-        # re-emits the resumed segment, so a masked failure from a prior
-        # segment is only visible in the stored row). The extra run-row read
-        # happens on the complete path ONLY — failed/awaiting_human skip it.
-        stored_node_outputs: dict[str, Any] = {}
-        stored_node_telemetry: dict[str, Any] = {}
-        if final_status == "complete":
-            # FAR-1487: a stamped terminate-rejection ENDs the graph, which is
-            # a NORMAL stream exit - without this downgrade the run would be
-            # finalized ``complete`` (the same bug one layer up).
-            final_status, error_code, error_detail = await self._downgrade_hitl_terminate_rejection(
-                run_id=run_id,
-                org_id=org_id,
+            await self._teardown_resume_runtime(
+                model_backend_hub=model_backend_hub,
                 final_status=final_status,
-                error_code=error_code,
-                error_detail=error_detail,
-            )
-        if final_status == "complete":
-            stored_node_outputs, stored_node_telemetry = await self._load_stored_node_columns(run_id=run_id, org_id=org_id)
-        final_status, error_code, error_detail = self._downgrade_connector_failures(
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-            stored_node_outputs=stored_node_outputs,
-            stored_node_telemetry=stored_node_telemetry,
-        )
-        final_status, error_code, error_detail = self._downgrade_masked_sandbox_failures(
-            run_id=run_id,
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-            stored_node_outputs=stored_node_outputs,
-            stored_node_telemetry=stored_node_telemetry,
-        )
-
-        # Record audit events for block failures on resume.
-        eval_blocked = final_status == "eval_failed" and error_code == "eval_blocked"
-        if eval_blocked:
-            await self._record_eval_blocked_audit(
-                org_id=org_id,
                 run_id=run_id,
-                pipeline_id=pipeline_id,
-                error_detail=error_detail,
             )
+        return final_status, error_code, error_detail, node_token_usage
 
-        # Resume recomputes from LIVE components over the cumulative merged set
-        # (two-state rule, §4.4); finalize_cost reads the stored cumulative set,
-        # merges the resumed segment (segment-wins), and recomputes.
-        # FAR-152 §15.3 — work_intact computed at terminalization (same rule as
-        # execute()).
-        work_intact = self._compute_run_work_intact(final_status, error_code, completed_node_outputs, node_ids)
-        await self._run_finalize_cost_transaction(
-            run_id=run_id,
-            org_id=org_id,
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            node_token_usage=node_token_usage,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-            work_intact=work_intact,
-        )
-
-        # Terminal-failure notification. Fired ONLY after the
-        # terminal write above has COMMITTED and ONLY for a non-retryable
-        # critical code (see ``should_notify_terminal_failure``) — routine
-        # retryable failures stay silent, and a finalize lock retry (which
-        # re-runs the transaction) can never double-notify because the dispatch
-        # sits outside the retry loop. Failure-isolated inside the helper.
-        if final_status == "failed":
-            await self._dispatch_run_failed(
-                org_id=org_id,
-                run_id=run_id,
-                pipeline_id=pipeline_id,
-                error_code=error_code,
-            )
-
-        # FAR-291: run-termination compensation for a guardrail-blocked
-        # MID-RUN terminalization. The terminal status write (finalize_cost
-        # above) has already landed; a run whose earlier nodes pushed a PR /
-        # flipped a Linear status before a later node's output was
-        # guardrail-blocked now gets those side effects compensated. Best-effort
-        # + failure-isolated (guard-the-guard): a compensation failure never
-        # crashes terminalization. Uses its own fresh session + hub.
-        if eval_blocked:
-            await self._compensate_blocked_run_best_effort(
-                org_id=org_id,
-                run_id=run_id,
-                executed_nodes=completed_node_outputs,
-            )
-
-        # Fetch the final run in a fresh session — finalize_cost's ledger block
-        # may have aborted the transaction in the whole-tx-abort reduced-escape
-        # path (the run row was re-terminalized there).
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            final_run = await get_run(session, run_id)
-
-        if final_run is None:
-            raise RunNotFoundError(run_id)
-
-        # FAR-2006: a non-retryable provider auth/billing refusal is exactly
-        # the class that must page. Dispatched from the ONE shared finalization
-        # tail so every terminal path (transient short-circuit, retry-policy
-        # exhaustion, generic catch) is covered without a second call site.
-        await self._alert_provider_failure(
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            final_status=final_status,
-            error_code=error_code,
-        )
-
-        # FAR-2138 — terminal-outcome notifications for the statuses that carry
-        # their own event (stalled / budget_exceeded / eval_blocked). Read from
-        # the COMMITTED row, never the pre-finalize locals: the per-agent token
-        # budget override lands INSIDE finalize_cost above, so only the row
-        # carries the resulting ``budget_exceeded`` status. Dispatched from this
-        # ONE shared tail so execute and resume are both covered.
-        await self._dispatch_terminal_status_notification(
-            org_id=org_id,
-            run_id=run_id,
-            pipeline_id=pipeline_id,
-            final_run=final_run,
-        )
-
-        # FAR-152 §15.3 — post-commit async evidence probe (same rule as
-        # execute()). Bounded ≤3s per node, gated by the EvidenceProvider seam.
-        await self._run_post_terminal_evidence_probes(
-            run_id=run_id,
-            org_id=org_id,
-            final_status=final_status,
-            completed_node_outputs=completed_node_outputs,
-        )
-        # FAR-1690 A3 (run_teardown.RunTeardownSeal): the sealed terminal step —
-        # revoke the run's per-run API key (FAR-296 Phase 3b), then destroy every
-        # workspace labelled modulo.run.id = run_id, then write one
-        # run.teardown_sealed fact. Revoke-first, fail-closed. Failure-isolated
-        # so a seal failure never crashes terminalization (the key's short-TTL
-        # expiry in validate_api_key is the credential backstop; the
-        # workspace-orphan reconciler reclaims a workspace the seal could not).
-        try:
-            await self._seal_run_teardown(run_id=run_id, org_id=org_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("run_teardown.seal_failed", extra={"run_id": str(run_id)})
-        return final_run
-
-    async def _alert_provider_failure(
+    def _resume_stream_inputs(
         self,
         *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
+        graph_json: dict[str, Any],
+        thread_id: str,
+    ) -> tuple[dict[str, Any], set[str], dict[str, int]]:
+        """Build the checkpoint config, node-id set and token budgets for a resume."""
+        config = {"configurable": {"thread_id": thread_id}}
+        node_ids = {str(n["id"]) for n in graph_json.get("nodes", [])}
+        node_token_budgets = {str(n["id"]): n["token_budget"] for n in graph_json.get("nodes", []) if n.get("token_budget") is not None}
+        return config, node_ids, node_token_budgets
+
+    async def _teardown_resume_runtime(
+        self,
+        *,
+        model_backend_hub: ModelBackendHub | None,
         final_status: str,
-        error_code: str | None,
+        run_id: uuid.UUID,
     ) -> None:
-        """Dispatch the provider-refusal alert (FAR-2006) — failure-isolated.
-
-        A 401/402 provider refusal is terminal and never retried, so without a
-        real alert the only trace is a log line plus an ``error_code`` row —
-        exactly how a whole night ran at zero throughput with nothing
-        surfaced. Uses the existing Notifier path (webhook + in-app) with a
-        DEDICATED event so an operator can page on provider refusals without
-        subscribing to every failed run.
-
-        Called from the one shared finalization tail, so every terminal path
-        is covered. Fail-open WITH a log: an alerting failure must never crash
-        terminalization (the run is already terminal), but it also must never
-        be silent.
-        """
-        if self._notifier is None or final_status != "failed":
-            return
-        canonical = map_legacy_code(error_code)
-        if canonical not in NON_RETRYABLE_PROVIDER_CODES:
-            return
-
-        pipeline_name: str | None = None
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                pipeline_name = await _safe_pipeline_name(session, pipeline_id, org_id, run_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.provider_failure_alert_name_lookup_failed",
-                extra={"run_id": str(run_id), "pipeline_id": str(pipeline_id)},
-                exc_info=True,
-            )
-
-        payload: dict[str, Any] = {
-            "run_id": str(run_id),
-            "pipeline_id": str(pipeline_id),
-            "pipeline_name": pipeline_name or "unknown pipeline",
-            "error_code": canonical,
-        }
-        try:
-            await self._notifier.dispatch_event(
-                org_id=org_id,
-                event_type=EVENT_PROVIDER_FAILURE,
-                payload=payload,
-                run_id=run_id,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception(
-                "pipeline.provider_failure_alert_failed",
-                extra={"run_id": str(run_id), "error_code": canonical},
-            )
-
-    async def _seal_run_teardown(self, *, run_id: uuid.UUID, org_id: uuid.UUID) -> None:
-        """Run the sealed joint revoke+destroy step for a terminalized run (FAR-1690 A3).
-
-        Failure-isolated at the call site — a seal failure never crashes
-        terminalization. ``seal_run_teardown`` itself raises
-        ``RunTeardownSealError`` when the credential revoke could not be
-        confirmed (after writing the ``sealed=False`` fact); that surfaces here
-        as a loud log line, and the compensating sweep retries.
-        """
-        if self._session_factory is None:
-            return
-        from farna.core.run_teardown import seal_run_teardown
-
-        await seal_run_teardown(
-            run_id=run_id,
-            org_id=org_id,
-            session_factory=self._session_factory,
-        )
+        """Clear the process-global runtime state a resume installed."""
+        set_cancellation_check(None)
+        set_audit_hook(None)
+        set_model_backend_hub(None)
+        if model_backend_hub is not None:
+            await _teardown_hub(model_backend_hub)
+        if final_status not in ("awaiting_human", "complete"):
+            get_registry().close(run_id)
 
     async def execute(
         self,
@@ -6027,15 +3640,9 @@ class PipelineExecutor:
         is_correction_run = scalars["is_correction_run"]
         run_number = scalars["run_number"]
 
-        # Phase 3: Load eval definitions
-        eval_defs_by_node = await self._execute_load_eval_defs(
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            policy_gate_pins_json=snapshot.policy_gate_pins_json,
-        )
-
-        # Phase 4: Pre-stream checks (capacity, spend ceiling)
-        pre_stream_run = await self._execute_pre_stream_checks(
+        # Phases 3-4: Load eval definitions, then run the pre-stream gates
+        # (capacity, spend ceiling).
+        eval_defs_by_node, pre_stream_run = await self._execute_admit_pre_stream(
             run_id=run_id,
             org_id=org_id,
             pipeline_id=pipeline_id,
@@ -6043,6 +3650,7 @@ class PipelineExecutor:
             graph_json=graph_json,
             snapshot_id=snapshot_id,
             claim_token=claim_token,
+            policy_gate_pins_json=snapshot.policy_gate_pins_json,
         )
         if pre_stream_run is not None:
             return pre_stream_run
@@ -6055,18 +3663,120 @@ class PipelineExecutor:
             graph_json=graph_json,
         )
         graph_idempotent = _graph_is_idempotent(graph_json)
-        gate_suppressed = False
 
         # Phase 6: Prepare stream config
+        scope, stream_config = self._build_execute_stream_config(
+            run_id=run_id,
+            org_id=org_id,
+            pipeline_id=pipeline_id,
+            snapshot_id=snapshot_id,
+            thread_id=thread_id,
+            snapshot=snapshot,
+            input_payload=input_payload,
+            variant_config_snapshot=variant_config_snapshot,
+            graph_json=graph_json,
+            eval_defs_by_node=eval_defs_by_node,
+            guard=guard,
+            node_type_map=node_type_map,
+            pipeline_node_timeout_seconds=pipeline.node_timeout_seconds,
+            broker=broker,
+            pipeline_retry_policy=pipeline_retry_policy,
+            run_number=run_number,
+        )
+
+        # Phase 7: Stream and handle exceptions
+        final_status, error_code, error_detail, node_token_usage, retry_policy_eligible = await self._execute_stream_phase(
+            scope=scope,
+            stream_config=stream_config,
+            graph_idempotent=graph_idempotent,
+            single_sandbox_node=single_sandbox_node,
+            model_backend_hub=model_backend_hub,
+            connector_hub=connector_hub,
+        )
+
+        # Phases 8-10: apply the retry policy, run the post-stream tail and
+        # teardown, then finalize.
+        return await self._finish_execute_after_stream(
+            scope=scope,
+            stream_config=stream_config,
+            pipeline_retry_policy=pipeline_retry_policy,
+            is_correction_run=is_correction_run,
+            graph_idempotent=graph_idempotent,
+            model_backend_hub=model_backend_hub,
+            connector_hub=connector_hub,
+            final_status=final_status,
+            error_code=error_code,
+            error_detail=error_detail,
+            node_token_usage=node_token_usage,
+            retry_policy_eligible=retry_policy_eligible,
+        )
+
+    async def _execute_admit_pre_stream(
+        self,
+        *,
+        run_id: uuid.UUID,
+        org_id: uuid.UUID,
+        pipeline_id: uuid.UUID,
+        max_concurrent: int,
+        graph_json: dict[str, Any],
+        snapshot_id: uuid.UUID,
+        claim_token: str | None,
+        policy_gate_pins_json: list[dict[str, Any]] | None,
+    ) -> tuple[dict[str, list[EvalDefDTO]], Run | None]:
+        """Load the run's eval definitions, then run the capacity/spend gates.
+
+        Returns ``(eval_defs_by_node, blocked_run)`` — ``blocked_run`` is the
+        terminal/deferred run the caller must return, or ``None`` to proceed.
+        """
+        eval_defs_by_node = await self._execute_load_eval_defs(
+            org_id=org_id,
+            pipeline_id=pipeline_id,
+            policy_gate_pins_json=policy_gate_pins_json,
+        )
+        pre_stream_run = await self._execute_pre_stream_checks(
+            run_id=run_id,
+            org_id=org_id,
+            pipeline_id=pipeline_id,
+            max_concurrent=max_concurrent,
+            graph_json=graph_json,
+            snapshot_id=snapshot_id,
+            claim_token=claim_token,
+        )
+        return eval_defs_by_node, pre_stream_run
+
+    def _build_execute_stream_config(
+        self,
+        *,
+        run_id: uuid.UUID,
+        org_id: uuid.UUID,
+        pipeline_id: uuid.UUID,
+        snapshot_id: uuid.UUID,
+        thread_id: str,
+        snapshot: PipelineSnapshot,
+        input_payload: dict[str, Any],
+        variant_config_snapshot: dict[str, Any] | None,
+        graph_json: dict[str, Any],
+        eval_defs_by_node: dict[str, list[EvalDefDTO]],
+        guard: Any,
+        node_type_map: dict[str, str],
+        pipeline_node_timeout_seconds: int,
+        broker: RunEventBroker,
+        pipeline_retry_policy: dict[str, Any] | None,
+        run_number: int,
+    ) -> tuple[_RunScope, _StreamConfig]:
+        """Build the run scope and stream config for the streaming phases.
+
+        Returns ``(scope, stream_config)``. ``stream_config.completed_node_outputs``
+        is ONE shared instance for the whole run: ``_stream_graph`` mutates it
+        IN PLACE, so the stream config and the finalize call MUST receive the
+        same dict or the accumulated outputs never reach finalize_cost.
+        """
         run_ref = rc.build_run_ref(str(pipeline_id), run_number)
 
         def _node_idempotency_key(node_id: str, _state: dict[str, Any]) -> str | None:
             return rc.node_idempotency_key(run_ref=run_ref, node_ref=node_id)
 
         node_ids = {str(n["id"]) for n in graph_json.get("nodes", [])}
-        # ONE shared instance for the whole run: ``_stream_graph`` mutates it
-        # IN PLACE, so the stream config and the finalize call MUST receive the
-        # same dict or the accumulated outputs never reach finalize_cost.
         completed_node_outputs: dict[str, Any] = {}
         scope = _RunScope(
             run_id=run_id,
@@ -6085,18 +3795,39 @@ class PipelineExecutor:
             completed_node_outputs=completed_node_outputs,
             guard=guard,
             node_type_map=node_type_map,
-            pipeline_node_timeout_seconds=pipeline.node_timeout_seconds,
+            pipeline_node_timeout_seconds=pipeline_node_timeout_seconds,
             broker=broker,
             pipeline_retry_policy=pipeline_retry_policy,
             idempotency_key=_node_idempotency_key,
         )
+        return scope, stream_config
 
-        # Phase 7: Stream and handle exceptions
+    async def _execute_stream_phase(
+        self,
+        *,
+        scope: _RunScope,
+        stream_config: _StreamConfig,
+        graph_idempotent: bool,
+        single_sandbox_node: bool,
+        model_backend_hub: ModelBackendHub | None,
+        connector_hub: Any | None,
+    ) -> tuple[str, str | None, str | None, dict[str, Any] | None, bool]:
+        """Stream the graph and translate every exit into a status tuple.
+
+        Returns ``(final_status, error_code, error_detail, node_token_usage,
+        retry_policy_eligible)``. The ``requeue`` / ``superseded`` transient
+        decisions re-raise the original exception (via
+        ``_apply_transient_decision``) so the SAQ job retry path re-dispatches.
+        """
+        graph_json = stream_config.graph_json
+        broker = stream_config.broker
+        completed_node_outputs = stream_config.completed_node_outputs
         final_status = "failed"
         error_code: str | None = None
         error_detail: str | None = None
         node_token_usage: dict[str, Any] | None = None
         retry_policy_eligible = True
+        gate_suppressed = False
 
         try:
             final_status, error_code, error_detail, node_token_usage = await self._prepare_and_stream(
@@ -6106,7 +3837,7 @@ class PipelineExecutor:
         except asyncio.CancelledError:
             raise
         except RouterNoMatchError as exc:
-            _log.info("pipeline.router_no_match", extra={"run_id": str(run_id), "detail": str(exc)})
+            _log.info("pipeline.router_no_match", extra={"run_id": str(scope.run_id), "detail": str(exc)})
             final_status = "router_no_match"
             error_code = "router.no_match"
             error_detail = _sanitize_detail(str(exc), limit=None)
@@ -6116,7 +3847,7 @@ class PipelineExecutor:
             if tier_refused:
                 _log.warning(
                     "pipeline.tier_refused_terminal",
-                    extra={"run_id": str(run_id), "exc_type": type(exc).__name__},
+                    extra={"run_id": str(scope.run_id), "exc_type": type(exc).__name__},
                 )
                 final_status = "failed"
                 error_code = _ERROR_CODE_SANDBOX_TIER_REFUSED
@@ -6125,12 +3856,12 @@ class PipelineExecutor:
             else:
                 _log.warning(
                     "pipeline.node_cancelled_transient",
-                    extra={"run_id": str(run_id), "exc_type": type(exc).__name__},
+                    extra={"run_id": str(scope.run_id), "exc_type": type(exc).__name__},
                 )
                 transient = await self._decide_transient_failure(
                     exc=exc,
-                    run_id=run_id,
-                    org_id=org_id,
+                    run_id=scope.run_id,
+                    org_id=scope.org_id,
                     graph_json=graph_json,
                     graph_idempotent=graph_idempotent,
                     single_sandbox_node=single_sandbox_node,
@@ -6138,7 +3869,7 @@ class PipelineExecutor:
                     connector_hub=connector_hub,
                     broker=broker,
                     stall_requested=self._stall_requested,
-                    pipeline_retry_policy=pipeline_retry_policy,
+                    pipeline_retry_policy=stream_config.pipeline_retry_policy,
                 )
                 gate_suppressed, final_status, error_code, error_detail = self._apply_transient_decision(
                     transient,
@@ -6154,15 +3885,37 @@ class PipelineExecutor:
                 retry_policy_eligible,
             ) = self._execute_handle_stream_exceptions(
                 exc=exc,
-                run_id=run_id,
+                run_id=scope.run_id,
                 node_token_usage=node_token_usage,
                 retry_policy_eligible=retry_policy_eligible,
             )
+        return final_status, error_code, error_detail, node_token_usage, retry_policy_eligible
 
+    async def _finish_execute_after_stream(
+        self,
+        *,
+        scope: _RunScope,
+        stream_config: _StreamConfig,
+        pipeline_retry_policy: dict[str, Any] | None,
+        is_correction_run: bool,
+        graph_idempotent: bool,
+        model_backend_hub: ModelBackendHub | None,
+        connector_hub: Any | None,
+        final_status: str,
+        error_code: str | None,
+        error_detail: str | None,
+        node_token_usage: dict[str, Any] | None,
+        retry_policy_eligible: bool,
+    ) -> Run:
+        """Apply the retry policy, run the post-stream tail, then finalize."""
+        graph_json = stream_config.graph_json
+        node_type_map = stream_config.node_type_map
+        completed_node_outputs = stream_config.completed_node_outputs
+        node_ids = stream_config.node_ids
         # Phase 8: Apply retry policy
         _retry_decision, final_status, error_code, error_detail = await self._execute_retry_policy(
-            run_id=run_id,
-            org_id=org_id,
+            run_id=scope.run_id,
+            org_id=scope.org_id,
             pipeline_retry_policy=pipeline_retry_policy,
             final_status=final_status,
             error_code=error_code,
@@ -6172,16 +3925,16 @@ class PipelineExecutor:
             graph_json=graph_json,
             model_backend_hub=model_backend_hub,
             connector_hub=connector_hub,
-            broker=broker,
+            broker=stream_config.broker,
             retry_policy_eligible=retry_policy_eligible,
         )
 
         # Phase 9: Post-stream tail and teardown
         signal_node_type_map = extend_node_type_map_from_edges(node_type_map, graph_json)
         final_status, error_code, error_detail = await self._run_post_stream_and_teardown(
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
+            run_id=scope.run_id,
+            org_id=scope.org_id,
+            pipeline_id=scope.pipeline_id,
             final_status=final_status,
             error_code=error_code,
             error_detail=error_detail,
@@ -6194,9 +3947,9 @@ class PipelineExecutor:
         # Phase 10: Finalize
         return await self._finalize_then_publish_completed(
             defer_close=final_status == "complete",
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
+            run_id=scope.run_id,
+            org_id=scope.org_id,
+            pipeline_id=scope.pipeline_id,
             node_type_map=node_type_map,
             final_status=final_status,
             error_code=error_code,
@@ -6223,39 +3976,19 @@ class PipelineExecutor:
     ) -> dict[str, Any]:
         """Decide how a transient node-cancelled / sandbox-failed run recovers.
 
-        Extracted from ``execute``'s ``except (NodeCancelledError,
-        SandboxNodeFailedError)`` handler. Loads the transient state, computes
-        superseded / stalled / gate_ok / script_lease_ok, then returns a
-        decision dict. The caller (``execute``) performs the side effects that
-        must stay in its scope — the idempotency-gate envelope write and the
-        bare re-raise for requeue / superseded (which propagates out of
-        execute() before the post-stream try/finally). Mutations that are safe
-        to perform here (the fenced pending-reset + cleanup) happen in this
-        method so the re-raise path stays identical to the inline chain.
+        Loads the transient state, computes superseded / stalled / gate_ok /
+        script_lease_ok, then returns a decision dict. The caller
+        (``_execute_stream_phase``) performs the side effects that must stay in
+        its scope — the idempotency-gate envelope write and the bare re-raise
+        for requeue / superseded (which propagates out of execute() before the
+        post-stream try/finally). Mutations that are safe to perform here (the
+        fenced pending-reset + cleanup) happen in this method so the re-raise
+        path stays identical to the inline chain.
 
-        Returns one of:
-        - ``{"decision": "gate", ...}`` — idempotency gate suppressed the
-          transient retry (delivery already sent); the run completes COMPLETE.
-        - ``{"decision": "requeue"}`` — retry budget remains; the run was
-          fenced back to pending and the execution environment cleaned up so
-          the SAQ job re-entry gets a fresh broker.
-        - ``{"decision": "superseded"}`` — the run is owned by a successor or
-          was already terminal-failed by the zombie watchdog; cleaned up, never
-          reset, never terminal-failed here.
-        - ``{"decision": "terminal", ...}`` — no retry will be attempted: either
-          the retry budget is exhausted, or the REQUIRED requeue was refused
-          because the failure class is non-retryable (FAR-1800 — a first-attempt
-          terminal). The run_failed event was published and the caller
-          terminal-fails with the returned code/detail.
+        Returns one of ``gate`` / ``requeue`` / ``superseded`` / ``terminal``;
+        each decision's semantics are documented on the helper that builds it.
         """
-        from farna.settings import get_settings
-
-        retries = int(get_settings().saq_run_retries)
-        # FAR-2076: the transport allowance (settings.saq_run_retries) is one
-        # budget; the pipeline's retry_policy is the other. Bound this path by
-        # the policy ceiling so a transient retry can never grant an execution
-        # the policy refuses. No policy => unchanged.
-        retries = _transient_retry_allowance(retries, pipeline_retry_policy)
+        retries = self._transient_retry_budget(pipeline_retry_policy)
         (
             execution_attempt_count,
             current_token,
@@ -6273,17 +4006,132 @@ class PipelineExecutor:
         superseded = self._claim_token is not None and current_token is not None and current_token != self._claim_token
         stalled = bool(stall_requested is not None and stall_requested.is_set())
 
-        # FAR-228 guard B (retry-suppression — THE INCIDENT FIX): before any
-        # state mutation, check whether the run ALREADY delivered (a prior
-        # attempt's marker carries delivery_done=True) for THIS node. If so,
-        # a transient retry is suppressed: the run completes COMPLETE with
-        # error_code harness.idempotency_gate instead of burning the retry
-        # budget and re-sending the side effect. ORDERING INVARIANT: computed
-        # AFTER superseded/stalled (above) and BEFORE any mutation —
-        # final_status/error_code are first mutated only in the
-        # retries-exhausted branch below. `markers` was loaded by
-        # `_load_transient_state` (repo reader, same transaction) — no extra
-        # SELECT here.
+        gate_ok, gated_node_id, script_lease_ok = await self._transient_signals(
+            exc=exc,
+            run_id=run_id,
+            org_id=org_id,
+            graph_json=graph_json,
+            run_markers=run_markers,
+            idempotency_key=idempotency_key,
+            superseded=superseded,
+            stalled=stalled,
+            cancellation_requested=cancellation_requested,
+            single_sandbox_node=single_sandbox_node,
+        )
+        if gate_ok and gated_node_id is not None:
+            return self._transient_gate_decision(run_id=run_id, gated_node_id=gated_node_id)
+        provider_refusal = self._provider_refusal_decision(exc=exc, run_id=run_id, broker=broker)
+        if provider_refusal is not None:
+            return provider_refusal
+        # FAR-1800: classify the transient failure's retained stdout ONCE, so the
+        # requeue gate and the terminal code agree. The exception message embeds
+        # the retained stdout tail (the no-output diagnostic), which is where a
+        # provider refusal (HTTP 402 "Insufficient account funds") appears.
+        # Fail open: an unrecognised failure yields None and keeps today's path.
+        failure_code = classify_provider_error(str(exc))
+        # FAR-2562: the failure's OWN canonical class code — the same code the
+        # terminal write publishes (``sandbox.no_output_json`` for a base
+        # SandboxNodeFailedError, its own code for a mapped subclass). The
+        # registry's per-class attempt cap is keyed on it, so a deterministic
+        # no-output death may consume at most that many executions. Kept
+        # SEPARATE from ``failure_code`` (the provider classification) so the
+        # FAR-1800 non-retryable gate keeps judging exactly what it judged
+        # before. Deliberately None for:
+        #   * ``NodeCancelledError`` — not a SandboxNodeFailedError, so a plain
+        #     cancellation carries no class code and its behaviour is unchanged;
+        #   * the FAR-136 hang death ("likely hung"), whose terminal code stays
+        #     the generic ``node_cancelled`` — capping it under the no-output
+        #     class would silently change that code.
+        failure_class_code = _sandbox_failure_class_code(exc)
+        if await self._try_transient_requeue(
+            exc=exc,
+            run_id=run_id,
+            org_id=org_id,
+            model_backend_hub=model_backend_hub,
+            connector_hub=connector_hub,
+            execution_attempt_count=execution_attempt_count,
+            retries=retries,
+            superseded=superseded,
+            stalled=stalled,
+            script_lease_ok=script_lease_ok,
+            graph_idempotent=graph_idempotent,
+            failure_code=failure_code,
+            failure_class_code=failure_class_code,
+        ):
+            return {"decision": "requeue"}
+        if superseded or stalled:
+            # Superseded or watchdog-stalled: the run is owned by a
+            # successor or was already terminal-failed by the zombie
+            # watchdog — never reset it to pending and never terminal-fail
+            # it here. Clean up so the SAQ job retry re-entry gets a fresh
+            # broker and no stale contextvars (the caller re-raises).
+            await self._cleanup_run_resources(model_backend_hub=model_backend_hub, connector_hub=connector_hub, run_id=run_id)
+            return {"decision": "superseded"}
+        return self._terminal_transient_decision(
+            exc=exc,
+            script_lease_ok=script_lease_ok,
+            graph_idempotent=graph_idempotent,
+            execution_attempt_count=execution_attempt_count,
+            retries=retries,
+            failure_code=failure_code,
+            failure_class_code=failure_class_code,
+            broker=broker,
+        )
+
+    def _transient_retry_budget(self, pipeline_retry_policy: dict[str, Any] | None) -> int:
+        """The transient retry allowance, bounded by the pipeline's policy ceiling.
+
+        FAR-2076: the transport allowance (settings.saq_run_retries) is one
+        budget; the pipeline's retry_policy is the other. Bound this path by
+        the policy ceiling so a transient retry can never grant an execution
+        the policy refuses. No policy => unchanged.
+        """
+        from farna.settings import get_settings
+
+        retries = int(get_settings().saq_run_retries)
+        return _transient_retry_allowance(retries, pipeline_retry_policy)
+
+    async def _transient_signals(
+        self,
+        *,
+        exc: NodeCancelledError | SandboxNodeFailedError,
+        run_id: uuid.UUID,
+        org_id: uuid.UUID,
+        graph_json: dict[str, Any],
+        run_markers: dict[str, Any] | None,
+        idempotency_key: str | None,
+        superseded: bool,
+        stalled: bool,
+        cancellation_requested: bool,
+        single_sandbox_node: bool,
+    ) -> tuple[bool, str | None, bool]:
+        """Compute the transient path's read-only signals.
+
+        Returns ``(gate_ok, gated_node_id, script_lease_ok)``.
+
+        FAR-228 guard B (retry-suppression — THE INCIDENT FIX): before any
+        state mutation, check whether the run ALREADY delivered (a prior
+        attempt's marker carries delivery_done=True) for THIS node. If so,
+        a transient retry is suppressed: the run completes COMPLETE with
+        error_code harness.idempotency_gate instead of burning the retry
+        budget and re-sending the side effect. ORDERING INVARIANT: computed
+        AFTER superseded/stalled (the caller's) and BEFORE any mutation —
+        final_status/error_code are first mutated only in the
+        retries-exhausted branch. ``run_markers`` was loaded by
+        ``_load_transient_state`` (repo reader, same transaction) — no extra
+        SELECT here.
+
+        FAR-296 Phase 2: before ANY requeue of a script-mode run, prove no
+        script process could still be alive (stale-claim lease probe).
+        A stale ``script_executing`` lease means a script may have run —
+        requeue is forbidden (exactly-once). Only when the probe proves no
+        live lease does the run stay eligible for the fenced reset.
+        The probe is computed BEFORE the gate/retry chain so
+        the idempotency gate stays the FIRST branch (it must suppress the
+        pending-reset when a delivery marker is present), and so the
+        pending-reset branch remains reachable for BOTH script-mode and
+        non-script-mode graphs (a stale lease simply disqualifies it).
+        """
         gate_ok = self._idempotency_gate_ok(
             exc=exc,
             run_markers=run_markers,
@@ -6303,74 +4151,83 @@ class PipelineExecutor:
         # Only SandboxNodeFailedError carries a node_id — the gate is
         # keyed on it, so a None node_id (plain NodeCancelledError) can
         # never suppress.
-        _gated_node_id = exc.node_id if isinstance(exc, SandboxNodeFailedError) else None
-        # FAR-296 Phase 2: before ANY requeue of a script-mode run, prove no
-        # script process could still be alive (stale-claim lease probe).
-        # A stale ``script_executing`` lease means a script may have run —
-        # requeue is forbidden (exactly-once). Only when the probe proves no
-        # live lease does the run stay eligible for the fenced reset below.
-        # The probe is computed BEFORE the gate/retry chain below so
-        # the idempotency gate stays the FIRST branch (it must suppress the
-        # pending-reset when a delivery marker is present), and so the
-        # pending-reset branch remains reachable for BOTH script-mode and
-        # non-script-mode graphs (a stale lease simply disqualifies it).
+        gated_node_id = exc.node_id if isinstance(exc, SandboxNodeFailedError) else None
         script_lease_ok = await self._script_lease_ok(run_id=run_id, org_id=org_id, graph_json=graph_json)
-        if gate_ok and _gated_node_id is not None:
-            _log.warning(
-                "pipeline.idempotency_gate.suppressed_retry",
-                extra={"run_id": str(run_id), "node_id": _gated_node_id},
-            )
-            return {
-                "decision": "gate",
-                "final_status": "complete",
-                "error_code": _ERROR_CODE_HARNESS_IDEMPOTENCY_GATE,
-                "error_detail": "delivery already sent; transient retry suppressed by idempotency gate",
-                "gated_node_id": _gated_node_id,
-            }
-        # FAR-2006: a provider credential / funding refusal is NON-RETRYABLE.
-        # Classify it from the retained sandbox output carried in the
-        # exception BEFORE the retry gate: re-dispatching a 401/402 can never
-        # succeed, so retrying only burns a slot (the measured failure mode
-        # was three ~10-minute attempts per run, a whole night at zero
-        # throughput). The idempotency gate above keeps priority (a delivery
-        # already sent is still the stronger fact).
+        return gate_ok, gated_node_id, script_lease_ok
+
+    def _transient_gate_decision(self, *, run_id: uuid.UUID, gated_node_id: str) -> dict[str, Any]:
+        """The idempotency gate suppressed the retry: the run completes COMPLETE."""
+        _log.warning(
+            "pipeline.idempotency_gate.suppressed_retry",
+            extra={"run_id": str(run_id), "node_id": gated_node_id},
+        )
+        return {
+            "decision": "gate",
+            "final_status": "complete",
+            "error_code": _ERROR_CODE_HARNESS_IDEMPOTENCY_GATE,
+            "error_detail": "delivery already sent; transient retry suppressed by idempotency gate",
+            "gated_node_id": gated_node_id,
+        }
+
+    def _provider_refusal_decision(
+        self,
+        *,
+        exc: NodeCancelledError | SandboxNodeFailedError,
+        run_id: uuid.UUID,
+        broker: RunEventBroker,
+    ) -> dict[str, Any] | None:
+        """A provider credential / funding refusal is NON-RETRYABLE (FAR-2006).
+
+        Classify it from the retained sandbox output carried in the exception
+        BEFORE the retry gate: re-dispatching a 401/402 can never succeed, so
+        retrying only burns a slot (the measured failure mode was three
+        ~10-minute attempts per run, a whole night at zero throughput). The
+        idempotency gate keeps priority (a delivery already sent is still the
+        stronger fact). Returns ``None`` when the exception carries no
+        provider refusal.
+        """
         provider_code = non_retryable_provider_code(str(exc))
-        if provider_code is not None:
-            error_detail = _sanitize_detail(
-                f"Model provider refused the run ({provider_code}); not retried — re-dispatching cannot succeed: {exc}",
-                limit=5000,
-            )
-            _log.warning(
-                "pipeline.provider_failure_terminal",
-                extra={"run_id": str(run_id), "error_code": provider_code, "exc_type": type(exc).__name__},
-            )
-            broker.publish("run_failed", {"error": provider_code, "detail": error_detail})
-            return {
-                "decision": "terminal",
-                "final_status": "failed",
-                "error_code": provider_code,
-                "error_detail": error_detail,
-            }
-        # FAR-1800: classify the transient failure's retained stdout ONCE, so the
-        # requeue gate and the terminal code agree. The exception message embeds
-        # the retained stdout tail (the no-output diagnostic), which is where a
-        # provider refusal (HTTP 402 "Insufficient account funds") appears.
-        # Fail open: an unrecognised failure yields None and keeps today's path.
-        failure_code = classify_provider_error(str(exc))
-        # FAR-2562: the failure's OWN canonical class code — the same code the
-        # terminal write below publishes (``sandbox.no_output_json`` for a base
-        # SandboxNodeFailedError, its own code for a mapped subclass). The
-        # registry's per-class attempt cap is keyed on it, so a deterministic
-        # no-output death may consume at most that many executions. Kept
-        # SEPARATE from ``failure_code`` (the provider classification) so the
-        # FAR-1800 non-retryable gate keeps judging exactly what it judged
-        # before. Deliberately None for:
-        #   * ``NodeCancelledError`` — not a SandboxNodeFailedError, so a plain
-        #     cancellation carries no class code and its behaviour is unchanged;
-        #   * the FAR-136 hang death ("likely hung"), whose terminal code stays
-        #     the generic ``node_cancelled`` — capping it under the no-output
-        #     class would silently change that code.
-        failure_class_code = _sandbox_failure_class_code(exc)
+        if provider_code is None:
+            return None
+        error_detail = _sanitize_detail(
+            f"Model provider refused the run ({provider_code}); not retried — re-dispatching cannot succeed: {exc}",
+            limit=5000,
+        )
+        _log.warning(
+            "pipeline.provider_failure_terminal",
+            extra={"run_id": str(run_id), "error_code": provider_code, "exc_type": type(exc).__name__},
+        )
+        broker.publish("run_failed", {"error": provider_code, "detail": error_detail})
+        return {
+            "decision": "terminal",
+            "final_status": "failed",
+            "error_code": provider_code,
+            "error_detail": error_detail,
+        }
+
+    async def _try_transient_requeue(
+        self,
+        *,
+        exc: NodeCancelledError | SandboxNodeFailedError,
+        run_id: uuid.UUID,
+        org_id: uuid.UUID,
+        model_backend_hub: ModelBackendHub | None,
+        connector_hub: Any | None,
+        execution_attempt_count: int,
+        retries: int,
+        superseded: bool,
+        stalled: bool,
+        script_lease_ok: bool,
+        graph_idempotent: bool,
+        failure_code: str | None,
+        failure_class_code: str | None,
+    ) -> bool:
+        """Fence the run back to ``pending`` when a retry is still allowed.
+
+        Returns ``True`` when the requeue happened (the caller returns the
+        ``requeue`` decision and re-raises), ``False`` when the requeue gate
+        refused and the caller must continue down the decision chain.
+        """
         if _can_fenced_requeue(
             execution_attempt_count,
             retries,
@@ -6414,32 +4271,39 @@ class PipelineExecutor:
             # cancellation check + hubs and close the run's broker so the
             # retry re-entry gets a fresh broker and no stale contextvars.
             await self._cleanup_run_resources(model_backend_hub=model_backend_hub, connector_hub=connector_hub, run_id=run_id)
-            return {"decision": "requeue"}
-        if superseded or stalled:
-            # Superseded or watchdog-stalled: the run is owned by a
-            # successor or was already terminal-failed by the zombie
-            # watchdog — never reset it to pending and never terminal-fail
-            # it here. Clean up so the SAQ job retry re-entry gets a fresh
-            # broker and no stale contextvars (the caller re-raises).
-            await self._cleanup_run_resources(model_backend_hub=model_backend_hub, connector_hub=connector_hub, run_id=run_id)
-            return {"decision": "superseded"}
-        # Retries exhausted — or requeue was REFUSED because the failure class is
-        # non-retryable (FAR-1800) or has spent its registry execution cap
-        # (FAR-2562) — so no (further) retry was attempted at all.
-        # Terminal failure with a MEANINGFUL code (not the raw langgraph class
-        # name). Publish the run_failed event so WS subscribers get a live
-        # failure notification, consistent with every other terminal-failure
-        # path in this file.
-        #
-        # Write cap: 5000, NOT 500 — the transient node-cancelled
-        # detail is the only place the FAR-197 no-output.json
-        # diagnostic (stdout/stderr tails, the E2B log tail where the
-        # kill reason lives) reaches the user. It is bounded by the
-        # builder to fit the 5000-char sanitizer/column cap
-        # (runs.error_detail is Text, widened from String(5000) by migration 0199), and every detail read
-        # surface (run-detail REST + MCP) presents at limit=5000; list
-        # surfaces truncate to 200 by design. A 500-char write cap cut
-        # the stderr + log tails entirely for large-output failures.
+            return True
+        return False
+
+    def _terminal_transient_decision(
+        self,
+        *,
+        exc: NodeCancelledError | SandboxNodeFailedError,
+        script_lease_ok: bool,
+        graph_idempotent: bool,
+        execution_attempt_count: int,
+        retries: int,
+        failure_code: str | None,
+        failure_class_code: str | None,
+        broker: RunEventBroker,
+    ) -> dict[str, Any]:
+        """Terminal failure with a MEANINGFUL code and a published run_failed.
+
+        Retries exhausted — or requeue was REFUSED because the failure class is
+        non-retryable (FAR-1800) or has spent its registry execution cap
+        (FAR-2562) — so no (further) retry was attempted at all. Publish the
+        run_failed event so WS subscribers get a live failure notification,
+        consistent with every other terminal-failure path in this file.
+
+        Write cap: 5000, NOT 500 — the transient node-cancelled detail is the
+        only place the FAR-197 no-output.json diagnostic (stdout/stderr tails,
+        the E2B log tail where the kill reason lives) reaches the user. It is
+        bounded by the builder to fit the 5000-char sanitizer/column cap
+        (runs.error_detail is Text, widened from String(5000) by migration
+        0199), and every detail read surface (run-detail REST + MCP) presents
+        at limit=5000; list surfaces truncate to 200 by design. A 500-char
+        write cap cut the stderr + log tails entirely for large-output
+        failures.
+        """
         error_code, error_detail = self._transient_failure_detail(
             exc=exc,
             script_lease_ok=script_lease_ok,
@@ -6667,17 +4531,69 @@ class PipelineExecutor:
         _tracker = self._dispatch_phase_tracker
         if _tracker is not None:
             _tracker.enter_phase("graph_compile")
-        # Compile (or retrieve from cache) the StateGraph. ``pipeline_retry_policy``
-        # and ``idempotency_key`` are threaded into the per-node retry/compensation
-        # wrapper (FAR-402 P5) — the latter is runtime-derived so a cached graph
-        # still dedupes against the run's stable identity.
-        # FAR-502: the eval defs loaded fresh above (execute()) are baked into
-        # HITL gate closures by the factory below. Folding their content hash
-        # into the cache key means a replay / variant run whose eval
-        # definitions changed since the cached compile misses the cache and
-        # recompiles with the fresh definitions instead of silently reusing
-        # the first run's closures.
-        compiled = get_or_compile(
+        compiled = self._compile_scoped_graph(scope=scope, config=config)
+        initial_state = await self._build_initial_stream_state(scope=scope, config=config)
+        runtime_config, node_token_budgets = self._prepare_stream_runtime(config=config, thread_id=scope.thread_id)
+        await self._seed_run_scoped_context(scope=scope, config=config)
+
+        # FAR-432 (item 4a): a checkpointer is ONLY attached when the pipeline
+        # is HITL/interactive. The decision is DERIVED from the graph at
+        # execution time (a HITL gate edge or a ``manual`` input node → resume
+        # must work → persist). Batch pipelines never pause, so their
+        # per-superstep checkpoints are pure overhead — derive persistence off.
+        # ``compiled`` is shared via the graph cache, so the checkpointer is
+        # explicitly cleared in the non-interactive branch to avoid leaking a
+        # previously-attached saver into a batch run of the same snapshot.
+        if self._checkpointer_conn_string and _graph_is_interactive(config.graph_json):
+            from farna.settings import get_settings
+
+            _settings = get_settings()
+            async with _checkpointer_scope(
+                self._checkpointer_conn_string,
+                organisation_id=scope.org_id,
+                fernet_key=_settings.fernet_key,
+            ) as saver:
+                compiled.checkpointer = saver
+                # FAR-893: enter streaming phase.
+                if _tracker is not None:
+                    _tracker.enter_phase("streaming")
+                return await self._stream_with_config(
+                    compiled,
+                    initial_state,
+                    runtime_config,
+                    node_token_budgets,
+                    scope=scope,
+                    config=config,
+                )
+        compiled.checkpointer = None
+        # FAR-893: enter streaming phase.
+        if _tracker is not None:
+            _tracker.enter_phase("streaming")
+        return await self._stream_with_config(
+            compiled,
+            initial_state,
+            runtime_config,
+            node_token_budgets,
+            scope=scope,
+            config=config,
+        )
+
+    def _compile_scoped_graph(self, *, scope: _RunScope, config: _StreamConfig) -> Any:
+        """Compile (or retrieve from cache) the run's StateGraph.
+
+        ``pipeline_retry_policy`` and ``idempotency_key`` are threaded into the
+        per-node retry/compensation wrapper (FAR-402 P5) — the latter is
+        runtime-derived so a cached graph still dedupes against the run's
+        stable identity.
+
+        FAR-502: the eval defs loaded fresh above (execute()) are baked into
+        HITL gate closures by the factory below. Folding their content hash
+        into the cache key means a replay / variant run whose eval
+        definitions changed since the cached compile misses the cache and
+        recompiles with the fresh definitions instead of silently reusing
+        the first run's closures.
+        """
+        return get_or_compile(
             scope.pipeline_id,
             scope.snapshot_id,
             lambda: build_graph_from_json(
@@ -6697,6 +4613,8 @@ class PipelineExecutor:
             ),
         )
 
+    async def _build_initial_stream_state(self, *, scope: _RunScope, config: _StreamConfig) -> dict[str, Any]:
+        """Seed the LangGraph state, pinning the earned autonomy level at start."""
         initial_state = _seed_state(config.snapshot, config.input_payload, config.variant_config_snapshot)
         earned_pin = await self._resolve_earned_at_start(scope.pipeline_id, scope.org_id, config.snapshot)
         if earned_pin is not None:
@@ -6724,7 +4642,19 @@ class PipelineExecutor:
                 "_registry_gated_agents": self._registry_gated_agents,
             }
         )
-        runtime_config: dict[str, Any] = {"configurable": {"thread_id": scope.thread_id}}
+        return initial_state
+
+    def _prepare_stream_runtime(
+        self,
+        *,
+        config: _StreamConfig,
+        thread_id: str,
+    ) -> tuple[dict[str, Any], dict[str, int]]:
+        """Populate the runtime config, node-id set, node timeouts and token budgets.
+
+        Returns ``(runtime_config, node_token_budgets)``.
+        """
+        runtime_config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
         config.node_ids.clear()
         config.node_ids.update({str(n["id"]) for n in config.graph_json.get("nodes", [])})
         # FAR-369: expose each node's configured ``timeout_seconds`` so the
@@ -6740,11 +4670,28 @@ class PipelineExecutor:
         self._node_timeouts.clear()
         self._node_timeouts.update(_resolved_node_timeouts(config.graph_json, config.pipeline_node_timeout_seconds))
         node_token_budgets: dict[str, int] = {str(n["id"]): n["token_budget"] for n in config.graph_json.get("nodes", []) if n.get("token_budget") is not None}
+        return runtime_config, node_token_budgets
 
-        # FAR-215: seed the run-scoped conformance context so every node
-        # re-validates its bound guardrail conformance at node start. The
-        # claimed guardrail list is hoisted ONCE per run (one query); the
-        # live capability manifest is still read per node at node start.
+    async def _seed_run_scoped_context(self, *, scope: _RunScope, config: _StreamConfig) -> None:
+        """Seed the conformance context and count this REAL execution attempt.
+
+        FAR-215: seed the run-scoped conformance context so every node
+        re-validates its bound guardrail conformance at node start. The
+        claimed guardrail list is hoisted ONCE per run (one query); the
+        live capability manifest is still read per node at node start.
+
+        Count this REAL node-execution attempt (post capacity-check,
+        post compile, pre-stream). The NodeCancelledError retry budget
+        is bounded by node_attempt_count, NOT claim_count —
+        claim_count increments on every SAQ claim including
+        capacity-deferred / non-executing claims, which would otherwise
+        consume the retry budget before any real execution attempt
+        (postmortem FAR-121). FAR-2076 keeps this counter as the per-node
+        retry budget it always was; the RUN-level execution budget is the
+        separate durable ``execution_attempt_count``, stamped on admission
+        in ``_claim_under_capacity`` (earlier than this line, so a pre-node
+        death still consumes the run-level budget).
+        """
         claimed, claims_load_failed = await self._load_claimed_conformance_guardrails(scope.org_id, scope.pipeline_id)
         set_conformance_ctx(
             self._session_factory,
@@ -6755,17 +4702,6 @@ class PipelineExecutor:
             claims_load_failed,
         )
 
-        # Count this REAL node-execution attempt (post capacity-check,
-        # post compile, pre-stream). The NodeCancelledError retry budget
-        # below is bounded by node_attempt_count, NOT claim_count —
-        # claim_count increments on every SAQ claim including
-        # capacity-deferred / non-executing claims, which would otherwise
-        # consume the retry budget before any real execution attempt
-        # (postmortem FAR-121). FAR-2076 keeps this counter as the per-node
-        # retry budget it always was; the RUN-level execution budget is the
-        # separate durable ``execution_attempt_count``, stamped on admission
-        # in ``_claim_under_capacity`` (earlier than this line, so a pre-node
-        # death still consumes the run-level budget).
         async with self._session_factory() as session, session.begin():
             await set_rls_org(session, scope.org_id)
             await set_rls_execution_context(session)
@@ -6774,63 +4710,32 @@ class PipelineExecutor:
                 {"rid": str(scope.run_id)},
             )
 
-        # FAR-432 (item 4a): a checkpointer is ONLY attached when the pipeline
-        # is HITL/interactive. The decision is DERIVED from the graph at
-        # execution time (a HITL gate edge or a ``manual`` input node → resume
-        # must work → persist). Batch pipelines never pause, so their
-        # per-superstep checkpoints are pure overhead — derive persistence off.
-        # ``compiled`` is shared via the graph cache, so the checkpointer is
-        # explicitly cleared in the non-interactive branch to avoid leaking a
-        # previously-attached saver into a batch run of the same snapshot.
-        if self._checkpointer_conn_string and _graph_is_interactive(config.graph_json):
-            from farna.settings import get_settings
-
-            _settings = get_settings()
-            async with _checkpointer_scope(
-                self._checkpointer_conn_string,
-                organisation_id=scope.org_id,
-                fernet_key=_settings.fernet_key,
-            ) as saver:
-                compiled.checkpointer = saver
-                # FAR-893: enter streaming phase.
-                if _tracker is not None:
-                    _tracker.enter_phase("streaming")
-                final_status, error_code, error_detail, node_token_usage = await self._stream_graph(
-                    compiled,
-                    initial_state,
-                    runtime_config,
-                    config.node_ids,
-                    config.broker,
-                    scope.run_id,
-                    pipeline_id=scope.pipeline_id,
-                    org_id=scope.org_id,
-                    completed_node_outputs=config.completed_node_outputs,
-                    guard=config.guard,
-                    node_token_budgets=node_token_budgets,
-                    eval_definitions_by_node=config.eval_defs_by_node,
-                    node_type_map=config.node_type_map,
-                )
-        else:
-            compiled.checkpointer = None
-            # FAR-893: enter streaming phase.
-            if _tracker is not None:
-                _tracker.enter_phase("streaming")
-            final_status, error_code, error_detail, node_token_usage = await self._stream_graph(
-                compiled,
-                initial_state,
-                runtime_config,
-                config.node_ids,
-                config.broker,
-                scope.run_id,
-                pipeline_id=scope.pipeline_id,
-                org_id=scope.org_id,
-                completed_node_outputs=config.completed_node_outputs,
-                guard=config.guard,
-                node_token_budgets=node_token_budgets,
-                eval_definitions_by_node=config.eval_defs_by_node,
-                node_type_map=config.node_type_map,
-            )
-        return final_status, error_code, error_detail, node_token_usage
+    async def _stream_with_config(
+        self,
+        compiled: Any,
+        initial_state: dict[str, Any],
+        runtime_config: dict[str, Any],
+        node_token_budgets: dict[str, int],
+        *,
+        scope: _RunScope,
+        config: _StreamConfig,
+    ) -> tuple[str, str | None, str | None, dict[str, Any] | None]:
+        """Run ``_stream_graph`` with the run's stream wiring."""
+        return await self._stream_graph(
+            compiled,
+            initial_state,
+            runtime_config,
+            config.node_ids,
+            config.broker,
+            scope.run_id,
+            pipeline_id=scope.pipeline_id,
+            org_id=scope.org_id,
+            completed_node_outputs=config.completed_node_outputs,
+            guard=config.guard,
+            node_token_budgets=node_token_budgets,
+            eval_definitions_by_node=config.eval_defs_by_node,
+            node_type_map=config.node_type_map,
+        )
 
     async def _load_transient_state(self, *, run_id: uuid.UUID, org_id: uuid.UUID) -> tuple[int, str | None, dict[str, Any] | None, bool, str | None]:
         """Reload the run's attempt markers + claim + cancellation state.
@@ -7515,67 +5420,108 @@ class PipelineExecutor:
             if outcome == "reuse":
                 coalesce_reused = True
             else:
-                # Resolve pipeline name (failure-isolated)
-                pipeline_name = await self._create_interrupt_gate_resolve_pipeline_name(
-                    session=session,
-                    pipeline_id=pipeline_id,
+                pipeline_name = await self._create_interrupt_gate_row(
+                    session,
+                    mgr,
                     org_id=org_id,
-                    _run_id=run_id,
-                )
-
-                # Capture HITL review context (failure-isolated)
-                gate_context = await self._create_interrupt_gate_capture_context(
-                    session=session,
                     run_id=run_id,
                     review_id=review_id,
-                    org_id=org_id,
-                    pipeline_name=pipeline_name,
+                    pipeline_id=pipeline_id,
+                    required_team_id=required_team_id,
                     completed_node_outputs=completed_node_outputs,
                     condition_result=condition_result,
                     subject=subject,
                     subject_parent=subject_parent,
                     subject_leaf_key=subject_leaf_key,
-                )
-
-                # Resolve HITL review config (failure-isolated)
-                gate_config = await self._create_interrupt_gate_resolve_config(
-                    session=session,
-                    run_id=run_id,
-                    review_id=review_id,
-                    org_id=org_id,
-                )
-
-                # Resolve review window deadline (failure-isolated)
-                terminalize_at = await self._create_interrupt_gate_resolve_window(
-                    session=session,
-                    pipeline_id=pipeline_id,
-                    org_id=org_id,
-                    run_id=run_id,
-                    review_id=review_id,
-                )
-
-                # FAR-939 chunk 12 (M4): stamp the fire-time evaluation modes
-                # onto the fire-time review-config column (the same
-                # failure-isolated stamp FAR-634 established). Only merged
-                # onto a RESOLVED config — a NULL stamp stays NULL so the
-                # resolver's snapshot/live walk fallback is untouched, and
-                # every reader of gate_config_json reads members by key, so
-                # the extra member is inert to them.
-                if frozen_gated_eval_modes and isinstance(gate_config, dict):
-                    gate_config = {**gate_config, _GATED_EVAL_MODES_KEY: frozen_gated_eval_modes}
-
-                await mgr.create_gate(
-                    session,
-                    run_id=run_id,
-                    review_id=review_id,
-                    pipeline_id=pipeline_id,
-                    org_id=org_id,
-                    required_team_id=required_team_id,
-                    context_json=gate_context,
-                    gate_config_json=gate_config,
-                    terminalize_at=terminalize_at,
+                    frozen_gated_eval_modes=frozen_gated_eval_modes,
                 )
         return pipeline_name, coalesce_reused
+
+    async def _create_interrupt_gate_row(
+        self,
+        session: AsyncSession,
+        mgr: HITLManager,
+        *,
+        org_id: uuid.UUID,
+        run_id: uuid.UUID,
+        review_id: str,
+        pipeline_id: uuid.UUID,
+        required_team_id: uuid.UUID | None,
+        completed_node_outputs: dict[str, Any] | None,
+        condition_result: dict[str, Any] | None,
+        subject: str | None,
+        subject_parent: dict[str, Any] | None,
+        subject_leaf_key: str | None,
+        frozen_gated_eval_modes: list[dict[str, Any]] | None,
+    ) -> str | None:
+        """Resolve the gate's briefing + config + window and create the row.
+
+        Runs inside ``_create_interrupt_gate``'s already-open transaction (the
+        caller owns the session, RLS, the manager instance and the coalescing
+        decision). Returns the resolved pipeline name (``None`` when the lookup
+        failed).
+        """
+        # Resolve pipeline name (failure-isolated)
+        pipeline_name = await self._create_interrupt_gate_resolve_pipeline_name(
+            session=session,
+            pipeline_id=pipeline_id,
+            org_id=org_id,
+            _run_id=run_id,
+        )
+
+        # Capture HITL review context (failure-isolated)
+        gate_context = await self._create_interrupt_gate_capture_context(
+            session=session,
+            run_id=run_id,
+            review_id=review_id,
+            org_id=org_id,
+            pipeline_name=pipeline_name,
+            completed_node_outputs=completed_node_outputs,
+            condition_result=condition_result,
+            subject=subject,
+            subject_parent=subject_parent,
+            subject_leaf_key=subject_leaf_key,
+        )
+
+        # Resolve HITL review config (failure-isolated)
+        gate_config = await self._create_interrupt_gate_resolve_config(
+            session=session,
+            run_id=run_id,
+            review_id=review_id,
+            org_id=org_id,
+        )
+
+        # Resolve review window deadline (failure-isolated)
+        terminalize_at = await self._create_interrupt_gate_resolve_window(
+            session=session,
+            pipeline_id=pipeline_id,
+            org_id=org_id,
+            run_id=run_id,
+            review_id=review_id,
+        )
+
+        # FAR-939 chunk 12 (M4): stamp the fire-time evaluation modes
+        # onto the fire-time review-config column (the same
+        # failure-isolated stamp FAR-634 established). Only merged
+        # onto a RESOLVED config — a NULL stamp stays NULL so the
+        # resolver's snapshot/live walk fallback is untouched, and
+        # every reader of gate_config_json reads members by key, so
+        # the extra member is inert to them.
+        if frozen_gated_eval_modes and isinstance(gate_config, dict):
+            gate_config = {**gate_config, _GATED_EVAL_MODES_KEY: frozen_gated_eval_modes}
+
+        await mgr.create_gate(
+            session,
+            run_id=run_id,
+            review_id=review_id,
+            pipeline_id=pipeline_id,
+            org_id=org_id,
+            required_team_id=required_team_id,
+            context_json=gate_context,
+            gate_config_json=gate_config,
+            terminalize_at=terminalize_at,
+        )
+        return pipeline_name
 
     async def _handle_graph_interrupt(
         self,
@@ -8308,3 +6254,17 @@ class PipelineExecutor:
             if run_root_token is not None:
                 context_api.detach(run_root_token)
             self._otel_bridge.end_run_root()
+
+
+# ---------------------------------------------------------------------------
+# End of the PipelineExecutor class body.
+#
+# ``_FinalizeMixin`` / ``_TelemetryMixin`` are private aliases for the two mixin
+# bases (steps 2-3 of GAPS-harden-w2-executor.md section 5). They are composition
+# detail, not importable surface: dropping the bindings here keeps ``dir()`` on
+# this module exactly what it was before the split. Everything the rest of the
+# codebase imports or ``mock.patch``es still resolves, because the methods live
+# on the class through the MRO and the moved bodies resolve their free names via
+# ``executor_parts.support._ref``.
+# ---------------------------------------------------------------------------
+del _FinalizeMixin, _TelemetryMixin
