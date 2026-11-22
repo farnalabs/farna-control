@@ -214,3 +214,42 @@ def plan_entitlements(plan_ctx: Any) -> frozenset[str]:
     if not callable(enabled_fn):
         return frozenset()
     return frozenset(entitlement.key for entitlement in ENTITLEMENTS.values() if any(enabled_fn(flag) for flag in entitlement.flags))
+
+
+def entitlement_available(plan_ctx: Any, entitlement_key: str) -> bool:
+    """Whether the plan may use ``entitlement_key`` RIGHT NOW (FAR-2665 follow-up).
+
+    A commercial gate composes TWO independent answers, and both must hold:
+
+    * **granted** — the signed licence bought the capability
+      (:func:`plan_entitlements`); and
+    * **not wholly switched off** — the per-install operator kill switch
+      (``feature_flag_catalog.is_active``) and the plan-level overrides are read
+      through :meth:`PlanContext.feature_enabled`. Before this composition an
+      operator who switched a capability off in the catalogue locked its UI
+      (the plan payload's per-flag ``currently_active`` is false) while every
+      entitled API route stayed open — a silent capability regression.
+
+    The entitlement is a BUNDLE of flags. It is refused only when EVERY flag
+    implementing it is switched off: killing one sub-flag of a multi-flag
+    capability (say ``admin_spend_limits`` inside Cost governance) narrows that
+    one surface's UI, it does not withdraw the bought capability, so the sibling
+    surfaces stay reachable. Switching off every flag of the bundle IS a
+    withdrawal of the capability, and this gate then closes its API to match the
+    locked UI. This is the same one-capability rule the consolidated routes
+    already apply (any flag of a group grants the group).
+
+    A plan context that cannot answer ``feature_enabled`` (a minimal legacy test
+    double) falls back to the licence grant alone, so the helper never invents a
+    refusal it cannot substantiate.
+
+    Raises ``KeyError`` for an unknown ``entitlement_key`` — callers validate at
+    import time (the :func:`validate_entitlement_key` fail-fast contract).
+    """
+    entitlement = get_entitlement(entitlement_key)
+    if entitlement_key not in plan_entitlements(plan_ctx):
+        return False
+    enabled_fn = getattr(plan_ctx, "feature_enabled", None)
+    if not callable(enabled_fn):
+        return True
+    return any(enabled_fn(flag) for flag in entitlement.flags)

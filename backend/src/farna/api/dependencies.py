@@ -962,23 +962,36 @@ def require_entitlement(entitlement_key: str) -> DependsParameter:
     one. Demoting an entitlement to Community must never widen a role, so a
     route keeps every ``require_permission`` / role dependency it already had.
 
-    Returns 402 Payment Required when the entitlement is not granted.
+    FAR-2665 follow-up — the gate COMPOSES the licence grant with the operator
+    kill switch. It refuses unless the capability is both granted AND not wholly
+    switched off (see :func:`farna.core.entitlements.entitlement_available`), so
+    an operator who disables every flag implementing a capability in
+    ``feature_flag_catalog`` closes its API to match the locked UI. A route never
+    names the individual flag: the entitlement gate is the one place the
+    composition lives, so every commercial route inherits it.
+
+    Returns 402 Payment Required when the entitlement is not granted or every
+    flag implementing it is switched off.
 
     .. code-block:: python
 
        dependencies=[require_entitlement("identity"), require_permission("team.list")]
     """
-    from farna.core.entitlements import get_entitlement, plan_entitlements, validate_entitlement_key
+    from farna.core.entitlements import entitlement_available, get_entitlement, plan_entitlements, validate_entitlement_key
 
     validate_entitlement_key(entitlement_key)
     entitlement = get_entitlement(entitlement_key)
 
     def _check(ctx: PlanContext = Depends(get_plan_context)) -> None:
-        if entitlement_key in plan_entitlements(ctx):
+        if entitlement_available(ctx, entitlement_key):
             return
+        if entitlement_key not in plan_entitlements(ctx):
+            detail = f"{entitlement.name} is not available on your plan — it requires a Team licence installed at system or organisation scope"
+        else:
+            detail = f"{entitlement.name} is not enabled for this organisation — every feature switch for this capability is turned off"
         raise ProblemException(
             ProblemType.FEATURE_REQUIRED,
-            detail=(f"{entitlement.name} is not available on your plan — it requires a Team licence installed at system or organisation scope"),
+            detail=detail,
             instance=entitlement_key,
         )
 

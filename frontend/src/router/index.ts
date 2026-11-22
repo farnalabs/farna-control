@@ -1,6 +1,7 @@
 import { formatApiError } from '../lib/api/formatError'
 import { decodeJwtPayload } from '../lib/jwt'
 import { createRouter, createWebHistory, type RouteMeta } from 'vue-router'
+import { getActivePinia } from 'pinia'
 import { getAccessToken } from '../lib/api/client'
 import { usePlanStore } from '../stores/planStore'
 import i18n from '../i18n'
@@ -1009,6 +1010,22 @@ export function lockedRouteFor(
 }
 
 /**
+ * The plan store when a Pinia instance is active, else null.
+ *
+ * Production installs Pinia (`app.use(pinia)`) before `app.use(router)`, so the
+ * guard always has a store. A handful of spec files drive this same real guard
+ * callback WITHOUT installing Pinia (they exercise the manifest-binding
+ * backstop, not navigation state); returning null lets the pure
+ * manifest-backstop assertions run instead of throwing a "no active Pinia"
+ * error into the guard's catch-all, which would bounce every navigation to the
+ * dashboard.
+ */
+function activePlanStore(): ReturnType<typeof usePlanStore> | null {
+  const pinia = getActivePinia()
+  return pinia ? usePlanStore(pinia) : null
+}
+
+/**
  * Enforce role, ENTITLEMENT and devMode/visibility access rules.  Returns a
  * redirect/locked route-object when access is denied, or `true` when the
  * caller may continue.  The plan store is lazily fetched so the guard sees the
@@ -1192,6 +1209,27 @@ router.beforeEach(async (to) => {
     if ((to.name === 'login' || to.name === 'org-login') && token) return { name: 'dashboard' }
     if (to.name === 'login' || to.name === 'org-login') return true // login page without token — allowed
     if (!token) return { name: 'login' }
+
+    // FAR-2665: the plan/flags payload must resolve before the FIRST
+    // authenticated navigation completes when there is no persisted layout to
+    // trust. Dropping the universal community tier gate from ordinary routes
+    // means the per-route gate no longer fetches the payload for them, so
+    // without this `main.ts` would mount AppLayout before `/api/v1/plan` landed
+    // and paint nav chrome against an unresolved flag map (the FAR-1237
+    // mobile-nav flash: `mobile-nav-flash.spec.ts` asserts NOTHING paints while
+    // the flags are unknown). The gate is deliberately keyed on
+    // `flagsSource === 'none'` — no cache, no server payload — rather than
+    // `!loaded`: a CACHE hit already knows the layout from the persisted map,
+    // and blocking it on a slow server read would regress the cached
+    // first-paint the same suite pins. The fetch never rejects
+    // (`settlePlanSource` swallows), so a failed read settles to the
+    // `unavailable` drawer fallback instead of hanging the navigation.
+    // Entitlement-gated routes still fetch in `enforceRoleTierVisibility` when
+    // the grant is needed, so this is additive, never a replacement.
+    const planStore = activePlanStore()
+    if (planStore && planStore.flagsSource === 'none') {
+      await planStore.fetchPlan()
+    }
 
     // Role / tier / visibility enforcement, plus the FAR-1950 fail-closed
     // backstop for a manifest-gated path that hydration did not reach.
