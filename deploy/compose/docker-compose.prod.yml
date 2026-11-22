@@ -184,6 +184,16 @@ services:
       # with DB_CAPACITY_BYTES. Use those two to override with an explicit size,
       # or DB_CAPACITY_SOURCE=disabled to turn detection off entirely.
       DB_CAPACITY_PATH: ${DB_CAPACITY_PATH:-/var/lib/farna/db-volume}
+      # FARNA_CONTROL_SNAPSHOT_DIR: where the entrypoint's pre-upgrade
+      # snapshot goes (FAR-2667). It MUST be the /backups bind mount below and
+      # never the postgres_data volume: a host path survives image replacement
+      # and `compose down`, does not double the volume the capacity monitor
+      # watches, and is reachable while Postgres is stopped - which is when a
+      # restore runs.
+      FARNA_CONTROL_SNAPSHOT_DIR: /backups
+      # FARNA_CONTROL_VERSION: recorded in the snapshot directory name so an
+      # operator can tell which release a recovery point precedes.
+      FARNA_CONTROL_VERSION: ${TAG}
     depends_on:
       postgres:
         condition: service_healthy
@@ -200,6 +210,10 @@ services:
       # (capacity "none", stop inert) rather than erroring - detection never
       # blocks a run by accident.
       - postgres_data:/var/lib/farna/db-volume:ro
+      # Pre-upgrade snapshots (FAR-2667). Deliberately OUTSIDE postgres_data:
+      # the snapshot must outlive the database it protects, and it must be
+      # readable with Postgres stopped.
+      - ./backups:/backups
     restart: unless-stopped
 
   # Health watchdog (Gatus) - same image and config as the root

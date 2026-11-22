@@ -155,9 +155,43 @@ See the feature's contract line in `docs/product-map/system/runtime.md`.
 
 ## Upgrade Path: Dump Before Migrating
 
-A schema change is a migration event. Take a dump before running
-`alembic upgrade heads`, so a bad upgrade has a recovery point that does not
-depend on the migration itself.
+A schema change is a migration event. Every upgrade path now takes the dump
+itself, immediately before the migrations run, so a bad upgrade always has a
+recovery point that does not depend on the operator remembering a command:
+
+| Path | Who takes the snapshot | Where it lands |
+|------|------------------------|----------------|
+| Container (compose) | the image entrypoint, before `alembic upgrade heads` | `/backups/pre-upgrade-dump-<TAG>-<ts>/` (the `backups/` bind mount beside the compose file) |
+| Native bundle | `farna-control upgrade` / the installer, before the binary swap | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
+
+Both paths call the same helper and share the same guarantees:
+
+- **Proven complete at dump time.** A plain SQL dump that is cut short still
+  replays as a shorter script, so the snapshot is accepted only if pg_dump's
+  completion trailer is present and the dump checksums. An incomplete dump is
+  swept and the upgrade is refused.
+- **Refused when there is no room.** The output filesystem must have at least
+  `max(2 GB, 1.25 x pg_database_size(current_database()))` free. Otherwise the
+  upgrade refuses and says so; nothing is changed.
+- **Two verified snapshots, in order.** The new snapshot is dumped, verified,
+  and only then is the oldest pruned. Nothing is deleted before its
+  replacement verifies, and the last surviving snapshot is never deleted.
+- **Replayable by the release that took it.** pg_dump emits the settings of the
+  *client* it came from; a client newer than the server writes settings the
+  server rejects (pg_dump 17 writes `SET transaction_timeout`, PostgreSQL 16
+  refuses it). The dump's preamble is rewritten to drop settings the target
+  server does not know, so the snapshot restores into the server it came from.
+
+The manual dump below remains the out-of-band fallback (for example when the
+stack is stopped, or to keep a recovery point on separate media).
+
+### 1. Take a dump by hand (fallback)
+
+```bash
+cd /opt/modulo/backend
+uv run farna-control backup --db-url "$DATABASE_URL" \
+  --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
+```
 
 ### Which tool, which artifact
 
@@ -170,14 +204,14 @@ This page documents two backup tools. They produce different artifacts and are
 | `farna-control backup` | a **directory** holding `database.sql`, the three checkpoint JSON exports, `credentials_references.json` and `backup-info.json` | `farna-control restore <directory>` | **No** - the directory is written unencrypted |
 
 `scripts/restore.py --input` reads only a `scripts/backup.py` archive, and
-`farna-control restore` reads only a directory written by `farna-control backup`. The
-version-upgrade procedure in
-[`docs/upgrade-process.md`](../upgrade-process.md) uses the `scripts/backup.py`
-/ `scripts/restore.py` pair - the encrypted archive - so that is the pair to
-use when following that procedure. The `farna-control backup` / `farna-control restore` pair
-described below is the in-product database-level dump; the AES-256-CBC claim in
-the Overview applies to `scripts/backup.py` only, so store a `farna-control backup`
-directory on encrypted media if the archive itself must be encrypted.
+`farna-control restore` reads only a directory written by `farna-control backup`
+(or by an upgrade's automatic pre-upgrade snapshot, which writes the same
+directory shape). The automatic upgrade snapshots described above use the
+`farna-control` directory, so that is the format a bad upgrade is recovered
+with. The `scripts/backup.py` / `scripts/restore.py` pair remains the
+encrypted-media / offsite tool. The AES-256-CBC claim in the Overview applies
+to `scripts/backup.py` only, so store a `farna-control backup` directory on
+encrypted media if the archive itself must be encrypted.
 `scripts/backup-prune.py` prunes only `modulo-backup-*.tar.gz.enc` files, so it
 does NOT prune `farna-control backup` directories - delete those yourself.
 
@@ -202,8 +236,14 @@ That writes `database.sql` (a `pg_dump` of schema and data), the three
 LangGraph checkpoint JSON exports (`checkpoints.json`,
 `checkpoint_blobs.json`, `checkpoint_writes.json`),
 `credentials_references.json`, and a `backup-info.json` manifest recording the
-schema head and a SHA-256 checksum per file. `pg_dump` and `psql` must be on
-`PATH`, at the same major version as the server.
+schema head, a SHA-256 checksum per file, and the dump-time completeness
+attestation. `pg_dump` and `psql` must be on `PATH`; a client whose major is
+newer than the server is supported (the dump preamble is rewritten to drop
+settings the server does not know).
+
+`farna-control backup` now refuses a dump that is empty, truncated, or a
+pg_dump custom-format (`-Fc`) archive: the snapshot is proven complete before
+the manifest is written.
 
 ### 2. Upgrade and check the result
 
@@ -227,10 +267,25 @@ uv run farna-control restore /backups/pre-upgrade-<timestamp> --db-url "$DATABAS
 ```
 
 `restore` verifies every file against the manifest's checksums before it
-touches the database; `--dry-run` performs those checks and stops. Because
-`database.sql` is a dump of the whole database, restoring it also restores the
-pre-upgrade `alembic_version` row, leaving the database recorded at the
-revision it was dumped from.
+touches the database; `--dry-run` performs those checks and stops. It also
+refuses, loudly and before anything is written, a dump that:
+
+- the manifest records **no checksum** for (a foreign or hand-assembled
+  archive cannot be proven to belong to this backup);
+- fails pg_dump's completion-trailer re-check, when the manifest attested
+  completeness at dump time (a file truncated after the manifest was written);
+- is a pg_dump **custom-format** (`-Fc`) archive, which this restore path
+  cannot replay.
+
+Because `database.sql` is a dump of the whole database, restoring it also
+restores the pre-upgrade `alembic_version` row, leaving the database recorded
+at the revision it was dumped from.
+
+With `--data-dir`, restore **stops a running launcher itself** and leaves the
+stack stopped; on success it prints the exact `farna-control start --data-dir
+<dir>` command and never restarts anything. Without `--data-dir` it prints the
+compose start command instead. Nothing is auto-restarted: a half-verified
+database must not be handed to an application.
 
 Note the two different versions in play. The manifest's `schema_versions` field
 records the **migration head of the code that wrote the backup** (`alembic`

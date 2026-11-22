@@ -26,7 +26,6 @@ from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-
 from farna.launcher.state import LauncherState, load_state, save_state
 from farna.launcher.upgrade import (
     SNAPSHOT_MANIFEST_NAME,
@@ -36,6 +35,7 @@ from farna.launcher.upgrade import (
     main,
     pre_upgrade_dump,
 )
+
 from tests.unit.launcher.test_launcher_shared import clock_steps
 
 #: This module EXECUTES the shipped installer under a real POSIX shell (and
@@ -81,13 +81,38 @@ def _allow_windows_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(secrets_file, "assert_supported_platform", lambda: None)
 
 
-def _fake_run(returncode: int = 0, payload: bytes = b"-- pg_dump output\n") -> Callable[..., Any]:
+#: FAR-2667: a PLAIN pg_dump ends with this trailer. Every fake dump the
+#: launcher snapshot path accepts must carry it, because an incomplete dump is
+#: now refused at dump time instead of being discovered during a recovery.
+_PG_DUMP_PAYLOAD = b"-- pg_dump output\n-- PostgreSQL database dump complete\n"
+
+
+def _fake_run(returncode: int = 0, payload: bytes = _PG_DUMP_PAYLOAD) -> Callable[..., Any]:
     def _run(argv: list[str], stdout: Any = None, **kwargs: Any) -> MagicMock:
         if stdout is not None and returncode == 0:
             stdout.write(payload)
         return MagicMock(returncode=returncode, stderr=b"connection refused" if returncode else b"")
 
     return _run
+
+
+@pytest.fixture(autouse=True)
+def _pinned_snapshot_seams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the two seams that would otherwise need a live machine.
+
+    * the snapshot disk guard's ``pg_database_size`` probe (exercised for real
+      in test_upgrade_snapshot.py; here the dump orchestration is under test);
+    * the pg_dump resolution, so a CI runner without PostgreSQL client tools
+      still exercises the dump argv and completeness gate.
+    """
+    from farna.launcher import upgrade as upgrade_module
+
+    monkeypatch.setattr(upgrade_module, "_database_size_bytes", lambda _url, **_kwargs: 1024)
+    monkeypatch.setattr(upgrade_module, "_resolve_pg_dump", lambda _bin_dir: "pg_dump")
+    # The dump compatibility rewrite asks the target server for its GUC names.
+    from farna.db import plain_dump
+
+    monkeypatch.setattr(plain_dump, "server_guc_names", lambda _url, **_kwargs: {"statement_timeout"})
 
 
 def _enter_fake_run(stack: contextlib.ExitStack, **kwargs: Any) -> MagicMock:
@@ -114,7 +139,7 @@ def test_pre_upgrade_dump_reports_snapshot(tmp_path: Path, monkeypatch: pytest.M
     assert snapshot.directory.parent == data_dir
     assert snapshot.directory.name.startswith(SNAPSHOT_PREFIX)
     assert snapshot.dump_path.exists()
-    assert snapshot.bytes == len(b"-- pg_dump output\n")
+    assert snapshot.bytes == len(_PG_DUMP_PAYLOAD)
     manifest = json.loads((snapshot.directory / SNAPSHOT_MANIFEST_NAME).read_text(encoding="utf-8"))
     assert manifest["snapshot_for_upgrade"] is True
     assert manifest["dump_bytes"] == snapshot.bytes
@@ -171,7 +196,7 @@ def test_dump_carries_the_bundled_state(tmp_path: Path, monkeypatch: pytest.Monk
     def _capture(argv: list[str], stdout: Any = None, **kwargs: Any) -> MagicMock:
         seen["argv"] = argv
         if stdout is not None:
-            stdout.write(b"-- pg_dump output\n")
+            stdout.write(_PG_DUMP_PAYLOAD)
         return MagicMock(returncode=0)
 
     with patch("farna.launcher.upgrade.subprocess.run", new=_capture):
@@ -289,7 +314,7 @@ def test_dump_password_is_never_in_argv(tmp_path: Path, monkeypatch: pytest.Monk
         seen["argv"] = argv
         seen["env"] = kwargs.get("env")
         if stdout is not None:
-            stdout.write(b"-- pg_dump output\n")
+            stdout.write(_PG_DUMP_PAYLOAD)
         return MagicMock(returncode=0)
 
     with patch("farna.launcher.upgrade.subprocess.run", new=_capture):
@@ -453,6 +478,7 @@ def test_dumped_snapshot_restores_end_to_end(tmp_path: Path, monkeypatch: pytest
 # ---------------------------------------------------------------------------
 
 from farna.launcher import upgrade as upgrade_module  # noqa: E402 (appended flow tests)
+
 from tests.unit.launcher.test_launcher_shared import (  # noqa: E402 (appended flow tests)
     _UPGRADE_SIGNING_KEY_HEX,
     _upgrade_dump_seam,
@@ -645,7 +671,7 @@ def test_perform_upgrade_downgrade_refuses(tmp_path, monkeypatch, patched_trust_
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
         return _upgrade_dump_seam(data_dir, recorded_heads=["head-the-target-never-shipped"])(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -742,7 +768,7 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -802,7 +828,7 @@ def test_upgrade_marker_written_before_boot(tmp_path, monkeypatch, patched_trust
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -993,7 +1019,6 @@ def test_cli_upgrade_surfaces_a_clean_click_exception(monkeypatch, tmp_path):
     leaked past the internal conversion) is reported as `Error: ...` - never
     a raw traceback."""
     from click.testing import CliRunner
-
     from farna.cli.main import cli
     from farna.launcher import manifest as manifest_module
 
@@ -1167,7 +1192,7 @@ def test_reupgrade_of_the_same_version_keeps_the_prior_bytes_for_restore(tmp_pat
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -2939,7 +2964,7 @@ class TestPerformUpgradeHappyPath:
         staging.mkdir()
         release_fixture = _upgrade_release_fixture(staging)
 
-        def _dump(data_dir, *, bin_dir=None):
+        def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
             return _upgrade_dump_seam(data_dir)(data_dir)
 
         monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)

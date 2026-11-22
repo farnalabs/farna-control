@@ -125,11 +125,15 @@ than the default `~/.local/opt/farna-control`. The built-in default and
 `farna-control upgrade` flow:
 
 1. **Enforced pre-upgrade dump.** The bundled pg_dump writes a versioned
-   snapshot dir under the data dir (`pre-upgrade-dump-<ts>/`) with a
-   restore manifest, and verifies the dump is non-empty. A failed dump
-   aborts the upgrade - NO binary swap happens without a verified
-   snapshot. The dump needs the bundled Postgres reachable, so run the
-   upgrade command while the stack is running.
+   snapshot dir beside the cluster (`pre-upgrade-dump-<version>-<ts>/`, a
+   sibling of `pgdata/`, never inside it) with a restore manifest. The dump is
+   proven complete at dump time (pg_dump's completion trailer), checksummed,
+   and the two most recent verified snapshots are kept. The disk guard refuses
+   the upgrade when the output filesystem has less than
+   `max(2 GB, 1.25 x database size)` free. A failed or unverified dump aborts
+   the upgrade - NO binary swap happens without a verified snapshot. The dump
+   needs the bundled Postgres reachable, so run the upgrade command while the
+   stack is running.
 2. Stop + swap. The data dir must not be locked for the swap; the command
    stops the stack, re-points `current` to the new bundle, then boots the
    new bundle's migrations and gates on health.
@@ -219,13 +223,66 @@ For the operator upgrade itself:
 # 1. Pull the exact new image named by TAG.
 TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml pull modulo
 
-# 2. Restart with that immutable image (runs migrations on startup).
+# 2. Restart with that immutable image (takes the pre-upgrade snapshot, then
+#    runs migrations on startup).
 TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo
 
 # 3. Verify migration completed and readiness is healthy.
 TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml logs modulo | grep -i alembic
 curl http://localhost:80/healthz/ready
 ```
+
+#### The pre-upgrade snapshot is automatic (FAR-2667)
+
+The container entrypoint takes a verified `pg_dump` snapshot of the database
+**immediately before** `alembic upgrade heads` runs, while the application is
+still stopped and the database is up. It is not a step the operator can
+forget, and it is not skippable:
+
+- the snapshot lands in `deploy/compose/backups/pre-upgrade-dump-<TAG>-<UTC
+  timestamp>/` on the host (bind-mounted at `/backups`), never inside the
+  `postgres_data` volume — so it survives image replacement and
+  `docker compose down`, and it is readable while Postgres is stopped;
+- the dump is proven complete at dump time (pg_dump's completion trailer),
+  checksummed, and recorded in both `manifest.json` and the
+  restore-compatible `backup-info.json`;
+- the two most recent verified snapshots are kept (dump, verify, then prune;
+  nothing is deleted before its replacement verifies);
+- the guard refuses to run the upgrade at all when the output filesystem has
+  less than `max(2 GB, 1.25 x database size)` free, naming the required
+  space, the available space and that nothing has been changed. A refused
+  snapshot aborts the boot, so no migration is applied;
+- a first start against an empty database is not an upgrade: nothing is
+  dumped and the boot proceeds.
+
+The entrypoint prints the snapshot path it took. Record it.
+
+#### If the new release fails: restore the snapshot
+
+Run the recovery helper that ships beside the compose file:
+
+```bash
+./compose-restore.sh /backups/pre-upgrade-dump-<TAG>-<UTC timestamp>
+```
+
+It stops the application, verifies the snapshot's manifest and checksums,
+refuses a corrupt or foreign dump *before* touching the database, restores
+the dump, re-applies the application role's grants, and then **stops** — it
+prints the exact start command and never restarts the stack:
+
+```bash
+TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo
+```
+
+Start the previous release only after reading the restore output. Rolling the
+database backwards (`alembic downgrade`) is not supported; the snapshot is the
+way back. The pre-restore safety dump of the database you are replacing is
+written into `backups/` next to the snapshot.
+
+The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) rehearses this on
+a disposable host. Its rollback leg must assert this documented path — restore
+the pre-upgrade snapshot, then start the previous image — rather than assume
+the old image can boot on a newer database.
 
 ### Self-Hosted (Bare Metal / VM)
 

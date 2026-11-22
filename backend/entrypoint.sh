@@ -1,6 +1,26 @@
 #!/bin/sh
 set -e
 
+# FAR-2667: optional pre-upgrade database snapshot. Enabled by pointing
+# FARNA_CONTROL_SNAPSHOT_DIR at a directory that survives the container
+# (deploy/compose/docker-compose.prod.yml does this via its /backups bind
+# mount). Unset -> skipped, so local development containers stay unchanged.
+# Runs BEFORE the migrations; if the snapshot cannot be taken or verified this
+# exits non-zero and no migration is applied.
+if [ -n "${FARNA_CONTROL_SNAPSHOT_DIR:-}" ]; then
+  echo "Pre-upgrade database snapshot (FAR-2667)..."
+  snapshot="$(python -m farna.launcher.upgrade \
+    --db-url "${DATABASE_ADMIN_URL:-$DATABASE_URL}" \
+    --output-dir "$FARNA_CONTROL_SNAPSHOT_DIR" \
+    --skip-if-pristine)"
+  if [ -n "$snapshot" ]; then
+    echo "Pre-upgrade snapshot verified: $snapshot"
+    echo "  Restore a bad release with: scripts/compose-restore.sh $snapshot"
+  else
+    echo "Fresh database (no application tables): no pre-upgrade snapshot needed."
+  fi
+fi
+
 echo "=== Bootstrapping modulo_app role ==="
 python -m farna.db.bootstrap_role
 

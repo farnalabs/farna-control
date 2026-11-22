@@ -31,6 +31,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -53,6 +54,7 @@ from farna.launcher.entry import APP_DB_NAME
 from farna.launcher.env_safety import scrub_os_environment
 from farna.launcher.initdb import _binary
 from farna.launcher.manifest import ManifestSecurityError, ReleaseManifest
+from farna.launcher.platform import binary_name
 from farna.launcher.supervisor import _read_lock_holder
 
 _log = logging.getLogger(__name__)
@@ -60,6 +62,16 @@ _log = logging.getLogger(__name__)
 SNAPSHOT_PREFIX = "pre-upgrade-dump-"
 SNAPSHOT_MANIFEST_NAME = "manifest.json"
 SNAPSHOT_MANIFEST_VERSION = 1
+# ---- FAR-2667: the snapshot is proven complete at dump time ----------------
+# Retention keeps this many VERIFIED snapshots (Hopper, FAR-2667 note item 3).
+RETENTION_COUNT = 2
+# The disk guard: free bytes at the output filesystem must be at least
+# max(SNAPSHOT_MIN_FREE_BYTES, SNAPSHOT_HEADROOM_FACTOR x pg_database_size).
+SNAPSHOT_MIN_FREE_BYTES = 2 * 1024**3
+SNAPSHOT_HEADROOM_FACTOR = 1.25
+# Completeness proof and replay-compatibility rewrite live in
+# farna.db.plain_dump — ONE implementation shared with `farna-control backup`.
+_GIB = 1024**3
 # The restore-side manifest: `farna-control restore` hard-requires backup-info.json
 # (shape-validated, checksum-verified). The snapshot carries BOTH manifest
 # files so the installer's printed command works verbatim.
@@ -82,24 +94,31 @@ _WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:")
 # The launcher-owned public surface (consumed by install.sh via the bundled
 # runtime; vulture's dead-code gate special-cases __all__).
 __all__ = [
+    "RETENTION_COUNT",
     "SNAPSHOT_MANIFEST_NAME",
     "SNAPSHOT_PREFIX",
     "PreUpgradeSnapshot",
+    "SnapshotRef",
     "UpgradeError",
     "UpgradeResult",
     "assert_not_held",
     "atomic_symlink_swap",
     "check_no_downgrade",
     "default_install_root",
+    "enforce_snapshot_disk_headroom",
     "extract_and_verify_bundle",
     "fetch_release_assets",
     "main",
     "perform_upgrade",
     "pre_upgrade_dump",
+    "prune_snapshots",
     "prune_versions",
     "repair_current_symlink",
+    "required_snapshot_free_bytes",
     "restore_guidance",
     "sweep_upgrade_caches",
+    "take_upgrade_snapshot",
+    "verify_dump_complete",
     "write_upgrade_marker",
 ]
 
@@ -133,13 +152,24 @@ def _pg_child_env(password: str | None) -> dict[str, str]:
 
 
 @dataclass(frozen=True)
-class PreUpgradeSnapshot:
-    """One verified pre-upgrade snapshot (the installer aborts without one)."""
+class SnapshotRef:
+    """One VERIFIED pre-upgrade snapshot (the installer aborts without one).
+
+    Returned by :func:`take_upgrade_snapshot` — the single callable both the
+    native launcher and the container entrypoint use (FAR-2667).
+    """
 
     directory: Path
     dump_path: Path
+    checksum: str
     bytes: int
+    schema_heads: list[str]
     created_at: str
+
+
+# The pre-FAR-2667 name; kept as the same type so every existing caller and
+# the installer's printed command keep working unchanged.
+PreUpgradeSnapshot = SnapshotRef
 
 
 def _pid_alive(pid: int) -> bool:
@@ -203,16 +233,21 @@ def pre_upgrade_dump(
     *,
     bin_dir: Path | None = None,
     output_dir: Path | None = None,
+    release: str | None = None,
 ) -> PreUpgradeSnapshot:
-    """Perform and verify the enforced pre-upgrade pg_dump.
+    """Perform and verify the NATIVE pre-upgrade pg_dump (FAR-672 / FAR-2667).
 
-    Produces ``<data-dir>/pre-upgrade-dump-<timestamp>/`` containing the
-    pg_dump SQL file plus a versioned manifest JSON. The dump MUST be
-    non-empty: an empty dump is a failure (the snapshot dir is swept) — the
-    installer aborts rather than swapping binaries over a zero-byte snapshot.
+    Resolves the bundled cluster's owner-role URL from the data dir's
+    HMAC-verified state.json + secrets.json, then hands off to
+    :func:`take_upgrade_snapshot` — the SAME callable the container
+    entrypoint uses, so the native and container paths cannot drift.
+
+    Produces ``<data-dir>/pre-upgrade-dump-[<release>-]<timestamp>/`` beside
+    the cluster (never inside ``pgdata/``), containing the pg_dump SQL file,
+    a versioned snapshot manifest and the restore-compatible
+    ``backup-info.json``. A dump that cannot be PROVEN complete (no
+    pg_dump completion trailer) is swept and the upgrade aborts.
     """
-    import shutil
-
     from farna.launcher.env_safety import scrub_os_environment
     from farna.launcher.secrets_file import SecretsFileError, _load_existing
     from farna.launcher.state import load_state
@@ -261,9 +296,7 @@ def pre_upgrade_dump(
     from farna.launcher.initdb import BOOTSTRAP_USERNAME
 
     url_with_password = f"postgresql://{BOOTSTRAP_USERNAME}:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
-    dump_url, postgres_password = _decredential_url(url_with_password)
 
-    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     # `parent` is the operator-chosen data/snapshot directory, supplied by the
     # bundled installer via the local `farna-control upgrade --data-dir` CLI -- never an
     # HTTP request or agent input. The block above has already refused unless the
@@ -272,17 +305,236 @@ def pre_upgrade_dump(
     # not attacker-arbitrary, and no privilege boundary is crossed (the process
     # runs as the same operator that chose the path).
     parent = output_dir if output_dir is not None else data_dir
-    parent.mkdir(parents=True, exist_ok=True)  # NOSONAR pythonsecurity:S8707
-    snapshot_dir = parent / f"{SNAPSHOT_PREFIX}{timestamp}"
+    return take_upgrade_snapshot(
+        url_with_password,
+        parent,
+        release=release,
+        bin_dir=bin_dir,
+        extra_manifest={"postgres_port": state.postgres_port},
+    )
+
+
+# ---------------------------------------------------------------------------
+# FAR-2667 — the ONE snapshot callable both deployment paths use
+# ---------------------------------------------------------------------------
+
+
+def _gib(value: float) -> str:
+    """Human GB figure (one decimal) for the disk-guard message."""
+    return f"{value / _GIB:.1f}"
+
+
+def required_snapshot_free_bytes(database_bytes: int) -> int:
+    """Free bytes the snapshot needs: max(2 GiB, 1.25 x database size).
+
+    Hopper's FAR-2667 rule. The 1.25 x term is the dump itself plus the
+    WAL/temp headroom the write costs; the 2 GiB floor keeps a tiny database
+    from producing an unusably small margin.
+    """
+    return max(SNAPSHOT_MIN_FREE_BYTES, math.ceil(database_bytes * SNAPSHOT_HEADROOM_FACTOR))
+
+
+def _database_size_bytes(db_url: str, *, timeout_seconds: int = 15) -> int:
+    """``pg_database_size(current_database())`` for the dump target.
+
+    Fails CLOSED: an unmeasurable database refuses the upgrade rather than
+    skipping the disk guard (a guard that silently passes is not a guard).
+    """
+    import psycopg
+
+    try:
+        with psycopg.connect(db_url, connect_timeout=timeout_seconds) as conn, conn.cursor() as cur:
+            cur.execute("SELECT pg_database_size(current_database())")
+            row = cur.fetchone()
+    except Exception as exc:
+        raise UpgradeError(f"Refusing to upgrade: cannot measure the database size for the snapshot disk guard ({exc}). Nothing has been changed.") from exc
+    if not row or not isinstance(row[0], (int, float)):
+        raise UpgradeError("Refusing to upgrade: the database size query returned no usable figure, so the snapshot disk guard cannot run. Nothing has been changed.")
+    return int(row[0])
+
+
+def _nearest_existing_path(path: Path) -> Path:
+    """*path* if it exists, else its nearest existing ancestor (for statfs)."""
+    candidate = path
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return candidate
+
+
+def enforce_snapshot_disk_headroom(db_url: str, output_dir: Path) -> int:
+    """Refuse the upgrade unless the snapshot's filesystem has room.
+
+    Requirement: free bytes at the OUTPUT filesystem >= max(2 GiB,
+    1.25 x pg_database_size(current_database())). Returns the required byte
+    count when the guard passes. The message names the required space, the
+    available space, the shortfall and that nothing has been changed.
+    """
+    database_bytes = _database_size_bytes(db_url)
+    required = required_snapshot_free_bytes(database_bytes)
+    probe = _nearest_existing_path(output_dir)
+    try:
+        free = shutil.disk_usage(str(probe)).free
+    except OSError as exc:
+        raise UpgradeError(f"Refusing to upgrade: cannot measure free space at {output_dir} ({exc}). Nothing has been changed.") from exc
+    if free < required:
+        shortfall = required - free
+        raise UpgradeError(f"Refusing to upgrade: the snapshot needs about {_gib(required)} GB free at {output_dir}; {_gib(free)} GB is available. Free {_gib(shortfall)} GB and re-run. Nothing has been changed.")
+    return required
+
+
+def verify_dump_complete(dump_path: Path) -> int:
+    """Prove a plain-format pg_dump finished; return its size in bytes.
+
+    A truncated plain SQL dump replays as a shorter but syntactically valid
+    script, so "non-empty" is not proof. pg_dump writes its completion trailer
+    LAST, so its presence is the dump-time completeness proof (the -Fc
+    equivalent is ``pg_restore --list``). Delegates to
+    :mod:`farna.db.plain_dump` so the container/backup path cannot disagree.
+    """
+    from farna.db import plain_dump
+
+    try:
+        return plain_dump.assert_complete(dump_path)
+    except ValueError as exc:
+        raise UpgradeError(str(exc)) from exc
+
+
+def _snapshot_created_at(directory: Path) -> str:
+    """Best-effort creation stamp for retention ordering (manifest first)."""
+    try:
+        manifest = json.loads((directory / SNAPSHOT_MANIFEST_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    created = manifest.get("created_at") if isinstance(manifest, dict) else None
+    if isinstance(created, str) and created:
+        return created
+    try:
+        return datetime.fromtimestamp(directory.stat().st_mtime, UTC).isoformat()
+    except OSError:
+        return ""
+
+
+def snapshot_is_intact(directory: Path) -> bool:
+    """Cheap structural check that *directory* is a usable snapshot.
+
+    Deliberately NOT a checksum of the dump: retention runs on every upgrade
+    and must not re-read gigabytes. Full checksum verification belongs to the
+    restore. This proves the two manifests parse, describe this directory's
+    own dump, agree on its size, and that the dump ends with pg_dump's
+    completion trailer.
+    """
+    if not (directory / SNAPSHOT_MANIFEST_NAME).is_file():
+        return False
+    if not (directory / _RESTORE_MANIFEST_NAME).is_file():
+        return False
+    try:
+        manifest = json.loads((directory / SNAPSHOT_MANIFEST_NAME).read_text(encoding="utf-8"))
+        restore_manifest = json.loads((directory / _RESTORE_MANIFEST_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(manifest, dict) or not isinstance(restore_manifest, dict):
+        return False
+    if manifest.get("snapshot_for_upgrade") is not True:
+        return False
+    dump_name = manifest.get("dump_name")
+    if not isinstance(dump_name, str) or not dump_name:
+        return False
+    checksums = restore_manifest.get("file_checksums")
+    if not isinstance(checksums, dict) or not isinstance(checksums.get(dump_name), str):
+        return False
+    dump_path = directory / dump_name
+    if not dump_path.is_file():
+        return False
+    try:
+        if dump_path.stat().st_size != manifest.get("dump_bytes"):
+            return False
+        verify_dump_complete(dump_path)
+    except (OSError, UpgradeError):
+        return False
+    return True
+
+
+def prune_snapshots(
+    output_dir: Path,
+    *,
+    retain: int = RETENTION_COUNT,
+    protect: Path | None = None,
+) -> list[str]:
+    """Keep the newest *retain* INTACT snapshots; delete the rest.
+
+    Ordering contract (Hopper, FAR-2667 item 3): the caller runs this only
+    AFTER the new snapshot has verified, so a run can never delete a
+    recovery point before its replacement exists. *protect* is the snapshot
+    just written and is never deleted. A snapshot that is not intact (partial
+    write, interrupted run, corrupt trailer) is not a recovery point, so it is
+    swept — unless it is the protected one.
+
+    Never deletes the last surviving intact snapshot: the newest *retain*
+    intact entries are always kept.
+    """
+    if not output_dir.is_dir():
+        return []
+    candidates = sorted(
+        (entry for entry in output_dir.iterdir() if entry.is_dir() and entry.name.startswith(SNAPSHOT_PREFIX) and not entry.is_symlink()),
+        key=_snapshot_created_at,
+        reverse=True,
+    )
+    intact_newest = [entry for entry in candidates if snapshot_is_intact(entry)][:retain]
+    keep = {entry.resolve() for entry in intact_newest}
+    if protect is not None:
+        keep.add(protect.resolve())
+    pruned: list[str] = []
+    for entry in candidates:
+        if entry.resolve() in keep:
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
+        pruned.append(entry.name)
+        _log.info("upgrade.snapshot_pruned dir=%s", entry)
+    return pruned
+
+
+def take_upgrade_snapshot(
+    db_url: str,
+    output_dir: Path,
+    *,
+    release: str | None = None,
+    bin_dir: Path | None = None,
+    retain: int = RETENTION_COUNT,
+    extra_manifest: dict[str, Any] | None = None,
+) -> SnapshotRef:
+    """The ONE pre-upgrade snapshot callable (native launcher + container).
+
+    1. Refuse unless the output filesystem has max(2 GiB, 1.25 x db) free.
+    2. ``pg_dump --format=plain --clean --if-exists`` into
+       ``<output_dir>/pre-upgrade-dump-[<release>-]<UTC-ts>/database.sql``.
+    3. Prove the dump complete (pg_dump's completion trailer) and record the
+       sha256 + the schema head(s) in both manifests.
+    4. Prune to the newest *retain* verified snapshots (never the new one).
+
+    The directory must never sit inside the Postgres cluster: the callers
+    pass the data dir (sibling of ``pgdata/``) or the ``/backups`` bind mount.
+
+    Raises :class:`UpgradeError` on any failure; a failed dump leaves no
+    directory behind, and the caller aborts the upgrade.
+    """
+    import shutil
+
+    output_dir.mkdir(parents=True, exist_ok=True)  # NOSONAR pythonsecurity:S8707 — operator-chosen snapshot dir
+    enforce_snapshot_disk_headroom(db_url, output_dir)
+
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    stamp_prefix = f"{SNAPSHOT_PREFIX}{release}-" if release else SNAPSHOT_PREFIX
+    snapshot_dir = output_dir / f"{stamp_prefix}{stamp}"
     counter = 0
     while snapshot_dir.exists():
         counter += 1
-        snapshot_dir = parent / f"{SNAPSHOT_PREFIX}{timestamp}-{counter}"
+        snapshot_dir = output_dir / f"{stamp_prefix}{stamp}-{counter}"
     snapshot_dir.mkdir(parents=True, exist_ok=False)
 
+    dump_url, postgres_password = _decredential_url(db_url)
     dump_path = snapshot_dir / _DUMP_NAME
     argv = [
-        _binary(_resolve_pg_bin_dir(bin_dir), "pg_dump"),
+        _resolve_pg_dump(bin_dir),
         "--clean",
         "--if-exists",
         "--no-owner",
@@ -292,28 +544,44 @@ def pre_upgrade_dump(
     ]
     try:
         _run_dump(argv, dump_path, child_env=_pg_child_env(postgres_password))
+        # pg_dump writes the CLIENT's settings as a preamble; a client newer
+        # than the server emits GUCs the server rejects, which would make this
+        # snapshot unreplayable into the very server it came from. Drop those,
+        # then prove the dump finished.
+        from farna.db import plain_dump
+
+        removed = plain_dump.strip_unsupported_preamble_settings(dump_path, plain_dump.server_guc_names(db_url))
+        if removed:
+            _log.warning("upgrade.snapshot_preamble_settings_dropped settings=%s", ",".join(removed))
+        size = verify_dump_complete(dump_path)
+    except ValueError as exc:
+        shutil.rmtree(snapshot_dir, ignore_errors=True)
+        raise UpgradeError(f"pre-upgrade dump FAILED — upgrade ABORTED, no binary swap was made: {exc}") from exc
     except UpgradeError as exc:
-        # A failed dump never leaves a half-written snapshot masquerading
-        # as one, and the installer never sees a directory to trust.
+        # A failed dump never leaves a half-written snapshot masquerading as
+        # one, and the caller never sees a directory to trust. Retention is
+        # NOT run here: nothing has been verified, so nothing may be deleted.
         shutil.rmtree(snapshot_dir, ignore_errors=True)
         raise UpgradeError(f"pre-upgrade dump FAILED — upgrade ABORTED, no binary swap was made: {exc}") from exc
 
-    size = dump_path.stat().st_size
-    if size <= 0:
-        shutil.rmtree(snapshot_dir, ignore_errors=True)
-        raise UpgradeError("pre-upgrade dump produced an EMPTY file — upgrade ABORTED; refusing to swap binaries over no snapshot")
-
+    checksum = _sha256_file(dump_path)
+    schema_heads = _alembic_heads()
     created_at = datetime.now(UTC).isoformat()
-    manifest = {
+    manifest: dict[str, Any] = {
         "manifest_version": SNAPSHOT_MANIFEST_VERSION,
         "snapshot_for_upgrade": True,
+        "dump_complete": True,
+        "dump_format": "plain",
         "created_at": created_at,
         "dump_name": _DUMP_NAME,
         "dump_bytes": size,
-        "postgres_port": state.postgres_port,
+        "dump_sha256": checksum,
+        "schema_heads": schema_heads,
     }
+    if extra_manifest:
+        manifest.update(extra_manifest)
     (snapshot_dir / SNAPSHOT_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    _write_restore_manifest(snapshot_dir, created_at=created_at)
+    _write_restore_manifest(snapshot_dir, created_at=created_at, checksum=checksum, size=size, schema_heads=schema_heads)
     if os.name == "posix":
         # Deferred P3: Windows ACL hardening (chmod is a silent no-op there).
         # DIRECTORIES get 0700 — the e(xecute) bit is the DIRECTORY search
@@ -325,14 +593,43 @@ def pre_upgrade_dump(
                 entry.chmod(_PRIVATE_MODE)
         except OSError as exc:
             _log.warning("upgrade.snapshot_mode_failed path=%s error=%s", snapshot_dir, exc)
-    snapshot = PreUpgradeSnapshot(
+
+    # ORDERING (Hopper, FAR-2667 item 3): dump -> verify -> prune. Reached
+    # only once the new snapshot is verified on disk.
+    pruned = prune_snapshots(output_dir, retain=retain, protect=snapshot_dir)
+    if pruned:
+        _log.info("upgrade.snapshots_pruned names=%s", ",".join(pruned))
+
+    snapshot = SnapshotRef(
         directory=snapshot_dir,
         dump_path=dump_path,
+        checksum=checksum,
         bytes=size,
+        schema_heads=schema_heads,
         created_at=created_at,
     )
-    _log.info("upgrade.snapshot_created dir=%s bytes=%s", snapshot_dir, size)
+    _log.info("upgrade.snapshot_created dir=%s bytes=%s pruned=%s", snapshot_dir, size, len(pruned))
     return snapshot
+
+
+def _database_is_pristine(db_url: str, *, timeout_seconds: int = 15) -> bool:
+    """True only for a database with NO application tables (a first install).
+
+    A fresh ``docker compose up`` must not demand snapshot headroom or write
+    a snapshot of an empty database. Ambiguity (any table present, or the
+    probe failing) reads as NOT pristine, so an upgrade always takes a
+    snapshot.
+    """
+    import psycopg
+
+    try:
+        with psycopg.connect(db_url, connect_timeout=timeout_seconds) as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'")
+            row = cur.fetchone()
+    except Exception as exc:
+        _log.warning("upgrade.pristine_probe_failed error=%s", exc)
+        return False
+    return bool(row) and int(row[0]) == 0
 
 
 def _resolve_pg_bin_dir(bin_dir: Path | None) -> Path:
@@ -343,6 +640,32 @@ def _resolve_pg_bin_dir(bin_dir: Path | None) -> Path:
     if from_env:
         return Path(from_env)
     return Path(sys.prefix) / "bundled" / "bin"
+
+
+def _resolve_pg_dump(bin_dir: Path | None) -> str:
+    """Resolve the pg_dump executable both deployment paths can reach.
+
+    Order: an EXPLICIT bundled dir (param, then ``FARNA_CONTROL_BUNDLED_BIN_DIR``)
+    — the native bundle always provides one — then the bundle's own
+    ``<prefix>/bundled/bin``, then ``pg_dump`` on PATH. The container image
+    installs the PostgreSQL client tools on PATH and ships no ``bundled/``
+    tree, so without the PATH step the compose path could never take a
+    snapshot. An explicitly given directory that lacks pg_dump is NOT a silent
+    PATH fallback: naming a directory is a statement of where the binary is.
+    """
+    explicit = bin_dir
+    if explicit is None:
+        from_env = os.environ.get("FARNA_CONTROL_BUNDLED_BIN_DIR")
+        explicit = Path(from_env) if from_env else None
+    if explicit is not None:
+        return _binary(explicit, "pg_dump")
+    bundled = _resolve_pg_bin_dir(None)
+    if (bundled / binary_name("pg_dump")).exists():
+        return _binary(bundled, "pg_dump")
+    on_path = shutil.which("pg_dump")
+    if on_path is None:
+        raise UpgradeError(f"no pg_dump found: neither the bundled {bundled / binary_name('pg_dump')} nor pg_dump on PATH. Install the PostgreSQL client tools (or run from a bundle that ships them) — the upgrade is refused because it cannot take a snapshot.")
+    return on_path
 
 
 def _alembic_heads() -> list[str]:
@@ -362,7 +685,7 @@ def _alembic_heads() -> list[str]:
         return ["unknown"]
 
 
-def _write_restore_manifest(snapshot_dir: Path, *, created_at: str) -> None:
+def _write_restore_manifest(snapshot_dir: Path, *, created_at: str, checksum: str, size: int, schema_heads: list[str]) -> None:
     """Write the restore-compatible manifest the installer's printed command needs.
 
     ``farna-control restore`` hard-requires ``backup-info.json`` (shape-validated +
@@ -373,17 +696,22 @@ def _write_restore_manifest(snapshot_dir: Path, *, created_at: str) -> None:
     refuse). ``fernet_key_hash`` is intentionally absent: re-encryption only
     engages when ``credentials_references.json`` exists, which the snapshot
     does not carry (the full pre-restore DB lives in the SQL dump).
+
+    ``dump_complete`` is the dump-time completeness attestation FAR-2667 adds:
+    the caller has already verified pg_dump's completion trailer, so restore
+    can re-verify the SAME trailer rather than trusting the checksum alone.
     """
-    checksum = hashlib.sha256((snapshot_dir / _DUMP_NAME).read_bytes()).hexdigest()
     restore_manifest = {
         "snapshot_for_upgrade": True,
         "manifest_version": SNAPSHOT_MANIFEST_VERSION,
         "backup_type": "pre-upgrade-snapshot",
         "timestamp": created_at,
-        "schema_versions": _alembic_heads(),
+        "schema_versions": schema_heads,
         "db_version": "unknown",
         "dump_name": _DUMP_NAME,
-        "dump_bytes": (snapshot_dir / _DUMP_NAME).stat().st_size,
+        "dump_bytes": size,
+        "dump_format": "plain",
+        "dump_complete": True,
         "file_checksums": {_DUMP_NAME: checksum},
     }
     # 0600 fd creation: the manifest is never briefly exposed at umask mode.
@@ -422,23 +750,54 @@ def _run_dump(argv: list[str], dump_path: Path, *, child_env: dict[str, str] | N
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry the installer invokes: dump, verify, print the snapshot path.
+    """CLI entry both deployment paths invoke: dump, verify, print the path.
 
-    The snapshot directory path is the FINAL stdout line; the installer
-    captures it and aborts (non-zero exit) when the helper fails.
+    Two modes, one callable behind them:
+
+    * ``--data-dir`` — the NATIVE path (install.sh). The dump URL is resolved
+      from the data dir's state.json + secrets.json.
+    * ``--db-url`` + ``--output-dir`` — the CONTAINER path
+      (``deploy/supervisor/entrypoint.sh``, before ``alembic upgrade heads``).
+      ``--skip-if-pristine`` makes a first install (an empty database) a
+      no-op instead of demanding snapshot headroom.
+
+    STDOUT CARRIES EXACTLY ONE LINE ON SUCCESS: the snapshot directory (or
+    nothing at all for a pristine database). install.sh captures the whole
+    stdout as the path, so every diagnostic goes to stderr.
     """
-    parser = argparse.ArgumentParser(prog="python -m farna.launcher.upgrade", description="Pre-upgrade pg_dump")
-    parser.add_argument("--data-dir", type=Path, required=True, help="Bundled launcher data dir")
+    parser = argparse.ArgumentParser(prog="python -m farna.launcher.upgrade", description="Pre-upgrade database snapshot")
+    parser.add_argument("--data-dir", type=Path, default=None, help="Bundled launcher data dir (native path)")
     parser.add_argument("--bin-dir", type=Path, default=None, help="Bundled pg/ binaries dir override (packaging seam)")
+    parser.add_argument("--db-url", default=None, help="Database URL to dump — use the OWNER/admin role (container path)")
+    parser.add_argument("--output-dir", type=Path, default=None, help="Directory that holds snapshot directories (container path; e.g. /backups)")
+    parser.add_argument("--release", default=None, help="Release token recorded in the snapshot directory name")
+    parser.add_argument(
+        "--skip-if-pristine",
+        action="store_true",
+        default=False,
+        help="Exit 0 without a snapshot when the database has NO application tables (a fresh install is not an upgrade)",
+    )
     args = parser.parse_args(argv)
     scrub_os_environment()
+    if (args.data_dir is None) == (args.db_url is None):
+        parser.error("pass exactly one of --data-dir (native) or --db-url (container)")
+    if args.db_url is not None and args.output_dir is None:
+        parser.error("--db-url requires --output-dir")
     try:
-        snapshot = pre_upgrade_dump(args.data_dir, bin_dir=args.bin_dir)
+        if args.db_url is not None:
+            assert args.output_dir is not None  # parser-enforced
+            if args.skip_if_pristine and _database_is_pristine(args.db_url):
+                print("Fresh database (no application tables) — no pre-upgrade snapshot needed.", file=sys.stderr)  # noqa: T201
+                return 0
+            snapshot = take_upgrade_snapshot(args.db_url, args.output_dir, release=args.release, bin_dir=args.bin_dir)
+        else:
+            assert args.data_dir is not None  # parser-enforced
+            snapshot = pre_upgrade_dump(args.data_dir, bin_dir=args.bin_dir, release=args.release)
     except UpgradeError as exc:
-        # Actionable installer-abort text: never a bare traceback.
+        # Actionable installer/entrypoint abort text: never a bare traceback.
         print(f"ERROR: {exc}", file=sys.stderr)  # noqa: T201
         return 1
-    # The installer captures the FINAL stdout line as the snapshot path.
+    # The installer/entrypoint captures the FINAL stdout line as the snapshot path.
     print(snapshot.directory)  # noqa: T201
     return 0
 
@@ -1401,6 +1760,7 @@ def _run_upgrade_preflight(
     bundle_dir: Path,
     release_manifest: ReleaseManifest,
     tarball: Path,
+    version: str,
 ) -> Path | None:
     """Pre-flight refusals + the enforced dump; returns the snapshot dir.
 
@@ -1415,7 +1775,7 @@ def _run_upgrade_preflight(
         db_heads = _alembic_heads()
         snapshot_dir: Path | None = None
     else:
-        snapshot = pre_upgrade_dump(data_dir, bin_dir=_prior_pg_bin(reserve_target))
+        snapshot = pre_upgrade_dump(data_dir, bin_dir=_prior_pg_bin(reserve_target), release=version)
         snapshot_dir = snapshot.directory
         db_heads = _snapshot_schema_versions(snapshot_dir)
     check_no_downgrade(db_heads, snapshot_dir, bundle_dir)
@@ -1501,6 +1861,7 @@ def perform_upgrade(
             bundle_dir=bundle_dir,
             release_manifest=release_manifest,
             tarball=tarball,
+            version=version,
         )
 
         # -- The DESTRUCTIVE phase (stages 4-8) ---------------------------

@@ -159,6 +159,26 @@ Once that returns 200, open [http://localhost](http://localhost).
 - Stop: `docker compose down`
 - Stop and delete all data: `docker compose down -v`
 
+## Upgrades and recovery
+
+`docker compose up -d` with a new `TAG` runs the migrations. BEFORE they run,
+the container takes a verified `pg_dump` snapshot of the database into
+`./backups` (the `backups/` directory beside this file, mounted at `/backups`)
+and prints its path. The two most recent verified snapshots are kept.
+
+If the new release fails after migrating, restore the snapshot and start the
+previous release:
+
+```bash
+./compose-restore.sh /backups/<snapshot-printed-by-the-upgrade>
+TAG=<previous-version> docker compose up -d modulo
+```
+
+`compose-restore.sh` stops the application, verifies the snapshot's manifest
+and checksums, refuses a corrupt or mismatched dump, restores the database,
+and leaves everything stopped so you choose when to start. It never restarts
+the stack for you.
+
 ## Integrity Verification
 
 Every shipped file is listed in `SHA256SUMS`:
@@ -317,6 +337,13 @@ def build_compose_release(
     # Generate quickstart instructions
     quickstart_content = generate_quickstart_md(clean_version, valid_tag)
 
+    # FAR-2667: the documented recovery command ships WITH the artifact, so a
+    # failed upgrade never depends on the operator reconstructing a
+    # `docker compose run` invocation from documentation.
+    restore_helper = repo_root / "scripts" / "compose-restore.sh"
+    if not restore_helper.is_file():
+        raise FileNotFoundError(f"Compose restore helper not found: {restore_helper}")
+
     # Prepare file bytes map for tarball
     files_to_pack: dict[str, bytes] = {
         _COMPOSE_FILENAME: compose_transformed.encode("utf-8"),
@@ -324,10 +351,11 @@ def build_compose_release(
         ".env.example": env_content.encode("utf-8"),
         "quickstart.md": quickstart_content.encode("utf-8"),
         "init-env.sh": _INIT_ENV_SH.encode("utf-8"),
+        "compose-restore.sh": restore_helper.read_bytes(),
     }
-    # `init-env.sh` is meant to be executed by the operator, so it ships 0755;
+    # These two are meant to be executed by the operator, so they ship 0755;
     # everything else is read-only data.
-    executable = frozenset({"init-env.sh"})
+    executable = frozenset({"init-env.sh", "compose-restore.sh"})
 
     # Compute SHA256SUMS over the files
     sums_lines: list[str] = []

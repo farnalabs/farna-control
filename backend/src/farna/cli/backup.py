@@ -299,6 +299,34 @@ def _run_pg_dump(raw_url: str, output: Path, timeout: int = 300) -> None:
         raise RuntimeError(f"pg_dump timed out after {timeout}s") from exc
     if result.returncode != 0:
         raise RuntimeError(f"pg_dump failed: {result.stderr.decode(errors='replace').strip()}")
+    # FAR-2667: a zero exit is not proof the dump is usable, and a client
+    # NEWER than the server writes preamble settings the server rejects. Both
+    # checks run here, at dump time, so the archived artifact is complete and
+    # replayable instead of being discovered during a recovery.
+    from farna.db import plain_dump
+
+    try:
+        removed = plain_dump.strip_unsupported_preamble_settings(output, plain_dump.server_guc_names(raw_url))
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if removed:
+        _log.warning("backup.dump_preamble_settings_dropped settings=%s", ",".join(removed))
+    assert_plain_dump_complete(output)
+
+
+def assert_plain_dump_complete(dump_path: Path) -> None:
+    """Refuse a dump that is truncated, empty, or not plain SQL (FAR-2667).
+
+    Delegates to :mod:`farna.db.plain_dump` — the ONE implementation the
+    pre-upgrade snapshot path also uses, so the two producers cannot disagree
+    on what "complete" means.
+    """
+    from farna.db import plain_dump
+
+    try:
+        plain_dump.assert_complete(dump_path)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
@@ -322,17 +350,18 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
         raise RuntimeError(f"psql restore failed: {result.stderr.decode(errors='replace').strip()}")
 
 
-def _take_safety_dump(raw_url: str, timeout: int = 300) -> Path | None:
+def _take_safety_dump(raw_url: str, timeout: int = 300, output_dir: Path | None = None) -> Path | None:
     """pg_dump the CURRENT target before it is wiped (restore safety net).
 
     A mid-import psql failure must leave the pre-restore cluster restorable:
-    the dump lands in a private-mode sibling directory and its path is
-    reported. Any dump failure refuses the restore (the operator may pass
-    --no-safety-dump explicitly to proceed without one). The ONLY tolerated
-    degradation is pg_dump not being installed at all — in which case a loud
-    warning is issued and the restore continues bare-backed: psql needs the
-    dump replayed anyway, so a pg_dump-less machine's restore dies on the
-    very next step without ever touching the database.
+    the dump lands in a private-mode directory under *output_dir* (default:
+    the current directory) and its path is reported. Any dump failure refuses
+    the restore (the operator may pass --no-safety-dump explicitly to proceed
+    without one). The ONLY tolerated degradation is pg_dump not being
+    installed at all — in which case a loud warning is issued and the restore
+    continues bare-backed: psql needs the dump replayed anyway, so a
+    pg_dump-less machine's restore dies on the very next step without ever
+    touching the database.
     """
     if shutil.which("pg_dump") is None:
         click.echo(
@@ -341,11 +370,13 @@ def _take_safety_dump(raw_url: str, timeout: int = 300) -> Path | None:
         )
         return None
     ts = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    base = output_dir if output_dir is not None else Path()
+    base.mkdir(parents=True, exist_ok=True)
     suffix = random.randint(1000, 9999)  # nosec B311 -- not crypto, just avoiding a directory-name collision  # noqa: S311
-    safety_dir = Path(f"./{_SAFETY_DUMP_PREFIX}{ts}-{suffix}")
+    safety_dir = base / f"{_SAFETY_DUMP_PREFIX}{ts}-{suffix}"
     while safety_dir.exists():
         suffix = random.randint(1000, 9999)  # nosec B311 -- not crypto, just avoiding a directory-name collision  # noqa: S311
-        safety_dir = Path(f"./{_SAFETY_DUMP_PREFIX}{ts}-{suffix}")
+        safety_dir = base / f"{_SAFETY_DUMP_PREFIX}{ts}-{suffix}"
     try:
         safety_dir.mkdir()
         _run_pg_dump(raw_url, safety_dir / _DB_SQL_FILE, timeout=timeout)
@@ -617,6 +648,55 @@ def _acquire_data_lock(data_dir: Path, *, mode: str) -> Any:
     except DataDirLockError as exc:
         raise click.ClickException(str(exc)) from exc
     return lock
+
+
+def _stop_launcher_writers(data_dir: Path) -> bool:
+    """Stop a LIVE launcher so the restore owns the database (FAR-2667).
+
+    Returns True when a running launcher was stopped. Nothing to stop is a
+    no-op (the data-dir lock acquired next is the authority on whether a
+    writer remains). On a platform without the verified-liveness seam the
+    holder is not signalled — the lock acquisition refuses loudly instead.
+    """
+    from farna.launcher.supervisor import _read_lock_holder
+
+    holder = _read_lock_holder(data_dir.parent / (data_dir.name + ".lock"))
+    if holder is None or os.name != "posix":
+        return False
+    from farna.launcher.upgrade import UpgradeError, _pid_alive, stop_running_stack
+
+    if not _pid_alive(holder.pid):
+        return False  # stale record: the kernel released the flock when it died
+    click.echo(f"Stopping the running launcher (holder PID {holder.pid}) before the restore...")
+    try:
+        stop_running_stack(data_dir)
+    except UpgradeError as exc:
+        raise click.ClickException(f"Refusing to restore: the launcher for {data_dir} is still running after a stop request — {exc}") from exc
+    except Exception as exc:  # LauncherError, or a platform without the stop seam
+        raise click.ClickException(f"Refusing to restore: the running launcher for {data_dir} (holder PID {holder.pid}) cannot be stopped from here ({exc}). Stop it first: farna-control stop --data-dir {data_dir}") from exc
+    click.echo("  Launcher stopped. It stays stopped until you start it again.")
+    return True
+
+
+def _start_command(opts: _RestoreOptions) -> str:
+    """The exact command that starts the restored release (never run here)."""
+    if opts.data_dir is not None:
+        return f"farna-control start --data-dir {opts.data_dir}"
+    return "docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo"
+
+
+def _print_start_guidance(opts: _RestoreOptions, *, stopped: bool) -> None:
+    """Print the exact start command; NEVER start anything (FAR-2667 item 5).
+
+    An automatic restart would hand a half-verified database to an app that
+    then refuses to boot; the operator starts it deliberately.
+    """
+    click.echo("")
+    if stopped:
+        click.echo("The launcher was stopped for the restore and is still stopped.")
+    click.echo("Writers stay stopped. Start the restored release with:")
+    click.echo(f"  {_start_command(opts)}")
+    click.echo("No automatic restart was performed.")
 
 
 def _read_state_mac(state_path: Path) -> str | None:
@@ -1321,6 +1401,7 @@ class _RestoreOptions:
     data_dir: Path | None
     replace_cluster: bool
     no_safety_dump: bool
+    safety_dump_dir: Path | None = None
 
 
 def _run_restore(opts: _RestoreOptions) -> None:
@@ -1329,14 +1410,17 @@ def _run_restore(opts: _RestoreOptions) -> None:
     Both connection URLs are resolved first (the target from ``--db-url`` /
     settings, the APP role from ``--app-db-url`` / ``DATABASE_URL``), so a
     configuration typo fails BEFORE anything destructive happens. Then, in
-    order: validate targets (verify-before-wipe checks, then the --dry-run
-    preview short-circuit), the pre-restore safety dump, the database-cluster
-    restore (SQL dump, checkpoint JSON exports, credential re-encryption,
-    collation drift check), launcher data-dir adoption, and the promoted
-    bootstrap role-posture re-run. The app role is never derived from the
-    restore target URL, and a posture failure FAILS the restore. Any failure
-    is logged, echoed, and re-raised as a ClickException; a data-dir lock
-    taken before the phases is always released.
+    order: stop the writers (a live launcher is stopped here, never left for
+    the operator to remember), validate targets (verify-before-wipe checks,
+    then the --dry-run preview short-circuit), the pre-restore safety dump,
+    the database-cluster restore (SQL dump, checkpoint JSON exports,
+    credential re-encryption, collation drift check), launcher data-dir
+    adoption, and the promoted bootstrap role-posture re-run. The app role is
+    never derived from the restore target URL, and a posture failure FAILS
+    the restore. Any failure is logged, echoed, and re-raised as a
+    ClickException; a data-dir lock taken before the phases is always
+    released. On success the exact START command is printed and nothing is
+    auto-restarted.
     """
     raw_url = _resolve_url(opts.db_url)
     settings = get_settings()
@@ -1357,7 +1441,12 @@ def _run_restore(opts: _RestoreOptions) -> None:
     click.echo(f"Schema versions: {', '.join(manifest.get('schema_versions', ['unknown']))}")
 
     lock = None
+    stopped = False
     if opts.data_dir is not None:
+        # FAR-2667 item 5: restore STOPS the writers itself (it never asks the
+        # operator to remember a stop) and leaves them stopped. Taking the
+        # data-dir lock afterwards is what proves they really are gone.
+        stopped = _stop_launcher_writers(opts.data_dir)
         # Restore-while-running refuses BEFORE anything is verified as
         # writable, let alone wiped (ADR 031 data-dir lock contract).
         lock = _acquire_data_lock(opts.data_dir, mode="restore")
@@ -1374,6 +1463,7 @@ def _run_restore(opts: _RestoreOptions) -> None:
         _ensure_restore_posture(admin_url, app_url)
 
         click.echo("\nRestore complete.")
+        _print_start_guidance(opts, stopped=stopped)
     except click.ClickException:
         # Already a user-facing failure (including RestorePostureError) with
         # its own remediation message and non-zero exit — do not re-wrap it.
@@ -1393,9 +1483,9 @@ def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: 
 
     Runs the instance-identity check (when a data dir is in play), the disk
     pre-flight, the overwrite confirmation prompt, the archive checksum and
-    JSON-export integrity checks, and — after the --dry-run preview
-    short-circuit — the schema-downgrade guard and the populated-database /
-    ``--replace-cluster`` guard.
+    JSON-export integrity checks, the dump-integrity gate (FAR-2667), and —
+    after the --dry-run preview short-circuit — the schema-downgrade guard
+    and the populated-database / ``--replace-cluster`` guard.
 
     Returns False when a --dry-run preview was emitted (the caller must
     stop); True when the restore may proceed to mutation.
@@ -1413,6 +1503,8 @@ def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: 
         click.echo("Verifying backup file integrity...")
         _verify_file_checksums(opts.backup_dir, checksums)
         click.echo("  All file checksums verified")
+
+    _validate_dump_integrity(opts.backup_dir, manifest)
 
     _verify_json_exports(opts.backup_dir)
 
@@ -1464,6 +1556,40 @@ def _verify_json_exports(backup_dir: Path) -> None:
                 raise click.ClickException(f"Corrupt JSON file {json_name}: {exc}") from exc
 
 
+def _validate_dump_integrity(backup_dir: Path, manifest: dict[str, Any]) -> None:
+    """Refuse a corrupt or foreign dump BEFORE the target is wiped (FAR-2667).
+
+    Two gates, both fail-closed:
+
+    1. **Coverage.** If ``database.sql`` exists, the manifest MUST record a
+       checksum for it. Without one nothing proves this dump belongs to this
+       archive, so a foreign or hand-assembled directory is refused rather
+       than replayed over the live database.
+    2. **Completeness.** When the manifest ATTESTED completeness at dump time
+       (``dump_complete``), re-verify pg_dump's completion trailer now: a file
+       truncated after the manifest was written is caught even if the
+       checksum was regenerated. Archives written before this attestation
+       existed are verified by checksum alone, with a loud warning — they
+       cannot prove more than that.
+    """
+    dump_path = backup_dir / _DB_SQL_FILE
+    if not dump_path.exists():
+        return
+    checksums = manifest.get("file_checksums")
+    if not isinstance(checksums, dict) or not isinstance(checksums.get(_DB_SQL_FILE), str):
+        raise click.ClickException(f"{_DB_SQL_FILE} is present but {_BACKUP_INFO_FILE} records no checksum for it — this archive cannot be proven intact, so it is refused. Restore a complete archive written by `farna-control backup` (or the snapshot an upgrade printed).")
+    if manifest.get("dump_complete") is True:
+        try:
+            assert_plain_dump_complete(dump_path)
+        except RuntimeError as exc:
+            raise click.ClickException(f"Refusing to restore: {exc}. The archive is corrupt — restore a complete snapshot.") from exc
+        return
+    click.echo(
+        "WARNING: this archive predates dump-completion attestation — only its checksum can be verified, so a dump truncated before the checksum was taken cannot be detected. Re-take the snapshot with this release if the recovery matters.",
+        err=True,
+    )
+
+
 def _safety_dump(opts: _RestoreOptions, raw_url: str) -> None:
     """Pre-restore safety dump of the TARGET, taken before anything is wiped.
 
@@ -1476,7 +1602,7 @@ def _safety_dump(opts: _RestoreOptions, raw_url: str) -> None:
     """
     if opts.no_safety_dump or not (opts.backup_dir / _DB_SQL_FILE).exists():
         return
-    _take_safety_dump(raw_url)
+    _take_safety_dump(raw_url, output_dir=opts.safety_dump_dir)
 
 
 def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, settings: Any) -> None:
@@ -1717,6 +1843,11 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
             "fernet_key_hash": _fernet_key_hash(settings.fernet_key),
             "file_checksums": {**file_checksums, **ride_along_checksums},
             "launcher_snapshot": launcher_section,
+            # FAR-2667: `_run_pg_dump` proved the completion trailer before
+            # this manifest was written, so restore can re-verify the dump is
+            # whole instead of trusting the checksum alone.
+            "dump_format": "plain",
+            "dump_complete": True,
         }
         _write_json(backup_dir / _BACKUP_INFO_FILE, manifest)
         click.echo("  backup-info.json written")
@@ -1792,6 +1923,12 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
     default=False,
     help=("Skip the automatic pre-restore safety dump of the TARGET. LOUD: without it, a mid-import failure would otherwise abort out of a half-dropped database."),
 )
+@click.option(
+    "--safety-dump-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help=("Directory to write the pre-restore safety dump into (default: the current directory). Set it to a persistent path when restore runs in a disposable container."),
+)
 def restore(
     backup_dir: Path,
     db_url: str | None,
@@ -1802,6 +1939,7 @@ def restore(
     data_dir: Path | None,
     replace_cluster: bool,
     no_safety_dump: bool,
+    safety_dump_dir: Path | None,
 ) -> None:
     """Restore a Farna Control database from a backup directory.
 
@@ -1818,9 +1956,13 @@ def restore(
     (non-zero exit naming the check), because a restored cluster whose app
     role can still bypass RLS must not be reported as complete. Incompatible
     collation families REFUSE the restore; same-family drift warns and
-    proceeds. With --dry-run, validates integrity and previews every step
-    without touching the database. Against a launcher data dir, takes the
-    exclusive lock (a still running launcher refuses with its holder PID).
+    proceeds. A corrupt or foreign dump is refused BEFORE the wipe: the
+    manifest must checksum ``database.sql``, and an archive that attested
+    dump-time completeness is re-verified now. With --dry-run, validates
+    integrity and previews every step without touching the database. Against
+    a launcher data dir, STOPS a running launcher itself, takes the exclusive
+    lock, and leaves the stack stopped: on success it prints the exact start
+    command and never auto-restarts.
     """
     _run_restore(
         _RestoreOptions(
@@ -1833,6 +1975,7 @@ def restore(
             data_dir=data_dir,
             replace_cluster=replace_cluster,
             no_safety_dump=no_safety_dump,
+            safety_dump_dir=safety_dump_dir,
         )
     )
 

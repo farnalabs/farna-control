@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import uuid
@@ -12,8 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-from psycopg.types.json import Jsonb
-
 from farna.cli.backup import (
     _db_has_modulo_tables,
     _export_checkpoint_blobs_sync,
@@ -34,8 +33,68 @@ from farna.cli.backup import (
     _write_json,
     cli,
 )
+from psycopg.types.json import Jsonb
 
 _TEST_APP_DB_URL = "postgresql+asyncpg://modulo:pw@127.0.0.1:5432/farna_control"
+
+#: A COMPLETE plain pg_dump: the completion trailer is what proves the dump
+#: finished (FAR-2667). Fixtures write this instead of an arbitrary string so
+#: they model an archive the real producer emits.
+_COMPLETE_DUMP = b"-- SQL dump\n-- PostgreSQL database dump complete\n"
+
+#: A dump whose write was cut short: no completion trailer.
+_TRUNCATED_DUMP = b"-- SQL dump\nCREATE TABLE t (id int);\n"
+
+
+def _complete_dump_run(argv: list[str], **kwargs: Any) -> MagicMock:
+    """A fake pg_dump that streams a COMPLETE dump to the open file handle."""
+    stdout = kwargs.get("stdout")
+    if stdout is not None:
+        stdout.write(_COMPLETE_DUMP)
+    return MagicMock(returncode=0, stderr=b"")
+
+
+def _truncated_dump_run(argv: list[str], **kwargs: Any) -> MagicMock:
+    """A fake pg_dump that exits 0 after writing only part of the dump."""
+    stdout = kwargs.get("stdout")
+    if stdout is not None:
+        stdout.write(_TRUNCATED_DUMP)
+    return MagicMock(returncode=0, stderr=b"")
+
+
+@pytest.fixture(autouse=True)
+def _pin_server_gucs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the target server's GUC list: these tests never touch a database.
+
+    `transaction_timeout` is deliberately ABSENT so a fixture dump that
+    contains it exercises the compatibility rewrite.
+    """
+    from farna.db import plain_dump
+
+    monkeypatch.setattr(
+        plain_dump,
+        "server_guc_names",
+        lambda _url, **_kwargs: {"statement_timeout", "lock_timeout", "client_encoding", "row_security"},
+    )
+
+
+def _write_restorable_dump(archive: Path, *, content: bytes = _COMPLETE_DUMP) -> None:
+    """Write database.sql and record its checksum in the archive's manifest.
+
+    FAR-2667 makes restore refuse a dump the manifest records no checksum for
+    (a foreign or hand-assembled archive), so every restorable fixture must
+    cover its own dump — exactly as `farna-control backup` does.
+    """
+    (archive / "database.sql").write_bytes(content)
+    manifest_path = archive / "backup-info.json"
+    if not manifest_path.exists():
+        # The test writes the manifest itself afterwards (it supplies its own
+        # checksum map), so leave the ordering to it.
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.setdefault("file_checksums", {})["database.sql"] = hashlib.sha256(content).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
 
 # ── _resolve_url ──────────────────────────────────────────────────────────────
 
@@ -242,9 +301,7 @@ class TestRunPgDump:
     @patch("farna.cli.backup.subprocess.run")
     def test_success(self, mock_run: MagicMock, mock_which: MagicMock, tmp_path: Path) -> None:
         mock_which.return_value = "pg_dump"
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        mock_run.return_value = mock_process
+        mock_run.side_effect = _complete_dump_run
 
         output = tmp_path / "dump.sql"
         _run_pg_dump("postgresql://user:pass@localhost/db", output)
@@ -259,6 +316,41 @@ class TestRunPgDump:
         assert "--format=plain" in cmd
         assert output.name in str(mock_run.call_args[1]["stdout"])
         assert mock_run.call_args[1]["timeout"] == 300
+
+    @patch.object(shutil, "which")
+    @patch("farna.cli.backup.subprocess.run")
+    def test_truncated_dump_is_refused(self, mock_run: MagicMock, mock_which: MagicMock, tmp_path: Path) -> None:
+        """FAR-2667: a zero exit is not proof of a complete dump. A file with no
+        pg_dump completion trailer is refused at dump time."""
+        mock_which.return_value = "pg_dump"
+        mock_run.side_effect = _truncated_dump_run
+
+        output = tmp_path / "dump.sql"
+        with pytest.raises(RuntimeError, match="INCOMPLETE"):
+            _run_pg_dump("postgresql://user:pass@localhost/db", output)
+
+    @patch.object(shutil, "which")
+    @patch("farna.cli.backup.subprocess.run")
+    def test_preamble_settings_the_server_lacks_are_dropped(self, mock_run: MagicMock, mock_which: MagicMock, tmp_path: Path) -> None:
+        """A client NEWER than the server writes GUCs the server rejects; the
+        dump must be replayable by the release that took it (observed: pg_dump
+        17 writes ``SET transaction_timeout``, PostgreSQL 16 refuses it)."""
+        mock_which.return_value = "pg_dump"
+
+        def _run(argv: list[str], **kwargs: Any) -> MagicMock:
+            stdout = kwargs.get("stdout")
+            if stdout is not None:
+                stdout.write(b"--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\nSET transaction_timeout = 0;\nSET client_encoding = 'UTF8';\n\nSELECT 1;\n--\n-- PostgreSQL database dump complete\n\n")
+            return MagicMock(returncode=0, stderr=b"")
+
+        mock_run.side_effect = _run
+        output = tmp_path / "dump.sql"
+        _run_pg_dump("postgresql://user:pass@localhost/db", output)
+        text = output.read_text(encoding="utf-8")
+        assert "transaction_timeout" not in text
+        assert "SET statement_timeout = 0;" in text
+        assert "SELECT 1;" in text
+        assert "-- PostgreSQL database dump complete" in text
 
     @patch.object(shutil, "which")
     @patch("farna.cli.backup.subprocess.run")
@@ -277,9 +369,7 @@ class TestRunPgDump:
     @patch("farna.cli.backup.subprocess.run")
     def test_custom_timeout(self, mock_run: MagicMock, mock_which: MagicMock, tmp_path: Path) -> None:
         mock_which.return_value = "pg_dump"
-        mock_process = MagicMock()
-        mock_process.returncode = 0
-        mock_run.return_value = mock_process
+        mock_run.side_effect = _complete_dump_run
 
         output = tmp_path / "dump.sql"
         _run_pg_dump("postgresql://user:pass@localhost/db", output, timeout=600)
@@ -1371,7 +1461,7 @@ class TestRestoreCli:
             "fernet_key_hash": _fernet_key_hash(fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL dump", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoint_blobs.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
@@ -1472,7 +1562,7 @@ class TestRestoreCli:
             "fernet_key_hash": _fernet_key_hash(old_fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
         (tmp_path / "credentials_references.json").write_text('{"connector_instances": []}', encoding="utf-8")
@@ -1518,7 +1608,7 @@ class TestRestoreCli:
             "fernet_key_hash": _fernet_key_hash(old_fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
         (tmp_path / "credentials_references.json").write_text('{"connector_instances": [], "model_backends": []}', encoding="utf-8")
@@ -1577,7 +1667,7 @@ class TestRestoreCli:
             "fernet_key_hash": _fernet_key_hash(fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
         (tmp_path / "credentials_references.json").write_text('{"connector_instances": []}', encoding="utf-8")
@@ -1622,7 +1712,7 @@ class TestRestoreCli:
             "fernet_key_hash": _fernet_key_hash(fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
 
@@ -1679,7 +1769,7 @@ class TestRestoreCli:
             "fernet_key_hash": _fernet_key_hash(old_fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
 
@@ -1812,7 +1902,7 @@ class TestRestoreIntegrity:
         mock_settings.return_value.fernet_key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         mock_settings.return_value.database_url = _TEST_APP_DB_URL
 
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         manifest = {
             "timestamp": "2024-01-01T00:00:00+00:00",
             "backup_type": "full",
@@ -1839,7 +1929,7 @@ class TestRestoreIntegrity:
     @patch("farna.cli.backup._restore_checkpoint_blobs_sync")
     @patch("farna.cli.backup._run_psql")
     @patch("farna.cli.backup.get_settings")
-    def test_restore_skips_checksums_when_not_in_manifest(
+    def test_restore_refuses_a_dump_the_manifest_does_not_cover(
         self,
         mock_settings: MagicMock,
         mock_psql: MagicMock,
@@ -1850,6 +1940,9 @@ class TestRestoreIntegrity:
         mock_safety_dump: MagicMock,
         tmp_path: Path,
     ) -> None:
+        """FAR-2667: a manifest with no checksum for database.sql cannot prove
+        this dump belongs to this archive — a FOREIGN archive is refused
+        BEFORE the wipe, never replayed over the live database."""
         fernet_key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         mock_settings.return_value.fernet_key = fernet_key
         mock_settings.return_value.database_url = _TEST_APP_DB_URL
@@ -1863,16 +1956,14 @@ class TestRestoreIntegrity:
             "fernet_key_hash": _fernet_key_hash(fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
-        (tmp_path / "checkpoints.json").write_text("[]", encoding="utf-8")
-        (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
-        (tmp_path / "credentials_references.json").write_text('{"connector_instances": [], "model_backends": []}', encoding="utf-8")
+        (tmp_path / "database.sql").write_bytes(_COMPLETE_DUMP)
 
         runner = CliRunner()
         result = runner.invoke(cli, ["restore", str(tmp_path), "--yes"])
 
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "All file checksums verified" not in result.output
+        assert result.exit_code != 0
+        assert "records no checksum for it" in result.output
+        mock_psql.assert_not_called()
 
     @patch("farna.cli.backup._restore_checkpoint_writes_sync")
     @patch("farna.cli.backup._restore_checkpoints_sync")
@@ -1900,7 +1991,7 @@ class TestRestoreIntegrity:
             "fernet_key_hash": _fernet_key_hash(fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoints.json").write_text("{bad json}", encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
         (tmp_path / "credentials_references.json").write_text('{"connector_instances": [], "model_backends": []}', encoding="utf-8")
@@ -1939,7 +2030,7 @@ class TestRestoreIntegrity:
             "fernet_key_hash": _fernet_key_hash(fernet_key),
         }
         (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-        (tmp_path / "database.sql").write_text("-- SQL dump", encoding="utf-8")
+        _write_restorable_dump(tmp_path)
         (tmp_path / "checkpoint_blobs.json").write_text(json.dumps([{"id": "b1"}, {"id": "b2"}]), encoding="utf-8")
         (tmp_path / "checkpoints.json").write_text(json.dumps([{"id": "c1"}]), encoding="utf-8")
         (tmp_path / "checkpoint_writes.json").write_text(json.dumps([]), encoding="utf-8")
@@ -2159,6 +2250,151 @@ class TestRestoreIntegrity:
 
 
 # ── _restore_checkpoints_sync: invalid UUID handling ──────────────────────────
+
+
+class TestRestoreDumpIntegrity:
+    """FAR-2667: a corrupt or foreign dump is refused BEFORE the wipe, and the
+    restored cluster is left stopped with the exact start command printed."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_posture_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("farna.cli.backup._ensure_restore_posture", lambda *_args, **_kwargs: None)
+
+    def _archive(self, tmp_path: Path, dump: bytes, *, attested: bool = True) -> None:
+        manifest = {
+            "timestamp": "2024-01-01T00:00:00+00:00",
+            "backup_type": "full",
+            "schema_versions": [],
+            "file_checksums": {"database.sql": hashlib.sha256(dump).hexdigest()},
+        }
+        if attested:
+            manifest["dump_complete"] = True
+            manifest["dump_format"] = "plain"
+        (tmp_path / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (tmp_path / "database.sql").write_bytes(dump)
+
+    def test_refuses_a_truncated_dump_even_when_the_checksum_matches(self, tmp_path: Path) -> None:
+        """The checksum proves the bytes are the ones the manifest describes; the
+        completion trailer proves those bytes are a WHOLE dump. Both must hold."""
+        truncated = b"-- dump\nCREATE TABLE t (id int);\n"
+        self._archive(tmp_path, truncated, attested=True)
+        with (
+            patch("farna.cli.backup._run_psql") as psql,
+            patch("farna.cli.backup.get_settings", **{"return_value.fernet_key": "a" * 32, "return_value.database_url": _TEST_APP_DB_URL}),
+        ):
+            result = CliRunner().invoke(cli, ["restore", str(tmp_path), "--yes"])
+        assert result.exit_code != 0
+        assert "INCOMPLETE" in result.output
+        psql.assert_not_called()
+
+    def test_refuses_a_custom_format_archive_by_name(self, tmp_path: Path) -> None:
+        self._archive(tmp_path, b"PGDMP" + b"\x00" * 64, attested=True)
+        with (
+            patch("farna.cli.backup._run_psql") as psql,
+            patch("farna.cli.backup.get_settings", **{"return_value.fernet_key": "a" * 32, "return_value.database_url": _TEST_APP_DB_URL}),
+        ):
+            result = CliRunner().invoke(cli, ["restore", str(tmp_path), "--yes"])
+        assert result.exit_code != 0
+        assert "CUSTOM-format" in result.output
+        psql.assert_not_called()
+
+    def test_warns_when_the_archive_predates_completeness_attestation(self, tmp_path: Path) -> None:
+        """An older archive can only be checksum-verified; say so loudly rather
+        than implying a proof that does not exist."""
+        self._archive(tmp_path, b"-- dump\n", attested=False)
+        with (
+            patch("farna.cli.backup._run_psql"),
+            patch("farna.cli.backup._take_safety_dump", return_value=Path("fake")),
+            patch("farna.cli.backup._get_schema_versions", return_value=[]),
+            patch("farna.cli.backup._db_has_modulo_tables", return_value=False),
+            patch("farna.cli.backup.get_settings", **{"return_value.fernet_key": "a" * 32, "return_value.database_url": _TEST_APP_DB_URL}),
+        ):
+            result = CliRunner().invoke(cli, ["restore", str(tmp_path), "--yes"])
+        assert "predates dump-completion attestation" in result.output
+
+
+class TestRestoreStartGuidance:
+    """FAR-2667 item 5: restore stops the writers itself and leaves them
+    stopped, printing the exact start command and never auto-restarting."""
+
+    def _options(self, *, data_dir: Path | None) -> Any:
+        from farna.cli.backup import _RestoreOptions
+
+        return _RestoreOptions(
+            backup_dir=Path("archive"),
+            db_url=None,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+
+    def test_native_start_command_names_the_data_dir(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        from farna.cli.backup import _print_start_guidance
+
+        _print_start_guidance(self._options(data_dir=tmp_path / "data"), stopped=True)
+        out = capsys.readouterr().out
+        assert f"farna-control start --data-dir {tmp_path / 'data'}" in out
+        assert "still stopped" in out
+        assert "No automatic restart was performed" in out
+
+    def test_container_start_command_is_the_compose_up(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from farna.cli.backup import _print_start_guidance
+
+        _print_start_guidance(self._options(data_dir=None), stopped=False)
+        out = capsys.readouterr().out
+        assert "docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo" in out
+        assert "No automatic restart was performed" in out
+
+    def test_stop_writers_is_a_no_op_without_a_live_holder(self, tmp_path: Path) -> None:
+        from farna.cli.backup import _stop_launcher_writers
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        assert _stop_launcher_writers(data_dir) is False
+
+    def test_stop_writers_refuses_when_the_launcher_survives(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import click
+        from farna.cli import backup as backup_mod
+        from farna.launcher import upgrade as upgrade_module
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (tmp_path / "data.lock").write_text(json.dumps({"pid": 4242, "mode": "serve"}), encoding="utf-8")
+        monkeypatch.setattr(backup_mod.os, "name", "posix")
+
+        def _still_running(_data_dir: Path, **_kwargs: Any) -> None:
+            raise upgrade_module.UpgradeError("still locked by holder PID 4242")
+
+        monkeypatch.setattr(upgrade_module, "_pid_alive", lambda _pid: True)
+        monkeypatch.setattr(upgrade_module, "stop_running_stack", _still_running)
+        with pytest.raises(click.ClickException, match="still running"):
+            backup_mod._stop_launcher_writers(data_dir)
+
+    def test_stop_writers_stops_a_live_launcher(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from farna.cli import backup as backup_mod
+        from farna.launcher import upgrade as upgrade_module
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (tmp_path / "data.lock").write_text(json.dumps({"pid": 4242, "mode": "serve"}), encoding="utf-8")
+        monkeypatch.setattr(backup_mod.os, "name", "posix")
+        stopped: list[Path] = []
+        monkeypatch.setattr(upgrade_module, "_pid_alive", lambda _pid: True)
+        monkeypatch.setattr(upgrade_module, "stop_running_stack", lambda data_dir, **kwargs: stopped.append(data_dir))
+        assert backup_mod._stop_launcher_writers(data_dir) is True
+        assert stopped == [data_dir]
 
 
 class TestRestoreCheckpointsSyncErrorPaths:

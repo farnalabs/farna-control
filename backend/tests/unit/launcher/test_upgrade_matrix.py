@@ -33,13 +33,13 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
-
 from farna.launcher import upgrade as upgrade_module
 from farna.launcher.doctor import (
     EXIT_HEALTHY,
     DoctorProbes,
     run_doctor,
 )
+
 from tests.unit.launcher.test_launcher_shared import (
     _UPGRADE_SIGNING_KEY_HEX,
     _upgrade_fetch_seam,
@@ -65,23 +65,26 @@ def _boot_strap_matrix(tmp_path: Any, monkeypatch: Any, *, recorded_heads: list[
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _b: {"3ab2c1d"})
     counter = {"n": 0}
 
-    def dump(data_dir: Any, *, bin_dir: Any = None) -> Any:
+    def dump(data_dir: Any, *, bin_dir: Any = None, output_dir: Any = None, release: Any = None) -> Any:
         counter["n"] += 1
         import json as json_module
 
-        from farna.launcher.upgrade import PreUpgradeSnapshot
+        from farna.launcher.upgrade import SnapshotRef
 
+        payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
         snapshot_dir = data_dir / f"pre-upgrade-dump-fake-{counter['n']}"
         snapshot_dir.mkdir()
-        (snapshot_dir / "database.sql").write_bytes(b"-- the enforced dump\n")
+        (snapshot_dir / "database.sql").write_bytes(payload)
         (snapshot_dir / "backup-info.json").write_text(
             json_module.dumps({"schema_versions": recorded_heads or ["3ab2c1d"]}),
             encoding="utf-8",
         )
-        return PreUpgradeSnapshot(
+        return SnapshotRef(
             directory=snapshot_dir,
             dump_path=snapshot_dir / "database.sql",
-            bytes=19,
+            checksum="0" * 64,
+            bytes=len(payload),
+            schema_heads=list(recorded_heads or ["3ab2c1d"]),
             created_at="fake-dump-epoch",
         )
 

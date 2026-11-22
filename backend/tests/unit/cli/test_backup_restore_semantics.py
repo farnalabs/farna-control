@@ -13,6 +13,7 @@ the collation drift warning, and the promoted bootstrap posture re-run.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -24,11 +25,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlsplit
 
 import click
+import farna.cli.backup as backup_mod
 import pytest
 from click.testing import CliRunner
-from psycopg.types.json import Jsonb
-
-import farna.cli.backup as backup_mod
 from farna.cli.backup import (
     MANIFEST_VERSION,
     RestorePostureError,
@@ -38,6 +37,7 @@ from farna.cli.backup import (
     cli,
 )
 from farna.launcher.state import LauncherState, load_state, save_state
+from psycopg.types.json import Jsonb
 
 _FERNET_KEY = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _RESTORE_OUTPUTS = "restore-outputs"
@@ -48,8 +48,23 @@ _APP_DB_URL = "postgresql://farna_control_app:pw@127.0.0.1:5432/farna_control"
 
 _FAKE_ARCHIVED_PAYLOAD = {"schema_version": 1, "postgres_port": 15432, "redis_port": 16379, "api_port": 18000}
 _DB_SQL_NAME = "database.sql"
+#: FAR-2667: restore refuses a dump whose manifest records no checksum for it,
+#: and re-verifies this completion trailer when the manifest attested
+#: completeness at dump time. Fixtures therefore write a complete-looking dump
+#: and checksum it, exactly as `farna-control backup` does.
+_DUMP_CONTENT = "-- dump\n-- PostgreSQL database dump complete\n"
+_DUMP_CHECKSUM = hashlib.sha256(_DUMP_CONTENT.encode("utf-8")).hexdigest()
 
 _LOCK_REFUSAL = "Refusing to start: data dir /data is locked by another launcher (holder PID 4242, mode 'serve'); the requested acquire (mode 'backup') is refused."
+
+
+@pytest.fixture(autouse=True)
+def _pin_server_gucs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dump's compatibility rewrite asks the server for its GUC names;
+    these tests never touch a database."""
+    from farna.db import plain_dump
+
+    monkeypatch.setattr(plain_dump, "server_guc_names", lambda _url, **_kwargs: {"statement_timeout"})
 
 
 def _seed_data_dir(tmp_path: Path) -> Path:
@@ -90,7 +105,17 @@ def _enter_backup_patches(stack: contextlib.ExitStack, lock: MagicMock | None = 
 
 
 def _write_dump_for(_url: Any, output: Path) -> None:
-    output.write_text("-- pg_dump output", encoding="utf-8")
+    # A COMPLETE plain dump: `farna-control backup` now attests dump-time
+    # completeness, and restore re-verifies the trailer.
+    output.write_bytes(_DUMP_CONTENT.encode("utf-8"))
+
+
+def _write_dump_then_succeed(argv: list[str], **kwargs: Any) -> Any:
+    """A fake pg_dump that emits a COMPLETE dump (trailer included) and exits 0."""
+    stdout = kwargs.get("stdout")
+    if stdout is not None:
+        stdout.write(_DUMP_CONTENT.encode("utf-8"))
+    return MagicMock(returncode=0, stderr=b"")
 
 
 def _enter_restore_patches(stack: contextlib.ExitStack, lock: MagicMock | None = None) -> None:
@@ -322,6 +347,13 @@ def _make_archive(
 ) -> Path:
     temp_backup = tmp_path / (_RESTORE_OUTPUTS + str(len(list(tmp_path.iterdir()))))
     temp_backup.mkdir()
+    # Files first, manifest last: the manifest must checksum the dump that is
+    # actually on disk (FAR-2667 refuses an archive with no coverage for it).
+    (temp_backup / _DB_SQL_NAME).write_bytes(_DUMP_CONTENT.encode("utf-8"))
+    (temp_backup / "checkpoint_blobs.json").write_text("[]", encoding="utf-8")
+    (temp_backup / "checkpoints.json").write_text("[]", encoding="utf-8")
+    (temp_backup / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
+    (temp_backup / "credentials_references.json").write_text("{}", encoding="utf-8")
     manifest: dict[str, Any] = {}
     if manifest_version is None:
         manifest = {
@@ -330,16 +362,12 @@ def _make_archive(
             "db_version": "PostgreSQL 16.0",
             "schema_versions": ["rev1"],
             "fernet_key_hash": _fernet_key_hash(_FERNET_KEY),
-            "file_checksums": {},
+            "file_checksums": {_DB_SQL_NAME: _DUMP_CHECKSUM},
         }
     else:
         manifest = _base_manifest_versioned(manifest_version, state_mac)
+        manifest["file_checksums"] = {_DB_SQL_NAME: _DUMP_CHECKSUM}
     (temp_backup / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
-    (temp_backup / "database.sql").write_text("-- dump", encoding="utf-8")
-    (temp_backup / "checkpoint_blobs.json").write_text("[]", encoding="utf-8")
-    (temp_backup / "checkpoints.json").write_text("[]", encoding="utf-8")
-    (temp_backup / "checkpoint_writes.json").write_text("[]", encoding="utf-8")
-    (temp_backup / "credentials_references.json").write_text("{}", encoding="utf-8")
     if launcher_files:
         # The archived state.json is a REAL HMAC envelope (payload + mac):
         # adoption is only possible from archives whose state.json carries
@@ -870,7 +898,7 @@ def test_restore_writes_pre_restore_safety_dump_before_psql(tmp_path: Path) -> N
     safety_dumped: list[Path] = []
     order: list[str] = []
 
-    def _fake_safety(raw_url: str, timeout: int = 300) -> Path:
+    def _fake_safety(raw_url: str, timeout: int = 300, output_dir: Path | None = None) -> Path:
         order.append("safety")
         safety_dumped.append(Path("safety"))
         return Path("safety")
@@ -1133,6 +1161,9 @@ def test_backup_pg_dump_no_password_in_argv(tmp_path: Path) -> None:
     def _capture(argv: list[str], **kwargs: Any) -> Any:
         seen["argv"] = argv
         seen["env"] = kwargs.get("env", {})
+        stdout = kwargs.get("stdout")
+        if stdout is not None:
+            stdout.write(_DUMP_CONTENT.encode("utf-8"))
         return MagicMock(returncode=0, stderr=b"")
 
     output = tmp_path / "out.sql"
@@ -1153,7 +1184,7 @@ def test_pg_dump_output_file_is_created_private(tmp_path: Path) -> None:
     output = tmp_path / "out.sql"
     with contextlib.ExitStack() as stack:
         stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/pg_dump"))
-        stack.enter_context(patch("farna.cli.backup.subprocess.run", return_value=MagicMock(returncode=0, stderr=b"")))
+        stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_write_dump_then_succeed))
         backup_mod._run_pg_dump("postgresql://user:pass@host:5432/farna_control", output)
     assert (output.stat().st_mode & 0o777) == 0o600, "the dump must be born 0600"
 
