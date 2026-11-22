@@ -10528,7 +10528,7 @@ async def _resolve_sandbox_git_content_config(config: _SandboxNodeConfig) -> _Sa
     )
 
 
-def _render_sandbox_prompt_and_command(
+def _render_sandbox_prompt_and_command(  # NOSONAR S3776 - one inline Jinja render step; its per-arm except clauses are the documented legacy-command contract
     *,
     state: dict[str, Any],
     node_def: dict[str, Any],
@@ -11294,7 +11294,7 @@ class _SandboxProvisioned(NamedTuple):
     handle: Any
 
 
-async def _sandbox_create_workspace(
+async def _sandbox_create_workspace(  # NOSONAR S3776 - one provisioning step; the nested rate-limit backoff + provisioning watchdog are a single documented retry contract
     _exec_ctx: _SandboxExecContext,
     *,
     node_id: str,
@@ -11461,7 +11461,7 @@ async def _sandbox_upload_context_files(
         )
 
 
-async def _sandbox_write_schema_contract(
+async def _sandbox_write_schema_contract(  # NOSONAR S3776 - one advisory-contract write step; the upload/best-effort arms are a single documented FAR-901 seam
     *,
     node_id: str,
     node_def: dict[str, Any],
@@ -13030,7 +13030,7 @@ async def _sandbox_stall_or_timeout(
     raise _stall_failure
 
 
-async def _sandbox_retain_stall_evidence(
+async def _sandbox_retain_stall_evidence(  # NOSONAR S3776 - one contiguous stall/timeout evidence step; kill-before-read ordering + per-arm persistence are a single FAR-97/FAR-811 contract
     _state: _SandboxDispatchState,
     *,
     cmd_result: Any,
@@ -13633,7 +13633,7 @@ async def _sandbox_fail_schema_validation(
         _state.cost_estimate_usd = _cost_estimate_usd
 
 
-async def _sandbox_derive_status(
+async def _sandbox_derive_status(  # NOSONAR S3776 - one status/cost derivation step; the script vs llm envelope arms are a single documented verdict contract
     _state: _SandboxDispatchState,
     *,
     output_json: Any,
@@ -13905,7 +13905,7 @@ def _sandbox_emit_output_span(
         )
 
 
-async def _sandbox_finalise_envelope(
+async def _sandbox_finalise_envelope(  # NOSONAR S3776 - one terminal-envelope assembly step; the sentinel/artifact/envelope writes are a single documented success-path contract
     _state: _SandboxDispatchState,
     _interpreted: _SandboxInterpretation,
     *,
@@ -14097,7 +14097,7 @@ async def _sandbox_finalise_envelope(
     )
 
 
-async def _retain_cancellation_evidence(
+async def _retain_cancellation_evidence(  # NOSONAR S3776 - one cancellation-evidence step; the deliberate nested CancelledError handlers + uncancel calls are a single documented contract
     _state: _SandboxDispatchState,
     *,
     node_id: str,

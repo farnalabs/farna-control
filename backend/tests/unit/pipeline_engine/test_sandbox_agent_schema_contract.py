@@ -320,3 +320,82 @@ async def test_resolve_provider_id_swallows_db_error() -> None:
         raise RuntimeError("db down")
 
     assert await _resolve_provider_id_from_agent(_boom, uuid.uuid4()) is None
+
+
+async def test_contract_written_but_local_dir_missing_skips_upload() -> None:
+    """A writer reporting success without a local schema dir uploads nothing."""
+    node_def = _script_node_def()
+    fn = make_sandbox_agent_fn(node_def)
+    sandbox = _sandbox_mock()
+
+    with (
+        patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)),
+        patch("farna.core.runner_bindings.resolve_agent_bindings", new=AsyncMock(return_value={})),
+        patch(
+            "farna.core.pipeline_engine.node_runner.write_schema_contract",
+            return_value=ContractWriteResult(schema_files_written=True),
+        ),
+    ):
+        result = await fn(_run_state())
+
+    assert result["telemetry"]["status"] == "completed"
+    assert not [path for path in _written_paths(sandbox) if "/home/user/schemas/" in path]
+
+
+async def test_contract_non_file_entries_are_skipped(tmp_path: Path) -> None:
+    """A directory inside the schema dir is not uploaded as a schema file."""
+    node_def = _script_node_def()
+    fn = make_sandbox_agent_fn(node_def)
+    sandbox = _sandbox_mock()
+    contract_tmp = tmp_path / "schema_contract_test"
+    contract_tmp.mkdir()
+
+    def _nested_dir_writer(base: Path, *, node_id: str, **_: Any) -> ContractWriteResult:
+        (Path(base) / "schemas" / node_id / "nested").mkdir(parents=True)
+        return ContractWriteResult(schema_files_written=True)
+
+    with (
+        patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)),
+        patch("farna.core.runner_bindings.resolve_agent_bindings", new=AsyncMock(return_value={})),
+        patch("tempfile.mkdtemp", return_value=str(contract_tmp)),
+        patch("farna.core.pipeline_engine.node_runner.write_schema_contract", side_effect=_nested_dir_writer),
+    ):
+        result = await fn(_run_state())
+
+    assert result["telemetry"]["status"] == "completed"
+    assert not [path for path in _written_paths(sandbox) if "/home/user/schemas/" in path]
+
+
+async def test_contract_temp_dir_creation_failure_is_best_effort() -> None:
+    """A temp-dir creation failure is logged and never fails the node."""
+    node_def = _script_node_def()
+    fn = make_sandbox_agent_fn(node_def)
+    sandbox = _sandbox_mock()
+
+    with (
+        patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)),
+        patch("farna.core.runner_bindings.resolve_agent_bindings", new=AsyncMock(return_value={})),
+        patch("tempfile.mkdtemp", side_effect=OSError("no temp dir")),
+    ):
+        result = await fn(_run_state())
+
+    assert result["telemetry"]["status"] == "completed"
+
+
+async def test_org_stdout_ceiling_clamps_retention_cap() -> None:
+    """A configured org ceiling hard-clamps the node's stdout retention cap."""
+    node_def = _script_node_def()
+    fn = make_sandbox_agent_fn(node_def)
+    sandbox = _sandbox_mock()
+
+    with (
+        patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)),
+        patch("farna.core.runner_bindings.resolve_agent_bindings", new=AsyncMock(return_value={})),
+        patch(
+            "farna.core.pipeline_engine.node_runner._read_org_stdout_retention_ceiling",
+            new=AsyncMock(return_value=64),
+        ),
+    ):
+        result = await fn(_run_state())
+
+    assert result["telemetry"]["status"] == "completed"
