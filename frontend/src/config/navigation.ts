@@ -439,6 +439,36 @@ function buildSidebarGroups(): NavGroup[] {
     .filter((g) => g.items.length > 0)
 }
 
+/** Claims a link-decision reads from the caller's access token. */
+export interface RouteGateUser {
+  /** False when the token is opaque/absent — no claims could be read. */
+  hasReadableToken: boolean
+  isSystemAdmin: boolean
+  orgRole: string | null
+}
+
+/** A refusal no licence upgrade can fix — only a role or instance admin can. */
+export type NonTierRefusal = 'role' | 'system_admin'
+
+/**
+ * The non-tier reason `item` is refused for `user`, or null when it is not.
+ *
+ * Tier gates are deliberately out of scope: a below-tier caller still follows
+ * the link, and the router guard lands them on the locked page with the
+ * upgrade path. Only a role / system-admin refusal is decided up front, so a
+ * view can point the caller at the refusal that a purchase cannot fix.
+ *
+ * An unreadable token yields null — nothing can be known, so the guard stays
+ * the authority. A READABLE token with an empty/absent `org_role` is a
+ * refusal: the role is known and it is not one of the required ones.
+ */
+export function nonTierRefusal(item: NavItem, user: RouteGateUser): NonTierRefusal | null {
+  if (!user.hasReadableToken) return null
+  if (item.systemAdminOnly && !user.isSystemAdmin) return 'system_admin'
+  if (item.requiredRoles?.length && !item.requiredRoles.includes(user.orgRole ?? '')) return 'role'
+  return null
+}
+
 export function canSeeItem(
   item: NavItem,
   user: { role: string; permissions?: string[] },
