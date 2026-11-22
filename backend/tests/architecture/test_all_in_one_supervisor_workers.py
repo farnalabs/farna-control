@@ -58,7 +58,7 @@ _LOG_DIR = "/var/log/supervisor"
 
 #: The single application service in the production compose - the one the
 #: supervisord programs run inside.
-_APP_SERVICE = "modulo"
+_APP_SERVICE = "farna-control"
 
 
 def _supervisord() -> configparser.ConfigParser:

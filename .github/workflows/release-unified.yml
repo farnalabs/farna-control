@@ -903,7 +903,7 @@ jobs:
               # bump-version.py updates it. Staging it here keeps the release PR
               # consistent with the always-on UV lockfile freshness CI gate.
               uv lock --project backend
-              git add backend/pyproject.toml backend/uv.lock frontend/package.json deploy/helm/modulo/Chart.yaml
+              git add backend/pyproject.toml backend/uv.lock frontend/package.json deploy/helm/farna-control/Chart.yaml
               if git diff --cached --quiet; then
                 echo "::error::bump-version.py changed nothing - refusing to create an empty release PR."
                 exit 1
@@ -2012,8 +2012,8 @@ jobs:
           echo "${GH_TOKEN}" | helm registry login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
           # Package and push chart
-          helm package deploy/helm/modulo --destination /tmp/helm-pkg --version "$VERSION_NUM" --app-version "$VERSION_NUM"
-          CHART_TGZ="/tmp/helm-pkg/modulo-${VERSION_NUM}.tgz"
+          helm package deploy/helm/farna-control --destination /tmp/helm-pkg --version "$VERSION_NUM" --app-version "$VERSION_NUM"
+          CHART_TGZ="/tmp/helm-pkg/farna-control-${VERSION_NUM}.tgz"
           helm push "$CHART_TGZ" "oci://ghcr.io/${IMAGE_NAMESPACE}/charts"
 
       # -----------------------------------------------------------------------
@@ -2062,7 +2062,7 @@ jobs:
             --from "$PREV" --to "$GA_TAG" \
             --version "$VERSION" --output CHANGELOG.md > "$NOTES_FILE"
 
-          RELEASE_TITLE="Modulo ${GA_TAG}"
+          RELEASE_TITLE="Farna Control ${GA_TAG}"
           if gh release view "$GA_TAG" >/dev/null 2>&1; then
             gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
             echo "GitHub Release updated for ${GA_TAG} with title ${RELEASE_TITLE}."
@@ -2857,7 +2857,7 @@ jobs:
           # invalidates every verify-against-the-manifest already downloaded.
           # An existing release gets an upload (which fails loudly on an
           # existing asset); a new one is created with its assets atomically.
-          RELEASE_TITLE="Modulo ${RC_TAG}"
+          RELEASE_TITLE="Farna Control ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
             gh release edit "$TAG" --title "$RELEASE_TITLE" "${PUBLISH_ARGS[@]}"
@@ -3422,7 +3422,7 @@ jobs:
           set -euo pipefail
           python3 -m venv /tmp/modulo-pypi-smoke
           /tmp/modulo-pypi-smoke/bin/python -m pip install --disable-pip-version-check --no-cache-dir dist/*.whl
-          /tmp/modulo-pypi-smoke/bin/modulo apply --help
+          /tmp/modulo-pypi-smoke/bin/farna-control apply --help
 
       - name: Publish farna-control via Trusted Publishing
         # PyPI Trusted Publisher must be registered by a human for this

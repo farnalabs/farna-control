@@ -13,7 +13,7 @@ Vendor-neutral Helm chart for the Farna Control stack. Deploys backend API, SAQ 
 
 ```bash
 # Add the chart (requires two Postgres roles: admin + app)
-helm install modulo ./deploy/helm/modulo \
+helm install farna-control ./deploy/helm/farna-control \
   --set postgres.host=your-rds-host \
   --set postgres.password=your-password \
   --set postgres.username=farna_control_app \
@@ -270,8 +270,8 @@ See `values.eks.example.yaml` for a validated EKS configuration using AWS manage
 
 ```bash
 # Deploy (SECRET_KEY, FERNET_KEY and SAQ auth are mandatory — see Required Values)
-helm install modulo ./deploy/helm/modulo \
-  -f deploy/helm/modulo/values.eks.example.yaml \
+helm install farna-control ./deploy/helm/farna-control \
+  -f deploy/helm/farna-control/values.eks.example.yaml \
   --set postgres.password=<rds-password> \
   --set backend.env.SECRET_KEY=$(openssl rand -base64 32) \
   --set backend.env.FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())") \
@@ -283,10 +283,10 @@ helm install modulo ./deploy/helm/modulo \
 
 ```bash
 # Create kind cluster
-kind create cluster --name modulo-dev
+kind create cluster --name farna-control-dev
 
 # Deploy with embedded Redis (requires two Postgres roles: admin + app)
-helm install modulo ./deploy/helm/modulo \
+helm install farna-control ./deploy/helm/farna-control \
   --set redis.embedded=true \
   --set redis.password=replace-with-a-development-password \
   --set postgres.host=host.docker.internal \
@@ -303,15 +303,15 @@ helm install modulo ./deploy/helm/modulo \
 ## Upgrade
 
 ```bash
-helm upgrade modulo ./deploy/helm/modulo \
-  -f deploy/helm/modulo/values.yaml
+helm upgrade farna-control ./deploy/helm/farna-control \
+  -f deploy/helm/farna-control/values.yaml
 ```
 
 ## Uninstall
 
 ```bash
-helm uninstall modulo
-kubectl delete namespace modulo  # If namespace.create=true
+helm uninstall farna-control
+kubectl delete namespace farna-control  # If namespace.create=true
 ```
 
 ## Architecture
@@ -346,7 +346,7 @@ kubectl delete namespace modulo  # If namespace.create=true
 - [x] `helm lint` passes with EKS example values
 - [x] `helm template` renders without errors
 - [x] **Live EKS validation (FAR-1052, 2026-09-23):** deployed end-to-end on a
-  real EKS cluster (`modulo-validation`, EKS 1.34, 2× `m7i-flex.large` managed
+  real EKS cluster (`farna-control-validation`, EKS 1.34, 2× `m7i-flex.large` managed
   nodes, in-cluster embedded Redis, Postgres external in a sibling namespace,
   images `365370368472.dkr.ecr.us-east-1.amazonaws.com/modulo/{backend,frontend}:dev-20260923`).
   All workloads became Ready with backend/worker pods spread across **both**

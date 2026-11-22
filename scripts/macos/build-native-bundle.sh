@@ -27,7 +27,7 @@ DOWNLOADS="${BUILD_ROOT}/downloads"
 mkdir -p "${DOWNLOADS}" "${BUNDLE_ROOT}" "${APP_ROOT}/Contents/MacOS" "${APP_ROOT}/Contents/Resources"
 
 # Render the checked-in brand mark into the native icon format before signing.
-# qlmanage is part of macOS and preserves the SVG's existing Modulo mark without
+# qlmanage is part of macOS and preserves the SVG's existing Farna Control mark without
 # introducing a second logo source. iconutil then embeds the complete @1x/@2x
 # icon family in Contents/Resources, where Finder and LaunchServices read it.
 ICON_SOURCE="${ROOT_DIR}/scripts/macos/assets/Modulo.svg"

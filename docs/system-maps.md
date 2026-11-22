@@ -913,10 +913,10 @@ An organization can roll back to a prior published revision at any time. Rolling
 4. Leaves historical fact records and past run snapshots untouched.
 
 ### 8.5 Declarative GitOps Authoring (`farna-control apply`)
-System Maps is planned as a Beta 2 extension to the declarative `farna-control apply` engine. The current engine accepts the `api_version: modulo.dev/v1` envelope with an `entities:` mapping, but it does not currently register a `system_maps` entity kind. The example below uses that current envelope to illustrate the planned Beta 2 payload; it is syntactically valid YAML, but it is illustrative/future only until the `system_maps` schema kind and apply handlers are added. The current engine rejects this entity set, so do not present the example as a currently applicable configuration.
+System Maps is planned as a Beta 2 extension to the declarative `farna-control apply` engine. The current engine accepts the `api_version: farna.dev/v1` envelope with an `entities:` mapping, but it does not currently register a `system_maps` entity kind. The example below uses that current envelope to illustrate the planned Beta 2 payload; it is syntactically valid YAML, but it is illustrative/future only until the `system_maps` schema kind and apply handlers are added. The current engine rejects this entity set, so do not present the example as a currently applicable configuration.
 
 ```yaml
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   system_maps:
     - name: "Core SDLC Delivery"

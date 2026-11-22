@@ -116,7 +116,7 @@ the per-token breakdown comparison the manifest previously parked as the lone
   "Degraded evals" column. The backend consumer was read before writing copy:
   the flag is persisted on `variant_groups` and, when on,
   `_merge_variant_payload` adds `_degraded_evals: true` to every run's input
-  payload; nothing in Modulo skips or weakens eval execution. Added an
+  payload; nothing in Farna Control skips or weakens eval execution. Added an
   operator-controlled builder checkbox (default off) with help text stating
   exactly that, wired it to `CreateVariantGroupRequest.degraded_evals`, and
   added a tooltip to the existing table badge. Covered by

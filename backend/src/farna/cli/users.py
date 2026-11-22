@@ -1,10 +1,10 @@
-"""``modulo users``: local-account management for a single install (FAR-680).
+"""``farna-control users``: local-account management for a single install (FAR-680).
 
 Three DB-direct commands on the native-launcher surface:
 
-* ``modulo users add <email> [--admin] [--password <pw> | prompt]``
-* ``modulo users list``
-* ``modulo users reset-password <email> [--password <pw> | prompt]``
+* ``farna-control users add <email> [--admin] [--password <pw> | prompt]``
+* ``farna-control users list``
+* ``farna-control users reset-password <email> [--password <pw> | prompt]``
 
 Creation and password RESEEDING reuse the promoted FARNA_CONTROL_USERS seeder
 (``farna.db.seed.seed_modulo_user`` — the same creation path the boot
@@ -312,7 +312,7 @@ async def _add_user(url: str, email: str, password: str, as_admin: bool) -> str:
                     actor_source="cli_admin_escalation",
                     log_key="cli.users.admin_escalation_audit_failed",
                     payload={
-                        "summary": (f"User {email} escalated from {previous_role} to admin in organisation '{org.name}' by 'modulo users add --admin'"),
+                        "summary": (f"User {email} escalated from {previous_role} to admin in organisation '{org.name}' by 'farna-control users add --admin'"),
                         "email": email,
                         "role": "admin",
                         "previous_role": previous_role,
@@ -339,7 +339,7 @@ async def _reset_password(url: str, email: str, password: str) -> str:
         async with maker() as session, session.begin():
             account = (await session.execute(select(Account).where(Account.email == email))).scalar_one_or_none()
             if account is None:
-                raise UserCliError(f"no user with email {email} in this database — try 'modulo users list'")
+                raise UserCliError(f"no user with email {email} in this database — try 'farna-control users list'")
             # Strict boolean compare (the admin route compares the same way):
             # a break-glass account must never have its hash overwritten.
             if account.is_break_glass is True:

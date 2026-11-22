@@ -126,10 +126,10 @@ run and fails if any default compose file publishes a port on a non-loopback
 address.
 
 The only whole-file exception is `deploy/compose/docker-compose.prod.yml`'s
-`${PORT:-80}:80` binding on the `modulo` service – the production app
+`${PORT:-80}:80` binding on the `farna-control` service – the production app
 must be reachable from outside.  That file is excluded from the
 whole-file guard, but it is still checked service-scoped: every service
-in it other than `modulo` (currently the watchdog dashboard) must bind
+in it other than `farna-control` (currently the watchdog dashboard) must bind
 loopback, so a future non-app service cannot silently publish on all
 interfaces.  See `test_service_scoped_compose_ports_are_loopback_only`.
 
@@ -202,7 +202,7 @@ but no weekly image-scan cadence exists yet. Trivy runs in CI as a repository
 *filesystem* scan (`ci.yml`, `scan-type: 'fs'`, `scan-ref: '.'`) for
 dependency CVEs and misconfigurations; it does not scan the built images.
 `publish-images.yml` gates the GHCR push on image smoke checks (`import
-modulo`, `nginx -t`) only, with no vulnerability gate. Until the automated
+farna`, `nginx -t`) only, with no vulnerability gate. Until the automated
 trivy/grype image gate lands (the GA/CI item below), scanning a published
 image tag is a manual operator step:
 `trivy image ghcr.io/farnalabs/farna-control:<version>`. The digest-drift guard
@@ -361,5 +361,5 @@ mechanically guarded here:
   `docker-compose.yml`, `docker-compose.local.yml`, and
   `deploy/compose/docker-compose.test.yml` must bind to `127.0.0.1`.
   The sole documented exception is `deploy/compose/docker-compose.prod.yml`
-  (`${PORT:-80}:80` on the `modulo` service – the production app must be
+  (`${PORT:-80}:80` on the `farna-control` service – the production app must be
   externally reachable).

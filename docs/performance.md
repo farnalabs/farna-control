@@ -12,8 +12,8 @@ load testing tool. Scripts live in `tests/performance/` and target the Farna Con
 - The Farna Control backend (and its dependencies: Postgres 16, Redis 8) is running
 - Test user credentials exist in the target environment (`auth-burst.js` rotates
   through five of them so token caching does not distort the login numbers):
-  - `admin@modulo.test`, `user-one@modulo.test`, `user-two@modulo.test`,
-    `viewer@modulo.test`, `editor@modulo.test`
+  - `admin@farna-control.test`, `user-one@farna-control.test`, `user-two@farna-control.test`,
+    `viewer@farna-control.test`, `editor@farna-control.test`
   - all with password `test-password-123`
 
 ### Install k6

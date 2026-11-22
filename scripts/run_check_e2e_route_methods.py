@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when an E2E HTTP call no longer matches a live Modulo API route.
+"""Fail when an E2E HTTP call no longer matches a live Farna Control API route.
 
 Deploy-critical: ``.github/workflows/deploy.yml`` runs
 ``playwright test --grep "@regression"`` against staging before promoting to
@@ -147,7 +147,7 @@ alongside ``fetch('/api/v1/pipelines')``) is still a violation. An enumerated
 occurrence that cannot be analysed - one with no descriptor and no note - is a
 violation (exit 1) naming the line: a new
 call shape within the documented families fails loudly instead of passing. A call whose target is not an API path, or an absolute external URL
-that provably names no Modulo route, is excluded explicitly or noted at most; it
+that provably names no Farna Control route, is excluded explicitly or noted at most; it
 is never a hard failure. A method-reference line is reported as a note when
 unaccounted - it names no route this checker can validate, but it is never
 dropped silently.
@@ -187,7 +187,7 @@ explicit note, or - when it is an API-shaped occurrence the extractor cannot
 analyse - an unaccounted-occurrence violation (exit 1), exactly as the coverage
 ledger above states. Documented shapes that name no route this checker can
 validate (a method-reference line, a whole-path ternary, an absolute external
-URL that provably names no Modulo route) are noted or excluded explicitly - at
+URL that provably names no Farna Control route) are noted or excluded explicitly - at
 most a note, never a hard failure, and never silence within the scanned
 families. That guarantee of visibility does NOT extend to HTTP clients outside
 the documented families: ``axios``, ``ofetch``, ``ky`` and custom
@@ -199,7 +199,7 @@ note and no violation. Adding a family is a deliberate contract change with its
 own tests, not an opportunistic extension of the extractor.
 
 An absolute external URL (``http://`` / ``https://``) whose literal carries no
-``/api/`` segment is not a Modulo API candidate: it names another origin, so no
+``/api/`` segment is not a Farna Control API candidate: it names another origin, so no
 live route could ever match it. It needs no suppression annotation and is never
 a hard failure.
 
@@ -1386,7 +1386,7 @@ def _is_external_url_literal(expression: str) -> bool:
     """True when *expression* is a literal absolute URL naming another origin.
 
     A ``fetch``/``request`` target of ``'http://localhost:8000/healthz'`` (or an
-    ``https://`` sibling) is not a Modulo API path, so no live route could ever
+    ``https://`` sibling) is not a Farna Control API path, so no live route could ever
     match it - it must not require a suppression annotation. Only a WHOLE
     string/template literal counts: a relative path, a variable, or a URL with
     an ``/api/`` segment stays a candidate and keeps its existing handling.
@@ -2764,7 +2764,7 @@ def _extract_fetch_like(  # NOSONAR
         path_info = extract_path(target)
         if path_info is None:
             if _is_external_url_literal(target):
-                # A literal absolute URL on another origin is not a Modulo API
+                # A literal absolute URL on another origin is not a Farna Control API
                 # call: no annotation is required and it is never a violation.
                 accounted_offsets.add(offset)
                 continue
@@ -2796,7 +2796,7 @@ def _extract_fetch_like(  # NOSONAR
                 accounted_offsets.add(offset)
             else:
                 # A documented callee whose target is not an API path names no
-                # Modulo route (``fetch('/healthz')``, ``route.fetch()``, a
+                # Farna Control route (``fetch('/healthz')``, ``route.fetch()``, a
                 # bare URL variable). That is not an unanalysed call shape -
                 # the guard simply has no live route to check it against - so
                 # it is a note, never a hard failure. An explicit ignore

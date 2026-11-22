@@ -10488,7 +10488,7 @@ async def _resolve_sandbox_git_content_config(config: _SandboxNodeConfig) -> _Sa
 
     The resolved pin (repo/sha/path) is logged by the resolver for audit; the
     pinned SHA itself is already resident in the run snapshot (graph-save
-    validation rejects unpinned refs, and ``modulo apply`` pins before write).
+    validation rejects unpinned refs, and ``farna-control apply`` pins before write).
     """
     from farna.core.pipeline_engine.git_content import (
         GIT_CONTENT_PREFIX,

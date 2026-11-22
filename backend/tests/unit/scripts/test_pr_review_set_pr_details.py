@@ -39,7 +39,7 @@ import yaml
 pytestmark = pytest.mark.posix_only
 
 PR_REVIEW_WORKFLOW = Path(".github") / "workflows" / "pr-review.yml"
-JOB_NAME = "Trigger Modulo PR Review"
+JOB_NAME = "Trigger Farna Control PR Review"
 STEP_NAME = "Set PR details"
 
 _EXPRESSION = re.compile(r"\$\{\{\s*(.+?)\s*\}\}")

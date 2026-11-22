@@ -29,7 +29,7 @@ export const options = {
 export function setup() {
   // Login and seed audit events
   const loginRes = http.post(`${BASE_URL}/auth/login`, JSON.stringify({
-    email: 'admin@modulo.test',
+    email: 'admin@farna-control.test',
     password: 'test-password-123',
   }), {
     headers: { 'Content-Type': 'application/json' },

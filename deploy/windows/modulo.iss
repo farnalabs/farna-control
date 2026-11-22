@@ -1,4 +1,4 @@
-; Modulo Windows Installer — Inno Setup script
+; Farna Control Windows Installer — Inno Setup script
 ; Native Windows packaging is fail-closed until a real Windows bundle exists.
 ;
 ; Alpha launch path: this installer places the runtime bundle and creates the
@@ -433,7 +433,7 @@ begin
     '  Failing stage    : ' + Redact(CurrentStage) + #13#10 +
     '  Install log      : ' + Redact(LogDisplay) + #13#10 +
     '  Support reference: ' + SupportRef + #13#10 + #13#10 +
-    'Send this block AND the install log file above to Modulo support so the' + #13#10 +
+    'Send this block AND the install log file above to Farna Control support so the' + #13#10 +
     'failure can be diagnosed: https://github.com/farnalabs/modulo/issues' + #13#10 +
     '----- end of Farna Control install support block -----' + #13#10;
   WriteInstallLog(Msg);
@@ -467,7 +467,7 @@ procedure WriteServiceModeNotice;
 begin
   WriteInstallLog(
     'NOTE: Windows service mode: Coming soon (Beta). This build installs a ' +
-    'Start Menu shortcut that starts Modulo in the foreground; no Windows ' +
+    'Start Menu shortcut that starts Farna Control in the foreground; no Windows ' +
     'service is registered.');
 end;
 
@@ -493,7 +493,7 @@ begin
       DeleteFile(LogFilePath);
     LogActive := True;
     LogBytes := 0;
-    WriteInstallLog('Modulo installer started. Support reference: ' + SupportRef);
+    WriteInstallLog('Farna Control installer started. Support reference: ' + SupportRef);
     WriteInstallLog('Version: ' + '{#VERSION_NUM}');
     WriteInstallLog('Architecture: ' + '{#BUNDLE_ARCH}');
     WriteInstallLog('Stage: ' + CurrentStage);

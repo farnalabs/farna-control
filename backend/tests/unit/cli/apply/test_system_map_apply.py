@@ -1,4 +1,4 @@
-"""Unit tests for System Maps modulo apply support (FAR-2288)."""
+"""Unit tests for System Maps farna-control apply support (FAR-2288)."""
 
 import json
 import re
@@ -412,7 +412,7 @@ def test_apply_one_system_map_update() -> None:
 
 
 _SYSTEM_MAP_UPDATE_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   system_maps:
     - name: Existing Map

@@ -212,7 +212,7 @@ function Get-MarkedBlock {
 }
 
 try {
-    Write-Output "=== Modulo Windows Installer Contract Test (FAR-2315) ==="
+    Write-Output "=== Farna Control Windows Installer Contract Test (FAR-2315) ==="
     if ($isccPath) {
         Write-Output "Inno Setup ISCC: $isccPath"
     } else {

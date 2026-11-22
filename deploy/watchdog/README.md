@@ -50,7 +50,7 @@ writes `url: ${WATCHDOG_PROBE_URL}` and each deployment supplies the value:
 | Deployment | Target | Why |
 |---|---|---|
 | `docker-compose.yml` (root) | `http://backend:8000/healthz/ready` (image default) | Split services; uvicorn is directly reachable over the compose network. |
-| `deploy/compose/docker-compose.prod.yml` | `http://modulo:80/healthz/ready` | All-in-one image: the app is service `modulo` behind nginx on port 80 (its `location /health` prefix proxies `/healthz/ready` through); uvicorn's own `127.0.0.1:8000` is loopback-bound inside the container and unreachable from other containers. |
+| `deploy/compose/docker-compose.prod.yml` | `http://farna-control:80/healthz/ready` | All-in-one image: the app is service `farna-control` behind nginx on port 80 (its `location /health` prefix proxies `/healthz/ready` through); uvicorn's own `127.0.0.1:8000` is loopback-bound inside the container and unreachable from other containers. |
 
 The default lives in the image (`ENV WATCHDOG_PROBE_URL=...` in the
 Dockerfile), not in `config.yaml`, because Gatus has **no** default syntax —

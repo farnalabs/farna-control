@@ -1,4 +1,4 @@
-"""Unit tests for FAR-220 git-sourced content in ``modulo apply`` (increment 1).
+"""Unit tests for FAR-220 git-sourced content in ``farna-control apply`` (increment 1).
 
 Covers the pin-on-apply flow: a declarative ``git+<repo>[@<ref>]#<path>``
 content ref on a sandbox_agent node is resolved to a pinned commit SHA at plan
@@ -40,7 +40,7 @@ _PINNED_PROMPT_A = f"git+{_REPO}@{_SHA_A}#prompts/x.md"
 _PINNED_PROMPT_B = f"git+{_REPO}@{_SHA_B}#prompts/x.md"
 
 CONFIG_TEXT = f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: git-content

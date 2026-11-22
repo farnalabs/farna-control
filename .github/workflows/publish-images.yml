@@ -257,7 +257,7 @@ jobs:
       # causing crash-loops on every cluster. This check must never be
       # removed — it is the regression gate for that specific failure.
       # -----------------------------------------------------------------
-      - name: Smoke check — import modulo
+      - name: Smoke check — import farna
         shell: bash
         run: |
           IMAGE="$(echo "${{ steps.meta.outputs.tags }}" | head -n1)"

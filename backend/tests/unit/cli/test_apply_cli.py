@@ -1,4 +1,4 @@
-"""Unit tests for the ``modulo apply`` CLI registration (FAR-681 slice 1)."""
+"""Unit tests for the ``farna-control apply`` CLI registration (FAR-681 slice 1)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from farna.cli.apply import register_apply
 
 CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   schemas:
     - name: alpha
@@ -22,7 +22,7 @@ entities:
 """
 
 BACKEND_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: openai
@@ -151,7 +151,7 @@ class TestOutputFormats:
         group = click.Group("test")
         register_apply(group)
         path = tmp_path / "config.yaml"
-        path.write_text("api_version: modulo.dev/v1\nentities: {}\n", encoding="utf-8")
+        path.write_text("api_version: farna.dev/v1\nentities: {}\n", encoding="utf-8")
         result = runner.invoke(group, ["apply", "-f", str(path)])
         assert result.exit_code == 0, result.output
         assert "summary:" in result.output
