@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="plugin_management" show-disabled>
+  <FeatureGate feature-name="plugin_management" required-tier="team" show-disabled>
     <div class="page-wide">
       <PageHeader title="Plugins" :subtitle="$t('views.AdminPluginsView.manage_installed_modulo_plugins_and_extensions')">
         <template #right>
@@ -17,7 +17,7 @@
         <div v-if="plugins.length === 0" class="card p-8 text-center">
           <p class="text-lg font-medium">{{ $t('views.AdminPluginsView.no_plugins_installed') }}</p>
           <p class="mt-1 text-sm text-muted-foreground">
-            Install plugins via pip to extend Modulo with additional connectors and model backends.
+            Install plugins via pip to extend Farna Control with additional connectors and model backends.
           </p>
         </div>
 

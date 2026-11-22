@@ -22,7 +22,7 @@ from farna.settings import Settings, get_settings
 
 if TYPE_CHECKING:
     # Typing only: importing the ORM model at module scope would pull the SQLAlchemy
-    # model layer into every ``modulo.auth.dependencies`` import, so the annotation is
+    # model layer into every ``farna.auth.dependencies`` import, so the annotation is
     # quoted and the runtime import stays inside ``_lookup_api_key_org``.
     from farna.db.models.api_key import OrgApiKey
 

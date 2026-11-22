@@ -458,11 +458,11 @@ class PolicyGateResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 # The per-eval advisory lock is SHARED with the declarative graph writer
-# (``modulo.db.crud.pipeline``): both serialise through
-# ``modulo.db.crud._gate_advisory_lock`` — the SAME ``policy_gate:<eval_id>``
+# (``farna.db.crud.pipeline``): both serialise through
+# ``farna.db.crud._gate_advisory_lock`` — the SAME ``policy_gate:<eval_id>``
 # key through ``hashtext`` (FAR-1688). The helper lives in a neutral
 # ``db``-side module because the ``db-does-not-import-core`` import-linter
-# contract forbids ``modulo.db`` -> ``modulo.api``, so this layer cannot own
+# contract forbids ``farna.db`` -> ``farna.api``, so this layer cannot own
 # the helper the DB layer also needs.
 
 

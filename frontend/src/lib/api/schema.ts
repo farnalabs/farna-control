@@ -5059,7 +5059,7 @@ export interface paths {
          * @description Return the durable per-attempt execution history of a run (FAR-2078).
          *
          *     Attempts are ordered by ``attempt_index`` ascending (0-based, per run,
-         *     contiguous — see ``modulo.db.models.run_attempt``). ``items`` is capped at
+         *     contiguous — see ``farna.db.models.run_attempt``). ``items`` is capped at
          *     100 rows; ``total`` carries the run's true attempt count.
          *
          *     Org-scoped like every other run child read: the run is loaded through
@@ -5256,7 +5256,7 @@ export interface paths {
          *
          *     Accepts two (run_id, node_id) pairs, fetches each node's output,
          *     applies sensitive masking, and returns a structured line-level diff
-         *     via the shared modulo.core.line_diff helper.
+         *     via the shared farna.core.line_diff helper.
          */
         post: operations["diff_node_output_api_v1_runs_diff_post"];
         delete?: never;
@@ -6737,7 +6737,7 @@ export interface paths {
          *     the release SBOM and the build identity. It does not list every artefact the
          *     pack maps: a row resting on ``customer_records`` (policies, risk assessments,
          *     internal-audit reports, incident and restore-test records) is the customer's
-         *     own evidence, produced outside Modulo, and the index produces no entry for
+         *     own evidence, produced outside Farna Control, and the index produces no entry for
          *     that type - so those rows are not returned here in any form. The shipped
          *     mapping documentation (``docs/security/compliance-control-mapping.md``)
          *     lists them for the customer instead.
@@ -8009,7 +8009,7 @@ export interface paths {
          *
          *     Each side carries its proposal contract plus the draft nodes and edges it
          *     was generated with. The comparison is pure and deterministic
-         *     (``modulo.determination.comparison``): it reports added, removed and
+         *     (``farna.determination.comparison``): it reports added, removed and
          *     changed nodes and edges with stable ids, names every changed property with
          *     its base and target values, carries each side's provenance onto its items,
          *     and reports only the approval/HITL and automation categories the draft
@@ -10896,7 +10896,7 @@ export interface paths {
          *     row per starved pipeline (bounded by the org's pipeline count), so no
          *     pagination and ``total`` is the exact item count. Detection (the SQL
          *     aggregate) lives in the crud layer
-         *     (:func:`modulo.db.crud.error_tracking.get_scheduler_starvation_pipelines`)
+         *     (:func:`farna.db.crud.error_tracking.get_scheduler_starvation_pipelines`)
          *     — the route keeps auth, RLS pinning and serialization only; the
          *     ``handle_db_errors`` decorator owns the DB-error mapping (it re-raises
          *     ``HTTPException`` untouched).
@@ -16288,7 +16288,7 @@ export interface components {
         IdentityResponse: {
             /**
              * Instance Id
-             * @description UUID of this Modulo instance
+             * @description UUID of this Farna Control instance
              */
             instance_id: string;
             /**
@@ -16557,10 +16557,10 @@ export interface components {
          *     malformed entry (non-dict, missing kind/ref, bad status) is REJECTED and
          *     counted per-ref by ``validate_and_normalise_reported_refs`` instead of
          *     failing the whole request with a 422 — fail-open per ref.
-         *     ``pipeline_id`` is the optional Modulo pipeline that completed the stage;
+         *     ``pipeline_id`` is the optional Farna Control pipeline that completed the stage;
          *     when it is a stage of this map, the matched journey advances into it.
          *     ``stage_id`` is the map stage id the workflow completed; used when the
-         *     stage is external (a GitHub Actions workflow, not a Modulo pipeline) and
+         *     stage is external (a GitHub Actions workflow, not a Farna Control pipeline) and
          *     has no ``pipeline_id`` — the stage is resolved against this map's current
          *     ``lifecycle_map_stages`` projection so the journey advances into it
          *     (e.g. the merge queue reports ``stage_id: "merge"``, the deploy agent
@@ -21929,7 +21929,7 @@ export interface components {
          * SeamCoverageProvenance
          * @description The ADR-042 provenance classes, bound to the canonical constants.
          *
-         *     Members are assigned FROM ``modulo.core.provenance`` so a rename there
+         *     Members are assigned FROM ``farna.core.provenance`` so a rename there
          *     propagates instead of drifting; a test asserts this enum covers the whole
          *     canonical set (a new ADR-042 class must be added here too).
          * @enum {string}
@@ -21937,7 +21937,7 @@ export interface components {
         SeamCoverageProvenance: "observed" | "derived" | "reported" | "attested";
         /**
          * SeamCoverageState
-         * @description Whether a Modulo-owned control covered the seam for this run.
+         * @description Whether a Farna Control-owned control covered the seam for this run.
          * @enum {string}
          */
         SeamCoverageState: "enforced" | "degraded" | "not_applicable";

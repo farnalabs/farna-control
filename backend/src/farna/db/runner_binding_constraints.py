@@ -1,8 +1,8 @@
 """Pure save-time constraints for AgentRunnerBinding (FAR-592 / D6).
 
-DB-half module (importable by db.crud without crossing into modulo.core):
+DB-half module (importable by db.crud without crossing into farna.core):
 name validation, reserved-var exclusion, and the credential-field surface.
-The provision-time resolution lives in ``modulo.core.runner_bindings``,
+The provision-time resolution lives in ``farna.core.runner_bindings``,
 which re-exports these.
 """
 

@@ -201,7 +201,7 @@ class UnknownEvalTypeError(ValueError):
 class GuardrailMisroutedError(RuntimeError):
     """Raised when a guardrail definition is routed through ``EvalEngine.evaluate``.
 
-    Guardrail detection is a sibling function in ``modulo.core.guardrails``
+    Guardrail detection is a sibling function in ``farna.core.guardrails``
     that reuses the pure eval helpers; the ``EvalEngine.evaluate`` contract is
     untouched. Any attempt to evaluate a guardrail through the generic engine
     is a routing bug and must fail loudly rather than silently mis-evaluate.
@@ -320,7 +320,7 @@ class EvalEngine:
             case EvalType.MODEL_JUDGE:
                 return self._evaluate_model_judge(output, eval_def, run_id, model_judge_callable)
             case EvalType.GUARDRAIL:
-                # Guardrail detection is a sibling function (modulo.core.guardrails)
+                # Guardrail detection is a sibling function (farna.core.guardrails)
                 # that reuses the pure regex/json_schema helpers; it must never be
                 # routed through the generic engine — its config shape differs and
                 # block semantics are guardrail-owned (terminal eval_failed). Fail

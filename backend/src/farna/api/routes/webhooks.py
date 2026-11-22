@@ -820,7 +820,7 @@ async def _write_receive_paused_event(
     """Commit the ``paused`` TriggerEvent (skipped when the org row is gone).
 
     The orphan-org guard, the warning text and the in-transaction write live
-    once in :mod:`modulo.api.routes._trigger_events`, shared with the Slack
+    once in :mod:`farna.api.routes._trigger_events`, shared with the Slack
     intake path; only the trigger type and log scope are webhook-specific.
     """
     await write_paused_trigger_event(

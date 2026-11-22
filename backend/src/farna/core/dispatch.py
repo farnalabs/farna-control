@@ -17,7 +17,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 # FAR-2076: the retry budget lives in the zero-import leaf module
-# ``modulo.core.retry_budget``. Only the enqueue-side adapter helper is needed
+# ``farna.core.retry_budget``. Only the enqueue-side adapter helper is needed
 # here; every other consumer imports from the leaf directly, so this module
 # deliberately does not re-export names it does not use.
 from farna.core.retry_budget import clamp_saq_retries
@@ -312,7 +312,7 @@ async def _saq_retries_for_run(run_id: uuid.UUID, *, org_id: uuid.UUID, job_type
     one. Left at ``settings.saq_run_retries`` the transport silently outran a
     pipeline's ``retry_policy.max_retries`` — the transport granted executions
     the policy had already refused. The clamp comes from the ONE shared helper
-    (``modulo.core.retry_budget.clamp_saq_retries``), which reads the durable
+    (``farna.core.retry_budget.clamp_saq_retries``), which reads the durable
     execution counter ``runs.execution_attempt_count`` — never ``claim_count``
     (it grows on capacity-demoted and resume claims).
 

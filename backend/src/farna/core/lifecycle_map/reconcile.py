@@ -149,7 +149,7 @@ _refs_dismissal_suppressed_total: Any = None
 # predates this counter and does not carry it.
 _REFS_EVENT_CAP_DROPPED = "refs_cap_dropped"
 # FAR-795 slice B: agent-mint counter event names. The db layer cannot import
-# core, so ``modulo.db.crud.run`` emits these raw strings through the
+# core, so ``farna.db.crud.run`` emits these raw strings through the
 # ``lifecycle_refs`` counter hook and this sink maps them onto the OTel
 # counters — the string pair is a deliberate layering mirror.
 REFS_EVENT_AGENT_MINTED = "agent_minted"

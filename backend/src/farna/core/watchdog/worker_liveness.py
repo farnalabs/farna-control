@@ -187,7 +187,7 @@ def _hostname() -> str:
 def _configured_queues(settings: Settings) -> list[str]:
     """PREFIX-AWARE queue names for this environment (runs + system).
 
-    Mirrors ``modulo.api.routes.health._configured_queues`` — reimplemented
+    Mirrors ``farna.api.routes.health._configured_queues`` — reimplemented
     here so the watchdog (a ``core`` module) does not import from ``api``.
     """
     runs_queue = settings.saq_runs_queue
@@ -397,7 +397,7 @@ def _parse_alert_email_to(alert_email_to: str | None) -> list[str]:
 def _alert_context_suffix(settings: Settings) -> str:
     """The context block appended to EVERY alert body (email, generic webhook
     and Teams alike): a leading blank line plus the shared environment /
-    ``ALERT_CONTEXT`` lines rendered by :mod:`modulo.core.alert_context`.
+    ``ALERT_CONTEXT`` lines rendered by :mod:`farna.core.alert_context`.
 
     Single-sourced here (rather than composed per channel) so the three
     renderings can never drift: ``alert_context_text`` always yields at least

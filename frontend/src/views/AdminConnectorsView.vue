@@ -1,4 +1,8 @@
 <template>
+  <!-- FAR-2604: connecting a repository is the first thing a self-hoster does,
+       so this page stays open on Community. `plugin_management` is broader than
+       the pages it gates (it is Team-tier); FAR-2665 narrows it. Neither the
+       /admin/connectors route nor its API carries a feature gate. -->
   <FeatureGate feature-name="plugin_management" required-tier="community" show-disabled>
 
     <div class="page-wide">

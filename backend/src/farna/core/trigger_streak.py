@@ -190,7 +190,7 @@ _STREAK_NOTIFY_MAX_PER_TICK = 10  # max inline notify attempts per tick; the res
 _STREAK_RETRY_COOLDOWN_SECONDS = 15 * 60  # retry a pending member at most once per 15 min
 
 # Terminal-status IN-list derived from the single source of truth
-# (``modulo.db.models.run.TERMINAL_STATUSES``) so a new terminal status can
+# (``farna.db.models.run.TERMINAL_STATUSES``) so a new terminal status can
 # never silently change the walk. Assembled into the SQL constants via
 # ``__STATUSES__`` placeholders + ``str.replace`` (bandit S608 flags
 # f-string/format SQL; these are static frozensets, never user input).

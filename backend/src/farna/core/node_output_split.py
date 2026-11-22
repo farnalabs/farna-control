@@ -132,7 +132,7 @@ _ARTIFACT_TELEMETRY_KEYS = (
 #: FAR-1693 adds ``provenance`` — the unified taxonomy class (``reported``) —
 #: alongside the ``witnessed_via`` channel stamp. Both must survive the failed
 #: branch; the conformance test ties this literal to
-#: ``modulo.core.provenance.PROVENANCE_KEY`` so the two cannot drift.
+#: ``farna.core.provenance.PROVENANCE_KEY`` so the two cannot drift.
 DISPATCH_PROVENANCE_FIELDS = (
     "witnessed_via",
     "execution_identity",

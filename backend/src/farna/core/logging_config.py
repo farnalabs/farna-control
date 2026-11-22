@@ -24,7 +24,7 @@ from sqlalchemy.exc import ProgrammingError
 correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 #: Organisation whose context an ERROR record is attributed to. Set ONLY at
 #: the points where the organisation becomes known — the auth/principal
-#: resolution dependencies (``modulo.auth.dependencies.bind_principal_context``,
+#: resolution dependencies (``farna.auth.dependencies.bind_principal_context``,
 #: plus its catch-all re-bind in ``api/middleware/catch_all.py``) and the SAQ
 #: worker's ``before_process`` hook (``core/saq_worker.py``). A record logged
 #: while this is ``None`` cannot be persisted (``error_events.organisation_id``

@@ -269,7 +269,7 @@ class ReviewResponse(BaseModel):
     #: FAR-613: the fire-time briefing bundle persisted on the claim row
     #: (condition, FAR-688 matched ``condition_result``, trigger, source
     #: node, bounded artifacts, reason, pipeline_name). None for legacy
-    #: gates. Shape: ``modulo.core.pipeline_engine.hitl_context.HitlReviewContext``
+    #: gates. Shape: ``farna.core.pipeline_engine.hitl_context.HitlReviewContext``
     #: (kept as an open dict here — the API contract must accept legacy
     #: bundles that predate any key).
     context: dict[str, Any] | None = None
@@ -460,14 +460,14 @@ async def _enforce_human_only_gate(
     FAR-610: the decision routes previously performed no ``human_only`` check.
     The gate's config is resolved from the run's snapshot graph (falling back
     to the live edges / live HITL-node config) via the shared resolver
-    (:func:`modulo.db.crud.hitl_review_config.resolve_hitl_review_config`) — the
+    (:func:`farna.db.crud.hitl_review_config.resolve_hitl_review_config`) — the
     gate id maps to exactly one edge by topology, never by position. Runs
     BEFORE the capacity check and the manager call so a denial has no side
     effects (fail fast, gate left undecided).
 
     Fail closed (FAR-610 review): when the config is UNRESOLVABLE but the
     gate actually fired (a claim row exists — see
-    :func:`modulo.db.crud.hitl_review_config.hitl_review_exists_but_unresolved`),
+    :func:`farna.db.crud.hitl_review_config.hitl_review_exists_but_unresolved`),
     the human_only policy cannot be verified, so non-browser principals are
     denied rather than silently allowed. Browser JWTs pass either way (the
     UI is their enforcement surface), and manual-node ids short-circuit
@@ -503,7 +503,7 @@ async def _enforce_human_only_gate(
     Hot path (FAR-610 review): the first line short-circuits browser JWTs —
     they are always allowed, so the resolver's queries never run on the
     common UI approve flow. The deny policy itself lives in the shared pure
-    verdict :func:`modulo.db.crud.hitl_review_config.human_only_denial`; the
+    verdict :func:`farna.db.crud.hitl_review_config.human_only_denial`; the
     fail-closed claim lookup runs only when the config is unresolvable.
     """
     non_browser_credential = principal.via_api_key or principal.client_kind != CLIENT_KIND_BROWSER

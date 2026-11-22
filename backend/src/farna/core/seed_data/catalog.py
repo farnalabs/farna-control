@@ -2,7 +2,7 @@
 
 These constants seed the DB tables tier_catalog and feature_flag_catalog
 at application startup.  They are seed data only — the runtime feature flag
-registry lives in modulo.core.feature_flags.
+registry lives in farna.core.feature_flags.
 
 ``FLAGS`` is now DERIVED from ``_KNOWN_FLAGS`` (the single source of truth).
 Adding a flag requires only a ``FeatureFlag(...)`` entry in

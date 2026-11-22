@@ -68,7 +68,7 @@ def _to_sync_url(url: str) -> str:
 
 
 # Migration advisory lock — the SAME key the app lifespan runner uses
-# (modulo.api.main._MIGRATION_LOCK_KEY). Every migration path goes through
+# (farna.api.main._MIGRATION_LOCK_KEY). Every migration path goes through
 # env.py's run_migrations_online(): the entrypoint's raw `alembic upgrade heads`
 # (web AND worker process groups booting concurrently on a fresh deploy) and
 # the app's lifespan run. Holding this lock serialises them so two raw runs can
@@ -85,7 +85,7 @@ _MIGRATION_LOCK_POLL_INTERVAL = 1.0
 # would block on itself. Standalone `alembic upgrade heads` (entrypoint.sh)
 # never sets the flag and therefore always takes the lock.
 #
-# The flag lives in ``modulo.db.migrations._lock_state`` rather than as a module
+# The flag lives in ``farna.db.migrations._lock_state`` rather than as a module
 # global here: alembic executes env.py as a fresh ``env_py`` module (see
 # ``alembic.util.pyfiles.load_python_file``), so a global defined in this file
 # would be invisible to the copy ``command.upgrade`` runs and the caller-held

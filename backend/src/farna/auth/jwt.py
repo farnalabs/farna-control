@@ -26,7 +26,7 @@ _ACCESS_TOKEN_MINUTES: int = 15
 #: production default is ``Settings.modulo_refresh_token_ttl_hours`` (24,
 #: env ``MODULO_REFRESH_TOKEN_TTL_HOURS``) — every production call site
 #: passes it explicitly. This constant exists so the pure JWT helpers stay
-#: import-free of ``modulo.settings`` (no settings/DB dependency at mint
+#: import-free of ``farna.settings`` (no settings/DB dependency at mint
 #: time, keeps unit tests light); a drift-guard test asserts the two stay
 #: equal.
 _REFRESH_TOKEN_HOURS: int = 24

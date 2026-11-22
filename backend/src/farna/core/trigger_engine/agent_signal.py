@@ -504,7 +504,7 @@ async def _count_active_runs(session: AsyncSession, trigger_id: uuid.UUID) -> in
 
     FAR-1999: a ``pending`` run counts only inside the create→dispatch grace
     window. Delegates to the shared
-    :func:`modulo.core.run_admission.count_trigger_slot_occupancy`, so the
+    :func:`farna.core.run_admission.count_trigger_slot_occupancy`, so the
     agent-signal lane shares one implementation of the grace semantics with
     every other lane.
     """

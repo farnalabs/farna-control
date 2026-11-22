@@ -371,7 +371,7 @@ class LibraryPrimitiveResponse(BaseModel):
         ``LibraryPrimitiveResponse`` (list, get, create, patch, delete, restore,
         adapt, contribute/list/publish)
         passes through this validator, so the shipped
-        :func:`modulo.api.middleware.sensitive_mask.mask_pipeline_graph_node`
+        :func:`farna.api.middleware.sensitive_mask.mask_pipeline_graph_node`
         per-node masker covers them all at one chokepoint. Non-composite
         primitives pass through untouched; a masker failure is impossible to
         leak through (``mask_pipeline_graph_node`` scrubs fail-closed).

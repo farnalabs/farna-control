@@ -73,7 +73,7 @@ _MSG_TIMEOUT = "The compliance evidence index exceeded its time bound. Narrow th
 _LOG_PREFIX = "compliance.evidence_index"
 
 #: Admin-only: the index aggregates org-wide audit evidence. See the
-#: registration comment in ``modulo.auth.permissions``.
+#: registration comment in ``farna.auth.permissions``.
 _CODE_EVIDENCE_INDEX_READ = "compliance.evidence_index.read"
 
 
@@ -128,7 +128,7 @@ async def get_evidence_index_endpoint(
     the release SBOM and the build identity. It does not list every artefact the
     pack maps: a row resting on ``customer_records`` (policies, risk assessments,
     internal-audit reports, incident and restore-test records) is the customer's
-    own evidence, produced outside Modulo, and the index produces no entry for
+    own evidence, produced outside Farna Control, and the index produces no entry for
     that type - so those rows are not returned here in any form. The shipped
     mapping documentation (``docs/security/compliance-control-mapping.md``)
     lists them for the customer instead.

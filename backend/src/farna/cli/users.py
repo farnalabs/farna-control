@@ -7,7 +7,7 @@ Three DB-direct commands on the native-launcher surface:
 * ``modulo users reset-password <email> [--password <pw> | prompt]``
 
 Creation and password RESEEDING reuse the promoted MODULO_USERS seeder
-(``modulo.db.seed.seed_modulo_user`` — the same creation path the boot
+(``farna.db.seed.seed_modulo_user`` — the same creation path the boot
 seeder runs) and the auth password machinery (``hash_password``); session
 invalidation on reset reuses the token-family helpers the admin reset
 route uses (``list_families_for_account`` / ``blacklist_family``).

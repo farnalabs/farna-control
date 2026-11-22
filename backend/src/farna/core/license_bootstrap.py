@@ -1,7 +1,7 @@
 """The single definition of the licence trust-anchor bootstrap (FAR-2093).
 
 Licence verification consults process-global state held in
-``modulo.core.license``: the configured Ed25519 public key (the deployment's
+``farna.core.license``: the configured Ed25519 public key (the deployment's
 trust anchor) and whether the built-in DEVELOPMENT anchor may be trusted at
 all. That state does not cross a process boundary, so EVERY process that
 resolves licence state must apply it at startup.
@@ -104,7 +104,7 @@ async def restore_persisted_license(settings: Any) -> license_mod.PersistedLicen
     depend on the licence store, and the licence is re-read later by
     :func:`start_persisted_license_refresh_loop` (worker) or by the plan/admin
     resolution paths (API). A trust-anchor miss stays FAIL-CLOSED and propagates
-    :class:`modulo.core.license.PersistedLicenseAnchorError`.
+    :class:`farna.core.license.PersistedLicenseAnchorError`.
     """
     from farna.db.session import AsyncSessionLocal
 

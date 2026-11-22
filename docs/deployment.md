@@ -249,7 +249,7 @@ export MODULO_ADMIN_SECRET=<shared-secret>
 farna-control migrate export-org <org-id>
 ```
 
-The token can also be passed via `MODULO_ADMIN_TOKEN` environment variable.
+The token can also be passed via `FARNA_CONTROL_ADMIN_TOKEN` environment variable.
 
 ### Commands
 
@@ -406,7 +406,7 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `FARNA_CONTROL_OIDC_PROVIDERS` | No | `[]` | JSON array of OIDC provider configs. **Deprecated**; use the admin SSO providers UI. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | – | OTel gRPC/HTTP exporter endpoint |
-| `MODULO_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider |
+| `FARNA_CONTROL_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider |
 | `MODULO_ADMIN_SECRET` | No | – | Shared secret for `farna-control migrate` CLI auth |
 
 
@@ -629,10 +629,10 @@ and which follow-ups remain open.
 **Stack versus runtime provider.** The chart installs the stack, not the agent
 runtime. The Kubernetes *runtime provider*, which runs agent workspaces as
 long-lived pods, ships on main (FAR-1051): an admin enables it with
-`MODULO_KUBERNETES_ENABLED` and selects it per dispatch with an Environment
+`FARNA_CONTROL_KUBERNETES_ENABLED` and selects it per dispatch with an Environment
 Profile whose `provider_type` is `kubernetes`, and agents then run as
 long-lived pods in the customer's cluster under that cluster's ServiceAccount
-(`MODULO_KUBERNETES_SERVICE_ACCOUNT`). The kind conformance gate is green
+(`FARNA_CONTROL_KUBERNETES_SERVICE_ACCOUNT`). The kind conformance gate is green
 (FAR-1053); the scheduled managed-cluster leg has not run yet - its kubeconfig
 secrets are not provisioned - so no managed cluster is claimed
 (`docs/deployment/k8s-conformance-parity.md` records exactly what each leg

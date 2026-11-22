@@ -173,7 +173,7 @@ _MIGRATION_SQL: list[str] = [
 #: historical artefact and must not change behaviour when application
 #: constants evolve (repo convention, stated in 0192/0193/0215), and
 #: import-linter's ``db-does-not-import-core`` contract forbids a
-#: ``modulo.db`` module importing ``modulo.core`` anyway. The two sides are
+#: ``farna.db`` module importing ``farna.core`` anyway. The two sides are
 #: therefore pinned identical by
 #: ``tests/unit/pipeline_engine/test_modulo_saver.py::TestCheckpointAutovacuumTwin``
 #: — edit one without the other and CI fails.

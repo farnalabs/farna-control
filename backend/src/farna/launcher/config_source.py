@@ -21,7 +21,7 @@ the native launcher, after the environment scrub and the config pin.
 
 The composed values contain credentials (the generated passwords embedded
 in the URLs); the file lands in the data dir at 0600 via the promoted
-exclusive-create writer (``modulo.db.bootstrap._write_env_file``), which
+exclusive-create writer (``farna.db.bootstrap._write_env_file``), which
 also refuses a symlink squatting on the contract path.
 """
 

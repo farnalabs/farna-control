@@ -1,10 +1,10 @@
 """22 canonical library agent primitives.
 
 Each dict follows the pattern established in
-:mod:`modulo.core.library.complexity_reviewer` — a
+:mod:`farna.core.library.complexity_reviewer` — a
 :class:`dict[str, Any]` that supplies all the metadata,
 prompt template, input/output schemas, and tags needed to
-register a :class:`~modulo.db.models.library_primitive.LibraryPrimitive`.
+register a :class:`~farna.db.models.library_primitive.LibraryPrimitive`.
 """
 
 from __future__ import annotations

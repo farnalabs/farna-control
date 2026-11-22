@@ -2,9 +2,9 @@
 
 The production suite-run path (the SAQ ``execute_suite_run`` job) previously
 never supplied an ``model_judge_callable``, so the runner
-(:mod:`modulo.core.eval_engine.execute_suite_run`) hard-refused every
+(:mod:`farna.core.eval_engine.execute_suite_run`) hard-refused every
 ``EvalSuite`` that contained an ``model_judge`` definition. This module closes the
-gap: it builds an ORG-SCOPED :class:`~modulo.core.model_backend_hub.ModelBackendHub`
+gap: it builds an ORG-SCOPED :class:`~farna.core.model_backend_hub.ModelBackendHub`
 from the org's ACTIVE ``ModelBackend`` rows and a single dispatch callable that
 resolves each judge definition's OWN ``config["model_backend_id"]`` through that
 hub.
@@ -16,7 +16,7 @@ outbound dependency - the air-gap path.
 This module deliberately does NOT reimplement the judge itself. It owns only
 hub construction + per-definition dispatch; the sync->async invoke bridge, the
 timeout bounds and the malformed-id fail-closed behaviour all stay in
-:mod:`modulo.core.pipeline_engine.llm_judge` (the in-pipeline judge path). That
+:mod:`farna.core.pipeline_engine.llm_judge` (the in-pipeline judge path). That
 keeps one source of truth for judge behaviour across both call sites.
 """
 
@@ -109,7 +109,7 @@ async def build_org_model_backend_hub(
 def build_suite_run_model_judge_callable(hub: ModelBackendHub) -> ModelJudgeCallable:
     """Build ONE synchronous judge callable that dispatches per definition.
 
-    The :class:`~modulo.core.eval_engine.ModelJudgeCallable` protocol is
+    The :class:`~farna.core.eval_engine.ModelJudgeCallable` protocol is
     synchronous and receives ``(output, eval_def)`` per call, and the suite
     runner hands the SAME callable to every definition in the suite. This
     dispatcher therefore reads ``eval_def.config["model_backend_id"]`` per call
@@ -119,7 +119,7 @@ def build_suite_run_model_judge_callable(hub: ModelBackendHub) -> ModelJudgeCall
 
     A MISSING or malformed ``model_backend_id``, and an id the hub does not
     know (a VALID UUID for a deleted, deactivated, or another org's backend),
-    raise :class:`~modulo.core.eval_engine.typed_judge.JudgeExecutionError` with
+    raise :class:`~farna.core.eval_engine.typed_judge.JudgeExecutionError` with
     ``judge.configuration``. The engine turns that into
     ``outcome=error``/NULL score for THAT definition — no verdict, never a
     ``passed=False, score=0.0`` verdict — and the remaining definitions and

@@ -2,10 +2,10 @@
 
 The audit chain hashes each event's canonical serialisation and links it to the
 prior event via ``previous_hash``. The offline-verifiable evidence pack
-(:mod:`modulo.core.evidence_pack`) must re-derive that same hash from an
+(:mod:`farna.core.evidence_pack`) must re-derive that same hash from an
 exported event WITHOUT importing the DB / SQLAlchemy / RLS layer, so the
 computation lives here — a dependency-free module — and
-``modulo.core.audit_logger`` re-exports it.
+``farna.core.audit_logger`` re-exports it.
 
 This is a MOVE, not a format change: the serialisation is byte-identical to the
 implementation previously inlined in ``audit_logger/__init__`` (the audit-chain

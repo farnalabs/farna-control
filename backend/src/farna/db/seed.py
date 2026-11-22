@@ -1,6 +1,6 @@
 """System seeding: system schemas (org creation) + MODULO_USERS boot seeding.
 
-The MODULO_USERS seeder was promoted from ``modulo.api.main`` (FAR-671 /
+The MODULO_USERS seeder was promoted from ``farna.api.main`` (FAR-671 /
 ADR 031 Decision 2) so the native launcher and the container boot share one
 implementation. The DB layer stays free of api imports (import-linter
 ``db-does-not-import-core``): the ORCHESTRATOR takes an already-built session

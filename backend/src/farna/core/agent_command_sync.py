@@ -4,7 +4,7 @@ Every writer of a pipeline graph must keep the bound ``Agent`` rows in step
 with the node-level ``agent_commands`` that graph declares, inside the SAME
 transaction as the graph write and BEFORE it: a run reads an immutable
 snapshot, and snapshot materialisation
-(:func:`modulo.db.crud.pipeline_snapshot._apply_agent_fields`) lets a non-NULL
+(:func:`farna.db.crud.pipeline_snapshot._apply_agent_fields`) lets a non-NULL
 Agent-row ``agent_commands`` OVERWRITE the node value. A graph write that only
 persisted ``graph_nodes_json`` therefore read back correctly while every run
 silently executed the stale Agent-row command (the FAR-488 incident).
@@ -13,10 +13,10 @@ This module is the neutral home for that contract so every writer can share
 ONE implementation:
 
 * the REST full-graph / graph-in-PATCH / node-conversion writers
-  (``modulo.api.routes.pipelines``),
-* the MCP full-graph writer (``modulo.api.mcp_server``),
-* snapshot rollback (``modulo.api.routes.pipelines``' post-lock hook), and
-* bundle import (``modulo.core.workflow_import_export``).
+  (``farna.api.routes.pipelines``),
+* the MCP full-graph writer (``farna.api.mcp_server``),
+* snapshot rollback (``farna.api.routes.pipelines``' post-lock hook), and
+* bundle import (``farna.core.workflow_import_export``).
 
 It cannot live only in ``api/routes/pipelines.py`` because bundle import runs
 in ``core`` and core may not import api (import-linter

@@ -11,7 +11,7 @@
 ## 1. Telemetry & Observability
 
 - [ ] **`FARNA_CONTROL_TELEMETRY_ENABLED` is not set** (defaults to `false`)
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep MODULO_TELEMETRY`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep FARNA_CONTROL_TELEMETRY_ENABLED`
   - expected: no output or `FARNA_CONTROL_TELEMETRY_ENABLED=false`
   - **the env var alone is not sufficient.** A deployment-wide, process-global
     runtime override can flip it on without a restart: `GET /api/v1/admin/telemetry`
