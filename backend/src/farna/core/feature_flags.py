@@ -1,6 +1,13 @@
-"""Feature flag registry — catalogs all known feature flags and their current status.
+"""Feature flag registry — behaviour flags with no commercial tier (FAR-2665).
 
-Tier structure (matching the DB tier_catalog):
+A flag here is BEHAVIOUR ONLY: a per-org kill switch and a rollout gate. The
+commercial question ("is this capability bought?") belongs to
+:mod:`farna.core.entitlements`, and a flag therefore does not declare a tier.
+``FeatureFlag.tier`` remains as a read-only PROJECTION of the entitlement
+registry, kept because the admin catalogue, the plan payload and the MCP feature
+list all render it; it is derived, never declared and never read from the DB.
+
+Tier vocabulary in the DB tier_catalog (rank order):
     community (0) — Free tier, all features active without a license
     team      (1) — The one paid tier
 """
@@ -10,10 +17,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, replace
 from typing import Any, ClassVar, Protocol
 
+from farna.core.entitlements import entitlement_for_flag, entitlement_key_for_flag, granted_entitlements
 from farna.core.license import LicenseData, is_parked
 
 logger = logging.getLogger(__name__)
@@ -23,16 +31,29 @@ logger = logging.getLogger(__name__)
 class FeatureFlag:
     name: str
     description: str
-    tier: str
     currently_active: bool = False
     depends_on: list[str] | None = None
     # FAR-2302: whether an ORGANISATION ADMIN may set this flag for their own
     # org. Fail-closed default: a flag that does not explicitly opt in is
     # system-administrator-only, so a new sensitive flag can never be opened to
-    # org admins by omission. Only community-tier flags are eligible; the route
-    # (``api/routes/admin_org_feature_flags.py``) refuses team-tier flags
+    # org admins by omission. Only flags no entitlement covers are eligible; the
+    # route (``api/routes/admin_org_feature_flags.py``) refuses a paid-tier flag
     # regardless of this value.
     org_admin_settable: bool = False
+
+    @property
+    def tier(self) -> str:
+        """The plan tier this flag is presented under — a DERIVED projection.
+
+        FAR-2665: a flag no longer declares a tier. "team" means the flag is
+        covered by an entitlement in :mod:`farna.core.entitlements`; every other
+        flag is "community" behaviour. Kept as a property so the admin
+        catalogue, the ``/api/v1/plan`` payload and the MCP feature list keep
+        their existing wire shape without a per-consumer rewrite — and so no
+        consumer can read a tier out of the DB and reintroduce the FAR-2604
+        divergence.
+        """
+        return "team" if entitlement_key_for_flag(self.name) is not None else "community"
 
 
 _KNOWN_FLAGS: list[FeatureFlag] = [
@@ -40,48 +61,39 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="eval_system",
         description="Built-in eval runner for LLM output quality gates",
-        tier="community",
     ),
     FeatureFlag(
         name="webhook_trigger",
         description="Trigger pipelines via incoming webhooks",
-        tier="community",
     ),
     FeatureFlag(
         name="mcp_server",
         description="Expose pipelines as MCP tools",
-        tier="community",
     ),
     FeatureFlag(
         name="dashboard_charts",
         description="Dashboard trend charts (run activity sparklines)",
-        tier="community",
         org_admin_settable=True,
     ),
     FeatureFlag(
         name="web_vitals_analytics",
         description="Web Vitals analytics dashboard for monitoring frontend performance",
-        tier="community",
     ),
     FeatureFlag(
         name="assistant",
         description="Assistant in-app AI assistant",
-        tier="community",
     ),
     FeatureFlag(
         name="model_backend_management",
         description="Manage LLM backend connections and credentials",
-        tier="community",
     ),
     FeatureFlag(
         name="user_management",
         description="Basic user management — create, deactivate, and role-assign organisation users",
-        tier="community",
     ),
     FeatureFlag(
         name="observability",
         description="OpenTelemetry export and LangSmith integration settings",
-        tier="community",
     ),
     # FAR-2604: these two are Community, not Team. A self-hosted Community
     # install cannot operate without them — the runners page manages the
@@ -93,12 +105,10 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="email_config",
         description="SMTP email configuration for notifications",
-        tier="community",
     ),
     FeatureFlag(
         name="environment_profiles",
         description="Sandbox environment profiles for code execution",
-        tier="community",
     ),
     # FAR-2663: schema versioning is provenance, not organisation-scale
     # capability — the audit boundary principle puts it in Community. It was
@@ -109,80 +119,77 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="schema_version_history",
         description="Version history and diff for schema definitions",
-        tier="community",
     ),
-    # ── Team tier ──────────────────────────────────────────────────────
+    # ── Entitled capabilities (Team) ───────────────────────────────────
+    # FAR-2665: these flags no longer DECLARE a tier. Each is covered by an
+    # entitlement in ``core.entitlements`` (identity / audit_evidence /
+    # cost_governance) and is active exactly when the licence grants that
+    # entitlement. ``error_tracking`` and ``error_forwarders`` used to live in
+    # this block and are now plain Community behaviour flags: they are
+    # operational/integration capability, not organisation-scale governance.
     FeatureFlag(
         name="sso",
         description="Single sign-on via OIDC / SAML 2.0 providers",
-        tier="team",
     ),
     FeatureFlag(
         name="team_rbac",
         description="Team-level role-based access control",
-        tier="team",
     ),
     FeatureFlag(
         name="audit_viewer",
         description="Tamper-evident audit log viewer",
-        tier="team",
     ),
     FeatureFlag(
         name="admin_spend_limits",
         description="Per-organisation daily spend limits and budgets",
-        tier="team",
     ),
     FeatureFlag(
         name="admin_cost_controls",
         description="Budget overview, team budgets, alert thresholds, and billing settings",
-        tier="team",
-    ),
-    FeatureFlag(
-        name="error_tracking",
-        description="External error tracking and alerting integrations",
-        tier="team",
     ),
     FeatureFlag(
         name="scim",
         description="SCIM 2.0 user and group provisioning",
-        tier="team",
-    ),
-    FeatureFlag(
-        name="plugin_management",
-        description="Manage plugins, connectors, and node categories",
-        tier="team",
     ),
     FeatureFlag(
         name="admin_cost_breakdown",
         description="Monthly cost breakdown and anomaly detection across teams",
-        tier="team",
     ),
     FeatureFlag(
         name="admin_run_retention",
         description="Configure run retention policies and manual purge",
-        tier="team",
+    ),
+    # ── Community tier — operational / integration capability (FAR-2665) ──
+    # FAR-2665 lowered these five from Team. Each is how a self-hoster operates
+    # and integrates their own install — runtime settings, rate limits, plugin
+    # management and error tracking/forwarding — not organisation-scale
+    # governance, so withholding them stranded a Community operator on pages
+    # they could reach but not use. They are Community by not being named by any
+    # entitlement, and stay per-org kill-switchable behaviour flags.
+    FeatureFlag(
+        name="error_tracking",
+        description="External error tracking and alerting integrations",
     ),
     FeatureFlag(
         name="error_forwarders",
         description="Dispatch errors to external services via webhooks",
-        tier="team",
     ),
-    # ── Team tier (runtime / system config) ─────────────────────────────
     FeatureFlag(
         name="rate_limits",
         description="Configure API rate limits",
-        tier="team",
     ),
     FeatureFlag(
         name="runtime_config",
         description="Runtime configuration overrides",
-        tier="team",
+    ),
+    FeatureFlag(
+        name="plugin_management",
+        description="Manage plugins, connectors, and node categories",
     ),
     # ── Community tier — analytics page (live; frontend shipped in PR #747) ─
     FeatureFlag(
         name="analytics_page",
         description="Run analytics dashboard (rolling-window run/cost/quality series)",
-        tier="community",
         org_admin_settable=True,
     ),
     # ── Community tier — user-scoped MCP keys (default ON, FAR-2301) ────────
@@ -193,21 +200,18 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="user_scoped_mcp_keys",
         description="Per-user MCP API keys (keys operate as their creator's identity)",
-        tier="community",
         org_admin_settable=True,
     ),
     # ── Community tier — API-key grant-sets (default OFF, FAR-1477 / ADR 058) ──
     FeatureFlag(
         name="api_key_grants",
         description="Explicit capability grant-sets on API keys (role becomes a bundle over grants)",
-        tier="community",
         org_admin_settable=True,
     ),
     # ── Community tier - SSO unrestricted JIT provisioning (default OFF, FAR-855) ──
     FeatureFlag(
         name="sso_unrestricted_provisioning",
         description=("Allow SSO providers to auto-provision ANY authenticated identity into the organisation (auto_provision=true with no allowed_domains). DANGEROUS: self-service org join for every IdP account. Intentionally not plan-tier gated."),
-        tier="community",
     ),
     # Retained in the registry only so persisted/catalogued organisations can
     # upgrade without losing compatibility; retired flags are filtered from all
@@ -215,7 +219,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="lifecycle_map_journeys",
         description="Retired internal Lifecycle Map journey display",
-        tier="community",
     ),
     # ── Community tier — System Maps authoring and published read model ────────
     # FAR-2595: authoring is a clearly-labelled Beta-preview surface, not
@@ -224,33 +227,28 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="system_maps",
         description="Beta preview: System Maps authoring (discovery and map editing)",
-        tier="community",
         org_admin_settable=True,
     ),
     FeatureFlag(
         name="system_maps_read",
         description="Published System Maps read model",
-        tier="community",
     ),
     # ── Community tier — webhook notification delivery log (default ON, FAR-2235) ──
     FeatureFlag(
         name="webhook_notification_log",
         description="Webhook notification delivery log (admin delivery-log UI)",
-        tier="community",
         org_admin_settable=True,
     ),
     # ── Community tier — library collections (FAR-760, default OFF) ───────
     FeatureFlag(
         name="library_collection",
         description="Library collections — pin multiple primitives into a browsable bundle",
-        tier="community",
         org_admin_settable=True,
     ),
     # ── Community tier — evidence-driven autonomy gating (FAR-1175, default OFF) ──
     FeatureFlag(
         name="autonomy_gating",
         description=("Evidence-driven autonomy gating — a pipeline's HITL gates resolve against its runtime earned autonomy level (demotion bites in-flight runs at the next gate; promotion applies only to new runs)"),
-        tier="community",
         org_admin_settable=True,
     ),
     # ── Community tier — human-linked MCP authority for human_only HITL gates
@@ -267,7 +265,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
             "caller is denied on human_only gates. deliver_manual remains "
             "browser-only."
         ),
-        tier="community",
     ),
 ]
 
@@ -277,14 +274,14 @@ TIER_RANK: dict[str, int] = {"community": 0, "team": 1}
 
 
 def declared_feature_tier(feature_name: str) -> str | None:
-    """The catalog tier declared for ``feature_name``, or ``None`` if unknown.
+    """The tier PRESENTED for ``feature_name``, or ``None`` if unknown.
 
-    Reads the static ``_KNOWN_FLAGS`` catalog — the same declaration a
-    ``FeatureFlagRegistry`` seeds itself from — so a consumer that only has a
-    resolved plan (e.g. the 402 detail builder) can tell a plan-tier
-    restriction from a default-off feature without a session or a registry
-    instance. An unknown name returns ``None`` so callers fail closed instead
-    of inventing an entitlement.
+    FAR-2665: derived from the entitlement registry, never declared by the flag
+    and never read from the DB. A consumer that only has a resolved plan (e.g.
+    the 402 detail builder) can still tell a commercial restriction from a
+    default-off behaviour flag without a session or a registry instance. An
+    unknown name returns ``None`` so callers fail closed instead of inventing an
+    entitlement.
     """
     for flag in _KNOWN_FLAGS:
         if flag.name == feature_name:
@@ -375,6 +372,10 @@ class CommunityTier:
     def has_license_key(self) -> bool:
         return self._registry.has_license_key
 
+    def entitlements(self) -> frozenset[str]:
+        """The commercial capabilities this plan grants (FAR-2665)."""
+        return self._registry.entitlements
+
 
 class LicenseKeyTier:
     """Licensed plan — activates features based on license tier and explicit feature list.
@@ -384,7 +385,11 @@ class LicenseKeyTier:
     def __init__(self, license_data: LicenseData) -> None:
         self._tier = license_data.tier
         self._features = set(license_data.features)
-        self._registry = FeatureFlagRegistry(current_tier=license_data.tier, has_license_key=True)
+        self._registry = FeatureFlagRegistry(
+            current_tier=license_data.tier,
+            has_license_key=True,
+            entitlements=granted_entitlements(license_data.tier, license_data.features),
+        )
 
     def feature_enabled(self, name: str) -> bool:
         flag = self._registry.get_flag(name)
@@ -405,6 +410,10 @@ class LicenseKeyTier:
     def has_license_key(self) -> bool:
         return self._registry.has_license_key
 
+    def entitlements(self) -> frozenset[str]:
+        """The commercial capabilities this plan grants (FAR-2665)."""
+        return self._registry.entitlements
+
 
 class PlanContext(Protocol):
     """Interface for plan-based feature gating."""
@@ -418,6 +427,8 @@ class PlanContext(Protocol):
     def tier(self) -> str: ...
 
     def has_license_key(self) -> bool: ...
+
+    def entitlements(self) -> frozenset[str]: ...
 
 
 class DbPlanContext:
@@ -434,14 +445,19 @@ class DbPlanContext:
         has_license_key: bool = False,
         license_features: set[str] | None = None,
     ) -> DbPlanContext:
-        """Resolve a plan context from the tier catalog in the database."""
-        registry = await FeatureFlagRegistry.from_db(session, plan_id, has_license_key)
+        """Resolve a plan context from the DB feature catalog.
 
-        if license_features:
-            for flag in registry.list_flags():
-                if flag.name in license_features:
-                    flag.currently_active = True
-
+        FAR-2665: the licence's named capabilities are folded in as ENTITLEMENT
+        grants (``license_features`` accepts the new group keys, the covered
+        flag names and the legacy licence names), so a per-capability licence
+        unlocks exactly its group rather than a tier.
+        """
+        registry = await FeatureFlagRegistry.from_db(
+            session,
+            plan_id,
+            has_license_key,
+            license_features=license_features,
+        )
         return cls(registry)
 
     def tier(self) -> str:
@@ -449,6 +465,10 @@ class DbPlanContext:
 
     def has_license_key(self) -> bool:
         return self._registry.has_license_key
+
+    def entitlements(self) -> frozenset[str]:
+        """The commercial capabilities this plan grants (FAR-2665)."""
+        return self._registry.entitlements
 
     def feature_enabled(self, name: str) -> bool:
         flag = self._registry.get_flag(name)
@@ -737,19 +757,38 @@ def effective_feature_flags(
 
 
 class FeatureFlagRegistry:
-    """Knows all feature flags and determines active status from the current tier.
+    """Knows all feature flags and derives active status from granted ENTITLEMENTS.
 
-    Falls back to hardcoded ``_KNOWN_FLAGS`` / ``TIER_RANK`` when DB-backed data
-    has not been loaded.  Call ``load_from_db()`` to replace with catalog data.
+    FAR-2665: the registry no longer ranks flags by a declared tier. A flag
+    covered by an entitlement is active only when the plan grants that
+    entitlement; a flag no entitlement covers is Community behaviour and is
+    active unless it is default-OFF or explicitly overridden. The DB catalogue
+    supplies ``is_active`` (the operator kill switch) — never a tier: tier is a
+    projection of :mod:`farna.core.entitlements`, so a code tier change can no
+    longer fail to reach an existing install (FAR-2604).
     """
 
     _overrides: ClassVar[dict[str, bool]] = {}
 
-    def __init__(self, current_tier: str = "community", has_license_key: bool = False) -> None:
+    def __init__(
+        self,
+        current_tier: str = "community",
+        has_license_key: bool = False,
+        entitlements: Iterable[str] | None = None,
+    ) -> None:
         self._current_tier = current_tier
         self._has_license_key = has_license_key
+        # ``None`` means "derive from the tier" (a paid tier grants every
+        # entitlement). A caller that resolved a licence passes the explicit set
+        # so a per-capability key keeps granting only what it names.
+        self._entitlements = frozenset(entitlements) if entitlements is not None else granted_entitlements(current_tier)
         self._flags = [FeatureFlag(**asdict(f)) for f in _KNOWN_FLAGS]
         self._refresh()
+
+    @property
+    def entitlements(self) -> frozenset[str]:
+        """The entitlement keys this registry grants (FAR-2665)."""
+        return self._entitlements
 
     async def _load_catalog(self, session: Any) -> None:
         """Read the tier/feature-flag catalog rows into this registry.
@@ -774,7 +813,11 @@ class FeatureFlagRegistry:
                 FeatureFlag(
                     name=f["name"],
                     description=f["description"],
-                    tier=f["tier_id"],
+                    # FAR-2665: the catalog's ``tier_id`` is deliberately NOT
+                    # read. Tier is a projection of the entitlement registry,
+                    # so a stale DB row cannot hold a capability back (the
+                    # FAR-2604 defect). ``is_active`` is still the catalog's
+                    # job — it is the per-install kill switch.
                     depends_on=f["depends_on"],
                     # FAR-2302: settability is a CODE-level classification (it
                     # is not a DB catalog column), so carry it from
@@ -814,9 +857,19 @@ class FeatureFlagRegistry:
         session: Any,
         current_tier: str,
         has_license_key: bool = False,
+        license_features: Iterable[str] | None = None,
     ) -> FeatureFlagRegistry:
-        """Create a registry pre-loaded from the DB tier/feature catalog."""
-        instance = cls(current_tier=current_tier, has_license_key=has_license_key)
+        """Create a registry pre-loaded from the DB feature catalog.
+
+        The DB supplies the operator kill switch (``is_active``) and row set;
+        the tier/entitlement projection comes from code plus the licence's
+        named capabilities (``license_features``), so no DB tier is consulted.
+        """
+        instance = cls(
+            current_tier=current_tier,
+            has_license_key=has_license_key,
+            entitlements=granted_entitlements(current_tier, license_features),
+        )
         await instance.load_from_db(session)
         return instance
 
@@ -846,12 +899,10 @@ class FeatureFlagRegistry:
         return self._effective_tier_ranks().get(tier, 0)
 
     def _refresh(self) -> None:
-        tier_rank = self._effective_tier_ranks()
-        current_rank = tier_rank.get(self._current_tier, 0)
         # Flags seeded ``is_active=false`` in the DB catalog (experiments that
         # must ship default-OFF everywhere). ``__init__`` runs ``_refresh()``
         # before ``_load_catalog``, so guard with getattr. The hardcoded
-        # ``DEFAULT_OFF_FLAGS`` set wins over the tier-rank fallback AND over a
+        # ``DEFAULT_OFF_FLAGS`` set wins over the entitlement grant AND over a
         # DB catalog row marked active — only an explicit override (org
         # ``feature_overrides`` / system ``set_override``) can turn them on.
         inactive: set[str] = getattr(self, "_inactive_flags", set()) | DEFAULT_OFF_FLAGS
@@ -860,16 +911,30 @@ class FeatureFlagRegistry:
             if flag.name in inactive:
                 flag.currently_active = False
             else:
-                flag_tier_rank = tier_rank.get(flag.tier, 0)
-                flag.currently_active = flag_tier_rank <= current_rank
+                covering = entitlement_for_flag(flag.name)
+                # A flag no entitlement covers is Community behaviour: available
+                # unless switched off. A covered flag follows its entitlement.
+                flag.currently_active = covering is None or covering.key in self._entitlements
 
             override = self._overrides.get(flag.name)
             if override is not None:
                 flag.currently_active = override
 
-    def refresh(self, current_tier: str, has_license_key: bool) -> None:
+    def refresh(
+        self,
+        current_tier: str,
+        has_license_key: bool,
+        entitlements: Iterable[str] | None = None,
+    ) -> None:
+        """Re-resolve the plan and recompute active state.
+
+        ``entitlements=None`` re-derives the grant from the tier (a paid tier
+        grants everything), preserving the pre-FAR-2665 ``refresh(tier, ...)``
+        call shape for callers that never had a licence feature list.
+        """
         self._current_tier = current_tier
         self._has_license_key = has_license_key
+        self._entitlements = frozenset(entitlements) if entitlements is not None else granted_entitlements(current_tier)
         self._refresh()
 
     def list_flags(self) -> list[FeatureFlag]:
@@ -893,12 +958,13 @@ class FeatureFlagRegistry:
         return self._overrides.get(name)
 
     def tier_gap_flags(self) -> list[FeatureFlag]:
-        """Return flags whose tier is above community but inactive because license is community."""
-        if self._current_tier != "community":
-            return []
-        tier_rank = self._effective_tier_ranks()
-        community_rank = tier_rank.get("community", 0)
-        return [f for f in self._flags if tier_rank.get(f.tier, 0) > community_rank and not f.currently_active]
+        """Entitled flags this plan does NOT grant — what a licence would unlock.
+
+        Replaces the tier-rank gap report (FAR-2665): a flag is a gap when an
+        entitlement covers it and that entitlement is not granted. Community
+        behaviour flags can never be a gap (no purchase unlocks them).
+        """
+        return [flag for flag in self._flags if (covering := entitlement_for_flag(flag.name)) is not None and covering.key not in self._entitlements and not flag.currently_active]
 
     async def resolve_flag(
         self,

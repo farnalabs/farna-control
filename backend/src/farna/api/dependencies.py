@@ -945,6 +945,46 @@ def require_feature(feature_name: str) -> DependsParameter:
     return cast("DependsParameter", Depends(_check))
 
 
+def require_entitlement(entitlement_key: str) -> DependsParameter:
+    """FastAPI dependency factory — blocks a route unless the plan holds an ENTITLEMENT.
+
+    FAR-2665: an entitlement is the COMMERCIAL grant (a bundle of behaviour
+    flags), separate from a feature flag (behaviour) and from an RBAC
+    permission (who may do a thing). Team-gated routes use this so the gate
+    states what must be bought rather than naming one flag that happens to sit
+    inside the bundle.
+
+    The key is validated AT IMPORT TIME: an unknown key raises ``ValueError``
+    here rather than silently gating on a capability no licence can grant (the
+    same fail-fast contract as an unknown RBAC permission key).
+
+    This gate is ALWAYS additive to a permission/role gate — it never replaces
+    one. Demoting an entitlement to Community must never widen a role, so a
+    route keeps every ``require_permission`` / role dependency it already had.
+
+    Returns 402 Payment Required when the entitlement is not granted.
+
+    .. code-block:: python
+
+       dependencies=[require_entitlement("identity"), require_permission("team.list")]
+    """
+    from farna.core.entitlements import get_entitlement, plan_entitlements, validate_entitlement_key
+
+    validate_entitlement_key(entitlement_key)
+    entitlement = get_entitlement(entitlement_key)
+
+    def _check(ctx: PlanContext = Depends(get_plan_context)) -> None:
+        if entitlement_key in plan_entitlements(ctx):
+            return
+        raise ProblemException(
+            ProblemType.FEATURE_REQUIRED,
+            detail=(f"{entitlement.name} is not available on your plan — it requires a Team licence installed at system or organisation scope"),
+            instance=entitlement_key,
+        )
+
+    return cast("DependsParameter", Depends(_check))
+
+
 def require_org_feature(feature_name: str) -> DependsParameter:
     """FastAPI dependency factory — feature gate that applies org overrides.
 

@@ -1,7 +1,7 @@
 """Admin cost-components CRUD — org-scoped, soft-delete, validated.
 
 Prefix: ``/api/v1/admin/costs/components``. Gated with
-``require_permission("cost.manage")`` + ``require_feature("admin_cost_breakdown")``
+``require_permission("cost.manage")`` + ``require_entitlement("cost_governance")``
 on the write routes AND the GET list. Save-time 422 validation is the ONLY
 validation path — there is NO validate-formula endpoint (the frontend's inline
 UI validation round-trips through the save endpoint's 422).
@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.api.db_error_handling import handle_db_errors
-from farna.api.dependencies import get_db_session, require_feature, require_permission
+from farna.api.dependencies import get_db_session, require_entitlement, require_permission
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
@@ -245,7 +245,7 @@ def _to_response(component: CostComponent) -> CostComponentResponse:
 @router.get("")
 @handle_db_errors("costs.components.list")
 async def get_components(
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[CostComponentResponse]:
@@ -268,7 +268,7 @@ async def get_components(
 @handle_db_errors("costs.components.create")
 async def create_component(
     req: CostComponentCreate,
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> CostComponentResponse:
@@ -314,7 +314,7 @@ async def create_component(
 async def update_component(
     component_id: uuid.UUID,
     req: CostComponentUpdate,
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> CostComponentResponse:
@@ -368,7 +368,7 @@ async def update_component(
 @handle_db_errors("costs.components.delete")
 async def delete_component(
     component_id: uuid.UUID,
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> None:

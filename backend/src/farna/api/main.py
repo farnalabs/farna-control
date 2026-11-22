@@ -1174,11 +1174,22 @@ async def _seed_tier_catalog() -> None:
                 **flag,
                 "depends_on": (json.dumps(flag["depends_on"]) if flag["depends_on"] is not None else None),
             }
+            # FAR-2665: RECONCILE the code declaration onto an existing row
+            # instead of ``DO NOTHING``. ``tier_id`` is now a projection of the
+            # entitlement registry and ``description``/``depends_on`` are code
+            # statements, so the code registry must win on every boot — otherwise
+            # a tier change (FAR-2604) or a retirement never reaches an existing
+            # install and the admin catalogue keeps advertising the stale value.
+            # ``is_active`` is deliberately NOT in the SET list: it is the
+            # per-install operator kill switch and must survive a boot.
             await session.execute(
                 text("""
                         INSERT INTO feature_flag_catalog (name, description, tier_id, depends_on, is_active)
                         VALUES (:name, :description, :tier_id, :depends_on, true)
-                        ON CONFLICT (name) DO NOTHING
+                        ON CONFLICT (name) DO UPDATE SET
+                            description = EXCLUDED.description,
+                            tier_id = EXCLUDED.tier_id,
+                            depends_on = EXCLUDED.depends_on
                     """),
                 params,
             )
