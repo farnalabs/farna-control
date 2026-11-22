@@ -113,7 +113,7 @@ _SCHEMA_MAX_DEPTH = 20
 _KNOWN_SANDBOX_TEMPLATES = frozenset({"opencode", "modulo-opencode"})
 
 # Pipeline retry_policy events (the budget BOUND lives in the one shared
-# ``modulo.core.retry_budget`` module — imported at the top of this file; a
+# ``farna.core.retry_budget`` module — imported at the top of this file; a
 # second copy here would make a raised bound read every stored policy as
 # malformed and silently disable every ceiling).
 # "eval_failed" re-dispatches a guardrail-blocked run (final_status
@@ -3041,7 +3041,7 @@ class GraphValidator:
 
         FAR-210: a correction on a redaction guardrail is an exfiltration
         channel for the exact data redaction protects. The runtime
-        ``RedactCorrectBlockedError`` (``modulo.core.guardrails.correction``)
+        ``RedactCorrectBlockedError`` (``farna.core.guardrails.correction``)
         is the fail-closed backstop; this save-time check rejects the
         mis-bound config at authoring time so it can never be saved onto a
         redaction guardrail.
@@ -3808,7 +3808,7 @@ class GraphValidator:
         the rule is lenient so existing flat-dict pipelines compile identically.
         """
         # Lazy import: importing the submodule would otherwise trigger
-        # modulo.core.pipeline_engine.__init__ (which imports the executor, which
+        # farna.core.pipeline_engine.__init__ (which imports the executor, which
         # imports this package) and create a circular-import deadlock at
         # module-load time. At call time the package is already initialised.
         from farna.core.pipeline_engine.port_resolver import validate_port_topology

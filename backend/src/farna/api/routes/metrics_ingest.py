@@ -184,7 +184,7 @@ async def _api_error_count_today(
 def _consent_active(settings_json: dict[str, Any] | None) -> bool:
     """Return True when the org has opted in to product analytics.
 
-    Thin delegate to :func:`modulo.core.product_analytics.consent.is_org_consenting`,
+    Thin delegate to :func:`farna.core.product_analytics.consent.is_org_consenting`,
     the single canonical reader of the stored consent level. The egress decision
     made here therefore cannot drift from the posture reported by the
     transparency endpoint, which reads through the same shared predicate.

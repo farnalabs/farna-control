@@ -1,7 +1,7 @@
 """Metric counters for the cost breakdown engine — the single owning module.
 
 Counters are ``modulo_``-prefixed and wired to the OTel meter provider (the
-house pattern — see ``modulo.core.error_tracking.metrics``). All handles are
+house pattern — see ``farna.core.error_tracking.metrics``). All handles are
 lazy-initialised so a missing meter provider never breaks the cost path.
 
 The metric inventory (names + labels) is canonical in the distilled spec

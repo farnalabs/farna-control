@@ -4,7 +4,7 @@
 The DB layer owns the store chokepoints (``crud.run.update_run_status`` blobs
 branch, ``recovery._apply_recovery_markers``, the node-runner marker
 savepoint). When the new-table store-write fails fail-closed, the chokepoint
-raises :class:`~modulo.db.crud.run_node_outputs.DualWriteError` and its
+raises :class:`~farna.db.crud.run_node_outputs.DualWriteError` and its
 caller's transaction rolls back — the legacy run row is never half-written.
 THIS module is what makes that abort survivable:
 
@@ -144,7 +144,7 @@ async def _emit_error_event(
 ) -> None:
     """Ingest one error event in a SEPARATE session (the saq_hooks._ingest_error_event pattern).
 
-    Mirrors :func:`modulo.core.error_tracking.saq_hooks._ingest_error_event`:
+    Mirrors :func:`farna.core.error_tracking.saq_hooks._ingest_error_event`:
     the standalone engine factory (own connection pool), ``set_rls_org`` for
     the run's org, ``source='backend'`` (the ``ck_error_events_source``
     vocabulary). Raises on failure — callers wrap best-effort.

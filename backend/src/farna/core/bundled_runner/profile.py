@@ -1,7 +1,7 @@
 """Bundled Runner shipped template + live drift (FAR-590, D4).
 
 The shipped template constants live in the DB layer
-(``modulo.db.bundled_runner_template``) so the seeding hook and the backfill
+(``farna.db.bundled_runner_template``) so the seeding hook and the backfill
 migration can consume them without a ``db -> core`` import; this module
 re-exports them and owns the LIVE drift helper (no fingerprint lifecycle:
 drift is computed against the constants on every read).

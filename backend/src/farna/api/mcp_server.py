@@ -93,7 +93,7 @@ from farna.api.routes.evals import _EVAL_TYPE_PATTERN
 # REST approve route does. Reuse that route's executor builder (notifier-wired)
 # and its capacity-deferred response body rather than duplicating either — the
 # established sibling-route-module import pattern (`api_keys`, `evals`,
-# `triggers` above). ``modulo.api.routes.hitl`` imports nothing from
+# `triggers` above). ``farna.api.routes.hitl`` imports nothing from
 # ``mcp_server``, so there is no circular-import risk.
 from farna.api.routes.hitl import (
     _build_resume_executor,
@@ -6191,7 +6191,7 @@ def _parse_eval_ref_ids(
 async def _load_eval_def(s: AsyncSession, org_id: uuid.UUID, eid: uuid.UUID) -> Any:
     """Load an org-scoped ``Eval`` row; ``None`` when the row does not exist.
 
-    Return type is ``Eval | None`` (from ``modulo.db.models.eval``); written
+    Return type is ``Eval | None`` (from ``farna.db.models.eval``); written
     as ``Any`` because the import is deferred inside the function body.
 
     Consolidated single loader (chunk 3b cutover): reads from the ``evals``
@@ -7168,7 +7168,7 @@ async def _viewer_run_scope_visible(
     """True when a viewer's team memberships cover the run's effective owner.
 
     ``hitl_claims`` carries only the org-only RLS policy, so a viewer read has
-    no team boundary of its own; :func:`modulo.db.crud.team_scope.viewer_run_scope_visible`
+    no team boundary of its own; :func:`farna.db.crud.team_scope.viewer_run_scope_visible`
     supplies the account-team membership clamp the REST HITL lists also apply.
     """
     from farna.db.crud.team_scope import viewer_run_scope_visible

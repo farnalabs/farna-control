@@ -323,7 +323,7 @@ async def _run_break_glass_watchdog(settings: Settings) -> None:  # NOSONAR S750
 
 
 async def _db_is_at_migration_head(settings: Settings) -> bool:
-    """Thin wrapper over the promoted predicate (modulo.db.health_checks).
+    """Thin wrapper over the promoted predicate (farna.db.health_checks).
 
     Kept as the boot-path/test seam (existing tests monkeypatch this name and
     the module-level ``get_or_create_engine`` seam); behaviour unchanged from
@@ -351,7 +351,7 @@ async def _run_migrations(settings: Settings) -> None:
     credentials, so an upgrade-in-place that later adds
     ``MODULO_SYSTEM_DATABASE_URL`` repairs the ``farna_control_system`` password on
     the next restart instead of leaving readiness red until an operator runs
-    ``python -m modulo.db.bootstrap_role`` by hand. The fast-path still skips
+    ``python -m farna.db.bootstrap_role`` by hand. The fast-path still skips
     exactly what it exists to skip — the alembic run and the migration
     advisory lock: the bootstrap is idempotent (create-or-update + re-grant +
     re-assert), takes its OWN bounded, fail-open lock (FAR-1200), and does not
@@ -555,7 +555,7 @@ async def _boot_seed(name: str, coro: Awaitable[Any]) -> None:
 
 
 async def _seed_modulo_users(settings: Settings) -> None:
-    """Boot wrapper over the promoted seeder (modulo.db.seed.seed_modulo_users).
+    """Boot wrapper over the promoted seeder (farna.db.seed.seed_modulo_users).
 
     Resolves the engine/factory through THIS layer's seams (the DB layer stays
     free of api imports); behaviour unchanged (FAR-671). Attribute lookups on
@@ -570,7 +570,7 @@ async def _seed_modulo_users(settings: Settings) -> None:
 
 
 # The single-user seeder and the rehash helper were promoted verbatim into
-# modulo.db.seed (FAR-671). Module-level aliases keep the historical private
+# farna.db.seed (FAR-671). Module-level aliases keep the historical private
 # names importable from this module (existing tests call them here).
 _seed_modulo_user = seed_modulo_user
 _rehash_existing_user = rehash_existing_user
@@ -877,8 +877,8 @@ def _configure_capacity_platform_probe(settings: Settings) -> None:
     The probe lets a deployment whose DB volume is not mountable into the app
     (Fly: separate app/DB machines) auto-detect capacity instead of pinning
     ``DB_CAPACITY_BYTES``. Built by the infra/provider layer
-    (``modulo.core.capacity_providers``) and injected into the DB layer through
-    its port, so ``modulo.db`` never imports ``modulo.core``.
+    (``farna.core.capacity_providers``) and injected into the DB layer through
+    its port, so ``farna.db`` never imports ``farna.core``.
 
     Fail-open end to end: a build/install failure (or an unconfigured provider)
     leaves the port UNSET, which keeps the FAR-1882 behaviour - filesystem probe,
@@ -1010,8 +1010,8 @@ def _register_shutdown_manager(settings: Settings) -> None:
     """Register graceful-shutdown callbacks for resources created during startup.
 
     Two session factories exist:
-      - modulo.db.session    (module-level, used by entrypoint.sh + ClaimExpiryJob)
-      - modulo.api.dependencies  (DI-injected, used by all route handlers)
+      - farna.db.session    (module-level, used by entrypoint.sh + ClaimExpiryJob)
+      - farna.api.dependencies  (DI-injected, used by all route handlers)
     Both point to the same DB URL but have separate connection pools.  They
     are intentionally decoupled -- the entrypoint runs before FastAPI is
     initialised and can't use DI.  Dispose both so no connections leak.
@@ -1404,7 +1404,7 @@ def _openapi_schema() -> dict[str, Any]:
     the handlers registered above actually render RFC 9457 Problem Details.
     Wrapping the generator keeps that correction inside ``app.openapi()`` so
     ``/openapi.json``, ``/docs`` and the schema-freshness generator all see the
-    same truthful document. See ``modulo.api.openapi``.
+    same truthful document. See ``farna.api.openapi``.
     """
     return apply_error_response_schemas(_raw_openapi())
 
@@ -1448,7 +1448,7 @@ _SERVE_SPA_ENV = SERVE_SPA_ENV
 _FRONTEND_DIST_ENV = FRONTEND_DIST_ENV
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _ASSETS_PREFIX = "/assets/"
-# Matches modulo.api.routes.library._MAX_UPLOAD_SIZE (50 MB) — the native
+# Matches farna.api.routes.library._MAX_UPLOAD_SIZE (50 MB) — the native
 # single-port path must never accept MORE than the Docker path accepts.
 _UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024
 

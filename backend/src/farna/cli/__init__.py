@@ -8,7 +8,7 @@ module scope lands on EVERY console-script invocation — including
 ``MODULO_URL`` + ``MODULO_API_KEY`` and needs neither the database nor
 the settings graph.
 
-FAR-1586: ``migrate_org`` imported ``modulo.db.session`` at module scope,
+FAR-1586: ``migrate_org`` imported ``farna.db.session`` at module scope,
 and that module builds its async engine AT IMPORT TIME via
 ``get_settings()`` — so merely importing the CLI demanded
 ``DATABASE_URL`` / ``SECRET_KEY`` / ``FERNET_KEY``. The names below are

@@ -3,7 +3,7 @@
 Invitations live OUTSIDE the ``rls_org_isolation`` regime (pre-authenticated
 consumption), so every helper scopes by organisation explicitly. Token
 plaintexts are 256-bit urlsafe values minted by
-``modulo.util.one_time_token.generate_token`` (shared with the MCP setup
+``farna.util.one_time_token.generate_token`` (shared with the MCP setup
 handoff); only their SHA-256 hex is persisted.
 """
 

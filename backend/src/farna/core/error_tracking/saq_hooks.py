@@ -69,7 +69,7 @@ _NOOP_STATUSES = frozenset(
 )
 
 # System / no-tenant sentinel org (SYSTEM_ORG_ID) is imported from
-# modulo.db.models.organisation at module top — the single canonical
+# farna.db.models.organisation at module top — the single canonical
 # definition. Do NOT re-type the nil-UUID literal here (FAR-1505).
 
 

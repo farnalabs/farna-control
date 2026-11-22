@@ -13,7 +13,7 @@ pieces that must never drift between them live here once:
   The imports are function-local so this module stays a light dependency for the
   cron graph and for the sweeps that import it at module scope.
 
-Deliberately a leaf apart from :mod:`modulo.settings`: no sweep imports another
+Deliberately a leaf apart from :mod:`farna.settings`: no sweep imports another
 sweep to reach either helper.
 """
 

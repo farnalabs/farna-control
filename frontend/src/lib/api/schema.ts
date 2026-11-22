@@ -5059,7 +5059,7 @@ export interface paths {
          * @description Return the durable per-attempt execution history of a run (FAR-2078).
          *
          *     Attempts are ordered by ``attempt_index`` ascending (0-based, per run,
-         *     contiguous — see ``modulo.db.models.run_attempt``). ``items`` is capped at
+         *     contiguous — see ``farna.db.models.run_attempt``). ``items`` is capped at
          *     100 rows; ``total`` carries the run's true attempt count.
          *
          *     Org-scoped like every other run child read: the run is loaded through
@@ -5256,7 +5256,7 @@ export interface paths {
          *
          *     Accepts two (run_id, node_id) pairs, fetches each node's output,
          *     applies sensitive masking, and returns a structured line-level diff
-         *     via the shared modulo.core.line_diff helper.
+         *     via the shared farna.core.line_diff helper.
          */
         post: operations["diff_node_output_api_v1_runs_diff_post"];
         delete?: never;
@@ -8009,7 +8009,7 @@ export interface paths {
          *
          *     Each side carries its proposal contract plus the draft nodes and edges it
          *     was generated with. The comparison is pure and deterministic
-         *     (``modulo.determination.comparison``): it reports added, removed and
+         *     (``farna.determination.comparison``): it reports added, removed and
          *     changed nodes and edges with stable ids, names every changed property with
          *     its base and target values, carries each side's provenance onto its items,
          *     and reports only the approval/HITL and automation categories the draft
@@ -10896,7 +10896,7 @@ export interface paths {
          *     row per starved pipeline (bounded by the org's pipeline count), so no
          *     pagination and ``total`` is the exact item count. Detection (the SQL
          *     aggregate) lives in the crud layer
-         *     (:func:`modulo.db.crud.error_tracking.get_scheduler_starvation_pipelines`)
+         *     (:func:`farna.db.crud.error_tracking.get_scheduler_starvation_pipelines`)
          *     — the route keeps auth, RLS pinning and serialization only; the
          *     ``handle_db_errors`` decorator owns the DB-error mapping (it re-raises
          *     ``HTTPException`` untouched).
@@ -21929,7 +21929,7 @@ export interface components {
          * SeamCoverageProvenance
          * @description The ADR-042 provenance classes, bound to the canonical constants.
          *
-         *     Members are assigned FROM ``modulo.core.provenance`` so a rename there
+         *     Members are assigned FROM ``farna.core.provenance`` so a rename there
          *     propagates instead of drifting; a test asserts this enum covers the whole
          *     canonical set (a new ADR-042 class must be added here too).
          * @enum {string}

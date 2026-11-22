@@ -15,7 +15,7 @@ with executed node outputs and a connector hub. It NEVER raises into the
 terminalization path — every step is best-effort with a log + audit.
 
 Connector support: connectors OPT IN by overriding
-:meth:`~modulo.connectors.base.ConnectorBase.compensate` (GitHub closes a PR,
+:meth:`~farna.connectors.base.ConnectorBase.compensate` (GitHub closes a PR,
 Linear unassigns/archives). The default returns ``not_supported``.
 """
 

@@ -4,7 +4,7 @@ Concrete-provider-free home for Docker endpoint classification and the TLS
 gate.  Both Docker consumers import from here so they share ONE enforcement
 point:
 
-- :class:`~modulo.core.runtime_provider.docker.DockerRuntimeProvider`
+- :class:`~farna.core.runtime_provider.docker.DockerRuntimeProvider`
   validates its endpoint at registration, and
 - the Bundled Runner orphan reconciler validates the same endpoint before it
   opens its engine client.

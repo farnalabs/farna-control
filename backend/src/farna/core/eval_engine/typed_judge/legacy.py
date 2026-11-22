@@ -6,7 +6,7 @@ rows stay readable and execute exactly as they do today, but they are frozen:
 
 * **Create** requires the typed dialect — ``answer_contract ==
   "typed_questions"`` plus a structurally valid question set (the schema lives
-  in :mod:`~modulo.core.eval_engine.typed_judge.config`). A legacy config
+  in :mod:`~farna.core.eval_engine.typed_judge.config`). A legacy config
   cannot be created at any of the eight write paths.
 * **Update** accepts a legacy config only when it is byte-identical to the
   stored one (canonical JSON comparison). Editing a legacy config is a typed

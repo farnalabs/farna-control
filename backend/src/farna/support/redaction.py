@@ -2,15 +2,15 @@
 
 Layers, in the order they are applied to every member's raw text:
 
-1. **Member allowlist** — enforced at assembly time (:mod:`modulo.support.bundle`).
+1. **Member allowlist** — enforced at assembly time (:mod:`farna.support.bundle`).
    No content layer; it decides what may exist at all.
 2. **Exact-value scrub** — every real generated secret value (the bundled
    postgres/redis passwords, the state HMAC key, plus every credential-shaped
    Settings value) is replaced verbatim, including its percent-encoded form.
 3. **Structural ``KEY=value`` scrub** — through the CANONICAL sensitive-field
-   classifier (:func:`modulo.core.secret_patterns.is_sensitive_field_name`),
+   classifier (:func:`farna.core.secret_patterns.is_sensitive_field_name`),
    the same classifier ``modulo env`` and ``modulo doctor --report`` use.
-4. **Shared value patterns** — :func:`modulo.core.secret_patterns.mask_secret_values_in_text`
+4. **Shared value patterns** — :func:`farna.core.secret_patterns.mask_secret_values_in_text`
    (GitHub PATs, API keys, bearer tokens, URL userinfo, private keys, JWTs).
 5. **Fail-closed post-assembly gate** — re-scans each already-redacted member.
    Any residual seeded value, pattern hit, unredacted sensitive ``KEY=value``,

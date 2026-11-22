@@ -255,7 +255,7 @@ def egress_tier_for_provider_type(provider_type: str) -> str | None:
     fatal: a profile bound to that provider cannot have resolved either, and a
     later dispatch surfaces the typed config error. Returns ``None`` for an
     unrecognised provider type; callers fail closed by passing the raw value
-    through as the tier, which :func:`modulo.core.pipeline_engine.egress.resolve_egress`
+    through as the tier, which :func:`farna.core.pipeline_engine.egress.resolve_egress`
     refuses as an unknown tier rather than silently defaulting to an
     enforceable one.
     """

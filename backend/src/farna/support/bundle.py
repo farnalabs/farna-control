@@ -2,7 +2,7 @@
 
 One artefact a self-hoster can safely send to Farnalabs: a zip with a FIXED,
 versioned member allowlist and a five-layer, fail-closed redaction pipeline.
-See :mod:`modulo.support.redaction` for the layers.
+See :mod:`farna.support.redaction` for the layers.
 
 The member set is closed: adding one requires updating :data:`GOLDEN_MEMBERS`,
 which the golden-member test pins. Readers tolerate unknown members so a newer
@@ -16,8 +16,8 @@ be attributed to an item refuses the whole build.
 
 Runs inside the app container with no launcher and no data dir:
 
-``python -m modulo.support.bundle --out <path> [--json]``
-``python -m modulo.support.bundle --redact-stdin``
+``python -m farna.support.bundle --out <path> [--json]``
+``python -m farna.support.bundle --redact-stdin``
 
 Every bundle carries a PER-RUN reference (``MSB-<format_version>-<UTC
 yyyymmddThhmmssZ>-<8 lowercase hex>``) stamped in ``report.json`` and
@@ -1418,12 +1418,12 @@ def _shrink_logs(members: Mapping[str, str]) -> dict[str, str]:
 
 def _write_atomically(out_path: Path, data: bytes) -> None:
     # ``out_path`` is the operator-chosen destination of a LOCAL command:
-    # ``modulo support --out PATH``, ``python -m modulo.support.bundle --out
+    # ``modulo support --out PATH``, ``python -m farna.support.bundle --out
     # PATH`` or ``modulo doctor --report PATH``. It is never supplied over HTTP
     # or by a model, and the process runs as the same operator that chose the
     # path, so writing there crosses no privilege boundary and the S8707 taint
     # flow from argparse argv is a false positive (same reasoning as the
-    # trusted ``--data-dir`` path in modulo.launcher.upgrade).
+    # trusted ``--data-dir`` path in farna.launcher.upgrade).
     tmp_path = out_path.with_name(f"{out_path.name}.tmp-{os.getpid()}")
     with tmp_path.open("wb") as handle:
         handle.write(data)

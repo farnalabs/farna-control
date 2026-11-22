@@ -49,7 +49,7 @@ Deliberate deviations from the ``RunEvidence`` precedent:
 
 The four JSON blob columns use the shared JSONB alias: migration 0192 promotes
 them to ``jsonb`` on Postgres, so they are declared with
-``JSON().with_variant(JSONB(), "postgresql")`` (``modulo.db.models.base.
+``JSON().with_variant(JSONB(), "postgresql")`` (``farna.db.models.base.
 JSONB_COL``) rather than a bare generic ``JSON`` — a bare ``JSON`` over a jsonb
 column binds equality/containment predicates as ``$1::JSON`` and Postgres
 raises ``operator does not exist: jsonb = json`` (FAR-1856's failure class).

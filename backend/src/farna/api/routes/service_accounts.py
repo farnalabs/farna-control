@@ -13,7 +13,7 @@ Shape decisions, each traceable to the ADRs:
   shared account machinery.
 * **Org-owned, never super-principal**: every role write goes through
   :func:`_validate_service_org_role`, whose ceiling authority is
-  :func:`modulo.core.principals.clamp_service_role` — a grant that would be
+  :func:`farna.core.principals.clamp_service_role` — a grant that would be
   clamped (``admin``) is REJECTED with a 422, never silently widened, and the
   database trigger from migration 0311 backstops every other write path
   structurally.

@@ -1,6 +1,6 @@
 """Journey advancement on run finalise (FAR-143 part 2).
 
-The create-time path (``modulo.db.crud.run._hydrate_journeys``) MINTs journey
+The create-time path (``farna.db.crud.run._hydrate_journeys``) MINTs journey
 rows via ``INSERT ... ON CONFLICT DO NOTHING``. This module is the finalise
 counterpart: when a run reaches a terminal (or ``awaiting_human``) state, it
 advances the ``journeys`` rows for every canonical work-item ref the run
@@ -64,7 +64,7 @@ string interpolation (repo rule).
 
 Ref canonicalisation
 --------------------
-Each raw entry is run through ``validate_ref_entry`` (``modulo.db.lifecycle_refs``),
+Each raw entry is run through ``validate_ref_entry`` (``farna.db.lifecycle_refs``),
 which canonicalises ``kind`` + ``ref`` (e.g. ``#123`` vs ``123`` for a github
 kind both land on ``123``) and validates ``source`` / ``status``. A malformed
 entry is dropped with a warning (fail-open), mirroring the create-time path.
@@ -112,7 +112,7 @@ _ADVANCING_TERMINAL_STATUSES: frozenset[str] = frozenset(
 _AWAITING_HUMAN = "awaiting_human"
 
 # Mint-only: ensure the journey row exists without touching latest_*/run_count.
-# Mirrors modulo.db.crud.run._hydrate_journeys (uuid bindings as 32-hex for
+# Mirrors farna.db.crud.run._hydrate_journeys (uuid bindings as 32-hex for
 # cross-backend portability). The provenance / first_seen_source columns are
 # stamped on the INSERT arm (FAR-794 + FAR-795): an agent-sourced mint must
 # carry ``provenance='agent'`` / ``first_seen_source='agent'`` from birth, and
@@ -197,14 +197,14 @@ _ADVANCE_SQL = text(
 )
 
 # FAR-794 slice 2b: the rank-guarded provenance UPSERT for caller/derived refs
-# at terminal finalise — the same shape ``modulo.db.crud.run._hydrate_journeys``
+# at terminal finalise — the same shape ``farna.db.crud.run._hydrate_journeys``
 # established at create time, applied to the mint entries that were absent at
 # run creation (node-input injection arrived after the snapshot seeded input).
 #
 # * INSERT arm MINTS the missing caller/derived journey row (agents never mint).
 # * UPDATE arm upgrades ``provenance`` by rank ONLY (``agent(0) < derived(1) <
 #   caller(2)``, unknown/NULL legacy rank 0 — the same inline CASE the create
-#   path in ``modulo.db.crud.run`` established) — an INDEPENDENT SET, never
+#   path in ``farna.db.crud.run`` established) — an INDEPENDENT SET, never
 #   gated by the ``:evidence_ts`` evidence compare-and-set, and it does
 #   NOT touch ``updated_at`` / ``latest_*`` / ``run_count`` (those are owned
 #   by terminal-advance evidence-CAS). A provenance upgrade never downgrades.
@@ -335,7 +335,7 @@ async def confirm_reported_refs(
     CONFIRM / MATCH an existing journey keyed by the same canonical
     ``(organisation_id, kind, ref)`` — it can NEVER mint one (minting is owned
     by the create-time ``INSERT ... ON CONFLICT DO NOTHING`` path in
-    ``modulo.db.crud.run``). This is the self-report endpoint's counterpart to
+    ``farna.db.crud.run``). This is the self-report endpoint's counterpart to
     the finalise path's ``_confirm_reported_refs``, kept here so both consumers
     share one org-scoped EXISTS check.
 
@@ -569,7 +569,7 @@ async def upsert_ref_provenances(
 
     FAR-794 slice 2b: at terminal finalise the run's create-stamped refs are
     minted through the rank-guarded upsert (the same shape the create path in
-    ``modulo.db.crud.run`` uses) — the UPDATE arm upgrades ``provenance`` ONLY
+    ``farna.db.crud.run`` uses) — the UPDATE arm upgrades ``provenance`` ONLY
     by rank (derived → caller), independent of the evidence compare-and-set:
     a provenance upgrade is an independent SET that must never gate, or be
     gated by, the ``latest_*`` evidence write. ``first_seen_source`` is

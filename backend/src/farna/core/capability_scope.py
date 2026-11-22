@@ -9,7 +9,7 @@ that narrows (never widens) what the node's Agent is granted:
   win is that non-scoped credentials are never decrypted at all).
 * ``allowed_tools``: MCP/runtime tools the node's agent may invoke. Wired as an
   additional narrowing filter through the existing ``check_tool_scope``
-  chokepoint (``modulo.core.mcp.scope_validator``) — no parallel tool-scope
+  chokepoint (``farna.core.mcp.scope_validator``) — no parallel tool-scope
   system.
 * ``context_scope``: allowlist of ``run_context`` keys the node may read
   (need-to-know boundary).

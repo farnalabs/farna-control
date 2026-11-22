@@ -1,7 +1,7 @@
 """Versioned compliance control-mapping pack (FAR-2036).
 
 The pack is shipped *in the product*, so it moves with the release it
-describes. It is structured data (YAML under ``modulo/compliance/mappings/``),
+describes. It is structured data (YAML under ``farna/compliance/mappings/``),
 never a Python literal, and it is versioned independently of the product.
 
 Honesty is enforced structurally at load time (see :func:`validate_mapping_rows`):

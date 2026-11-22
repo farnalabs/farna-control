@@ -387,7 +387,7 @@ def _node_started_policy_allows(row: Any) -> tuple[bool, str]:
     own terminal spelling, ``harness.worker_lost``) nor the stall class (the
     executor-death outcome the nodeless sibling maps to) forbids the re-run,
     and a covered policy still has to have budget left — the shared
-    :func:`modulo.core.retry_budget.retry_executions_consumed` bound, fed from
+    :func:`farna.core.retry_budget.retry_executions_consumed` bound, fed from
     the durable ``runs.execution_attempt_count`` (FAR-2076). That counter is
     the number of EXECUTION attempts of the graph, so it also bounds a
     PRE-node death (worker lost during hub init / graph compile) without

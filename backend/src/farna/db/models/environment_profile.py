@@ -8,7 +8,7 @@ from farna.db.models.base import JSONB_COL, OrgScoped, SoftDeleteMixin
 
 # Single source of truth for the provider_type vocabulary (FAR-595). The
 # model CHECK below, the API request-validation pattern
-# (modulo.api.routes.environment_profiles), and the vocabulary scanner test
+# (farna.api.routes.environment_profiles), and the vocabulary scanner test
 # (tests/unit/core/runtime_provider/test_provider_type_coverage.py) all
 # derive from this constant — never hardcode the list elsewhere.
 PROVIDER_TYPES: Final[frozenset[str]] = frozenset({"local_docker", "e2b", "local", "runner_docker", "kubernetes"})

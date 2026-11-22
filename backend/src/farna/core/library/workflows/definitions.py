@@ -3,7 +3,7 @@
 Each dict defines a pre-built pipeline template that combines agents,
 schemas, and connector bindings into a reusable workflow.
 
-Workflows are registered as :class:`~modulo.db.models.library_primitive.LibraryPrimitive`
+Workflows are registered as :class:`~farna.db.models.library_primitive.LibraryPrimitive`
 with ``primitive_type='workflow'``.
 """
 

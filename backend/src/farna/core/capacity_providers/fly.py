@@ -1,6 +1,6 @@
 """Fly.io volume capacity probe (FAR-1992).
 
-A concrete :class:`modulo.db.capacity.PlatformCapacityProbe` implementation for
+A concrete :class:`farna.db.capacity.PlatformCapacityProbe` implementation for
 Fly.io deployments where the API/MCP app and the Postgres machine are SEPARATE
 Fly apps, so the app cannot ``statvfs`` the database volume (the reason
 FAR-1882's filesystem probe cannot auto-detect capacity there). The probe reads
@@ -50,7 +50,7 @@ FLY_API_BASE_URL = "https://api.machines.dev"
 _BYTES_PER_GIB = 1024**3
 
 # A factory that builds an httpx-compatible async client for ``url``. Defaults to
-# the SSRF-pinned client (``modulo.core.ssrf``); injectable so tests can supply a
+# the SSRF-pinned client (``farna.core.ssrf``); injectable so tests can supply a
 # fake without touching the network or the pinned transport.
 ClientFactory = Callable[..., Awaitable[Any]]
 
@@ -109,7 +109,7 @@ def capacity_bytes_from_volumes(payload: Any, selector: str = "") -> int | None:
 class FlyVolumeCapacityProbe:
     """Platform capacity probe backed by the Fly Machines API volumes endpoint.
 
-    Implements the structural :class:`modulo.db.capacity.PlatformCapacityProbe`
+    Implements the structural :class:`farna.db.capacity.PlatformCapacityProbe`
     port (``name`` + awaitable ``probe_capacity_bytes``). It is deliberately NOT a
     subclass of the port - the DB layer is kept free of any import of this module,
     so the ``db → core`` import-linter contract stays intact.

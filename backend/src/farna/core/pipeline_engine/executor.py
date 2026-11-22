@@ -282,7 +282,7 @@ def _is_finalize_lock_retryable(exc: BaseException) -> bool:
     ownership layer. ``is_lock_abort`` recognises both SQLSTATEs across the raw
     asyncpg ``LockNotAvailableError`` and SQLAlchemy ``OperationalError`` shapes.
 
-    EXCLUDES :class:`~modulo.db.crud.run_node_outputs.DualWriteError`: it is a
+    EXCLUDES :class:`~farna.db.crud.run_node_outputs.DualWriteError`: it is a
     deliberate FAIL-CLOSED abort that ``finalize_cost`` raises only AFTER the
     run has been terminalised ``dual_write_failed``. Its ``sqlstate`` reflects
     the underlying failure (often 40P01), so a bare SQLSTATE test would retry
@@ -301,7 +301,7 @@ _log = logging.getLogger(__name__)
 GUARDRAIL_EVAL_TYPE = "guardrail"
 
 # NOTE: the output-point predicate is NOT re-implemented here. The canonical
-# ``is_output_interception`` lives in ``modulo.core.guardrails.output_intercept``
+# ``is_output_interception`` lives in ``farna.core.guardrails.output_intercept``
 # and is lazily imported inside ``_handle_chain_end_event`` (a module-level
 # import cycle guards against guardrails -> eval_engine -> executor). A local
 # copy of a security-seam predicate is exactly the duplication flagged in
@@ -6617,7 +6617,7 @@ class PipelineExecutor:
         # connector_type_refs grants) is computed from the graph at run start so
         # the hub decrypts ONLY those connectors; out-of-scope credentials are
         # never disclosed. The scope is computed by
-        # ``modulo.core.capability_scope.compute_run_fetch_scope``. CONTRACT
+        # ``farna.core.capability_scope.compute_run_fetch_scope``. CONTRACT
         # CHANGE (FAR-435 tightening vs the old fall-back behaviour): a run that
         # MIXES connector-scoped and connector-unrestricted nodes no longer falls
         # back to fetch-everything — it fetches only the scoped union. The legacy

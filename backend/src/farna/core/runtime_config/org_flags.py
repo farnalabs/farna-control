@@ -1,7 +1,7 @@
 """Org-scoped, persistent runtime flags backed by ``Organisation.settings_json``.
 
 FAR-795 Slice A substrate. The process-global
-:class:`~modulo.core.runtime_config.store.RuntimeConfigStore` is keyed by
+:class:`~farna.core.runtime_config.store.RuntimeConfigStore` is keyed by
 env-var names and is NOT visible across processes — a flag set via the API
 process is invisible to the SAQ worker processes that finalise/reconcile
 work-item minting. This module provides the org-scoped, DB-backed alternative:

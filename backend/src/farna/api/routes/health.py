@@ -723,7 +723,7 @@ async def _check_checkpointer() -> CheckResult:
 def _resolve_alembic_ini() -> Path:
     """Locate backend/alembic.ini robustly regardless of the process cwd.
 
-    Same pattern as ``modulo.api.main._resolve_alembic_ini`` — the readiness
+    Same pattern as ``farna.api.main._resolve_alembic_ini`` — the readiness
     migration check must not depend on the cwd (the pre-commit test harness
     runs pytest from the repo root while CI and the container run from
     ``backend/``).
@@ -1727,7 +1727,7 @@ async def evaluate_readiness() -> ReadinessResponse:
     * the ``/healthz/ready`` HTTP route (wrapped by ``handle_db_errors``, which
       adds the 503 status code from this result's ``status``);
     * the ``health_readiness_alert`` system cron
-      (``modulo.core.health_alerts``), which emails the operator when this
+      (``farna.core.health_alerts``), which emails the operator when this
       evaluation transitions into a degraded/unavailable state.
 
     The cron imports this lazily (a ``core`` module must not import ``api`` at

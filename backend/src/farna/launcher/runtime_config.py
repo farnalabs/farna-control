@@ -6,7 +6,7 @@ reads before anything else. Two delivery paths produce it:
 * the container path — ``deploy/fly/entrypoint.sh`` renders
   ``runtime-config.js`` into the nginx docroot;
 * the native single-port path — the API serves ``GET /runtime-config.js``
-  when ``serve_spa`` is ON (``modulo.api.main._init_once_mount_spa``).
+  when ``serve_spa`` is ON (``farna.api.main._init_once_mount_spa``).
 
 ONE allowlist backs both: its top-level keys are exactly
 :data:`RUNTIME_CONFIG_KEYS`, and both paths generate through
@@ -69,7 +69,7 @@ def build_runtime_config_payload(env: Mapping[str, str] | None = None) -> dict[s
     if username and password:
         auto_login: dict[str, str] = {"username": username, "password": password}
         # FAR-865: optional explicit org binding. When unset the SPA falls back
-        # to the demo org (``modulo.core.demo.DEMO_ORG_SLUG``), preserving the
+        # to the demo org (``farna.core.demo.DEMO_ORG_SLUG``), preserving the
         # pre-FAR-865 legacy first-membership behaviour for existing deploys.
         org_slug = source.get(_AUTO_LOGIN_ORG_SLUG_ENV)
         if org_slug:
