@@ -249,7 +249,7 @@ class TestSigningFailsClosed:
 
         from farna.core.evidence_pack import signing
 
-        monkeypatch.setattr(signing, "get_settings", lambda: SimpleNamespace(modulo_evidence_signing_key=""))
+        monkeypatch.setattr(signing, "get_settings", lambda: SimpleNamespace(evidence_signing_key=""))
 
         with pytest.raises(EvidenceSigningError, match="No evidence signing key configured"):
             build_evidence_pack(organisation_id=ORG, events=[], private_key_pem=None)
@@ -534,7 +534,7 @@ class TestSigningKeyEdges:
         from farna.core.evidence_pack import signing
 
         private_pem, public_pem = _keypair()
-        monkeypatch.setattr(signing, "get_settings", lambda: SimpleNamespace(modulo_evidence_signing_key=private_pem))
+        monkeypatch.setattr(signing, "get_settings", lambda: SimpleNamespace(evidence_signing_key=private_pem))
 
         assert configured_public_key_pem() == public_pem
 

@@ -1,7 +1,7 @@
 """Unit tests for AuthRateLimiter and AuthRateLimitMiddleware.
 
 Covers:
-  - get_auth_rate_limiter returns None when modulo_auth_rate_limit_enabled=False
+  - get_auth_rate_limiter returns None when auth_rate_limit_enabled=False
   - get_auth_rate_limiter singleton behavior
   - AuthRateLimitMiddleware skips rate limiting when _rate_limiter is None
   - _client_ip precedence and unknown-host fallback
@@ -54,26 +54,26 @@ def _make_app(
 
 class TestGetAuthRateLimiter:
     def test_returns_none_when_disabled(self):
-        settings = make_settings(modulo_auth_rate_limit_enabled=False)
+        settings = make_settings(auth_rate_limit_enabled=False)
         limiter = get_auth_rate_limiter(settings)
         assert limiter is None
 
     def test_returns_limiter_when_enabled(self, monkeypatch):
         monkeypatch.setattr("redis.asyncio.Redis.from_url", lambda url, **kwargs: MagicMock())
-        settings = make_settings(modulo_auth_rate_limit_enabled=True)
+        settings = make_settings(auth_rate_limit_enabled=True)
         limiter = get_auth_rate_limiter(settings)
         assert limiter is not None
         assert isinstance(limiter, AuthRateLimiterCls)
 
     def test_returns_none_when_no_redis(self):
         """get_auth_rate_limiter returns None when REDIS_URL is empty (graceful fallback)."""
-        settings = make_settings(modulo_auth_rate_limit_enabled=True, redis_url="")
+        settings = make_settings(auth_rate_limit_enabled=True, redis_url="")
         limiter = get_auth_rate_limiter(settings)
         assert limiter is None
 
     def test_singleton_returns_same_instance(self, monkeypatch):
         monkeypatch.setattr("redis.asyncio.Redis.from_url", lambda url, **kwargs: MagicMock())
-        settings = make_settings(modulo_auth_rate_limit_enabled=True)
+        settings = make_settings(auth_rate_limit_enabled=True)
         first = get_auth_rate_limiter(settings)
         second = get_auth_rate_limiter(settings)
         assert first is second
@@ -87,7 +87,7 @@ class TestGetAuthRateLimiter:
             "redis.asyncio.Redis.from_url",
             MagicMock(side_effect=ConnectionError("boom")),
         )
-        limiter = get_auth_rate_limiter(make_settings(modulo_auth_rate_limit_enabled=True))
+        limiter = get_auth_rate_limiter(make_settings(auth_rate_limit_enabled=True))
         assert limiter is None
         assert rl_mod._auth_rate_limiter is None
         assert rl_mod._redis_clients == before_clients
@@ -102,14 +102,14 @@ class TestGetAuthRateLimiter:
             MagicMock(side_effect=asyncio.CancelledError()),
         )
         with pytest.raises(asyncio.CancelledError):
-            get_auth_rate_limiter(make_settings(modulo_auth_rate_limit_enabled=True))
+            get_auth_rate_limiter(make_settings(auth_rate_limit_enabled=True))
         assert rl_mod._redis_clients == before_clients
 
 
 class TestAuthRateLimitMiddlewareDisabled:
     def test_skips_rate_limiting_when_limiter_is_none(self):
-        """When modulo_auth_rate_limit_enabled=False, middleware passes through."""
-        app = _make_app(settings=make_settings(modulo_auth_rate_limit_enabled=False))
+        """When auth_rate_limit_enabled=False, middleware passes through."""
+        app = _make_app(settings=make_settings(auth_rate_limit_enabled=False))
 
         with TestClient(app) as client:
             resp = client.post("/api/v1/auth/login")
@@ -155,7 +155,7 @@ class TestAuthRateLimitMiddlewareEnabled:
         """GET requests to auth paths should not be rate limited."""
         limiter = make_auth_limiter(auth_redis, max_attempts=0)
         app = _make_app(
-            settings=make_settings(modulo_auth_rate_limit_enabled=True),
+            settings=make_settings(auth_rate_limit_enabled=True),
             rate_limiter=limiter,
             method="GET",
         )
@@ -176,7 +176,7 @@ class TestAuthRateLimitMiddlewareEnabled:
         """
         limiter = make_auth_limiter(auth_redis, max_attempts=0)
         app = _make_app(
-            settings=make_settings(modulo_auth_rate_limit_enabled=True),
+            settings=make_settings(auth_rate_limit_enabled=True),
             rate_limiter=limiter,
             path="/api/v1/other",
         )
@@ -199,7 +199,7 @@ class TestAuthRateLimitMiddlewareEnabled:
         auth_redis.ttl = AsyncMock(return_value=30)
         limiter = make_auth_limiter(auth_redis, max_attempts=0)
         app = _make_app(
-            settings=make_settings(modulo_auth_rate_limit_enabled=True),
+            settings=make_settings(auth_rate_limit_enabled=True),
             rate_limiter=limiter,
             path="/api/v1/auth/demo",
         )
@@ -215,8 +215,8 @@ class TestAuthRateLimitMiddlewareEnabled:
         """A valid FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN should skip the auth rate limit."""
         auth_redis.ttl = AsyncMock(return_value=30)
         limiter = make_auth_limiter(auth_redis, max_attempts=0)
-        settings = make_settings(modulo_auth_rate_limit_enabled=True)
-        settings.modulo_ratelimit_bypass_token = "bypass-secret"
+        settings = make_settings(auth_rate_limit_enabled=True)
+        settings.ratelimit_bypass_token = "bypass-secret"
         app = _make_app(settings=settings, rate_limiter=limiter)
 
         with TestClient(app) as client:
@@ -232,8 +232,8 @@ class TestAuthRateLimitMiddlewareEnabled:
         """An invalid bypass token should still be rate limited."""
         auth_redis.ttl = AsyncMock(return_value=30)
         limiter = make_auth_limiter(auth_redis, max_attempts=0)
-        settings = make_settings(modulo_auth_rate_limit_enabled=True)
-        settings.modulo_ratelimit_bypass_token = "bypass-secret"
+        settings = make_settings(auth_rate_limit_enabled=True)
+        settings.ratelimit_bypass_token = "bypass-secret"
         app = _make_app(settings=settings, rate_limiter=limiter)
 
         with TestClient(app) as client:
@@ -250,7 +250,7 @@ class TestAuthRateLimitMiddlewareEnabled:
         limiter = make_auth_limiter(auth_redis, max_attempts=10)
         mw = AuthRateLimitMiddleware(
             app=FastAPI(),
-            settings=make_settings(modulo_auth_rate_limit_enabled=True),
+            settings=make_settings(auth_rate_limit_enabled=True),
             rate_limiter=limiter,
         )
         request = make_mock_request(path="/api/v1/auth/login", headers={}, client=None)

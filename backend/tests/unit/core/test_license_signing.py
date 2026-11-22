@@ -120,14 +120,14 @@ class TestGenerateTeamLicense:
     def test_private_key_resolved_from_settings(self) -> None:
         kp = generate_keypair()
         set_public_key(kp["public_key"])
-        fake_settings = SimpleNamespace(modulo_license_private_key=kp["private_key"])
+        fake_settings = SimpleNamespace(license_private_key=kp["private_key"])
         with patch("farna.core.license_signing.get_settings", return_value=fake_settings):
             key = generate_team_license("Acme")
         assert parse_and_verify(key).valid is True
 
     def test_no_private_key_raises(self) -> None:
         with (
-            patch("farna.core.license_signing.get_settings", return_value=SimpleNamespace(modulo_license_private_key="")),
+            patch("farna.core.license_signing.get_settings", return_value=SimpleNamespace(license_private_key="")),
             pytest.raises(LicenseSigningError, match="FARNA_CONTROL_LICENSE_PRIVATE_KEY"),
         ):
             generate_team_license("Acme")

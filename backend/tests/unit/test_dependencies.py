@@ -45,7 +45,7 @@ class TestGetOrCreateEngine:
         from farna.api.dependencies import get_or_create_engine
 
         settings = MagicMock()
-        settings.modulo_db = "postgres"
+        settings.db = "postgres"
         settings.database_url = "postgresql+asyncpg://u:p@localhost/db"
         # FAR-1524: pool_recycle is settings-driven (db_pool_recycle_seconds),
         # default 1500s — below the Fly HAProxy 30m session window.
@@ -71,7 +71,7 @@ class TestGetOrCreateEngine:
         from farna.api.dependencies import get_or_create_engine
 
         settings = MagicMock()
-        settings.modulo_db = "sqlite"
+        settings.db = "sqlite"
         settings.database_url = "sqlite+aiosqlite:///./test.db"
 
         with (
@@ -91,7 +91,7 @@ class TestGetOrCreateEngine:
         from farna.api.dependencies import get_or_create_engine
 
         settings = MagicMock()
-        settings.modulo_db = "sqlite"
+        settings.db = "sqlite"
         settings.database_url = "sqlite+aiosqlite:///./test.db"
 
         with (
@@ -110,7 +110,7 @@ class TestGetOrCreateEngine:
         deps._engine = None
 
         settings = MagicMock()
-        settings.modulo_db = "postgres"
+        settings.db = "postgres"
         settings.database_url = "postgresql+asyncpg://u:p@localhost/db"
 
         with (

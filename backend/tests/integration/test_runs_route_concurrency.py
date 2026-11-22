@@ -184,10 +184,10 @@ async def runs_route_client(db_url: str, app_engine: AsyncEngine) -> AsyncGenera
         database_url=db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
         # The FAR-1625 snapshot-allocation row lock is bounded by the
         # *transaction-scoped* ``Settings.mutation_row_lock_timeout_ms`` — NOT
         # by the pipeline's ``lock_wait_timeout_seconds`` column (that column

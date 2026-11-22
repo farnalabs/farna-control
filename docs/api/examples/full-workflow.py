@@ -16,9 +16,9 @@ Demonstrates a full end-to-end workflow:
 Fully runnable with environment variable config.
 
 Usage:
-  export MODULO_URL=http://localhost:8000
-  export MODULO_EMAIL=admin@example.com
-  export MODULO_PASSWORD=changeme
+  export FARNA_CONTROL_URL=http://localhost:8000
+  export FARNA_CONTROL_EMAIL=admin@example.com
+  export FARNA_CONTROL_PASSWORD=changeme
   python full-workflow.py
 
 Requires: httpx (pip install httpx)
@@ -33,11 +33,11 @@ from urllib.parse import urlparse
 
 import httpx
 
-BASE_URL = os.getenv("MODULO_URL", "http://localhost:8000").rstrip("/")
-EMAIL = os.getenv("MODULO_EMAIL")
-PASSWORD = os.getenv("MODULO_PASSWORD")
-POLL_INTERVAL = float(os.getenv("MODULO_POLL_INTERVAL", "2"))
-MAX_POLLS = int(os.getenv("MODULO_MAX_POLLS", "30"))
+BASE_URL = os.getenv("FARNA_CONTROL_URL", "http://localhost:8000").rstrip("/")
+EMAIL = os.getenv("FARNA_CONTROL_EMAIL")
+PASSWORD = os.getenv("FARNA_CONTROL_PASSWORD")
+POLL_INTERVAL = float(os.getenv("FARNA_CONTROL_POLL_INTERVAL", "2"))
+MAX_POLLS = int(os.getenv("FARNA_CONTROL_MAX_POLLS", "30"))
 
 
 def bail(msg: str):
@@ -74,7 +74,7 @@ def step(label: str):
 
 def main():
     if not EMAIL or not PASSWORD:
-        bail("Set MODULO_EMAIL and MODULO_PASSWORD")
+        bail("Set FARNA_CONTROL_EMAIL and FARNA_CONTROL_PASSWORD")
 
     # ── Shared state ──────────────────────────────────────────────
     token = None

@@ -56,7 +56,7 @@ _REDIS_DB = "0"
 _COMPOSED_FIELDS: dict[str, str] = {
     "DATABASE_URL": "database_url",
     "REDIS_URL": "redis_url",
-    "FARNA_CONTROL_SYSTEM_DATABASE_URL": "modulo_system_database_url",
+    "FARNA_CONTROL_SYSTEM_DATABASE_URL": "system_database_url",
 }
 
 # The launcher-owned public surface (consumed by the entry; vulture's

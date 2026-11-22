@@ -63,7 +63,7 @@ def _client(principal: TenantPrincipal | None) -> Generator[TestClient, None, No
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
     app.dependency_overrides[get_db_session] = override_session
     if principal is not None:

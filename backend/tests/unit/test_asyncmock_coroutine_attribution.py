@@ -160,7 +160,7 @@ def test_opt_out_disables_the_attribution_message(tmp_path: Path) -> None:
 def test_origin_tracking_is_enabled_for_the_unit_suite() -> None:
     """The creation stack is recorded by CPython origin tracking, not tracemalloc."""
     if not unit_conftest._ATTRIBUTION_ENABLED:
-        pytest.skip("attribution disabled via MODULO_TEST_COROUTINE_ATTRIBUTION")
+        pytest.skip("attribution disabled via FARNA_CONTROL_TEST_COROUTINE_ATTRIBUTION")
     assert sys.get_coroutine_origin_tracking_depth() >= unit_conftest._COROUTINE_ORIGIN_DEPTH
 
 

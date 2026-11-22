@@ -1394,7 +1394,7 @@ class TestDefaultInstallRoot:
         "no native install to upgrade" on every fresh or migrated install.
         """
         monkeypatch.delenv("FARNA_CONTROL_INSTALL_ROOT", raising=False)
-        monkeypatch.delenv("MODULO_INSTALL_ROOT", raising=False)
+        monkeypatch.delenv("FARNA_CONTROL_INSTALL_ROOT", raising=False)
         home = tmp_path / "home"
         home.mkdir()
         monkeypatch.setenv("HOME", str(home))

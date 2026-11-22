@@ -58,10 +58,10 @@ def _make_settings(**overrides: object) -> object:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_admin_password": "testpass",
-        "modulo_auth_rate_limit_enabled": False,
+        "admin_password": "testpass",
+        "auth_rate_limit_enabled": False,
         "redis_url": "",
-        "modulo_multi_org_enabled": True,
+        "multi_org_enabled": True,
     }
     kwargs.update(overrides)
     return Settings(**kwargs)
@@ -641,7 +641,7 @@ class TestOrgLogin:
     def test_env_var_fallback_not_applied_for_per_org(self, client: tuple[TestClient, AsyncMock]) -> None:
         """Per-org endpoint does NOT use env-var SAML fallback (FAR-1004).
 
-        Even when settings.modulo_saml_enabled is True, the per-org endpoint
+        Even when settings.saml_enabled is True, the per-org endpoint
         only checks the DB for this org's SAML providers.
         """
         http, session = client
@@ -666,9 +666,9 @@ class TestOrgLogin:
 
         # Override settings with SAML env-var enabled — should NOT affect per-org response
         settings = _make_settings(
-            modulo_saml_enabled=True,
-            modulo_license_key="test-key",
-            modulo_saml_idp_metadata_url="https://idp.example.com/metadata",
+            saml_enabled=True,
+            license_key="test-key",
+            saml_idp_metadata_url="https://idp.example.com/metadata",
         )
         app.dependency_overrides[get_settings] = lambda: settings
         try:

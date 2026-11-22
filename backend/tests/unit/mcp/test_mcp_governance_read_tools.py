@@ -64,7 +64,7 @@ def _enable_internal_lifecycle_map_access(request: pytest.FixtureRequest, monkey
     }:
         from farna.api.mcp_server import _ctx_key_grants
 
-        monkeypatch.setattr("farna.api.mcp_server.get_settings", lambda: MagicMock(modulo_dev_mode=True))
+        monkeypatch.setattr("farna.api.mcp_server.get_settings", lambda: MagicMock(dev_mode=True))
         _ctx_key_grants.set(frozenset({"library.search.in_dev", "lifecycle_map.list"}))
         yield
         _ctx_key_grants.set(None)
@@ -406,8 +406,8 @@ class TestListFeatureFlags(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1320,8 +1320,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1355,8 +1355,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1399,8 +1399,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = _valid_license_key()
-            settings.modulo_dev_mode = False
+            settings.license_key = _valid_license_key()
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1448,8 +1448,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = "not-a-valid-key"
-            settings.modulo_dev_mode = False
+            settings.license_key = "not-a-valid-key"
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1492,8 +1492,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1535,8 +1535,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1581,8 +1581,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1626,8 +1626,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = ""
-            settings.modulo_dev_mode = False
+            settings.license_key = ""
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:
@@ -1686,8 +1686,8 @@ class TestListFeatureFlagsErrorArms(AuthContext):
         _ctx_is_system_admin.set(True)
         try:
             settings = MagicMock()
-            settings.modulo_license_key = "not-a-valid-key"
-            settings.modulo_dev_mode = False
+            settings.license_key = "not-a-valid-key"
+            settings.dev_mode = False
             with patch("farna.api.mcp_server.get_settings", return_value=settings):
                 result = await list_feature_flags()
         finally:

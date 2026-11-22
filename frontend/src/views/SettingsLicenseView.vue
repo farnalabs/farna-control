@@ -304,7 +304,7 @@ const applyScope = ref<'org' | 'system'>('org')
  * or redeploy. The persisted system licence is restored at startup and
  * refreshed into other processes within a short TTL, so the SAQ worker sees it
  * too. The org key takes precedence over the instance-wide licence, which in
- * turn overrides a deployment-wide `MODULO_LICENSE_KEY` — the operator needs to
+ * turn overrides a deployment-wide `FARNA_CONTROL_LICENSE_KEY` — the operator needs to
  * know that BEFORE they rely on it.
  */
 const applyDialogDescription = computed(() =>
@@ -469,7 +469,7 @@ async function removeLicense() {
  * before clearing the in-memory slot and busts every cached licence status
  * server-side, so the removal is durable (it does not return on a restart) and
  * the deployment degrades without one. Resolution then falls back to
- * `MODULO_LICENSE_KEY`, then Community. Reloading the plan and the status is
+ * `FARNA_CONTROL_LICENSE_KEY`, then Community. Reloading the plan and the status is
  * what the operator sees change immediately.
  */
 async function removeSystemLicense() {

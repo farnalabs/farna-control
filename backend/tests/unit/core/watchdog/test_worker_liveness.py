@@ -53,7 +53,7 @@ def _make_settings(**overrides: Any) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "test",
+        "admin_password": "test",
         "redis_url": "redis://localhost:6379/0",
         "watchdog_tick_seconds": 30,
         "watchdog_worker_stale_seconds": 180,

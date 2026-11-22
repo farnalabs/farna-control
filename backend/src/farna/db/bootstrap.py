@@ -8,13 +8,12 @@ contract - importable WITHOUT SQLAlchemy/models; asyncpg-level only.
 1. Fix DATABASE_ADMIN_URL for the SQLAlchemy async driver and fix the runtime
    DATABASE_URL for backwards compatibility
 2. Create the alembic_version table with VARCHAR(255) for branch migrations
-3. Resolve the system database URL from the accepted aliases, in priority order:
-   FARNA_CONTROL_SYSTEM_DATABASE_URL, MODULO_SYSTEM_DATABASE_URL, then
-   FARNA_CONTROL_SYSTEM_DATABASE_URL. An explicitly configured value is
-   fixed and published under the canonical name. Otherwise, derive a value from
-   DATABASE_URL for the entrypoint env-file contract only; never publish that
-   derived credential into the canonical application setting. The result is
-   written to /tmp/system_database_url.env.
+3. Resolve the system database URL from ``FARNA_CONTROL_SYSTEM_DATABASE_URL``,
+   the only spelling read (the pre-rebrand alias was removed). An explicitly
+   configured value is fixed and published under the canonical name. Otherwise,
+   derive a value from DATABASE_URL for the entrypoint env-file contract only;
+   never publish that derived credential into the canonical application setting.
+   The result is written to /tmp/system_database_url.env.
 4. Write the fixed DATABASE_ADMIN_URL / DATABASE_URL / system database URL to
    files for the shell script
 """
@@ -146,24 +145,14 @@ def main() -> None:
     _write_env_file("/tmp/database_url.env", runtime_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
     _write_env_file("/tmp/database_admin_url.env", admin_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
 
-    # MODULO_SYSTEM_DATABASE_URL: the farna_control_system role (LOGIN, BYPASSRLS) URL used
+    # FARNA_CONTROL_SYSTEM_DATABASE_URL: the farna_control_system role (LOGIN, BYPASSRLS) URL used
     # by system crons (metrics_dump, analytics_facts_maintenance, journey_reconcile,
     # retention_cleanup, dispatcher_reconcile) and the SSO pre-auth provider lookup.
     # If set, fix it like the others. If not, derive the URL for the entrypoint's
     # env-file contract, but do not pass that derived credential into role
     # reconciliation: bootstrap_role.py must preserve an existing system-role
     # password on warm boots without an explicit system URL.
-    configured_system_url = next(
-        (
-            os.environ.get(name, "")
-            for name in (
-                "FARNA_CONTROL_SYSTEM_DATABASE_URL",
-                "MODULO_SYSTEM_DATABASE_URL",
-            )
-            if os.environ.get(name, "")
-        ),
-        "",
-    )
+    configured_system_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
     if configured_system_url:
         system_url = fix_database_url(configured_system_url)
         os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] = system_url
@@ -176,7 +165,8 @@ def main() -> None:
             # The derived URL is for the entrypoint env-file contract only.
             # Do not publish it as the canonical application credential: its
             # password comes from the app URL and is not a verified system-role
-            # credential. bootstrap_role.py reads only the explicit legacy alias.
+            # credential. bootstrap_role.py reads only the canonical name, so it
+            # keeps the existing system-role password on this warm boot.
             print(  # noqa: T201
                 "WARNING: no system database URL is configured; derived system URL is written to the entrypoint env file only and is not published as an application credential.",
                 file=sys.stderr,
@@ -184,6 +174,6 @@ def main() -> None:
             _write_env_file("/tmp/system_database_url.env", system_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
         else:
             print(  # noqa: T201
-                "WARNING: cannot derive MODULO_SYSTEM_DATABASE_URL (DATABASE_URL has no usable password/userinfo) - system crons will fall back to farna_control_app",
+                "WARNING: cannot derive FARNA_CONTROL_SYSTEM_DATABASE_URL (DATABASE_URL has no usable password/userinfo) - system crons will fall back to farna_control_app",
                 file=sys.stderr,
             )

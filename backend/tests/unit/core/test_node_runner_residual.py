@@ -698,7 +698,7 @@ async def test_mark_connector_write_no_delivery_reraises_cancellation():
 def _enable_write_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: SimpleNamespace(modulo_connector_write_gate_enabled=True),
+        lambda: SimpleNamespace(connector_write_gate_enabled=True),
     )
 
 
@@ -2077,7 +2077,7 @@ async def test_connector_node_write_gate_suppresses(monkeypatch: pytest.MonkeyPa
     set_connector_hub(hub)
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     suppressed = nr._idempotency_gate_skipped_envelope("conn-node")
@@ -2103,7 +2103,7 @@ async def test_connector_node_write_intent_persisted_before_write(monkeypatch: p
     set_connector_hub(_StubHub(connector=connector))
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     with (
@@ -2126,7 +2126,7 @@ async def test_connector_node_write_intent_persist_failure_never_fails_node(capl
     set_connector_hub(_StubHub())
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     with (
@@ -2185,7 +2185,7 @@ async def test_connector_node_write_intent_persist_reraises_cancellation(monkeyp
     set_connector_hub(_StubHub())
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     with (
@@ -2990,7 +2990,7 @@ def test_sandbox_node_def_malformed_loop_intercept_raises():
 
 async def test_sandbox_input_payload_truncated_beyond_10k():
     """A >10KB input payload is replaced by a bounded truncation marker in the
-    sandbox envs (MODULO_INPUT_PAYLOAD) — the raw payload never reaches env."""
+    sandbox envs (FARNA_CONTROL_INPUT_PAYLOAD) — the raw payload never reaches env."""
     fn = make_sandbox_agent_fn(_sandbox_node_def())
     sandbox = _make_sandbox_mock()
     with patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)):
@@ -3901,6 +3901,99 @@ async def test_sandbox_script_schema_violation_raises_script_invalid_output(monk
         pytest.raises(ScriptInvalidOutputError, match="schema"),
     ):
         await fn(_run_state())
+
+
+# ---------------------------------------------------------------------------
+# Exec phase (K-M) — the watchdog guard must never read an unbound local
+# ---------------------------------------------------------------------------
+
+
+def _exec_phase_state() -> Any:
+    """A dispatch state with nothing published yet (phases K-M prelude)."""
+    return nr._SandboxDispatchState(
+        exec_ctx=nr._SandboxExecContext(
+            session_factory=None,
+            org_id=_ORG_ID,
+            run_id=_RUN_ID,
+            node_id="n1",
+            claim_lease=None,
+            sandbox_timeout=60,
+            provider="e2b",
+        )
+    )
+
+
+async def _run_exec_phase(state: Any) -> Any:
+    return await nr._sandbox_apply_policy_and_exec(
+        state,
+        nr._SandboxMaterialisation(schema_dir={}, input_json="{}", env_vars_extra={}),
+        node_id="n1",
+        run_id=_RUN_ID,
+        org_id=_ORG_ID,
+        pipeline_id="pipe-1",
+        session_factory=None,
+        state={},
+        node_def={"id": "n1"},
+        sandbox_mode="script",
+        rendered_agent_command="python3 /home/user/main.py",
+        sandbox_timeout=60,
+        start_time=0.0,
+        stdout_cap=1024,
+        stdout_retention_mode="tail",
+        resource_limits=None,
+        read_only=False,
+        git_credentials=None,
+        single_pr_per_run=False,
+        delivery_sentinel=None,
+        enable_heartbeat=False,
+        watch_log_path=None,
+        stdout_percentage_delta=None,
+        watch_globs=[],
+        wallclock_budget_seconds=None,
+        stall_timeout_override=None,
+        loop_intercept_config=None,
+        drained_chunks=[],
+        _resolved_provider="e2b",
+    )
+
+
+async def test_exec_phase_policy_step_failure_is_never_unbound_local():
+    """A failure in the POLICY step (phase K) must surface as its own error.
+
+    ``watchdog`` is pre-bound above the outer ``try`` — i.e. above the policy
+    step and above the command ``try`` whose handlers used to run before the
+    post-try guard. A policy-step failure therefore propagates as itself and can
+    never be replaced by an ``UnboundLocalError`` raised from the guard's
+    ``watchdog is None`` read.
+    """
+    state = _exec_phase_state()
+    with patch.object(nr, "_sandbox_apply_runtime_policy", new=AsyncMock(side_effect=ValueError("policy boom"))), pytest.raises(ValueError, match="policy boom"):
+        await _run_exec_phase(state)
+    # The guard was never reached, so nothing was published for the command.
+    assert state.script_lease_claimed is False
+
+
+async def test_exec_phase_runtime_build_failure_surfaces_its_own_cause():
+    """A failure that prevents the watchdog's construction must surface as
+    ITSELF.
+
+    Before the wave-4 fix the post-try guard replaced it with a synthetic
+    ``RuntimeError("watchdog was not constructed — provisioning failed before
+    sandbox creation")``: a false stage attribution (provisioning had already
+    succeeded) that also hid the real cause from the caller's typed
+    provider-error translation. It must never surface as ``UnboundLocalError``
+    either — ``watchdog`` is pre-bound, so the guard's read is always defined.
+    """
+    state = _exec_phase_state()
+    with (
+        # Let the policy step succeed so the failure lands on the runtime build
+        # (the other pre-watchdog step) rather than on the policy phase.
+        patch.object(nr, "_sandbox_apply_runtime_policy", new=AsyncMock(return_value=None)),
+        patch.object(nr, "_sandbox_build_exec_runtime", new=AsyncMock(side_effect=ValueError("stall detector boom"))),
+        pytest.raises(ValueError, match="stall detector boom") as exc_info,
+    ):
+        await _run_exec_phase(state)
+    assert not isinstance(exc_info.value, UnboundLocalError)
 
 
 # ---------------------------------------------------------------------------

@@ -53,7 +53,7 @@ async def _stream(*items: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
 
 
 def _settings_namespace(key_pem: str) -> SimpleNamespace:
-    return SimpleNamespace(modulo_evidence_signing_key=key_pem, modulo_evidence_exporter_identity="route-test")
+    return SimpleNamespace(evidence_signing_key=key_pem, evidence_exporter_identity="route-test")
 
 
 async def _call_pack(
@@ -146,7 +146,7 @@ class TestVerificationKeyRoute:
 
     async def test_unconfigured_key_maps_to_503(self) -> None:
         def _raise() -> str:
-            raise EvidenceSigningError("No evidence signing key configured — set MODULO_EVIDENCE_SIGNING_KEY.")
+            raise EvidenceSigningError("No evidence signing key configured — set FARNA_CONTROL_EVIDENCE_SIGNING_KEY.")
 
         with (
             patch.object(route, "configured_public_key_pem", side_effect=_raise),

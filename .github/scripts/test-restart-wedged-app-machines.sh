@@ -53,7 +53,7 @@ case "${1:-}" in
     echo "boot log fetched"
     echo "DATABASE_URL fixed: postgresql://farna_control_app:hunter2@db.internal:5432/modulo..."
     echo "DATABASE_URL fixed: postgresql+asyncpg://staging_modulo:asyncpw@[fdaa:8b:fa9e:0:1::4]:5432/st..."
-    echo "MODULO_SYSTEM_DATABASE_URL fixed: postgresql+psycopg://farna_control_system:psycopgsecret@db.internal:5432/st..."
+    echo "FARNA_CONTROL_SYSTEM_DATABASE_URL fixed: postgresql+psycopg://farna_control_system:psycopgsecret@db.internal:5432/st..."
     exit "${FLY_LOGS_EXIT:-0}"
     ;;
   machines)

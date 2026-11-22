@@ -94,7 +94,7 @@ inventing a mechanism):
   visible only in the readiness payload and never pages — see
   :func:`_severe_event_loop_stall` for the three-band contract.
 * **FAR-1771 stall attribution (the alerting half's companion).** When
-  ``MODULO_SLOW_CALLBACK_WARN_MS`` is set, :func:`install_event_loop_stall_attribution`
+  ``FARNA_CONTROL_SLOW_CALLBACK_WARN_MS`` is set, :func:`install_event_loop_stall_attribution`
   arms asyncio's slow-callback warning on the running loop AND starts a
   low-frequency sampler thread that records the loop thread's stack;
   :func:`report_event_loop_stall_attribution` then returns the blocking
@@ -341,7 +341,7 @@ def _severe_event_loop_stall(check: SubCheck) -> bool:
 # ``asyncio.run``/``run_forever`` (uvicorn ``Server.run``, the SAQ worker,
 # a thread function). See :func:`_attributed_frame`.
 #
-# Gated entirely on ``MODULO_SLOW_CALLBACK_WARN_MS`` (Settings): off (the
+# Gated entirely on ``FARNA_CONTROL_SLOW_CALLBACK_WARN_MS`` (Settings): off (the
 # default) means no thread, no samples, no loop debug flags, and the report
 # helper returns None without logging — zero cost. On, the same knob also
 # arms asyncio's own slow-callback warning (``loop.set_debug`` +
@@ -516,7 +516,7 @@ def install_event_loop_stall_attribution(settings: Settings | None = None) -> bo
     a previous sampler (test re-install) is stopped first.
     """
     settings = settings or get_settings()
-    warn_ms = settings.modulo_slow_callback_warn_ms
+    warn_ms = settings.slow_callback_warn_ms
     if warn_ms <= 0:
         return False
     uninstall_event_loop_stall_attribution()

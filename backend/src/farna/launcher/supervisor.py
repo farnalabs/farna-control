@@ -58,7 +58,7 @@ Contracts locked by tests (``tests/unit/launcher/test_supervisor.py``):
   STARTTIME mismatch); a live postgres holding it is a hard refusal.
   SIGKILL debris (initdb temp dirs + plaintext pwfiles) is swept via the
   slice-1 sweep.
-* **MODULO_TEST_PAUSE_AT seam**: same deterministic pattern as slice 1 — a
+* **FARNA_CONTROL_TEST_PAUSE_AT seam**: same deterministic pattern as slice 1 — a
   registered gate name pauses the supervisor right before the cap-trip
   teardown; an unregistered value is refused. The entry scrubs the variable
   before boot (env_safety), so the seam is inert in production.
@@ -85,7 +85,7 @@ Contracts locked by tests (``tests/unit/launcher/test_supervisor.py``):
 Timing knobs default to the shared policy constants
 (:mod:`farna.launcher.policy` — the single source) and are overridden
 directly by tests (≥6-8x tick-vs-window margins per the repo timing
-lesson); the ``MODULO_LAUNCHER_*`` environment variables are the operator
+lesson); the ``FARNA_CONTROL_LAUNCHER_*`` environment variables are the operator
 override seam until Settings grows launcher knob fields.
 """
 
@@ -134,7 +134,7 @@ REDIS_CONF_PREFIX = ".redis-conf-"
 # The shim polls its parent at most this often (ADR 031 Decision 5).
 SHIM_POLL_SECONDS = 2.0
 
-# Registered MODULO_TEST_PAUSE_AT gates owned by this module (same seam shape
+# Registered FARNA_CONTROL_TEST_PAUSE_AT gates owned by this module (same seam shape
 # as initdb's; the entry scrubs the variable so a production boot is inert).
 GATE_SUPERVISOR_PRE_TEARDOWN = "supervisor_pre_teardown"
 _REGISTERED_GATES = frozenset({GATE_SUPERVISOR_PRE_TEARDOWN})
@@ -374,7 +374,7 @@ _KNOB_BOUNDS: dict[str, tuple[float, float]] = {
 
 
 def knobs_from_env(env: dict[str, str] | None = None) -> SupervisorKnobs:
-    """Build knobs from ``MODULO_LAUNCHER_*`` env overrides (operator seam).
+    """Build knobs from ``FARNA_CONTROL_LAUNCHER_*`` env overrides (operator seam).
 
     Until Settings grows launcher fields, the launcher honours these env
     overrides; unknown/invalid/out-of-bounds values fall back to the

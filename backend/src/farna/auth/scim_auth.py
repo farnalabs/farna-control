@@ -1,8 +1,8 @@
-"""SCIM 2.0 auth — Bearer token from MODULO_SCIM_TOKEN env var.
+"""SCIM 2.0 auth — Bearer token from FARNA_CONTROL_SCIM_TOKEN env var.
 
 Separate from the JWT-based auth used by the main API. The SCIM token is a
 shared secret configured via environment variable. SCIM operates on the default
-organisation (first org in the DB, or the org specified by MODULO_SCIM_DEFAULT_ORG_ID).
+organisation (first org in the DB, or the org specified by FARNA_CONTROL_SCIM_DEFAULT_ORG_ID).
 """
 
 import hmac
@@ -37,7 +37,7 @@ async def get_scim_principal(
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_db_session),
 ) -> ScimPrincipal:
-    """Validate Bearer token against MODULO_SCIM_TOKEN and resolve the target org."""
+    """Validate Bearer token against FARNA_CONTROL_SCIM_TOKEN and resolve the target org."""
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -48,11 +48,11 @@ async def get_scim_principal(
     # FAR-1135: hot-reloadable keys — the runtime override (admin API)
     # wins over the boot-time Settings value so SCIM can be enabled,
     # rotated, or disabled without a restart.
-    scim_token = override_or("FARNA_CONTROL_SCIM_TOKEN", settings.modulo_scim_token)
+    scim_token = override_or("FARNA_CONTROL_SCIM_TOKEN", settings.scim_token)
     if not scim_token:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="SCIM is not configured — set MODULO_SCIM_TOKEN",
+            detail="SCIM is not configured — set FARNA_CONTROL_SCIM_TOKEN",
         )
 
     # Compare as UTF-8 bytes: ``hmac.compare_digest`` raises ``TypeError`` on str
@@ -66,14 +66,14 @@ async def get_scim_principal(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    default_org_id = override_or("FARNA_CONTROL_SCIM_DEFAULT_ORG_ID", settings.modulo_scim_default_org_id)
+    default_org_id = override_or("FARNA_CONTROL_SCIM_DEFAULT_ORG_ID", settings.scim_default_org_id)
     if default_org_id:
         try:
             org_id = uuid.UUID(default_org_id)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="MODULO_SCIM_DEFAULT_ORG_ID is not a valid UUID",
+                detail="FARNA_CONTROL_SCIM_DEFAULT_ORG_ID is not a valid UUID",
             ) from None
         return ScimPrincipal(organisation_id=org_id)
 

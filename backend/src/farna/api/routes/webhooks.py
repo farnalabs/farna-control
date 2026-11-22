@@ -3,11 +3,11 @@
 URL: POST /api/v1/triggers/{trigger_id}/webhook
      POST /api/v1/triggers/{trigger_id}/webhook/replay/{event_id}
 
-Auth: HMAC-SHA256 via X-Modulo-Webhook-Secret header (configured per trigger).
-      X-Modulo-Timestamp header is required; validated within ±300s window.
-      Alternatively (FAR-2241), with no Modulo header present, GitHub's
+Auth: HMAC-SHA256 via X-Farna-Control-Webhook-Secret header (configured per trigger).
+      X-Farna-Control-Timestamp header is required; validated within ±300s window.
+      Alternatively (FAR-2241), with no Farna Control header present, GitHub's
       X-Hub-Signature-256 (sha256=<hmac of raw body>) is accepted; no timestamp,
-      so no replay window beyond payload dedup. Modulo headers always win.
+      so no replay window beyond payload dedup. Farna Control headers always win.
       Triggers with no hmac_secret accept unauthenticated requests.
 
 All delivery attempts are logged as TriggerEvent rows regardless of outcome.
@@ -219,11 +219,12 @@ async def _verify_webhook_auth(
     """Route-level timestamp + HMAC validation for an incoming webhook.
 
     FAR-2241: ``github_signature`` is the ``X-Hub-Signature-256`` header value,
-    passed ONLY when the request carries no Modulo header (the caller decides;
-    the Modulo path always wins). It is verified over the exact raw body with
-    the trigger's ``hmac_secret``; there is no timestamp, so no replay window
-    (payload dedup still applies downstream). Returns True when the delivery
-    authenticated via the GitHub scheme, so the engine skips its Modulo checks.
+    passed ONLY when the request carries no Farna Control header (the caller
+    decides; the Farna Control path always wins). It is verified over the exact
+    raw body with the trigger's ``hmac_secret``; there is no timestamp, so no
+    replay window (payload dedup still applies downstream). Returns True when
+    the delivery authenticated via the GitHub scheme, so the engine skips its
+    Farna Control checks.
 
     Belt-and-braces ahead of the engine's own check. Only triggers configured
     with an ``hmac_secret`` are validated here — HMAC-less triggers accept
@@ -554,7 +555,7 @@ async def _verify_replay_auth(
 
     Replay skips live-payload HMAC (the request body is empty) but an
     unauthenticated caller must still present a valid signature — same
-    ``X-Modulo-Webhook-Secret`` + ``X-Modulo-Timestamp`` headers as
+    ``X-Farna-Control-Webhook-Secret`` + ``X-Farna-Control-Timestamp`` headers as
     ``receive_webhook``, verified over the STORED raw body of the original
     event. Raises the same typed errors: ``TimestampExpiredError`` (400),
     ``HmacValidationError`` (401, including the no-hmac_secret-configured
@@ -572,13 +573,13 @@ async def _verify_replay_auth(
     """
     # ADR 047: unauthenticated replay requires a valid HMAC signature
     # over the stored payload (same check as receive_webhook).
-    hmac_signature = request.headers.get("X-Modulo-Webhook-Secret")
-    modulo_timestamp = request.headers.get("X-Modulo-Timestamp")
+    hmac_signature = request.headers.get("X-Farna-Control-Webhook-Secret")
+    modulo_timestamp = request.headers.get("X-Farna-Control-Timestamp")
     # FAR-2251: same rule as receive_webhook - GitHub's scheme is used only
-    # when NO Modulo header is present; otherwise the Modulo path wins.
+    # when NO Farna Control header is present; otherwise that path wins.
     modulo_header_present = hmac_signature is not None or modulo_timestamp is not None
     github_signature = None if modulo_header_present else request.headers.get("X-Hub-Signature-256")
-    # The GitHub scheme carries no timestamp, so only the Modulo path checks it.
+    # The GitHub scheme carries no timestamp, so only the Farna Control path checks it.
     ts = verify_timestamp(modulo_timestamp) if github_signature is None else None
     # config_json shape was validated by the shared bootstrap
     # helper (TriggerConfigInvalidError → 400 in the route) — this read
@@ -754,7 +755,7 @@ _INTAKE_ERROR_RESPONSES: tuple[tuple[type[Exception], tuple[int, str]], ...] = (
     (TriggerNotFoundError, (status.HTTP_404_NOT_FOUND, MSG_TRIGGER_NOT_FOUND)),
     (TriggerInactiveError, (status.HTTP_404_NOT_FOUND, MSG_TRIGGER_NOT_FOUND)),
     (TriggerConfigInvalidError, (status.HTTP_400_BAD_REQUEST, "Trigger configuration is invalid")),
-    (TimestampExpiredError, (status.HTTP_400_BAD_REQUEST, "X-Modulo-Timestamp is outside the ±300s replay window")),
+    (TimestampExpiredError, (status.HTTP_400_BAD_REQUEST, "X-Farna-Control-Timestamp is outside the ±300s replay window")),
     (HmacValidationError, (status.HTTP_401_UNAUTHORIZED, "HMAC signature verification failed")),
     (DuplicateWebhookError, (status.HTTP_400_BAD_REQUEST, "Duplicate webhook payload")),
     (ReplayNotFoundError, (status.HTTP_404_NOT_FOUND, "Trigger event not found")),
@@ -1418,7 +1419,7 @@ async def _raise_unexpected_delivery_error(
 
 # FAR-1472 exemption (kept in audit_coverage_baseline.txt): the principal here
 # is OPTIONAL - HMAC-less triggers accept unauthenticated calls by design, and
-# an HMAC-verified caller carries no Modulo credential. audited() takes a
+# an HMAC-verified caller carries no user credential. audited() takes a
 # required principal resolver (it needs an account_id for
 # audit_events.actor_user_id) and get_current_tenant_user_optional can return
 # None, so there is nothing to attribute the event to. Actor-less variant
@@ -1453,12 +1454,13 @@ async def receive_webhook(
 ) -> dict[str, Any]:
     """Receive an incoming webhook and enqueue a pipeline run.
 
-    Requires X-Modulo-Timestamp header (Unix seconds, ±300s window).
-    Requires X-Modulo-Webhook-Secret header if trigger has hmac_secret configured.
-    Alternatively, when no Modulo header is sent, GitHub's ``X-Hub-Signature-256``
-    (``sha256=`` HMAC-SHA256 of the raw body keyed by the trigger's hmac_secret) is
-    accepted. That scheme carries no timestamp, so it has no replay window; payload
-    dedup bounds replays. If any Modulo header is present, the Modulo scheme is used.
+    Requires X-Farna-Control-Timestamp header (Unix seconds, ±300s window).
+    Requires X-Farna-Control-Webhook-Secret header if trigger has hmac_secret configured.
+    Alternatively, when no Farna Control header is sent, GitHub's
+    ``X-Hub-Signature-256`` (``sha256=`` HMAC-SHA256 of the raw body keyed by the
+    trigger's hmac_secret) is accepted. That scheme carries no timestamp, so it
+    has no replay window; payload dedup bounds replays. If any Farna Control
+    header is present, the Farna Control scheme is used.
 
     ADR 047 exempt-channel: this route is CSRF-exempt via the audited
     ``/api/v1/triggers/`` prefix and exempt from the org-role sweep because it
@@ -1471,12 +1473,12 @@ async def receive_webhook(
     failure, 429 on flood rejection.
     """
     raw_body = await request.body()
-    hmac_signature = request.headers.get("X-Modulo-Webhook-Secret")
-    modulo_header_present = hmac_signature is not None or request.headers.get("X-Modulo-Timestamp") is not None
-    # FAR-2241: GitHub's scheme is used only when NO Modulo header is present;
-    # if any is, the Modulo path wins and never falls back to the weaker one.
+    hmac_signature = request.headers.get("X-Farna-Control-Webhook-Secret")
+    modulo_header_present = hmac_signature is not None or request.headers.get("X-Farna-Control-Timestamp") is not None
+    # FAR-2241: GitHub's scheme is used only when NO Farna Control header is
+    # present; if any is, that path wins and never falls back to the weaker one.
     github_signature = None if modulo_header_present else request.headers.get("X-Hub-Signature-256")
-    modulo_timestamp = request.headers.get("X-Modulo-Timestamp") or str(int(time.time()))
+    modulo_timestamp = request.headers.get("X-Farna-Control-Timestamp") or str(int(time.time()))
     raw_payload = await _parse_webhook_body(request)
     _require_system_engine(_CODE_WEBHOOKS_RECEIVE_WEBHOOK)
     state = _WebhookState()
@@ -1552,7 +1554,7 @@ async def receive_webhook(
 
 # FAR-1472 exemption (kept in audit_coverage_baseline.txt): same gap as
 # receive_webhook - the replay's principal is optional (an HMAC-only caller
-# carries no Modulo credential), so audited(principal_dep=...) has no
+# carries no user credential), so audited(principal_dep=...) has no
 # guaranteed actor. Actor-less core variant needed to cover replay.
 @router.post(
     "/{trigger_id}/webhook/replay/{event_id}",
@@ -1592,10 +1594,10 @@ async def replay_webhook(
     ADR 047: replay is a mutating run-creation channel and is NOT exempt. A
     principal (if present) must hold the ``run.trigger`` permission (``runner``
     minimum). An unauthenticated caller must present a valid HMAC signature
-    (``X-Modulo-Webhook-Secret`` + ``X-Modulo-Timestamp``) over the stored
+    (``X-Farna-Control-Webhook-Secret`` + ``X-Farna-Control-Timestamp``) over the stored
     payload — the same verification ``receive_webhook`` performs. FAR-2251:
     GitHub's ``X-Hub-Signature-256`` over the stored body is also accepted
-    when no Modulo header is present.
+    when no Farna Control header is present.
     """
     if principal is not None:
         try:

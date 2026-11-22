@@ -42,8 +42,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_private_key=_TEST_PRIV,
+        admin_password="testpass",
+        license_private_key=_TEST_PRIV,
         redis_url="",
     )
 
@@ -228,7 +228,7 @@ class TestFulfilTeamPurchase:
         # structured classification the install surfaces return, so the
         # operator can tell a signature/anchor mismatch from a corrupt key.
         assert f"reason={REASON_SIGNATURE_MISMATCH}" in caplog.text
-        assert "MODULO_LICENSE_PUBLIC_KEY" in caplog.text
+        assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in caplog.text
 
     async def test_fulfilment_without_email(self) -> None:
         settings = _make_settings()

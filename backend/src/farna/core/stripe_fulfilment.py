@@ -342,7 +342,7 @@ def _generate_and_verify_license(
         license_key = generate_team_license(
             org_name,
             term_months=term_months,
-            private_key_hex=settings.modulo_license_private_key or None,
+            private_key_hex=settings.license_private_key or None,
             renewal_mode=renewal_mode,
             starts_at=starts_at,
         )
@@ -355,8 +355,8 @@ def _generate_and_verify_license(
         _log.exception(
             "stripe.fulfilment.generated_license_failed_verification event_id=%s error=%s "
             "reason=%s hint=%s — unverifiable key not emailed; event left unclaimed so Stripe's "
-            "retries re-attempt. The signing key (MODULO_LICENSE_PRIVATE_KEY) and the trust "
-            "anchor (MODULO_LICENSE_PUBLIC_KEY) must be the two halves of one Ed25519 keypair.",
+            "retries re-attempt. The signing key (FARNA_CONTROL_LICENSE_PRIVATE_KEY) and the trust "
+            "anchor (FARNA_CONTROL_LICENSE_PUBLIC_KEY) must be the two halves of one Ed25519 keypair.",
             event_id,
             validation.error,
             validation.reason,

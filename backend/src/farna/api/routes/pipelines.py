@@ -22,7 +22,7 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -185,6 +185,7 @@ from farna.db.models.schema import Schema
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.soft_delete import include_soft_deleted
 from farna.util import sanitise_log_value as _sanitise_log_value
+from farna.util.uuid import coerce_uuid
 
 # FAR-2008: the FAR-488a Agent-row sync lives in ``farna.core`` (bundle import
 # must reach it without importing the API layer). These module-level aliases
@@ -1369,7 +1370,7 @@ class SchemaPin(BaseModel):
         return v
 
 
-_RESERVED_ENV_PREFIXES = ("MODULO_", "OPENCODE_API_KEY")
+_RESERVED_ENV_PREFIXES = ("FARNA_CONTROL_", "OPENCODE_API_KEY")
 
 
 class CapabilityScope(BaseModel):
@@ -2498,32 +2499,17 @@ class PipelineGraphResponse(PipelineGraphUpdate):
         return [strip_unset_connector_binding_inputs(node.model_dump(mode="json")) for node in nodes]
 
 
-async def _resolve_node_providers(
+async def _agent_backend_providers(
     session: AsyncSession,
-    nodes: list[dict[str, Any]],
+    agent_ids: set[uuid.UUID],
     *,
     organisation_id: uuid.UUID,
-) -> dict[str, str]:
-    """Map graph node id → its agent's model-backend provider (FAR-900).
+) -> dict[uuid.UUID, str]:
+    """Map each of *agent_ids* → the provider of its model backend.
 
-    The design-time ``schema_translation_report`` needs the target provider to
-    compute the provider-specific strip set.  The provider lives on the node's
-    Agent → ModelBackend, so resolve it here (only when the opt-in
-    ``include_schema_warnings`` flag is set).  Nodes with no agent/backend are
-    simply absent from the mapping and fall back to advisory-only warnings.
+    An agent with no backend, or a backend that is not visible in the
+    organisation, is absent from the mapping.
     """
-    agent_ids: set[uuid.UUID] = set()
-    for node in nodes:
-        raw_agent = node.get("agent_id")
-        if raw_agent is None:
-            continue
-        try:
-            agent_ids.add(uuid.UUID(str(raw_agent)))
-        except (ValueError, TypeError):
-            continue
-    if not agent_ids:
-        return {}
-
     agents = (
         (
             await session.execute(
@@ -2552,17 +2538,33 @@ async def _resolve_node_providers(
             .all()
         )
         backend_provider = {b.id: b.provider for b in backends}
+    return {a.id: backend_provider[a.model_backend_id] for a in agents if a.model_backend_id in backend_provider}
 
-    agent_provider = {a.id: backend_provider.get(a.model_backend_id) for a in agents if a.model_backend_id is not None}
+
+async def _resolve_node_providers(
+    session: AsyncSession,
+    nodes: list[dict[str, Any]],
+    *,
+    organisation_id: uuid.UUID,
+) -> dict[str, str]:
+    """Map graph node id → its agent's model-backend provider (FAR-900).
+
+    The design-time ``schema_translation_report`` needs the target provider to
+    compute the provider-specific strip set.  The provider lives on the node's
+    Agent → ModelBackend, so resolve it here (only when the opt-in
+    ``include_schema_warnings`` flag is set).  Nodes with no agent/backend are
+    simply absent from the mapping and fall back to advisory-only warnings.
+    """
+    agent_ids = {agent_id for node in nodes if (agent_id := coerce_uuid(node.get("agent_id"))) is not None}
+    if not agent_ids:
+        return {}
+
+    agent_provider = await _agent_backend_providers(session, agent_ids, organisation_id=organisation_id)
     providers: dict[str, str] = {}
     for node in nodes:
         raw_node_id = node.get("id")
-        raw_agent = node.get("agent_id")
-        if raw_node_id is None or raw_agent is None:
-            continue
-        try:
-            agent_uuid = uuid.UUID(str(raw_agent))
-        except (ValueError, TypeError):
+        agent_uuid = coerce_uuid(node.get("agent_id"))
+        if raw_node_id is None or agent_uuid is None:
             continue
         provider = agent_provider.get(agent_uuid)
         if provider:
@@ -3742,6 +3744,98 @@ def _build_node_patch_graph(
         ) from None
 
 
+async def _replace_graph_under_lock(
+    session: AsyncSession,
+    *,
+    pipeline_id: uuid.UUID,
+    principal: TenantPrincipal,
+    req: PipelineGraphUpdate,
+    node_data: list[dict[str, Any]],
+    edge_data: list[GraphEdgeData],
+) -> tuple[Any, list[GraphValidationIssue]]:
+    """Run the locked full-graph replacement inside the caller's transaction.
+
+    Returns ``(graph, issues)``: ``graph`` is ``replace_pipeline_graph``'s
+    result (``None`` when the pipeline row has gone) and ``issues`` the
+    save-time advisory validation issues. The team gate, the masked-echo
+    resolution, the reference gates, the Agent-row sync and the write all run
+    under the one row lock this function's caller opened.
+    """
+    await _set_rls_context(session, principal)
+    await _reapply_team_gate_inside_mutation_txn(session, principal, pipeline_id)
+    pipeline = await _get_pipeline_or_404(session, pipeline_id, organisation_id=principal.organisation_id)
+    # FAR-1181: the graph READ masks envVars/contextFiles/parameter
+    # values; a full-replace write round-tripping that masked read must
+    # not persist the mask literals over the stored secrets. Echoes are
+    # resolved against the stored graph before the write commits.
+    node_data = merge_masked_graph_nodes(node_data, list(pipeline.graph_nodes_json or []))
+    validator_graph = {
+        "nodes": node_data,
+        "edges": [_edge_data_to_validator(edge) for edge in edge_data],
+    }
+    connector_bindings = extract_connector_bindings(node_data)
+    await _enforce_connector_team_bindings(
+        session,
+        principal.organisation_id,
+        pipeline.owner_team_id,
+        connector_bindings,
+    )
+    # FAR-309 PR A review: the guardrail-binding strip guard now lives
+    # in the SERVICE LAYER (replace_pipeline_graph, under the row lock)
+    # so every graph-mutation caller inherits it — including the
+    # PATCH /{id} graph_json path and snapshot rollback. The admin flag
+    # is resolved here and the service layer re-reads the live role
+    # under the lock for REST callers.
+    _schema_pins, model_backend_pins = await _resolve_graph_references(
+        session,
+        req.nodes,
+        principal.organisation_id,
+        pipeline_owner_team_id=pipeline.owner_team_id,
+    )
+    # FAR-488a + FAR-1810: keep the bound Agent rows in step with
+    # node-level agent_commands PATCHes BEFORE the write, because the
+    # write mints the FAR-1810 edit snapshot — and the snapshot copy's
+    # ``_materialize_agent_fields`` OVERWRITES each bound node's
+    # ``agent_commands`` with the Agent-row value. Syncing first makes
+    # the snapshot (and any rollback replaying it) pin the command the
+    # operator just saved; pre-change the sync ran AFTER the write, so
+    # the snapshot carried the stale command.
+    await _sync_agent_row_commands(
+        session,
+        org_id=principal.organisation_id,
+        nodes=node_data,
+        pipeline_id=pipeline_id,
+    )
+    graph = await replace_pipeline_graph(
+        session,
+        pipeline_id=pipeline_id,
+        org_id=principal.organisation_id,
+        nodes=node_data,
+        edges=[_edge_data_to_dict(edge) for edge in edge_data],
+        actor=GraphWriteActor(
+            is_privileged=_is_privileged(principal.org_role, principal.key_grants),
+            caller_type="rest",
+            account_id=principal.account_id,
+            is_guardrail_admin=_is_guardrail_admin(principal),
+            grants_deny_privilege=_grants_deny_privilege(principal),
+            grants_deny_guardrail_admin=_grants_deny_guardrail_admin(principal),
+        ),
+        recording=GraphWriteRecording(record_snapshot=True),
+    )
+    if graph is None:
+        return graph, []
+    issues = await _validate_graph_save(
+        session,
+        org_id=principal.organisation_id,
+        pipeline_id=pipeline_id,
+        validator_graph=validator_graph,
+        connector_bindings=connector_bindings,
+        model_backend_pins=model_backend_pins,
+        environment_profile_id=pipeline.environment_profile_id,
+    )
+    return graph, issues
+
+
 @router.put(
     "/{pipeline_id}/graph",
     dependencies=[Depends(audited("pipeline_graph_replaced", "pipeline", principal_dep=get_current_tenant_user))],
@@ -3762,82 +3856,18 @@ async def replace_pipeline_graph_endpoint(
     # "privileged" for weakening by design, and equivalent weakening remains
     # reachable via update_pipeline / convert_to_agent / revert_to_manual, so an
     # admin-only gate would only block the operator's primary graph-edit path.
-    node_data, edge_data, validator_graph, connector_bindings = _prepare_graph_write(req)
-    issues: list[GraphValidationIssue] = []
+    node_data, edge_data, _validator_graph, _connector_bindings = _prepare_graph_write(req)
 
     try:
         async with session.begin():
-            await _set_rls_context(session, principal)
-            await _reapply_team_gate_inside_mutation_txn(session, principal, pipeline_id)
-            pipeline = await _get_pipeline_or_404(session, pipeline_id, organisation_id=principal.organisation_id)
-            # FAR-1181: the graph READ masks envVars/contextFiles/parameter
-            # values; a full-replace write round-tripping that masked read must
-            # not persist the mask literals over the stored secrets. Echoes are
-            # resolved against the stored graph before the write commits.
-            node_data = merge_masked_graph_nodes(node_data, list(pipeline.graph_nodes_json or []))
-            validator_graph = {
-                "nodes": node_data,
-                "edges": [_edge_data_to_validator(edge) for edge in edge_data],
-            }
-            connector_bindings = extract_connector_bindings(node_data)
-            await _enforce_connector_team_bindings(
-                session,
-                principal.organisation_id,
-                pipeline.owner_team_id,
-                connector_bindings,
-            )
-            # FAR-309 PR A review: the guardrail-binding strip guard now lives
-            # in the SERVICE LAYER (replace_pipeline_graph, under the row lock)
-            # so every graph-mutation caller inherits it — including the
-            # PATCH /{id} graph_json path and snapshot rollback. The admin flag
-            # is resolved here and the service layer re-reads the live role
-            # under the lock for REST callers.
-            _schema_pins, model_backend_pins = await _resolve_graph_references(
-                session,
-                req.nodes,
-                principal.organisation_id,
-                pipeline_owner_team_id=pipeline.owner_team_id,
-            )
-            # FAR-488a + FAR-1810: keep the bound Agent rows in step with
-            # node-level agent_commands PATCHes BEFORE the write, because the
-            # write mints the FAR-1810 edit snapshot — and the snapshot copy's
-            # ``_materialize_agent_fields`` OVERWRITES each bound node's
-            # ``agent_commands`` with the Agent-row value. Syncing first makes
-            # the snapshot (and any rollback replaying it) pin the command the
-            # operator just saved; pre-change the sync ran AFTER the write, so
-            # the snapshot carried the stale command.
-            await _sync_agent_row_commands(
-                session,
-                org_id=principal.organisation_id,
-                nodes=node_data,
-                pipeline_id=pipeline_id,
-            )
-            graph = await replace_pipeline_graph(
+            graph, issues = await _replace_graph_under_lock(
                 session,
                 pipeline_id=pipeline_id,
-                org_id=principal.organisation_id,
-                nodes=node_data,
-                edges=[_edge_data_to_dict(edge) for edge in edge_data],
-                actor=GraphWriteActor(
-                    is_privileged=_is_privileged(principal.org_role, principal.key_grants),
-                    caller_type="rest",
-                    account_id=principal.account_id,
-                    is_guardrail_admin=_is_guardrail_admin(principal),
-                    grants_deny_privilege=_grants_deny_privilege(principal),
-                    grants_deny_guardrail_admin=_grants_deny_guardrail_admin(principal),
-                ),
-                recording=GraphWriteRecording(record_snapshot=True),
+                principal=principal,
+                req=req,
+                node_data=node_data,
+                edge_data=edge_data,
             )
-            if graph is not None:
-                issues = await _validate_graph_save(
-                    session,
-                    org_id=principal.organisation_id,
-                    pipeline_id=pipeline_id,
-                    validator_graph=validator_graph,
-                    connector_bindings=connector_bindings,
-                    model_backend_pins=model_backend_pins,
-                    environment_profile_id=pipeline.environment_profile_id,
-                )
     except (HitlReviewWeakeningDenied, GuardrailBindingStripDenied) as exc:
         await _handle_graph_write_denials(
             session,
@@ -4691,6 +4721,39 @@ async def _assert_autonomy_admin_or_owner(session: AsyncSession, principal: Tena
     )
 
 
+def _assert_autonomy_change_direction(
+    *,
+    target_level: AutonomyLevel,
+    current_level: AutonomyLevel,
+    ceiling: AutonomyLevel,
+    promote: bool,
+) -> None:
+    """Validate a manual autonomy change against its direction (422 otherwise).
+
+    A promotion must strictly raise the level and never exceed the pipeline's
+    ceiling; a demotion must strictly lower it.
+    """
+    target_rank = autonomy_level_rank(target_level)
+    current_rank = autonomy_level_rank(current_level)
+    if promote:
+        if target_rank <= current_rank:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(f"Promotion must raise autonomy above the current level ({current_level.value}): {target_level.value}"),
+            )
+        if target_rank > autonomy_level_rank(ceiling):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(f"Promotion to {target_level.value} exceeds the pipeline's max_autonomy_level ceiling ({ceiling.value})"),
+            )
+        return
+    if target_rank >= current_rank:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(f"Demotion must lower autonomy below the current level ({current_level.value}): {target_level.value}"),
+        )
+
+
 async def _apply_manual_autonomy_change(
     *,
     pipeline_id: uuid.UUID,
@@ -4726,22 +4789,12 @@ async def _apply_manual_autonomy_change(
 
         current_level = _current_effective_level(pipeline)
         ceiling = _effective_ceiling(pipeline)
-        if promote:
-            if autonomy_level_rank(target_level) <= autonomy_level_rank(current_level):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=(f"Promotion must raise autonomy above the current level ({current_level.value}): {target_level.value}"),
-                )
-            if autonomy_level_rank(target_level) > autonomy_level_rank(ceiling):
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=(f"Promotion to {target_level.value} exceeds the pipeline's max_autonomy_level ceiling ({ceiling.value})"),
-                )
-        elif autonomy_level_rank(target_level) >= autonomy_level_rank(current_level):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=(f"Demotion must lower autonomy below the current level ({current_level.value}): {target_level.value}"),
-            )
+        _assert_autonomy_change_direction(
+            target_level=target_level,
+            current_level=current_level,
+            ceiling=ceiling,
+            promote=promote,
+        )
 
         updated = await set_earned_autonomy_level(
             session,
@@ -5145,6 +5198,70 @@ def _is_pipeline_name_conflict(exc: IntegrityError) -> bool:
     return "uq_pipelines_org_name" in text_ or "pipelines.name" in text_
 
 
+async def _clone_source_or_404(
+    session: AsyncSession,
+    *,
+    pipeline_id: uuid.UUID,
+    org_id: uuid.UUID,
+) -> Any:
+    """Load the pipeline being copied, 404ing when it is not in *org_id*."""
+    source = await get_pipeline(session, pipeline_id, organisation_id=org_id)
+    if source is None:
+        logger.warning("Copy aborted: source pipeline %s not found", pipeline_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"pipeline_copy_failed: Source pipeline not found [pipeline_id: {pipeline_id}]",
+        )
+    return source
+
+
+async def _assert_clone_name_available(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    target_name: str,
+) -> None:
+    """422 when *target_name* is already taken in the organisation."""
+    if await check_pipeline_name_available(session, org_id, target_name):
+        return
+    logger.warning(
+        "Copy aborted: name '%s' already exists in org %s",
+        _sanitise_log_value(target_name),
+        org_id,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=(f"pipeline_copy_failed: A pipeline named '{target_name}' already exists in this organisation"),
+    )
+
+
+async def _assert_clone_target_team_gate(
+    session: AsyncSession,
+    *,
+    account_id: uuid.UUID,
+    org_role: str | None,
+    cloned: Any,
+) -> None:
+    """Re-check the team gate against the CLONE's own visibility/owner team.
+
+    FAR-1276: the clone inherits the SOURCE's ``visibility``/
+    ``owner_team_id``, so the source gate above normally covers the target
+    too — this re-check makes that inheritance explicit and keeps the target
+    gated if the clone ever grows a client-supplied team. Same matrix as the
+    rest of the module: org admins bypass, a team-private target requires
+    membership of ITS owner team.
+    """
+    clone_team_id = cloned.owner_team_id
+    if clone_team_id is None or org_role == "admin" or not _is_team_private(cloned.visibility, clone_team_id):
+        return
+    await _require_team_membership(
+        session,
+        account_id=account_id,
+        team_id=clone_team_id,
+        denial_detail=_MSG_NOT_TEAM_MEMBER,
+    )
+
+
 async def _clone_pipeline_into_org(
     session: AsyncSession,
     *,
@@ -5177,25 +5294,10 @@ async def _clone_pipeline_into_org(
     the copy write (``_clone_pipeline_config`` + edges + snapshots), which is
     the window the in-txn re-check exists to close.
     """
-    source = await get_pipeline(session, pipeline_id, organisation_id=org_id)
-    if source is None:
-        logger.warning("Copy aborted: source pipeline %s not found", pipeline_id)
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"pipeline_copy_failed: Source pipeline not found [pipeline_id: {pipeline_id}]",
-        )
+    source = await _clone_source_or_404(session, pipeline_id=pipeline_id, org_id=org_id)
 
     target_name = requested_name or f"Copy of {source.name}"
-    if not await check_pipeline_name_available(session, org_id, target_name):
-        logger.warning(
-            "Copy aborted: name '%s' already exists in org %s",
-            _sanitise_log_value(target_name),
-            org_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(f"pipeline_copy_failed: A pipeline named '{target_name}' already exists in this organisation"),
-        )
+    await _assert_clone_name_available(session, org_id=org_id, target_name=target_name)
 
     async def _in_txn_team_gate() -> None:
         # Bound to this transaction + principal; awaited by clone_pipeline right
@@ -5239,17 +5341,13 @@ async def _clone_pipeline_into_org(
     # FAR-1276: the clone inherits the SOURCE's ``visibility``/
     # ``owner_team_id``, so the source gate above normally covers the target
     # too - this re-check makes that inheritance explicit and keeps the target
-    # gated if the clone ever grows a client-supplied team. Same matrix as the
-    # rest of the module: org admins bypass, a team-private target requires
-    # membership of ITS owner team.
-    clone_team_id = cloned.owner_team_id
-    if clone_team_id is not None and org_role != "admin" and _is_team_private(cloned.visibility, clone_team_id):
-        await _require_team_membership(
-            session,
-            account_id=account_id,
-            team_id=clone_team_id,
-            denial_detail=_MSG_NOT_TEAM_MEMBER,
-        )
+    # gated if the clone ever grows a client-supplied team.
+    await _assert_clone_target_team_gate(
+        session,
+        account_id=account_id,
+        org_role=org_role,
+        cloned=cloned,
+    )
 
     await append_audit_event(
         session,
@@ -5392,6 +5490,41 @@ async def _detect_parameter_ports(
     return detected_ports
 
 
+def _selected_sub_graph_nodes(
+    graph_nodes: list[dict[str, Any]],
+    selected_ids: list[uuid.UUID],
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Filter the pipeline's graph nodes to *selected_ids*.
+
+    Returns the selected node dicts and their string ids. Raises 422 when no
+    requested id matches a stored node.
+    """
+    selected_ids_str = {str(nid) for nid in selected_ids}
+    sub_nodes = [n for n in graph_nodes if str(n.get("id")) in selected_ids_str]
+    if not sub_nodes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No valid nodes selected",
+        )
+    return sub_nodes, {str(n.get("id")) for n in sub_nodes}
+
+
+def _sub_graph_edges(edge_rows: Sequence[Any], node_ids: set[str]) -> list[dict[str, Any]]:
+    """Serialise the persisted edges whose endpoints are both in *node_ids*."""
+    return [
+        {
+            "id": str(edge.id),
+            "source_node_id": str(edge.source_node_id),
+            "target_node_id": str(edge.target_node_id),
+            "edge_type": edge.edge_type,
+            "condition_expression": edge.condition_expression,
+            "hitl_review_config": edge.hitl_review_config,
+        }
+        for edge in edge_rows
+        if str(edge.source_node_id) in node_ids and str(edge.target_node_id) in node_ids
+    ]
+
+
 @router.post(
     "/{pipeline_id}/save-as-composite",
     status_code=status.HTTP_201_CREATED,
@@ -5417,16 +5550,7 @@ async def save_as_composite_endpoint(
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PIPELINE_NOT_FOUND)
             await _reapply_team_gate_inside_mutation_txn(session, principal, pipeline.id)
 
-            all_nodes = pipeline.graph_nodes_json
-            selected_ids_str = {str(nid) for nid in req.selected_node_ids}
-            sub_nodes = [n for n in all_nodes if str(n.get("id")) in selected_ids_str]
-            if not sub_nodes:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="No valid nodes selected",
-                )
-
-            sub_node_ids_str = {str(n.get("id")) for n in sub_nodes}
+            sub_nodes, sub_node_ids = _selected_sub_graph_nodes(pipeline.graph_nodes_json, req.selected_node_ids)
 
             # Auto-detect parameter placeholders: scan all agent prompts referenced by selected nodes
             agent_ids = {n.get("agent_id") for n in sub_nodes if n.get("agent_id") is not None}
@@ -5438,18 +5562,7 @@ async def save_as_composite_endpoint(
 
             # Extract edges that connect selected nodes
             all_edges_raw = await session.execute(select(PipelineEdge).where(PipelineEdge.pipeline_id == pipeline_id))
-            sub_edges = [
-                {
-                    "id": str(edge.id),
-                    "source_node_id": str(edge.source_node_id),
-                    "target_node_id": str(edge.target_node_id),
-                    "edge_type": edge.edge_type,
-                    "condition_expression": edge.condition_expression,
-                    "hitl_review_config": edge.hitl_review_config,
-                }
-                for edge in all_edges_raw.scalars().all()
-                if str(edge.source_node_id) in sub_node_ids_str and str(edge.target_node_id) in sub_node_ids_str
-            ]
+            sub_edges = _sub_graph_edges(all_edges_raw.scalars().all(), sub_node_ids)
 
             # Create the composite template.
             # FAR-1374: persist the pipeline's declared credential env values
@@ -5992,6 +6105,94 @@ async def tag_snapshot_endpoint(
     return _snapshot_to_response(snapshot)
 
 
+def _make_rollback_post_lock_gate(
+    session: AsyncSession,
+    *,
+    principal: TenantPrincipal,
+    pipeline_id: uuid.UUID,
+) -> Callable[[PipelineSnapshot, Pipeline], Awaitable[None]]:
+    """Build the gate ``rollback_to_snapshot`` runs under its row lock.
+
+    FAR-1515 MAJOR 3: a rollback replays the target snapshot's graph
+    verbatim, so it must run the same connector-team gate every other
+    graph write path runs — otherwise rolling back to a snapshot that
+    pins ANOTHER TEAM's team-private connector re-creates state the
+    save paths refuse (an org-visibility connector is shared across
+    the organisation and never mismatches, so since FAR-1618 it
+    never trips this gate). The gate runs INSIDE
+    ``rollback_to_snapshot`` as a post-lock callback (the pipeline row
+    lock is already held there), against the pipeline's CURRENT owner
+    team — the team boundary may have moved since the snapshot was
+    taken — and raises the same named 409 ``connector_team_mismatch``
+    as ``PUT /graph``. The model-backend gate is deliberately NOT
+    mirrored here: it remains a save-time-only rule (ModelBackendHub
+    has no invocation-time visibility gate), so rollbacks are judged
+    on connector bindings only.
+
+    FAR-1845: the contract for the pipeline graph-write surfaces is
+    "sync the bound Agent rows inside the SAME transaction, BEFORE the
+    graph write" (FAR-488a: what you save/restore is what runs). The
+    REST full-graph/PATCH writes, the MCP full-graph write, this
+    snapshot rollback and (since FAR-2008) bundle import all honour
+    it through the shared ``core.agent_command_sync`` helper.
+    ``rollback_to_snapshot``
+    rewrites ``pipeline.graph_nodes_json``
+    from the target snapshot verbatim, so without this sync the live
+    graph would claim the restored command while
+    ``_materialize_agent_fields`` let the stale Agent row win at
+    run-snapshot time — the rollback would appear to change the
+    command and the run would execute the old one. The caller owns
+    the sync because ``rollback_to_snapshot`` (db layer) cannot import
+    api (import-linter db-does-not-import-api), exactly as
+    the REST graph-write endpoints own theirs.
+    """
+
+    async def _gate(target: PipelineSnapshot, pipeline: Pipeline) -> None:
+        snapshot_nodes = target.graph_json.get("nodes", []) if isinstance(target.graph_json, dict) else []
+        # Sync the bound Agent rows FIRST — never behind an early
+        # return. The connector-team gate below short-circuits a graph
+        # with no connector bindings, but the Agent-row sync must run
+        # for every restored snapshot regardless of connector content.
+        synced = await _sync_agent_row_commands(
+            session,
+            org_id=pipeline.organisation_id,
+            nodes=snapshot_nodes,
+            pipeline_id=pipeline_id,
+        )
+        # FAR-2008: a rollback can rewrite a SHARED Agent row's commands
+        # (one Agent may be bound by several pipelines). The structured
+        # log line attributes the agent, but only an audit event makes
+        # the mutation durable and queryable, so emit one in the SAME
+        # transaction whenever the sync actually changed a row — naming
+        # every changed Agent id, not just a count, so the audit chain
+        # identifies the mutated rows. A no-op rollback writes nothing
+        # and therefore records nothing.
+        if synced:
+            await append_audit_event(
+                session,
+                org_id=pipeline.organisation_id,
+                event_type="pipeline.agent_commands_synced",
+                actor_user_id=principal.account_id,
+                resource_type="pipeline",
+                resource_id=pipeline_id,
+                payload_json={
+                    "agent_count": len(synced),
+                    "agent_ids": [str(agent_id) for agent_id in synced],
+                },
+            )
+        stored_bindings = extract_connector_bindings(snapshot_nodes)
+        if not stored_bindings:
+            return
+        await _enforce_connector_team_bindings(
+            session,
+            pipeline.organisation_id,
+            pipeline.owner_team_id,
+            stored_bindings,
+        )
+
+    return _gate
+
+
 @router.post(
     "/{pipeline_id}/snapshots/{snapshot_id}/rollback",
     dependencies=[
@@ -6018,81 +6219,6 @@ async def rollback_snapshot_endpoint(
             await _set_rls_context(session, principal)
             await _reapply_team_gate_inside_mutation_txn(session, principal, pipeline_id)
 
-            # FAR-1515 MAJOR 3: a rollback replays the target snapshot's graph
-            # verbatim, so it must run the same connector-team gate every other
-            # graph write path runs — otherwise rolling back to a snapshot that
-            # pins ANOTHER TEAM's team-private connector re-creates state the
-            # save paths refuse (an org-visibility connector is shared across
-            # the organisation and never mismatches, so since FAR-1618 it
-            # never trips this gate). The gate runs INSIDE
-            # ``rollback_to_snapshot`` as a post-lock callback (the pipeline row
-            # lock is already held there), against the pipeline's CURRENT owner
-            # team — the team boundary may have moved since the snapshot was
-            # taken — and raises the same named 409 ``connector_team_mismatch``
-            # as ``PUT /graph``. The model-backend gate is deliberately NOT
-            # mirrored here: it remains a save-time-only rule (ModelBackendHub
-            # has no invocation-time visibility gate), so rollbacks are judged
-            # on connector bindings only.
-            #
-            # FAR-1845: the contract for the pipeline graph-write surfaces is
-            # "sync the bound Agent rows inside the SAME transaction, BEFORE the
-            # graph write" (FAR-488a: what you save/restore is what runs). The
-            # REST full-graph/PATCH writes, the MCP full-graph write, this
-            # snapshot rollback and (since FAR-2008) bundle import all honour
-            # it through the shared ``core.agent_command_sync`` helper.
-            # ``rollback_to_snapshot``
-            # rewrites ``pipeline.graph_nodes_json``
-            # from the target snapshot verbatim, so without this sync the live
-            # graph would claim the restored command while
-            # ``_materialize_agent_fields`` let the stale Agent row win at
-            # run-snapshot time — the rollback would appear to change the
-            # command and the run would execute the old one. The caller owns
-            # the sync because ``rollback_to_snapshot`` (db layer) cannot import
-            # api (import-linter db-does-not-import-api), exactly as
-            # the REST graph-write endpoints own theirs.
-            async def _rollback_post_lock_gate(target: PipelineSnapshot, pipeline: Pipeline) -> None:
-                snapshot_nodes = target.graph_json.get("nodes", []) if isinstance(target.graph_json, dict) else []
-                # Sync the bound Agent rows FIRST — never behind an early
-                # return. The connector-team gate below short-circuits a graph
-                # with no connector bindings, but the Agent-row sync must run
-                # for every restored snapshot regardless of connector content.
-                synced = await _sync_agent_row_commands(
-                    session,
-                    org_id=pipeline.organisation_id,
-                    nodes=snapshot_nodes,
-                    pipeline_id=pipeline_id,
-                )
-                # FAR-2008: a rollback can rewrite a SHARED Agent row's commands
-                # (one Agent may be bound by several pipelines). The structured
-                # log line attributes the agent, but only an audit event makes
-                # the mutation durable and queryable, so emit one in the SAME
-                # transaction whenever the sync actually changed a row — naming
-                # every changed Agent id, not just a count, so the audit chain
-                # identifies the mutated rows. A no-op rollback writes nothing
-                # and therefore records nothing.
-                if synced:
-                    await append_audit_event(
-                        session,
-                        org_id=pipeline.organisation_id,
-                        event_type="pipeline.agent_commands_synced",
-                        actor_user_id=principal.account_id,
-                        resource_type="pipeline",
-                        resource_id=pipeline_id,
-                        payload_json={
-                            "agent_count": len(synced),
-                            "agent_ids": [str(agent_id) for agent_id in synced],
-                        },
-                    )
-                stored_bindings = extract_connector_bindings(snapshot_nodes)
-                if not stored_bindings:
-                    return
-                await _enforce_connector_team_bindings(
-                    session,
-                    pipeline.organisation_id,
-                    pipeline.owner_team_id,
-                    stored_bindings,
-                )
-
             new_snapshot = await rollback_to_snapshot(
                 session,
                 pipeline_id,
@@ -6103,7 +6229,11 @@ async def rollback_snapshot_endpoint(
                 is_guardrail_admin=_is_guardrail_admin(principal),
                 grants_deny_privilege=_grants_deny_privilege(principal),
                 grants_deny_guardrail_admin=_grants_deny_guardrail_admin(principal),
-                post_lock_gate=_rollback_post_lock_gate,
+                post_lock_gate=_make_rollback_post_lock_gate(
+                    session,
+                    principal=principal,
+                    pipeline_id=pipeline_id,
+                ),
             )
     except (HitlReviewWeakeningDenied, GuardrailBindingStripDenied) as exc:
         await _handle_graph_write_denials(
@@ -6517,6 +6647,80 @@ async def _finalize_locked_graph_save(
     raise
 
 
+def _saved_graph_response(
+    saved: tuple[list[dict[str, Any]], list[Any], list[GraphValidationIssue]] | None,
+) -> PipelineGraphResponse:
+    """Unpack a ``_save_locked_graph`` result into the graph response.
+
+    A ``None`` result means the pipeline row vanished between the locked read
+    and the write, which 404s exactly like the sibling graph writes.
+    """
+    if saved is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PIPELINE_NOT_FOUND)
+    saved_nodes, saved_edges, validation_issues = saved
+    return _graph_response(saved_nodes, saved_edges, validation_issues=validation_issues)
+
+
+async def _resolve_conversion_references(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    req: ConvertToAgentRequest,
+) -> None:
+    """404/422 when the agent, connector or model backend a conversion names is unusable.
+
+    Every referenced row is looked up in the caller's organisation; the rows
+    themselves are only existence proof (the node stores their ids).
+    """
+    agent = (
+        await session.execute(
+            select(Agent).where(
+                Agent.id == req.agent_id,
+                Agent.organisation_id == principal.organisation_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+
+    connector = (
+        await session.execute(
+            select(ConnectorInstance).where(
+                ConnectorInstance.id == req.connector_binding.instance_id,
+                ConnectorInstance.organisation_id == principal.organisation_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if connector is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connector not found")
+    if connector.connector_type_id != req.connector_binding.type:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Connector type mismatch",
+        )
+
+    model_backend = (
+        await session.execute(
+            select(ModelBackend).where(
+                ModelBackend.id == req.model_backend_id,
+                ModelBackend.organisation_id == principal.organisation_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if model_backend is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model backend not found")
+
+
+def _apply_agent_conversion(target: dict[str, Any], req: ConvertToAgentRequest) -> None:
+    """Rewrite a manual node *target* in place as the requested agent node."""
+    target["node_type"] = "agent"
+    target["agent_id"] = str(req.agent_id)
+    target["connector_binding"] = {
+        "type": req.connector_binding.type,
+        "instance_id": str(req.connector_binding.instance_id),
+    }
+    target.pop("output_schema_id", None)
+
+
 # Team gate (shared by BOTH node-conversion endpoints) - PARITY +
 # defence-in-depth, matching replace_pipeline_graph / update_pipeline. Both
 # layers were previously absent here while the sibling graph writes had both:
@@ -6569,51 +6773,8 @@ async def convert_node_to_agent_endpoint(
                     detail="Only manual nodes can be converted to agent",
                 )
 
-            agent = (
-                await session.execute(
-                    select(Agent).where(
-                        Agent.id == req.agent_id,
-                        Agent.organisation_id == principal.organisation_id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if agent is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-            connector = (
-                await session.execute(
-                    select(ConnectorInstance).where(
-                        ConnectorInstance.id == req.connector_binding.instance_id,
-                        ConnectorInstance.organisation_id == principal.organisation_id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if connector is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connector not found")
-            if connector.connector_type_id != req.connector_binding.type:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="Connector type mismatch",
-                )
-
-            model_backend = (
-                await session.execute(
-                    select(ModelBackend).where(
-                        ModelBackend.id == req.model_backend_id,
-                        ModelBackend.organisation_id == principal.organisation_id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if model_backend is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model backend not found")
-
-            target["node_type"] = "agent"
-            target["agent_id"] = str(req.agent_id)
-            target["connector_binding"] = {
-                "type": req.connector_binding.type,
-                "instance_id": str(req.connector_binding.instance_id),
-            }
-            target.pop("output_schema_id", None)
+            await _resolve_conversion_references(session, principal, req)
+            _apply_agent_conversion(target, req)
 
             await append_audit_event(
                 session,
@@ -6645,10 +6806,38 @@ async def convert_node_to_agent_endpoint(
     except (HitlReviewWeakeningDenied, GuardrailBindingStripDenied, GitContentRefError, ProgrammingError) as exc:
         await _finalize_locked_graph_save(exc, session, principal=principal, pipeline_id=pipeline_id)
 
-    if saved is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PIPELINE_NOT_FOUND)
-    saved_nodes, saved_edges, validation_issues = saved
-    return _graph_response(saved_nodes, saved_edges, validation_issues=validation_issues)
+    return _saved_graph_response(saved)
+
+
+def _restore_manual_node(
+    target: dict[str, Any],
+    snapshot_node: dict[str, Any],
+    node_id: uuid.UUID,
+) -> None:
+    """Rewrite *target* (an agent node) in place back to the snapshot's manual shape.
+
+    The snapshot node must itself have been a manual node carrying an output
+    schema — a revert cannot invent either.
+    """
+    if snapshot_node.get("node_type") != "manual":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Snapshot node was not a manual node",
+        )
+
+    output_schema_id = snapshot_node.get("output_schema_id")
+    if output_schema_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Snapshot node has no output schema",
+        )
+
+    target["node_type"] = "manual"
+    target["output_schema_id"] = output_schema_id if isinstance(output_schema_id, str) else str(output_schema_id)
+    target.pop("agent_id", None)
+    target.pop("connector_binding", None)
+    if not target.get("label"):
+        target["label"] = snapshot_node.get("label") or f"Manual {node_id}"
 
 
 # Team gate: same parity + defence-in-depth rationale as the shared comment
@@ -6691,33 +6880,14 @@ async def revert_node_to_manual_endpoint(
             if snapshot is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_SNAPSHOT_NOT_FOUND)
 
-            snapshot_nodes = snapshot.graph_json.get("nodes", [])
-            snapshot_node = _find_node_in_list(snapshot_nodes, node_id)
+            snapshot_node = _find_node_in_list(snapshot.graph_json.get("nodes", []), node_id)
             if snapshot_node is None:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="Snapshot does not contain this node",
                 )
-            if snapshot_node.get("node_type") != "manual":
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="Snapshot node was not a manual node",
-                )
 
-            output_schema_id = snapshot_node.get("output_schema_id")
-            if output_schema_id is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail="Snapshot node has no output schema",
-                )
-
-            target["node_type"] = "manual"
-            sid = str(output_schema_id) if not isinstance(output_schema_id, str) else output_schema_id
-            target["output_schema_id"] = sid
-            target.pop("agent_id", None)
-            target.pop("connector_binding", None)
-            if not target.get("label"):
-                target["label"] = snapshot_node.get("label") or f"Manual {node_id}"
+            _restore_manual_node(target, snapshot_node, node_id)
 
             await append_audit_event(
                 session,
@@ -6749,10 +6919,7 @@ async def revert_node_to_manual_endpoint(
     except (HitlReviewWeakeningDenied, GuardrailBindingStripDenied, GitContentRefError, ProgrammingError) as exc:
         await _finalize_locked_graph_save(exc, session, principal=principal, pipeline_id=pipeline_id)
 
-    if saved is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PIPELINE_NOT_FOUND)
-    saved_nodes, saved_edges, validation_issues = saved
-    return _graph_response(saved_nodes, saved_edges, validation_issues=validation_issues)
+    return _saved_graph_response(saved)
 
 
 def _find_node_in_list(nodes: list[dict[str, Any]], node_id: uuid.UUID) -> dict[str, Any] | None:

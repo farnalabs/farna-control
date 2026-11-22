@@ -54,7 +54,7 @@ async def resolve_schema_validator_mode(
     Resolution order (FAR-899):
       1. ``organisations.settings_json["schema_validator_mode"]`` (per-org)
       2. ``system_config`` row with key ``"schema_validator_mode"`` (instance-wide)
-      3. ``MODULO_SCHEMA_VALIDATOR_MODE`` env var (first-boot seed only)
+      3. ``FARNA_CONTROL_SCHEMA_VALIDATOR_MODE`` env var (first-boot seed only)
       4. ``"lenient"`` (hard default)
 
     The env var acts as a first-boot/default seed only: once a runtime value

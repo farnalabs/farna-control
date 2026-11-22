@@ -12,7 +12,7 @@ One session-scoped harness that:
   where "workspace pods must pass restricted admission" is actually proven
   (see docs/deployment/k8s-conformance-parity.md);
 - creates a uniquely-named ServiceAccount for the workspace pods and points
-  ``MODULO_KUBERNETES_SERVICE_ACCOUNT`` at it, proving the provider honours
+  ``FARNA_CONTROL_KUBERNETES_SERVICE_ACCOUNT`` at it, proving the provider honours
   that setting;
 - builds the ``KubernetesRuntimeProvider`` bound to that namespace;
 - tears everything down at session end: ``provider.close()`` (tracked pods +

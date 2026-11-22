@@ -45,7 +45,7 @@ def _audit_append_spy(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
 
 @pytest.mark.anyio
 async def test_seed_modulo_users_empty_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_users="")
+    settings = _make_settings(users="")
     session = _mock_session()
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
     await main._seed_modulo_users(settings)
@@ -57,7 +57,7 @@ async def test_seed_modulo_users_no_org_creates_default_org(monkeypatch: pytest.
     """FAR-2581: with no TENANT org the seeder creates the default org, never skips into a sentinel."""
     from farna.db.models.organisation import Organisation
 
-    settings = _make_settings(modulo_users="admin:secret1")
+    settings = _make_settings(users="admin:secret1")
     session = _mock_session(_result(scalar_one_or_none=None))
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
     monkeypatch.setattr("farna.auth.passwords.hash_password", lambda pw: "$2b$12$fakehash")
@@ -70,7 +70,7 @@ async def test_seed_modulo_users_no_org_creates_default_org(monkeypatch: pytest.
 
 @pytest.mark.anyio
 async def test_seed_modulo_users_new_user(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_users="user@example.com:secret1")
+    settings = _make_settings(users="user@example.com:secret1")
     org = SimpleNamespace(id=uuid.uuid4())
     session = _session_with_results([_result(scalar_one_or_none=org), _result(scalar_one_or_none=None)])
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
@@ -147,14 +147,14 @@ async def test_rehash_existing_user_creates_missing_membership() -> None:
 async def test_seed_sso_providers_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     session = _mock_session()
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
-    await main._seed_sso_providers(_make_settings(modulo_oidc_providers=""))
-    await main._seed_sso_providers(_make_settings(modulo_oidc_providers="[]"))
+    await main._seed_sso_providers(_make_settings(oidc_providers=""))
+    await main._seed_sso_providers(_make_settings(oidc_providers="[]"))
     assert session.add.call_count == 0
 
 
 @pytest.mark.anyio
 async def test_seed_sso_providers_already_exist(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_oidc_providers='[{"provider_id": "p1", "client_id": "c1", "client_secret": "s1", "discovery_url": "https://d"}]')
+    settings = _make_settings(oidc_providers='[{"provider_id": "p1", "client_id": "c1", "client_secret": "s1", "discovery_url": "https://d"}]')
     session = _mock_session(_result(scalar_one_or_none=MagicMock()))
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
     await main._seed_sso_providers(settings)
@@ -163,7 +163,7 @@ async def test_seed_sso_providers_already_exist(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.anyio
 async def test_seed_sso_providers_no_org(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_oidc_providers='[{"provider_id": "p1", "client_id": "c1", "client_secret": "s1", "discovery_url": "https://d"}]')
+    settings = _make_settings(oidc_providers='[{"provider_id": "p1", "client_id": "c1", "client_secret": "s1", "discovery_url": "https://d"}]')
     session = _mock_session(_result(scalar_one_or_none=None))
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
     await main._seed_sso_providers(settings)
@@ -172,7 +172,7 @@ async def test_seed_sso_providers_no_org(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.anyio
 async def test_seed_sso_providers_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_oidc_providers="not-json")
+    settings = _make_settings(oidc_providers="not-json")
     org = SimpleNamespace(id=uuid.uuid4())
     session = _mock_session(_result(scalar_one_or_none=org))
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
@@ -182,7 +182,7 @@ async def test_seed_sso_providers_invalid_json(monkeypatch: pytest.MonkeyPatch) 
 
 @pytest.mark.anyio
 async def test_seed_sso_providers_entry_missing_fields_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_oidc_providers='[{"provider_id": "p1"}]')
+    settings = _make_settings(oidc_providers='[{"provider_id": "p1"}]')
     org = SimpleNamespace(id=uuid.uuid4())
     session = _mock_session(_result(scalar_one_or_none=org))
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
@@ -192,7 +192,7 @@ async def test_seed_sso_providers_entry_missing_fields_skipped(monkeypatch: pyte
 
 @pytest.mark.anyio
 async def test_seed_sso_providers_valid_entry_seeded(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_oidc_providers='[{"provider_id": "p1", "client_id": "c1", "client_secret": "s1", "discovery_url": "https://d"}]')
+    settings = _make_settings(oidc_providers='[{"provider_id": "p1", "client_id": "c1", "client_secret": "s1", "discovery_url": "https://d"}]')
     org = SimpleNamespace(id=uuid.uuid4())
     session = _session_with_results([_result(scalar_one_or_none=None), _result(scalar_one_or_none=org)])
     _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
@@ -371,7 +371,7 @@ def test_configure_license_sets_public_key(monkeypatch: pytest.MonkeyPatch) -> N
     set_public_key = MagicMock()
     monkeypatch.setattr("farna.core.license.set_public_key", set_public_key)
     monkeypatch.setattr("farna.core.license.check_production_public_key", MagicMock())
-    settings = _make_settings(modulo_license_public_key="test-public-key")
+    settings = _make_settings(license_public_key="test-public-key")
     main._configure_license_and_otel(settings)
     assert set_public_key.call_count == 1
 
@@ -388,7 +388,7 @@ def test_configure_license_sqlite_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     setup_otel = MagicMock()
     monkeypatch.setattr(main, "setup_otel", setup_otel)
     monkeypatch.setattr("farna.core.license.check_production_public_key", MagicMock())
-    main._configure_license_and_otel(_make_settings(modulo_db="sqlite"))
+    main._configure_license_and_otel(_make_settings(db="sqlite"))
     assert setup_otel.call_count == 1
 
 
@@ -404,7 +404,7 @@ def test_configure_license_requires_redis() -> None:
 def test_discover_plugins_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     get_registry = MagicMock()
     monkeypatch.setattr("farna.core.plugin_registry.get_plugin_registry", get_registry)
-    main._discover_plugins(_make_settings(modulo_plugin_discovery=False))
+    main._discover_plugins(_make_settings(plugin_discovery=False))
     assert get_registry.call_count == 0
 
 
@@ -412,7 +412,7 @@ def test_discover_plugins_none_found(monkeypatch: pytest.MonkeyPatch) -> None:
     registry = MagicMock()
     registry.discover_plugins = MagicMock(return_value=[])
     monkeypatch.setattr("farna.core.plugin_registry.get_plugin_registry", MagicMock(return_value=registry))
-    main._discover_plugins(_make_settings(modulo_plugin_discovery=True))
+    main._discover_plugins(_make_settings(plugin_discovery=True))
     assert registry.discover_plugins.call_count == 1
 
 
@@ -422,7 +422,7 @@ def test_discover_plugins_found(monkeypatch: pytest.MonkeyPatch) -> None:
     registry = MagicMock()
     registry.discover_plugins = MagicMock(return_value=[plugin])
     monkeypatch.setattr("farna.core.plugin_registry.get_plugin_registry", MagicMock(return_value=registry))
-    main._discover_plugins(_make_settings(modulo_plugin_discovery=True))
+    main._discover_plugins(_make_settings(plugin_discovery=True))
     assert registry.discover_plugins.call_count == 1
 
 
@@ -509,7 +509,7 @@ async def test_lifespan_full_boot_and_teardown(monkeypatch: pytest.MonkeyPatch) 
 
 @pytest.mark.anyio
 async def test_lifespan_seeds_demo_orgs_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _make_settings(modulo_seed_demo_orgs=True)
+    settings = _make_settings(seed_demo_orgs=True)
     _patch_lifespan_seams(monkeypatch, settings)
     seed_demo_orgs = AsyncMock()
     monkeypatch.setattr("farna.core.seed_data.demo_data.seed_demo_orgs", seed_demo_orgs)
@@ -594,15 +594,15 @@ def _make_settings(**overrides: object) -> Settings:
         "secret_key": _VALID_32,
         "fernet_key": _FERNET_KEY,
         "fernet_key_old": "",
-        "modulo_admin_password": "testpass",
+        "admin_password": "testpass",
         "redis_url": "redis://localhost:6379/0",
-        "modulo_public_url": "http://localhost:8000",
+        "public_url": "http://localhost:8000",
         "watchdog_enabled": False,
     }
     values.update(overrides)
-    # SQLite is test-only: Settings refuses it unless BOTH the ``modulo_db``
+    # SQLite is test-only: Settings refuses it unless BOTH the ``db``
     # knob and the test-only opt-in agree (ADR 068).
-    if values.get("modulo_db") == "sqlite":
+    if values.get("db") == "sqlite":
         values.setdefault("allow_sqlite", True)
     return Settings(**values)  # type: ignore[arg-type]
 

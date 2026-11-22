@@ -3,7 +3,7 @@
 Configures python-json-logger with:
 - Standard fields: timestamp, level, logger, module, function, line
 - correlation_id from middleware contextvar
-- Configurable log level per module via MODULO_LOG_LEVEL env var
+- Configurable log level per module via FARNA_CONTROL_LOG_LEVEL env var
 - Configurable per-module override via FARNA_CONTROL_LOG_LEVEL_<MODULE_PATH>
 - Sensitive field redaction (keys, secrets, tokens → "***")
 """
@@ -279,7 +279,7 @@ def configure_logging() -> None:
 
 
 def _apply_per_module_levels() -> None:
-    """Apply per-module log levels from MODULO_LOG_LEVEL_<MODULE> env vars."""
+    """Apply per-module log levels from FARNA_CONTROL_LOG_LEVEL_<MODULE> env vars."""
     seen: set[str] = set()
     for env_name, value in os.environ.items():
         if not env_name.startswith("FARNA_CONTROL_LOG_LEVEL_"):

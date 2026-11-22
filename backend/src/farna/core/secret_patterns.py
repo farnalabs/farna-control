@@ -173,15 +173,15 @@ def is_sensitive_env_key(key: str) -> bool:
 
 # Whole-value redaction regardless of the canonical classifier: structured
 # values that embed credentials the token/classifier match cannot see
-# (``modulo_oidc_providers`` is a JSON array with client_secret values,
-# ``modulo_users`` an "email:password" list, the alert webhook URLs carry the
+# (``oidc_providers`` is a JSON array with client_secret values,
+# ``users`` an "email:password" list, the alert webhook URLs carry the
 # token in the URL PATH rather than userinfo). Single definition (FAR-2305):
 # ``modulo env``, the doctor report and the support bundle all import this set
 # instead of keeping their own copy.
 WHOLESALE_REDACT_FIELDS: frozenset[str] = frozenset(
     {
-        "modulo_oidc_providers",
-        "modulo_users",
+        "oidc_providers",
+        "users",
         "alert_webhook_url",
         "alert_teams_webhook_url",
     }

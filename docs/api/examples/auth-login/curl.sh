@@ -14,16 +14,16 @@
 #     (`-c` writes it, `-b` sends it).
 #
 # Usage:
-#   export MODULO_URL=http://localhost:8000
-#   export MODULO_EMAIL=admin@example.com
-#   export MODULO_PASSWORD=changeme
+#   export FARNA_CONTROL_URL=http://localhost:8000
+#   export FARNA_CONTROL_EMAIL=admin@example.com
+#   export FARNA_CONTROL_PASSWORD=changeme
 #   bash auth-login/curl.sh
 
 set -euo pipefail
 
-BASE_URL="${MODULO_URL:-http://localhost:8000}"
-EMAIL="${MODULO_EMAIL:?MODULO_EMAIL is required}"
-PASSWORD="${MODULO_PASSWORD:?MODULO_PASSWORD is required}"
+BASE_URL="${FARNA_CONTROL_URL:-http://localhost:8000}"
+EMAIL="${FARNA_CONTROL_EMAIL:?FARNA_CONTROL_EMAIL is required}"
+PASSWORD="${FARNA_CONTROL_PASSWORD:?FARNA_CONTROL_PASSWORD is required}"
 
 JAR="$(mktemp)"
 trap 'rm -f "$JAR"' EXIT

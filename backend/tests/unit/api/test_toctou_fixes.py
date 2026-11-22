@@ -32,7 +32,7 @@ def _make_settings(**overrides: Any) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
         redis_url=overrides.get("redis_url", "redis://localhost:6379/0"),
     )
 
@@ -345,8 +345,8 @@ def test_rotate_key_conflict_writes_no_started_audit_event() -> None:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_system_database_url="postgresql+asyncpg://localhost/system",
+            admin_password="testpass",
+            system_database_url="postgresql+asyncpg://localhost/system",
             redis_url="",
         )
 
@@ -412,8 +412,8 @@ def _no_redis_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_system_database_url="postgresql+asyncpg://localhost/system",
+        admin_password="testpass",
+        system_database_url="postgresql+asyncpg://localhost/system",
         redis_url="",
     )
 

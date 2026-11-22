@@ -329,7 +329,7 @@ async def jit_provision_user(
     - ``auto_provision=true`` + non-empty ``allowed_domains``: a VERIFIED
       email domain in the EXACT (case-insensitive, no implicit subdomain)
       allowlist auto-provisions with ``provider.default_role`` (fallback
-      ``settings.modulo_sso_default_role`` — closes FAR-839); otherwise
+      ``settings.sso_default_role`` — closes FAR-839); otherwise
       falls back to the invitation path. A pending invitation always wins
       over the domain path so it grants the role it specifies.
     - ``auto_provision=true`` + EMPTY ``allowed_domains``: "anyone who
@@ -502,7 +502,7 @@ async def _audit_invite_consumed_fail_open(session: AsyncSession, org_id: uuid.U
 
 def _sso_default_role(provider: SsoProvider, settings: Settings) -> str:
     """FAR-839: SSO join role = provider.default_role, else the app setting."""
-    return provider.default_role or settings.modulo_sso_default_role
+    return provider.default_role or settings.sso_default_role
 
 
 async def _upsert_sso_identity(
@@ -552,7 +552,7 @@ async def _provision_membership(
     ``invitation`` (FAR-855) grants the invitation's role — including
     reactivating a tombstoned membership with that role (accept-invite
     semantics). With ``provider`` present the role falls back to
-    ``provider.default_role`` then ``settings.modulo_sso_default_role``.
+    ``provider.default_role`` then ``settings.sso_default_role``.
     An existing LIVE membership is left untouched; a tombstoned one is
     reactivated with the join role (an invitation to a deactivated member
     must restore their access, mirroring accept-invite).
@@ -573,7 +573,7 @@ async def _provision_membership(
     elif provider is not None:
         role = _sso_default_role(provider, settings)
     else:
-        role = settings.modulo_sso_default_role
+        role = settings.sso_default_role
 
     _log.info("sso.jit_membership")
     if existing is not None and existing.deactivated_at is not None:
@@ -659,7 +659,7 @@ async def issue_sso_tokens(account: Account, org_id: uuid.UUID, org_role: str, s
         organisation_id=str(org_id),
         account_id=str(account.id),
         org_role=org_role,
-        ttl_minutes=settings.modulo_access_token_minutes,
+        ttl_minutes=settings.access_token_minutes,
         # FAR-634: SSO completes a browser redirect flow — explicit browser
         # class, same as the password login mint.
         client_kind=CLIENT_KIND_BROWSER,
@@ -672,7 +672,7 @@ async def issue_sso_tokens(account: Account, org_id: uuid.UUID, org_role: str, s
         org_role=org_role,
         token_family=str(family.family_id),
         token_sequence=0,
-        ttl_hours=settings.modulo_refresh_token_ttl_hours,
+        ttl_hours=settings.refresh_token_ttl_hours,
         client_kind=CLIENT_KIND_BROWSER,
     )
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}  # nosec B105 — OAuth token_type label, not a credential
@@ -1076,10 +1076,10 @@ async def oidc_process_callback(
 
 
 def _parse_oidc_providers(settings: Settings) -> list[dict[str, str]]:
-    if not settings.modulo_oidc_providers:
+    if not settings.oidc_providers:
         return []
     try:
-        entries = json.loads(settings.modulo_oidc_providers)
+        entries = json.loads(settings.oidc_providers)
     except (json.JSONDecodeError, TypeError) as exc:
         _log.warning("sso.oidc_invalid_json", extra={"error": str(exc)})
         return []
@@ -1314,17 +1314,17 @@ async def _saml_config_from_db(
     # Per-provider entity_id default (FAR-1001): when the DB provider
     # has no entity_id set, default to {public_url}/saml/{provider_id}
     # for per-provider routes, or the legacy env setting for singleton.
-    default_entity = f"{get_public_url(settings).rstrip('/')}/api/v1/auth/saml/{provider_id}" if provider_id is not None else settings.modulo_saml_entity_id or "farna-control"
+    default_entity = f"{get_public_url(settings).rstrip('/')}/api/v1/auth/saml/{provider_id}" if provider_id is not None else settings.saml_entity_id or "farna-control"
     entity_id = db_saml.entity_id or default_entity
-    sp_key = settings.modulo_saml_sp_private_key or None
-    sp_cert = settings.modulo_saml_sp_x509_cert or None
+    sp_key = settings.saml_sp_private_key or None
+    sp_cert = settings.saml_sp_x509_cert or None
     return idp_metadata, entity_id, sp_key, sp_cert, db_saml
 
 
 async def _saml_config_from_env(settings: Settings) -> tuple[str, str, str | None, str | None, None]:
     """Fetch env-var SAML IdP metadata and build the resolved config tuple.
 
-    Availability is a CONFIGURATION question (``modulo_saml_enabled`` plus IdP
+    Availability is a CONFIGURATION question (``saml_enabled`` plus IdP
     metadata), never a licence question (FAR-2059). Sign-in is an
     authentication concern: refusing to build the config on a lapsed licence
     locks every administrator out of the instance — and therefore out of the
@@ -1339,9 +1339,9 @@ async def _saml_config_from_env(settings: Settings) -> tuple[str, str, str | Non
         raise ValueError(f"Failed to fetch IdP metadata: {exc}") from None
     return (
         idp_metadata,
-        settings.modulo_saml_entity_id,
-        settings.modulo_saml_sp_private_key or None,
-        settings.modulo_saml_sp_x509_cert or None,
+        settings.saml_entity_id,
+        settings.saml_sp_private_key or None,
+        settings.saml_sp_x509_cert or None,
         None,
     )
 
@@ -1361,7 +1361,7 @@ async def _resolve_saml_config(
 
     Returns ``(idp_metadata_xml, entity_id, sp_private_key, sp_x509_cert,
     db_provider)``. ``entity_id`` is ``db_saml.entity_id or
-    settings.modulo_saml_entity_id`` (used by the SP handler). ``db_provider`` is
+    settings.saml_entity_id`` (used by the SP handler). ``db_provider`` is
     the row when config came from the DB (used for JIT org placement); ``None``
     for the env path.
     """
@@ -1375,7 +1375,7 @@ async def _resolve_saml_config(
     # the lapse locks every administrator out of the licence screen with no way
     # back in. The Team entitlement is enforced at the admin configuration
     # surface (``require_feature("sso")``) and post-auth, not here.
-    if not settings.modulo_saml_enabled:
+    if not settings.saml_enabled:
         raise ValueError("SAML is not enabled")
 
     return await _saml_config_from_env(settings)
@@ -1652,11 +1652,11 @@ def _parse_saml_datetime(value: str) -> datetime:
 
 
 async def _saml_fetch_idp_metadata(settings: Settings) -> str:
-    if settings.modulo_saml_idp_metadata_xml:
-        return settings.modulo_saml_idp_metadata_xml
-    if settings.modulo_saml_idp_metadata_url:
-        return await fetch_sso_metadata(settings.modulo_saml_idp_metadata_url, kind="SAML IdP", client_factory=pinned_async_client)
-    raise ValueError("SAML IdP metadata not configured (set MODULO_SAML_IDP_METADATA_URL or _XML)")
+    if settings.saml_idp_metadata_xml:
+        return settings.saml_idp_metadata_xml
+    if settings.saml_idp_metadata_url:
+        return await fetch_sso_metadata(settings.saml_idp_metadata_url, kind="SAML IdP", client_factory=pinned_async_client)
+    raise ValueError("SAML IdP metadata not configured (set FARNA_CONTROL_SAML_IDP_METADATA_URL or _XML)")
 
 
 def _saml_parse_idp_metadata(

@@ -152,12 +152,12 @@ class TestStartupAnchorPolicy:
     def _settings(**overrides: Any) -> SimpleNamespace:
         values: dict[str, Any] = {
             "debug": False,
-            "modulo_license_key": "",
-            "modulo_license_public_key": "",
-            "modulo_public_url": "https://modulo.test",
-            "modulo_db": "postgres",
+            "license_key": "",
+            "license_public_key": "",
+            "public_url": "https://modulo.test",
+            "db": "postgres",
             "redis_url": "redis://localhost:6379/0",
-            "modulo_otel_service_name": "modulo-test",
+            "otel_service_name": "modulo-test",
         }
         values.update(overrides)
         return SimpleNamespace(**values)
@@ -168,7 +168,7 @@ class TestStartupAnchorPolicy:
         monkeypatch.setattr(api_main, "is_telemetry_enabled", lambda: False)
 
     def test_licence_without_anchor_fails_closed(self) -> None:
-        settings = self._settings(modulo_license_key="env-licence-key")
+        settings = self._settings(license_key="env-licence-key")
 
         with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
             api_main._configure_license_and_otel(settings)
@@ -187,19 +187,19 @@ class TestStartupAnchorPolicy:
         setup_otel = MagicMock()
         monkeypatch.setattr(api_main, "setup_otel", setup_otel)
 
-        api_main._configure_license_and_otel(self._settings(debug=True, modulo_license_key="env-licence-key"))
+        api_main._configure_license_and_otel(self._settings(debug=True, license_key="env-licence-key"))
 
         assert setup_otel.call_count == 1
 
     def test_valid_anchor_is_applied(self) -> None:
         kp = generate_keypair()
 
-        api_main._configure_license_and_otel(self._settings(modulo_license_public_key=kp["public_key"]))
+        api_main._configure_license_and_otel(self._settings(license_public_key=kp["public_key"]))
 
         assert using_builtin_dev_anchor() is False
 
     def test_invalid_anchor_fails_closed(self) -> None:
-        settings = self._settings(modulo_license_public_key="not-hex")
+        settings = self._settings(license_public_key="not-hex")
 
         with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
             api_main._configure_license_and_otel(settings)
@@ -221,7 +221,7 @@ class TestSharedLicenseBootstrap:
     def test_applies_the_configured_anchor(self) -> None:
         kp = generate_keypair()
 
-        configure_license_trust_anchor(self._settings(modulo_license_public_key=kp["public_key"]))
+        configure_license_trust_anchor(self._settings(license_public_key=kp["public_key"]))
 
         assert using_builtin_dev_anchor() is False
         assert license_mod._configured_public_key_hex == kp["public_key"]
@@ -239,8 +239,8 @@ class TestSharedLicenseBootstrap:
 
     def test_licence_without_anchor_fails_closed(self) -> None:
         with pytest.raises(RuntimeError, match="FARNA_CONTROL_LICENSE_PUBLIC_KEY"):
-            configure_license_trust_anchor(self._settings(modulo_license_key="a.b"))
+            configure_license_trust_anchor(self._settings(license_key="a.b"))
 
     def test_malformed_anchor_fails_closed(self) -> None:
         with pytest.raises(RuntimeError, match="valid Ed25519 public key"):
-            configure_license_trust_anchor(self._settings(modulo_license_public_key="not-hex"))
+            configure_license_trust_anchor(self._settings(license_public_key="not-hex"))

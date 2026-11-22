@@ -2167,8 +2167,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
-          MODULO_SELF_REPORT_URL: ${{ secrets.MODULO_SELF_REPORT_URL }}
-          MODULO_SELF_REPORT_TOKEN: ${{ secrets.MODULO_SELF_REPORT_TOKEN }}
+          # Transitional dual-accept: the renamed secret is provisioned over time;
+          # fall back to the pre-rebrand secret name until then so the
+          # self-report POST never silently skips (fail-open). Drop the
+          # fallback once the new secret is provisioned everywhere.
+          FARNA_CONTROL_SELF_REPORT_URL: ${{ secrets.FARNA_CONTROL_SELF_REPORT_URL || secrets.MODULO_SELF_REPORT_URL }}
+          FARNA_CONTROL_SELF_REPORT_TOKEN: ${{ secrets.FARNA_CONTROL_SELF_REPORT_TOKEN }}
         run: |
           # FAR-145 follow-up (workflow self-report): the Deploy Agent carries PRs
           # to staging/prod but never emitted work_item_refs, so the deploy stage of
@@ -2186,7 +2190,7 @@ jobs:
           #
           # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a
           # Modulo outage can NEVER fail the deploy. The payload is always recorded
-          # in the log; the POST only fires when MODULO_SELF_REPORT_URL is
+          # in the log; the POST only fires when FARNA_CONTROL_SELF_REPORT_URL is
           # configured. The endpoint is POST
           # /api/v1/lifecycle-maps/{lifecycle_map_id}/journeys/self-report
           # (FAR-143); the URL secret points at the dogfood map's endpoint.
@@ -2207,8 +2211,8 @@ jobs:
           echo "=== Modulo self-report payload (deployed PRs) ==="
           echo "$PAYLOAD"
 
-          if [ -z "$MODULO_SELF_REPORT_URL" ]; then
-            echo "::notice::MODULO_SELF_REPORT_URL not configured - deployed PRs recorded in log only, POST skipped (fail-open)."
+          if [ -z "$FARNA_CONTROL_SELF_REPORT_URL" ]; then
+            echo "::notice::FARNA_CONTROL_SELF_REPORT_URL not configured - deployed PRs recorded in log only, POST skipped (fail-open)."
             exit 0
           fi
 
@@ -2216,9 +2220,9 @@ jobs:
           # NOT read as success — that masking is the exact FAR-666 failure mode.
           # Keep -sS (stderr stays visible: connection/TLS errors reach the log);
           # drop -f so we can branch on the real HTTP status code.
-          HTTP_CODE=$(curl -sS -o "${RUNNER_TEMP}/self-report-body.json" -w '%{http_code}' --max-time 15 -X POST "$MODULO_SELF_REPORT_URL" \
+          HTTP_CODE=$(curl -sS -o "${RUNNER_TEMP}/self-report-body.json" -w '%{http_code}' --max-time 15 -X POST "$FARNA_CONTROL_SELF_REPORT_URL" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $MODULO_SELF_REPORT_TOKEN" \
+            -H "Authorization: Bearer $FARNA_CONTROL_SELF_REPORT_TOKEN" \
             -d "$PAYLOAD") || HTTP_CODE="000"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
@@ -2959,7 +2963,7 @@ jobs:
       - name: Enter production sandbox drain
         shell: bash
         env:
-          MODULO_DEPLOY_DRAIN_TOKEN: ${{ secrets.MODULO_DEPLOY_DRAIN_TOKEN }}
+          FARNA_CONTROL_DEPLOY_DRAIN_TOKEN: ${{ secrets.FARNA_CONTROL_DEPLOY_DRAIN_TOKEN }}
         run: |
           set -euo pipefail
           # FAR-2382 bootstrap. The admission freeze is best-effort: it is only
@@ -2970,13 +2974,13 @@ jobs:
           # deploy forever (observed at 07fe115a). Degrade to the active-run
           # wait gate below with a loud warning instead; genuine control
           # failures still fail closed.
-          if [ -z "$MODULO_DEPLOY_DRAIN_TOKEN" ]; then
-            echo "::warning::MODULO_DEPLOY_DRAIN_TOKEN is not configured; skipping the sandbox admission freeze. Without the freeze the active-run wait gate below cannot converge, so it degrades to the legacy deploy path. Provision the secret on both the GitHub repo and the production app to enable the drain."
+          if [ -z "$FARNA_CONTROL_DEPLOY_DRAIN_TOKEN" ]; then
+            echo "::warning::FARNA_CONTROL_DEPLOY_DRAIN_TOKEN is not configured; skipping the sandbox admission freeze. Without the freeze the active-run wait gate below cannot converge, so it degrades to the legacy deploy path. Provision the secret on both the GitHub repo and the production app to enable the drain."
             exit 0
           fi
           status=$(curl -sS --max-time 15 -o /tmp/deploy-drain-enter.json -w '%{http_code}' \
             -X POST "https://control.farna.dev/api/v1/deployment/drain?active=true" \
-            -H "Authorization: Bearer $MODULO_DEPLOY_DRAIN_TOKEN" \
+            -H "Authorization: Bearer $FARNA_CONTROL_DEPLOY_DRAIN_TOKEN" \
             -H "Content-Type: application/json") || {
             echo "::error::could not reach the deployment drain control; refusing production deploy."
             exit 1
@@ -3318,7 +3322,7 @@ jobs:
           # when new sandbox runs are still being admitted the count can rise at
           # any moment and a quiescent window can never form. Waiting anyway
           # deadlocked production deploys for the full timeout (observed on
-          # 33306b9: MODULO_DEPLOY_DRAIN_TOKEN was unconfigured, so the freeze
+          # 33306b9: FARNA_CONTROL_DEPLOY_DRAIN_TOKEN was unconfigured, so the freeze
           # was skipped, and 60 minutes of continuous sandbox activity kept the
           # count above zero). Degrade to the legacy deploy path with a loud
           # warning when the freeze is not active; still fail closed when it is.
@@ -3338,7 +3342,7 @@ jobs:
                   exit 0
                   ;;
                 INACTIVE)
-                  echo "::warning::production sandbox admission is not frozen (deployment_drain=false), so new sandbox runs can start at any moment and the active-run count cannot converge. Skipping the active-run wait gate and proceeding with the deploy. Provision MODULO_DEPLOY_DRAIN_TOKEN on both the GitHub repo and the production app to enable the drain."
+                  echo "::warning::production sandbox admission is not frozen (deployment_drain=false), so new sandbox runs can start at any moment and the active-run count cannot converge. Skipping the active-run wait gate and proceeding with the deploy. Provision FARNA_CONTROL_DEPLOY_DRAIN_TOKEN on both the GitHub repo and the production app to enable the drain."
                   exit 0
                   ;;
                 *)
@@ -3780,20 +3784,20 @@ jobs:
       - name: Clear production sandbox drain
         shell: bash
         env:
-          MODULO_DEPLOY_DRAIN_TOKEN: ${{ secrets.MODULO_DEPLOY_DRAIN_TOKEN }}
+          FARNA_CONTROL_DEPLOY_DRAIN_TOKEN: ${{ secrets.FARNA_CONTROL_DEPLOY_DRAIN_TOKEN }}
         run: |
           set -euo pipefail
           # FAR-2382 bootstrap: nothing was engaged when the token is absent or
           # the live build has no /drain route, so there is nothing to clear.
           # Once a freeze IS engaged, a genuine clear failure must still fail
           # closed and leave admission frozen for manual recovery.
-          if [ -z "$MODULO_DEPLOY_DRAIN_TOKEN" ]; then
-            echo "::warning::MODULO_DEPLOY_DRAIN_TOKEN is not configured; no admission freeze was engaged, so there is nothing to clear."
+          if [ -z "$FARNA_CONTROL_DEPLOY_DRAIN_TOKEN" ]; then
+            echo "::warning::FARNA_CONTROL_DEPLOY_DRAIN_TOKEN is not configured; no admission freeze was engaged, so there is nothing to clear."
             exit 0
           fi
           status=$(curl -sS --max-time 15 -o /tmp/deploy-drain-clear.json -w '%{http_code}' \
             -X POST "https://control.farna.dev/api/v1/deployment/drain?active=false" \
-            -H "Authorization: Bearer $MODULO_DEPLOY_DRAIN_TOKEN" \
+            -H "Authorization: Bearer $FARNA_CONTROL_DEPLOY_DRAIN_TOKEN" \
             -H "Content-Type: application/json") || {
             echo "::error::could not reach the deployment drain control to clear it; admission may still be frozen."
             exit 1

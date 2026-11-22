@@ -354,7 +354,7 @@ def _env_saml_available(settings: Settings) -> bool:
     screen. Entitlement is enforced post-auth (the plan resolves to Community)
     and on the admin configuration surface by ``require_feature("sso")``.
     """
-    return bool(settings.modulo_saml_enabled and (bool(settings.modulo_saml_idp_metadata_url) or bool(settings.modulo_saml_idp_metadata_xml)))
+    return bool(settings.saml_enabled and (bool(settings.saml_idp_metadata_url) or bool(settings.saml_idp_metadata_xml)))
 
 
 async def is_saml_available(
@@ -1133,14 +1133,14 @@ async def saml_metadata(
             db_saml = await _get_enabled_saml_global(system_session, session)
             # A DB-configured SAML provider is self-sufficient (no env flag needed),
             # mirroring saml_login/saml_acs which resolve the DB provider without the
-            # modulo_saml_enabled flag. Only when no DB provider exists do we require
+            # saml_enabled flag. Only when no DB provider exists do we require
             # the env flag, preserving the pure-env-var contract.
-            if db_saml is None and not settings.modulo_saml_enabled:
+            if db_saml is None and not settings.saml_enabled:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="SAML is not enabled",
                 )
-            entity_id = (db_saml.entity_id if db_saml is not None else None) or settings.modulo_saml_entity_id
+            entity_id = (db_saml.entity_id if db_saml is not None else None) or settings.saml_entity_id
 
             public_url = get_public_url(settings).rstrip("/")
             acs_url = f"{public_url}/api/v1/auth/saml/acs"

@@ -22,7 +22,7 @@ _SETTINGS_KWARGS = {
     "database_url": "postgresql+asyncpg://localhost/test",
     "secret_key": "a" * 32,
     "fernet_key": "a" * 32,
-    "modulo_admin_password": "testpass",
+    "admin_password": "testpass",
 }
 
 
@@ -128,20 +128,20 @@ class TestSettingsIntegration:
     """Tests that the Settings model integration with telemetry."""
 
     def test_settings_defaults_to_disabled(self, monkeypatch: pytest.MonkeyPatch):
-        """Settings.modulo_telemetry_enabled should default to False."""
+        """Settings.telemetry_enabled should default to False."""
         # Isolate from any ambient FARNA_CONTROL_TELEMETRY_ENABLED in the runner env.
         monkeypatch.delenv("FARNA_CONTROL_TELEMETRY_ENABLED", raising=False)
-        assert _settings().modulo_telemetry_enabled is False
+        assert _settings().telemetry_enabled is False
 
     def test_settings_can_enable(self, monkeypatch: pytest.MonkeyPatch):
-        """Settings.modulo_telemetry_enabled can be set to True."""
+        """Settings.telemetry_enabled can be set to True."""
         monkeypatch.delenv("FARNA_CONTROL_TELEMETRY_ENABLED", raising=False)
-        assert _settings(modulo_telemetry_enabled=True).modulo_telemetry_enabled is True
+        assert _settings(telemetry_enabled=True).telemetry_enabled is True
 
     def test_env_var_overrides_default(self, monkeypatch: pytest.MonkeyPatch):
         """FARNA_CONTROL_TELEMETRY_ENABLED env var should override the default."""
         monkeypatch.setenv("FARNA_CONTROL_TELEMETRY_ENABLED", "true")
-        assert _settings().modulo_telemetry_enabled is True
+        assert _settings().telemetry_enabled is True
 
 
 class TestIsTelemetryEnabled:
@@ -251,7 +251,7 @@ class TestToggleTelemetry:
             patch("farna.otel_bridge.export.setup_otel") as mock_setup,
             patch("farna.settings.get_settings") as mock_settings,
         ):
-            mock_settings.return_value.modulo_otel_service_name = "test-svc"
+            mock_settings.return_value.otel_service_name = "test-svc"
             toggle_telemetry(enabled)
         assert store.get("FARNA_CONTROL_TELEMETRY_ENABLED") == expected_override
         mock_setup.assert_called_once_with(service_name="test-svc", telemetry_enabled=enabled)
@@ -266,7 +266,7 @@ class TestToggleTelemetry:
             patch("farna.otel_bridge.export.setup_otel"),
             patch("farna.settings.get_settings") as mock_settings,
         ):
-            mock_settings.return_value.modulo_otel_service_name = "test-svc"
+            mock_settings.return_value.otel_service_name = "test-svc"
             toggle_telemetry(True)
             toggle_telemetry(True)
         assert store.get("FARNA_CONTROL_TELEMETRY_ENABLED") == "true"

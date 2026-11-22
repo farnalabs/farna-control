@@ -86,7 +86,7 @@ def _make_oauth_settings():
     return Settings(
         **{
             **base.model_dump(),
-            "modulo_public_url": "https://modulo.example.com",
+            "public_url": "https://modulo.example.com",
         }
     )
 

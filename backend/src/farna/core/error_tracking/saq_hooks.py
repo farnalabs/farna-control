@@ -82,7 +82,7 @@ def _get_engine() -> AsyncEngine:
 
                 settings = get_settings()
                 # FAR-1440: guard on the URL's ACTUAL driver scheme, not the
-                # independent ``modulo_db`` knob, and translate the preserved
+                # independent ``db`` knob, and translate the preserved
                 # ``sslmode`` into asyncpg's ``ssl`` connect arg — the raw URL
                 # raises TypeError at first connect once Settings stops
                 # stripping sslmode.

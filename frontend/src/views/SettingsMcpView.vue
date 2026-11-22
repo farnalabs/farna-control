@@ -520,7 +520,7 @@ const filteredApiKeys = computed(() => {
 })
 
 /**
- * The page's ONE concept of "MODULO_PUBLIC_URL is configured" (FAR-1282).
+ * The page's ONE concept of "FARNA_CONTROL_PUBLIC_URL is configured" (FAR-1282).
  *
  * The server-side OAuth guard (`api/routes/mcp_oauth.py`) refuses the
  * registration flow when the effective public URL is empty OR is the
@@ -528,11 +528,11 @@ const filteredApiKeys = computed(() => {
  * reports that same value as `<public url>/mcp` (empty public URL -> `/mcp`).
  * So strip the `/mcp` suffix and test the base against exactly the two
  * rejecting values the server uses - `!mcpUrl` alone is not enough, because a
- * default/unset MODULO_PUBLIC_URL comes back as `http://localhost:8000/mcp`,
+ * default/unset FARNA_CONTROL_PUBLIC_URL comes back as `http://localhost:8000/mcp`,
  * which is truthy but still fails the server guard.
  *
  * Everything that cares about that precondition reads THIS computed: the
- * MODULO_PUBLIC_URL warning card, the Active/Local Only badge, and the OAuth
+ * FARNA_CONTROL_PUBLIC_URL warning card, the Active/Local Only badge, and the OAuth
  * register gate (passed to `McpOauthClientsCard` as `public-url-configured`).
  */
 const publicUrlConfigured = computed(() => {

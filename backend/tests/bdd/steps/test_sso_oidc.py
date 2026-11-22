@@ -26,10 +26,10 @@ def _oidc_settings(license_key: str = "test-license-key") -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=license_key,
-        modulo_csrf_enabled=False,
-        modulo_oidc_providers=json.dumps(
+        admin_password="testpass",
+        license_key=license_key,
+        csrf_enabled=False,
+        oidc_providers=json.dumps(
             [
                 {
                     "provider_id": "google",

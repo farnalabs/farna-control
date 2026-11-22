@@ -28,8 +28,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_public_url=_PUBLIC_URL,
+        admin_password="testpass",
+        public_url=_PUBLIC_URL,
     )
 
 
@@ -114,7 +114,7 @@ def test_invite_user_returns_single_use_link(admin_client: TestClient) -> None:
     assert resp.status_code == 201
     body = resp.json()
     assert body["id"] == str(invitation.id)
-    # The invite URL is anchored to settings.modulo_public_url and carries the
+    # The invite URL is anchored to settings.public_url and carries the
     # plaintext token exactly once — in the URL FRAGMENT (never the query
     # string, so the credential is not sent to servers/proxies/logs).
     assert body["invite_url"] == f"{_PUBLIC_URL}/accept-invite#token={plaintext}"

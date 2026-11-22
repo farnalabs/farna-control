@@ -6,6 +6,6 @@ Windows service mode: Coming soon (Beta). This build does not register a Windows
 
 The native runtime bundle is built separately. The installer intentionally refuses to compile unless the bundle contains both bin\modulo.exe and modulo-runtime.json. This prevents publishing or installing a partial package.
 
-After installation, you can choose to open the local Modulo URL in your browser. The URL defaults to http://127.0.0.1:8000 and can be changed at compile time with /D MODULO_URL="http://127.0.0.1:8000".
+After installation, you can choose to open the local Modulo URL in your browser. The URL defaults to http://127.0.0.1:8000 and can be changed at compile time with /D FARNA_CONTROL_URL="http://127.0.0.1:8000".
 
 For setup and operating guidance, see the project documentation at https://farna.dev/control/docs/. The license page in the installer displays the repository's authoritative LICENSE file.

@@ -4,7 +4,7 @@ Locks the ADR 031 Decision 8 rules: FIXED bootstrap role, C.UTF-8 locale,
 temp-dir + atomic rename (fails if the target exists), the non-empty-dir
 refusal (corrupt = missing PG_VERSION + non-empty), argument pinning, the
 deterministic pause gate ordering, and the SIGKILL-mid-bootstrap behaviour
-via a subprocess + the MODULO_TEST_PAUSE_AT seam (no timing-based kills).
+via a subprocess + the FARNA_CONTROL_TEST_PAUSE_AT seam (no timing-based kills).
 """
 
 import os
@@ -268,7 +268,7 @@ def test_bootstrap_refuses_unknown_pause_gate_name(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # MODULO_TEST_PAUSE_AT is a test-only seam: an unknown value (a stale leak
+    # FARNA_CONTROL_TEST_PAUSE_AT is a test-only seam: an unknown value (a stale leak
     # from a developer shell) must fail the bootstrap loudly, never silently.
     monkeypatch.setenv("FARNA_CONTROL_TEST_PAUSE_AT", "not_a_registered_gate")
     called: list[list[str]] = []

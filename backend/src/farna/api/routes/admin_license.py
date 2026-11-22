@@ -361,7 +361,7 @@ def _configured_license_keys(settings: Settings, org: Organisation | None) -> li
     org_settings = getattr(org, "settings_json", None)
     if isinstance(org_settings, dict) and org_settings.get("license_key"):
         keys.append(str(org_settings["license_key"]))
-    configured_key = getattr(settings, "modulo_license_key", "") or ""
+    configured_key = getattr(settings, "license_key", "") or ""
     if configured_key:
         keys.append(configured_key)
     return keys
@@ -372,7 +372,7 @@ def _configured_parked_successor(settings: Settings, org: Organisation | None) -
 
     The in-memory park slot only holds keys INSTALLED through
     ``POST /api/v1/admin/license``. A successor can also arrive as deployment
-    configuration (``MODULO_LICENSE_KEY``) or an org-level key; those are not
+    configuration (``FARNA_CONTROL_LICENSE_KEY``) or an org-level key; those are not
     "installed" by an operator action at all, so the status surface looks for
     them here to report their start date. This is REPORTING only: the ladder
     itself already refuses to apply a parked key
@@ -663,7 +663,7 @@ async def remove_license(
        sweep would keep serving the removed licence for up to a minute.
 
     The response is the post-removal instance-wide resolution rather than a
-    hard-coded "no licence": ``MODULO_LICENSE_KEY`` is deployment configuration
+    hard-coded "no licence": ``FARNA_CONTROL_LICENSE_KEY`` is deployment configuration
     (rung 3 of the same ladder), so a deployment licensed by the env var still
     resolves to Team after the installed key is cleared. Reporting Community
     there would be false; the caller can tell the two apart from ``has_license``.
@@ -714,7 +714,7 @@ async def issue_license(
         req.org_name,
         term_months=req.term_months,
         features=req.features if req.features is not None else TEAM_FEATURES,
-        private_key_hex=settings.modulo_license_private_key or None,
+        private_key_hex=settings.license_private_key or None,
     )
 
     validation = parse_and_verify(license_key)
@@ -725,14 +725,14 @@ async def issue_license(
             validation.reason,
         )
         # The deployment just signed a key and then failed to verify it: the
-        # signing key (MODULO_LICENSE_PRIVATE_KEY) and the trust anchor
-        # (MODULO_LICENSE_PUBLIC_KEY) are not the same keypair. Name that.
+        # signing key (FARNA_CONTROL_LICENSE_PRIVATE_KEY) and the trust anchor
+        # (FARNA_CONTROL_LICENSE_PUBLIC_KEY) are not the same keypair. Name that.
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
-                "detail": ("Generated license key failed signature verification against this deployment's trust anchor. Check that MODULO_LICENSE_PRIVATE_KEY and MODULO_LICENSE_PUBLIC_KEY belong to the same Ed25519 keypair (anchor mismatch)."),
+                "detail": ("Generated license key failed signature verification against this deployment's trust anchor. Check that FARNA_CONTROL_LICENSE_PRIVATE_KEY and FARNA_CONTROL_LICENSE_PUBLIC_KEY belong to the same Ed25519 keypair (anchor mismatch)."),
                 "reason": validation.reason or REASON_SIGNATURE_MISMATCH,
-                "hint": ("The signing key and the anchor must be the two halves of one keypair. Set MODULO_LICENSE_PUBLIC_KEY to the public key derived from MODULO_LICENSE_PRIVATE_KEY."),
+                "hint": ("The signing key and the anchor must be the two halves of one keypair. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY to the public key derived from FARNA_CONTROL_LICENSE_PRIVATE_KEY."),
             },
         )
 

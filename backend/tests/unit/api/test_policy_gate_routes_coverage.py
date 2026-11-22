@@ -51,13 +51,13 @@ _RUNTIME = RuntimeError("kaboom")
 _INTEGRITY = IntegrityError("s", {}, Exception())
 
 
-def _make_settings(*, modulo_csrf_enabled: bool = False) -> Settings:
+def _make_settings(*, csrf_enabled: bool = False) -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
-        modulo_csrf_enabled=False,
+        admin_password="testpass",
+        csrf_enabled=False,
     )
 
 
@@ -240,7 +240,7 @@ def _install_overrides(session: AsyncMock, *, org_role: str = "admin") -> None:
     app.dependency_overrides[deny_break_glass_mint] = lambda: None
     for middleware in app.user_middleware:
         if middleware.cls is CsrfMiddleware:
-            middleware.kwargs["settings"] = _make_settings(modulo_csrf_enabled=False)
+            middleware.kwargs["settings"] = _make_settings(csrf_enabled=False)
 
 
 @pytest.fixture(autouse=True)

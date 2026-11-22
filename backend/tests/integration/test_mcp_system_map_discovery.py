@@ -50,8 +50,8 @@ async def mcp_discovery_context(
         database_url="postgresql+asyncpg://unused/test",
         secret_key="a" * 32,
         fernet_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        modulo_admin_password="",
-        modulo_dev_mode=True,
+        admin_password="",
+        dev_mode=True,
     )
     with (
         patch("farna.api.mcp_server.get_settings", return_value=settings),

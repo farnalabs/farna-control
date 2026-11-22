@@ -60,14 +60,14 @@ def _settings_without_license() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="",
+        admin_password="testpass",
+        license_key="",
         # These fixtures model an instance with NO tenant row (the mock session
         # returns an empty organisations list). Under the ADR 005 single-org
         # invariant that is "single-org, tenant unidentifiable", which the
         # pre-auth resolver now FAILS CLOSED on (503). Multi-org mode is the
         # honest way to model "no tenant to bind" -> system scope.
-        modulo_multi_org_enabled=True,
+        multi_org_enabled=True,
     )
 
 
@@ -76,9 +76,9 @@ def _settings_with_license() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="valid-license-key",
-        modulo_multi_org_enabled=True,
+        admin_password="testpass",
+        license_key="valid-license-key",
+        multi_org_enabled=True,
     )
 
 
@@ -263,12 +263,12 @@ def _env_oidc_settings(*, license_key: str = "") -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=license_key,
+        admin_password="testpass",
+        license_key=license_key,
         # No tenant row in the mock session -> model "no tenant to bind" as
         # multi-org (system scope) rather than the fail-closed single-org state.
-        modulo_multi_org_enabled=True,
-        modulo_oidc_providers=json.dumps(
+        multi_org_enabled=True,
+        oidc_providers=json.dumps(
             [
                 {
                     "provider_id": "google",
@@ -376,7 +376,7 @@ class TestSsoAuthGating:
 
         app.dependency_overrides.clear()
         session = _make_mock_session()
-        settings = _settings_without_license().model_copy(update={"modulo_multi_org_enabled": False})
+        settings = _settings_without_license().model_copy(update={"multi_org_enabled": False})
 
         with pytest.raises(HTTPException) as excinfo:
             await resolve_anonymous_plan_context(settings, session)
@@ -420,10 +420,10 @@ class TestSsoAuthGating:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_license_key="valid-license-key",
-            modulo_multi_org_enabled=True,
-            modulo_oidc_providers=json.dumps(
+            admin_password="testpass",
+            license_key="valid-license-key",
+            multi_org_enabled=True,
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "google",
@@ -609,11 +609,11 @@ class TestRealLicenceResolution:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_license_key=key,
+            admin_password="testpass",
+            license_key=key,
             # Empty org list models "no tenant to bind"; multi-org is the
             # honest representation of that state (system scope).
-            modulo_multi_org_enabled=True,
+            multi_org_enabled=True,
         )
 
         ctx = await resolve_anonymous_plan_context(settings, _make_mock_session())
@@ -641,9 +641,9 @@ class TestRealLicenceResolution:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_license_key=key,
-            modulo_multi_org_enabled=True,
+            admin_password="testpass",
+            license_key=key,
+            multi_org_enabled=True,
         )
 
         ctx = await resolve_anonymous_plan_context(settings, _make_mock_session())
@@ -669,9 +669,9 @@ class TestRealLicenceResolution:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_license_key=key,
-            modulo_multi_org_enabled=True,
+            admin_password="testpass",
+            license_key=key,
+            multi_org_enabled=True,
         )
 
         ctx = await resolve_anonymous_plan_context(settings, _make_mock_session())
@@ -703,9 +703,9 @@ class TestRealLicenceResolution:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_license_key=key,
-            modulo_multi_org_enabled=True,
+            admin_password="testpass",
+            license_key=key,
+            multi_org_enabled=True,
         )
 
         ctx = await resolve_anonymous_plan_context(settings, _make_mock_session())
@@ -880,7 +880,7 @@ class TestOidcLoginPublicUrlBridge:
 
     This exercises the handler body (SSO enabled), which the 402/401 gating
     tests above never reach, and asserts the redirect_uri is built from the
-    override — reverting the route to ``settings.modulo_public_url`` fails it.
+    override — reverting the route to ``settings.public_url`` fails it.
     """
 
     def test_oidc_login_redirect_uri_uses_public_url_override(self, client_with_sso: TestClient) -> None:

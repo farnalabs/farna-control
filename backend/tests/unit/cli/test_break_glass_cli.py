@@ -54,11 +54,11 @@ def _make_settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://modulo:modulo@localhost:5432/farna_control",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "test",
+        "admin_password": "test",
         "redis_url": "",
-        "modulo_break_glass_secret": "p" * 32,
-        "modulo_break_glass_standby_secret": "s" * 32,
-        "modulo_break_glass_database_url": "postgresql+asyncpg://farna_control_breakglass:bgpass@localhost:5432/farna_control",
+        "break_glass_secret": "p" * 32,
+        "break_glass_standby_secret": "s" * 32,
+        "break_glass_database_url": "postgresql+asyncpg://farna_control_breakglass:bgpass@localhost:5432/farna_control",
     }
     base.update(overrides)
     return Settings(**base)
@@ -221,8 +221,8 @@ class TestActivate:
 
     def test_ttl_out_of_range_exits_5(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_ttl_minutes=60,
-            modulo_break_glass_max_ttl_minutes=120,
+            break_glass_ttl_minutes=60,
+            break_glass_max_ttl_minutes=120,
         )
         result = _invoke(["activate", "acme", "--reason", "TKT-1", "--ttl-minutes", "500", "--yes"], settings)
         assert result.exit_code == EXIT_PRECONDITIONS

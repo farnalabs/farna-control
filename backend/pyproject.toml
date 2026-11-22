@@ -103,7 +103,7 @@ dependencies = [
     # Kubernetes runtime provider (FAR-1051): async client for the
     # exec-shaped pod provider (repo is async end-to-end; aiohttp is
     # already a dependency). The provider itself is env-gated
-    # (MODULO_KUBERNETES_ENABLED) — the dependency is inert until then.
+    # (FARNA_CONTROL_KUBERNETES_ENABLED) — the dependency is inert until then.
     "kubernetes-asyncio>=36.0.0",
     # Retry library — replaces hand-rolled retry-with-backoff patterns
     "tenacity>=9.0.0",

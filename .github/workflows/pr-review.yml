@@ -322,7 +322,7 @@ jobs:
         id: webhook
         if: steps.pr-details.outputs.ready == 'true' && steps.dedup.outputs.skip != 'true' && steps.author-gate.outputs.skipped != 'true'
         env:
-          DISPATCH_URL: ${{ secrets.MODULO_PR_REVIEW_WEBHOOK_URL }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET }}
           DISPATCH_LABEL: "Modulo PR Review"
           DISPATCH_ACCEPT_ANY_2XX: "1"

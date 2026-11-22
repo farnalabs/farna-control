@@ -114,15 +114,15 @@ async def _require_csrf_double_submit(  # NOSONAR S7503 - FastAPI dependency sea
 ) -> None:
     """Double-submit CSRF gate for the cookie-only refresh/logout endpoints (FAR-1197).
 
-    ``modulo_csrf_exempt_paths`` exempts the whole ``/api/v1/auth`` prefix by
+    ``csrf_exempt_paths`` exempts the whole ``/api/v1/auth`` prefix by
     default (login must work pre-session), and the SPA no longer sends a Bearer
     header on refresh/logout — so the app-level CsrfMiddleware alone cannot
     protect these two routes. This route-local dependency enforces the same
     double-submit rule (XSRF-TOKEN cookie vs X-CSRF-Token header, constant-time
-    compare), honouring the same ``modulo_csrf_enabled`` kill switch as the
+    compare), honouring the same ``csrf_enabled`` kill switch as the
     middleware. Fails CLOSED: a missing cookie or header is a 403.
     """
-    if not settings.modulo_csrf_enabled:
+    if not settings.csrf_enabled:
         return
     cookie = request.cookies.get(CsrfMiddleware.CSRF_COOKIE)
     header = request.headers.get(CsrfMiddleware.CSRF_HEADER)
@@ -367,7 +367,7 @@ async def _resolve_demo_org_membership(session: AsyncSession, account_id: uuid.U
     Resolves through the demo org SLUG + the viewer role (not just "any
     membership") so the demo endpoint can only ever mint a session scoped to
     the demo organisation. Defense-in-depth against operator
-    misconfiguration: if MODULO_DEMO_USER names a pre-existing privileged
+    misconfiguration: if FARNA_CONTROL_DEMO_USER names a pre-existing privileged
     account, its other-org memberships are never eligible here.
 
     Soft-deleted demo orgs are excluded (``deleted_at IS NULL``): a soft-delete
@@ -497,7 +497,7 @@ def mint_password_change_response(
         account_id=str(account.id),
         org_role=current_user.org_role or "",
         is_system_admin=current_user.is_system_admin,
-        ttl_minutes=settings.modulo_access_token_minutes,
+        ttl_minutes=settings.access_token_minutes,
         client_kind=CLIENT_KIND_BROWSER,
     )
     refresh_token = create_refresh_token(
@@ -509,7 +509,7 @@ def mint_password_change_response(
         is_system_admin=current_user.is_system_admin,
         token_family=str(family.family_id),
         token_sequence=0,
-        ttl_hours=settings.modulo_refresh_token_ttl_hours,
+        ttl_hours=settings.refresh_token_ttl_hours,
         client_kind=CLIENT_KIND_BROWSER,
     )
     response = JSONResponse(
@@ -531,7 +531,7 @@ def _mint_login_response(ctx: _LoginContext, settings: Settings) -> JSONResponse
         account_id=str(ctx.account.id),
         org_role=ctx.org_role or "",
         is_system_admin=ctx.account.is_system_admin,
-        ttl_minutes=settings.modulo_access_token_minutes,
+        ttl_minutes=settings.access_token_minutes,
         client_kind=CLIENT_KIND_BROWSER,
     )
     refresh_token = create_refresh_token(
@@ -543,7 +543,7 @@ def _mint_login_response(ctx: _LoginContext, settings: Settings) -> JSONResponse
         is_system_admin=ctx.account.is_system_admin,
         token_family=str(ctx.family.family_id),
         token_sequence=0,
-        ttl_hours=settings.modulo_refresh_token_ttl_hours,
+        ttl_hours=settings.refresh_token_ttl_hours,
         client_kind=CLIENT_KIND_BROWSER,
     )
     requires_bootstrap = not ctx.memberships and ctx.account.is_system_admin
@@ -591,7 +591,7 @@ async def login(
             req.password,
             limiter=limiter,
             ip=ip,
-            org_slug=req.org_slug if settings.modulo_multi_org_enabled else None,
+            org_slug=req.org_slug if settings.multi_org_enabled else None,
         )
     except IntegrityError:
         _log.exception(_CODE_AUTH_LOGIN)
@@ -668,18 +668,18 @@ async def demo_login(
     """Auto-login the env-configured read-only demo user (FAR-535).
 
     The browser sends NO credentials — the server reads the demo email/password
-    from settings (MODULO_DEMO_USER / MODULO_DEMO_PASSWORD). Kill switch: when
-    MODULO_DEMO_ENABLED is falsy or either credential is unset the endpoint
+    from settings (FARNA_CONTROL_DEMO_USER / FARNA_CONTROL_DEMO_PASSWORD). Kill switch: when
+    FARNA_CONTROL_DEMO_ENABLED is falsy or either credential is unset the endpoint
     answers a plain 404 so it never reveals that a demo feature exists.
 
-    The minted access token carries the SHORT demo TTL (modulo_demo_token_minutes,
+    The minted access token carries the SHORT demo TTL (demo_token_minutes,
     default 2h, hard-capped at 4h) and NO refresh token is issued — the demo
     session dies with the access token. Note the session persists until its TTL
     expiry after the kill switch is flipped (no refresh token can extend it; the
     4h cap bounds that residual window). The session is minted ONLY for a viewer
     membership in the demo org: if the env user authenticates but has no viewer
     membership in the demo org (operator misconfiguration — e.g.
-    MODULO_DEMO_USER naming a privileged account) the endpoint answers the same
+    FARNA_CONTROL_DEMO_USER naming a privileged account) the endpoint answers the same
     plain 404, so a demo request can never mint a token for another org or
     elevated role. Credential mismatches answer the SAME plain 404 (not
     login's 401): the endpoint takes no client credentials, so a login-identical
@@ -748,13 +748,13 @@ async def demo_login(
         account_id=str(account.id),
         org_role=org_role,
         is_system_admin=account.is_system_admin,
-        ttl_minutes=settings.modulo_demo_token_minutes,
+        ttl_minutes=settings.demo_token_minutes,
         # FAR-634: the demo login is a browser flow (cookie-set response).
         client_kind=CLIENT_KIND_BROWSER,
     )
     content = DemoLoginResponse(access_token=access_token).model_dump()
     response = JSONResponse(content=content)
-    _set_auth_cookies(response, access_token, settings, max_age_seconds=settings.modulo_demo_token_minutes * 60)
+    _set_auth_cookies(response, access_token, settings, max_age_seconds=settings.demo_token_minutes * 60)
     return response
 
 
@@ -1227,7 +1227,7 @@ def _mint_refresh_response(
         organisation_id=claims.org_id,
         account_id=claims.account_id,
         org_role=str(minted_org_role),
-        ttl_minutes=settings.modulo_access_token_minutes,
+        ttl_minutes=settings.access_token_minutes,
         client_kind=claims.client_kind,
     )
     new_refresh = create_refresh_token(
@@ -1238,7 +1238,7 @@ def _mint_refresh_response(
         org_role=str(minted_org_role),
         token_family=claims.family_id,
         token_sequence=new_sequence,
-        ttl_hours=settings.modulo_refresh_token_ttl_hours,
+        ttl_hours=settings.refresh_token_ttl_hours,
         client_kind=claims.client_kind,
     )
     content = RefreshResponse(access_token=new_access).model_dump()
@@ -1504,12 +1504,12 @@ async def ws_token(
             token = await create_ws_token(
                 redis,
                 principal_json,
-                ttl=settings.modulo_ws_token_ttl_seconds,
+                ttl=settings.ws_token_ttl_seconds,
             )
             return WsTokenResponse(
                 ws_token=token,
                 token_type="ws-opaque",  # noqa: S106  # nosec B106 — opaque-token type label, not a credential
-                expires_in_seconds=settings.modulo_ws_token_ttl_seconds,
+                expires_in_seconds=settings.ws_token_ttl_seconds,
             )
         finally:
             await redis.aclose()
@@ -1721,7 +1721,7 @@ REFRESH_COOKIE = "modulo_refresh"
 
 
 def _refresh_cookie_ttl(settings: Settings) -> int:
-    return settings.modulo_refresh_token_ttl_hours * 3600
+    return settings.refresh_token_ttl_hours * 3600
 
 
 def _set_auth_cookies(
@@ -1744,7 +1744,7 @@ def _set_auth_cookies(
     access cookie has expired.
     """
     secure = not settings.debug
-    resolved_max_age = max_age_seconds if max_age_seconds is not None else settings.modulo_access_token_minutes * 60
+    resolved_max_age = max_age_seconds if max_age_seconds is not None else settings.access_token_minutes * 60
     response.set_cookie(
         key=SESSION_COOKIE,
         value=access_token,
@@ -1784,7 +1784,7 @@ def _set_csrf_cookie(response: Response, token: str, settings: Settings, *, max_
         httponly=False,
         samesite="strict",
         secure=not settings.debug,
-        max_age=max_age_seconds if max_age_seconds is not None else settings.modulo_access_token_minutes * 60,
+        max_age=max_age_seconds if max_age_seconds is not None else settings.access_token_minutes * 60,
         path="/",
     )
 

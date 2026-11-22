@@ -55,7 +55,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -187,7 +187,7 @@ def test_receive_webhook_returns_202(client: TestClient) -> None:
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000", "X-Modulo-Webhook-Secret": "test-hmac"},
+            headers={"X-Farna-Control-Timestamp": "1700000000", "X-Farna-Control-Webhook-Secret": "test-hmac"},
         )
 
     assert resp.status_code == 202
@@ -214,7 +214,7 @@ def test_receive_webhook_records_error_event_on_dispatch_failure(client: TestCli
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000", "X-Modulo-Webhook-Secret": "test-hmac"},
+            headers={"X-Farna-Control-Timestamp": "1700000000", "X-Farna-Control-Webhook-Secret": "test-hmac"},
         )
 
     assert resp.status_code == 202
@@ -229,7 +229,7 @@ def test_receive_webhook_missing_json_body_returns_400(client: TestClient) -> No
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             content=b"not json",
-            headers={"X-Modulo-Timestamp": "1700000000", "Content-Type": "application/json"},
+            headers={"X-Farna-Control-Timestamp": "1700000000", "Content-Type": "application/json"},
         )
 
     assert resp.status_code == 400
@@ -247,7 +247,7 @@ def test_receive_webhook_trigger_not_found_returns_404(client: TestClient) -> No
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 404
@@ -265,7 +265,7 @@ def test_receive_webhook_inactive_returns_404(client: TestClient) -> None:
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 404
@@ -296,7 +296,7 @@ def test_receive_webhook_hmac_failure_returns_401(client: TestClient) -> None:
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": str(int(time.time())), "X-Modulo-Webhook-Secret": "sha256=bad"},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time())), "X-Farna-Control-Webhook-Secret": "sha256=bad"},
             )
         m.assert_not_called()
     finally:
@@ -343,8 +343,8 @@ def test_receive_webhook_valid_hmac_promotes_audit_actor_source(client: TestClie
                 content=body,
                 headers={
                     "Content-Type": "application/json",
-                    "X-Modulo-Timestamp": str(ts),
-                    "X-Modulo-Webhook-Secret": signature,
+                    "X-Farna-Control-Timestamp": str(ts),
+                    "X-Farna-Control-Webhook-Secret": signature,
                 },
             )
     finally:
@@ -393,8 +393,8 @@ def test_receive_webhook_legacy_plaintext_secret_accepted_with_dated_warning(cli
                 content=body,
                 headers={
                     "Content-Type": "application/json",
-                    "X-Modulo-Timestamp": str(ts),
-                    "X-Modulo-Webhook-Secret": signature,
+                    "X-Farna-Control-Timestamp": str(ts),
+                    "X-Farna-Control-Webhook-Secret": signature,
                 },
             )
     finally:
@@ -444,8 +444,8 @@ def test_receive_webhook_gaaaa_prefixed_plaintext_secret_accepted_with_dated_war
                 content=body,
                 headers={
                     "Content-Type": "application/json",
-                    "X-Modulo-Timestamp": str(ts),
-                    "X-Modulo-Webhook-Secret": signature,
+                    "X-Farna-Control-Timestamp": str(ts),
+                    "X-Farna-Control-Webhook-Secret": signature,
                 },
             )
     finally:
@@ -502,8 +502,8 @@ def test_receive_webhook_undecryptable_token_secret_fails_closed(client: TestCli
                 content=body,
                 headers={
                     "Content-Type": "application/json",
-                    "X-Modulo-Timestamp": str(ts),
-                    "X-Modulo-Webhook-Secret": signature,
+                    "X-Farna-Control-Timestamp": str(ts),
+                    "X-Farna-Control-Webhook-Secret": signature,
                 },
             )
     finally:
@@ -527,7 +527,7 @@ def test_receive_webhook_paused_org_returns_202_paused(client: TestClient) -> No
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": str(int(time.time()))},
+            headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
         )
 
     assert resp.status_code == 202
@@ -603,7 +603,7 @@ def test_receive_webhook_paused_org_missing_row_returns_202_without_event(client
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": str(int(time.time()))},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -629,7 +629,7 @@ def test_receive_webhook_guardrail_blocked_run_acks_422(client: TestClient) -> N
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000", "X-Modulo-Webhook-Secret": "test-hmac"},
+            headers={"X-Farna-Control-Timestamp": "1700000000", "X-Farna-Control-Webhook-Secret": "test-hmac"},
         )
 
     assert resp.status_code == 422
@@ -651,7 +651,7 @@ def test_receive_webhook_blocked_run_without_eval_blocked_acks_202(client: TestC
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000", "X-Modulo-Webhook-Secret": "test-hmac"},
+            headers={"X-Farna-Control-Timestamp": "1700000000", "X-Farna-Control-Webhook-Secret": "test-hmac"},
         )
 
     assert resp.status_code == 202
@@ -670,7 +670,7 @@ def test_receive_webhook_duplicate_returns_400(client: TestClient) -> None:
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 400
@@ -704,7 +704,7 @@ def test_receive_webhook_ci_failure_coalesced_acks_202_and_commits(client: TestC
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -747,7 +747,7 @@ def test_receive_webhook_guardrail_blocked_returns_400_and_commits(client: TestC
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -790,7 +790,7 @@ def test_receive_webhook_concurrent_limit_refusal_records_event_after_unwind(cli
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -843,7 +843,7 @@ def test_receive_webhook_required_refs_missing_records_event_after_unwind(client
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -913,7 +913,7 @@ def test_receive_webhook_rate_limited_persists_event_and_returns_429(client: Tes
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -1024,7 +1024,7 @@ def test_receive_webhook_archived_pipeline_returns_409(client: TestClient) -> No
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 409
@@ -1071,7 +1071,7 @@ def test_receive_webhook_snapshot_lock_busy_returns_503_error(client: TestClient
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": str(int(time.time()))},
+            headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
         )
 
     assert resp.status_code == 503
@@ -1176,7 +1176,7 @@ def test_webhook_unauthenticated_returns_4xx(client: TestClient) -> None:
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": str(int(time.time()))},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -1281,7 +1281,7 @@ def test_receive_webhook_bootstrap_reads_trigger_via_system_session(client: Test
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000", "X-Modulo-Webhook-Secret": "test-hmac"},
+                headers={"X-Farna-Control-Timestamp": "1700000000", "X-Farna-Control-Webhook-Secret": "test-hmac"},
             )
     finally:
         app.dependency_overrides.pop(get_system_db_session, None)
@@ -1312,7 +1312,7 @@ def test_receive_webhook_missing_trigger_returns_404(client: TestClient) -> None
             resp = client.post(
                 f"/api/v1/triggers/{uuid.uuid4()}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_system_db_session, None)
@@ -1341,7 +1341,7 @@ def test_receive_webhook_soft_deleted_trigger_returns_404(client: TestClient) ->
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": str(int(time.time()))},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
             )
     finally:
         app.dependency_overrides.pop(get_system_db_session, None)
@@ -1380,7 +1380,7 @@ def test_receive_webhook_other_org_trigger_returns_404_no_writes(client: TestCli
             resp = client.post(
                 f"/api/v1/triggers/{uuid.uuid4()}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_system_db_session, None)
@@ -1408,7 +1408,7 @@ def test_receive_webhook_degraded_system_engine_returns_503(client: TestClient) 
         resp = client.post(
             f"/api/v1/triggers/{uuid.uuid4()}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 503
@@ -1435,7 +1435,7 @@ def test_receive_webhook_trigger_busy_records_delivery_then_acks(client: TestCli
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": str(int(time.time()))},
+            headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
         )
 
     assert resp.status_code == 202
@@ -1483,7 +1483,7 @@ def test_receive_webhook_backpressure_refusal_records_event_after_unwind(client:
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -1537,7 +1537,7 @@ def test_receive_webhook_trigger_busy_re_records_original_payload_hash_after_unw
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 content=sent_body,
-                headers={"X-Modulo-Timestamp": str(int(time.time())), "Content-Type": "application/json"},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time())), "Content-Type": "application/json"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -1585,7 +1585,7 @@ def test_receive_webhook_guardrail_blocked_run_422_with_committed_rows(client: T
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": str(int(time.time()))},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -1649,7 +1649,7 @@ def test_receive_webhook_invalid_config_json_returns_400(client: TestClient) -> 
             resp = client.post(
                 f"/api/v1/triggers/{uuid.uuid4()}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_system_db_session, None)
@@ -1710,7 +1710,7 @@ def test_receive_webhook_event_not_accepted_returns_400(client: TestClient) -> N
             resp = client.post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"action": "opened"},
-                headers={"X-Modulo-Timestamp": "1700000000"},
+                headers={"X-Farna-Control-Timestamp": "1700000000"},
             )
     finally:
         app.dependency_overrides.pop(get_db_session, None)
@@ -1766,7 +1766,7 @@ def test_receive_webhook_trigger_busy_unresolvable_returns_429(client: TestClien
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": str(int(time.time()))},
+            headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
         )
 
     assert resp.status_code == 429
@@ -1785,7 +1785,7 @@ def test_receive_webhook_snapshot_creation_failure_returns_500(client: TestClien
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": str(int(time.time()))},
+            headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
         )
 
     assert resp.status_code == 500
@@ -1826,7 +1826,7 @@ def test_receive_webhook_inactive_trigger_skips_pause_precheck() -> None:
             resp = TestClient(app).post(
                 f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
                 json={"event": "test"},
-                headers={"X-Modulo-Timestamp": str(int(time.time()))},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
             )
     finally:
         app.dependency_overrides.clear()
@@ -1930,7 +1930,7 @@ def test_modulo_header_path_unchanged_for_valid_signature(client: TestClient) ->
     ts = int(time.time())
     resp, engine = _post_with_secret_trigger(
         client,
-        {"X-Modulo-Timestamp": str(ts), "X-Modulo-Webhook-Secret": _modulo_signature(_GH_BODY, ts)},
+        {"X-Farna-Control-Timestamp": str(ts), "X-Farna-Control-Webhook-Secret": _modulo_signature(_GH_BODY, ts)},
     )
 
     assert resp.status_code == 202, resp.text
@@ -1943,8 +1943,8 @@ def test_modulo_headers_win_when_both_present_and_github_signature_valid(client:
     resp, engine = _post_with_secret_trigger(
         client,
         {
-            "X-Modulo-Timestamp": str(ts),
-            "X-Modulo-Webhook-Secret": "sha256=bad",
+            "X-Farna-Control-Timestamp": str(ts),
+            "X-Farna-Control-Webhook-Secret": "sha256=bad",
             "X-Hub-Signature-256": _gh_signature(_GH_BODY),
         },
     )
@@ -1956,7 +1956,7 @@ def test_modulo_headers_win_when_both_present_and_github_signature_valid(client:
 def test_modulo_timestamp_alone_does_not_fall_back_to_github_signature(client: TestClient) -> None:
     resp, engine = _post_with_secret_trigger(
         client,
-        {"X-Modulo-Timestamp": str(int(time.time())), "X-Hub-Signature-256": _gh_signature(_GH_BODY)},
+        {"X-Farna-Control-Timestamp": str(int(time.time())), "X-Hub-Signature-256": _gh_signature(_GH_BODY)},
     )
 
     assert resp.status_code == 401

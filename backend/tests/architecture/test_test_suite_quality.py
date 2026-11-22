@@ -1128,7 +1128,7 @@ _MODULO_TEST_STYLE_SCOPE_VAR = "FARNA_CONTROL_TEST_STYLE_SCOPE"
 
 @functools.cache
 def _resolve_scope_paths() -> frozenset[Path] | None:
-    """Resolve ``MODULO_TEST_STYLE_SCOPE`` once and cache.
+    """Resolve ``FARNA_CONTROL_TEST_STYLE_SCOPE`` once and cache.
 
     Returns a frozenset of resolved ``Path`` objects when the variable is set
     and non-empty, or ``None`` when it is unset / empty (meaning full scan).
@@ -1149,7 +1149,7 @@ def _resolve_scope_paths() -> frozenset[Path] | None:
 
 
 def _iter_all_test_modules():
-    """Yield every test module in the tree, ignoring ``MODULO_TEST_STYLE_SCOPE``.
+    """Yield every test module in the tree, ignoring ``FARNA_CONTROL_TEST_STYLE_SCOPE``.
 
     Lenses that reason about the whole tree must use this even when the scan is
     scoped: a fixture requested by a test in an *unchanged* file is not dead, so
@@ -13335,7 +13335,7 @@ def _self_asserting_bdd_baseline_candidates() -> set[str]:
     """Baseline entries the stale check may judge under the active scan.
 
     Unscoped: every entry (the tree-wide ratchet). Under
-    ``MODULO_TEST_STYLE_SCOPE`` only entries whose module is IN scope: the
+    ``FARNA_CONTROL_TEST_STYLE_SCOPE`` only entries whose module is IN scope: the
     scoped ``--changed-files`` run never re-checked the others, so an
     un-scanned module cannot be judged stale — without this filter every
     scoped run whose changed set excludes the BDD steps reported all 75
@@ -13528,7 +13528,7 @@ def _duplicate_test_body_baseline_candidates() -> set[str]:
     """Baseline entries the stale check may judge under the active scan.
 
     Unscoped: every entry (the tree-wide ratchet). Under
-    ``MODULO_TEST_STYLE_SCOPE`` only entries whose module is IN scope: the
+    ``FARNA_CONTROL_TEST_STYLE_SCOPE`` only entries whose module is IN scope: the
     scoped ``--changed-files`` run never re-checked the others, so an
     un-scanned module cannot be judged stale — without this filter every
     scoped run whose changed set excluded those duplicate pairs reported all
@@ -13761,7 +13761,7 @@ def _render_noop_bdd_then_baseline(keys: set[str]) -> str:
 def _noop_bdd_then_baseline_candidates() -> set[str]:
     """Baseline entries the stale check may judge under the active scan.
 
-    Under ``MODULO_TEST_STYLE_SCOPE`` only entries whose module is in scope: the
+    Under ``FARNA_CONTROL_TEST_STYLE_SCOPE`` only entries whose module is in scope: the
     scoped ``--changed-files`` run never re-checked the others, so an un-scanned
     module cannot be judged stale (the same phantom-stale filter the
     self-asserting-BDD ratchet needs). Tree-wide staleness stays owned by the

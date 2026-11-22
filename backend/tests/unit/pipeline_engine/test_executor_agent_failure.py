@@ -4,7 +4,7 @@ When a captured sandbox-agent node output self-reports failure
 (``agent_status=failed`` OR ``outcome=failed``), ``_stream_graph`` must
 terminalize the run as ``failed`` with error_code ``agent.failed`` — NEVER
 ``complete`` — regardless of the exit code. The elevation is flag-gated
-(``modulo_agent_failure_elevation_enabled``) and fail-open: any computation
+(``agent_failure_elevation_enabled``) and fail-open: any computation
 error logs and falls back to today's path.
 """
 
@@ -76,13 +76,13 @@ def _mock_compiled(events: list[dict[str, Any]]) -> MagicMock:
 
 
 class _FakeSettings:
-    modulo_agent_failure_elevation_enabled = True
+    agent_failure_elevation_enabled = True
 
 
 @pytest.fixture
 def elevation_enabled(monkeypatch):
     fake = _FakeSettings()
-    fake.modulo_agent_failure_elevation_enabled = True
+    fake.agent_failure_elevation_enabled = True
     monkeypatch.setattr("farna.settings.get_settings", lambda _fresh=False: fake)
     return fake
 
@@ -90,7 +90,7 @@ def elevation_enabled(monkeypatch):
 @pytest.fixture
 def elevation_disabled(monkeypatch):
     fake = _FakeSettings()
-    fake.modulo_agent_failure_elevation_enabled = False
+    fake.agent_failure_elevation_enabled = False
     monkeypatch.setattr("farna.settings.get_settings", lambda _fresh=False: fake)
     return fake
 

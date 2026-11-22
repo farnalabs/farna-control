@@ -796,7 +796,7 @@ def _patch_finalize_machinery(monkeypatch: pytest.MonkeyPatch) -> None:
     # ``build_cost_breakdown(..., settings=...)`` without touching the
     # settings-module cache the refs cap reads.
     stub_settings = MagicMock()
-    stub_settings.modulo_work_item_refs_cap = 100
+    stub_settings.work_item_refs_cap = 100
     monkeypatch.setattr("farna.core.cost_controller.finalize.get_settings", lambda: stub_settings)
     monkeypatch.setattr(
         "farna.core.cost_controller.finalize.build_telemetry",

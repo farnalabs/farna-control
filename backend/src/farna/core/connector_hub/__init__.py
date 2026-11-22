@@ -204,7 +204,7 @@ def _handle_settings_read_failure(exc: Exception, org_id: str | None) -> None:
 
 def _shared_redis_unconfigured(settings: Any) -> bool:
     """True when no shared Redis budget exists and the connector-local bucket is correct."""
-    return not settings.redis_url or settings.modulo_db.lower() == "sqlite"
+    return not settings.redis_url or settings.db.lower() == "sqlite"
 
 
 def _build_shared_redis_client(settings: Any) -> Any:

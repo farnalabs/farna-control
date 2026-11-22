@@ -6,7 +6,7 @@ that module eagerly imported ``farna.cli.migrate_org`` -> ``farna.db.session``,
 whose async engine is built AT IMPORT TIME through ``get_settings()``. The whole
 ``modulo apply`` surface therefore demanded ``DATABASE_URL`` / ``SECRET_KEY`` /
 ``FERNET_KEY`` at startup, even though ``apply`` only talks to a remote instance
-over ``MODULO_URL`` + ``MODULO_API_KEY``.
+over ``FARNA_CONTROL_URL`` + ``FARNA_CONTROL_API_KEY``.
 
 The test below runs the REAL import path in a fresh subprocess with the
 database/secret variables stripped and a working directory containing no
@@ -84,7 +84,7 @@ def _child_env() -> dict[str, str]:
 
 
 def test_apply_cli_imports_with_only_modulo_url_and_api_key(tmp_path: Path) -> None:
-    """Importing the console script needs only MODULO_URL + MODULO_API_KEY.
+    """Importing the console script needs only FARNA_CONTROL_URL + FARNA_CONTROL_API_KEY.
 
     The subprocess runs with ``DATABASE_URL``/``SECRET_KEY``/``FERNET_KEY``
     stripped and ``cwd`` set to an empty temp dir (so no ambient ``.env`` can

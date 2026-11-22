@@ -1,8 +1,8 @@
 """OTel exporter configuration.
 
 Configures the global TracerProvider with exporters based on environment:
-- Stdout (ConsoleSpanExporter) — disabled by default, requires MODULO_TELEMETRY_ENABLED=true
-- OTLP — requires both MODULO_TELEMETRY_ENABLED=true and OTEL_EXPORTER_OTLP_ENDPOINT set
+- Stdout (ConsoleSpanExporter) — disabled by default, requires FARNA_CONTROL_TELEMETRY_ENABLED=true
+- OTLP — requires both FARNA_CONTROL_TELEMETRY_ENABLED=true and OTEL_EXPORTER_OTLP_ENDPOINT set
 - LangSmith — configured externally via LANGCHAIN_TRACING_V2 + LANGCHAIN_API_KEY env vars
 
 Sensitive data (credentials, API keys, user content) is never written to span attributes.
@@ -44,7 +44,7 @@ def setup_otel(
     resource = Resource.create({"service.name": service_name})
     provider = TracerProvider(resource=resource)
     if not telemetry_enabled:
-        _log.info("OTel telemetry is DISABLED (MODULO_TELEMETRY_ENABLED not set to true). No telemetry data will be exported.")
+        _log.info("OTel telemetry is DISABLED (FARNA_CONTROL_TELEMETRY_ENABLED not set to true). No telemetry data will be exported.")
         trace.set_tracer_provider(provider)
         return
 

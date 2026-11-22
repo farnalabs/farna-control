@@ -226,12 +226,12 @@ describe('SettingsMcpView', () => {
     expect(wrapper.text()).toContain('Active')
   })
 
-  it('shows MODULO_PUBLIC_URL warning when url is empty', async () => {
+  it('shows FARNA_CONTROL_PUBLIC_URL warning when url is empty', async () => {
     const wrapper = mountView(mockMcpConfigEmpty, mockApiKeysNoActive, mockNoOAuthClients)
     await nextTick()
     await nextTick()
     await nextTick()
-    expect(wrapper.text()).toContain('MODULO_PUBLIC_URL not set')
+    expect(wrapper.text()).toContain('FARNA_CONTROL_PUBLIC_URL not set')
     expect(wrapper.text()).toContain('Local Only')
     expect(wrapper.text()).toContain('http://localhost:8000')
   })
@@ -868,7 +868,7 @@ describe('SettingsMcpView', () => {
     await nextTick()
     await nextTick()
     await nextTick()
-    expect(wrapper.text()).toContain('MODULO_PUBLIC_URL not set')
+    expect(wrapper.text()).toContain('FARNA_CONTROL_PUBLIC_URL not set')
     expect(wrapper.text()).toContain('Local Only')
   })
 
@@ -1241,7 +1241,7 @@ describe('SettingsMcpView', () => {
   it('register API error is surfaced through formatApiError', async () => {
     postMock.mockResolvedValueOnce({
       data: undefined,
-      error: { status: 500, detail: 'MODULO_PUBLIC_URL must be configured for OAuth flow' },
+      error: { status: 500, detail: 'FARNA_CONTROL_PUBLIC_URL must be configured for OAuth flow' },
     })
     const wrapper = mountView()
     await nextTick()
@@ -1262,7 +1262,7 @@ describe('SettingsMcpView', () => {
 
     const err = wrapper.find('[data-testid="settings-mcp-oauth-register-error"]')
     expect(err.exists()).toBe(true)
-    expect(err.text()).toContain('MODULO_PUBLIC_URL must be configured for OAuth flow')
+    expect(err.text()).toContain('FARNA_CONTROL_PUBLIC_URL must be configured for OAuth flow')
     expect(vm.oauthCreatedDialogOpen).toBe(false)
     expect(err.attributes('aria-live')).toBe('assertive')
   })
@@ -1476,7 +1476,7 @@ describe('SettingsMcpView', () => {
     expect(registerForm?.props('loading')).toBe(false)
   })
 
-  // ��� FAR-1282: registration is gated on MODULO_PUBLIC_URL �������������
+  // ��� FAR-1282: registration is gated on FARNA_CONTROL_PUBLIC_URL �������������
 
   // The MCP status endpoint reports the effective public URL as `<url>/mcp`,
   // and the server-side OAuth guard rejects an empty URL OR the
@@ -1496,11 +1496,11 @@ describe('SettingsMcpView', () => {
 
     const explain = wrapper.find('[data-testid="settings-mcp-oauth-public-url-warning"]')
     expect(explain.exists()).toBe(true)
-    expect(explain.text()).toContain('Set MODULO_PUBLIC_URL before registering an OAuth client')
+    expect(explain.text()).toContain('Set FARNA_CONTROL_PUBLIC_URL before registering an OAuth client')
     expect(explain.attributes('aria-live')).toBe('polite')
 
     // The same cause surfaces on the page-level warning card + badge.
-    expect(wrapper.text()).toContain('MODULO_PUBLIC_URL not set')
+    expect(wrapper.text()).toContain('FARNA_CONTROL_PUBLIC_URL not set')
     expect(wrapper.text()).toContain('Local Only')
   })
 
@@ -1524,7 +1524,7 @@ describe('SettingsMcpView', () => {
     const registerBtn = wrapper.find('[data-testid="settings-mcp-register-oauth-client"]')
     expect((registerBtn.element as HTMLButtonElement).disabled).toBe(false)
     expect(wrapper.find('[data-testid="settings-mcp-oauth-public-url-warning"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('MODULO_PUBLIC_URL not set')
+    expect(wrapper.text()).not.toContain('FARNA_CONTROL_PUBLIC_URL not set')
     expect(wrapper.text()).toContain('Active')
   })
 

@@ -82,10 +82,10 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
-        modulo_auth_rate_limit_enabled=True,
-        modulo_auth_max_attempts=10,
-        modulo_auth_window_seconds=60,
+        admin_password="testpass",
+        auth_rate_limit_enabled=True,
+        auth_max_attempts=10,
+        auth_window_seconds=60,
         redis_url="redis://localhost:6379/0",
     )
 

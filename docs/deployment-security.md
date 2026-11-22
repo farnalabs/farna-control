@@ -275,7 +275,7 @@ Backups are encrypted with AES-256-CBC (PBKDF2, 600K iterations). See
 `docs/operations/backup.md` for the full procedure.
 
 **Key requirements:**
-- Set `MODULO_BACKUP_PASSPHRASE` to a strong passphrase. The CLI only rejects an
+- Set `FARNA_CONTROL_BACKUP_PASSPHRASE` to a strong passphrase. The CLI only rejects an
   empty or `-`-prefixed value, so a 32+ character minimum is an operator
   recommendation, not an enforced check.
 - Store the passphrase separately from the backup file (different vault, different
@@ -737,7 +737,7 @@ before marking a production deployment as complete.
 - [ ] `FARNA_CONTROL_USERS` uses bcrypt-hashed passwords (or SSO is the primary auth)
 - [ ] No secrets committed to git (gitleaks CI pass)
 - [ ] Secrets are injected via environment, not hardcoded in any file
-- [ ] `MODULO_ADMIN_SECRET` (for migration CLI) is rotated separately from `SECRET_KEY`
+- [ ] `FARNA_CONTROL_ADMIN_SECRET` (for migration CLI) is rotated separately from `SECRET_KEY`
 - [ ] Fernet/Vault/AWS Secrets Manager backend is correctly configured and tested
 
 ### Database

@@ -1262,7 +1262,7 @@ async def test_guard_a_skips_when_prior_attempt_marked_delivery_done():
         session_factory=_factory,
         single_sandbox_node=True,
     )
-    settings = MagicMock(modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(idempotency_gate_enabled=True)
     state = _run_state()
     state["_claim_lease"] = "tok-claim"
     # FAR-583: the gate's repo read parses the run id as a UUID; the seeded
@@ -1298,7 +1298,7 @@ async def test_guard_a_skips_after_success_persisted_marker():
         session_factory=_factory,
         single_sandbox_node=True,
     )
-    settings = MagicMock(modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(idempotency_gate_enabled=True)
     state = _run_state()
     state["_claim_lease"] = "tok-claim"
     # FAR-583: the gate's repo read parses the run id as a UUID.
@@ -1349,7 +1349,7 @@ async def test_guard_a_skips_when_gate_disabled_by_kill_switch():
         session_factory=_factory,
         single_sandbox_node=True,
     )
-    settings = MagicMock(modulo_idempotency_gate_enabled=False)
+    settings = MagicMock(idempotency_gate_enabled=False)
     state = _run_state()
     state["_claim_lease"] = "tok-claim"
     with (
@@ -1506,7 +1506,7 @@ async def test_guard_a_inert_when_multi_node():
         session_factory=_factory,
         single_sandbox_node=False,
     )
-    settings = MagicMock(modulo_idempotency_gate_enabled=True)
+    settings = MagicMock(idempotency_gate_enabled=True)
     state = _run_state()
     state["_claim_lease"] = "tok-claim"
     state["_run_id"] = _RUN_ID

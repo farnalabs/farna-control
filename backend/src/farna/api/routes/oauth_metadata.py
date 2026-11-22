@@ -63,7 +63,7 @@ PROTECTED_RESOURCE_MCP_PATH = "/.well-known/oauth-protected-resource/mcp"
 #: Discovery documents describe a slow-moving configuration surface (the
 #: public URL and the scope vocabulary). Five minutes keeps a reconnecting
 #: harness from re-fetching on every session start while still picking up an
-#: admin's ``MODULO_PUBLIC_URL`` override promptly. ``public`` is safe here:
+#: admin's ``FARNA_CONTROL_PUBLIC_URL`` override promptly. ``public`` is safe here:
 #: the documents carry no per-user or per-org data.
 _CACHE_CONTROL = "public, max-age=300"
 
@@ -71,7 +71,7 @@ _CACHE_CONTROL = "public, max-age=300"
 def resolve_public_base_url(request: Request, settings: Settings | None = None) -> str:
     """The public origin every discovery URL is anchored to.
 
-    ``MODULO_PUBLIC_URL`` (resolved through the runtime-config bridge so an
+    ``FARNA_CONTROL_PUBLIC_URL`` (resolved through the runtime-config bridge so an
     admin ``PUT /api/v1/admin/runtime-config`` override wins over the
     boot-time value) is the authority when it is *configured* — that is what
     production and any split-origin deployment want.
@@ -97,16 +97,16 @@ def resolve_public_base_url(request: Request, settings: Settings | None = None) 
 
 
 def _unconfigured_response() -> Response:
-    """``500`` matching the OAuth flow's refusal when ``MODULO_PUBLIC_URL`` is unset.
+    """``500`` matching the OAuth flow's refusal when ``FARNA_CONTROL_PUBLIC_URL`` is unset.
 
     Discovery must not advertise an issuer the flow would refuse: a
-    deployment that never configures ``MODULO_PUBLIC_URL`` gets the same
+    deployment that never configures ``FARNA_CONTROL_PUBLIC_URL`` gets the same
     visible failure here as it does from ``register_oauth_client`` and the
     authorize/token endpoints, instead of a document pointing at
     ``http://localhost:8000`` (review feedback on PR #1384).
     """
     return JSONResponse(
-        {"error": "server_error", "detail": "MODULO_PUBLIC_URL must be configured"},
+        {"error": "server_error", "detail": "FARNA_CONTROL_PUBLIC_URL must be configured"},
         status_code=500,
     )
 

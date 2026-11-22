@@ -1338,7 +1338,7 @@ async def test_under_cap_stdout_stays_inline_no_artifact(tmp_path, monkeypatch):
     """
     from farna.settings import get_settings
 
-    monkeypatch.setattr(get_settings(), "modulo_artifacts_enabled", False)
+    monkeypatch.setattr(get_settings(), "artifacts_enabled", False)
     node_def = _base_node_def(timeout_seconds=30, stdout_retention_mode="full", stdout_max_bytes=8192)
     fn = make_sandbox_agent_fn(node_def)
     sandbox, _ = _sandbox_with_std_bytes("x" * 2048)
@@ -3190,7 +3190,7 @@ async def test_exception_path_under_cap_stdout_stays_inline_no_artifact(tmp_path
     """
     from farna.settings import get_settings
 
-    monkeypatch.setattr(get_settings(), "modulo_artifacts_enabled", False)
+    monkeypatch.setattr(get_settings(), "artifacts_enabled", False)
     node_def = _base_node_def(timeout_seconds=30, stdout_retention_mode="full", stdout_max_bytes=8192)
     fn = make_sandbox_agent_fn(node_def)
     sandbox, _ = _sandbox_with_std_bytes("x" * 2048)

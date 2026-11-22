@@ -47,7 +47,7 @@ bdd/steps/test_alpha_notifications.py:a webhook POST is sent to {url}
 bdd/steps/test_alpha_notifications.py:a webhook from org "{org}" uses "{secret}"
 bdd/steps/test_alpha_notifications.py:after {count:d} failures, the event is logged to the dead-letter queue
 bdd/steps/test_alpha_notifications.py:an alert is logged
-bdd/steps/test_alpha_notifications.py:the request includes header "X-Modulo-Timestamp"
+bdd/steps/test_alpha_notifications.py:the request includes header "X-Farna-Control-Timestamp"
 bdd/steps/test_alpha_notifications.py:the request includes header "{header}"
 bdd/steps/test_alpha_notifications.py:the timestamp is within 5 minutes of current time
 bdd/steps/test_alpha_notifications.py:the webhook body contains the run_id and error_detail

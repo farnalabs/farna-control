@@ -13,7 +13,7 @@
 ;   BUNDLE_ARCH - amd64 (the only supported installer architecture)
 ;   BUNDLE_DIR  - extracted native Windows bundle root
 ; Optional ISPP define:
-;   MODULO_URL  - local URL opened by the post-install checkbox
+;   FARNA_CONTROL_URL  - local URL opened by the post-install checkbox
 ;
 ; Bundle contract:
 ;   BUNDLE_DIR\bin\modulo.exe
@@ -47,8 +47,8 @@
 #ifndef BUNDLE_DIR
   #error BUNDLE_DIR is required
 #endif
-#ifndef MODULO_URL
-  #define MODULO_URL "http://127.0.0.1:8000"
+#ifndef FARNA_CONTROL_URL
+  #define FARNA_CONTROL_URL "http://127.0.0.1:8000"
 #endif
 
 #if BUNDLE_ARCH != "amd64"
@@ -133,7 +133,7 @@ Name: "{commondesktop}\Farna Control"; Filename: "{app}\bin\modulo.exe"; Working
 [Run]
 ; The only post-install action is opening the local URL. Nothing here touches
 ; the Service Control Manager: no service is registered (see the header).
-Filename: "{#MODULO_URL}"; Description: "Open Farna Control in your browser"; Flags: postinstall shellexec unchecked; Check: ShouldOpenModulo
+Filename: "{#FARNA_CONTROL_URL}"; Description: "Open Farna Control in your browser"; Flags: postinstall shellexec unchecked; Check: ShouldOpenModulo
 
 ; No [UninstallRun] section: no Windows service is registered at install time,
 ; so there is no service to stop or delete on uninstall.

@@ -597,7 +597,7 @@ def _ctx_role_val() -> str | None:
 
 def _mcp_internal_lifecycle_map_access() -> bool:
     """Return whether the MCP caller has the retained internal lifecycle-map grant."""
-    if not getattr(get_settings(), "modulo_dev_mode", True):
+    if not getattr(get_settings(), "dev_mode", True):
         return False
     role = _ctx_role_val()
     return ORG_ROLE_HIERARCHY.get(role or "", -1) >= ORG_ROLE_HIERARCHY["operator"] and grants_permit(_ctx_key_grants.get(None), "library.search.in_dev")
@@ -2118,7 +2118,7 @@ class McpAuthMiddleware(BaseHTTPMiddleware):
         # agent forwarded it) into the request-scoped ContextVar consumed by
         # check_tool_scope. Absent/empty header = UNRESTRICTED, preserving the
         # pre-scope behaviour for all non-node tool calls.
-        raw_allowed = request.headers.get("X-Modulo-Allowed-Tools")
+        raw_allowed = request.headers.get("X-Farna-Control-Allowed-Tools")
         if raw_allowed:
             set_request_allowed_tools([t.strip() for t in raw_allowed.split(",") if t.strip()])
         else:
@@ -11158,7 +11158,7 @@ async def list_feature_flags() -> dict[str, Any]:
             # key source counts only after canonical verification. It answers
             # "is a valid key configured", where is_valid answers "did the
             # effective ladder resolve one".
-            has_key = verify_license_key(getattr(settings, "modulo_license_key", "") or "") is not None or get_license() is not None or verify_license_key(str(org_key)) is not None
+            has_key = verify_license_key(getattr(settings, "license_key", "") or "") is not None or get_license() is not None or verify_license_key(str(org_key)) is not None
             registry = await FeatureFlagRegistry.from_db(s, plan_ctx.tier(), has_license_key=has_key)
 
             # Best-effort overlay of the org's per-flag overrides (same
@@ -11177,7 +11177,7 @@ async def list_feature_flags() -> dict[str, Any]:
                 "has_license_key": registry.has_license_key,
                 "is_valid": license_valid,
             },
-            "dev_mode": settings.modulo_dev_mode,
+            "dev_mode": settings.dev_mode,
             "flags": [
                 {
                     "name": f.name,
@@ -12268,7 +12268,7 @@ SENSITIVE_CONFIG_KEYS: set[str] = {
     "redis_url",
     "api_key",
     "api_keys",
-    "modulo_license_key",
+    "license_key",
     "modulo_secret_key",
     "modulo_fernet_key",
 }
@@ -13508,7 +13508,7 @@ async def restore_parameter_set(
 @mcp.tool(
     description="AI-assisted schema inference. Takes a sample JSON payload and returns an inferred "
     "JSON Schema definition. Precondition: this preview feature requires developer "
-    "mode (toggle Developer Mode in Admin > Feature Flags, or MODULO_DEV_MODE=true) "
+    "mode (toggle Developer Mode in Admin > Feature Flags, or FARNA_CONTROL_DEV_MODE=true) "
     "and at least one configured model backend; the call fails otherwise.",
 )
 @_RETRY_DB
@@ -13526,9 +13526,9 @@ async def infer_schema(
         from farna.settings import get_settings
 
         settings = get_settings()
-        if not settings.modulo_dev_mode:
+        if not settings.dev_mode:
             return _tool_error(
-                "Schema inference requires developer mode. Set MODULO_DEV_MODE=true or toggle Developer Mode in Admin > Feature Flags.",
+                "Schema inference requires developer mode. Set FARNA_CONTROL_DEV_MODE=true or toggle Developer Mode in Admin > Feature Flags.",
                 code="feature_required",
             )
         from farna.core.schema_registry import SchemaInferenceError, SchemaInferenceService
@@ -14595,7 +14595,7 @@ def _oauth_authorize_settings_error(settings: Any) -> JSONResponse | None:
     """Return an error response when the public URL is unconfigured."""
     if not public_url_is_configured(settings):
         return JSONResponse(
-            {"error": "server_error", "detail": "MODULO_PUBLIC_URL must be configured"},
+            {"error": "server_error", "detail": "FARNA_CONTROL_PUBLIC_URL must be configured"},
             status_code=500,
         )
     return None
@@ -14920,7 +14920,7 @@ async def _oauth_token_impl(request: Request) -> JSONResponse:
     settings = get_settings()
     if not public_url_is_configured(settings):
         return JSONResponse(
-            {"error": "server_error", "detail": "MODULO_PUBLIC_URL must be configured"},
+            {"error": "server_error", "detail": "FARNA_CONTROL_PUBLIC_URL must be configured"},
             status_code=500,
         )
 

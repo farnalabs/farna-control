@@ -179,4 +179,4 @@ def test_the_compose_wires_the_system_database_url_the_system_worker_requires():
     # Same password as the app role: bootstrap_role parses the password out of
     # this URL when it creates/alters the role, so both sides must reference the
     # ONE operator secret (FARNA_CONTROL_DB_PASSWORD) rather than two literals drifting.
-    assert "${FARNA_CONTROL_DB_PASSWORD" in value, f"FARNA_CONTROL_SYSTEM_DATABASE_URL must interpolate ${{MODULO_DB_PASSWORD}} so the role password and the URL agree, got {value!r}"
+    assert "${FARNA_CONTROL_DB_PASSWORD" in value, f"FARNA_CONTROL_SYSTEM_DATABASE_URL must interpolate ${{FARNA_CONTROL_DB_PASSWORD}} so the role password and the URL agree, got {value!r}"

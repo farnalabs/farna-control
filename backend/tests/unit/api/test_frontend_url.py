@@ -21,7 +21,7 @@ def _base_settings(**overrides: str) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_admin_password": "testpass",
+        "admin_password": "testpass",
     }
     return Settings(**{**defaults, **overrides})
 
@@ -36,16 +36,16 @@ class TestResolveFrontendUrl:
 
     def test_prefers_modulo_frontend_url_when_set(self) -> None:
         settings = _base_settings(
-            modulo_frontend_url="https://app.example.com",
-            modulo_public_url="https://marketing.example.com",
+            frontend_url="https://app.example.com",
+            public_url="https://marketing.example.com",
             cors_origins="https://marketing.example.com,https://app.example.com",
         )
         assert resolve_frontend_url(settings) == "https://app.example.com"
 
     def test_falls_back_to_modulo_public_url(self) -> None:
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="https://app.example.com",
+            frontend_url="",
+            public_url="https://app.example.com",
             cors_origins="https://marketing.example.com,https://app.example.com",
         )
         assert resolve_frontend_url(settings) == "https://app.example.com"
@@ -53,22 +53,22 @@ class TestResolveFrontendUrl:
     def test_independent_of_cors_ordering(self) -> None:
         """The first CORS origin must NOT influence the redirect target."""
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="https://app.example.com",
+            frontend_url="",
+            public_url="https://app.example.com",
             cors_origins="https://farna.dev,https://app.example.com,http://localhost:5173",
         )
         assert resolve_frontend_url(settings) == "https://app.example.com"
 
     def test_strips_trailing_slash(self) -> None:
         settings = _base_settings(
-            modulo_frontend_url="https://app.example.com/",
+            frontend_url="https://app.example.com/",
         )
         assert resolve_frontend_url(settings) == "https://app.example.com"
 
     def test_localhost_default_when_both_empty(self) -> None:
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="",
+            frontend_url="",
+            public_url="",
             cors_origins="http://localhost:5173",
         )
         assert resolve_frontend_url(settings) == "http://localhost:5173"
@@ -85,23 +85,23 @@ class TestSsoFrontendUrlDelegate:
     def test_sso_uses_frontend_url_not_cors(self) -> None:
         """FAR-837 regression: redirect must use FARNA_CONTROL_PUBLIC_URL, not CORS[0]."""
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="https://control.farna.dev",
+            frontend_url="",
+            public_url="https://control.farna.dev",
             cors_origins="https://farna.dev,https://control.farna.dev,http://localhost:5173",
         )
         assert _frontend_url(settings) == "https://control.farna.dev"
 
     def test_sso_prefers_frontend_url_when_set(self) -> None:
         settings = _base_settings(
-            modulo_frontend_url="https://custom.example.com",
-            modulo_public_url="https://app.example.com",
+            frontend_url="https://custom.example.com",
+            public_url="https://app.example.com",
         )
         assert _frontend_url(settings) == "https://custom.example.com"
 
     def test_redirect_to_frontend_includes_tokens(self) -> None:
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="https://app.example.com",
+            frontend_url="",
+            public_url="https://app.example.com",
         )
         tokens = {"access_token": "at-123", "refresh_token": "rt-456"}
         resp = _redirect_to_frontend(tokens, settings)
@@ -116,8 +116,8 @@ class TestSsoFrontendUrlDelegate:
     def test_redirect_to_frontend_without_refresh_token_sets_no_cookie(self) -> None:
         """FAR-1197: when the token payload has no refresh token, no cookie is set."""
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="https://app.example.com",
+            frontend_url="",
+            public_url="https://app.example.com",
         )
         tokens = {"access_token": "at-only"}
         resp = _redirect_to_frontend(tokens, settings)
@@ -130,8 +130,8 @@ class TestSsoFrontendUrlDelegate:
     def test_redirect_to_frontend_no_cors_dependency(self) -> None:
         """Redirect target is stable regardless of CORS list ordering."""
         settings = _base_settings(
-            modulo_frontend_url="",
-            modulo_public_url="https://control.farna.dev",
+            frontend_url="",
+            public_url="https://control.farna.dev",
             cors_origins="https://farna.dev,https://control.farna.dev",
         )
         tokens = {"access_token": "tok", "refresh_token": "ref"}

@@ -60,11 +60,11 @@ class _AllFeatures:
 def _make_settings(db_url: str) -> Settings:
     return Settings(
         database_url=db_url,
-        modulo_db="postgres",
+        db="postgres",
         secret_key="a" * 32,
         fernet_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         redis_url="",
-        modulo_admin_password="test",
+        admin_password="test",
     )
 
 
@@ -300,11 +300,11 @@ async def integration_client_with_audit(
         database_url=db_url,
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
-        modulo_dev_mode=True,
+        admin_password="",
+        dev_mode=True,
     )
 
     test_principal = TenantPrincipal(
