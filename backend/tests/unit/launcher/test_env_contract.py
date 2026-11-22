@@ -860,30 +860,13 @@ def test_gate_flags_a_redeclared_registered_name() -> None:
 #: rather than silently losing the spelling; do NOT revive the alias.
 DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
     {
-        "MODULO_ADMIN_TOKEN",
-        "MODULO_AGENT_MINT_BUDGET_LIMIT",
-        "MODULO_AGENT_MINT_BUDGET_WINDOW_MINUTES",
+        # ``docs/configuration-reference.md`` now publishes the accepted
+        # ``FARNA_CONTROL_`` spelling for the knobs that used to be listed here,
+        # so their legacy ``MODULO_`` names left the page (and this burn-down
+        # list) in the same change.
         "MODULO_BACKUP_PASSPHRASE",
-        "MODULO_CRON_STREAK_MIN_WINDOW_HOURS",
-        "MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT",
-        "MODULO_DOCKER_HOST",
-        "MODULO_E2B_API_KEY",
         # Deliberately dropped and documented as not read; see the note above.
         "MODULO_ENV",
-        "MODULO_KUBERNETES_ENABLED",
-        "MODULO_KUBERNETES_NAMESPACE",
-        "MODULO_KUBERNETES_SERVICE_ACCOUNT",
-        "MODULO_MAX_RATE_USD",
-        "MODULO_MAX_REPORTABLE_BAND_USD",
-        "MODULO_MAX_REPORTABLE_USD_MIN",
-        "MODULO_MAX_SELF_REPORTED_USD",
-        "MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS",
-        "MODULO_PRODUCT_ANALYTICS_ENABLED",
-        "MODULO_PRODUCT_ANALYTICS_ENDPOINT_URL",
-        "MODULO_PRODUCT_ANALYTICS_INSTANCE_SECRET",
-        "MODULO_RUNNER_MACHINE_ID",
-        "MODULO_SCHEMA_VALIDATOR_MODE",
-        "MODULO_STREAK_DEACTIVATE_KILL_SWITCH",
     }
 )
 
