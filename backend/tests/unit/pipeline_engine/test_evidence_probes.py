@@ -1005,7 +1005,7 @@ class TestEvidenceEnabled:
         monkeypatch.delenv("FARNA_CONTROL_HEURISTIC_ENABLED", raising=False)
 
         class _Settings:
-            modulo_heuristic_enabled = True
+            heuristic_enabled = True
 
         monkeypatch.setattr("farna.settings.get_settings", lambda: _Settings())
         assert evidence_enabled() is True
@@ -1014,7 +1014,7 @@ class TestEvidenceEnabled:
         monkeypatch.delenv("FARNA_CONTROL_HEURISTIC_ENABLED", raising=False)
 
         class _Settings:
-            modulo_heuristic_enabled = False
+            heuristic_enabled = False
 
         monkeypatch.setattr("farna.settings.get_settings", lambda: _Settings())
         assert evidence_enabled() is False
