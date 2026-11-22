@@ -924,8 +924,8 @@ def require_feature(feature_name: str) -> DependsParameter:
 
     .. code-block:: python
 
-       _: object = require_feature("sso")           # route parameter
-       dependencies=[require_feature("team_rbac")]  # decorator
+       _: object = require_feature("system_maps")   # route parameter
+       dependencies=[require_entitlement("identity")]  # decorator
 
     NOTE: this reads ONLY the tier/licence-derived plan state. It does NOT
     apply ``organisations.settings_json.feature_overrides``. For a

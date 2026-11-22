@@ -11026,7 +11026,7 @@ async def list_teams(page: int = 1, page_size: int = 20) -> dict[str, Any]:
         from farna.db.crud.team import list_teams as db_list_teams
 
         org_id = _ctx_org_id_val()
-        # REST parity: GET /api/v1/teams is router-gated require_feature("team_rbac").
+        # REST parity: GET /api/v1/teams is router-gated by require_entitlement("identity")
         feat_err = await _require_plan_feature(org_id, get_settings(), "team_rbac")
         if feat_err:
             return feat_err
