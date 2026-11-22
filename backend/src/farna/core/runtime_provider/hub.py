@@ -150,7 +150,7 @@ class RuntimeProviderHub:
 
         Like the other factory arms this is an EXPLICIT configuration path —
         the caller naming the provider is the opt-in (the environment-driven
-        :func:`modulo.core.runtime_provider.build_hub` carries the
+        :func:`farna.core.runtime_provider.build_hub` carries the
         ``FARNA_CONTROL_KUBERNETES_ENABLED`` gate instead). A provider type that is
         in the vocabulary but unhandled here still warns-and-skips; an
         unrecognised type raises :class:`UnknownProviderTypeError`.

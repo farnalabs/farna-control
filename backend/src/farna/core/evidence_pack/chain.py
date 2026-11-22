@@ -3,7 +3,7 @@
 This is the same linkage check ``audit_logger.verify_chain`` performs against
 the live DB, but run over plain event dicts decoded from the pack's
 ``audit-events.ndjson`` file — no session, no RLS, no chain-head row. It reuses
-the ONE hash implementation (``modulo.core.audit_logger.compute_event_hash``),
+the ONE hash implementation (``farna.core.audit_logger.compute_event_hash``),
 so it can never agree with a tampered claim by re-implementing the digest.
 """
 

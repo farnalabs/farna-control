@@ -9,14 +9,14 @@ those rows.
 
 This module is the PERIODIC invariant behind the eventual FAR-132 strip: it
 counts ``__final__`` rows that still reach the legacy fallback
-(:func:`modulo.core.node_output_split.stored_row_is_legacy` — outputs side
+(:func:`farna.core.node_output_split.stored_row_is_legacy` — outputs side
 present, telemetry side absent) so a post-flip writer that re-introduced the
 legacy shape cannot go unnoticed. Zero is the expected, healthy result once the
 P5 verify-backfill has run; a non-zero count blocks the strip.
 
 Only GENUINE node-return rows are counted. The reserved ``__``-prefixed
 sentinel namespace (``__run_meta__``, ``__unknown__``, ``__mwi_audit__`` and
-future sentinels — see :data:`~modulo.db.models.run_node_outputs.
+future sentinels — see :data:`~farna.db.models.run_node_outputs.
 SENTINEL_NODE_ID_PREFIX`) is excluded: those rows are bookkeeping and are
 written with an outputs side and NO telemetry side by construction, so counting
 them would pin the healthy zero permanently above zero and make the strip gate

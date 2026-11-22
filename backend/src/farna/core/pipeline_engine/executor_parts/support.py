@@ -84,7 +84,7 @@ def _is_finalize_lock_retryable(exc: BaseException) -> bool:
     ownership layer. ``is_lock_abort`` recognises both SQLSTATEs across the raw
     asyncpg ``LockNotAvailableError`` and SQLAlchemy ``OperationalError`` shapes.
 
-    EXCLUDES :class:`~modulo.db.crud.run_node_outputs.DualWriteError`: it is a
+    EXCLUDES :class:`~farna.db.crud.run_node_outputs.DualWriteError`: it is a
     deliberate FAIL-CLOSED abort that ``finalize_cost`` raises only AFTER the
     run has been terminalised ``dual_write_failed``. Its ``sqlstate`` reflects
     the underlying failure (often 40P01), so a bare SQLSTATE test would retry

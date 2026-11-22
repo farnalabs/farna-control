@@ -1,7 +1,7 @@
 """CRUD for durable per-attempt execution history (FAR-2078).
 
 The persistence seam behind ``run_attempts`` (see
-:mod:`modulo.db.models.run_attempt` for the column contract and the
+:mod:`farna.db.models.run_attempt` for the column contract and the
 ``attempt_index`` semantics). Three operations:
 
 * :func:`start_attempt` — allocate the next ``attempt_index`` for a run and

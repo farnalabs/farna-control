@@ -196,7 +196,7 @@ class TestSeamCoverageInputGuardrailPass:
         assert ingestion["reason"].startswith("1 ingestion-edge guardrail(s) evaluated")
         # runtime_loop stays n/a
         assert by_seam["runtime_loop"]["state"] == "not_applicable"
-        assert by_seam["runtime_loop"]["reason"] == "runtime does not expose a tool-event contract Modulo can verify"
+        assert by_seam["runtime_loop"]["reason"] == "runtime does not expose a tool-event contract Farna Control can verify"
 
 
 class TestSeamCoverageInputGuardrailBlock:

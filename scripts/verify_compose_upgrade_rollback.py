@@ -50,6 +50,56 @@ class CommandResult:
     stderr: str
 
 
+@dataclass(frozen=True)
+class ChildLogRead:
+    """One read of a single backend child log file from inside the container."""
+
+    stream: str
+    path: str
+    result: CommandResult
+
+    @property
+    def readable(self) -> bool:
+        """Whether the container was up and the child log file could be read."""
+        return self.result.returncode == 0
+
+    @property
+    def text(self) -> str:
+        return f"{self.result.stdout}\n{self.result.stderr}"
+
+    @property
+    def source(self) -> str:
+        """The exact command that was tried, for a failure message."""
+        return shlex.join(self.result.argv)
+
+
+@dataclass(frozen=True)
+class ChildLogEvidence:
+    """The terminal read of every backend child log file, plus poll count."""
+
+    reads: tuple[ChildLogRead, ...]
+    attempts: int
+
+    @property
+    def text(self) -> str:
+        return "\n".join(read.text for read in self.reads)
+
+    @property
+    def unreadable(self) -> tuple[ChildLogRead, ...]:
+        return tuple(read for read in self.reads if not read.readable)
+
+
+def _tail_excerpt(text: str, *, max_lines: int = 4, limit: int = 300) -> str:
+    """Collapse *text* to its last few non-empty lines for a failure message."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    excerpt = " | ".join(lines[-max_lines:])
+    if not excerpt:
+        return "<empty>"
+    if len(excerpt) > limit:
+        return "..." + excerpt[-limit:]
+    return excerpt
+
+
 def validate_tag(tag: str, *, name: str) -> str:
     """Require a non-empty immutable-looking release tag."""
     value = tag.strip()
@@ -89,6 +139,37 @@ def build_compose_command(compose_file: Path, project_name: str, *args: str, env
 
 
 _INVALID_SECRET_KEY = "intentionally-invalid-secret"
+
+#: The specific startup failure an intentionally short SECRET_KEY must produce
+#: (backend/src/farna/settings.py::_secret_key_is_strong). The assertion matches
+#: this message, never "any error" or "any exit".
+_INVALID_SECRET_KEY_FAILURE = "SECRET_KEY must be at least"
+
+#: The all-in-one image runs supervisord, which dup2()s each child program's
+#: streams onto per-program log files (deploy/supervisor/supervisord.conf).
+#: The backend child's output therefore NEVER reaches the container's
+#: stdout/stderr, so ``docker compose logs`` cannot show a backend startup
+#: traceback - which is why the failure assertion reads these files from
+#: inside the container instead. uvicorn reports on stderr and the pydantic
+#: ``Settings`` traceback goes to stderr too, so both files are read: asserting
+#: on backend.out.log alone would silently miss the failure.
+_BACKEND_CHILD_LOGS: tuple[tuple[str, str], ...] = (
+    ("stdout", "/var/log/supervisor/backend.out.log"),
+    ("stderr", "/var/log/supervisor/backend.err.log"),
+)
+
+#: Backoff for polling the crash-looping backend child log: the failed-upgrade
+#: ``up -d`` returns before the backend has even imported ``farna.api.main``,
+#: so the first read can legitimately be empty.
+_CHILD_LOG_POLL_INITIAL_SECONDS = 1.0
+_CHILD_LOG_POLL_MAX_SECONDS = 5.0
+
+#: Floor for how long the child log is polled before the failure is declared.
+#: The backend reaches the ``Settings()`` call that rejects the key only after
+#: its whole module tree has imported, which is the slowest point of a cold
+#: start (measured: minutes on a cold, heavily loaded host), so this wait gets a
+#: generous floor instead of reusing the per-command timeout.
+_CHILD_LOG_MINIMUM_WAIT_SECONDS = 300
 
 
 def _redact(text: str, secrets: set[str]) -> str:
@@ -154,6 +235,10 @@ class Evidence:
     def add_secrets(self, secrets: set[str]) -> None:
         self._secrets.update(secrets)
 
+    def redact(self, text: str) -> str:
+        """Redact configured credential values from text bound for a log or error."""
+        return _redact(text, self._secrets)
+
     def record(self, result: CommandResult, *, outcome: str) -> None:
         self._counter += 1
         stem = f"{self._counter:02d}-{result.name}"
@@ -187,9 +272,7 @@ class Evidence:
             "project_name": project_name,
             "cwd": str(Path.cwd()),
         }
-        (self.directory / "metadata.json").write_text(
-            _redact(json.dumps(metadata, indent=2, sort_keys=True) + "\n", self._secrets), encoding="utf-8"
-        )
+        (self.directory / "metadata.json").write_text(_redact(json.dumps(metadata, indent=2, sort_keys=True) + "\n", self._secrets), encoding="utf-8")
 
 
 class Matrix:
@@ -220,9 +303,15 @@ class Matrix:
         self.timeout = timeout
         self.runner = runner
 
-    def command(
-        self, name: str, argv: list[str], *, expected: str = "success", env: dict[str, str] | None = None
-    ) -> CommandResult:
+    def command(self, name: str, argv: list[str], *, expected: str = "success", env: dict[str, str] | None = None) -> CommandResult:
+        """Run one command, record it, and assert its requested outcome.
+
+        ``expected`` is ``"success"``, ``"failure"``, or ``"captured"``:
+        ``"captured"`` records whatever happened without asserting an outcome,
+        because the caller asserts on the captured result itself - a non-zero
+        exit there is information (a stopped container, for example), not a
+        validation failure of its own.
+        """
         self.evidence.add_secrets(_secret_values(env))
         result = self.runner(
             argv,
@@ -243,9 +332,7 @@ class Matrix:
             raise ValidationError(f"{name} unexpectedly succeeded; the failed-upgrade proof is absent")
         return captured
 
-    def compose(
-        self, name: str, tag: str, *args: str, expected: str = "success", secret_key: str | None = None
-    ) -> CommandResult:
+    def compose(self, name: str, tag: str, *args: str, expected: str = "success", secret_key: str | None = None) -> CommandResult:
         env = dict(os.environ)
         env["TAG"] = tag
         env["PORT"] = self.port
@@ -318,9 +405,7 @@ class Matrix:
                 timeout=max(1, min(10, self.timeout)),
                 check=False,
             )
-            result = CommandResult(
-                name + f"-attempt-{attempt}", tuple(argv), raw.returncode, raw.stdout or "", raw.stderr or ""
-            )
+            result = CommandResult(name + f"-attempt-{attempt}", tuple(argv), raw.returncode, raw.stdout or "", raw.stderr or "")
             self.evidence.record(result, outcome=self._readiness_outcome(raw.returncode))
             code = result.stdout.strip()
             last_code = code or "<none>"
@@ -333,9 +418,7 @@ class Matrix:
                 break
             time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
         wanted = "ready (HTTP 200)" if expected else "not ready (any reachable non-200)"
-        raise ValidationError(
-            f"{name}: expected {wanted} before deadline, received HTTP {last_code} (curl exit {last_returncode})"
-        )
+        raise ValidationError(f"{name}: expected {wanted} before deadline, received HTTP {last_code} (curl exit {last_returncode})")
 
     def _assert_failed_upgrade_config(self, text: str, name: str) -> None:
         if self.new_tag not in text:
@@ -343,11 +426,73 @@ class Matrix:
         if _INVALID_SECRET_KEY not in text:
             raise ValidationError(f"{name} compose config did not receive the intentionally invalid SECRET_KEY")
 
-    def _assert_failed_upgrade_logs(self, result: CommandResult) -> None:
-        combined = f"{result.stdout}\n{result.stderr}"
-        expected = "SECRET_KEY must be at least"
-        if expected not in combined:
-            raise ValidationError("failed-upgrade logs did not contain the expected invalid SECRET_KEY startup failure")
+    def _read_backend_child_logs(self, attempt: int) -> tuple[ChildLogRead, ...]:
+        """Read every backend child log file from inside the container."""
+        return tuple(
+            ChildLogRead(
+                stream=stream,
+                path=path,
+                result=self.compose(
+                    f"failed-upgrade-backend-log-{stream}-attempt-{attempt}",
+                    self.new_tag,
+                    "exec",
+                    "-T",
+                    "modulo",
+                    "cat",
+                    path,
+                    expected="captured",
+                ),
+            )
+            for stream, path in _BACKEND_CHILD_LOGS
+        )
+
+    def _capture_backend_child_logs(self) -> ChildLogEvidence:
+        """Poll the backend child logs until the invalid-key failure appears.
+
+        The failed-upgrade container is a crash-loop: ``up -d`` returns as soon
+        as the container is created, so an immediate read can land before the
+        backend has even imported ``farna.api.main``. Poll (bounded by
+        ``--timeout``, floored at ``_CHILD_LOG_MINIMUM_WAIT_SECONDS``) until a
+        child log carries the specific invalid-SECRET_KEY failure; never stop
+        early on "any error" or "any non-zero exit".
+        """
+        deadline = time.monotonic() + max(self.timeout, _CHILD_LOG_MINIMUM_WAIT_SECONDS)
+        interval = _CHILD_LOG_POLL_INITIAL_SECONDS
+        attempt = 0
+        while True:
+            attempt += 1
+            evidence = ChildLogEvidence(reads=self._read_backend_child_logs(attempt), attempts=attempt)
+            if _INVALID_SECRET_KEY_FAILURE in evidence.text:
+                break
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
+            interval = min(interval * 2, _CHILD_LOG_POLL_MAX_SECONDS)
+        return evidence
+
+    def _assert_failed_upgrade_startup_failure(self, child_logs: ChildLogEvidence, container_log: CommandResult) -> None:
+        """Require the invalid-SECRET_KEY startup failure in the backend child log.
+
+        The container log is supplementary context only: it is recorded in the
+        evidence transcript and quoted on failure, but it can never satisfy the
+        assertion, because supervisord redirects the backend child's output
+        away from it.
+        """
+        if _INVALID_SECRET_KEY_FAILURE in child_logs.text:
+            return
+        unreadable = child_logs.unreadable
+        if unreadable:
+            details = "; ".join(f"{read.source} -> {_tail_excerpt(read.text, max_lines=1, limit=160)} (exit {read.result.returncode})" for read in unreadable)
+            child_state = f"unreadable, the container did not stay up: {details}"
+        else:
+            child_state = "readable but it did not contain the startup failure"
+        raise ValidationError(
+            "failed-upgrade logs did not contain the expected invalid SECRET_KEY startup failure. "
+            f"Sources tried ({child_logs.attempts} read attempt(s)): backend child log "
+            f"{'; '.join(read.source for read in child_logs.reads)} [{child_state}]; "
+            f"container log {shlex.join(container_log.argv)} "
+            f"[{_tail_excerpt(self.evidence.redact(container_log.stdout))}]"
+        )
 
     def run(self) -> None:
         self.evidence.write_metadata(
@@ -396,8 +541,12 @@ class Matrix:
             secret_key=_INVALID_SECRET_KEY,
         )
         self.ready("failed-upgrade-not-ready", expected=False)
-        failed_logs = self.compose("failed-upgrade-logs", self.new_tag, "logs", "--no-color", "--tail=200", "modulo")
-        self._assert_failed_upgrade_logs(failed_logs)
+        # supervisord writes the backend child's streams to its own log files,
+        # so the container log below is recorded as supplementary context only.
+        # The assertion reads the backend child log from inside the container.
+        child_logs = self._capture_backend_child_logs()
+        failed_container_logs = self.compose("failed-upgrade-logs", self.new_tag, "logs", "--no-color", "--tail=200", "modulo")
+        self._assert_failed_upgrade_startup_failure(child_logs, failed_container_logs)
 
         self.compose("rollback-old", self.old_tag, "up", "-d", "--remove-orphans")
         self.ready("rollback-ready", expected=True)

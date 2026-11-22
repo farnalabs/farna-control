@@ -160,7 +160,7 @@ async def lock_org_cost_state(session: AsyncSession, org_id: uuid.UUID) -> None:
 
     The BLOCKING form is used deliberately, not ``pg_try_advisory_xact_lock``:
     a contended wait must degrade through the transaction-scoped ``lock_timeout``
-    that :func:`~modulo.db.crud.row_lock.set_mutation_row_lock_timeout` sets on
+    that :func:`~farna.db.crud.row_lock.set_mutation_row_lock_timeout` sets on
     the line above, raising SQLSTATE 55P03 (``lock_not_available``) rather than
     hanging unbounded — the bounded-degradation contract FAR-1823 requires.
     Callers treat 55P03 as a retryable degradation.
@@ -217,7 +217,7 @@ MARKER_STATE_CLEARED_AT_HITL = "cleared_at_hitl"
 # every org, not a dispatch gate) — leaving it out would give a
 # Kubernetes-bound org NO cap at all, i.e. a silently uncounted tier.
 # The SQL filter that applies this set is
-# ``modulo.db.crud.run.RUNNER_HOST_RESOURCE_FILTER_SQL`` (the DB layer owns
+# ``farna.db.crud.run.RUNNER_HOST_RESOURCE_FILTER_SQL`` (the DB layer owns
 # the count body); the two MUST stay in step.
 HOST_RESOURCE_PROVIDERS: frozenset[str] = frozenset({RUNNER_PROVIDER_DOCKER, RUNNER_PROVIDER_LOCAL, RUNNER_PROVIDER_KUBERNETES})
 
@@ -226,7 +226,7 @@ HOST_RESOURCE_PROVIDERS: frozenset[str] = frozenset({RUNNER_PROVIDER_DOCKER, RUN
 # and the bare "dispatching" literal) attribute to runner_docker — fail-safe
 # (they can only be E2B-legacy or Docker, and Docker is the tier the
 # default-cap bucket must not undercount). The single-sourced SQL fragments
-# live in ``modulo.db.crud.run`` (the DB layer owns the count body; core
+# live in ``farna.db.crud.run`` (the DB layer owns the count body; core
 # imports db, never the reverse) — ``RUNNER_TOMBSTONE_EXCLUSION_SQL`` and
 # ``RUNNER_HOST_RESOURCE_FILTER_SQL`` there. The tombstone exclusion matches
 # the ``state`` field PRECISELY (``"state": "cleared_at_hitl"``) — a bare
@@ -393,7 +393,7 @@ async def count_active_runner_dispatches_for_decision(
     exclude_run_id: uuid.UUID | None = None,
     host_resource_only: bool = False,
 ) -> int:
-    """Thin wrapper over :func:`modulo.db.crud.run.count_active_runner_dispatches_for_org`
+    """Thin wrapper over :func:`farna.db.crud.run.count_active_runner_dispatches_for_org`
     with the tier filter applied. Kept here so every capacity path resolves
     cap + count through ONE module."""
     from farna.db.crud.run import count_active_runner_dispatches_for_org
@@ -863,7 +863,7 @@ DEFAULT_NODE_STARTED_STALE_SECONDS = 7200
 # The candidate-scan batch size (F8). A per-org scan without a LIMIT degrades
 # to an unbounded row materialisation on an org with a large marker backlog;
 # the sweep pages with a cursor instead. Default 500. (An env-tunable knob
-# would belong in modulo.settings — left a module constant pending that.)
+# would belong in farna.settings — left a module constant pending that.)
 SWEEP_CANDIDATE_BATCH = 500
 
 _SWEEP_CANDIDATE_SQL = text(
@@ -1246,8 +1246,8 @@ def _marker_sweep_lock_engine(factory: Any) -> Any:
     callers (``saq_worker._make_session_factory`` / ``cron_helpers._open_factory``)
     pass a real ``async_sessionmaker`` whose engine lives in ``factory.kw['bind']``
     (SQLAlchemy 2.0 does NOT expose ``.bind`` on ``async_sessionmaker`` — verified
-    empirically against the pinned 2.0.52). ``modulo.core`` must not depend on
-    ``modulo.api``, so there is deliberately no app-engine fallback."""
+    empirically against the pinned 2.0.52). ``farna.core`` must not depend on
+    ``farna.api``, so there is deliberately no app-engine fallback."""
     engine = factory.kw.get("bind") if hasattr(factory, "kw") else None
     if engine is None:
         raise RuntimeError("reconcile_runner_dispatch_markers requires a session factory with a bound engine")

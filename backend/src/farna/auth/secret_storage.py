@@ -267,7 +267,7 @@ async def decode_stored_secret_scoped(
 async def _read_rls_org_id(session: "AsyncSession") -> uuid.UUID | None:
     """Read the RLS org id currently bound to *session*, or ``None``.
 
-    FAR-1884: delegates to :func:`modulo.db.rls.read_rls_org`, which selects the
+    FAR-1884: delegates to :func:`farna.db.rls.read_rls_org`, which selects the
     authoritative source by the session DIALECT FIRST — the Postgres
     ``current_setting('app.organisation_id', true)`` GUC (never ``session.info``)
     on Postgres, ``session.info['org_id']`` on generic backends. One

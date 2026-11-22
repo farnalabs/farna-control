@@ -5,11 +5,11 @@ the caller's team — and the effective-owner resolver are centralised here so
 the semantics cannot drift between the list filters (pipelines, runs, triggers,
 HITL pending gates, analytics facts) and the MCP per-row guards.
 
-Live in the DB layer (not ``modulo.api``) so both ``modulo.db`` and
-``modulo.core`` can import it without violating the layer contracts — which is
+Live in the DB layer (not ``farna.api``) so both ``farna.db`` and
+``farna.core`` can import it without violating the layer contracts — which is
 also why :func:`team_blind_org_scope` (the FAR-1515 widened read) lives HERE:
-the binding gates in ``modulo.core.team_visibility`` need it, and ``modulo.db``
-must not import ``modulo.core``.
+the binding gates in ``farna.core.team_visibility`` need it, and ``farna.db``
+must not import ``farna.core``.
 """
 
 import asyncio

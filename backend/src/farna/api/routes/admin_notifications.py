@@ -106,7 +106,7 @@ def ensure_safe_webhook_url(url: str) -> None:
     """Validate a webhook URL's shape and SSRF floor.
 
     Shared with the notification-endpoint CRUD surface
-    (:mod:`modulo.api.routes.notifications`) so both save paths enforce the
+    (:mod:`farna.api.routes.notifications`) so both save paths enforce the
     same contract: an ``http(s)`` URL with no credentials that does not resolve
     to an internal/private address. Raises ``ValueError`` when unsafe.
     """

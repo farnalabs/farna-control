@@ -617,7 +617,7 @@ class DetectParamsResponse(BaseModel):
 
 
 # Placeholder format and prompt-bearing fields are shared with the runtime
-# expander (modulo.core.composite_engine.expander) so detection and expansion
+# expander (farna.core.composite_engine.expander) so detection and expansion
 # stay consistent.
 
 

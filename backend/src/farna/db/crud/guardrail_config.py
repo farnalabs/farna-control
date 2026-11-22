@@ -2,9 +2,9 @@
 
 The pin is a single JSON document on the ``organisations`` row — the org is
 the natural scope of guardrail configuration. This layer is deliberately
-storage-only: it moves raw JSON dicts, never ``modulo.core`` domain objects
+storage-only: it moves raw JSON dicts, never ``farna.core`` domain objects
 (the DB layer must not import core — import-linter contract
-``db-does-not-import-core``). The route layer (``modulo.api``) owns the
+``db-does-not-import-core``). The route layer (``farna.api``) owns the
 ``GuardrailPin`` <-> dict conversion. Reads/writes are scoped to the caller's
 ``organisation_id``; the route layer sets the RLS context inside the
 transaction (``set_rls_org``) before calling these.

@@ -70,11 +70,11 @@ SEAM_ORDER: Final[tuple[SeamName, ...]] = (
 #: Modulo can verify, so no Modulo-controlled enforcement can be attested
 #: mid-loop. A runtime plugin is observation of a third party's process, not
 #: evidence of a Modulo-owned control.
-RUNTIME_LOOP_UNAVAILABLE_REASON: Final[str] = "runtime does not expose a tool-event contract Modulo can verify"
+RUNTIME_LOOP_UNAVAILABLE_REASON: Final[str] = "runtime does not expose a tool-event contract Farna Control can verify"
 
 
 class SeamCoverageState(StrEnum):
-    """Whether a Modulo-owned control covered the seam for this run."""
+    """Whether a Farna Control-owned control covered the seam for this run."""
 
     ENFORCED = "enforced"
     DEGRADED = "degraded"
@@ -84,7 +84,7 @@ class SeamCoverageState(StrEnum):
 class SeamCoverageProvenance(StrEnum):
     """The ADR-042 provenance classes, bound to the canonical constants.
 
-    Members are assigned FROM ``modulo.core.provenance`` so a rename there
+    Members are assigned FROM ``farna.core.provenance`` so a rename there
     propagates instead of drifting; a test asserts this enum covers the whole
     canonical set (a new ADR-042 class must be added here too).
     """

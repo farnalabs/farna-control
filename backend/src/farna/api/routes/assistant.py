@@ -77,7 +77,7 @@ router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
 _NAV_TOOLS: dict[str, dict[str, Any]] = {
     "get_manifest": {
-        "description": ("Resolve Modulo route details from the app manifest. Provide a route path to get one page's route and element details, or omit it to get the whole app map. Read-only: this does not move the user's browser."),
+        "description": ("Resolve Farna Control route details from the app manifest. Provide a route path to get one page's route and element details, or omit it to get the whole app map. Read-only: this does not move the user's browser."),
         "parameters": {"path": {"type": "string", "description": "Optional route path to resolve."}},
     },
 }

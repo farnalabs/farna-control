@@ -56,6 +56,22 @@ export default {
     }
   },
   "views": {
+    "LockedRoute": {
+      "this_page": "This page",
+      "tier_heading": "{capability} requires the {tier} licence",
+      "tier_heading_unknown": "{capability} needs a higher plan tier",
+      "tier_subtitle": "Your organisation is on the {currentTier} plan. An organisation administrator can upgrade the licence to unlock it.",
+      "tier_subtitle_unknown": "Your current plan does not include this capability. An organisation administrator can upgrade the licence to unlock it.",
+      "role_heading": "Your role cannot open {capability}",
+      "role_subtitle": "Ask an organisation administrator to give you the role that includes it.",
+      "system_admin_heading": "{capability} is restricted to instance administrators",
+      "system_admin_subtitle": "Only an instance system administrator can open this page. Ask them for access.",
+      "role_body": "A plan upgrade will not change this - it needs a role change from your organisation administrator.",
+      "system_admin_body": "A plan upgrade will not change this - it is an instance-level restriction only a system administrator can lift. Your organisation administrator cannot grant it.",
+      "available_body": "Your licence now covers {capability}.",
+      "open_capability": "Open {capability}",
+      "back_to_dashboard": "Back to the Dashboard"
+    },
     "EvidenceView": {
       "title": "Evidence",
       "subtitle": "Look up what a run recorded, with only the fields your role is allowed to see.",
@@ -1766,7 +1782,7 @@ export default {
       "runner_bindings_add": "Add binding",
       "runner_bindings_remove": "Remove binding",
       "runner_bindings_save": "Save bindings",
-      "runner_bindings_save_failed": "Saving bindings failed — check the target env var (must be valid and not Modulo-reserved) and the source field.",
+      "runner_bindings_save_failed": "Saving bindings failed — check the target env var (must be valid and not Farna Control-reserved) and the source field.",
       "runner_bindings_duplicate": "The target env var '{target}' is already bound on this agent.",
       "runner_bindings_local_warning": "Bindings are refused on the Local (host-subprocess) provider tier without an explicit opt-in.",
 
@@ -4276,7 +4292,7 @@ export default {
       "comparison_name_auto": "Comparison",
       "advanced_overrides_note": "Model Backend and Prompt Version are advanced input overrides: their values are injected into each run's input payload (input.model_backend_id / input.prompt_version). A generic pipeline only honors them if its templates reference those inputs; otherwise the snapshot-pinned model and prompts are used.",
       "degraded_evals_label": "Degraded evals",
-      "degraded_evals_help": "Marks every run's input payload with `_degraded_evals: true` so a pipeline can react to it; Modulo still runs every eval itself.",
+      "degraded_evals_help": "Marks every run's input payload with `_degraded_evals: true` so a pipeline can react to it; Farna Control still runs every eval itself.",
       "error_blank_label": "Variant label cannot be blank.",
       "error_duplicate_label": "Variant labels must be unique.",
       "error_need_snapshot": "Select a snapshot for this variant.",
@@ -4721,7 +4737,7 @@ export default {
       "columnRuns": "Runs",
       "columnDegraded": "Degraded evals",
       "degradedBadge": "degraded",
-      "degradedTooltip": "This comparison was created with degraded evals on, so every run's input payload carries `_degraded_evals: true`. Modulo still runs every eval.",
+      "degradedTooltip": "This comparison was created with degraded evals on, so every run's input payload carries `_degraded_evals: true`. Farna Control still runs every eval.",
       "view": "View",
       "viewing": "Viewing",
       "viewComparison": "View {name}",
@@ -5780,7 +5796,7 @@ export default {
       "locked_aria": "{label} (Available on the {plan} plan)"
     },
     "Router": {
-      "chunk_recovery_failed": "Modulo could not load that page after a new version was deployed. Returning you to the dashboard. Please try again."
+      "chunk_recovery_failed": "Farna Control could not load that page after a new version was deployed. Returning you to the dashboard. Please try again."
     },
     "FeatureGate": {
       "team_feature": "Team Feature",

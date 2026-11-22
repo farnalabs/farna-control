@@ -376,7 +376,7 @@ def _strip_env_vars(node_id: str, env: dict[str, Any]) -> tuple[dict[str, Any], 
 def _strip_context_files(node_id: str, files: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
     """Remove context files whose CONTENT carries a secret (value tier only).
 
-    Mirrors :func:`modulo.api.middleware.sensitive_mask.mask_pipeline_graph_node`,
+    Mirrors :func:`farna.api.middleware.sensitive_mask.mask_pipeline_graph_node`,
     which runs only the value patterns over file content — a file NAME is not a
     credential, its bytes are.
     """
@@ -1684,7 +1684,7 @@ def _validate_bundle_format(bundle: dict[str, Any]) -> None:
     fmt_version = bundle.get("format_version")
     if fmt_version == BUNDLE_FORMAT_VERSION:
         return
-    msg = f"Unsupported bundle format version '{fmt_version}'. Expected '{BUNDLE_FORMAT_VERSION}'. This bundle may have been created by a different version of Modulo."
+    msg = f"Unsupported bundle format version '{fmt_version}'. Expected '{BUNDLE_FORMAT_VERSION}'. This bundle may have been created by a different version of Farna Control."
     raise ValueError(msg)
 
 

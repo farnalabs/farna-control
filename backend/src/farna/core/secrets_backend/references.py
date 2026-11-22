@@ -9,12 +9,12 @@ value:
 
 The marker sits INSIDE the existing string field — the same "an alternative
 value, not a new field" shape ``git+`` refs use in
-:mod:`modulo.core.pipeline_engine.git_content` — so the REST contract and the
+:mod:`farna.core.pipeline_engine.git_content` — so the REST contract and the
 generated frontend API types are unchanged.
 
 Resolution is SERVER-SIDE at write time, under the caller's organisation
 context: the route resolves the key through
-:meth:`modulo.core.secrets_backend.SecretsBackend.get_secret` and encrypts the
+:meth:`farna.core.secrets_backend.SecretsBackend.get_secret` and encrypts the
 resolved value exactly as a literal credential would be. The value never
 crosses a client boundary — the CLI only ever sends the key.
 

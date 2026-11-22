@@ -558,7 +558,7 @@ def test_verify_release_from_files_none_refuses_missing_artifact(tmp_path: Path,
 def test_shipped_trust_store_has_only_the_provisioned_current_key() -> None:
     assert set(manifest_module._TRUST_ROWS) == {_KEY_ID_CURRENT}
     label, public_hex = manifest_module._TRUST_ROWS[_KEY_ID_CURRENT]
-    assert label == "Modulo production release signing key (2026-A)"
+    assert label == "Farna Control production release signing key (2026-A)"
     assert len(public_hex) == 64
     assert bytes.fromhex(public_hex) == bytes.fromhex("73f7dd1483fff0c0df45d706ae9ce7a68151942b8e2e8bc715b5d9beb719b5b0")
     assert _KEY_ID_NEXT not in manifest_module._TRUST_ROWS

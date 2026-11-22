@@ -306,7 +306,7 @@ async def _record_paused_slack_delivery(
     INSERT (it would violate the organisations FK -> 503). Fail-closed with
     no event row and no crash.
 
-    The shared writer in :mod:`modulo.api.routes._trigger_events` holds that
+    The shared writer in :mod:`farna.api.routes._trigger_events` holds that
     logic once for both intake paths; only the trigger type and log scope are
     Slack-specific here.
     """

@@ -33,7 +33,7 @@ _BUILTIN_SOURCE_METADATA: dict[str, dict[str, str]] = {
     },
     "product_primer": {
         "name": "Product Primer",
-        "description": "Overview of Modulo's features, capabilities, and architecture",
+        "description": "Overview of Farna Control's features, capabilities, and architecture",
     },
     "product_docs": {
         "name": "Product Docs",

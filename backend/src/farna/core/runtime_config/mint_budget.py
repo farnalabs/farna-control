@@ -23,7 +23,7 @@ Design contract:
   default) rather than fatal.
 - **Fail-OPEN** — any error raised by the guard itself (DB unavailable,
   dialect mismatch, driver error) returns ``True`` (allow) and logs the
-  exception. This is the policy counterpart of :mod:`modulo.core.runtime_config.org_flags`:
+  exception. This is the policy counterpart of :mod:`farna.core.runtime_config.org_flags`:
   org_flags is a SAFETY kill-switch and fail-closes to OFF; the budget is a
   cost cap and must never become a hard dependency of run
   finalisation/reconciliation — an outage degrades cost control, never the
@@ -49,7 +49,7 @@ Design contract:
 
 RLS/tenant context: on PostgreSQL the caller (API route or SAQ worker
 session) must set the org RLS context before calling — same contract as
-:meth:`modulo.core.runtime_config.org_flags.read_org_flag` and the other
+:meth:`farna.core.runtime_config.org_flags.read_org_flag` and the other
 org-scoped readers in ``db/crud/run.py``.
 """
 

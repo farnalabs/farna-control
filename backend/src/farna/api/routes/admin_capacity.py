@@ -3,7 +3,7 @@
 Exposes ``GET /api/v1/admin/db-capacity`` returning the live DB capacity status
 (``capacity_percent`` / ``mode`` / ``alert_level`` / ``used_bytes`` /
 ``capacity_bytes`` / ``source``) from
-:func:`modulo.db.capacity.db_capacity_status`. This is the source the frontend
+:func:`farna.db.capacity.db_capacity_status`. This is the source the frontend
 banner polls to alarm on a running-out DB volume before it hits the 98%
 hard-stop. ``source`` names the capacity source that resolved (``env`` /
 ``filesystem`` / ``platform`` / ``none``, FAR-1882 + FAR-1992) so an operator can

@@ -1295,7 +1295,7 @@ _ERROR_DETAIL_HARD_LIMIT = 5000
 # literal prefix + a flat char class + a flat quantifier, so worst-case work is
 # linear in the (capped) input. The AWS-key and GitHub fine-grained-PAT formats
 # are sourced from the canonical shared list in
-# :mod:`modulo.core.secret_patterns` so the secret-format knowledge is never
+# :mod:`farna.core.secret_patterns` so the secret-format knowledge is never
 # duplicated or drifted across redaction sites.
 _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+"),
@@ -1315,7 +1315,7 @@ _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     AWS_ACCESS_KEY_PATTERN,
     re.compile(r"AIza[0-9A-Za-z_-]{20,}"),
     # ``r`` (Slack rotateable tokens) aligned with the canonical shared list
-    # in :mod:`modulo.core.secret_patterns` (``xox[baprs]-``) — the two
+    # in :mod:`farna.core.secret_patterns` (``xox[baprs]-``) — the two
     # sites had drifted apart and a ``xoxr-`` token escaped this sanitizer.
     re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"),

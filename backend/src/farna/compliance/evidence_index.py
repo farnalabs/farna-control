@@ -10,7 +10,7 @@ Design rules (each is a requirement, not a preference):
 * **Read existing data.** No new tables. Every artefact is read from data the
   product already records.
 * **Never silently omit.** Every artefact type in
-  :data:`~modulo.compliance.artifacts.INDEXED_ARTIFACT_TYPES` appears in the
+  :data:`~farna.compliance.artifacts.INDEXED_ARTIFACT_TYPES` appears in the
   index. A type with no records is reported ``absent`` with a reason;
   ``strict=True`` turns the same condition into a raised
   :class:`EvidenceIndexIncompleteError`.
@@ -35,7 +35,7 @@ Design rules (each is a requirement, not a preference):
   rather than holding a pooled connection open.
 * **The human-oversight count uses the product's own rule.** Whether a gate is
   ``human_only`` is resolved through
-  :func:`modulo.db.crud.hitl_review_config.human_only_effective` - the single
+  :func:`farna.db.crud.hitl_review_config.human_only_effective` - the single
   source of truth for the fail-safe default (FAR-609). Re-implementing the rule
   here would under-report human oversight, because an omitted ``human_only``
   key means TRUE, not FALSE.

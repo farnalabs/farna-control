@@ -3,7 +3,7 @@
 The judge resolver used to live in ``node_runner``'s private namespace even
 though two call sites need it: the executor's post-node eval path (FAR-315)
 and the node-runner HITL-gate eval path (FAR-307).  Both hand it to
-:func:`modulo.core.pipeline_engine.eval_persist_order.run_evals_persist_before_decide`
+:func:`farna.core.pipeline_engine.eval_persist_order.run_evals_persist_before_decide`
 as the ``resolve_model_judge`` callback, so it now lives here and both modules
 import it.
 
@@ -27,10 +27,10 @@ was never judged must not pass.
 
 Type note (FAR-1652 review): the judge callables built below annotate their
 ``eval_def`` parameter as
-:class:`~modulo.core.eval_engine.EvalDefinition` because that is what the
-:class:`~modulo.core.eval_engine.ModelJudgeCallable` protocol declares, while
+:class:`~farna.core.eval_engine.EvalDefinition` because that is what the
+:class:`~farna.core.eval_engine.ModelJudgeCallable` protocol declares, while
 both call sites actually pass the duck-typed
-:class:`~modulo.core.pipeline_engine.eval_persist_order.EvalDefDTO` (FAR-1100
+:class:`~farna.core.pipeline_engine.eval_persist_order.EvalDefDTO` (FAR-1100
 cutover).  Only ``eval_def.config`` is read, and ``EvalDefDTO`` mirrors the
 legacy ``EvalDefinition`` attribute names by design, so the annotation is
 intentionally looser than the runtime payload rather than an inaccurate one.

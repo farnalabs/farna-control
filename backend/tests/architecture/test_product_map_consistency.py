@@ -63,9 +63,11 @@ _nav_shared_loader = SourceFileLoader("nav_config_shared", str(REPO_ROOT / "scri
 _nav_shared = module_from_spec(spec_from_loader("nav_config_shared", _nav_shared_loader))
 _nav_shared_loader.exec_module(_nav_shared)
 
-# Auth / public / dev / error plumbing that is intentionally not part of the
-# product map (no breadcrumb or sidebar surface a user navigates to).
-NON_PRODUCT_ROUTES = frozenset({"login", "org-login", "auth-callback", "not-found", "dev-metrics", "demo"})
+# Auth / public / dev / error / refusal plumbing that is intentionally not part
+# of the product map (no breadcrumb or sidebar surface a user navigates to).
+# ``locked-route`` is the FAR-2664 refusal surface a below-tier deep link lands
+# on: it renders, but it is not a capability of its own.
+NON_PRODUCT_ROUTES = frozenset({"login", "org-login", "auth-callback", "not-found", "dev-metrics", "demo", "locked-route"})
 
 #: The frontend router file defines every route at a ``path:`` key indented at
 #: least six spaces (top-level records sit at six, NESTED children — e.g. the

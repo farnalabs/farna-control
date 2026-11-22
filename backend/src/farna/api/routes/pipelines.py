@@ -8,7 +8,7 @@ serialisable transaction.
 FAR-1109: the graph write ALSO translates each node's declared ``policy_gate``
 block into the ``policy_gates`` row lifecycle. That translation lives in the
 shared write transaction itself
-(``modulo.db.crud.pipeline.replace_pipeline_graph`` ->
+(``farna.db.crud.pipeline.replace_pipeline_graph`` ->
 ``reconcile_graph_policy_gates``), so EVERY graph writer — these REST routes,
 the MCP ``update_pipeline_graph`` tool, node conversions, snapshot rollback,
 onboarding and the demo seed — translates. The row operations acquire the
@@ -186,7 +186,7 @@ from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.soft_delete import include_soft_deleted
 from farna.util import sanitise_log_value as _sanitise_log_value
 
-# FAR-2008: the FAR-488a Agent-row sync lives in ``modulo.core`` (bundle import
+# FAR-2008: the FAR-488a Agent-row sync lives in ``farna.core`` (bundle import
 # must reach it without importing the API layer). These module-level aliases
 # keep the historical private names importable/patchable from this module —
 # route tests (and ``mcp_server``) reference ``_sync_agent_row_commands`` here.
@@ -3987,7 +3987,7 @@ async def _require_team_membership(
 
 
 #: The bounded row-lock wait for mutation transactions is single-sourced in
-#: ``modulo.db.crud.row_lock.set_mutation_row_lock_timeout`` (FAR-1313 /
+#: ``farna.db.crud.row_lock.set_mutation_row_lock_timeout`` (FAR-1313 /
 #: FAR-1279 rationale lives on that function). It moved out of this route
 #: module so ``routes.triggers`` can import it without a cross-route (cyclic)
 #: import edge; the Settings field semantics are unchanged.
