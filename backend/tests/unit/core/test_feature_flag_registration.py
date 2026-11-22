@@ -28,6 +28,54 @@ class TestRetiredViewFlags:
         assert "saved_views" not in DEFAULT_OFF_FLAGS
 
 
+class TestFar2663FreedFlags:
+    """FAR-2663: schema version history is provenance, so it is Community.
+
+    Gating it withheld the WRITE path from every Community author — a schema
+    shell could be created and a definition could never be published — so the
+    flag must stay at the community tier; a future re-tiering has to change
+    these tests deliberately.
+    """
+
+    def test_schema_version_history_is_registered_at_community(self) -> None:
+        flag = FeatureFlagRegistry().get_flag("schema_version_history")
+        assert flag is not None, "schema_version_history must stay registered (it is the plan-payload entry)"
+        assert flag.tier == "community"
+
+    def test_declared_tier_is_community(self) -> None:
+        """The 402-detail builder reads this declarative tier, not the registry."""
+        from farna.core.feature_flags import declared_feature_tier
+
+        assert declared_feature_tier("schema_version_history") == "community"
+
+    def test_schema_version_history_is_active_on_a_community_plan(self) -> None:
+        flag = FeatureFlagRegistry(current_tier="community").get_flag("schema_version_history")
+        assert flag is not None
+        assert flag.currently_active is True
+
+
+class TestRetiredPipelineDeleteFlag:
+    """FAR-2663: ``pipeline_delete`` never gated the backend and is retired.
+
+    ``DELETE /api/v1/pipelines/{id}`` is guarded by the Community RBAC
+    permission ``pipeline.delete``; the flag only hid two UI buttons. It must
+    not come back as a plan flag (migration 0360 deletes the stale catalog row).
+    """
+
+    def test_flag_is_not_registered(self) -> None:
+        assert FeatureFlagRegistry().get_flag("pipeline_delete") is None
+
+    def test_flag_is_not_default_off(self) -> None:
+        from farna.core.feature_flags import DEFAULT_OFF_FLAGS
+
+        assert "pipeline_delete" not in DEFAULT_OFF_FLAGS
+
+    def test_flag_has_no_declared_tier(self) -> None:
+        from farna.core.feature_flags import declared_feature_tier
+
+        assert declared_feature_tier("pipeline_delete") is None
+
+
 class TestWebhookNotificationLogFlag:
     """FAR-656: the webhook notification delivery log is a community feature."""
 

@@ -100,6 +100,17 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
         description="Sandbox environment profiles for code execution",
         tier="community",
     ),
+    # FAR-2663: schema versioning is provenance, not organisation-scale
+    # capability — the audit boundary principle puts it in Community. It was
+    # gated on the write path as well as the reads, so a Community author could
+    # create a schema shell and could never publish a definition (the editor
+    # reported "Schema created but version save failed" with no reason, and the
+    # onboarding wizard stopped on a 402).
+    FeatureFlag(
+        name="schema_version_history",
+        description="Version history and diff for schema definitions",
+        tier="community",
+    ),
     # ── Team tier ──────────────────────────────────────────────────────
     FeatureFlag(
         name="sso",
@@ -154,16 +165,6 @@ _KNOWN_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="error_forwarders",
         description="Dispatch errors to external services via webhooks",
-        tier="team",
-    ),
-    FeatureFlag(
-        name="schema_version_history",
-        description="Version history and diff for schema definitions",
-        tier="team",
-    ),
-    FeatureFlag(
-        name="pipeline_delete",
-        description="Allow hard-deleting pipelines from the UI",
         tier="team",
     ),
     # ── Team tier (runtime / system config) ─────────────────────────────
@@ -299,6 +300,14 @@ def declared_feature_tier(feature_name: str) -> str | None:
 # Retained only in persisted data for backwards compatibility; it is not a
 # customer-configurable flag. Internal Lifecycle Map access is controlled by the
 # route's dev-mode visibility gate instead of an org feature override.
+#
+# FAR-2663 retired ``pipeline_delete`` outright (it is no longer in
+# ``_KNOWN_FLAGS``): deleting a pipeline was never backend-gated — ``DELETE
+# /api/v1/pipelines/{id}`` is guarded by the Community RBAC permission
+# ``pipeline.delete`` and soft-deletes, which is the correct control. The flag
+# only hid two buttons in the UI, and migration 0360 deletes the stale catalog
+# row so the admin Feature Flags surface cannot advertise a flag that gates
+# nothing.
 RETIRED_INTERNAL_FLAGS: frozenset[str] = frozenset({"lifecycle_map_journeys"})
 
 # Internal-only flags that are visible/enableable ONLY in dev-mode for

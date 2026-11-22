@@ -1077,22 +1077,24 @@ describe('PipelineEditorView — toolbar rendering', () => {
     expect(wrapper.find('[data-testid="pipeline-editor-unarchive"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="pipeline-editor-archive"]').exists()).toBe(false)
     // The Versions button is always available (FAR-1819: tier gate retired);
-    // the Delete button still needs the pipeline_delete feature
+    // Delete is too (FAR-2663: the pipeline_delete flag was retired — deletion
+    // is guarded by the pipeline.delete RBAC permission, not a plan feature).
     expect(wrapper.find('[data-testid="pipeline-editor-version-timeline"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="pipeline-editor-delete"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('keeps the ungated Versions button when the plan lacks features, still hides Delete', async () => {
+  it('keeps the ungated Versions and Delete buttons when the plan lacks features', async () => {
     router.push('/pipelines/test-pipeline-id/editor')
     await router.isReady()
     const wrapper = await mountEditorLoaded()
     const store = usePlanStore()
     store.features = {}
     await nextTick()
-    // FAR-1819: the version timeline is no longer plan-feature-gated
+    // FAR-1819: the version timeline is no longer plan-feature-gated.
     expect(wrapper.find('[data-testid="pipeline-editor-version-timeline"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="pipeline-editor-delete"]').exists()).toBe(false)
+    // FAR-2663: neither is Delete — an empty feature map must not hide it.
+    expect(wrapper.find('[data-testid="pipeline-editor-delete"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
