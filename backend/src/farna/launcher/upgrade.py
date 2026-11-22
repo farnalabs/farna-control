@@ -629,7 +629,9 @@ def _database_is_pristine(db_url: str, *, timeout_seconds: int = 15) -> bool:
     except Exception as exc:
         _log.warning("upgrade.pristine_probe_failed error=%s", exc)
         return False
-    return bool(row) and int(row[0]) == 0
+    if not row or not isinstance(row[0], int):
+        return False
+    return int(row[0]) == 0
 
 
 def _resolve_pg_bin_dir(bin_dir: Path | None) -> Path:
