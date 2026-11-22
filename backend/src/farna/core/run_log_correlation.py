@@ -3,7 +3,7 @@
 A READ-ONLY projection over data Modulo **already persists**. It adds NO new
 store and NO migration: it correlates three existing, ``run_id``-keyed sources
 and stamps each entry with its governed-run provenance class (FAR-1693 /
-ADR-042 — the single vocabulary in :mod:`modulo.core.provenance`):
+ADR-042 — the single vocabulary in :mod:`farna.core.provenance`):
 
 * **structured events** — ``audit_events`` rows for the run. Modulo wrote these
   natively, so they are :data:`PROVENANCE_ATTESTED`.
@@ -18,7 +18,7 @@ ADR-042 — the single vocabulary in :mod:`modulo.core.provenance`):
   (ADR-042 forecloses ``attested`` — attested never implies the substrate's
   data is true).
 
-This module is a core leaf: it imports only :mod:`modulo.core.provenance` and
+This module is a core leaf: it imports only :mod:`farna.core.provenance` and
 the stdlib, so both ``api`` and ``core`` may compose it (``core`` may not import
 ``api``; the reverse is allowed). The projection is pure — callers fetch the
 raw rows and hand them here — so it is unit-testable without a database.

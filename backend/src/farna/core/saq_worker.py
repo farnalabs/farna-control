@@ -45,7 +45,7 @@ and the web app in the same process, calling ``aiohttp.web.run_app(host=
 "127.0.0.1")`` and mapping ``SAQ_AUTH_USERNAME``/``SAQ_AUTH_PASSWORD`` to the
 ``AUTH_USER``/``AUTH_PASSWORD`` env vars SAQ's web reads. Run it instead::
 
-    python -m modulo.core.saq_worker
+    python -m farna.core.saq_worker
 """
 
 from __future__ import annotations
@@ -1217,7 +1217,7 @@ async def legacy_agent_return_sweep(_ctx: dict[str, Any]) -> dict[str, Any]:
 
     The periodic invariant gating the FAR-132 Agent-Return-split strip. The scan
     + LOUD detection log live in
-    :func:`modulo.core.cron_helpers.legacy_agent_return_sweep`; this wrapper owns
+    :func:`farna.core.cron_helpers.legacy_agent_return_sweep`; this wrapper owns
     the durable liveness record (mirroring ``decision_record_reconcile``): the
     outcome (``last_run_at`` + ``legacy_count``) is persisted to the shared Redis
     key every tick so /healthz/ready can warn when the sweep is stale or
@@ -2123,7 +2123,7 @@ async def journey_reconcile(_ctx: dict[str, Any]) -> dict[str, Any]:
     """System cron — hourly bounded journey reconciliation sweep (FAR-143).
 
     Re-derives ``journeys`` evidence from terminal runs whose journey rows are
-    MISSING or STALE (see ``modulo.core.lifecycle_map.reconcile``). System cron:
+    MISSING or STALE (see ``farna.core.lifecycle_map.reconcile``). System cron:
     uses farna_control_system role (LOGIN, BYPASSRLS) for cross-org access. farna_control_app
     is NOBYPASSRLS. The sweep is batch-bounded and idempotent, so an hourly
     tick simply drains whatever backlog remains.
@@ -2140,7 +2140,7 @@ async def journey_reconcile(_ctx: dict[str, Any]) -> dict[str, Any]:
 async def check_missed_fire_alerts_cron(_ctx: dict[str, Any]) -> dict[str, Any]:
     """System cron — hourly missed-fire probe for silent low-cadence triggers.
 
-    Delegates to :func:`modulo.core.error_tracking.check_missed_fire_alerts`,
+    Delegates to :func:`farna.core.error_tracking.check_missed_fire_alerts`,
     which alerts for active cron/polling triggers whose cadence is >= 1h and
     whose ``last_fired_at`` is stale (throttled by an in-memory cooldown).
 
@@ -2194,7 +2194,7 @@ async def connector_health_checks(_ctx: dict[str, Any]) -> dict[str, Any]:
 async def health_readiness_alert(_ctx: dict[str, Any]) -> dict[str, Any]:
     """System cron — readiness-degradation alert email (FAR-1446).
 
-    Delegates to :func:`modulo.core.health_alerts.run_health_alert_check`,
+    Delegates to :func:`farna.core.health_alerts.run_health_alert_check`,
     which evaluates readiness through the SAME code the ``/healthz/ready``
     route runs (``api.routes.health.evaluate_readiness`` — no reimplemented
     checks), and emails ``ALERT_EMAIL_TO`` on a confirmed transition into a
@@ -3191,7 +3191,7 @@ def run_system_web() -> None:
 
 
 def main() -> None:
-    """Entry point for ``python -m modulo.core.saq_worker`` (system worker)."""
+    """Entry point for ``python -m farna.core.saq_worker`` (system worker)."""
     run_system_web()
 
 

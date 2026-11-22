@@ -1,6 +1,6 @@
 """Boot health predicates (FAR-671) — pure, no ``modulo`` app imports.
 
-Promoted from the private ``modulo.api.main._db_is_at_migration_head`` so the
+Promoted from the private ``farna.api.main._db_is_at_migration_head`` so the
 native launcher (ADR 031) can reuse the exact migration-head fast-path check.
 The predicate is dependency-light: alembic and SQLAlchemy are imported lazily
 inside the function; nothing at module import time. The engine is passed in
@@ -18,7 +18,7 @@ _log = logging.getLogger(__name__)
 def resolve_alembic_ini() -> Path:
     """Locate backend/alembic.ini relative to this module (cwd-independent).
 
-    Same robustness contract as the historical ``modulo.api.main
+    Same robustness contract as the historical ``farna.api.main
     ._resolve_alembic_ini`` — but anchored at this module's own file so the
     native launcher and the API process resolve the same config.
     """

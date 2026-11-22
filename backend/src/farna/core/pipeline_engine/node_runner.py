@@ -12870,7 +12870,7 @@ async def _sandbox_capture_output_streams(
     _stdout_cap = stdout_cap
     try:
         elapsed = time.monotonic() - start_time
-        exit_code: int = getattr(cmd_result, "exit_code", -1)
+        exit_code = getattr(cmd_result, "exit_code", -1)
         # The redirected log file is the process's real stdout — prefer the
         # drained content (which also survives a timeout where cmd_result is
         # None and would otherwise surface EMPTY output), falling back to the

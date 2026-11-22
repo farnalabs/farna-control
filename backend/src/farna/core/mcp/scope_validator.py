@@ -7,7 +7,7 @@ Dual-layer enforcement:
    business logic layer, preventing bypass if the middleware has a bug.
 
 The per-tool requirement map references the centralized permission registry
-(``modulo.auth.permissions.PERMISSIONS``) rather than duplicating roles — the
+(``farna.auth.permissions.PERMISSIONS``) rather than duplicating roles — the
 registry is the single source of truth (ADR 047).
 """
 

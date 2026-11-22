@@ -289,7 +289,7 @@ async def me(
         user=UserInfo(username=current_user.username),
         org=OrganisationInfo(
             org_id=current_user.organisation_id,
-            org_name="Modulo",
+            org_name="Farna Control",
             settings={},
         ),
         team_memberships=[TeamMembershipInfo(team_id=m.team_id, team_role=m.role) for m in memberships],

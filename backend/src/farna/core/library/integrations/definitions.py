@@ -2,11 +2,11 @@
 
 Each dict provides the metadata, default configuration, credential
 field descriptions, and tool-group classification needed to register
-a :class:`~modulo.db.models.library_primitive.LibraryPrimitive` with
+a :class:`~farna.db.models.library_primitive.LibraryPrimitive` with
 ``primitive_type='integration'``.
 
 ``credential_fields`` is the single source of truth for the credential keys a
-connector type consumes: ``_build_connector`` in ``modulo.core.connector_hub``
+connector type consumes: ``_build_connector`` in ``farna.core.connector_hub``
 must read exactly these keys via ``_get_cred``. The parity guard in
 ``tests/unit/connector_hub/test_definitions_credential_parity.py`` enforces this
 for every type that has a direct hub read. A key declared here but read under a

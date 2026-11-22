@@ -180,7 +180,7 @@ def _base_url_change_requires_credential_error() -> HTTPException:
 def _validate_base_url(value: str, *, allow_insecure_http: bool = False) -> str:
     """Validate an operator-supplied base URL, raising the route's typed 422.
 
-    Delegates the rules to :func:`modulo.core.model_backend_endpoints.validate_base_url`
+    Delegates the rules to :func:`farna.core.model_backend_endpoints.validate_base_url`
     (shared with the FAR-2067 backfill CLI) and translates the domain error into
     the endpoint's 422 shape.
     """

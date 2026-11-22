@@ -7,7 +7,7 @@ singleton that persists across tests — override via `app.dependency_overrides`
 if test isolation is needed.
 
 The engine itself is NOT built here: ``get_or_create_engine`` delegates to
-``modulo.db.session.get_shared_engine`` so the API, dispatch, the SAQ worker
+``farna.db.session.get_shared_engine`` so the API, dispatch, the SAQ worker
 and crons all share one per-process pool with identical Fly/HAProxy knobs
 (``pool_pre_ping``, ``statement_cache_size=0``) instead of each maintaining a
 divergent second pool.
@@ -619,7 +619,7 @@ def require_team_membership_or_admin(resource_team_id_provider: TeamScopeProvide
 
     ``resource_team_id_provider`` resolves the target row's ``owner_team_id``
     and ``visibility`` from the request (path params + a DB lookup); see
-    ``modulo.api.team_scope``. ``runs`` is intentionally not team-gated — it has
+    ``farna.api.team_scope``. ``runs`` is intentionally not team-gated — it has
     no ``visibility`` column (org-role floor only, ADR 047 iteration-7 special).
 
     .. code-block:: python
@@ -737,7 +737,7 @@ async def resolve_anonymous_plan_with_tenant(
     (FAR-2060). Resolving both in one transaction closes the TOCTOU window where
     the plan was decided over one org read and the provider listing over another.
 
-    The tenant is :func:`modulo.db.crud.organisation.resolve_login_tenant`'s
+    The tenant is :func:`farna.db.crud.organisation.resolve_login_tenant`'s
     canonical answer — derived server-side from the database, never from
     anything the caller supplies (body, header, query or path).
 
@@ -1010,7 +1010,7 @@ def pg_connection_string(database_url: str) -> str:
     real checkpointer connection built here (boot schema init, HITL
     resume) on a deployment whose Postgres requires TLS. Settings now
     PRESERVES an operator's ``sslmode`` on Postgres URLs (FAR-1440, see
-    ``modulo.db.url_utils``), so a settings-derived URL reaches this
+    ``farna.db.url_utils``), so a settings-derived URL reaches this
     helper with its ``sslmode`` intact and libpq honours it directly.
     """
     return database_url.replace("postgresql+asyncpg://", "postgresql://").replace("postgresql+psycopg://", "postgresql://")
@@ -1027,7 +1027,7 @@ def get_or_create_engine(_settings: Settings) -> AsyncEngine:
     (e.g. in the MCP sub-app or background tasks) to share the same connection
     pool used by the main API.
 
-    Delegates to :func:`modulo.db.session.get_shared_engine` — the one engine
+    Delegates to :func:`farna.db.session.get_shared_engine` — the one engine
     factory per process — so dispatch, the SAQ worker, crons and the API share
     a single pool with identical Fly/HAProxy knobs (``pool_pre_ping``,
     ``statement_cache_size=0``) instead of maintaining divergent pools. The
@@ -1301,7 +1301,7 @@ async def get_current_tenant_user_optional(
 
     The login-route create_family mint for break-glass logins is DELIBERATELY
     excluded — it IS the recovery path. Consumers import this function directly
-    from ``modulo.api.dependencies`` (the previous PEP 562 lazy re-export in
+    from ``farna.api.dependencies`` (the previous PEP 562 lazy re-export in
     ``auth.dependencies`` was removed; ``webhooks.py`` imports it here).
     """
     if credentials is None:

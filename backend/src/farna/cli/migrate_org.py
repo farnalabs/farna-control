@@ -585,7 +585,7 @@ async def _import_one_row(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="modulo",
-        description="Modulo migration CLI — export and import organisation data.",
+        description="Farna Control migration CLI — export and import organisation data.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

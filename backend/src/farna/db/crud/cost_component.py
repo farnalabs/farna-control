@@ -1,4 +1,4 @@
-"""Org-scoped CRUD for CostComponent (PURE DB layer — no modulo.core imports).
+"""Org-scoped CRUD for CostComponent (PURE DB layer — no farna.core imports).
 
 All functions assume the caller has set the RLS org context via ``set_rls_org()``
 before calling. The session must be within an active transaction. The 409
@@ -6,7 +6,7 @@ duplicate pre-check runs with an explicit ``organisation_id`` filter (raw
 ``text()`` would bypass RLS on Postgres).
 
 Cross-field/formula/reserved-key validation and audit-event emission live in
-the API route layer (``modulo.api`` may import ``modulo.core``; ``modulo.db``
+the API route layer (``farna.api`` may import ``farna.core``; ``farna.db``
 may not). This module performs ONLY the DB-level checks that need the session:
 the org cap, the duplicate pre-check, and the last-enabled-calculated guards.
 """

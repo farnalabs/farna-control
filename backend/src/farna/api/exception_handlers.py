@@ -151,7 +151,7 @@ def sso_error_redirect(settings: Settings, code: str, slug: str | None) -> Redir
     The target is assembled ONLY from server-owned values — the configured
     frontend base (``resolve_frontend_url``) and a DB-resolved org slug — never
     from caller-supplied input, so it cannot be abused as an open redirect.
-    ``code`` is drawn from the fixed vocabulary in ``modulo.auth.sso``
+    ``code`` is drawn from the fixed vocabulary in ``farna.auth.sso``
     (``SSO_ERROR_*``), so exception text never reaches the URL.
 
     303 (See Other), not the success path's 307, converts the IdP's POST

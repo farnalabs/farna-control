@@ -1,6 +1,6 @@
 """Demo-org seed framework (FAR-450 foundation ticket).
 
-GATED behind ``MODULO_SEED_DEMO_ORGS`` (see ``modulo.settings``). Each demo
+GATED behind ``MODULO_SEED_DEMO_ORGS`` (see ``farna.settings``). Each demo
 organisation carries its OWN signed ``license_key`` in
 ``Organisation.settings_json`` so it resolves the intended tier (community or
 team) via ``core.feature_flags.resolve_plan_context`` — a bare ``plan_id``

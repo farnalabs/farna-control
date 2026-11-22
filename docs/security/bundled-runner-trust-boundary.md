@@ -30,7 +30,7 @@ agent runs).
 | -- | -- | -- |
 | **T1** Bundled Runner (self-hosted Docker) – this document | simplest, self-contained; **deliberately permissive networking** – bounded egress is the customer's cluster's job, not a bespoke module of ours | shipped + hardened |
 | **T2a** Managed sandbox (E2B, and the adapter pattern for Daytona et al.) | zero-setup external compute | E2B shipped |
-| **T2b** Bundled Runner on rented compute (Hetzner/Ubicloud/any Docker host) | *not a new tier* – T1 on rented metal, works via `MODULO_DOCKER_HOST`; needs validation + docs, not an adapter | doc/validation |
+| **T2b** Bundled Runner on rented compute (Hetzner/Ubicloud/any Docker host) | *not a new tier* – T1 on rented metal, works via `FARNA_CONTROL_DOCKER_HOST`; needs validation + docs, not an adapter | doc/validation |
 | **T3** Farna Control runner on Kubernetes | **most recommended shape** – inherits the customer's RBAC (role-based access control), admission policy, NetworkPolicy and workload identity; bounded by *their* controls | shipped (FAR-1051); kind conformance gate green (FAR-1053) – see the evidence note below |
 | **T4** Bring-your-own agent image | Farna Control provisions the workspace, runs **the customer's** agent image; same machinery, different payload + result contract | to build, after T3 |
 | **Dispatch** | govern an agent you already run – external CI triggers and customer-hosted agent endpoints | separate spike; connectors story, not a runner tier |
@@ -136,9 +136,9 @@ interfaces.  See `test_service_scoped_compose_ports_are_loopback_only`.
 ## Docker endpoint filtering (the socket proxy)
 
 When the overlay is enabled, the backend's Docker endpoint is the filtered
-proxy (`MODULO_DOCKER_HOST=tcp://docker-socket-proxy:2375` – step 2 of the
+proxy (`FARNA_CONTROL_DOCKER_HOST=tcp://docker-socket-proxy:2375` – step 2 of the
 documented endpoint chain). The raw socket is a documented operator override
-(step 3/4: `MODULO_DOCKER_HOST` unset + `DOCKER_HOST`, or no env at all →
+(step 3/4: `FARNA_CONTROL_DOCKER_HOST` unset + `DOCKER_HOST`, or no env at all →
 local socket). The allowlist is derived mechanically from the backend's real
 Docker API surface and is TESTED, not claimed: the docker-marked
 completeness assertion runs the provider exercise through the proxy and
@@ -219,12 +219,12 @@ the harness composition guard
 
 | Environment state | `runner_docker` registered? |
 |---|---|
-| `MODULO_DOCKER_HOST` or `DOCKER_HOST` set | YES |
-| Only an unrelated `MODULO_RUNNER_*` variable set (e.g. `MODULO_RUNNER_MACHINE_ID`) | NO – it is not a registration signal (FAR-996); the runner overlay registers because it also sets `MODULO_DOCKER_HOST` |
+| `FARNA_CONTROL_DOCKER_HOST` or `DOCKER_HOST` set | YES |
+| Only an unrelated `FARNA_CONTROL_RUNNER_*` variable set (e.g. `FARNA_CONTROL_RUNNER_MACHINE_ID`) | NO – it is not a registration signal (FAR-996); the runner overlay registers because it also sets `FARNA_CONTROL_DOCKER_HOST` |
 | No Docker endpoint set | NO – `runner_docker` does not register, regardless of anything else |
 
 An unregistered-but-bound provider raises `ProviderNotConfiguredError`
-(surfaced as the typed dispatch-unbound error) naming `MODULO_DOCKER_HOST`
+(surfaced as the typed dispatch-unbound error) naming `FARNA_CONTROL_DOCKER_HOST`
 – never a silent fallback.
 
 ## Container hardening (enforced defaults)
@@ -282,7 +282,7 @@ failure: the seccomp profile still applies.
 
 ## Docker endpoint TLS (FAR-1038)
 
-The Docker endpoint (`MODULO_DOCKER_HOST` / `DOCKER_HOST`) is validated at
+The Docker endpoint (`FARNA_CONTROL_DOCKER_HOST` / `DOCKER_HOST`) is validated at
 provider registration time:
 
 | Endpoint type | TLS required? | Rationale |
@@ -310,7 +310,7 @@ slip through one path while being rejected on the other.
 
 **Escape hatch**: operators who need a non-loopback, non-TLS endpoint (e.g. a
 socket proxy on a private bridge) can set
-`MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT=1`. This logs a prominent warning at
+`FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT=1`. This logs a prominent warning at
 provider construction but permits the endpoint. See
 `docs/security/bundled-runner-operator-guide.md` §8 for caveats.
 

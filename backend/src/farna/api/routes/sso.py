@@ -146,10 +146,10 @@ def _redirect_to_frontend(tokens: dict[str, str], settings: Settings) -> Redirec
 # ``audited_system("saml_acs_attempted", ...)`` dependency observe the failure
 # and record ``outcome="error"``. The real error is still logged server-side.
 #
-# The vocabulary + typed error live in ``modulo.auth.sso`` (next to the other
+# The vocabulary + typed error live in ``farna.auth.sso`` (next to the other
 # SSO callback error, SsoProvisioningDeniedError) so there is ONE definition;
 # the redirect target itself is built in the handler
-# (``modulo.api.exception_handlers.sso_error_redirect``).
+# (``farna.api.exception_handlers.sso_error_redirect``).
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,8 @@
 <template>
+  <!-- FAR-2604: node categories back the connector/plugin configuration a
+       Community install needs on first run, so this page stays open on
+       Community. `plugin_management` is broader than the pages it gates (it is
+       Team-tier); FAR-2665 narrows it. The route and API carry no gate. -->
   <FeatureGate feature-name="plugin_management" required-tier="community" show-disabled>
 
     <div class="page-wide">

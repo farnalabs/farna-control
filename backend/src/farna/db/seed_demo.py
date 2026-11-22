@@ -2,7 +2,7 @@
 
 GATED: runs only when ``MODULO_DEMO_ENABLED`` is truthy AND both
 ``MODULO_DEMO_USER`` (email) and ``MODULO_DEMO_PASSWORD`` are non-empty
-(see ``modulo.core.demo`` — the neutral gate both this seed and the auth
+(see ``farna.core.demo`` — the neutral gate both this seed and the auth
 route share). Default off — the seed is a no-op otherwise, so the
 default release path behaviour is unchanged.
 
@@ -59,9 +59,9 @@ Safety:
 * Idempotent by natural keys (org slug, account email, schema name, pipeline
   name, per-org run_number) — re-running never duplicates.
 
-Runnable standalone (entrypoint-style, mirrors ``modulo.db.bootstrap_role``):
+Runnable standalone (entrypoint-style, mirrors ``farna.db.bootstrap_role``):
 
-    python -m modulo.db.seed_demo
+    python -m farna.db.seed_demo
 """
 
 from __future__ import annotations
@@ -3294,7 +3294,7 @@ async def seed_demo_runtime(session_factory: async_sessionmaker[AsyncSession] | 
 
     The single transaction wrapper for both callers: main.py's boot lifespan
     passes its DI ``get_or_create_session_factory`` engine-backed factory (one
-    engine path per caller), while the ``python -m modulo.db.seed_demo``
+    engine path per caller), while the ``python -m farna.db.seed_demo``
     entry point below falls back to the shared module-level
     ``AsyncSessionLocal``.
     """

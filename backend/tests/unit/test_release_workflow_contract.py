@@ -367,6 +367,202 @@ def test_rc_validation_rejects_predecessor_checksum_and_version_mismatches() -> 
     assert "including any RC suffix" in matrix
 
 
+def _bundle_release(tag: str, *asset_names: str) -> dict[str, Any]:
+    """A published bundle release entry as the list-releases API returns it."""
+    return {
+        "tag_name": tag,
+        "draft": False,
+        "prerelease": False,
+        "assets": [{"name": name} for name in asset_names],
+    }
+
+
+def _predecessor_asset_resolver() -> str:
+    """The asset-name resolver exactly as the workflow ships it.
+
+    The job checks out the RC tag's tree, so the resolver cannot live in a
+    ``scripts/`` helper added after that RC was cut - it is embedded in the
+    workflow and these tests execute that embedded code, not a copy of it.
+    """
+    run = _rc_validate_step(_PREDECESSOR_START)["run"]
+    return _python_heredoc(run, "ASSET")
+
+
+def _resolve_predecessor_asset(
+    tmp_path: Path,
+    release_pages: Any,
+    bundle_tag: str,
+    bundle_version: str,
+) -> subprocess.CompletedProcess[str]:
+    release_json = tmp_path / "release-pages.json"
+    release_json.write_text(json.dumps(release_pages), encoding="utf-8")
+    return subprocess.run(  # noqa: S603 - fixed in-workflow resolver under test
+        [sys.executable, "-c", _predecessor_asset_resolver(), str(release_json), bundle_tag, bundle_version],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+
+def test_rc_validation_predecessor_compose_asset_resolves_the_legacy_naming(tmp_path: Path) -> None:
+    # bundle-v0.3.328 was published before the FAR-2580 artefact rename, so its
+    # compose asset keeps the modulo-<v>-compose.tar.gz name. The upgrade matrix
+    # must still find it instead of demanding the post-rename name.
+    release_pages = [
+        [
+            _bundle_release(
+                "bundle-v0.3.328",
+                "modulo-0.3.328-compose.tar.gz",
+                "modulo-0.3.328-linux-amd64.tar.gz",
+                "Modulo-0.3.328-macos-arm64.dmg",
+                "SHA256SUMS",
+            )
+        ]
+    ]
+
+    result = _resolve_predecessor_asset(tmp_path, release_pages, "bundle-v0.3.328", "0.3.328")
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "modulo-0.3.328-compose.tar.gz"
+
+
+def test_rc_validation_predecessor_compose_asset_resolves_the_post_rename_naming(tmp_path: Path) -> None:
+    release_pages = [
+        [
+            _bundle_release(
+                "bundle-v0.3.329",
+                "farna-control-0.3.329-compose.tar.gz",
+                "farna-control-0.3.329-linux-amd64.tar.gz",
+                "SHA256SUMS",
+            )
+        ]
+    ]
+
+    result = _resolve_predecessor_asset(tmp_path, release_pages, "bundle-v0.3.329", "0.3.329")
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "farna-control-0.3.329-compose.tar.gz"
+
+
+def test_rc_validation_predecessor_compose_asset_prefers_the_current_naming_when_both_exist(tmp_path: Path) -> None:
+    release_pages = [
+        [
+            _bundle_release(
+                "bundle-v0.3.329",
+                "modulo-0.3.329-compose.tar.gz",
+                "farna-control-0.3.329-compose.tar.gz",
+            )
+        ]
+    ]
+
+    # Deterministic: the post-rename asset is the artefact of record. Integrity
+    # is unchanged either way because the SHA256SUMS entry is matched against
+    # whichever name this returns.
+    result = _resolve_predecessor_asset(tmp_path, release_pages, "bundle-v0.3.329", "0.3.329")
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "farna-control-0.3.329-compose.tar.gz"
+
+
+def test_rc_validation_predecessor_compose_asset_names_both_patterns_when_neither_exists(tmp_path: Path) -> None:
+    release_pages = [
+        [
+            _bundle_release(
+                "bundle-v0.3.328",
+                "modulo-0.3.327-compose.tar.gz",
+                "modulo-0.3.328-linux-amd64.tar.gz",
+                "SHA256SUMS",
+            )
+        ]
+    ]
+
+    result = _resolve_predecessor_asset(tmp_path, release_pages, "bundle-v0.3.328", "0.3.328")
+
+    assert result.returncode == 1
+    assert "bundle-v0.3.328" in result.stderr
+    assert "farna-control-0.3.328-compose.tar.gz" in result.stderr
+    assert "modulo-0.3.328-compose.tar.gz" in result.stderr
+    assert not result.stdout
+
+
+def test_rc_validation_predecessor_compose_asset_fails_closed_for_an_unpublished_bundle(tmp_path: Path) -> None:
+    draft = {
+        "tag_name": "bundle-v0.3.328",
+        "draft": True,
+        "prerelease": False,
+        "assets": [{"name": "modulo-0.3.328-compose.tar.gz"}],
+    }
+
+    unpublished = _resolve_predecessor_asset(tmp_path, [[draft]], "bundle-v0.3.328", "0.3.328")
+    absent = _resolve_predecessor_asset(
+        tmp_path,
+        [[_bundle_release("bundle-v0.3.327", "modulo-0.3.327-compose.tar.gz")]],
+        "bundle-v0.3.328",
+        "0.3.328",
+    )
+
+    assert unpublished.returncode == 1
+    assert "is not a published release" in unpublished.stderr
+    assert absent.returncode == 1
+    assert "does not contain bundle-v0.3.328" in absent.stderr
+
+
+def test_rc_validation_resolves_the_predecessor_compose_asset_name_from_the_release() -> None:
+    workflow = _rc_validate_text()
+    matrix = workflow[workflow.index(_PREDECESSOR_START) : workflow.index(_MATRIX_RUN_START)]
+
+    # The resolver is embedded in the workflow, not a scripts/ helper: the job
+    # checks out the RC tag's tree, which predates any helper added later.
+    assert "<<'ASSET'" in matrix
+    assert "farna-control-{bundle_version}-compose.tar.gz" in matrix
+    assert "modulo-{bundle_version}-compose.tar.gz" in matrix
+    assert '--pattern "$compose_asset"' in matrix
+    assert 'downloaded_archive="$RUNNER_TEMP/${compose_asset}"' in matrix
+    # The resolved name is still cross-checked against the bundle version.
+    assert 'farna-control-"${bundle_version}"-compose.tar.gz)' in matrix
+    assert 'modulo-"${bundle_version}"-compose.tar.gz)' in matrix
+    # The fixed post-rename name must not be hard-coded: a legacy predecessor
+    # release carries no such asset and the download would fail.
+    assert '--pattern "farna-control-${bundle_version}-compose.tar.gz"' not in matrix
+    # Only the filename lookup is tolerant - every integrity gate still runs
+    # against whichever name the release actually carries.
+    assert "--pattern SHA256SUMS" in matrix
+    assert 'no checksum for $(basename "$downloaded_archive")' in matrix
+    assert 'checksum mismatch for published predecessor bundle asset $(basename "$downloaded_archive")' in matrix
+    assert "does not contain docker-compose.prod.yml" in matrix
+    assert 'gh attestation verify "$old_subject"' in matrix
+    assert "verify-image-digest" in matrix
+
+
+def test_rc_validation_records_the_predecessor_asset_name_it_used() -> None:
+    workflow = _rc_validate_text()
+    predecessor = workflow[workflow.index(_PREDECESSOR_START) : workflow.index(_MATRIX_RUN_START)]
+
+    # The job log says which name was used (and that it was the legacy one).
+    assert 'echo "Using predecessor bundle ${bundle_tag} compose asset ${compose_asset} (${predecessor_naming} naming)."' in predecessor
+    # The record is written only after provenance verified, so it can never
+    # name a predecessor that failed validation.
+    verified_at = predecessor.index("Verified predecessor image identity:")
+    assert predecessor.index('"compose_asset": "${compose_asset}"') > verified_at
+    assert predecessor.index('"asset_naming": "${predecessor_naming}"') > verified_at
+    assert predecessor.index('"bundle_tag": "${bundle_tag}"') > verified_at
+    assert '"verified": true' in predecessor
+
+    # ...and the evidence artefact carries it too.
+    step = _rc_validate_step("Record predecessor bundle asset evidence")
+    run = step["run"]
+    assert step["if"] == "always()"
+    assert 'predecessor_record="$RUNNER_TEMP/predecessor-asset.json"' in run
+    assert 'evidence_dir="$RUNNER_TEMP/compose-matrix-evidence"' in run
+    assert 'cp "$predecessor_record" "$evidence_dir/predecessor-asset.json"' in run
+
+    # The record must run after the matrix (which refuses a non-empty evidence
+    # directory) and before the upload that ships it.
+    matrix = _rc_validate_matrix_text()
+    assert matrix.index(_MATRIX_RUN_START) < matrix.index("Record predecessor bundle asset evidence") < matrix.index("Upload Docker acceptance evidence")
+
+
 def test_image_digest_verification_accepts_real_attestation_verify_shape() -> None:
     validator = _release_validator()
     digest = "sha256:" + "a" * 64

@@ -60,7 +60,7 @@ _PACKAGE_NAME = "farna-control"
 
 # Canonical sensitive-field vocabulary (single source of truth: FAR-2305).
 # ``farna-control env``, ``farna-control doctor --report`` and the support bundle all
-# classify through ``modulo.core.secret_patterns`` so a credential carrier can
+# classify through ``farna.core.secret_patterns`` so a credential carrier can
 # never be redacted in one surface and leaked in another.
 _WHOLESALE_REDACT_FIELDS = WHOLESALE_REDACT_FIELDS
 _URL_FIELD_SUFFIX = "_url"
@@ -223,7 +223,7 @@ def _is_sensitive_field(name: str) -> bool:
     The ad-hoc token list missed real credential carriers (``modulo_users``
     is an email:password list, ``modulo_oidc_providers`` embeds OIDC client
     secrets, webhook URLs carry their token in the URL path) — delegation to
-    ``modulo.core.secret_patterns.is_sensitive_field_name`` keeps the CLI's
+    ``farna.core.secret_patterns.is_sensitive_field_name`` keeps the CLI's
     redaction in lockstep with the API's, the doctor report's and the support
     bundle's.
     """

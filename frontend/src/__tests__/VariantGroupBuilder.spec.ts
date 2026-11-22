@@ -386,7 +386,7 @@ describe('VariantGroupBuilder', () => {
     const help = wrapper.find('#variant-builder-degraded-evals-help').text()
     expect(help).toContain('_degraded_evals: true')
     // The flag is not an eval-skipping switch: the copy must say so.
-    expect(help).toContain('Modulo still runs every eval')
+    expect(help).toContain('Farna Control still runs every eval')
   })
 
   it('surfaces a create-group error from the API', async () => {

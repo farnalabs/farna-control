@@ -1,7 +1,7 @@
 """Scheduled-report registry + fire + delivery (SAQ path).
 
 Report generators are registered via ``register_report_type()``. The per-item
-fire job (``fire_report_trigger`` in :mod:`modulo.core.cron_helpers`, enqueued
+fire job (``fire_report_trigger`` in :mod:`farna.core.cron_helpers`, enqueued
 by ``fire_due_triggers``) generates, formats, and delivers each due report as a
 bounded SAQ job. The Celery beat scheduler (``DatabaseReportScheduler`` /
 ``ReportFireTask``) was removed in PR C of the Celery->SAQ migration.
@@ -955,7 +955,7 @@ async def _deliver_to_urls(
     overrides the per-request timeout (default ``_REPORT_HTTP_TIMEOUT``).
 
     Each URL is dispatched through a pinned, freshly re-validated
-    ``httpx.AsyncClient`` (:func:`modulo.core.ssrf.pinned_async_client`) — the
+    ``httpx.AsyncClient`` (:func:`farna.core.ssrf.pinned_async_client`) — the
     same SSRF boundary the notifier uses. A URL that resolves to a
     private/internal address is rejected before any request is made and recorded
     as an ``ssrf_blocked`` failure; the DNS-rebinding window a validate-at-save

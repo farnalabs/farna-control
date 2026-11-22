@@ -309,7 +309,7 @@ def is_egress_allowed(instance_enabled: bool, org_level: str) -> bool:
 def partner_license_requires_analytics(license_data: Any) -> bool:
     """Return True when the licence carries ``product_analytics_required: true``.
 
-    Accepts a :class:`modulo.core.license.LicenseData` (reads its signed
+    Accepts a :class:`farna.core.license.LicenseData` (reads its signed
     ``raw_payload``), an object exposing a ``claims`` mapping, or a mapping
     itself. The claim must be exactly boolean ``True`` or the string
     ``"true"``; everything else (including ``"false"``, a missing claim, or

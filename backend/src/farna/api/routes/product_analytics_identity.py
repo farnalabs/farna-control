@@ -148,7 +148,7 @@ def _check_rotation_rate_limit(client_key: str) -> None:
 
 
 class IdentityResponse(BaseModel):
-    instance_id: str = Field(..., description="UUID of this Modulo instance")
+    instance_id: str = Field(..., description="UUID of this Farna Control instance")
     secret_exists: bool = Field(..., description="Whether a shared secret has been minted")
 
 

@@ -1,7 +1,7 @@
 """Map-scoped journey reads (FAR-144).
 
 Journeys are org-floor rows minted at create time from a run's work-item
-refs (see ``modulo.db.lifecycle_refs``). A lifecycle map "owns" the journeys
+refs (see ``farna.db.lifecycle_refs``). A lifecycle map "owns" the journeys
 whose latest-stage identity points at one of its stages, plus — until they
 gain a stage identity — journeys whose (kind, ref) has already run through one
 of the map's stage pipelines.

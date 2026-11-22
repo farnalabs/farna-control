@@ -142,6 +142,7 @@ const AssistantOnlyView = () => import('../views/AssistantOnlyView.vue')
 const SystemMapsView = () => import('../views/SystemMapsView.vue')
 const SystemMapDetailView = () => import('../views/SystemMapDetailView.vue')
 const DeterminationView = () => import('../views/DeterminationView.vue')
+const LockedRouteView = () => import('../views/LockedRouteView.vue')
 
 /**
  * Move focus to the newly entered route's content.
@@ -165,12 +166,12 @@ export function focusRouteContent() {
 /**
  * The `document.title` for a navigated route.
  *
- * A route with neither a manifest `title` nor a breadcrumb label used to render
- * "Modulo | Modulo"; it now falls back to the bare product name.
+ * A route with neither a manifest `title` nor a breadcrumb label falls back to
+ * the bare product name rather than repeating it as "<product> | <product>".
  */
 export function documentTitleFor(meta: RouteMeta): string {
   const pageTitle = meta.title ?? meta.breadcrumb
-  return pageTitle ? `${pageTitle} | Modulo` : 'Modulo'
+  return pageTitle ? `${pageTitle} | Farna Control` : 'Farna Control'
 }
 
 const router = createRouter({
@@ -771,6 +772,18 @@ const router = createRouter({
       redirect: '/admin/assistant',
     },
     {
+      // FAR-2664: the locked page a below-tier deep link lands on. It is the
+      // refusal surface for a capability the caller cannot open, not a
+      // navigable product page, so it renders no sidebar entry and needs no
+      // element inventory. It IS named so the product-map guard enumerates it,
+      // and the name is recorded in the backend suite's NON_PRODUCT_ROUTES —
+      // the exclusion is codified rather than implicit in an unnamed route.
+      path: '/locked',
+      name: 'locked-route',
+      component: LockedRouteView,
+      meta: { title: 'Locked' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       redirect: '/',
@@ -952,17 +965,59 @@ async function hasRequiredPermissions(
   return requiredPermissions.some((permission) => planStore.userPermissions.includes(permission))
 }
 
+/** The path of the locked page (FAR-2664) — see the route registration. */
+export const LOCKED_ROUTE_PATH = '/locked'
+
+/**
+ * A navigation target for a request the caller may not open *yet* (FAR-2664).
+ * Carries everything the locked page needs to name the capability in the
+ * caller's terms: where they were going, what it is called, and which licence
+ * it needs. `reason` distinguishes a paid capability (an upgrade fixes it)
+ * from a role / instance-admin refusal (it does not).
+ */
+export interface LockedRouteTarget {
+  path: typeof LOCKED_ROUTE_PATH
+  query: Record<string, string>
+}
+
+/** What a guard hands back when it refuses a navigation. */
+export type GuardDenial = { name: string } | LockedRouteTarget
+
+/**
+ * FAR-2664: a below-tier route is a paid capability the caller cannot use —
+ * not a broken application. Land on the locked page, which names the
+ * capability and offers the upgrade path, instead of bouncing silently to the
+ * dashboard with no explanation.
+ *
+ * The capability label comes from the manifest breadcrumb (the same string the
+ * breadcrumb bar and document title use); the view upgrades it to the
+ * translated sidebar label when it can resolve one.
+ */
+export function lockedRouteFor(
+  to: Parameters<Parameters<typeof router.beforeEach>[0]>[0],
+  reason: 'tier' | 'role' | 'system_admin' = 'tier',
+): LockedRouteTarget {
+  const entry = resolveManifestEntry(to)
+  const query: Record<string, string> = { from: to.fullPath || to.path || '/' }
+  const capability = entry?.breadcrumb
+  if (capability) query.capability = capability
+  const tier = to.meta?.requiredTier ?? entry?.required_tier
+  if (tier) query.tier = tier
+  query.reason = reason
+  return { path: LOCKED_ROUTE_PATH, query }
+}
+
 /**
  * Enforce role, tier, and devMode/visibility access rules.  Returns a
- * redirect route-object when access is denied, or `true` when the caller
- * may continue.  The plan store is lazily fetched so the guard sees the
+ * redirect/locked route-object when access is denied, or `true` when the
+ * caller may continue.  The plan store is lazily fetched so the guard sees the
  * real tier — the first navigation resolves *before* AppLayout.onMounted
  * kicks off `fetchPlan()`.
  */
 export async function enforceRoleTierVisibility(
   to: Parameters<Parameters<typeof router.beforeEach>[0]>[0],
   token: string,
-): Promise<{ name: string } | true> {
+): Promise<GuardDenial | true> {
   const payload = decodeJwtPayload(token)
 
   if (to.meta?.requiresSystemAdmin && !payload?.is_system_admin) {
@@ -1015,7 +1070,12 @@ export async function enforceRoleTierVisibility(
       planStore.loaded &&
       !planStore.isAtMinimumTier(to.meta.requiredTier)
     ) {
-      return { name: 'dashboard' }
+      // FAR-2664: the caller is otherwise permitted — this route is simply
+      // above their licence. Show the capability and the upgrade path instead
+      // of a silent dashboard bounce. The redirect stays for the genuinely
+      // unknown route, and for the role / instance-admin refusals above (a
+      // licence upgrade cannot fix those).
+      return lockedRouteFor(to)
     }
     const isPrivateOrDev =
       to.meta?.visibility === 'private_preview' || to.meta?.visibility === 'in_dev'
@@ -1044,7 +1104,7 @@ export async function enforceRoleTierVisibility(
 async function enforceManifestGate(
   to: RouteLocationTarget,
   token: string,
-): Promise<{ name: string } | true> {
+): Promise<GuardDenial | true> {
   if (
     to.meta?.requiresSystemAdmin ||
     to.meta?.requiredRoles?.length ||
@@ -1077,7 +1137,7 @@ async function enforceManifestGate(
  */
 async function enforceRouteFeatureFlag(
   to: RouteLocationTarget,
-): Promise<{ name: string } | true> {
+): Promise<GuardDenial | true> {
   if (!to.meta?.featureFlag) return true
   const planStore = usePlanStore()
   if (!planStore.loaded) {

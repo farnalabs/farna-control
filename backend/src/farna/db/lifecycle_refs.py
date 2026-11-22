@@ -6,9 +6,9 @@ reserved-key set that user input may never forge, and the deterministic
 canonical id (uuid5) derivation.
 
 It lives in the db layer so the create-time stamping path
-(``modulo.db.crud.run``) and future consumers (FAR-143 self-report parsing,
+(``farna.db.crud.run``) and future consumers (FAR-143 self-report parsing,
 query lookups) share ONE set of rules — and it must NOT import
-``modulo.core.*`` (the ``db-does-not-import-core`` import-linter contract).
+``farna.core.*`` (the ``db-does-not-import-core`` import-linter contract).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _log = logging.getLogger(__name__)
 # value is never trusted — ``create_run`` re-stamps every entry by channel),
 # so a forged key cannot escalate provenance.
 # Mirrors ``_RESERVED_RUN_CONTEXT_KEYS`` in
-# ``modulo.core.pipeline_engine.decorator``.
+# ``farna.core.pipeline_engine.decorator``.
 _RESERVED_INPUT_PAYLOAD_KEYS: frozenset[str] = frozenset(
     {
         "_work_item_id",
@@ -258,10 +258,10 @@ def sort_canonical_refs(refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 # --- Shadow-mode / intake observability hook (FAR-794 slice 2a) -------------
 #
-# The db layer must NOT import ``modulo.core.*`` (import-linter), but the
+# The db layer must NOT import ``farna.core.*`` (import-linter), but the
 # work-item-refs counters' metrics home lives beside the journey counters in
-# ``modulo.core.lifecycle_map.reconcile``. The bridge is a single hook:
-# ``modulo.db.crud.run`` and ``modulo.core.pipeline_engine.decorator`` emit
+# ``farna.core.lifecycle_map.reconcile``. The bridge is a single hook:
+# ``farna.db.crud.run`` and ``farna.core.pipeline_engine.decorator`` emit
 # named counter events through :func:`notify_refs_event`, and reconcile
 # registers the sink at import time. With no hook registered (e.g. a bare
 # unit-test process, or a process that never imports reconcile) the

@@ -4,7 +4,7 @@ Change-level checks historically ran on the agent's SELF-REPORTED
 ``changed_files`` list. A self-reported set is agent-controlled, so a gate that
 trusts it can be evaded by an agent that simply omits a file it changed. This
 module resolves the changed set on the PLATFORM and records where each set came
-from, using the shared provenance taxonomy (``modulo.core.provenance``):
+from, using the shared provenance taxonomy (``farna.core.provenance``):
 
 * ``observed`` - the platform read the changed set from the VCS connector at
   the run's pinned commit SHA. This is the trustworthy set.
@@ -382,7 +382,7 @@ def record_changed_set_evidence(
     computed from observed and reported facts). Returns the appended rows; the
     caller's transaction commits them.
 
-    Raises :class:`~modulo.core.eval_engine.evidence_layer.EvidenceWriteAuthorisationError`
+    Raises :class:`~farna.core.eval_engine.evidence_layer.EvidenceWriteAuthorisationError`
     if a key falls outside the producer's owned namespace.
     """
     rows: list[Any] = []

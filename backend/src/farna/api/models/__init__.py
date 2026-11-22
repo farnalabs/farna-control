@@ -1,7 +1,7 @@
 """API request/response models.
 
 Barrel exports for the most commonly imported model classes. Route files can
-import from ``modulo.api.models`` directly instead of reaching into submodules.
+import from ``farna.api.models`` directly instead of reaching into submodules.
 """
 
 from farna.api.models.problem import (
