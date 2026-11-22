@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
+from psycopg.types.json import Jsonb
+
 from farna.cli.backup import (
     _db_has_modulo_tables,
     _export_checkpoint_blobs_sync,
@@ -33,7 +35,6 @@ from farna.cli.backup import (
     _write_json,
     cli,
 )
-from psycopg.types.json import Jsonb
 
 _TEST_APP_DB_URL = "postgresql+asyncpg://modulo:pw@127.0.0.1:5432/farna_control"
 
@@ -2362,6 +2363,7 @@ class TestRestoreStartGuidance:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         import click
+
         from farna.cli import backup as backup_mod
         from farna.launcher import upgrade as upgrade_module
 

@@ -26,6 +26,7 @@ from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+
 from farna.launcher.state import LauncherState, load_state, save_state
 from farna.launcher.upgrade import (
     SNAPSHOT_MANIFEST_NAME,
@@ -35,7 +36,6 @@ from farna.launcher.upgrade import (
     main,
     pre_upgrade_dump,
 )
-
 from tests.unit.launcher.test_launcher_shared import clock_steps
 
 #: This module EXECUTES the shipped installer under a real POSIX shell (and
@@ -478,7 +478,6 @@ def test_dumped_snapshot_restores_end_to_end(tmp_path: Path, monkeypatch: pytest
 # ---------------------------------------------------------------------------
 
 from farna.launcher import upgrade as upgrade_module  # noqa: E402 (appended flow tests)
-
 from tests.unit.launcher.test_launcher_shared import (  # noqa: E402 (appended flow tests)
     _UPGRADE_SIGNING_KEY_HEX,
     _upgrade_dump_seam,
@@ -1019,6 +1018,7 @@ def test_cli_upgrade_surfaces_a_clean_click_exception(monkeypatch, tmp_path):
     leaked past the internal conversion) is reported as `Error: ...` - never
     a raw traceback."""
     from click.testing import CliRunner
+
     from farna.cli.main import cli
     from farna.launcher import manifest as manifest_module
 

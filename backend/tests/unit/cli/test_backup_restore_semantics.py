@@ -25,9 +25,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlsplit
 
 import click
-import farna.cli.backup as backup_mod
 import pytest
 from click.testing import CliRunner
+from psycopg.types.json import Jsonb
+
+import farna.cli.backup as backup_mod
 from farna.cli.backup import (
     MANIFEST_VERSION,
     RestorePostureError,
@@ -37,7 +39,6 @@ from farna.cli.backup import (
     cli,
 )
 from farna.launcher.state import LauncherState, load_state, save_state
-from psycopg.types.json import Jsonb
 
 _FERNET_KEY = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _RESTORE_OUTPUTS = "restore-outputs"

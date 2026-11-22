@@ -25,6 +25,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+
 from farna.launcher.doctor import DoctorProbes
 
 _UPGRADE_SIGNING_KEY_HEX = "101acdeda0cd35fdb51f4dae6eff9838b2d07c97641e41a09deb72a2a1a2254d"

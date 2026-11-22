@@ -10,9 +10,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import click
-import farna.cli.backup as backup_mod
 import pytest
 from cryptography.fernet import Fernet
+
+import farna.cli.backup as backup_mod
 from farna.cli.backup import (
     _check_tool,
     _export_checkpoint_blobs_sync,

@@ -33,13 +33,13 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+
 from farna.launcher import upgrade as upgrade_module
 from farna.launcher.doctor import (
     EXIT_HEALTHY,
     DoctorProbes,
     run_doctor,
 )
-
 from tests.unit.launcher.test_launcher_shared import (
     _UPGRADE_SIGNING_KEY_HEX,
     _upgrade_fetch_seam,
