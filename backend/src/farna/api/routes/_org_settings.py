@@ -64,7 +64,7 @@ async def apply_org_settings_patch_or_404(
 ) -> dict[str, Any]:
     """Apply the atomic org-settings patch; a missing/soft-deleted org is a 404.
 
-    Wraps :func:`modulo.db.crud.organisation.update_org_settings_patch`,
+    Wraps :func:`farna.db.crud.organisation.update_org_settings_patch`,
     translating its ``LookupError`` (org missing or soft-deleted — the patch
     helper refuses both) into the routes' shared ``404`` with
     ``MSG_ORGANISATION_NOT_FOUND``. ``patch`` is always passed positionally so

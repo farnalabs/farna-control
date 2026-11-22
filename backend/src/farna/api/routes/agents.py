@@ -368,7 +368,7 @@ def _validate_agent_git_content(
     """Save-time pin gate for git-sourced content refs on Agent rows (FAR-220).
 
     REST wrapper: delegates to the shared core helper
-    (:func:`modulo.core.pipeline_engine.git_content.validate_agent_git_content_values`,
+    (:func:`farna.core.pipeline_engine.git_content.validate_agent_git_content_values`,
     also called by the MCP ``create_agent`` tool so that surface cannot bypass
     the gate) and converts the typed :class:`GitContentRefError` to HTTP 422.
     The three fail-closed codes and their messages live in the shared helper.

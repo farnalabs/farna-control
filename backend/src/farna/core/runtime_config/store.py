@@ -210,7 +210,7 @@ class RuntimeConfigStore:
         """Return the raw runtime override for ``key``, or None when unset.
 
         Unlike :meth:`get`, this exposes only the override tier — bridge
-        helpers (:mod:`modulo.core.runtime_config.key_bridge`) use it to
+        helpers (:mod:`farna.core.runtime_config.key_bridge`) use it to
         layer an override on top of a consumer's boot-time Settings/env
         value without masking that value with the store's default tier.
         """

@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 # modes and their default — the SINGLE source of truth for the mode set. Both
 # consumers import from here so the set can never drift between the REST
 # connector's config validation and the pipeline engine's gate read:
-#   - ``modulo.connectors.rest`` validates the connector's ``on_unknown`` config
+#   - ``farna.connectors.rest`` validates the connector's ``on_unknown`` config
 #     value against :data:`ON_UNKNOWN_MODES` and defaults to
 #     :data:`DEFAULT_ON_UNKNOWN` when absent.
-#   - ``modulo.core.pipeline_engine.node_runner`` coerces a connector's
+#   - ``farna.core.pipeline_engine.node_runner`` coerces a connector's
 #     ``on_unknown_for`` read to :data:`DEFAULT_ON_UNKNOWN` for any value
 #     outside :data:`ON_UNKNOWN_MODES`.
 # This module is a stdlib-only leaf, so importing it from either side cannot
@@ -527,7 +527,7 @@ class ConnectorType(StrEnum):
 # the DB layer can all import without a cycle — so ``node_runner``,
 # ``executor``, ``runtime_retry``, ``graph_validator``, ``api.routes.pipelines``,
 # ``api.mcp_server`` and ``db.crud.run`` cannot grow separate copies of the
-# rule. (``modulo.db`` is forbidden from importing ``modulo.core`` by the
+# rule. (``farna.db`` is forbidden from importing ``farna.core`` by the
 # import-linter contract; this module is the seam that lets the run classifier
 # share the engine's predicate without an exemption.)
 
@@ -1075,7 +1075,7 @@ class ConnectorBase(ABC):
     """Abstract base for all external tool connectors."""
 
     # FAR-1650: the TLS context for this connector's egress clients, built at
-    # most once per instance by ``modulo.connectors._egress.egress_ssl_context``
+    # most once per instance by ``farna.connectors._egress.egress_ssl_context``
     # (the ``None`` class default means an instance that never makes an outbound
     # call pays nothing). Typed here — not built here — so this module stays a
     # stdlib-only leaf; ``httpx`` is imported only by ``_egress``.

@@ -28,7 +28,7 @@ concurrent operations on the same session.
 Precedent
 ---------
 This mirrors the existing ``register_tenant_filter`` pattern in
-``modulo.db.rls``, which injects ``WHERE organisation_id = :oid`` via the same
+``farna.db.rls``, which injects ``WHERE organisation_id = :oid`` via the same
 ``do_orm_execute`` event. The soft-delete filter is NOT backend-gated (unlike
 the tenant filter, which is skipped on Postgres because RLS handles it) —
 soft-delete is an application-level concern that applies identically to every

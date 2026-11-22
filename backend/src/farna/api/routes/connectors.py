@@ -237,7 +237,7 @@ def _validate_rest_config(config_json: dict[str, Any]) -> None:
     ``RestConnector.__init__`` raises on a bad mode — so it must be rejected
     here (422) instead of being saved. Mirrors the connector's own
     normalisation (case-insensitive, whitespace-tolerant) and uses the SHARED
-    ``ON_UNKNOWN_MODES`` constant from ``modulo.connectors.base`` (a stdlib-only
+    ``ON_UNKNOWN_MODES`` constant from ``farna.connectors.base`` (a stdlib-only
     leaf) — never a second copy of the mode set.
     """
     value = config_json.get("on_unknown")

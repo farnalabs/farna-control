@@ -19,7 +19,7 @@ from farna.db.models.base import JSONB_COL, OrgScoped
 _ONDELETE_SET_NULL = "SET NULL"
 
 # FAR-900: valid schema_profile values — MUST match get_args(SchemaProfile) from
-# modulo.core.schema_registry.rendering.  Kept static here because the DB layer
+# farna.core.schema_registry.rendering.  Kept static here because the DB layer
 # must not import core (import-linter contract).  A test asserts consistency.
 _VALID_SCHEMA_PROFILES = ("verbatim", "provider-strict", "runtime-sdk")
 

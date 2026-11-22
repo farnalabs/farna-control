@@ -1,7 +1,7 @@
 """Shared, dependency-free utilities used across all modulo layers.
 
-This module MUST NOT import from ``modulo.core``, ``modulo.api`` or
-``modulo.db``: it is intentionally a leaf so that the DB, core and API layers
+This module MUST NOT import from ``farna.core``, ``farna.api`` or
+``farna.db``: it is intentionally a leaf so that the DB, core and API layers
 can all import from it without violating the import-linter layer contracts.
 """
 

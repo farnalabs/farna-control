@@ -78,7 +78,7 @@ SSRF host pinning (best-effort for git transports)
 --------------------------------------------------
 Every host-side git invocation (:func:`run_git_ls_remote`,
 :func:`fetch_git_content`) validates the repository host through
-:func:`require_public_git_host` — the same ``modulo.core.ssrf`` resolver the
+:func:`require_public_git_host` — the same ``farna.core.ssrf`` resolver the
 HTTP connectors use (loopback/private/link-local/metadata addresses refused,
 DNS fail-closed). Residual: git spawns its own libcurl/ssh stack, which has no
 ``CURLOPT_RESOLVE``-style IP pinning hook, so a TOCTOU DNS-rebinding window
@@ -279,7 +279,7 @@ def resolve_against_ls_remote(ref: GitContentRef, refs: dict[str, str]) -> str:
     """Resolve *ref* to a commit SHA against ``git ls-remote`` output.
 
     ``refs`` is the ``{ref_name: sha}`` map produced by
-    :func:`modulo.core.pipeline_engine.workspace_inputs.parse_ls_remote`
+    :func:`farna.core.pipeline_engine.workspace_inputs.parse_ls_remote`
     (peeled annotated-tag entries already point at the underlying commit).
 
     * pinned (40-hex) — returned as-is (lowercased), no lookup needed;
@@ -321,7 +321,7 @@ def git_repository_host_url(repo_url: str) -> str:
     """Host-bound pseudo-URL (``https://host[:port]``) for SSRF gate probing.
 
     Mapping: ``https://host[:port]/...`` -> as-is; ``ssh://[user@]host[:port]/...``
-    -> ``https://host[:port]`` (userinfo stripped — :mod:`modulo.core.ssrf`
+    -> ``https://host[:port]`` (userinfo stripped — :mod:`farna.core.ssrf`
     refuses userinfo; the HOST is what the gate validates); SCP-style
     ``git@host:path`` -> ``https://host``.
 
@@ -346,7 +346,7 @@ async def require_public_git_host(repo_url: str) -> None:
     """SSRF gate for the repository host — the SAME policy HTTP connectors use.
 
     Maps *repo_url* to its host via :func:`git_repository_host_url`, then runs
-    the shared ``modulo.core.ssrf`` resolver (refuses loopback / private /
+    the shared ``farna.core.ssrf`` resolver (refuses loopback / private /
     link-local / metadata addresses; DNS is fail-closed). The function-level
     import avoids the (currently absent but easy to create) import cycle.
 
@@ -740,7 +740,7 @@ def validate_agent_git_content_values(
     Shared, non-HTTP validation called by every Agent write path: the REST
     save paths (``routes/agents.py`` -> HTTP 422), the MCP ``create_agent``
     tool (-> tool error dict), the Agent-command sync in
-    ``modulo.core.agent_command_sync`` (``sync_agent_row_commands``, used by
+    ``farna.core.agent_command_sync`` (``sync_agent_row_commands``, used by
     the graph save/patch/update endpoints, the MCP full-graph writer, snapshot
     rollback and bundle import — it validates each incoming ``agent_commands``
     list before writing the row; the REST graph endpoints surface the typed

@@ -40,7 +40,7 @@ class OrgDeletedError(RuntimeError):
     flow has set status='deleted' (or in a hard-deleted org — no row). A domain
     exception (not ``ValueError``) so API routes and cron/trigger callers can map
     it to a structured 4xx (409 for a deleted org, 404 for a missing org) instead
-    of a generic 500. Lives in ``modulo.core.exceptions`` alongside
+    of a generic 500. Lives in ``farna.core.exceptions`` alongside
     ``TriggersPausedError``; the ``db-does-not-import-core`` contract exempts the
     consuming CRUD module (see ``.importlinter``).
     """
@@ -78,7 +78,7 @@ class RateLimitConflictError(RuntimeError):
 # jobs and the agent_signal child-run path translate the refusal into a quiet
 # typed skip instead of letting it escape as a job error. Deliberately a
 # DIFFERENT value from ``PAUSE_SKIP_REASON`` (``"triggers_paused"``, in
-# ``modulo.db.settings_resolver``) so a per-pipeline lifecycle refusal can
+# ``farna.db.settings_resolver``) so a per-pipeline lifecycle refusal can
 # never be read as the org-wide pause kill-switch. This is an outcome-envelope
 # reason, NOT a ``TriggerEvent.validation_result`` value — no trigger-event
 # vocabulary change is implied by it.
@@ -115,7 +115,7 @@ class PipelineNotRunnableError(RuntimeError):
     untouched (fail closed by raising the read error itself, never fabricate
     a state and never treat an unreadable row as runnable).
 
-    Lives in ``modulo.core.exceptions`` alongside ``TriggersPausedError``; the
+    Lives in ``farna.core.exceptions`` alongside ``TriggersPausedError``; the
     ``db-does-not-import-core`` contract exempts the consuming CRUD module
     (see ``.importlinter``).
     """

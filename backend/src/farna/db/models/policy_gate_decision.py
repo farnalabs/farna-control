@@ -43,7 +43,7 @@ Rows with ``eval_result_id IS NULL`` stay **unbounded by design** (PostgreSQL
 and SQLite treat NULLs as distinct in a unique index): such a row is itself an
 anomaly — a decision recorded with no grounded evaluation result — and is the
 reconciliation job's responsibility
-(``modulo.core.eval_engine.decision_reconcile``), not the index's.
+(``farna.core.eval_engine.decision_reconcile``), not the index's.
 """
 
 import uuid

@@ -1059,7 +1059,7 @@ def _record_classification_failure(failure: str) -> None:
 
     Lazily registered and never raises: a systematic classify/persist failure
     must be dashboard-visible without ever breaking terminalization. The
-    counter lives here (not in ``modulo.core.error_tracking.metrics``) so this
+    counter lives here (not in ``farna.core.error_tracking.metrics``) so this
     module's failure rate is observable without coupling the two modules.
     """
     global _classification_failures_counter

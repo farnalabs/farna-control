@@ -125,7 +125,7 @@ _CODE_TRIGGERS_LIST_PIPELINE_TRIGGERS = "triggers.list_pipeline_triggers"
 # accepted regardless of ``trigger_type`` so a key a *different* trigger
 # surface legitimately reads is never rejected on the wrong trigger type.
 # Keep in sync with ``_RECOGNISED_TRIGGER_CONFIG_KEYS`` in
-# ``modulo.core.trigger_engine``.
+# ``farna.core.trigger_engine``.
 _RECOGNISED_TRIGGER_CONFIG_KEYS: frozenset[str] = frozenset(
     {
         # Webhook / HMAC / event filtering (trigger_engine, slack_app_mention)

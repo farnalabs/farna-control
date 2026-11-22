@@ -87,7 +87,7 @@ Provider reachability check (FAR-2316):
     sends its ROOT CAs — only the leaf and its intermediates — so comparing a
     served chain against root fingerprints cannot detect an interception, and
     a sound check needs the served chain, real per-CA fingerprints and the
-    pinned-IP egress transport from :mod:`modulo.core.ssrf`, which is far more
+    pinned-IP egress transport from :mod:`farna.core.ssrf`, which is far more
     machinery than a reachability pre-flight can justify. A detector that
     cannot detect, or that warns on every healthy TLS deployment, is worse
     than no detector (FAR-512 pins the transport the probe actually uses, so
@@ -858,7 +858,7 @@ NO_PROBE_PROVIDERS = frozenset({"custom", "stub"})
 
 SKIPPED_NO_PROBE = "skipped (no probe)"
 
-# Markers from ``modulo.core.ssrf``'s fail-closed messages: a backend that
+# Markers from ``farna.core.ssrf``'s fail-closed messages: a backend that
 # cannot even be constructed because its host does not resolve (or resolves to
 # an internal address) is UNREACHABLE, not "no probe" — conflating the two
 # would let the doctor report healthy while every model call fails.

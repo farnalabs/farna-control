@@ -2,9 +2,9 @@
 
 Alembic loads ``env.py`` as a *fresh* module via
 ``alembic.util.pyfiles.load_python_file`` (module id ``env_py``); it never
-reuses the cached ``modulo.db.migrations.env`` object. A lock-ownership flag
+reuses the cached ``farna.db.migrations.env`` object. A lock-ownership flag
 stored as a global inside ``env.py`` therefore does not propagate:
-``modulo.api.main`` sets the flag on the cached module while ``command.upgrade``
+``farna.api.main`` sets the flag on the cached module while ``command.upgrade``
 executes a different copy that still reads ``False`` -- so the app-lifespan
 migration run re-acquires the advisory lock it already holds on a second
 connection and blocks on itself (observed as ``Timed out waiting for the
@@ -12,8 +12,8 @@ migration advisory lock`` after the 240s poll in the nightly Schemathesis fuzz
 job).
 
 Keeping the flag in this separate module fixes the propagation: both the
-cached ``modulo.db.migrations.env`` and the freshly-loaded ``env_py`` import the
-same cached ``modulo.db.migrations._lock_state`` object, so the caller-held
+cached ``farna.db.migrations.env`` and the freshly-loaded ``env_py`` import the
+same cached ``farna.db.migrations._lock_state`` object, so the caller-held
 flag the app sets is the one the executing ``env.py`` reads.
 """
 

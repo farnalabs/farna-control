@@ -1,12 +1,12 @@
 """Modulo agent-loop interception bridge client (FAR-211).
 
 THIS FILE IS WRITTEN INTO THE E2B SANDBOX BY THE ``sandbox_agent`` NODE RUNNER
-(see ``modulo.core.guardrails.loop_intercept.bridge_client_source``) and
+(see ``farna.core.guardrails.loop_intercept.bridge_client_source``) and
 executed by the agent command wrapper. It is intentionally STDLIB-ONLY — it
 runs inside the sandbox where Modulo is not installed.
 
 It talks to the Modulo-hosted callback server (``LoopInterceptCallbackServer``
-in ``modulo.core.guardrails.loop_intercept``). Each tool-call event is POSTed
+in ``farna.core.guardrails.loop_intercept``). Each tool-call event is POSTed
 BEFORE the tool executes (``direction="before"``) and each tool result BEFORE
 it re-enters the model context (``direction="after"``, with a result summary).
 The server's decision is enforced:

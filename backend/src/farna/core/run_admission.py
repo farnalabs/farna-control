@@ -1139,7 +1139,7 @@ async def has_in_flight_ci_failure_run(
     AFTER a trigger's ``payload_mapping`` has run — a non-empty mapping REPLACES
     the payload wholesale, so re-deriving from the stored row would silently
     find nothing whenever the mapping renames or drops ``prNumber`` /
-    ``headSha``. :func:`modulo.db.crud.run.read_ci_failure_coalesce_key` reads
+    ``headSha``. :func:`farna.db.crud.run.read_ci_failure_coalesce_key` reads
     that stamp first; :func:`derive_ci_failure_coalesce_key` is the fallback for
     legacy rows created before the stamp existed (and for any row whose payload
     passed through verbatim).

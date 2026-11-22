@@ -13,7 +13,7 @@ This module owns ONE resolution policy for all of them:
 * a value that DECRYPTS under the configured key is decrypted via the
   scope-bound helper and returned;
 * a structurally complete Fernet token that does NOT decrypt is broken
-  ciphertext and FAILS CLOSED (:class:`~modulo.auth.secret_storage.SecretStorageError`)
+  ciphertext and FAILS CLOSED (:class:`~farna.auth.secret_storage.SecretStorageError`)
   — ciphertext is never used as the secret;
 * anything else is LEGACY PLAINTEXT (a pre-0306 row, or a plaintext write
   that bypassed the encrypting write path). It is accepted so pre-migration

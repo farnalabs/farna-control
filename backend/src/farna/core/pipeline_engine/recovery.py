@@ -240,7 +240,7 @@ def _immediately_claimable_heartbeat() -> datetime:
     """A heartbeat stamped one full claim-stale window (plus skew) in the past.
 
     Written into the SAME UPDATE that flips a node-started override run to
-    ``running``, so :func:`modulo.core.pipeline_execution.claim_resume_run_async`'s
+    ``running``, so :func:`farna.core.pipeline_execution.claim_resume_run_async`'s
     stale-running arm matches on the very first claim attempt. The window is
     read from ``Settings.run_claim_stale_seconds`` (``RUN_CLAIM_STALE_SECONDS``
     — the exact bound the claim SQL binds), never hardcoded.
@@ -518,7 +518,7 @@ async def _apply_recovery_markers(session: AsyncSession, run: Run, node_id: str,
     telemetry entry is the sole record). FAR-583 B1: the legacy ``runs`` blob
     columns are no longer written (their ORM mapping is cut) — the merged
     dicts are persisted on ``run_node_outputs`` by the primary repo write
-    (:func:`modulo.db.crud.run.write_run_outputs_from_run`), same-transaction.
+    (:func:`farna.db.crud.run.write_run_outputs_from_run`), same-transaction.
     Requires an active transaction on *session* (the caller's); a
     :class:`DualWriteError` propagates to :func:`recover_node`'s guard for
     the catch/orchestrate contract.

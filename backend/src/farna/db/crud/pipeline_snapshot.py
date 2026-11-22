@@ -556,7 +556,7 @@ def _apply_agent_fields(node: dict[str, Any], agent: Agent) -> uuid.UUID | None:
     Of the five Agent-authoritative fields only ``agent_commands`` is exposed
     as a node-level editable field on the typed graph model, so it is the only
     one a graph save/restore syncs back into the Agent row
-    (``modulo.core.agent_command_sync``). The other four stay owned by the
+    (``farna.core.agent_command_sync``). The other four stay owned by the
     Agent: one Agent row can be bound by many pipelines, and copying a
     historical snapshot's stale value onto it would silently revert an Agent
     edit made after that snapshot was taken.

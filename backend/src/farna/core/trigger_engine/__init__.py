@@ -176,7 +176,7 @@ class PipelineRateLimitError(RuntimeError):
 class PipelineBackpressureError(RuntimeError):
     """Trigger dispatch refused run creation — pipeline queue over limits (FAR-604).
 
-    Raised by the webhook path when :func:`modulo.core.run_admission.evaluate_backpressure`
+    Raised by the webhook path when :func:`farna.core.run_admission.evaluate_backpressure`
     decides the pipeline's pending queue is over depth or age limits. The
     delivery is NOT accepted (the sender retries); a ``backpressure_skipped``
     TriggerEvent is recorded first so the skip is auditable, never silent.
@@ -291,7 +291,7 @@ _sha256_hex = sha256_hex
 
 
 # Unique-violation detection lives in the neutral low-level module
-# (modulo.db.unique_violation) so this dedup path and create_run's admission
+# (farna.db.unique_violation) so this dedup path and create_run's admission
 # path share identical semantics. Legacy underscore name kept for
 # backward-compatible imports.
 def _is_unique_violation(exc: IntegrityError) -> bool:
@@ -473,13 +473,13 @@ class _RateLimitState:
 
 # Keys the engine actually reads from a trigger's config_json.  Keep in sync
 # with ``_RECOGNISED_TRIGGER_CONFIG_KEYS`` in
-# ``modulo.api.routes.triggers`` (the write-time gate) — the sets MUST
+# ``farna.api.routes.triggers`` (the write-time gate) — the sets MUST
 # match; a key added to one and not the other is a bug.
 #
 # The set is the union of every ``config.get(...)`` read site across the
 # trigger engine and its fire paths (``cron_helpers``, ``agent_signal``,
 # ``slack_app_mention``, ``trigger_streak``); see the mirrored definition in
-# ``modulo.api.routes.triggers`` for the per-surface grouping.
+# ``farna.api.routes.triggers`` for the per-surface grouping.
 _RECOGNISED_TRIGGER_CONFIG_KEYS: frozenset[str] = frozenset(
     {
         # Webhook / HMAC / event filtering
@@ -706,7 +706,7 @@ class TriggerEngine:
         same-key delivery arriving after the window elapsed used to mint a
         second full run while the first was still executing — doubling the
         pipeline's sandbox concurrency consumption for one work unit. The
-        in-flight leg (:func:`modulo.core.run_admission.has_in_flight_ci_failure_run`)
+        in-flight leg (:func:`farna.core.run_admission.has_in_flight_ci_failure_run`)
         closes that gap: suppression holds while ANY same-key run is still
         non-terminal, at any age, with the window kept as the primary fast path
         and an absolute age backstop so a permanently stuck run cannot suppress
@@ -1545,7 +1545,7 @@ class TriggerEngine:
         hold a slot for the whole time it waits — the observed failure mode
         was a single pending run occupying one of eight slots for ~50 minutes
         with no live dispatch. Delegates to the shared
-        :func:`modulo.core.run_admission.count_trigger_slot_occupancy`, so
+        :func:`farna.core.run_admission.count_trigger_slot_occupancy`, so
         every trigger lane shares one implementation of the grace semantics.
         """
         return await count_trigger_slot_occupancy(session, trigger_id)

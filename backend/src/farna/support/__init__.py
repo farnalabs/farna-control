@@ -6,14 +6,14 @@ like it carries a secret after layers 1-4, the build aborts, names the member
 and writes NO zip.
 
 Public surface (lazy — the package ``__init__`` deliberately does NOT import
-the module eagerly, so ``python -m modulo.support.bundle`` does not see the
+the module eagerly, so ``python -m farna.support.bundle`` does not see the
 module loaded twice):
 
-* :func:`modulo.support.bundle.build_bundle` — build a bundle (sync).
-* :func:`modulo.support.bundle.build_bundle_async` — async build (DB reads).
-* :func:`modulo.support.bundle.read_bundle` — read an existing bundle,
+* :func:`farna.support.bundle.build_bundle` — build a bundle (sync).
+* :func:`farna.support.bundle.build_bundle_async` — async build (DB reads).
+* :func:`farna.support.bundle.read_bundle` — read an existing bundle,
   tolerating unknown members (forward compatibility).
-* :data:`modulo.support.bundle.BUNDLE_FORMAT_VERSION` — the integer format
+* :data:`farna.support.bundle.BUNDLE_FORMAT_VERSION` — the integer format
   version, stamped in ``report.json`` and the printed reference line.
 """
 

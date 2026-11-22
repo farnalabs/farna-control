@@ -4,7 +4,7 @@ These are DEFAULTS ONLY. Runtime reads flow through ``get_settings()`` so an
 env override of a Settings knob moves the boundary EVERYWHERE (a knob's env
 override is asserted by the 8g test — the constants and the knobs must not
 drift apart). ``constants.py`` holds the canonical names; the corresponding
-Settings knobs in ``modulo.settings`` are the runtime authority.
+Settings knobs in ``farna.settings`` are the runtime authority.
 """
 
 from decimal import Decimal

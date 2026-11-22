@@ -1,14 +1,14 @@
 """Shared per-eval policy-gate advisory lock (FAR-1666 / FAR-1688).
 
-The declarative graph writer (``modulo.db.crud.pipeline``) and the in-product
-authoring routes (``modulo.api.routes.evals``) must serialise on the SAME
+The declarative graph writer (``farna.db.crud.pipeline``) and the in-product
+authoring routes (``farna.api.routes.evals``) must serialise on the SAME
 transaction-scoped advisory lock — key ``policy_gate:<eval_id>`` through
 Postgres ``hashtext`` — so a graph write and a concurrent authoring write can
 never race the create/load-and-mutate sequence.
 
 This module is the ONE derivation of that lock. It lives in the ``db`` layer
 rather than ``api`` because the ``db-does-not-import-core`` import-linter
-contract forbids ``modulo.db`` -> ``modulo.api``: an ``api``-owned helper could
+contract forbids ``farna.db`` -> ``farna.api``: an ``api``-owned helper could
 never be the neutral home both layers may import. Both layers therefore import
 from here, and a future edit to the key/timeout can only happen in one place.
 """

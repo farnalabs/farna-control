@@ -6,7 +6,7 @@ spend 0. Accrual and ceiling writes UPSERT, so the row appears on first write.
 
 This table is the cutover of FAR-1823 Land 2: the finalize gate+accrual and
 the admin ceiling set/clear endpoints read and write it under a per-org
-advisory lock (``modulo.core.runner_capacity.lock_org_cost_state``), so the hot
+advisory lock (``farna.core.runner_capacity.lock_org_cost_state``), so the hot
 path never updates — and never takes a row lock on — the ``organisations`` row
 (the FAR-1823 / D9 lock-coupling shape). Migration ``0321`` creates and
 backfills it. The three same-named ``organisations`` columns are deliberately

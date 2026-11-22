@@ -373,7 +373,7 @@ async def rollback_to_snapshot(
     ``connector_team_mismatch``) — and performing the FAR-488a bound-Agent-row
     sync for the restored graph (see FAR-1845 below). The hook receives the
     resolved ``target`` snapshot and the LOCKED ``pipeline`` row; the callback
-    lives in the route layer so this module never imports ``modulo.core``
+    lives in the route layer so this module never imports ``farna.core``
     (layer contract). Because it runs inside the caller's transaction, a hook
     that raises (including a gate denial after the sync) rolls the whole
     rollback — and the sync with it — back atomically.
@@ -386,7 +386,7 @@ async def rollback_to_snapshot(
     write (the REST route does it inside its ``post_lock_gate``), a restored
     node's command would read back from the graph and be silently replaced by
     the stale Agent-row command at run time. The sync cannot live here: this
-    db module may not import ``modulo.api`` (import-linter
+    db module may not import ``farna.api`` (import-linter
     db-does-not-import-api).
 
     FAR-1471: the rollback itself also appends a ``pipeline.graph_updated``

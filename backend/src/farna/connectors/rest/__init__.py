@@ -68,7 +68,7 @@ the runtime variables supplied per call:
                             #   When Redis IS configured but unavailable the limiter FAILS
                             #   CLOSED (after a single retry of the shared charge) rather
                             #   than silently falling back to N per-process buckets — see
-                            #   modulo.connectors._rate_bucket.
+                            #   farna.connectors._rate_bucket.
 
 FAN-OUT / ITERATOR (FAR-411)
 ---------------------------
@@ -86,7 +86,7 @@ sequence inside the write ``data``, ``write()`` fans out ONE request per item:
 * **Empty iterator** — 0 items succeeds vacuously with no calls (an empty
   fan-out is a no-op, not a failure).
 * **Per-destination token bucket** — the ONE outbound-call enforcement point.
-  Each item consumes a token from a :class:`modulo.connectors._rate_bucket.TokenBucket`
+  Each item consumes a token from a :class:`farna.connectors._rate_bucket.TokenBucket`
   keyed by host+path; when empty the call awaits refill. Per-process by default
   (each uvicorn/SAQ worker owns its own bucket), and SHARED across the fleet via
   Redis when a ``redis_client`` is wired at the composition root (FAR-439): one
@@ -142,7 +142,7 @@ WRITE-ONLY / PARTIAL-OVERLAY CREDENTIAL MODEL (FAR-466 / FAR-504)
 Credentials are WRITE-ONLY at the API surface: the ciphertext is never exposed
 in a response (only a ``has_credentials`` boolean). A PATCH overlays the
 supplied credential dict onto the decrypted stored one (see
-``modulo.api.routes.connectors._credential_overlay``):
+``farna.api.routes.connectors._credential_overlay``):
 
 * **Secret fields** (``token``, ``api_key``, ``username``, ``password``) are
   replaced only when the request supplies a real, non-empty, non-masked value;
@@ -217,7 +217,7 @@ _log = logging.getLogger(__name__)
 # Standard HTTP verbs the connector will issue (all else is rejected).
 _ALLOWED_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 # FAR-458 connector-write idempotency gate: the per-op ``on_unknown`` modes and
-# default live in ONE place — ``modulo.connectors.base`` (a stdlib-only leaf
+# default live in ONE place — ``farna.connectors.base`` (a stdlib-only leaf
 # both this connector's config validation and the pipeline engine's gate read
 # import) so the mode set can never drift between the two. ``fail_open``
 # (default) re-fires a write whose prior delivery could not be confirmed
@@ -237,9 +237,9 @@ _CONTROL_CHARS = frozenset({chr(c) for c in range(0x20) if c != 0x09} | {"\x7f"}
 
 # FAR-504: the sensitive-mask sentinel a redacted secret value is masked to.
 # Defined LOCALLY rather than imported because the ``Connectors don't reach into
-# core`` import-linter contract forbids ``modulo.connectors`` depending on
-# ``modulo.core``; the value mirrors ``modulo.core.secret_patterns
-# .SENSITIVE_VALUE_MASK`` (re-exported by ``modulo.api.middleware.sensitive_mask``
+# core`` import-linter contract forbids ``farna.connectors`` depending on
+# ``farna.core``; the value mirrors ``farna.core.secret_patterns
+# .SENSITIVE_VALUE_MASK`` (re-exported by ``farna.api.middleware.sensitive_mask``
 # and compared verbatim by the PATCH credential overlay). A masked placeholder is
 # NOT a real secret and must be rejected on create — see ``validate_credentials``.
 _SENSITIVE_VALUE_MASK = "\u2022\u2022\u2022\u2022\u2022\u2022"
@@ -509,10 +509,10 @@ class SecurityGuard:
     """Connector-local port for the SSRF + output-injection guards (FAR-408 layering).
 
     Injected at the composition root (see ``connector_hub._build_connector``) so the
-    connector does not reach into ``modulo.core`` directly. ``validate_url`` is
+    connector does not reach into ``farna.core`` directly. ``validate_url`` is
     awaited (or called) and raises on a disallowed target; ``filter_strings``
     raises on a string that fails the injection filter. The composition root is the
-    single place that binds this port to the real ``modulo.core`` guards; the
+    single place that binds this port to the real ``farna.core`` guards; the
     constructor default (when no guard is injected) is an inert stub used only by
     tests and ad-hoc direct construction.
     """
@@ -538,7 +538,7 @@ class SecurityGuard:
 def _stub_security_guard() -> SecurityGuard:
     """Inert guard used when no guard is injected (direct construction, tests).
 
-    The ``modulo.core`` SSRF + injection guards are bound by the composition root
+    The ``farna.core`` SSRF + injection guards are bound by the composition root
     (``connector_hub``) — never by the connector itself — so this stub performs no
     enforcement. Directly-constructed connectors that need real guarding must
     inject a real ``SecurityGuard``.
@@ -625,7 +625,7 @@ class RestConnector(ConnectorBase):
     dict (see the module docstring for both shapes). ``transport`` and
     ``ssrf_validator`` are test seams — production callers pass neither.
     ``security_guard`` is the injection/SSRF port; the composition root wires the
-    production ``modulo.core`` implementation. ``redis_client`` and ``tenant_id``
+    production ``farna.core`` implementation. ``redis_client`` and ``tenant_id``
     enable the shared per-destination budget (FAR-439): a Redis-backed atomic
     bucket keyed per <tenant_id, host+path> is enforced across workers, else the
     connector-local bucket is used.
@@ -952,7 +952,7 @@ class RestConnector(ConnectorBase):
         (single-worker dev — no fleet to multiply), and so tests that pre-seed
         ``_rate_buckets`` keep working. When a ``redis_client`` IS wired the
         shared limiter fails closed on a Redis outage rather than using this
-        store (see :class:`modulo.connectors._rate_bucket.PerDestinationRateLimiter`).
+        store (see :class:`farna.connectors._rate_bucket.PerDestinationRateLimiter`).
         """
         if self._rate_limiter is None:
             self._rate_limiter = PerDestinationRateLimiter(

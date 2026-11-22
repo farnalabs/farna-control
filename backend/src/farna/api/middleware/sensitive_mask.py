@@ -57,7 +57,7 @@ _log = logging.getLogger(__name__)
 # (``_SENSITIVE_KEY_PATTERNS`` / ``is_sensitive_key`` / ``is_sensitive_env_key``)
 # and the shared raw patterns (``SECRET_VALUE_PATTERNS``,
 # ``mask_secret_values_in_text``, ``GITHUB_PAT_PATTERN``, ``AWS_ACCESS_KEY_PATTERN``)
-# are all defined ONCE in :mod:`modulo.core.secret_patterns` (the single source of
+# are all defined ONCE in :mod:`farna.core.secret_patterns` (the single source of
 # truth) so the two modules can never drift. The API layer (runs.py) imports the
 # value patterns from there directly. They live in ``core`` so the core redaction
 # and export sites (error_codes.py, node_runner.py, soc2.py,
@@ -572,7 +572,7 @@ def resolve_and_reject_mask_sentinels(
     counterpart — is refused with 422 instead of being silently dropped.
 
     Two detection passes, one shared substring rule
-    (:func:`modulo.core.graph_validator.mask_sentinel.find_mask_sentinel_values`,
+    (:func:`farna.core.graph_validator.mask_sentinel.find_mask_sentinel_values`,
     the ``SENSITIVE_VALUE_MASK in value`` primitive):
 
     - the RESOLVED graph is scanned for sentinels that SURVIVED the merge

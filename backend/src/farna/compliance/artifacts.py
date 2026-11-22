@@ -2,8 +2,8 @@
 
 Every mapping row names the artefact type that evidences it. This module is the
 single vocabulary for those types, shared by the mapping-pack loader
-(:mod:`modulo.compliance.pack`) and the per-instance evidence index
-(:mod:`modulo.compliance.evidence_index`).
+(:mod:`farna.compliance.pack`) and the per-instance evidence index
+(:mod:`farna.compliance.evidence_index`).
 
 Two classes of artefact:
 

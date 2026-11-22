@@ -508,7 +508,7 @@ def _verify_export(meta: dict[str, Any], records: list[dict[str, Any]]) -> bool:
 )
 @click.pass_context
 def cli(ctx: click.Context, token: str | None) -> None:
-    """Modulo migration tool — export, import, and verify org data."""
+    """Farna Control migration tool — export, import, and verify org data."""
     ctx.ensure_object(dict)
     admin_id = _resolve_admin_auth(token)
     if admin_id is None:
