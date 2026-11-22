@@ -77,7 +77,7 @@ The schema validator mode is resolved from (in priority order):
 1. `organisations.settings_json["schema_validator_mode"]` (per-org)
 2. `system_config` row with key `"schema_validator_mode"`
    (instance-wide)
-3. `MODULO_SCHEMA_VALIDATOR_MODE` env var (first-boot seed only)
+3. `FARNA_CONTROL_SCHEMA_VALIDATOR_MODE` env var (first-boot seed only)
 4. `"lenient"` (hard default)
 
 To set the mode, write the value directly. No MCP tool exposes this key,
