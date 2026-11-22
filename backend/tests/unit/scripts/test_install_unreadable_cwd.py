@@ -71,10 +71,6 @@ _ENV_KEYS_TO_DROP = (
     "FARNA_CONTROL_LEGACY_SHIM_PATH",
     "FARNA_CONTROL_LEGACY_INSTALL_ROOT",
     "FARNA_CONTROL_LEGACY_USER_SHIM",
-    "FARNA_CONTROL_INSTALL_ROOT",
-    "FARNA_CONTROL_BIN_DIR",
-    "FARNA_CONTROL_DATA_DIR",
-    "FARNA_CONTROL_LEGACY_SHIM_PATH",
 )
 
 
@@ -327,8 +323,8 @@ def test_install_sh_anchors_every_path_override() -> None:
 @pytest.mark.parametrize(
     "historical",
     [
-        '  local legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-${FARNA_CONTROL_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}"',
-        '  DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${FARNA_CONTROL_DATA_DIR}}"',
+        '  local legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}"',
+        '  DATA_DIR="${FARNA_CONTROL_DATA_DIR}"',
         '  STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/farna-control"',
     ],
 )
