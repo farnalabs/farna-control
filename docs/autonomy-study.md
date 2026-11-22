@@ -140,10 +140,14 @@ within tolerance of human-only, the progressive-autonomy claim is defensible.
 
 - **Event stream** (real-time, append-only, tamper-evident): `audit_events`
   carrying `run.autonomy_level_applied` + existing `pipeline.autonomy_level_changed`.
-- **Dimensioned history** (survives 90-day run purge, ADR 020): `run_daily_facts`.
-  Recommended next-step column: `autonomy_level` (nullable, sourced from the
-  event stream at fact-write time) so the analytics query surface can bucket by
-  autonomy directly without re-joining the audit chain.
+- **Dimensioned history** (survives 90-day run purge, ADR 020): `run_daily_facts`
+  carries the nullable `autonomy_level` column (present in the baseline schema).
+  The fact writer populates it at write time (`_fact_autonomy_level` in
+  `core/analytics/__init__.py`) from the run's most recent
+  `run.autonomy_level_applied` event, so the analytics query surface can bucket
+  by autonomy directly without re-joining the audit chain. It stays NULL for a
+  run with no autonomy event (no HITL gate, or facts written before the column
+  existed).
 - **Outcome join** (roadmap): a `defect_escape` flag derivable from
   reverted/fixed runs correlated to their originating autonomous run.
 
@@ -151,9 +155,12 @@ within tolerance of human-only, the progressive-autonomy claim is defensible.
 
 ## 4. Initial longitudinal view (HONEST)
 
-> ⚠️ **Data-availability disclaimer.** At implementation time the
-> `run.autonomy_level_applied` event did **not** exist, so no real
-> per-run autonomy history has been collected. The figures below are
+> ⚠️ **Data-availability disclaimer.** The
+> `run.autonomy_level_applied` event now exists and is emitted on every HITL
+> gate evaluation (`core/run_context/autonomy_telemetry.py`), and it is already
+> copied onto `run_daily_facts.autonomy_level` at fact-write time. What is still
+> missing is a published collection window: no measured per-run autonomy history
+> has been collated into this document. The figures below are therefore
 > **illustrative placeholders** showing the *shape* of the report, computed
 > from the *current* static config signals we *do* have (pipeline
 > `default_autonomy_level` distribution). They are **not** measured outcome
@@ -164,7 +171,9 @@ within tolerance of human-only, the progressive-autonomy claim is defensible.
 From the autonomy-resolution model (`core/run_context/autonomy.py`) and the
 config-change audit event, the *configured* autonomy distribution across an
 org is observable *now* via `pipeline.autonomy_level_changed`. The *applied*
-distribution requires the new event and a collection window.
+distribution is recorded per run by `run.autonomy_level_applied` and carried on
+`run_daily_facts.autonomy_level`; turning that into the trend below still needs
+a collection window of live runs.
 
 ### 4.2 Illustrative longitudinal table (PLACEHOLDER – not real data)
 
@@ -174,10 +183,10 @@ distribution requires the new event and a collection window.
 | W2 | _placeholder_ | _placeholder_ | _placeholder_ | _placeholder_ |
 | W3 | _placeholder_ | _placeholder_ | _placeholder_ | _placeholder_ |
 
-*These cells will be populated once ≥1 collection window of
-`run.autonomy_level_applied` events exists. The collection is fail-open and
-zero-dependency, so backlog filling begins the moment this ships to an
-environment with live runs.*
+*These cells are populated once a collection window over
+`run.autonomy_level_applied` is collated and published here. The emission is
+fail-open and zero-dependency, so the history accrues from the first live run;
+this document simply has not published a window yet.*
 
 ### 4.3 What "good" looks like (targets, not measurements)
 
