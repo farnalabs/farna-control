@@ -22,7 +22,7 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -5522,7 +5522,7 @@ def _selected_sub_graph_nodes(
     return sub_nodes, {str(n.get("id")) for n in sub_nodes}
 
 
-def _sub_graph_edges(edge_rows: list[Any], node_ids: set[str]) -> list[dict[str, Any]]:
+def _sub_graph_edges(edge_rows: Sequence[Any], node_ids: set[str]) -> list[dict[str, Any]]:
     """Serialise the persisted edges whose endpoints are both in *node_ids*."""
     return [
         {
@@ -6661,7 +6661,7 @@ async def _finalize_locked_graph_save(
 
 
 def _saved_graph_response(
-    saved: tuple[list[PipelineGraphNode], list[PipelineGraphEdge], list[GraphValidationIssue]] | None,
+    saved: tuple[list[dict[str, Any]], list[Any], list[GraphValidationIssue]] | None,
 ) -> PipelineGraphResponse:
     """Unpack a ``_save_locked_graph`` result into the graph response.
 
