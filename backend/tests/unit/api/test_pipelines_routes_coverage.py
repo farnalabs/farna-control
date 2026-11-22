@@ -2832,3 +2832,95 @@ def test_save_edit_snapshot_lock_busy_maps_503(client: tuple[TestClient, AsyncMo
     detail = resp.json()["detail"]
     assert "snapshot lock unavailable" in detail.lower(), detail
     assert "retry" in detail.lower(), detail
+
+
+# ---------------------------------------------------------------------------
+# Graph-replacement decomposition helpers (harden/w2-pipelines)
+# ---------------------------------------------------------------------------
+
+
+def test_coerce_optional_uuid_returns_none_for_malformed_value() -> None:
+    """A non-UUID agent id is dropped rather than raising (best-effort coercion)."""
+    from farna.api.routes.pipelines import _coerce_optional_uuid
+
+    assert _coerce_optional_uuid("not-a-uuid") is None
+    assert _coerce_optional_uuid(12345) is None
+
+
+async def test_resolve_node_providers_returns_empty_when_no_valid_agent_ids() -> None:
+    """Nodes with no/absent/malformed agent ids short-circuit to an empty map."""
+    from typing import Any
+
+    from farna.api.routes.pipelines import _resolve_node_providers
+
+    nodes: list[dict[str, Any]] = [
+        {"id": "n1", "agent_id": None},
+        {"id": "n2", "agent_id": "not-a-uuid"},
+        {"id": "n3"},
+    ]
+    result = await _resolve_node_providers(AsyncMock(), nodes, organisation_id=_ORG_ID)
+    assert result == {}
+
+
+async def test_replace_graph_under_lock_returns_none_when_pipeline_row_gone() -> None:
+    """When the row vanished under the lock ``replace_pipeline_graph`` returns None.
+
+    The helper must pass ``(None, [])`` straight back so the endpoint's
+    existing 404 mapping runs, rather than attempting save validation.
+    """
+    from farna.api.routes.pipelines import _replace_graph_under_lock
+
+    principal = MagicMock()
+    principal.organisation_id = _ORG_ID
+    principal.account_id = _USER_ID
+    principal.org_role = "owner"
+    principal.key_grants = []
+    req = MagicMock()
+    req.nodes = []
+
+    with (
+        patch(f"{_PREFIX}_set_rls_context", new_callable=AsyncMock),
+        patch(f"{_PREFIX}_reapply_team_gate_inside_mutation_txn", new_callable=AsyncMock),
+        patch(f"{_PREFIX}_get_pipeline_or_404", new_callable=AsyncMock, return_value=_make_pipeline()),
+        patch(f"{_PREFIX}merge_masked_graph_nodes", return_value=[]),
+        patch(f"{_PREFIX}extract_connector_bindings", return_value=[]),
+        patch(f"{_PREFIX}_enforce_connector_team_bindings", new_callable=AsyncMock),
+        patch(f"{_PREFIX}_resolve_graph_references", new_callable=AsyncMock, return_value=(None, {})),
+        patch(f"{_PREFIX}_sync_agent_row_commands", new_callable=AsyncMock),
+        patch(f"{_PREFIX}replace_pipeline_graph", new_callable=AsyncMock, return_value=None),
+    ):
+        graph, issues = await _replace_graph_under_lock(
+            _make_session(),
+            pipeline_id=_PIPELINE_ID,
+            principal=principal,
+            req=req,
+            node_data=[],
+            edge_data=[],
+        )
+
+    assert graph is None
+    assert issues == []
+
+
+def test_restore_manual_node_labels_from_snapshot_when_target_has_none() -> None:
+    """A reverted node with no label inherits the snapshot node's label."""
+    from farna.api.routes.pipelines import _restore_manual_node
+
+    target: dict[str, object] = {}
+    snapshot_node = {"node_type": "manual", "output_schema_id": "schema-1", "label": "Human review"}
+    _restore_manual_node(target, snapshot_node, uuid.uuid4())
+
+    assert target["node_type"] == "manual"
+    assert target["label"] == "Human review"
+
+
+def test_restore_manual_node_falls_back_to_generated_label() -> None:
+    """With no label on either side the helper mints ``Manual <node_id>``."""
+    from farna.api.routes.pipelines import _restore_manual_node
+
+    node_id = uuid.uuid4()
+    target: dict[str, object] = {}
+    snapshot_node = {"node_type": "manual", "output_schema_id": "schema-1"}
+    _restore_manual_node(target, snapshot_node, node_id)
+
+    assert target["label"] == f"Manual {node_id}"

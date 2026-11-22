@@ -3761,8 +3761,6 @@ async def _replace_graph_under_lock(
     req: PipelineGraphUpdate,
     node_data: list[dict[str, Any]],
     edge_data: list[GraphEdgeData],
-    validator_graph: dict[str, Any],
-    connector_bindings: list[dict[str, Any]],
 ) -> tuple[Any, list[GraphValidationIssue]]:
     """Run the locked full-graph replacement inside the caller's transaction.
 
@@ -3867,7 +3865,7 @@ async def replace_pipeline_graph_endpoint(
     # "privileged" for weakening by design, and equivalent weakening remains
     # reachable via update_pipeline / convert_to_agent / revert_to_manual, so an
     # admin-only gate would only block the operator's primary graph-edit path.
-    node_data, edge_data, validator_graph, connector_bindings = _prepare_graph_write(req)
+    node_data, edge_data, _validator_graph, _connector_bindings = _prepare_graph_write(req)
 
     try:
         async with session.begin():
@@ -3878,8 +3876,6 @@ async def replace_pipeline_graph_endpoint(
                 req=req,
                 node_data=node_data,
                 edge_data=edge_data,
-                validator_graph=validator_graph,
-                connector_bindings=connector_bindings,
             )
     except (HitlReviewWeakeningDenied, GuardrailBindingStripDenied) as exc:
         await _handle_graph_write_denials(
