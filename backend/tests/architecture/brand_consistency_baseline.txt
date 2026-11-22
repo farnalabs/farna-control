@@ -788,6 +788,7 @@ backend/tests/unit/api/test_library_collection.py	39
 backend/tests/unit/api/test_library_endpoint.py	5
 backend/tests/unit/api/test_library_primitive_masking.py	2
 backend/tests/unit/api/test_library_routes.py	18
+backend/tests/unit/api/test_library_templates_read_any_credential.py	5
 backend/tests/unit/api/test_lifecycle_maps_routes.py	4
 backend/tests/unit/api/test_main.py	1
 backend/tests/unit/api/test_main_coverage_gaps.py	44

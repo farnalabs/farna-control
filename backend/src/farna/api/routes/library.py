@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from farna.api.constants import MSG_FEATURE_NOT_AVAILABLE, MSG_RESOURCE_ALREADY_EXISTS
+from farna.api.constants import MSG_FEATURE_NOT_AVAILABLE, MSG_PRIMITIVE_NOT_FOUND, MSG_RESOURCE_ALREADY_EXISTS
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
 from farna.api.dependencies import (
     get_db_session,
@@ -34,7 +34,9 @@ from farna.core.audit_coverage import audited
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
 from farna.core.library_service import (
-    MODULO_ORG_ID,
+    MODULO_ORG_ID as _BUILTIN_ORG_ID,
+)
+from farna.core.library_service import (
     BuiltinPrimitiveReadOnlyError,
     _bump_version,
     copy_to_adapt,
@@ -142,6 +144,7 @@ _CODE_LIBRARY_SEARCH = "library.search"
 _GRANT_LIBRARY_SEARCH_IN_DEV = "library.search.in_dev"
 _VISIBILITY_PATTERN = "^(org|team)$"
 _CODE_LIBRARY_WRITE = "library.write"
+_BUILTIN_SOURCE = "modulo"
 
 _MSG_LIBRARY_FEATURE_TEMPORARILY_UNAVAILABLE = "The library feature is temporarily unavailable due to a database issue. Please retry."
 _CODE_LIBRARY_MANAGE = "library.manage"
@@ -184,21 +187,20 @@ def _primitive_visible_to(
     """Return whether *primitive* is readable by the caller (FAR-2682).
 
     Two kinds of primitive are visible: a row owned by the caller's own
-    organisation, and an in-code built-in (``source="modulo"``) primitive,
-    which lives in the fixed :data:`MODULO_ORG_ID` sentinel organisation and is
-    "visible to every organisation" by design (ADR 032 §4). The resolver
-    (:func:`get_primitive`) already applies both, so this is defence-in-depth:
-    on a deployment whose connection role bypasses RLS (BYPASSRLS / break-glass)
-    an org-scoped lookup can surface a foreign row, and a by-id read must 404 it
-    rather than serialise it. Same terms as the FAR-2681 composite-template
-    guard.
+    organisation, and an in-code built-in primitive, which lives in the fixed
+    sentinel organisation and is "visible to every organisation" by design
+    (ADR 032 §4). The resolver (:func:`get_primitive`) already applies both, so
+    this is defence-in-depth: on a deployment whose connection role bypasses RLS
+    (BYPASSRLS / break-glass) an org-scoped lookup can surface a foreign row, and
+    a by-id read must 404 it rather than serialise it. Same terms as the
+    FAR-2681 composite-template guard.
 
     A ``TypeGuard`` so a true result also narrows the ORM row for the caller.
     """
     if primitive is None:
         return False
     owner = primitive.organisation_id
-    return owner in (principal.organisation_id, MODULO_ORG_ID)
+    return owner in (principal.organisation_id, _BUILTIN_ORG_ID)
 
 
 async def _require_readable_primitive(
@@ -223,7 +225,7 @@ async def _require_readable_primitive(
         principal,
         dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
     ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Primitive not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PRIMITIVE_NOT_FOUND)
     return primitive
 
 
@@ -237,7 +239,7 @@ def _reject_lifecycle_map_primitive_access(
     if primitive is not None and primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE and not _can_access_lifecycle_map_primitives(principal, dev_mode=dev_mode):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Primitive not found",
+            detail=MSG_PRIMITIVE_NOT_FOUND,
         )
 
 
@@ -266,7 +268,7 @@ async def _require_lifecycle_map_primitive_access(
             dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
         )
     ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Primitive not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PRIMITIVE_NOT_FOUND)
 
 
 def _filter_lifecycle_map_types(
@@ -366,8 +368,8 @@ def _require_organisation_id(principal: TenantPrincipal) -> uuid.UUID:
 
 def _trust_tier_for(source: str, verified: bool | None) -> str | None:
     """Compute the trust tier label from a primitive's provenance."""
-    if source == "modulo":
-        return "modulo"
+    if source == _BUILTIN_SOURCE:
+        return _BUILTIN_SOURCE
     if source == "registry" and verified is True:
         return "green"
     if source == "registry":
