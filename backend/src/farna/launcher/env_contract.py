@@ -9,16 +9,15 @@ The names live here because three separate incidents were the same defect: one
 side of a producer/consumer boundary was renamed and the other was not, so a
 value was written and never read.
 
-* FAR-2554 - the native launchers exported ``MODULO_BUNDLED_BIN_DIR`` while the
-  resolver read ``FARNA_CONTROL_BUNDLED_BIN_DIR``, so the boot fell through to a
-  directory no bundle produces.
+* FAR-2554 - the native launchers exported the pre-rebrand bin-dir name while the
+  resolver read the canonical ``FARNA_CONTROL_BUNDLED_BIN_DIR``, so the boot fell
+  through to a directory no bundle produces.
 * FAR-2560/FAR-2561 - two ``APP_DB_NAME`` constants, so the app connected to a
   database that first boot never created.
-* FAR-2563 - the macOS bundle launcher exported the pre-rebrand
-  ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST`` spelling and the Windows
-  bundled launcher exported NEITHER name, while :mod:`farna.api.main` read
-  ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST``. On macOS the
-  built SPA was therefore never mounted
+* FAR-2563 - the macOS bundle launcher exported the pre-rebrand SPA-serving
+  spelling and the Windows bundled launcher exported NEITHER name, while
+  :mod:`farna.api.main` read the canonical ``FARNA_CONTROL_SERVE_SPA`` /
+  ``FARNA_CONTROL_FRONTEND_DIST``. On macOS the built SPA was never mounted
   and ``/`` answered 404; on Windows single-port SPA serving did not exist at
   all, and this module's Windows producer adds it.
   ``.github/workflows/windows-artifacts.yml`` compiles that launcher on every

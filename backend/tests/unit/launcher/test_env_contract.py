@@ -4,14 +4,13 @@ Three separate incidents were one defect: a service-contract environment
 variable was renamed on one side of the producer/consumer boundary and not the
 other, so the value was written and never read.
 
-* FAR-2554 - ``MODULO_BUNDLED_BIN_DIR`` exported while the resolver read
-  ``FARNA_CONTROL_BUNDLED_BIN_DIR``, so the boot fell through to a directory no
-  bundle produces.
+* FAR-2554 - the pre-rebrand bin-dir name exported while the resolver read the
+  canonical ``FARNA_CONTROL_BUNDLED_BIN_DIR``, so the boot fell through to a
+  directory no bundle produces.
 * FAR-2560/2561 - two ``APP_DB_NAME`` constants.
-* FAR-2563 - the bundle launchers exported ``MODULO_SERVE_SPA`` /
-  ``MODULO_FRONTEND_DIST`` while ``farna.api.main`` read
-  ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST``, so the built SPA
-  was never mounted.
+* FAR-2563 - the bundle launchers exported the pre-rebrand SPA-serving spelling
+  while ``farna.api.main`` read the canonical ``FARNA_CONTROL_SERVE_SPA`` /
+  ``FARNA_CONTROL_FRONTEND_DIST``, so the built SPA was never mounted.
 
 The names live in one registry (:mod:`farna.launcher.env_contract`) and this
 module is the structural gate over it. There is ONE namespace now: a service
