@@ -377,7 +377,13 @@ async def my_teams_endpoint(
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[MyTeamResponse]:
-    """List the current user's team memberships with team names (profile "My Teams")."""
+    """List the current user's team memberships with team names (profile "My Teams").
+
+    Deliberate JWT-only route (FAR-2682): "my teams" is the calling account's
+    membership list. An ``mk_`` org API key is a machine identity with no
+    memberships, and the machine-readable team list is the admin surface. Do
+    not widen this in a credential sweep.
+    """
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)

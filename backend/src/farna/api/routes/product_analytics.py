@@ -246,7 +246,14 @@ async def get_product_analytics(
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> ConsentResponse:
-    """Read the current product analytics consent state and instance switch."""
+    """Read the current product analytics consent state and instance switch.
+
+    Deliberate JWT-only route (FAR-2682): this is the browser consent
+    preference of the logged-in member/org (its mutation sibling is on the
+    ``EXEMPT`` inventory as self-service consent). An ``mk_`` org API key is a
+    machine identity that cannot give or hold consent; do not widen this.
+    """
+
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)

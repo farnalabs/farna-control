@@ -12,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.api.constants import MSG_INTERNAL_SERVER_ERROR
 from farna.api.db_error_handling import handle_db_errors
-from farna.api.dependencies import get_db_session, require_permission
+from farna.api.dependencies import (
+    get_db_session,
+    require_permission,
+    require_permission_any_credential,
+)
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
@@ -34,6 +38,18 @@ from farna.db.rls import set_rls_org, set_rls_user_context
 
 _CODE_TEMPLATES_LIST_TEMPLATES_ENDPOINT = "templates.list_templates_endpoint"
 _CODE_TEMPLATES_CREATE_PIPELINE_TEMPLATE = "templates.create_pipeline_from_template_endpoint"
+
+# FAR-2682: browsing the pipeline-template catalogue is a pipeline read. This
+# router's write route already gates on ``pipeline.create``, so the read takes
+# the pipeline list's viewer-level key rather than a new one — and the
+# any-credential variant, because an ``mk_`` org API key already lists
+# pipelines (``GET /api/v1/pipelines``, ``pipeline.list``) and reads a pipeline
+# graph (``pipeline.graph.read``). A template is that same agents/nodes/edges
+# blueprint; refusing the key here made it the one pipeline-shaped catalogue a
+# permitted key could not read. The response carries only a preview skeleton
+# plus counts — no prompts, node ``env_vars`` or other credential-bearing
+# fields.
+_PERM_TEMPLATES_LIST = "pipeline.list"
 
 
 logger = logging.getLogger(__name__)
@@ -99,8 +115,16 @@ async def list_templates_endpoint(
     category: str | None = None,
     search: str | None = None,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_PERM_TEMPLATES_LIST),
 ) -> TemplateListResponse:
+    """List the pipeline-template catalogue (FAR-2682: JWT or ``mk_`` org API key).
+
+    The permission floor is ``pipeline.list`` (viewer) — this router's write
+    path already requires ``pipeline.create`` — and the any-credential variant
+    matches the pipeline list / graph reads an ``mk_`` key can already make.
+    The org boundary is the RLS org context set below (the org-scoped catalog
+    has no separate explicit clamp, unchanged by this ticket).
+    """
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)

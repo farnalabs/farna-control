@@ -28,8 +28,11 @@ from fastapi.testclient import TestClient
 from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
 from farna.api.middleware.sensitive_mask import SENSITIVE_VALUE_MASK
-from farna.auth.dependencies import get_current_user
-from farna.auth.jwt import AuthenticatedPrincipal
+from farna.auth.dependencies import (
+    get_current_tenant_user_or_api_key,
+    get_current_user,
+)
+from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.db.crud.base import PageResult
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
@@ -63,6 +66,14 @@ def client() -> TestClient:
     app.dependency_overrides[get_db_session] = lambda: mock_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
+        username="testuser",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="admin",
+    )
+    # FAR-2682: the library READ routes resolve via the any-credential
+    # dependency; both credential stacks share this admin principal.
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(
         username="testuser",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,

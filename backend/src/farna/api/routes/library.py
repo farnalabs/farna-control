@@ -6,7 +6,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, Self, cast
+from typing import Any, Literal, Self, TypeGuard, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.api.constants import MSG_FEATURE_NOT_AVAILABLE, MSG_RESOURCE_ALREADY_EXISTS
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
-from farna.api.dependencies import get_db_session, require_in_dev_operator, require_permission
+from farna.api.dependencies import (
+    get_db_session,
+    require_in_dev_operator,
+    require_permission,
+    require_permission_any_credential,
+)
 from farna.api.middleware.sensitive_mask import mask_pipeline_graph_node, resolve_and_reject_mask_sentinels
 from farna.api.models.team_visibility import TeamVisibilityMixin
 from farna.api.routes.lifecycle_maps import LifecycleMapResponse
@@ -29,6 +34,7 @@ from farna.core.audit_coverage import audited
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
 from farna.core.library_service import (
+    MODULO_ORG_ID,
     BuiltinPrimitiveReadOnlyError,
     _bump_version,
     copy_to_adapt,
@@ -169,6 +175,56 @@ def _can_access_lifecycle_map_primitives(principal: TenantPrincipal, *, dev_mode
     if ORG_ROLE_HIERARCHY.get(principal.org_role, -1) < ORG_ROLE_HIERARCHY["operator"]:
         return False
     return grants_permit(principal.key_grants, _GRANT_LIBRARY_SEARCH_IN_DEV)
+
+
+def _primitive_visible_to(
+    primitive: LibraryPrimitive | None,
+    principal: TenantPrincipal,
+) -> TypeGuard[LibraryPrimitive]:
+    """Return whether *primitive* is readable by the caller (FAR-2682).
+
+    Two kinds of primitive are visible: a row owned by the caller's own
+    organisation, and an in-code built-in (``source="modulo"``) primitive,
+    which lives in the fixed :data:`MODULO_ORG_ID` sentinel organisation and is
+    "visible to every organisation" by design (ADR 032 §4). The resolver
+    (:func:`get_primitive`) already applies both, so this is defence-in-depth:
+    on a deployment whose connection role bypasses RLS (BYPASSRLS / break-glass)
+    an org-scoped lookup can surface a foreign row, and a by-id read must 404 it
+    rather than serialise it. Same terms as the FAR-2681 composite-template
+    guard.
+
+    A ``TypeGuard`` so a true result also narrows the ORM row for the caller.
+    """
+    if primitive is None:
+        return False
+    owner = primitive.organisation_id
+    return owner in (principal.organisation_id, MODULO_ORG_ID)
+
+
+async def _require_readable_primitive(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    primitive_id: uuid.UUID,
+) -> LibraryPrimitive:
+    """Resolve *primitive_id* for a READ, or 404 (FAR-2682).
+
+    A read that is refused must be indistinguishable from a read of a missing
+    id: absent, foreign-org and lifecycle-map-hidden primitives all answer 404
+    with the same message, so the route never reveals that a primitive exists
+    in another tenant.
+    """
+    primitive = await get_primitive(session, principal.organisation_id, primitive_id)
+    if not _primitive_visible_to(primitive, principal):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Primitive {primitive_id} not found",
+        )
+    if primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE and not _can_access_lifecycle_map_primitives(
+        principal,
+        dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Primitive not found")
+    return primitive
 
 
 def _reject_lifecycle_map_primitive_access(
@@ -916,17 +972,33 @@ async def ping() -> dict[str, bool]:
 async def get_library_primitive_endpoint(
     primitive_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(_CODE_LIBRARY_SEARCH),
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> LibraryPrimitiveResponse:
+    """Read one library primitive (FAR-2682: JWT or ``mk_`` org API key).
+
+    The credential is any-credential because the data a permitted key can
+    already reach through another route includes this one: a ``composite``
+    primitive's ``content_json`` is a masked sub-pipeline graph, and the
+    composite-template by-id read (``GET /api/v1/composite-templates/{id}``)
+    accepts the same key on the same viewer-level read (FAR-2681). The
+    permission assertion is unchanged — ``library.search`` still resolves to
+    ``viewer`` and the kill-switch / grant-set legs still apply.
+
+    The request-time visibility guard (:func:`_primitive_visible_to`) is
+    defence-in-depth for a deployment running without RLS.
+    """
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
             primitive = await get_primitive(session, principal.organisation_id, primitive_id)
             if primitive is not None and (
-                primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE
-                and not _can_access_lifecycle_map_primitives(
-                    principal,
-                    dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                not _primitive_visible_to(primitive, principal)
+                or (
+                    primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE
+                    and not _can_access_lifecycle_map_primitives(
+                        principal,
+                        dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                    )
                 )
             ):
                 primitive = None
@@ -1791,12 +1863,20 @@ async def list_ratings_endpoint(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> RatingListResponse:
+    """List a primitive's ratings (FAR-2682: JWT or ``mk_`` org API key).
+
+    The same viewer-level ``library.search`` floor as the primitive read, and
+    the same any-credential pair, because the primitive response already carries
+    ``average_rating`` / ``review_count`` for the same id. The guard makes an
+    unknown or foreign id a 404 (previously a 200 with an empty page), so a
+    ratings read can never confirm that a primitive exists in another tenant.
+    """
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
-            await _require_lifecycle_map_primitive_access(session, principal, primitive_id)
+            await _require_readable_primitive(session, principal, primitive_id)
             result = await list_ratings_for_primitive(session, primitive_id, page=page, page_size=page_size)
     except IntegrityError:
         _log.exception("library.list_ratings_endpoint")
@@ -1818,12 +1898,18 @@ async def list_ratings_endpoint(
 async def get_rating_aggregate_endpoint(
     primitive_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> RatingAggregateResponse:
+    """Read a primitive's rating aggregate (FAR-2682: JWT or ``mk_`` org API key).
+
+    Same any-credential pair and viewer-level floor as the ratings list; the
+    lifecycle-map and cross-tenant hide is shared through
+    :func:`_require_readable_primitive`.
+    """
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
-            await _require_lifecycle_map_primitive_access(session, principal, primitive_id)
+            await _require_readable_primitive(session, principal, primitive_id)
             avg, count = await get_rating_aggregate(session, primitive_id)
     except IntegrityError:
         _log.exception("library.get_rating_aggregate_endpoint")
