@@ -201,12 +201,12 @@ const LEVEL_DEFS: LevelDef[] = [
     countLabelKey: 'views.GovernanceStackView.level_tools_count',
     gateKey: 'views.GovernanceStackView.gate_tools',
     featureName: 'plugin_management',
-    // FAR-2663: plugin_management is a Team-tier flag in the registry, and the
-    // plugin API returns 402 on a Community plan. The Tools level used to
-    // declare 'community', which `isAtMinimumTier` always satisfies, so this
-    // level stayed open while its management page locked. Agree with the
-    // registry (the entitlement restructure is FAR-2658, not anticipated here).
-    requiredTier: 'team',
+    // This level is the CONNECTORS surface ("Tools" -> /admin/connectors), not
+    // the Plugins page: connecting external tools is a first-run requirement,
+    // so it stays open on Community as FAR-2604 requires. `plugin_management`
+    // is broader than the pages it gates (it is Team-tier); FAR-2665 narrows
+    // it. The /admin/connectors route and API carry no feature gate.
+    requiredTier: 'community',
     links: [{ to: '/admin/connectors', labelKey: 'views.GovernanceStackView.level_tools_link' }],
   },
   {
