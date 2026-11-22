@@ -191,6 +191,7 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
         ".env.example",
         "quickstart.md",
         "init-env.sh",
+        "compose-restore.sh",
         "SHA256SUMS",
     }
     actual_files = {p.name for p in extracted_dir.iterdir()}
@@ -199,14 +200,14 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
     # Verify SHA256SUMS integrity over the files
     sums_file = extracted_dir / "SHA256SUMS"
     sums_lines = sums_file.read_text(encoding="utf-8").strip().splitlines()
-    assert len(sums_lines) == 5
+    assert len(sums_lines) == 6
 
     sums_dict: dict[str, str] = {}
     for line in sums_lines:
         digest, filename = line.split()
         sums_dict[filename] = digest
 
-    for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md", "init-env.sh"):
+    for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md", "init-env.sh", "compose-restore.sh"):
         assert name in sums_dict
         file_bytes = (extracted_dir / name).read_bytes()
         actual_digest = hashlib.sha256(file_bytes).hexdigest()
@@ -380,6 +381,7 @@ def test_bundled_init_env_ships_executable(tmp_path: Path):
         members = {member.name: member for member in tar.getmembers()}
 
     assert members["init-env.sh"].mode & 0o111, "init-env.sh must be executable in the tarball"
+    assert members["compose-restore.sh"].mode & 0o111, "compose-restore.sh must be executable in the tarball"
     for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md"):
         assert not members[name].mode & 0o111, f"{name} should not be executable"
 
