@@ -11,6 +11,13 @@ _PLACEHOLDER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _PLACEHOLDER_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 _PLACEHOLDER_KEY_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 _API_KEY = "mk_testprefix_testsecretkey1234567890abc"
+#: Refill rate for the rate-limit registries under test. Effectively zero: the
+#: tests assert on ``burst`` exhaustion, so a non-trivial rate lets a >1 s
+#: scheduling stall (memory-bound shard, contended runner) refill a token and
+#: flip an "exhausted" assertion to "allowed". Mirrors the same fix in
+#: ``test_mcp_hitl_decision_budget.py`` so the whole MCP rate-limit test set is
+#: deterministic.
+_REFILL_RATE = 1e-9
 
 
 def _make_session_context(session: AsyncMock) -> AsyncMock:
@@ -133,7 +140,7 @@ class TestTriggerPipelineClientKey:
 class TestTriggerPipelineRateAllowed(_AuthContext):
     @patch(
         "farna.api.mcp_server._trigger_pipeline_limiter",
-        new_callable=lambda: TokenBucketRegistry(rate=1.0, burst=3),
+        new_callable=lambda: TokenBucketRegistry(rate=_REFILL_RATE, burst=3),
     )
     async def test_allowed_within_burst(self, limiter: TokenBucketRegistry) -> None:
         from farna.api.mcp_server import _trigger_pipeline_rate_allowed
@@ -145,7 +152,7 @@ class TestTriggerPipelineRateAllowed(_AuthContext):
 
     @patch(
         "farna.api.mcp_server._trigger_pipeline_limiter",
-        new_callable=lambda: TokenBucketRegistry(rate=1.0, burst=1),
+        new_callable=lambda: TokenBucketRegistry(rate=_REFILL_RATE, burst=1),
     )
     async def test_denied_when_exhausted(self, limiter: TokenBucketRegistry) -> None:
         from farna.api.mcp_server import _trigger_pipeline_client_key, _trigger_pipeline_rate_allowed
@@ -158,7 +165,7 @@ class TestTriggerPipelineRateAllowed(_AuthContext):
 class TestTriggerPipelineToolRateLimit(_AuthContext):
     @patch(
         "farna.api.mcp_server._trigger_pipeline_limiter",
-        new_callable=lambda: TokenBucketRegistry(rate=1.0, burst=1),
+        new_callable=lambda: TokenBucketRegistry(rate=_REFILL_RATE, burst=1),
     )
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     async def test_returns_rate_limited_when_bucket_exhausted(
@@ -187,7 +194,7 @@ class TestTriggerPipelineToolRateLimit(_AuthContext):
 
     @patch(
         "farna.api.mcp_server._trigger_pipeline_limiter",
-        new_callable=lambda: TokenBucketRegistry(rate=1.0, burst=1),
+        new_callable=lambda: TokenBucketRegistry(rate=_REFILL_RATE, burst=1),
     )
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     @patch("farna.api.mcp_server.dispatch_run")
