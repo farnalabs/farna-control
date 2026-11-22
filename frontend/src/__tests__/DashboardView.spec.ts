@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { getAccessToken } from '../lib/api/client'
@@ -324,6 +324,36 @@ describe('DashboardView', () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
     expect(wrapper.text()).not.toContain('Team Breakdown')
+  })
+
+  // FAR-2664: the token-spend card must never lead to a silent dashboard
+  // bounce. Costs is Team + admin; a below-tier admin follows the link into the
+  // router guard's locked page, and a caller whose ROLE the route refuses goes
+  // straight to the same locked page with reason=role.
+  describe('token-spend card destination (FAR-2664)', () => {
+    afterEach(() => {
+      vi.mocked(getAccessToken).mockReturnValue('mock-token')
+    })
+
+    it('links an admin straight at Costs', async () => {
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('admin'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
+
+    it('sends a role the Costs route refuses to the honest lock, not the Dashboard', async () => {
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('from=%2Fadmin%2Fcosts')
+      expect(href).toContain('reason=role')
+      expect(href).not.toBe('/')
+    })
   })
 
   it('renders the run activity trend section by default', async () => {

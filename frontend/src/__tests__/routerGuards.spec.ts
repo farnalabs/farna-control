@@ -311,7 +311,7 @@ describe('enforceRoleTierVisibility', () => {
     expect(result).toBe(true)
   })
 
-  it('redirects on requiredTier when below the minimum tier', async () => {
+  it('sends a below-tier route to the locked page, not the Dashboard (FAR-2664)', async () => {
     decodeJwtPayload.mockReturnValue({})
     planStore.features = { something: 1 }
     planStore.isAtMinimumTier.mockReturnValue(false)
@@ -319,7 +319,41 @@ describe('enforceRoleTierVisibility', () => {
       makeRoute('some-tier-route', { requiredTier: 'team' }),
       'tok',
     )
-    expect(result).toEqual({ name: 'dashboard' })
+    expect(result).toEqual({
+      path: '/locked',
+      query: { from: '/', tier: 'team', reason: 'tier' },
+    })
+  })
+
+  it('names a real Team route and the licence it needs on the locked page (FAR-2664)', async () => {
+    // Pin the acceptance criterion against a REAL Team capability: a community
+    // admin deep-linking /settings/sso must be told it needs the Team licence,
+    // not silently returned to the Dashboard.
+    decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
+    const resolved = router.resolve('/settings/sso')
+    const route = {
+      name: resolved.name,
+      matched: resolved.matched,
+      path: resolved.path,
+      fullPath: resolved.fullPath,
+      meta: {} as Record<string, unknown>,
+    }
+    hydrateManifestMeta(route as never)
+
+    planStore.loaded = true
+    planStore.isAtMinimumTier.mockReturnValue(false)
+
+    const result = await enforceRoleTierVisibility(route as never, adminToken())
+
+    expect(result).toEqual({
+      path: '/locked',
+      query: {
+        from: '/settings/sso',
+        capability: 'SSO',
+        tier: 'team',
+        reason: 'tier',
+      },
+    })
   })
 
   it('allows on requiredTier when at the minimum tier', async () => {
@@ -356,7 +390,10 @@ describe('enforceRoleTierVisibility', () => {
       makeRoute('some-tier-route', { requiredTier: 'team' }),
       'tok',
     )
-    expect(result).toEqual({ name: 'dashboard' })
+    expect(result).toEqual({
+      path: '/locked',
+      query: { from: '/', tier: 'team', reason: 'tier' },
+    })
   })
 
   it('skips the tier check while the tier is unknown — no payload ever applied (FAR-1809)', async () => {

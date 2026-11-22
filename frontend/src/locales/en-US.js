@@ -56,6 +56,21 @@ export default {
     }
   },
   "views": {
+    "LockedRoute": {
+      "this_page": "This page",
+      "tier_heading": "{capability} requires the {tier} licence",
+      "tier_heading_unknown": "{capability} needs a higher plan tier",
+      "tier_subtitle": "Your organisation is on the {currentTier} plan. An organisation administrator can upgrade the licence to unlock it.",
+      "tier_subtitle_unknown": "Your current plan does not include this capability. An organisation administrator can upgrade the licence to unlock it.",
+      "role_heading": "Your role cannot open {capability}",
+      "role_subtitle": "Ask an organisation administrator to give you the role that includes it.",
+      "system_admin_heading": "{capability} is restricted to instance administrators",
+      "system_admin_subtitle": "Only an instance system administrator can open this page. Ask them for access.",
+      "permission_body": "A plan upgrade will not change this - it needs a role change from your organisation administrator.",
+      "available_body": "Your licence now covers {capability}.",
+      "open_capability": "Open {capability}",
+      "back_to_dashboard": "Back to the Dashboard"
+    },
     "EvidenceView": {
       "title": "Evidence",
       "subtitle": "Look up what a run recorded, with only the fields your role is allowed to see.",

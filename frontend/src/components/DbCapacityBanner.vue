@@ -49,13 +49,13 @@
       </p>
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
         <router-link
-          to="/admin/run-retention"
+          :to="retentionDestination"
           class="text-xs font-medium underline underline-offset-2"
           :class="bannerClass.text"
           data-testid="db-capacity-run-retention-link"
         >{{ $t('components.DbCapacityBanner.run_retention_link') }}</router-link>
         <router-link
-          to="/admin/housekeeping"
+          :to="housekeepingDestination"
           class="text-xs font-medium underline underline-offset-2"
           :class="bannerClass.text"
           data-testid="db-capacity-housekeeping-link"
@@ -69,6 +69,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { fetchDbCapacity, type DbCapacityInfo } from '../lib/api/dbCapacity'
 import { formatBytes } from '../lib/formatBytes'
+import { getNavGroups, type NavItem } from '../config/navigation'
+import { useCurrentUser } from '../composables/useCurrentUser'
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -145,6 +147,48 @@ const levelMeta = computed<{ role: string; ariaLive: 'polite' | 'assertive' }>((
   }
   return { role: 'status', ariaLive: 'polite' }
 })
+
+const { jwtPayload, isSystemAdmin, orgRole } = useCurrentUser()
+
+/**
+ * FAR-2664: the remediation links point at SYSTEM-group pages, and the
+ * system-admin gate is one of the refusals the router still REDIRECTS (only a
+ * below-tier route gets the locked page). Offering those links to a caller the
+ * gate refuses meant a silent bounce to the Dashboard while the banner kept
+ * warning about a full disk. Route each link at its page when the caller
+ * passes the non-tier gates — a below-tier caller still reaches the route,
+ * whose guard shows the tier lock — and at the locked page naming the refusal
+ * otherwise.
+ *
+ * The token is the same source the router gate reads; it is not a second
+ * authority. With no readable token (opaque or absent session) the plain
+ * destination is kept: that state cannot render this banner inside the
+ * authenticated shell, so guessing a refusal would only hide the operator's
+ * remediation path.
+ */
+const navItems = getNavGroups().flatMap((group) => group.items)
+
+function lockedDestination(item: NavItem, reason: 'role' | 'system_admin'): string {
+  const params = new URLSearchParams({ from: item.to, reason })
+  if (item.requiredTier) params.set('tier', item.requiredTier)
+  return `/locked?${params.toString()}`
+}
+
+function destinationFor(path: string): string {
+  const item = navItems.find((navItem) => navItem.to === path)
+  if (!item || !jwtPayload.value) return path
+  if (item.systemAdminOnly && !isSystemAdmin.value) {
+    return lockedDestination(item, 'system_admin')
+  }
+  const requiredRoles = item.requiredRoles
+  if (requiredRoles?.length && !requiredRoles.includes(orgRole.value ?? '')) {
+    return lockedDestination(item, 'role')
+  }
+  return path
+}
+
+const retentionDestination = computed(() => destinationFor('/admin/run-retention'))
+const housekeepingDestination = computed(() => destinationFor('/admin/housekeeping'))
 
 const usedBytesLabel = computed<string | null>(() => {
   const used = capacity.value?.used_bytes
