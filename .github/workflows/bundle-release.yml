@@ -809,22 +809,22 @@ jobs:
           expected_sharedir_abs="$(realpath -e -- "$SMOKE_BUNDLE/pg/share/postgresql")"
           test "$sharedir_abs" = "$expected_sharedir_abs"
           case "$sharedir_abs" in "$smoke_bundle_abs"/*) : ;; *) exit 1 ;; esac
-          initdb --pgdata "$PGDATA" --username modulo --auth=trust --locale C
+          initdb --pgdata "$PGDATA" --username farna_control --auth=trust --locale C
           pg_ctl --pgdata "$PGDATA" --log "$PGDATA/postgres.log" \
             --options="-k $SMOKE_SOCKET -p 55432" start -w
           trap 'pg_ctl --pgdata "$PGDATA" stop -m fast -w' EXIT
-          psql --host "$SMOKE_SOCKET" --port 55432 --username modulo --dbname postgres \
+          psql --host "$SMOKE_SOCKET" --port 55432 --username farna_control --dbname postgres \
             --command "SELECT 1;"
-          psql --host "$SMOKE_SOCKET" --port 55432 --username modulo --dbname postgres \
+          psql --host "$SMOKE_SOCKET" --port 55432 --username farna_control --dbname postgres \
             --command "SET TIME ZONE 'America/New_York'; SELECT now() AT TIME ZONE 'UTC';"
-          createdb --host "$SMOKE_SOCKET" --port 55432 --username modulo roundtrip
-          psql --host "$SMOKE_SOCKET" --port 55432 --username modulo --dbname roundtrip \
+          createdb --host "$SMOKE_SOCKET" --port 55432 --username farna_control roundtrip
+          psql --host "$SMOKE_SOCKET" --port 55432 --username farna_control --dbname roundtrip \
             --command "CREATE TABLE proof(value integer); INSERT INTO proof VALUES (2192);"
-          pg_dump --format=custom --host "$SMOKE_SOCKET" --port 55432 --username modulo --file "$SMOKE_DUMP" roundtrip
-          dropdb --host "$SMOKE_SOCKET" --port 55432 --username modulo roundtrip
-          createdb --host "$SMOKE_SOCKET" --port 55432 --username modulo roundtrip
-          pg_restore --exit-on-error --host "$SMOKE_SOCKET" --port 55432 --username modulo --dbname roundtrip "$SMOKE_DUMP"
-          test "$(psql --host "$SMOKE_SOCKET" --port 55432 --username modulo --dbname roundtrip --tuples-only --no-align --command "SELECT value FROM proof")" = "2192"
+          pg_dump --format=custom --host "$SMOKE_SOCKET" --port 55432 --username farna_control --file "$SMOKE_DUMP" roundtrip
+          dropdb --host "$SMOKE_SOCKET" --port 55432 --username farna_control roundtrip
+          createdb --host "$SMOKE_SOCKET" --port 55432 --username farna_control roundtrip
+          pg_restore --exit-on-error --host "$SMOKE_SOCKET" --port 55432 --username farna_control --dbname roundtrip "$SMOKE_DUMP"
+          test "$(psql --host "$SMOKE_SOCKET" --port 55432 --username farna_control --dbname roundtrip --tuples-only --no-align --command "SELECT value FROM proof")" = "2192"
           SMOKE_EOF
           chmod 0755 "$smoke_script"
           sudo -u "$smoke_user" env -i \

@@ -263,11 +263,11 @@ def _is_benign_migration_managed(diff: tuple[Any, ...]) -> bool:
         # Tables with no ORM model — per-table reasoned entries above.
         return inner[1].name in _NO_ORM_MODEL_TABLES
     if kind == "add_column":
-        # modulo_journey_facts.updated_at: the ORM's TimestampMixin declares
+        # farna_journey_facts.updated_at: the ORM's TimestampMixin declares
         # updated_at but no migration ever created the column; created_at is
         # the write instant.
         # permanent (documented repo divergence)
-        if inner[2] == "modulo_journey_facts" and inner[3].name == "updated_at":
+        if inner[2] == "farna_journey_facts" and inner[3].name == "updated_at":
             return True
         # DB-owned audit-chain columns the migrations add but the ORM does not
         # declare (organisations + the sibling audit-chain tables). The reverse

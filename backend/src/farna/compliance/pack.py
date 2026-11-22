@@ -92,7 +92,7 @@ class MappingPackError(ValueError):
 
 
 class MappingRow(BaseModel):
-    """One framework clause mapped to a Modulo control and its evidence."""
+    """One framework clause mapped to a Farna Control statement and its evidence."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -100,7 +100,7 @@ class MappingRow(BaseModel):
     framework: str
     clause: str
     clause_intent: str
-    modulo_control: str
+    farna_control: str
     artifact_type: str
     customer_location: str
     coverage: str
@@ -194,7 +194,7 @@ def _require_non_empty(value: str, field: str, row_id: str) -> None:
 _REQUIRED_ROW_TEXT_FIELDS: Final[tuple[str, ...]] = (
     "clause",
     "clause_intent",
-    "modulo_control",
+    "farna_control",
     "customer_location",
     "responsibility",
 )

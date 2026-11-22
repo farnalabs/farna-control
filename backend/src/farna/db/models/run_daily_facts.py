@@ -236,12 +236,12 @@ class JourneyFact(OrgScoped):
     breaks retention). ``created_at`` is the fact's own write instant.
     """
 
-    __tablename__ = "modulo_journey_facts"
+    __tablename__ = "farna_journey_facts"
     __table_args__ = (
         # 7d ratio lookups — org + fact write instant (run-sweep independent).
-        Index("ix_modulo_journey_facts_org_created", "organisation_id", "created_at"),
+        Index("ix_farna_journey_facts_org_created", "organisation_id", "created_at"),
         # One fact per (run, writer) — the upsert target of the live writer.
-        UniqueConstraint("run_id", "writer", name="uq_modulo_journey_facts_run_writer"),
+        UniqueConstraint("run_id", "writer", name="uq_farna_journey_facts_run_writer"),
     )
 
     run_id: Mapped[uuid.UUID] = mapped_column(

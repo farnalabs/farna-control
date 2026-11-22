@@ -7,8 +7,8 @@
 #
 # Coverage is per ROW and per FRAMEWORK. There is deliberately no single
 # "compliant" verdict anywhere in this pack.
-pack_version: "1.2.0"
-published_at: "2026-10-25"
+pack_version: "1.2.1"
+published_at: "2026-11-22"
 title: "Farna Control self-hosted compliance control-mapping pack"
 honesty_note: >-
   Farna Control holds no SOC 2, ISO/IEC 42001 or EU AI Act attestation. In a
