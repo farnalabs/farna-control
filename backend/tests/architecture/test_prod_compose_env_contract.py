@@ -48,10 +48,11 @@ _APP_SERVICE = "modulo"
 #: through ``Settings`` - with the source files that read them, asserted to
 #: exist and to mention the name, so an allowlist entry cannot outlive the code
 #: that justifies it. Anything else the compose passes MUST be a Settings name.
-#: ``FARNA_CONTROL_ENV`` is deliberately absent: the app reads only ``FARNA_CONTROL_ENV``
-#: (the ``environment`` field's canonical ``validation_alias``) plus its bare
-#: field-name spelling ``ENVIRONMENT``. ``FARNA_CONTROL_ENV`` was a legacy alias that the
-#: alias-set removal dropped; no code reads it.
+#: The pre-rebrand environment alias is deliberately absent: the app reads only
+#: ``FARNA_CONTROL_ENV`` (the ``environment`` field's canonical
+#: ``validation_alias``). That pre-rebrand spelling was dropped with the
+#: alias-set removal, and the bare field name ``ENVIRONMENT`` is not an env
+#: spelling either (``validate_by_name`` is off, FAR-2650); no code reads either.
 _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
     "DATABASE_ADMIN_URL": (
         "src/farna/db/bootstrap.py",

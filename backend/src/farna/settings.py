@@ -5,11 +5,11 @@ from collections.abc import Callable
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, InitSettingsSource, PydanticBaseSettingsSource
 
 from farna.db.url_utils import fix_database_url
 
@@ -188,6 +188,32 @@ def set_first_boot_guard(guard: Callable[[], None] | None) -> None:
 #: ``core.hitl_manager`` derives its ``_DEFAULT_EXPIRY_MINUTES`` from this, so
 #: the fire-time window and the claim's ``expires_at`` can never diverge.
 HITL_CLAIM_TTL_SECONDS: Final[int] = 900  # 15 minutes — see Settings.hitl_review_cancel_grace_seconds
+
+
+def _canonicalise_init_field_names(settings_cls: type[BaseSettings], values: dict[str, Any]) -> dict[str, Any]:
+    """Rename bare field-name constructor kwargs onto their declared alias.
+
+    ``validate_by_name`` is off (see :class:`Settings`), so a bare field name is
+    NEVER an environment spelling — an ambient ``DB``, ``USERS`` or
+    ``CSRF_ENABLED`` resolves to nothing. A bare field-name KEY in the input can
+    therefore only be a constructor kwarg, and FAR-1500's contract is that such
+    a kwarg is honoured rather than silently dropped by ``extra="ignore"``.
+
+    An explicitly supplied alias key wins over a name-keyed duplicate, matching
+    pydantic's usual alias precedence. Fields with no alias, and fields whose
+    alias equals their name, are left untouched.
+    """
+    if not values:
+        return values
+    resolved = dict(values)
+    for name, field in settings_cls.model_fields.items():
+        if name not in resolved:
+            continue
+        alias = field.validation_alias
+        if not isinstance(alias, str) or alias == name:
+            continue
+        resolved.setdefault(alias, resolved.pop(name))
+    return resolved
 
 
 class Settings(BaseSettings):
@@ -1076,9 +1102,11 @@ class Settings(BaseSettings):
     # "development")`` convention for the alert path; the pre-existing call
     # sites are deliberately not migrated in this change.
     #
-    # The canonical alias is ``FARNA_CONTROL_ENV``. ``populate_by_name`` also
-    # resolves the bare field-name spelling ``ENVIRONMENT``; no other spelling is
-    # read. ``tests/architecture/test_settings_environment_aliases.py`` pins the
+    # The canonical alias is ``FARNA_CONTROL_ENV`` and it is the ONLY spelling
+    # read from the environment: ``validate_by_name`` is off, so an ambient
+    # ``ENVIRONMENT`` var is ignored. A Python caller may still pass
+    # ``environment=`` as a constructor kwarg (mapped onto the alias on init).
+    # ``tests/architecture/test_settings_environment_aliases.py`` pins the
     # canonical alias so it cannot drift from the field name.
     environment: str = Field("development", validation_alias="FARNA_CONTROL_ENV")
     # Comma-separated allowlist of environments (case-insensitive, trimmed)
@@ -1199,23 +1227,78 @@ class Settings(BaseSettings):
     # cross-run linkage of previously destroyed tokens by design.
     guardrail_destroy_pepper: str = Field(default="", repr=False)
 
-    # populate_by_name (FAR-1500): constructor kwargs may use a field's NAME as
-    # well as its alias. Without it, a name-keyed kwarg for an aliased field is
-    # silently dropped by ``extra="ignore"`` — ``Settings(environment="prod")``
-    # kept the default while ``Settings(FARNA_CONTROL_ENV="prod")`` worked, a silent
-    # footgun for every caller that constructs Settings in Python.
+    # FAR-1500: constructor kwargs may use a field's NAME as well as its alias.
+    # ``validate_by_name`` stays OFF (the opposite of the config FAR-1500
+    # originally set): turning it on ALSO made every bare field name an ambient
+    # ENVIRONMENT spelling, so an unprefixed var such as ``CSRF_ENABLED=false``,
+    # ``DB``, ``USERS`` or ``RATELIMIT_BYPASS_TOKEN`` in the host environment
+    # silently overrode a security control (FAR-2650 review). The field-name
+    # contract is honoured for INIT KWARGS ONLY, by the explicit mapping in
+    # ``settings_customise_sources`` / ``_canonicalise_init_field_names`` and the
+    # ``_reject_unknown_settings_keys`` validator below; neither touches the
+    # environment, which is read exclusively through each field's declared alias.
     #
-    # What it actually changes: the alias wins when BOTH spellings are present
-    # (init kwargs and env vars alike); the field NAME is ALSO accepted as an
-    # init key AND as an env-var name, so when only the name is present the
-    # name supplies the value. For the 8 fields whose alias is not simply the
-    # upper-cased field name (``environment``, ``runner_machine_id``, the four
-    # ``max_*_usd`` cost knobs, ``product_analytics_endpoint_url``,
-    # ``product_analytics_instance_secret``) this is a real widening; the other
-    # aliased fields are unchanged because their alias already case-folds onto
-    # the name. Risk shape: an unprefixed ambient env var sharing one of those
-    # 8 names would now be read — the alias still wins if it is set too.
-    model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore", "populate_by_name": True}
+    # A name-keyed kwarg that cannot be honoured is never silently dropped: the
+    # before-validator rejects any key that is neither a field name nor a
+    # declared alias. ``dotenv_filtering="only_existing"`` keeps a dotenv file's
+    # unrelated keys (``DATABASE_ADMIN_URL`` and friends, read straight from
+    # ``os.environ`` elsewhere) out of that check — they were never Settings
+    # fields, so dropping them is not a silent drop of a caller's key.
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+        "validate_by_alias": True,
+        "validate_by_name": False,
+        "dotenv_filtering": "only_existing",
+    }
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Honour field-name constructor kwargs without making them env names.
+
+        ``InitSettingsSource`` only renames a name-keyed kwarg onto its alias
+        when ``validate_by_name`` is on, so rebuild it from the canonicalised
+        kwargs. Source priority is unchanged and still puts init kwargs above
+        the environment, so ``Settings(db="sqlite")`` beats an ambient
+        ``FARNA_CONTROL_DB``.
+        """
+        if isinstance(init_settings, InitSettingsSource):
+            init_settings = InitSettingsSource(settings_cls, _canonicalise_init_field_names(settings_cls, init_settings.init_kwargs))
+        return init_settings, env_settings, dotenv_settings, file_secret_settings
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_unknown_settings_keys(cls, data: Any) -> Any:
+        """Fail on a key nothing can honour rather than dropping it silently.
+
+        Known keys are every field name and every declared ``validation_alias``.
+        The environment source emits alias keys (or the field name only for a
+        field with no alias), so anything else is a caller-supplied key that
+        would previously vanish under ``extra="ignore"``. A bare field name is
+        also mapped onto its alias here so ``model_validate`` accepts the same
+        field-name spellings the constructor does.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = _canonicalise_init_field_names(cls, data)
+        known: set[str] = set()
+        for name, field in cls.model_fields.items():
+            known.add(name)
+            alias = field.validation_alias
+            if isinstance(alias, str):
+                known.add(alias)
+        unknown = sorted(key for key in data if key not in known)
+        if unknown:
+            raise ValueError(f"unknown settings key(s): {', '.join(unknown)}")
+        return data
 
     @field_validator("secret_key")
     @classmethod

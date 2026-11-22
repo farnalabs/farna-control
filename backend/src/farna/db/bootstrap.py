@@ -8,12 +8,12 @@ contract - importable WITHOUT SQLAlchemy/models; asyncpg-level only.
 1. Fix DATABASE_ADMIN_URL for the SQLAlchemy async driver and fix the runtime
    DATABASE_URL for backwards compatibility
 2. Create the alembic_version table with VARCHAR(255) for branch migrations
-3. Resolve the system database URL from the accepted aliases, in priority order:
-   FARNA_CONTROL_SYSTEM_DATABASE_URL. An explicitly configured value is
-   fixed and published under the canonical name. Otherwise, derive a value from
-   DATABASE_URL for the entrypoint env-file contract only; never publish that
-   derived credential into the canonical application setting. The result is
-   written to /tmp/system_database_url.env.
+3. Resolve the system database URL from ``FARNA_CONTROL_SYSTEM_DATABASE_URL``,
+   the only spelling read (the pre-rebrand alias was removed). An explicitly
+   configured value is fixed and published under the canonical name. Otherwise,
+   derive a value from DATABASE_URL for the entrypoint env-file contract only;
+   never publish that derived credential into the canonical application setting.
+   The result is written to /tmp/system_database_url.env.
 4. Write the fixed DATABASE_ADMIN_URL / DATABASE_URL / system database URL to
    files for the shell script
 """
@@ -165,7 +165,8 @@ def main() -> None:
             # The derived URL is for the entrypoint env-file contract only.
             # Do not publish it as the canonical application credential: its
             # password comes from the app URL and is not a verified system-role
-            # credential. bootstrap_role.py reads only the explicit legacy alias.
+            # credential. bootstrap_role.py reads only the canonical name, so it
+            # keeps the existing system-role password on this warm boot.
             print(  # noqa: T201
                 "WARNING: no system database URL is configured; derived system URL is written to the entrypoint env file only and is not published as an application credential.",
                 file=sys.stderr,

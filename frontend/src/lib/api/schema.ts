@@ -5692,10 +5692,11 @@ export interface paths {
          *
          *     Requires X-Farna-Control-Timestamp header (Unix seconds, ±300s window).
          *     Requires X-Farna-Control-Webhook-Secret header if trigger has hmac_secret configured.
-         *     Alternatively, when no Modulo header is sent, GitHub's ``X-Hub-Signature-256``
-         *     (``sha256=`` HMAC-SHA256 of the raw body keyed by the trigger's hmac_secret) is
-         *     accepted. That scheme carries no timestamp, so it has no replay window; payload
-         *     dedup bounds replays. If any Modulo header is present, the Modulo scheme is used.
+         *     Alternatively, when no Farna Control header is sent, GitHub's
+         *     ``X-Hub-Signature-256`` (``sha256=`` HMAC-SHA256 of the raw body keyed by the
+         *     trigger's hmac_secret) is accepted. That scheme carries no timestamp, so it
+         *     has no replay window; payload dedup bounds replays. If any Farna Control
+         *     header is present, the Farna Control scheme is used.
          *
          *     ADR 047 exempt-channel: this route is CSRF-exempt via the audited
          *     ``/api/v1/triggers/`` prefix and exempt from the org-role sweep because it
@@ -5736,7 +5737,7 @@ export interface paths {
          *     (``X-Farna-Control-Webhook-Secret`` + ``X-Farna-Control-Timestamp``) over the stored
          *     payload — the same verification ``receive_webhook`` performs. FAR-2251:
          *     GitHub's ``X-Hub-Signature-256`` over the stored body is also accepted
-         *     when no Modulo header is present.
+         *     when no Farna Control header is present.
          */
         post: operations["replay_webhook_api_v1_triggers__trigger_id__webhook_replay__event_id__post"];
         delete?: never;

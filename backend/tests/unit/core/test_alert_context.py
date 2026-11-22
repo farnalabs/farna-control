@@ -6,16 +6,17 @@ are deterministic) and renders the context with the shared helpers that both
 alert channels import.
 
 Note on how the fields are passed: ``Settings`` is a ``case_sensitive=False``
-``BaseSettings`` with ``populate_by_name=True`` (FAR-1500), so constructor keys
-are accepted under EITHER the field's environmental alias
-(case-insensitively) or the field's own name — ``FARNA_CONTROL_ENV`` and
-``environment`` both set the environment field, and ``ALERT_CONTEXT`` and
-``alert_context`` both set the context field. Before FAR-1500 only the alias
-worked for ``environment`` (an ``environment``-named key was silently dropped
-by ``extra="ignore"``, because the name does not case-fold onto ``FARNA_CONTROL_ENV``);
-the suite passes both fields as their aliases here (``FARNA_CONTROL_ENV`` /
-``ALERT_CONTEXT``), exactly as the rest of the suite passes ``ALERT_EMAIL_TO``.
-The name-keyed contract is pinned in ``tests/unit/test_settings.py``.
+``BaseSettings`` whose constructor accepts a field's own name as well as its
+environmental alias (FAR-1500, honoured by the explicit init-kwarg mapping —
+not by an env-name fallback: bare ``ENVIRONMENT`` is not read from the
+environment, FAR-2650). ``FARNA_CONTROL_ENV`` and ``environment`` both set the
+environment field, and ``ALERT_CONTEXT`` and ``alert_context`` both set the
+context field. Before FAR-1500 only the alias worked for ``environment`` (an
+``environment``-named key was silently dropped by ``extra="ignore"``, because
+the name does not case-fold onto ``FARNA_CONTROL_ENV``); the suite passes both
+fields as their aliases here (``FARNA_CONTROL_ENV`` / ``ALERT_CONTEXT``),
+exactly as the rest of the suite passes ``ALERT_EMAIL_TO``. The name-keyed
+contract is pinned in ``tests/unit/test_settings.py``.
 
 """
 

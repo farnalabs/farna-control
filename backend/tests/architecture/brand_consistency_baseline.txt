@@ -234,7 +234,7 @@ backend/src/farna/db/crud/notifications.py	1
 backend/src/farna/db/crud/org_deletion.py	2
 backend/src/farna/db/crud/organisation.py	3
 backend/src/farna/db/crud/pipeline.py	3
-backend/src/farna/db/crud/run.py	9
+backend/src/farna/db/crud/run.py	12
 backend/src/farna/db/crud/run_retention.py	5
 backend/src/farna/db/crud/variant_group.py	2
 backend/src/farna/db/health_checks.py	1
@@ -262,7 +262,7 @@ backend/src/farna/db/url_utils.py	2
 backend/src/farna/determination/__init__.py	1
 backend/src/farna/launcher/config_source.py	3
 backend/src/farna/launcher/doctor.py	21
-backend/src/farna/launcher/entry.py	7
+backend/src/farna/launcher/entry.py	8
 backend/src/farna/launcher/env_contract.py	1
 backend/src/farna/launcher/env_safety.py	1
 backend/src/farna/launcher/initdb.py	4
@@ -785,7 +785,7 @@ deploy/compose/docker-compose.prod.yml	4
 deploy/compose/runner-ci.yml	5
 deploy/compose/runner.yml	4
 deploy/docker/runner-opencode.Dockerfile	3
-deploy/fly/entrypoint.sh	1
+deploy/fly/entrypoint.sh	2
 deploy/fly/fly.staging.toml	13
 deploy/helm/modulo/Chart.yaml	2
 deploy/helm/modulo/README.md	24
@@ -1070,7 +1070,7 @@ scripts/bundle-versions.env	1
 scripts/check_doc_validity.py	19
 scripts/create-macos-info-plist.sh	3
 scripts/dispatch_with_retry.sh	2
-scripts/install.sh	20
+scripts/install.sh	21
 scripts/linux/build-deb.sh	4
 scripts/linux/native-firstrun-smoke.sh	1
 scripts/linux/validate-deb.sh	1

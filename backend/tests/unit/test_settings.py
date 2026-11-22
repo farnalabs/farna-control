@@ -385,10 +385,12 @@ def test_hitl_cancel_grace_new_env_wins_over_deprecated(monkeypatch: pytest.Monk
 
 
 # ---------------------------------------------------------------------------
-# FAR-1500 populate_by_name — constructor keys accept the field NAME as well
-# as the alias. Without it, a name-keyed kwarg for an ALIASED field was
-# silently dropped by extra="ignore": Settings(environment="staging") kept the
-# default while Settings(FARNA_CONTROL_ENV="staging") worked, with no error either way.
+# FAR-1500 / FAR-2650 — constructor keys accept the field NAME as well as the
+# alias, while ENVIRONMENT values are read ONLY through the canonical alias.
+# FAR-1500 originally set ``populate_by_name``, which also made every bare field
+# name an ambient env-var spelling. FAR-2650 replaced that with an explicit
+# init-kwarg mapping, so an unprefixed ``CSRF_ENABLED=false`` / ``DB`` / ``USERS``
+# in the host environment can no longer override a setting.
 # ---------------------------------------------------------------------------
 
 
@@ -398,9 +400,10 @@ def test_environment_accepts_the_env_alias_key() -> None:
 
 
 def test_environment_accepts_the_field_name_key() -> None:
-    """FAR-1500: a ``environment=`` kwarg now populates the field instead of
-    being silently ignored (it does NOT case-fold onto the ``FARNA_CONTROL_ENV``
-    alias, which is why this key was dropped before ``populate_by_name``)."""
+    """FAR-1500: an ``environment=`` kwarg populates the field instead of being
+    silently ignored (it does NOT case-fold onto the ``FARNA_CONTROL_ENV``
+    alias, so it is honoured by the explicit init-kwarg mapping, not by an
+    env name)."""
     assert _make(environment="staging").environment == "staging"
 
 
@@ -412,7 +415,7 @@ def test_alert_context_accepts_the_field_name_key() -> None:
     """Regression pin: ``alert_context=`` stays accepted as a constructor key.
     Pre-FAR-1500 this already worked by case-folding onto its own
     ``ALERT_CONTEXT`` alias, so it does not demonstrate the fix — it pins that
-    the field name keeps working once ``populate_by_name`` is set."""
+    the field name keeps working under the explicit init-kwarg mapping."""
     assert _make(alert_context="ops note").alert_context == "ops note"
 
 
@@ -431,22 +434,64 @@ def test_the_alias_key_wins_when_both_keys_are_supplied() -> None:
     assert settings.environment == "production"
 
 
-def test_populate_by_name_also_widens_env_var_matching_to_the_field_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Side effect worth pinning: ``populate_by_name`` widens ENV-var matching
-    too, so ``ENVIRONMENT`` (the field name) is now read where only
-    ``FARNA_CONTROL_ENV`` was before."""
+def test_an_unhonourable_constructor_key_raises_instead_of_being_dropped() -> None:
+    """A kwarg nothing can honour must fail loudly, never vanish under
+    ``extra="ignore"`` (the silent-drop half of the FAR-1500 footgun)."""
+    with pytest.raises(ValidationError, match="unknown settings key"):
+        _make(not_a_setting="value")
+
+
+def test_a_bare_field_name_env_var_is_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``ENVIRONMENT`` is not an env spelling: only ``FARNA_CONTROL_ENV`` is."""
     monkeypatch.delenv("FARNA_CONTROL_ENV", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "host-generic-var")
-    assert _make().environment == "host-generic-var"
+    assert _make().environment == "development"
 
 
-def test_the_env_alias_still_outranks_a_field_name_env_var(
+def test_a_bare_environment_spelling_cannot_override_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The widening cannot shadow the documented spelling: when BOTH
-    ``FARNA_CONTROL_ENV`` and a generic ``ENVIRONMENT`` are set, the alias wins."""
-    monkeypatch.setenv("ENVIRONMENT", "host-generic-var")
-    monkeypatch.setenv("FARNA_CONTROL_ENV", "staging")
-    assert _make().environment == "staging"
+    """No unprefixed field name is an env spelling (FAR-2650 review).
+
+    Before the fix ``populate_by_name`` made every bare field name resolvable,
+    so an ambient ``CSRF_ENABLED=false`` disabled CSRF and ``DB`` / ``USERS`` /
+    ``ADMIN_PASSWORD`` / ``RATELIMIT_BYPASS_TOKEN`` could be overridden by any
+    host process.
+    """
+    for canonical in (
+        "FARNA_CONTROL_DB",
+        "FARNA_CONTROL_USERS",
+        "FARNA_CONTROL_CSRF_ENABLED",
+        "FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN",
+        "FARNA_CONTROL_ADMIN_PASSWORD",
+    ):
+        monkeypatch.delenv(canonical, raising=False)
+    monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
+    monkeypatch.setenv("DB", "sqlite")
+    monkeypatch.setenv("USERS", "attacker@example.com")
+    monkeypatch.setenv("CSRF_ENABLED", "false")
+    monkeypatch.setenv("RATELIMIT_BYPASS_TOKEN", "attacker-token")
+    monkeypatch.setenv("ADMIN_PASSWORD", "attacker-password")
+
+    settings = _make()
+
+    assert settings.db == "postgres"
+    assert not settings.users
+    assert settings.csrf_enabled is True
+    assert not settings.ratelimit_bypass_token
+    assert not settings.admin_password
+
+
+def test_the_canonical_environment_spelling_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The canonical ``FARNA_CONTROL_*`` spellings DO populate the fields."""
+    monkeypatch.setenv("FARNA_CONTROL_USERS", "operator@example.com")
+    monkeypatch.setenv("FARNA_CONTROL_CSRF_ENABLED", "false")
+    monkeypatch.setenv("FARNA_CONTROL_RATELIMIT_BYPASS_TOKEN", "canonical-token")
+    monkeypatch.setenv("FARNA_CONTROL_ADMIN_PASSWORD", "canonical-password")
+
+    settings = _make()
+
+    assert settings.users == "operator@example.com"
+    assert settings.csrf_enabled is False
+    assert settings.ratelimit_bypass_token == "canonical-token"
+    assert settings.admin_password == "canonical-password"

@@ -1436,14 +1436,14 @@ app.openapi = _openapi_schema  # type: ignore[method-assign]
 # with the nginx values above.
 
 # The names live in ONE registry shared with the launchers and the gates
-# (FAR-2563). The macOS bundle launcher exported the pre-rebrand
-# ``FARNA_CONTROL_SERVE_SPA`` / ``FARNA_CONTROL_FRONTEND_DIST`` and the Windows launcher
-# exported neither, while this module read the ``FARNA_CONTROL_`` spelling: on
-# macOS the built SPA was never mounted (``/`` answered 404), and on Windows
-# single-port SPA serving did not exist at all. Readers go through ``read_env``
-# so an already-installed bundle that still exports the legacy name keeps
-# working, and so the legacy ``FARNA_CONTROL_LAN_ORIGINS`` spelling (published by the
-# configuration reference before the rebrand) is still honoured.
+# (FAR-2563). Before that fix the macOS bundle launcher exported the product's
+# pre-rebrand names and the Windows launcher exported neither, while this module
+# read the ``FARNA_CONTROL_`` spelling: on macOS the built SPA was never mounted
+# (``/`` answered 404), and on Windows single-port SPA serving did not exist at
+# all. Readers go through ``read_env``, which resolves ONLY the canonical name
+# (``env_contract.candidate_names`` has no legacy fallback) — including the
+# canonical ``FARNA_CONTROL_LAN_ORIGINS`` knob — so a producer that exports a
+# pre-rebrand spelling simply does not reach these readers.
 _SERVE_SPA_ENV = SERVE_SPA_ENV
 _FRONTEND_DIST_ENV = FRONTEND_DIST_ENV
 _TRUTHY = frozenset({"1", "true", "yes", "on"})

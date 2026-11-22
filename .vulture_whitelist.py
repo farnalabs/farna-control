@@ -95,6 +95,9 @@ __all__ = [
     # cannot see the call sites because all three imports are lazy (function-local).
     "_validate_sandbox_managed_inputs_config",
     # --- Service methods exercised by tests / framework wiring (no direct prod call site vulture can see) ---
+    # pydantic-settings invokes this hook BY NAME when building a Settings
+    # instance, so there is no call site for vulture to follow (settings.py).
+    "settings_customise_sources",
     "get_override",
     "expire_stale",
     "get_gate",
