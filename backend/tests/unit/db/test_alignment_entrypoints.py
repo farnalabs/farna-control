@@ -50,3 +50,39 @@ def test_entrypoint_calls_the_shared_guard_exactly_once(relative_path: str) -> N
     text = (_REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
     assert text.count(_GUARD_CALL) == 1, f"{relative_path} must contain exactly one shared-guard call, not duplicated logic"
+
+
+# ---------------------------------------------------------------------------
+# FAR-2667 C6: guard THEN snapshot THEN migrate
+# ---------------------------------------------------------------------------
+
+_SNAPSHOT_ENTRYPOINTS = {
+    # The snapshot step must sit between the release-alignment refusal and the
+    # migration: a database from a NEWER release is refused before anything is
+    # dumped, and a snapshot that cannot be taken aborts before anything is
+    # migrated.
+    "backend/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade 0001_v2_identity_org"),
+    "deploy/supervisor/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade heads"),
+}
+
+
+@pytest.mark.parametrize(("relative_path", "commands"), sorted(_SNAPSHOT_ENTRYPOINTS.items()))
+def test_entrypoint_orders_guard_snapshot_migrate(relative_path: str, commands: tuple[str, str, str]) -> None:
+    text = (_REPO_ROOT / relative_path).read_text(encoding="utf-8")
+    guard_command, snapshot_command, migrate_command = commands
+    lines = _executable_lines(text)
+
+    def _first(command: str) -> int:
+        return next(index for index, line in enumerate(lines) if command in line)
+
+    assert _first(guard_command) < _first(snapshot_command) < _first(migrate_command), f"{relative_path} must run the alignment guard, then the pre-upgrade snapshot, then the migrations"
+
+
+@pytest.mark.parametrize("relative_path", sorted(_SNAPSHOT_ENTRYPOINTS))
+def test_entrypoint_never_falls_back_to_the_application_role_for_the_dump(relative_path: str) -> None:
+    """M11: a dump through DATABASE_URL (NOBYPASSRLS) is row-partial."""
+    text = (_REPO_ROOT / relative_path).read_text(encoding="utf-8")
+
+    assert "DATABASE_ADMIN_URL:-$DATABASE_URL" not in text, f"{relative_path} must not fall back to DATABASE_URL for the snapshot"
+    assert "\u0024DATABASE_ADMIN_URL" in text
+    assert "cannot dump as the owner role" in text

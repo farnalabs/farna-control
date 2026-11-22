@@ -113,9 +113,14 @@ class TestResolveUrl:
         url = "postgresql://user:pass@localhost:5432/db"
         assert _resolve_url(url) == url
 
-    def test_unknown_scheme_passthrough(self) -> None:
-        url = "sqlite:///local.db"
-        assert _resolve_url(url) == url
+    def test_a_non_postgres_scheme_is_refused(self) -> None:
+        # The result feeds pg_dump/psql/psycopg, which speak libpq only: a
+        # non-Postgres URL used to pass through and fail deep inside a driver.
+        # It is refused here with one legible line instead.
+        import click
+
+        with pytest.raises(click.ClickException, match="PostgreSQL"):
+            _resolve_url("sqlite:///local.db")
 
     @patch("farna.cli.backup.get_settings")
     def test_none_fallback(self, mock_settings: MagicMock) -> None:
@@ -315,7 +320,7 @@ class TestRunPgDump:
         assert "--no-owner" in cmd
         assert "--no-acl" in cmd
         assert "--format=plain" in cmd
-        assert output.name in str(mock_run.call_args[1]["stdout"])
+        assert mock_run.call_args[1]["stdout"] is not None  # the dump is streamed to a file handle
         assert mock_run.call_args[1]["timeout"] == 300
 
     @patch.object(shutil, "which")

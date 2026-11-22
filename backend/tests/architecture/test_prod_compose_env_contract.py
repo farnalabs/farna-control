@@ -53,6 +53,11 @@ _APP_SERVICE = "modulo"
 #: field-name spelling ``ENVIRONMENT``. ``MODULO_ENV`` was a legacy alias that the
 #: alias-set removal dropped; no code reads it.
 _NON_SETTINGS_ENV: dict[str, tuple[str, ...]] = {
+    # FAR-2667: read by the container ENTRYPOINT (shell), not by Settings:
+    # FARNA_CONTROL_SNAPSHOT_DIR names the pre-upgrade snapshot directory and
+    # FARNA_CONTROL_VERSION is recorded in the snapshot's directory name.
+    "FARNA_CONTROL_SNAPSHOT_DIR": ("deploy/supervisor/entrypoint.sh",),
+    "FARNA_CONTROL_VERSION": ("deploy/supervisor/entrypoint.sh",),
     "DATABASE_ADMIN_URL": (
         "src/farna/db/bootstrap.py",
         "src/farna/db/migrations/env.py",
@@ -210,9 +215,14 @@ def test_every_non_settings_env_var_has_a_live_read_site():
     """An allowlisted os.environ name must still be read by the source."""
     for name, source_files in _NON_SETTINGS_ENV.items():
         for relative in source_files:
+            # Backend sources are cited relative to backend/; a name read by a
+            # NON-Python boot path (the container entrypoint) is cited relative
+            # to the repo root.
             path = _BACKEND_ROOT / relative
-            assert path.is_file(), f"_NON_SETTINGS_ENV[{name}] cites a missing file: backend/{relative}"
-            assert name in path.read_text(encoding="utf-8"), f"backend/{relative} no longer mentions {name} - the read site moved or was deleted, so the allowlist entry (and the compose's use of the name) must be revisited"
+            if not path.is_file():
+                path = _REPO_ROOT / relative
+            assert path.is_file(), f"_NON_SETTINGS_ENV[{name}] cites a missing file: {relative}"
+            assert name in path.read_text(encoding="utf-8"), f"{relative} no longer mentions {name} - the read site moved or was deleted, so the allowlist entry (and the compose's use of the name) must be revisited"
 
 
 def test_required_settings_fields_are_satisfied_by_the_compose():

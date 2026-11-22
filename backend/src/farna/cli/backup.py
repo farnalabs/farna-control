@@ -49,14 +49,16 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
+import stat
 import subprocess  # nosec B404 -- subprocess is used only to shell out to pg_dump/psql with a hardcoded argv list (never shell=True, never user-supplied commands); see _run_pg_dump/_run_psql
 import sys
 import urllib.parse
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import click
@@ -104,6 +106,10 @@ _TLS_DIRNAME = "tls"
 # false-positive on ordinary names like "dropbox-migrations-backup-tmp".
 _CLOUD_SYNC_VENDOR_ROOTS = frozenset({"dropbox", "onedrive", "icloud", "googledrive"})
 
+# A Windows drive-letter path in an archive manifest names a file outside the
+# archive (the same shape the bundle-integrity gate refuses).
+_WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:")
+
 # The launcher-owned public surface (consumed by farna.cli.main; vulture's
 # dead-code gate special-cases __all__).
 __all__ = ["MANIFEST_VERSION", "backup", "cli", "restore"]
@@ -116,12 +122,21 @@ __all__ = ["MANIFEST_VERSION", "backup", "cli", "restore"]
 
 
 def _resolve_url(db_url: str | None) -> str:
-    """Resolve a raw PostgreSQL connection string from --db-url or settings."""
+    """Resolve a raw PostgreSQL connection string from --db-url or settings.
+
+    Normalised through the ONE shared libpq normaliser (``farna.db.url_utils``):
+    the application is configured with ``postgresql+asyncpg://`` while
+    ``psycopg``/``pg_dump``/``psql`` speak libpq only, and the pre-upgrade
+    snapshot path normalises the same way — so the two dump producers cannot
+    disagree about which schemes work.
+    """
     raw = db_url or get_settings().database_url
-    for prefix in (_POSTGRES_ASYNC_PREFIX, "postgresql+psycopg://"):
-        if raw.startswith(prefix):
-            raw = "postgresql://" + raw[len(prefix) :]
-    return raw
+    from farna.db.url_utils import normalise_libpq_url
+
+    try:
+        return normalise_libpq_url(raw)
+    except ValueError as exc:
+        raise click.ClickException(f"Cannot use this DATABASE_URL: {exc}. `farna-control backup`/`restore` talk to PostgreSQL through pg_dump, psql and psycopg, which accept only postgresql:// URLs.") from exc
 
 
 # ── Fernet helpers ───────────────────────────────────────────────────────────
@@ -221,11 +236,25 @@ def _get_schema_versions() -> list[str]:
         return ["unknown"]
 
 
+def _connect(raw_url: str, *, timeout: int = 10) -> Any:
+    """psycopg connect with the password OUT of the DSN.
+
+    Every probe in this module goes through here: psycopg quotes the DSN
+    verbatim in a connection error, and these errors are echoed and logged, so
+    a password left in the DSN becomes a password in the operator's terminal
+    and the logs.
+    """
+    from farna.db.url_utils import psycopg_connect_args
+
+    dsn, password = psycopg_connect_args(raw_url)
+    return psycopg.connect(dsn, connect_timeout=timeout, password=password)
+
+
 def _get_db_version(raw_url: str) -> str:
     if psycopg is None:
         return "unknown"
     try:
-        with psycopg.connect(raw_url, connect_timeout=5) as conn:
+        with _connect(raw_url, timeout=5) as conn:
             row = conn.execute("SELECT version()").fetchone()
             return row[0] if row else "unknown"
     except Exception:
@@ -246,21 +275,17 @@ def _decredential_url(raw_url: str) -> tuple[str, str | None]:
 
     Returns ``(url_without_password, password)``. pg_dump/psql must never
     receive the password as an argv element: argv is world-readable via
-    ``/proc/<pid>/cmdline`` while the child runs. The password travels in
-    the child-scoped ``PGPASSWORD`` env var instead (see _pg_child_env).
+    ``/proc/<pid>/cmdline`` while the child runs. The password travels in the
+    child-scoped ``PGPASSWORD`` env var instead (see _pg_child_env).
+
+    Delegates to :func:`farna.db.url_utils.split_postgres_credentials` — the
+    ONE implementation the pre-upgrade snapshot shares, so a password holding
+    ``#``, ``?``, ``/`` or ``%`` cannot reparse to a different target in one
+    producer and not the other.
     """
-    parsed = urllib.parse.urlsplit(raw_url)
-    password = parsed.password
-    if password is None:
-        return raw_url, None
-    userinfo = ""
-    if parsed.username:
-        userinfo = urllib.parse.quote(parsed.username, safe="") + "@"
-    netloc = f"{userinfo}{parsed.hostname or ''}"
-    if parsed.port is not None:
-        netloc += f":{parsed.port}"
-    clean = parsed._replace(netloc=netloc)
-    return urllib.parse.urlunsplit(clean), urllib.parse.unquote(password)
+    from farna.db.url_utils import split_postgres_credentials
+
+    return split_postgres_credentials(raw_url)
 
 
 def _pg_child_env(password: str | None) -> dict[str, str]:
@@ -273,45 +298,20 @@ def _pg_child_env(password: str | None) -> dict[str, str]:
 
 
 def _run_pg_dump(raw_url: str, output: Path, timeout: int = 300) -> None:
-    _check_tool("pg_dump")
-    url_without_password, password = _decredential_url(raw_url)
-    if password == "pass":
-        password = "secret"
-    cmd = [
-        "pg_dump",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        "--format=plain",
-        url_without_password,
-    ]
-    # The dump file is CREATED 0600 (touch) so a mid-dump SIGKILL never
-    # leaves the SQL dump readable at umask mode; the subsequent open("wb")
-    # keeps the already-created 0600 mode.
-    output.touch(mode=0o600)
-    try:
-        with output.open("wb") as f:
-            result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list, never shell=True, never user input  # noqa: S603
-                cmd, stdout=f, stderr=subprocess.PIPE, check=False, timeout=timeout, env=_pg_child_env(password)
-            )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"pg_dump timed out after {timeout}s") from exc
-    if result.returncode != 0:
-        raise RuntimeError(f"pg_dump failed: {result.stderr.decode(errors='replace').strip()}")
-    # FAR-2667: a zero exit is not proof the dump is usable, and a client
-    # NEWER than the server writes preamble settings the server rejects. Both
-    # checks run here, at dump time, so the archived artifact is complete and
-    # replayable instead of being discovered during a recovery.
+    """Dump through the ONE shared plain-SQL pipeline (FAR-2667).
+
+    The argv, the 0600 file creation, the client-newer-than-server preamble
+    rewrite and the completeness proof all live in
+    :func:`farna.db.plain_dump.dump_plain_sql`, which the pre-upgrade snapshot
+    also calls — a pipeline written twice drifts, and the two producers must
+    agree on what a usable dump is.
+    """
     from farna.db import plain_dump
 
     try:
-        removed = plain_dump.strip_unsupported_preamble_settings(output, plain_dump.server_guc_names(raw_url))
+        plain_dump.dump_plain_sql(raw_url, output, timeout_seconds=timeout)
     except ValueError as exc:
-        raise RuntimeError(str(exc)) from exc
-    if removed:
-        _log.warning("backup.dump_preamble_settings_dropped settings=%s", ",".join(removed))
-    assert_plain_dump_complete(output)
+        raise RuntimeError(f"pg_dump failed: {exc}") from exc
 
 
 def assert_plain_dump_complete(dump_path: Path) -> None:
@@ -332,13 +332,15 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
 def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     _check_tool("psql")
     url_without_password, password = _decredential_url(raw_url)
-    if password == "pass":
-        password = "secret"
+    # -X (no ~/.psqlrc): an operator's psqlrc could `\set ON_ERROR_STOP off`,
+    # and psql would then exit 0 after a rolled-back restore. The explicit
+    # -v ON_ERROR_STOP=1 below is authoritative only when nothing else can
+    # change it, so the rc file is never read.
     # -1 (single transaction): the --clean dump replays its DROPs and CREATEs
     # atomically — a mid-import failure leaves the target database exactly as
     # it was, not half-dropped. Combined with the pre-restore safety dump
     # (see _take_safety_dump) a failed restore stays recoverable.
-    cmd = ["psql", "-q", "-1", "-v", "ON_ERROR_STOP=1", url_without_password]
+    cmd = ["psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1", url_without_password]
     try:
         with input_path.open("rb") as f:
             result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
@@ -856,13 +858,42 @@ def _record_last_backup(data_dir: Path, timestamp: str) -> None:
         _log.exception("backup_timestamp_unexpected_failure data_dir=%s", data_dir)
 
 
-def _disk_preflight(backup_dir: Path, data_dir: Path | None) -> None:
+def _server_data_directory(raw_url: str) -> str | None:
+    """The server's own ``data_directory`` (best effort; None when unreadable)."""
+    from farna.db.url_utils import psycopg_connect_args
+
+    try:
+        dsn, password = psycopg_connect_args(raw_url)
+        with psycopg.connect(dsn, connect_timeout=5, password=password) as conn, conn.cursor() as cur:
+            cur.execute("SHOW data_directory")
+            row = cur.fetchone()
+    except Exception:
+        _log.warning("restore_target_data_directory_unreadable")
+        return None
+    return str(row[0]) if row and row[0] else None
+
+
+def _disk_preflight(
+    backup_dir: Path,
+    data_dir: Path | None,
+    *,
+    target_fs: Path | None = None,
+    raw_url: str | None = None,
+) -> None:
     """Refuse an overwrite the disk cannot hold — BEFORE anything is wiped.
 
     Rough guard: the restored dump needs about its own size again in
     temporary WAL/transaction space, so 2x the database.sql size is
-    required free. Uses the target filesystem (the data dir when given,
-    otherwise the archive's filesystem).
+    required free on **the filesystem the DATABASE lives on** — measuring the
+    archive's filesystem (which may be a different volume entirely, e.g.
+    ``/backups``) can pass while the write still hits ENOSPC.
+
+    Target order: the data dir (native), then ``--target-fs`` /
+    ``DB_CAPACITY_PATH`` (the compose deployment mounts the database volume
+    read-only for exactly this kind of measurement), then the server's own
+    ``data_directory`` when it is visible from here. When none of those name a
+    measurable path the archive's filesystem is measured with a loud warning —
+    never silently.
     """
     db_sql = backup_dir / _DB_SQL_FILE
     if not db_sql.exists():
@@ -872,7 +903,7 @@ def _disk_preflight(backup_dir: Path, data_dir: Path | None) -> None:
     except OSError as exc:
         _log.warning("backup_preflight_size_failed path=%s error=%s", db_sql, exc)
         return
-    target_fs = data_dir if data_dir is not None else backup_dir
+    target_fs = _resolve_preflight_target(backup_dir, data_dir, target_fs, raw_url)
     try:
         free = shutil.disk_usage(str(target_fs)).free
     except OSError as exc:
@@ -880,6 +911,25 @@ def _disk_preflight(backup_dir: Path, data_dir: Path | None) -> None:
         return
     if free < needed:
         raise click.ClickException(f"Disk pre-flight FAILED: the restore needs ~2x the dump size free ({_human_size(needed)}) but only {_human_size(free)} is available on {target_fs}. Free space before restoring — refusing to wipe the current data.")
+
+
+def _resolve_preflight_target(backup_dir: Path, data_dir: Path | None, target_fs: Path | None, raw_url: str | None) -> Path:
+    """The best available path on the DATABASE's filesystem (see _disk_preflight)."""
+    if data_dir is not None:
+        return data_dir
+    if target_fs is not None and Path(target_fs).exists():
+        return Path(target_fs)
+    if raw_url is not None:
+        server_dir = _server_data_directory(raw_url)
+        if server_dir is not None and Path(server_dir).is_dir():
+            return Path(server_dir)
+    click.echo(
+        "WARNING: cannot identify the database's own filesystem (no --data-dir, no --target-fs/DB_CAPACITY_PATH, "
+        "and the server's data_directory is not visible from here), so the disk pre-flight measures the ARCHIVE filesystem instead. "
+        "Pass --target-fs <a path on the database volume> for an accurate check.",
+        err=True,
+    )
+    return backup_dir
 
 
 def _check_instance_identity(
@@ -1049,19 +1099,47 @@ def _validate_manifest_launcher_snapshot(manifest: dict[str, Any]) -> None:
         raise click.ClickException("backup manifest field launcher_snapshot is not an object")
 
 
-def _check_schema_downgrade(manifest: dict[str, Any]) -> None:
-    """Refuse restoring an archive written from a NEWER schema.
+def _known_revisions() -> list[str] | None:
+    """Every alembic revision this binary ships (``None`` when unreadable).
 
-    The manifest records the alembic head(s) at backup time. A dump from a
-    NEWER schema replayed into an OLDER binary's schema leaves the database
-    one migration ahead (or in an unknown state); refuse BEFORE anything is
-    wiped. Archives without a schema record (or with the 'unknown'
+    Note EVERY revision, not only the heads: an archive taken by an OLDER
+    release records an older revision, which is the rollback case a pre-upgrade
+    snapshot exists for. Comparing against the heads alone refuses every older
+    archive — which is what made the documented recovery impossible.
+    """
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        backend_dir = _get_backend_dir()
+        alembic_ini = backend_dir / "alembic.ini"
+        if not alembic_ini.exists():
+            return None
+        script = ScriptDirectory.from_config(Config(str(alembic_ini)))
+        return sorted({revision.revision for revision in script.walk_revisions()})
+    except Exception:
+        _log.exception("Failed to read this installation's migration tree")
+        return None
+
+
+def _check_schema_downgrade(manifest: dict[str, Any]) -> None:
+    """Refuse restoring an archive written by a NEWER release than this binary.
+
+    The manifest records the alembic revision(s) that were APPLIED at backup
+    time. A revision this binary does not ship at all means the archive came
+    from a newer release: the dump would leave the database at a revision this
+    binary cannot serve, so it is refused BEFORE anything is wiped.
+
+    An archive whose recorded revision this binary DOES ship is accepted even
+    when it is behind the current head: that is the documented rollback — the
+    restore puts the database back at that revision and the next start migrates
+    it forward again. Archives without a schema record (or with the 'unknown'
     placeholder) cannot be compared and are allowed with a warning.
     """
     if manifest.get("manifest_version") is None:
         # Legacy archives (pre-FAR-672) did not document schema_versions as
-        # alembic heads — loud warning only; the hard gate applies to the
-        # versioned manifests whose field is a genuine alembic-head record.
+        # alembic revisions — loud warning only; the hard gate applies to the
+        # versioned manifests whose field is a genuine revision record.
         click.echo(
             "WARNING: legacy archive carries no verifiable schema version — cannot check for a downgrade.",
             err=True,
@@ -1071,16 +1149,132 @@ def _check_schema_downgrade(manifest: dict[str, Any]) -> None:
     if not archive_versions or any(not isinstance(v, str) or v == "unknown" for v in archive_versions):
         click.echo("WARNING: archive carries no verifiable schema version — cannot check for a downgrade.", err=True)
         return
-    current = _get_schema_versions()
-    if any(not isinstance(v, str) or v == "unknown" for v in current):
+    known = _known_revisions()
+    if known is None:
         click.echo(
-            f"WARNING: cannot read this installation's current schema version — the archive declares {', '.join(archive_versions)}. Verify manually that this binary is not OLDER before restoring.",
+            f"WARNING: cannot read this installation's migration tree — the archive declares {', '.join(archive_versions)}. Verify manually that this binary ships those revisions before restoring.",
             err=True,
         )
         return
-    missing = sorted(set(archive_versions) - set(current))
-    if missing:
-        raise click.ClickException(f"Refusing to restore: the archive's schema ({', '.join(missing)}) is NEWER than this installation speaks ({', '.join(current)}). Downgrading a database under an older binary corrupts the schema. Upgrade Farna Control to the matching newer version first.")
+    unknown = sorted(set(archive_versions) - set(known))
+    if unknown:
+        raise click.ClickException(
+            f"Refusing to restore: the archive records schema revision(s) {', '.join(unknown)} that this Farna Control does not ship — the archive was written by a NEWER release than this binary. Upgrade Farna Control to the release that wrote the archive first, then restore."
+        )
+    current_heads = _get_schema_versions()
+    if set(archive_versions) - set(current_heads):
+        click.echo(
+            f"  Archive schema {', '.join(archive_versions)} is behind this release ({', '.join(current_heads)}): the restore puts the database back at the archived revision and the next start migrates it forward.",
+            err=True,
+        )
+
+
+def _read_target_revisions(raw_url: str) -> list[str]:
+    """The target database's recorded alembic revisions (``[]`` when fresh)."""
+    with _connect(raw_url) as conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", ("public.alembic_version",))
+        present = cur.fetchone()
+        if not present or not present[0]:
+            return []
+        cur.execute("SELECT version_num FROM alembic_version")
+        return sorted({str(row[0]) for row in cur.fetchall() if row and row[0]})
+
+
+def _known_revision_ancestry(head_revision: str) -> set[str] | None:
+    """Every revision at or below *head_revision* in this binary's tree.
+
+    ``None`` when the tree cannot be read or does not know *head_revision*:
+    the caller must then refuse rather than guess a lineage.
+    """
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        alembic_ini = _get_backend_dir() / "alembic.ini"
+        if not alembic_ini.exists():
+            return None
+        script = ScriptDirectory.from_config(Config(str(alembic_ini)))
+        return {revision.revision for revision in script.iterate_revisions(head_revision, "base")}
+    except Exception:
+        _log.warning("restore_target_ancestry_unreadable head=%s", head_revision)
+        return None
+
+
+def _target_descends_from_archive(target_revisions: list[str], archive_heads: list[str]) -> bool | None:
+    """Is every target revision at or below an archive head?
+
+    ``True`` — the target has MIGRATED PAST the snapshot: the normal
+    "the new release migrated and then failed" rollback, which the snapshot is
+    exactly the recovery point for.
+    ``False`` — a target revision is unrelated to the archive's lineage, so this
+    is a different deployment (or a different release train).
+    ``None`` — cannot be determined from this binary's migration tree.
+    """
+    for target in target_revisions:
+        ancestry = _known_revision_ancestry(target)
+        if ancestry is None:
+            return None
+        if not any(head in ancestry for head in archive_heads):
+            return False
+    return True
+
+
+def _check_target_schema_matches(manifest: dict[str, Any], raw_url: str, replace_cluster: bool) -> None:
+    """Verify the TARGET database is the one the archive came from (compose path).
+
+    ``--data-dir`` gives the restore a ``state.json`` instance identity to
+    compare. The compose deployment has no data dir — which used to mean BOTH
+    destructive guards were skipped and a wrong ``DATABASE_ADMIN_URL`` wiped a
+    live cluster with no verification at all. With ``--verify-target-schema``
+    the target's recorded schema is the identity, and three cases are told
+    apart:
+
+    * **same revisions** — restore proceeds;
+    * **target AHEAD of the snapshot** (every target revision descends from an
+      archive head in this binary's migration tree) — the release migrated and
+      then failed, which is exactly the rollback the snapshot exists for: the
+      restore proceeds, loudly noting that those migrations are being rolled
+      back;
+    * **anything else** — an unrelated revision, no ``alembic_version`` at all
+      (not a bootstrapped Farna Control database), or a lineage this binary
+      cannot verify: REFUSED.
+
+    ``--replace-cluster`` remains the deliberate override (it is a second,
+    explicit flag, so a wrapper cannot pre-supply it by accident).
+    """
+    archive_heads = [str(entry) for entry in (manifest.get("schema_versions") or [])]
+    if not archive_heads or any(head == "unknown" for head in archive_heads):
+        raise click.ClickException(
+            "Refusing to restore: --verify-target-schema was requested but the archive records no verifiable schema version, "
+            "so the target database cannot be proven to be the one this archive came from. Re-take the snapshot with this release, "
+            "or pass --replace-cluster if you have verified the target by hand."
+        )
+    try:
+        target_revisions = _read_target_revisions(raw_url)
+    except Exception as exc:
+        raise click.ClickException(f"Refusing to restore: --verify-target-schema could not read the target database's schema ({_url_display(raw_url)}: {exc}). Nothing has been changed.") from exc
+    if target_revisions and set(target_revisions) == set(archive_heads):
+        click.echo(f"  Target schema verified: {', '.join(target_revisions)}")
+        return
+    if target_revisions and _target_descends_from_archive(target_revisions, archive_heads) is True:
+        click.echo(
+            f"  Target schema verified: the target has migrated past the snapshot ({', '.join(target_revisions)} is ahead of {', '.join(archive_heads)}) — restoring ROLLS THOSE MIGRATIONS BACK with the data.",
+            err=True,
+        )
+        return
+    target_text = ", ".join(target_revisions) if target_revisions else "no alembic_version (not a bootstrapped Farna Control database)"
+    if replace_cluster:
+        click.echo(
+            f"WARNING: --verify-target-schema found a MISMATCH but --replace-cluster overrides it:\n  Target: {target_text}\n  Archive: {', '.join(archive_heads)}",
+            err=True,
+        )
+        return
+    raise click.ClickException(
+        "Refusing to restore: the TARGET database does not match the snapshot's recorded schema, so this is not provably the database the snapshot came from.\n"
+        f"  Target database: {target_text}\n"
+        f"  Snapshot:        {', '.join(archive_heads)}\n"
+        "Nothing has been changed. Check DATABASE_ADMIN_URL points at the deployment the snapshot was taken from, or pass --replace-cluster if you have verified the target by hand."
+    )
 
 
 def _db_has_modulo_tables(raw_url: str) -> bool:
@@ -1096,7 +1290,7 @@ def _db_has_modulo_tables(raw_url: str) -> bool:
     if psycopg is None:
         return True  # cannot verify — insist on the deliberate opt-in
     try:
-        with psycopg.connect(raw_url, connect_timeout=10) as conn, conn.cursor() as cur:
+        with _connect(raw_url) as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'")
             row = cur.fetchone()
     except Exception:
@@ -1270,7 +1464,7 @@ def _check_collation_versions_sync(raw_url: str) -> None:
         return
     query = "SELECT collname, collversion, pg_collversion() AS detected_version, collprovider FROM pg_collation WHERE collversion IS NOT NULL AND collversion <> pg_collversion()"
     try:
-        with psycopg.connect(raw_url, connect_timeout=10) as conn, conn.cursor() as cur:
+        with _connect(raw_url) as conn, conn.cursor() as cur:
             cur.execute(query)
             rows = cur.fetchall()
     except Exception:
@@ -1402,6 +1596,8 @@ class _RestoreOptions:
     replace_cluster: bool
     no_safety_dump: bool
     safety_dump_dir: Path | None = None
+    target_fs: Path | None = None
+    verify_target_schema: bool = False
 
 
 def _run_restore(opts: _RestoreOptions) -> None:
@@ -1409,18 +1605,20 @@ def _run_restore(opts: _RestoreOptions) -> None:
 
     Both connection URLs are resolved first (the target from ``--db-url`` /
     settings, the APP role from ``--app-db-url`` / ``DATABASE_URL``), so a
-    configuration typo fails BEFORE anything destructive happens. Then, in
-    order: stop the writers (a live launcher is stopped here, never left for
-    the operator to remember), validate targets (verify-before-wipe checks,
-    then the --dry-run preview short-circuit), the pre-restore safety dump,
-    the database-cluster restore (SQL dump, checkpoint JSON exports,
-    credential re-encryption, collation drift check), launcher data-dir
-    adoption, and the promoted bootstrap role-posture re-run. The app role is
-    never derived from the restore target URL, and a posture failure FAILS
-    the restore. Any failure is logged, echoed, and re-raised as a
-    ClickException; a data-dir lock taken before the phases is always
-    released. On success the exact START command is printed and nothing is
-    auto-restarted.
+    configuration typo fails BEFORE anything destructive happens.
+
+    ORDERING: every read-only verification runs FIRST — including the
+    ``--dry-run`` short-circuit — and only then are the writers stopped and the
+    data-dir lock taken. A preview must have NO side effects: stopping a live
+    launcher to print a plan would be a side effect the operator never agreed
+    to. After the lock: the pre-restore safety dump, the database-cluster
+    restore (SQL dump, checkpoint JSON exports, credential re-encryption,
+    collation drift check), launcher data-dir adoption, and the promoted
+    bootstrap role-posture re-run. The app role is never derived from the
+    restore target URL, and a posture failure FAILS the restore. Any failure is
+    logged, echoed, and re-raised as a ClickException; a data-dir lock is
+    always released. On success the exact START command is printed and nothing
+    is auto-restarted.
     """
     raw_url = _resolve_url(opts.db_url)
     settings = get_settings()
@@ -1440,6 +1638,12 @@ def _run_restore(opts: _RestoreOptions) -> None:
     click.echo(f"DB version at backup: {manifest.get('db_version', 'unknown')}")
     click.echo(f"Schema versions: {', '.join(manifest.get('schema_versions', ['unknown']))}")
 
+    # READ-ONLY verification first (nothing is stopped, nothing is locked):
+    # the dry run returns here and the real run has proven the archive before
+    # it takes a lock or touches the stack.
+    if not _validate_targets(opts, manifest, raw_url, settings):
+        return
+
     lock = None
     stopped = False
     if opts.data_dir is not None:
@@ -1452,9 +1656,6 @@ def _run_restore(opts: _RestoreOptions) -> None:
         lock = _acquire_data_lock(opts.data_dir, mode="restore")
 
     try:
-        if not _validate_targets(opts, manifest, raw_url, settings):
-            return
-
         _safety_dump(opts, raw_url)
         _restore_cluster(opts, manifest, raw_url, settings)
         _restore_data_dir(opts, manifest)
@@ -1493,7 +1694,11 @@ def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: 
     # Verify-before-wipe ordering: identity + disk before any mutation.
     if opts.data_dir is not None:
         _check_instance_identity(opts.data_dir, manifest, opts.replace_cluster)
-    _disk_preflight(opts.backup_dir, opts.data_dir)
+    elif opts.verify_target_schema:
+        # No data dir means no state.json identity to compare; the target's
+        # recorded schema stands in for it (see _check_target_schema_matches).
+        _check_target_schema_matches(manifest, raw_url, opts.replace_cluster)
+    _disk_preflight(opts.backup_dir, opts.data_dir, target_fs=opts.target_fs, raw_url=raw_url)
 
     if not opts.dry_run and not opts.yes:
         click.confirm("\nThis will OVERWRITE the current database. Continue?", abort=True)
@@ -1529,10 +1734,41 @@ def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: 
     return True
 
 
+def _archive_member(backup_dir: Path, filename: str) -> Path:
+    """Resolve a manifest-listed filename INSIDE *backup_dir* or refuse.
+
+    ``file_checksums`` is untrusted archive content: a crafted manifest entry
+    like ``../../etc/shadow`` or ``C:/Windows/win.ini`` would otherwise be
+    joined onto the backup directory and HASHED — printing a digest of an
+    arbitrary file to the operator's terminal. Every component must be a plain
+    name, no symlink may appear on the path, and the resolved target must stay
+    under the archive directory.
+    """
+    raw = filename.replace("\\", "/")
+    if not raw or raw.startswith("/") or PureWindowsPath(filename).is_absolute() or _WINDOWS_DRIVE_PATH.match(filename):
+        raise click.ClickException(f"Refusing to verify {filename!r}: the manifest names a path outside the archive.")
+    if any(component in {"", ".", ".."} for component in raw.split("/")):
+        raise click.ClickException(f"Refusing to verify {filename!r}: the manifest names a path outside the archive.")
+    current = backup_dir
+    for component in raw.split("/"):
+        current = current / component
+        try:
+            entry_stat = current.lstat()
+        except OSError:
+            continue  # reported as missing below
+        if stat.S_ISLNK(entry_stat.st_mode):
+            raise click.ClickException(f"Refusing to verify {filename!r}: the archive entry is a symlink, so it may point outside the archive.")
+    try:
+        current.resolve().relative_to(backup_dir.resolve())
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"Refusing to verify {filename!r}: the manifest names a path outside the archive.") from exc
+    return current
+
+
 def _verify_file_checksums(backup_dir: Path, checksums: dict[str, str]) -> None:
-    """Refuse on any manifest-listed file that is missing or mis-hashed."""
+    """Refuse on any manifest-listed file that is missing, escapes or is mis-hashed."""
     for filename, expected_hash in checksums.items():
-        file_path = backup_dir / filename
+        file_path = _archive_member(backup_dir, filename)
         if not file_path.exists():
             raise click.ClickException(f"Backup file {filename} listed in manifest but not found on disk")
         actual_hash = _file_checksum(file_path)
@@ -1557,10 +1793,15 @@ def _verify_json_exports(backup_dir: Path) -> None:
 
 
 def _validate_dump_integrity(backup_dir: Path, manifest: dict[str, Any]) -> None:
-    """Refuse a corrupt or foreign dump BEFORE the target is wiped (FAR-2667).
+    """Refuse a corrupt, foreign or MISSING dump BEFORE the target is wiped.
 
-    Two gates, both fail-closed:
+    Three gates, all fail-closed:
 
+    0. **Presence.** An archive that describes a database dump must contain it.
+       A manifest recording a ``database.sql`` checksum (or a pre-upgrade
+       snapshot, which always carries one) with no file on disk used to fall
+       through every check and "restore successfully" while changing nothing —
+       a missing dump is worse than a truncated one, because it is silent.
     1. **Coverage.** If ``database.sql`` exists, the manifest MUST record a
        checksum for it. Without one nothing proves this dump belongs to this
        archive, so a foreign or hand-assembled directory is refused rather
@@ -1573,9 +1814,19 @@ def _validate_dump_integrity(backup_dir: Path, manifest: dict[str, Any]) -> None
        cannot prove more than that.
     """
     dump_path = backup_dir / _DB_SQL_FILE
-    if not dump_path.exists():
-        return
     checksums = manifest.get("file_checksums")
+    claims_dump = manifest.get("snapshot_for_upgrade") is True or (isinstance(checksums, dict) and _DB_SQL_FILE in checksums) or manifest.get("dump_complete") is True
+    if not dump_path.exists():
+        if claims_dump:
+            raise click.ClickException(
+                f"Refusing to restore: this archive describes a database dump ({_DB_SQL_FILE}) but the file is MISSING from {backup_dir}. "
+                "A restore from it would report success while restoring nothing. Restore a complete archive written by `farna-control backup` (or the snapshot an upgrade printed)."
+            )
+        click.echo(
+            f"WARNING: no {_DB_SQL_FILE} in this archive and no dump is recorded in its manifest — only the JSON exports will be restored.",
+            err=True,
+        )
+        return
     if not isinstance(checksums, dict) or not isinstance(checksums.get(_DB_SQL_FILE), str):
         raise click.ClickException(f"{_DB_SQL_FILE} is present but {_BACKUP_INFO_FILE} records no checksum for it — this archive cannot be proven intact, so it is refused. Restore a complete archive written by `farna-control backup` (or the snapshot an upgrade printed).")
     if manifest.get("dump_complete") is True:
@@ -1929,6 +2180,19 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
     default=None,
     help=("Directory to write the pre-restore safety dump into (default: the current directory). Set it to a persistent path when restore runs in a disposable container."),
 )
+@click.option(
+    "--target-fs",
+    type=click.Path(path_type=Path),
+    envvar="DB_CAPACITY_PATH",
+    default=None,
+    help=("A path on the DATABASE's own filesystem, used by the disk pre-flight. Without it (and without --data-dir) the pre-flight measures the archive's filesystem, which may be a different volume. The compose deployment sets DB_CAPACITY_PATH to its database volume."),
+)
+@click.option(
+    "--verify-target-schema",
+    is_flag=True,
+    default=False,
+    help=("Refuse unless the TARGET database records exactly the schema revisions the archive was taken from. The compose recovery path's stand-in for the --data-dir instance-identity guard; --replace-cluster overrides it."),
+)
 def restore(
     backup_dir: Path,
     db_url: str | None,
@@ -1940,6 +2204,8 @@ def restore(
     replace_cluster: bool,
     no_safety_dump: bool,
     safety_dump_dir: Path | None,
+    target_fs: Path | None,
+    verify_target_schema: bool,
 ) -> None:
     """Restore a Farna Control database from a backup directory.
 
@@ -1976,6 +2242,8 @@ def restore(
             replace_cluster=replace_cluster,
             no_safety_dump=no_safety_dump,
             safety_dump_dir=safety_dump_dir,
+            target_fs=target_fs,
+            verify_target_schema=verify_target_schema,
         )
     )
 

@@ -162,22 +162,30 @@ Once that returns 200, open [http://localhost](http://localhost).
 ## Upgrades and recovery
 
 `docker compose up -d` with a new `TAG` runs the migrations. BEFORE they run,
-the container takes a verified `pg_dump` snapshot of the database into
-`./backups` (the `backups/` directory beside this file, mounted at `/backups`)
-and prints its path. The two most recent verified snapshots are kept.
+and only when a migration is pending, the container takes a verified `pg_dump`
+snapshot of the database into the `snapshot_data` volume (mounted at
+`/backups`) and prints its path. The two most recent snapshots at the current
+schema are kept; a snapshot from an older schema — the recovery point the
+current data depends on — is never pruned.
 
 If the new release fails after migrating, restore the snapshot and start the
 previous release:
 
 ```bash
-./compose-restore.sh /backups/<snapshot-printed-by-the-upgrade>
+./compose-restore.sh --confirm /backups/<snapshot-printed-by-the-upgrade>
 TAG=<previous-version> docker compose up -d modulo
 ```
 
-`compose-restore.sh` stops the application, verifies the snapshot's manifest
-and checksums, refuses a corrupt or mismatched dump, restores the database,
-and leaves everything stopped so you choose when to start. It never restarts
-the stack for you.
+`compose-restore.sh` requires the explicit `--confirm` argument. It then
+verifies the snapshot's manifest and checksums in a one-off container, refuses
+a corrupt, missing or foreign dump and a target database that is not the one
+the snapshot came from, restores the database, and leaves everything stopped
+so you choose when to start. It never restarts the stack for you, and it
+prints the start command even when the restore fails.
+
+A snapshot on the same host as the database is not a backup:
+`docker compose down -v` deletes both. Copy snapshots off the host, and use
+`farna-control backup` (or `scripts/backup.py`) for off-host retention.
 
 ## Integrity Verification
 

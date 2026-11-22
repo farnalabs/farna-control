@@ -3,37 +3,92 @@
 # (FAR-2667). This is the ONE documented recovery command for the compose
 # path:
 #
-#   scripts/compose-restore.sh /backups/pre-upgrade-dump-<version>-<timestamp>
+#   scripts/compose-restore.sh --confirm /backups/pre-upgrade-dump-<version>-<timestamp>
 #
-# It stops the writers itself (the `modulo` container), restores the snapshot
-# through a one-off container, and LEAVES EVERYTHING STOPPED, printing the
-# exact start command. It never starts the application: a restart would hand
-# a half-verified database to an app that then refuses to boot.
-set -euo pipefail
+# It VERIFIES before it destroys: the snapshot's manifest, checksums and dump
+# completeness are checked in a one-off container (restore --dry-run), and the
+# TARGET database must record the schema the snapshot was taken from
+# (--verify-target-schema). A snapshot that is corrupt, foreign, missing or
+# aimed at the wrong cluster is refused BEFORE anything is stopped or wiped.
+#
+# The confirmation is an explicit ARGUMENT (--confirm), never a --yes baked in
+# by a wrapper: a recovery command that confirms itself is a command that wipes
+# the wrong database without anyone saying so.
+#
+# It stops the writers itself (the `modulo` container), restores through a
+# one-off container, and LEAVES EVERYTHING STOPPED. It never starts the
+# application: a restart would hand a half-verified database to an app that
+# then refuses to boot. The exact start command is printed on failure as well
+# as success.
+# -E (errtrace) is REQUIRED: the ERR trap below must fire for a failing command
+# inside a shell FUNCTION (compose()/print_start_command()), and bash does not
+# inherit the ERR trap into functions without it — without -E a failed
+# `docker compose run` exits without printing the start command the operator
+# needs at exactly the moment they need it.
+set -Eeuo pipefail
 
 usage() {
-  printf 'usage: %s <snapshot-dir> [compose-file]\n' "$(basename "$0")" >&2
+  printf 'usage: %s --confirm <snapshot-dir> [compose-file]\n' "$(basename "$0")" >&2
   printf '  <snapshot-dir> is the path the upgrade printed, e.g.\n' >&2
-  printf '  /backups/pre-upgrade-dump-0.5.0-20261122-101500 (container path),\n' >&2
-  printf '  the same path on the host, or just the directory name.\n' >&2
+  printf '  /backups/pre-upgrade-dump-0.5.0-20261122-101500 (a path inside the\n' >&2
+  printf '  snapshot volume) or just the directory name.\n' >&2
+  printf '  --confirm  required: acknowledges that this OVERWRITES the current database\n' >&2
   printf '  compose-file defaults to the COMPOSE_FILE env var, then\n' >&2
   printf '  deploy/compose/docker-compose.prod.yml, then ./docker-compose.prod.yml\n' >&2
 }
 
-snapshot="${1:-}"
-if [ -n "${2:-}" ]; then
-  compose_file="$2"
-elif [ -n "${COMPOSE_FILE:-}" ]; then
-  compose_file="$COMPOSE_FILE"
-elif [ -f deploy/compose/docker-compose.prod.yml ]; then
-  compose_file=deploy/compose/docker-compose.prod.yml
-else
-  # Extracted compose release bundle layout: the helper sits beside it.
-  compose_file=docker-compose.prod.yml
+confirm=""
+snapshot=""
+compose_file=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --confirm | -c)
+      confirm=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    -*)
+      printf 'unknown option: %s\n' "$1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      if [ -z "$snapshot" ]; then
+        snapshot="$1"
+      elif [ -z "$compose_file" ]; then
+        compose_file="$1"
+      else
+        printf 'unexpected extra argument: %s\n' "$1" >&2
+        usage
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$compose_file" ]; then
+  if [ -n "${COMPOSE_FILE:-}" ]; then
+    compose_file="$COMPOSE_FILE"
+  elif [ -f deploy/compose/docker-compose.prod.yml ]; then
+    compose_file=deploy/compose/docker-compose.prod.yml
+  else
+    # Extracted compose release bundle layout: the helper sits beside it.
+    compose_file=docker-compose.prod.yml
+  fi
 fi
 
 if [ -z "$snapshot" ]; then
   usage
+  exit 2
+fi
+if [ -z "$confirm" ]; then
+  printf 'refusing to restore without --confirm: this OVERWRITES the current database.\n' >&2
+  printf 're-run as: %s --confirm %s\n' "$(basename "$0")" "$snapshot" >&2
   exit 2
 fi
 if [ ! -f "$compose_file" ]; then
@@ -41,33 +96,64 @@ if [ ! -f "$compose_file" ]; then
   exit 2
 fi
 
-# The snapshot lives on the host bind mount that the compose file mounts at
-# /backups, so accept a container path, a host path, or a bare name and
-# translate all three to the container path.
+print_start_command() {
+  printf '\nStart the previous release with:\n'
+  printf '  TAG=<previous-version> docker compose -f %s up -d modulo\n' "$compose_file"
+  printf 'No automatic restart was performed.\n'
+}
+
+on_error() {
+  status=$?
+  printf '\nRESTORE FAILED (exit %s) — the writers are still stopped; do NOT start the new release.\n' "$status" >&2
+  print_start_command >&2
+  exit "$status"
+}
+trap on_error ERR
+
+# The snapshot lives on the compose deployment's snapshot volume, mounted at
+# /backups, so accept a container path or a bare name and translate both to the
+# in-container path. Presence is verified INSIDE the container (the volume is
+# not a host directory).
 snapshot_name="$(basename "$snapshot")"
 container_snapshot="/backups/${snapshot_name}"
-host_backups_dir="$(cd "$(dirname "$compose_file")" && pwd)/backups"
 
-if [ ! -d "$host_backups_dir/${snapshot_name}" ]; then
-  printf 'refusing to restore: no snapshot directory at %s/%s\n' \
-    "$host_backups_dir" "$snapshot_name" >&2
-  printf 'list the available snapshots with: ls -1 %s\n' "$host_backups_dir" >&2
-  exit 1
-fi
+compose() {
+  docker compose -f "$compose_file" "$@"
+}
+
+printf 'Verifying snapshot %s before touching anything...\n' "$container_snapshot"
+# --dry-run performs every archive check (manifest shape/version, checksum
+# coverage, checksums, dump completeness, JSON exports) and previews the steps
+# WITHOUT touching the database, stopping the writers or taking the data-dir
+# lock. A corrupt, foreign or missing snapshot dies here.
+# shellcheck disable=SC2016  # the single-quoted script is executed INSIDE the container
+compose run --rm --no-deps --entrypoint sh modulo -c \
+  'test -d "$1" || { echo "refusing to restore: no snapshot directory at $1" >&2; exit 1; }' \
+  sh "$container_snapshot"
+compose run --rm --no-deps modulo \
+  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run >/dev/null
+
+printf 'Verifying the TARGET database matches the snapshot...\n'
+# Without --data-dir there is no state.json identity to compare, so the
+# equivalent guard verifies the TARGET's recorded schema against the snapshot's:
+# a database that is not the one this snapshot came from (different revision,
+# or not a bootstrapped Farna Control database at all) is refused.
+compose run --rm --no-deps modulo \
+  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run \
+  --verify-target-schema >/dev/null
 
 printf 'Stopping the writers (compose service "modulo")...\n'
-docker compose -f "$compose_file" stop modulo
+compose stop modulo
 
 printf 'Restoring %s ...\n' "$container_snapshot"
-# --no-deps: the database is already running; do not restart it. The one-off
-# container inherits the service environment (DATABASE_URL / DATABASE_ADMIN_URL
-# / DATABASE_ADMIN_URL's owner role is what pg_dump and psql need).
-# --safety-dump-dir /backups keeps the pre-restore safety dump of the CURRENT
-# database on the host instead of inside the disposable container.
-docker compose -f "$compose_file" run --rm --no-deps --entrypoint sh modulo -c \
-  'farna-control restore "$1" --db-url "$DATABASE_ADMIN_URL" --yes --safety-dump-dir /backups' \
-  sh "$container_snapshot"
+# --yes here is the INNER confirmation; the operator's confirmation is the
+# --confirm argument this script refuses to run without. --no-deps: the database
+# is already running; do not restart it. --safety-dump-dir /backups keeps the
+# pre-restore safety dump of the CURRENT database on the volume instead of
+# inside the disposable container.
+compose run --rm --no-deps modulo \
+  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" \
+  --yes --verify-target-schema --safety-dump-dir /backups
 
-printf '\nWriters stay stopped. Start the previous release with:\n'
-printf '  TAG=<previous-version> docker compose -f %s up -d modulo\n' "$compose_file"
-printf 'No automatic restart was performed.\n'
+printf '\nRestore complete. Writers stay stopped.\n'
+print_start_command

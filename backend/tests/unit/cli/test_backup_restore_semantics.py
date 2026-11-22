@@ -137,8 +137,11 @@ def _enter_restore_patches(stack: contextlib.ExitStack, lock: MagicMock | None =
         # connect to the developer's own Postgres). Individual tests override.
         lambda: patch("farna.cli.backup._db_has_modulo_tables", return_value=False),
         # Default: the local alembic head matches the archive's recorded
-        # ["rev1"] birthplace schema (no surprise downgrade refusals).
+        # ["rev1"] birthplace schema (no surprise downgrade refusals), and the
+        # binary ships that revision (the downgrade guard compares against the
+        # whole shipped tree, not just the heads).
         lambda: patch("farna.cli.backup._get_schema_versions", return_value=["rev1"]),
+        lambda: patch("farna.cli.backup._known_revisions", return_value=["rev1"]),
         # Default: the pre-restore safety dump "succeeds" (a real invocation
         # shells out to pg_dump). Individual tests override with side effects.
         lambda: patch("farna.cli.backup._take_safety_dump", return_value=Path("pre-restore-dump-fake")),
@@ -1027,11 +1030,11 @@ def test_restore_refuses_schema_downgrade(tmp_path: Path) -> None:
     psql_mock = MagicMock()
     with contextlib.ExitStack() as stack:
         _enter_restore_patches(stack, lock=MagicMock())
-        stack.enter_context(patch("farna.cli.backup._get_schema_versions", return_value=["older_head"]))
+        stack.enter_context(patch("farna.cli.backup._known_revisions", return_value=["older_head"]))
         stack.enter_context(patch("farna.cli.backup._run_psql", psql_mock))
         result = CliRunner().invoke(cli, ["restore", str(archive), "--yes"])
     assert result.exit_code != 0
-    assert "NEWER than this installation speaks" in result.output
+    assert "does not ship" in result.output
     assert psql_mock.called is False
 
 
@@ -1042,10 +1045,29 @@ def test_restore_accepts_matching_schema_versions(tmp_path: Path) -> None:
     (archive / "backup-info.json").write_text(json.dumps(archive_manifest), encoding="utf-8")
     with contextlib.ExitStack() as stack:
         _enter_restore_patches(stack, lock=MagicMock())
+        stack.enter_context(patch("farna.cli.backup._known_revisions", return_value=["same_head"]))
         stack.enter_context(patch("farna.cli.backup._get_schema_versions", return_value=["same_head"]))
         stack.enter_context(patch("farna.cli.backup._check_collation_versions_sync"))
         result = CliRunner().invoke(cli, ["restore", str(archive), "--yes"])
     assert result.exit_code == 0, result.output
+
+
+def test_restore_accepts_an_older_archive_and_rolls_forward_afterwards(tmp_path: Path) -> None:
+    """The documented rollback: a pre-upgrade snapshot records the OLDER
+    revision, which this binary SHIPS, so the restore proceeds and says the
+    next start migrates it forward (FAR-2667 — this used to be refused)."""
+    archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+    archive_manifest = json.loads((archive / "backup-info.json").read_text(encoding="utf-8"))
+    archive_manifest["schema_versions"] = ["older_revision"]
+    (archive / "backup-info.json").write_text(json.dumps(archive_manifest), encoding="utf-8")
+    with contextlib.ExitStack() as stack:
+        _enter_restore_patches(stack, lock=MagicMock())
+        stack.enter_context(patch("farna.cli.backup._known_revisions", return_value=["older_revision", "newer_head"]))
+        stack.enter_context(patch("farna.cli.backup._get_schema_versions", return_value=["newer_head"]))
+        stack.enter_context(patch("farna.cli.backup._check_collation_versions_sync"))
+        result = CliRunner().invoke(cli, ["restore", str(archive), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "migrates it forward" in result.output
 
 
 def test_restore_refuses_unverifiable_target_identity(tmp_path: Path) -> None:
@@ -1149,11 +1171,12 @@ def test_restore_psql_single_transaction_and_no_password_argv(tmp_path: Path) ->
         # -1 must reach psql
         dump_input = tmp_path / "dump-input.sql"
         dump_input.write_text("-- dump", encoding="utf-8")
-        backup_mod._run_psql("postgresql://user:pass@host:5432/farna_control", dump_input)
+        backup_mod._run_psql("postgresql://user:s3cretpw@host:5432/farna_control", dump_input)
+    assert "-X" in seen["argv"]
     assert "-1" in seen["argv"]
     joined = " ".join(str(a) for a in seen["argv"])
-    assert "secret" not in joined
-    assert seen["env"]["PGPASSWORD"] == "secret"
+    assert "s3cretpw" not in joined
+    assert seen["env"]["PGPASSWORD"] == "s3cretpw"
 
 
 def test_backup_pg_dump_no_password_in_argv(tmp_path: Path) -> None:
@@ -1171,10 +1194,10 @@ def test_backup_pg_dump_no_password_in_argv(tmp_path: Path) -> None:
     with contextlib.ExitStack() as stack:
         stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/pg_dump"))
         stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_capture))
-        backup_mod._run_pg_dump("postgresql://user:pass@host:5432/farna_control", output)
+        backup_mod._run_pg_dump("postgresql://user:s3cretpw@host:5432/farna_control", output)
     joined = " ".join(str(a) for a in seen["argv"])
-    assert "secret" not in joined
-    assert seen["env"]["PGPASSWORD"] == "secret"
+    assert "s3cretpw" not in joined
+    assert seen["env"]["PGPASSWORD"] == "s3cretpw"
     assert seen["argv"][-1] == "postgresql://user@host:5432/farna_control"
 
 
@@ -1186,7 +1209,7 @@ def test_pg_dump_output_file_is_created_private(tmp_path: Path) -> None:
     with contextlib.ExitStack() as stack:
         stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/pg_dump"))
         stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_write_dump_then_succeed))
-        backup_mod._run_pg_dump("postgresql://user:pass@host:5432/farna_control", output)
+        backup_mod._run_pg_dump("postgresql://user:s3cretpw@host:5432/farna_control", output)
     assert (output.stat().st_mode & 0o777) == 0o600, "the dump must be born 0600"
 
 
@@ -1445,3 +1468,169 @@ def test_restore_checkpoint_writes_decodes_hex_blobs_to_bytes() -> None:
     assert params[4] == "task-1"
     assert params[8] == b"\xde\xad\xbe\xef"
     assert conn.commit.called
+
+
+# ---------------------------------------------------------------------------
+# FAR-2667 review round: fail-closed restore guards
+# ---------------------------------------------------------------------------
+
+
+def _restore_runner(archive: Path, *extra: str) -> Any:
+    return CliRunner().invoke(cli, ["restore", str(archive), "--yes", "--app-db-url", _APP_DB_URL, *extra])
+
+
+class TestMissingDumpFailsClosed:
+    """A missing dump is worse than a truncated one (C7)."""
+
+    def test_a_deleted_dump_is_refused(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        (archive / _DB_SQL_NAME).unlink()
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            result = _restore_runner(archive)
+        assert result.exit_code != 0
+        assert "database.sql" in result.output
+        assert "not found on disk" in result.output
+
+    def test_the_dump_integrity_gate_itself_refuses_a_missing_dump(self, tmp_path: Path) -> None:
+        """C7 in isolation: the gate must refuse even when no checksum loop
+        runs first (a pre-upgrade snapshot always describes a dump)."""
+        with pytest.raises(click.ClickException, match="MISSING"):
+            backup_mod._validate_dump_integrity(tmp_path, {"snapshot_for_upgrade": True})
+
+    def test_a_checkpoint_only_archive_still_restores_with_a_warning(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        (archive / _DB_SQL_NAME).unlink()
+        manifest = json.loads((archive / "backup-info.json").read_text(encoding="utf-8"))
+        manifest["file_checksums"] = {}
+        manifest.pop("dump_complete", None)
+        (archive / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            result = _restore_runner(archive)
+        assert result.exit_code == 0, result.output
+        assert "only the JSON exports will be restored" in result.output
+
+
+class TestManifestContainment:
+    """A manifest entry may never name a file outside the archive (M6)."""
+
+    def test_a_directory_escaping_entry_is_refused(self, tmp_path: Path) -> None:
+        outside = tmp_path / "outside-secret.txt"
+        outside.write_text("DO NOT HASH ME", encoding="utf-8")
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        manifest = json.loads((archive / "backup-info.json").read_text(encoding="utf-8"))
+        manifest["file_checksums"]["../../outside-secret.txt"] = hashlib.sha256(b"DO NOT HASH ME").hexdigest()
+        (archive / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            result = _restore_runner(archive)
+        assert result.exit_code != 0
+        assert "outside the archive" in result.output
+
+    def test_an_absolute_entry_is_refused(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        manifest = json.loads((archive / "backup-info.json").read_text(encoding="utf-8"))
+        manifest["file_checksums"]["C:/Windows/win.ini"] = "0" * 64
+        (archive / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            result = _restore_runner(archive)
+        assert result.exit_code != 0
+        assert "outside the archive" in result.output
+
+
+class TestVerifyTargetSchema:
+    """The compose path's stand-in for the instance-identity guard (C5)."""
+
+    def test_a_matching_target_is_accepted(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stack.enter_context(patch("farna.cli.backup._read_target_revisions", return_value=["rev1"]))
+            result = _restore_runner(archive, "--verify-target-schema")
+        assert result.exit_code == 0, result.output
+        assert "Target schema verified" in result.output
+
+    def test_a_mismatched_target_is_refused(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stack.enter_context(patch("farna.cli.backup._read_target_revisions", return_value=["some-other-release"]))
+            result = _restore_runner(archive, "--verify-target-schema")
+        assert result.exit_code != 0
+        assert "does not match the snapshot" in result.output
+
+    def test_a_target_without_alembic_version_is_refused(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stack.enter_context(patch("farna.cli.backup._read_target_revisions", return_value=[]))
+            result = _restore_runner(archive, "--verify-target-schema")
+        assert result.exit_code != 0
+        assert "not a bootstrapped Farna Control database" in result.output
+
+    def test_a_target_ahead_of_the_snapshot_is_the_rollback_case(self, tmp_path: Path) -> None:
+        """The release migrated and then failed: the target descends from the
+        snapshot head, so restoring rolls those migrations back and the data with them."""
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stack.enter_context(patch("farna.cli.backup._read_target_revisions", return_value=["a-migration-past-the-snapshot"]))
+            stack.enter_context(patch("farna.cli.backup._target_descends_from_archive", return_value=True))
+            result = _restore_runner(archive, "--verify-target-schema")
+        assert result.exit_code == 0, result.output
+        assert "ROLLS THOSE MIGRATIONS BACK" in result.output
+
+    def test_an_unrelated_target_is_refused(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stack.enter_context(patch("farna.cli.backup._read_target_revisions", return_value=["a-different-release"]))
+            stack.enter_context(patch("farna.cli.backup._target_descends_from_archive", return_value=False))
+            result = _restore_runner(archive, "--verify-target-schema")
+        assert result.exit_code != 0
+        assert "does not match the snapshot" in result.output
+
+    def test_replace_cluster_overrides_the_mismatch(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stack.enter_context(patch("farna.cli.backup._read_target_revisions", return_value=["other"]))
+            result = _restore_runner(archive, "--verify-target-schema", "--replace-cluster")
+        assert result.exit_code == 0, result.output
+        assert "overrides it" in result.output
+
+
+class TestDryRunHasNoSideEffects:
+    """--dry-run must not stop the launcher or take the lock (M12)."""
+
+    def test_a_dry_run_touches_nothing(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        data_dir = _seed_data_dir(tmp_path)
+        with contextlib.ExitStack() as stack:
+            _enter_restore_patches(stack)
+            stop = stack.enter_context(patch("farna.cli.backup._stop_launcher_writers"))
+            lock = stack.enter_context(patch("farna.cli.backup._acquire_data_lock"))
+            result = _restore_runner(archive, "--dry-run", "--data-dir", str(data_dir))
+        assert result.exit_code == 0, result.output
+        stop.assert_not_called()
+        lock.assert_not_called()
+
+
+class TestDiskPreflightTarget:
+    """The pre-flight measures the DATABASE's filesystem, not /backups (M8)."""
+
+    def test_an_explicit_target_fs_wins(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        volume = tmp_path / "db-volume"
+        volume.mkdir()
+        assert backup_mod._resolve_preflight_target(archive, None, volume, None) == volume
+
+    def test_the_data_dir_wins_over_everything(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        volume = tmp_path / "db-volume"
+        volume.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        assert backup_mod._resolve_preflight_target(archive, data_dir, volume, None) == data_dir
