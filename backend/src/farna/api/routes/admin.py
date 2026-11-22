@@ -12,6 +12,7 @@ from typing import Annotated, Any, NamedTuple, NoReturn
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, StrictBool, field_validator
 from sqlalchemy import Date, case, cast, delete, func, select, text
+from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1330,6 +1331,102 @@ class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
 
 
+async def _tombstone_org_membership(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    membership: OrgMembership,
+) -> None:
+    """Tombstone the target's membership in *org_id* and revoke its access.
+
+    FAR-533 (gh-1794): ``is_active`` is PER-ORG. Deactivating tombstones the
+    CALLER'S-ORG membership (``deactivated_at``) and never flips the
+    account-global ``accounts.active`` flag — a single-org admin must not be
+    able to lock a shared user out of other orgs.
+
+    FAR-537: mirror the POST deactivate path's per-org revocation
+    (the caller-bound ``deactivate_break_glass`` SECURITY DEFINER): blacklist
+    the target's refresh-token families minted under the caller's org and
+    revoke the target's live org API keys in that org, so live access tokens
+    cannot outlive a PUT deactivation until TTL. The ``IS false`` / ``IS NULL``
+    guards keep a re-deactivation a clean no-op; running inside the caller's
+    transaction means a revocation failure rolls the deactivation back with it.
+    """
+
+    await session.execute(
+        sa_update(OrgMembership)
+        .where(
+            OrgMembership.account_id == user_id,
+            OrgMembership.organisation_id == org_id,
+            OrgMembership.deactivated_at.is_(None),
+        )
+        .values(deactivated_at=func.now())
+    )
+    # Keep the response object usable after commit without a post-commit lazy
+    # load under autobegin=False.
+    membership.deactivated_at = datetime.now(UTC)
+    revoked_at = datetime.now(UTC)
+    await session.execute(
+        sa_update(TokenFamily)
+        .where(
+            TokenFamily.account_id == user_id,
+            TokenFamily.organisation_id == org_id,
+            TokenFamily.is_blacklisted.is_(False),
+        )
+        .values(is_blacklisted=True, blacklisted_at=revoked_at)
+    )
+    await session.execute(
+        sa_update(OrgApiKey)
+        .where(
+            OrgApiKey.account_id == user_id,
+            OrgApiKey.organisation_id == org_id,
+            OrgApiKey.revoked_at.is_(None),
+        )
+        .values(revoked_at=revoked_at)
+    )
+
+
+async def _clear_org_membership_tombstone(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    membership: OrgMembership,
+) -> None:
+    """Clear the caller's-org tombstone; revoked families/keys stay revoked.
+
+    Reactivating cannot un-revoke what a prior deactivation revoked — revoked
+    families/keys are re-minted by re-login (FAR-533/FAR-537).
+    """
+
+    await session.execute(
+        sa_update(OrgMembership)
+        .where(
+            OrgMembership.account_id == user_id,
+            OrgMembership.organisation_id == org_id,
+        )
+        .values(deactivated_at=None)
+    )
+    membership.deactivated_at = None
+
+
+async def _set_org_membership_role(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    role: str,
+) -> None:
+    """Write the target's role in the caller's org."""
+
+    await session.execute(
+        sa_update(OrgMembership)
+        .where(
+            OrgMembership.account_id == user_id,
+            OrgMembership.organisation_id == org_id,
+        )
+        .values(role=role)
+    )
+
+
 @router.put("/users/{user_id}", dependencies=[Depends(audited("user_updated", "user", principal_dep=get_current_tenant_user))])
 @handle_db_errors("admin.admin_update_user")
 async def admin_update_user(
@@ -1395,78 +1492,14 @@ async def admin_update_user(
                 )
             _reject_service_account_target(account)
 
-            # FAR-533 (gh-1794): is_active is PER-ORG. Deactivating tombstones
-            # the CALLER'S-ORG membership (deactivated_at) and never flips the
-            # account-global accounts.active flag — a single-org admin must
-            # not be able to lock a shared user out of other orgs. Reactivating
-            # clears the caller's-org tombstone only; a globally-flipped
-            # account (operator break-glass) stays inactive until an operator
-            # restores it.
+            # FAR-533 (gh-1794): is_active is PER-ORG. Each branch below is a
+            # no-op when its flag is not requested.
             if req.is_active is False:
-                from sqlalchemy import update as sa_update
-
-                await session.execute(
-                    sa_update(OrgMembership)
-                    .where(
-                        OrgMembership.account_id == user_id,
-                        OrgMembership.organisation_id == current_user.organisation_id,
-                        OrgMembership.deactivated_at.is_(None),
-                    )
-                    .values(deactivated_at=func.now())
-                )
-                # Keep the response object usable after commit without a
-                # post-commit lazy load under autobegin=False.
-                target_membership.deactivated_at = datetime.now(UTC)
-                # FAR-537: mirror the POST deactivate path's per-org revocation
-                # (the caller-bound deactivate_break_glass SECURITY DEFINER):
-                # blacklist the target's refresh-token families minted under the
-                # caller's org and revoke the target's live org API keys in that
-                # org, so live access tokens cannot outlive a PUT deactivation
-                # until TTL. The IS false / IS NULL guards keep a re-deactivation
-                # a clean no-op; running inside this transaction means a
-                # revocation failure rolls the deactivation back with it.
-                revoked_at = datetime.now(UTC)
-                await session.execute(
-                    sa_update(TokenFamily)
-                    .where(
-                        TokenFamily.account_id == user_id,
-                        TokenFamily.organisation_id == current_user.organisation_id,
-                        TokenFamily.is_blacklisted.is_(False),
-                    )
-                    .values(is_blacklisted=True, blacklisted_at=revoked_at)
-                )
-                await session.execute(
-                    sa_update(OrgApiKey)
-                    .where(
-                        OrgApiKey.account_id == user_id,
-                        OrgApiKey.organisation_id == current_user.organisation_id,
-                        OrgApiKey.revoked_at.is_(None),
-                    )
-                    .values(revoked_at=revoked_at)
-                )
+                await _tombstone_org_membership(session, current_user.organisation_id, user_id, target_membership)
             if req.is_active is True:
-                from sqlalchemy import update as sa_update
-
-                await session.execute(
-                    sa_update(OrgMembership)
-                    .where(
-                        OrgMembership.account_id == user_id,
-                        OrgMembership.organisation_id == current_user.organisation_id,
-                    )
-                    .values(deactivated_at=None)
-                )
-                target_membership.deactivated_at = None
+                await _clear_org_membership_tombstone(session, current_user.organisation_id, user_id, target_membership)
             if req.org_role is not None:
-                from sqlalchemy import update as sa_update
-
-                await session.execute(
-                    sa_update(OrgMembership)
-                    .where(
-                        OrgMembership.account_id == user_id,
-                        OrgMembership.organisation_id == current_user.organisation_id,
-                    )
-                    .values(role=req.org_role)
-                )
+                await _set_org_membership_role(session, current_user.organisation_id, user_id, req.org_role)
 
             # The membership was loaded before the mutation transaction.  Use
             # the requested role when present; otherwise its loaded role is
@@ -1543,6 +1576,49 @@ def _raise_bg_pgcode(
         ) from None
 
 
+async def _deactivate_target_membership(
+    session: AsyncSession,
+    current_user: TenantPrincipal,
+    user_id: uuid.UUID,
+    account: Account,
+) -> str:
+    """Tombstone + revoke the target's membership, returning its org role.
+
+    Caller-bound SECURITY DEFINER: per-org family/key/membership revocation +
+    per-org membership tombstone (``deactivated_at`` — the deactivation
+    signal, gh-1794/FAR-533; ``accounts.active`` is only flipped by the
+    operator/break-glass branch) + per-org last-admin M2020 + bg-only
+    destructive tombstone. Atomic single statement. Team memberships are then
+    dropped and the ``user_deactivated`` audit event recorded.
+    """
+    await session.execute(
+        text("SELECT public.deactivate_break_glass(:caller, :target, false)"),
+        {"caller": current_user.account_id, "target": user_id},
+    )
+    await session.refresh(account)
+
+    team_memberships = await list_team_memberships_for_account(session, user_id)
+    for tm in team_memberships:
+        await remove_team_member(session, tm.id)
+
+    # Call-time import: tests patch farna.core.audit_logger.append_audit_event.
+    from farna.core.audit_logger import append_audit_event  # nosemgrep: semgrep.inline-import-route-files
+
+    await append_audit_event(
+        session,
+        org_id=current_user.organisation_id,
+        event_type="user_deactivated",
+        actor_user_id=current_user.account_id,
+        resource_type="user",
+        resource_id=user_id,
+        payload_json={"target_user_id": str(user_id)},
+    )
+
+    await session.flush()
+
+    return await _get_org_role(session, user_id, current_user.organisation_id)
+
+
 @router.post(
     "/users/{user_id}/deactivate",
     dependencies=[Depends(audited("api_access_post", "user", principal_dep=get_current_tenant_user))],
@@ -1598,36 +1674,7 @@ async def admin_deactivate_user(
                 target_active_after=False,
             )
 
-            # Caller-bound SECURITY DEFINER: per-org family/key/membership
-            # revocation + per-org membership tombstone (deactivated_at — the
-            # deactivation signal, gh-1794/FAR-533; accounts.active is only
-            # flipped by the operator/break-glass branch) + per-org last-admin
-            # M2020 + bg-only destructive tombstone. Atomic single statement.
-            await session.execute(
-                text("SELECT public.deactivate_break_glass(:caller, :target, false)"),
-                {"caller": current_user.account_id, "target": user_id},
-            )
-            await session.refresh(account)
-
-            team_memberships = await list_team_memberships_for_account(session, user_id)
-            for tm in team_memberships:
-                await remove_team_member(session, tm.id)
-
-            from farna.core.audit_logger import append_audit_event
-
-            await append_audit_event(
-                session,
-                org_id=current_user.organisation_id,
-                event_type="user_deactivated",
-                actor_user_id=current_user.account_id,
-                resource_type="user",
-                resource_id=user_id,
-                payload_json={"target_user_id": str(user_id)},
-            )
-
-            await session.flush()
-
-            org_role = await _get_org_role(session, user_id, current_user.organisation_id)
+            org_role = await _deactivate_target_membership(session, current_user, user_id, account)
     except LastAdminLockoutError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -1723,7 +1770,6 @@ async def admin_reactivate_user(
             # break-glass, or legacy pre-0173 deactivation) stays inactive
             # until an operator restores it; clearing this tombstone alone
             # restores exactly this org.
-            from sqlalchemy import update as sa_update
 
             await session.execute(
                 sa_update(OrgMembership)
@@ -1734,7 +1780,8 @@ async def admin_reactivate_user(
                 .values(deactivated_at=None)
             )
 
-            from farna.core.audit_logger import append_audit_event
+            # Call-time import: tests patch farna.core.audit_logger.append_audit_event.
+            from farna.core.audit_logger import append_audit_event  # nosemgrep: semgrep.inline-import-route-files
 
             await append_audit_event(
                 session,
@@ -2470,12 +2517,13 @@ async def admin_delete_team(
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_TEAM_NOT_FOUND)
 
-    from farna.core.audit_logger import append_audit_event
-
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)
             await set_rls_user_context(session, current_user.account_id, current_user.org_role)
+            # Call-time import: tests patch farna.core.audit_logger.append_audit_event.
+            from farna.core.audit_logger import append_audit_event  # nosemgrep: semgrep.inline-import-route-files
+
             await append_audit_event(
                 session,
                 org_id=current_user.organisation_id,
@@ -3635,12 +3683,13 @@ async def admin_manual_purge(
 ) -> dict[str, int]:
     _require_admin(current_user, "purge runs")
 
-    from farna.core.audit_logger import append_audit_event
-
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)
             result = await purge_runs(session, older_than=req.older_than)
+            # Call-time import: tests patch farna.core.audit_logger.append_audit_event.
+            from farna.core.audit_logger import append_audit_event  # nosemgrep: semgrep.inline-import-route-files
+
             await append_audit_event(
                 session,
                 org_id=current_user.organisation_id,

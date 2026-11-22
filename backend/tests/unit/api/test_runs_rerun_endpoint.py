@@ -28,7 +28,7 @@ from farna.api.main import app
 from farna.api.routes import runs as runs_module
 from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_user_or_api_key, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
-from farna.core.exceptions import PipelineNotRunnableError
+from farna.core.exceptions import OrgDeletedError, PipelineNotRunnableError
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_rls_preamble
 
@@ -400,6 +400,28 @@ def test_rerun_missing_source_returns_404(client: TestClient) -> None:
         resp = client.post(f"/api/v1/runs/{_SOURCE_RUN_ID}/rerun", json={})
 
     assert resp.status_code == 404
+
+
+@pytest.mark.parametrize(("deleted", "expected"), [(True, 409), (False, 404)], ids=["deleted-org", "missing-org"])
+def test_rerun_org_deleted_mapping(client: TestClient, deleted: bool, expected: int) -> None:
+    """FAR-1589: an OrgDeletedError from create_run maps to 409 (deleted) /
+    404 (missing), never a generic 500."""
+    source_run = _make_source_run()
+
+    with (
+        patch("farna.api.routes.runs.get_run", return_value=source_run),
+        patch("farna.api.routes.runs.get_pipeline", return_value=_make_pipeline()),
+        patch(
+            "farna.api.routes.runs.create_run",
+            new_callable=AsyncMock,
+            side_effect=OrgDeletedError(org_id=_ORG_ID, deleted=deleted),
+        ),
+        patch("farna.api.routes.runs.set_rls_org"),
+        patch("farna.api.routes.runs.set_rls_user_context"),
+    ):
+        resp = client.post(f"/api/v1/runs/{_SOURCE_RUN_ID}/rerun", json={})
+
+    assert resp.status_code == expected, resp.text
 
 
 def test_rerun_pipeline_missing_returns_404(client: TestClient) -> None:

@@ -442,4 +442,9 @@ __all__ = [
     #     call sites are the relay tests' stand-ins for ops/diagnostic use) ---
     "wait_ready",  # EventRelay: awaits the subscribe-confirmation signal
     "get_active_relay",  # relay singleton accessor (diagnostic/test-referenced)
+    # --- executor_parts split: public evidence helpers reached by the executor
+    #     through the _ref() call-time bridge, which static analysis cannot see ---
+    "node_declared_success",
+    "compute_work_intact",
+    "build_default_evidence_provider",
 ]
