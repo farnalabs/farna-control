@@ -64,6 +64,12 @@ __all__ = [
     "_TaskGroupSessionManager",
     "RepositoryHub",
     "AdvisoryLockService",
+    # --- Python protocol hooks called implicitly by the interpreter (never a
+    #     call site vulture can see; NOT dead code) ---
+    # api/mcp_tools/_patch_surface.py `HITLManager.__new__`: construction proxy for
+    # the patchable `farna.api.mcp_server.HITLManager`, so the extracted HITL
+    # domain both type-checks (annotation) and stays mock.patch-able (runtime).
+    "__new__",
     # --- Connector test doubles (referenced only by backend/tests) ---
     "_AzurePipelinesTestDouble",
     "_BuildkiteTestDouble",

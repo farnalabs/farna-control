@@ -13,6 +13,7 @@ import ast
 import inspect
 import os
 from collections.abc import Callable
+from pathlib import Path
 
 from fastapi.routing import APIRoute
 
@@ -225,13 +226,47 @@ def test_mcp_entry_points_are_registered_and_resolve_through_central_registry() 
     assert registered, "MCP inventory is empty; authorization coverage would be vacuous"
 
 
+def _mcp_surface_function_nodes() -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Every function defined anywhere in the MCP surface, keyed by bare name.
+
+    The MCP handlers were split out of ``api/mcp_server.py`` into
+    ``api/mcp_tools/<domain>.py`` (behaviour-preserving extraction) while the
+    shared spine — including the ``_check_agent_tool_scope`` chokepoint — stayed
+    in ``mcp_server.py``. The reachability walk therefore has to span the UNION,
+    or a relocated handler's call to the chokepoint would look unreachable and
+    every extracted domain would be reported as a bypass.
+
+    ``mcp_tools/_patch_surface.py`` is skipped: its call-time aliases carry the
+    same names as the real definitions and would shadow them in this name-keyed
+    map (they contain no call graph of their own).
+    """
+    from farna.api import mcp_server
+
+    api_root = Path(inspect.getfile(mcp_server)).parent
+    paths = [api_root / "mcp_server.py"]
+    paths.extend(sorted(path for path in (api_root / "mcp_tools").glob("*.py") if path.name != "_patch_surface.py"))
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                functions.setdefault(node.name, node)
+    return functions
+
+
 def _reachable_function_names(function: Callable[..., object]) -> set[str]:
-    """Return functions reachable from an MCP handler through direct calls."""
+    """Return functions reachable from an MCP handler through direct calls.
+
+    Walks the whole MCP surface (see ``_mcp_surface_function_nodes``), so a
+    handler that delegates to a helper still defined in ``api/mcp_server.py``
+    keeps its edge.
+    """
     source = inspect.getsource(function)
     module = inspect.getmodule(function)
     assert module is not None
-    tree = ast.parse(inspect.getsource(module))
-    functions = {node.name: node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    functions = _mcp_surface_function_nodes()
     calls = {name: {node.func.id for node in ast.walk(function_node) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in functions} for name, function_node in functions.items()}
     root = function.__name__
     if root not in functions:

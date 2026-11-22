@@ -255,8 +255,10 @@ def test_read_paths_query_evals_not_eval_definitions() -> None:
     read_path_specs: list[tuple[str, str, str]] = [
         ("api/routes/evals.py", "list_eval_definitions", "R1"),
         ("api/routes/evals.py", "get_eval_definition", "R2"),
-        ("api/mcp_server.py", "list_eval_definitions", "R3"),
-        ("api/mcp_server.py", "_load_eval_def", "R4"),
+        # R3/R4 live in the extracted MCP eval domain (behaviour-preserving split
+        # of api/mcp_server.py); the pin follows the reader, it is not dropped.
+        ("api/mcp_tools/evals.py", "list_eval_definitions", "R3"),
+        ("api/mcp_tools/evals.py", "_load_eval_def", "R4"),
     ]
     offenders: list[str] = []
     checked: list[str] = []

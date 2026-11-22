@@ -25,7 +25,7 @@
 > `cron_helpers.py:5849`, `cron_helpers.py:7021`). The +5 since the FAR-1833
 > cutover are **new sites landed by other work**, neither category C:
 >
-> - `api/mcp_server.py::_replace_pipeline_graph_txn` (A19; self-bounds with
+> - `api/mcp_tools/pipelines.py::_replace_pipeline_graph_txn` (A19; self-bounds with
 >   `set_mutation_row_lock_timeout` before its first lock, FAR-1361).
 > - `core/cron_helpers.py::_fail_node_deadline_run` (D15; `session.get(Run,
 >   with_for_update=True)` at `5849`, bounded by the reconcile org transaction's
@@ -110,7 +110,7 @@ hit; the raw `file:line` set is exactly reproducible from command (1).
 > sites).
 
 > **Post-cutover additions (other work).** Four sites then landed this branch after
-> the cutover, none in category C: A19 (`api/mcp_server.py::_replace_pipeline_graph_txn`),
+> the cutover, none in category C: A19 (`api/mcp_tools/pipelines.py::_replace_pipeline_graph_txn`),
 > D15 (`core/cron_helpers.py::_fail_node_deadline_run`), D16
 > (`core/cron_helpers.py::_write_terminal_triage_marker`) and D17
 > (`core/cron_helpers.py::_terminalize_aged_nodeless_zombies`). The branch tip the
@@ -144,13 +144,13 @@ unrelated writer or is held across non-lock work.
 
 | # | file:line | function | lock | txn | hold / blocking scope | over-serializes |
 |---|---|---|---|---|---|---|
-| A1 | `api/mcp_server.py:4692` (`bind_connector_to_node`, defined at 4652) | `bind_connector_to_node` | FOR UPDATE | caller txn | Pipeline row locked while the MCP graph/connector-binding write commits. | no – pipeline single-writer. |
+| A1 | `api/mcp_tools/pipelines.py` (`bind_connector_to_node`) | `bind_connector_to_node` | FOR UPDATE | caller txn | Pipeline row locked while the MCP graph/connector-binding write commits. | no – pipeline single-writer. |
 | A2 | `api/routes/triggers.py:379` | `_require_team_gate_in_txn` | FOR UPDATE | mutation txn, bounded by `set_mutation_row_lock_timeout` | TOCTOU re-check of the pipeline team gate; blocks pipeline graph writers for the RMW. | no. |
 | A3 | `api/routes/pipelines.py:3400` | `_reapply_team_gate_inside_mutation_txn` | FOR UPDATE | mutation txn, bounded | Same team-gate TOCTOU re-check (the route-side twin of A2). | no. |
 | A4 | `db/crud/pipeline_snapshot.py:441` | `_acquire_snapshot_allocation_lock` | FOR NO KEY UPDATE (`key_share=True`) | caller txn, bounded by `set_mutation_row_lock_timeout` | Snapshot-allocation slot; deliberately the weakest key-preserving lock so it does not conflict with FK-only writers. Timeout → `SnapshotLockNotAvailableError` (retryable 503). | no. |
 | A5 | `db/crud/run.py:2469` | `coalesce_pending_run` | FOR UPDATE **SKIP LOCKED** | caller txn | Non-blocking claim of a pending run to coalesce; never waits. | no. |
 | A6 | `db/crud/run.py:3600` | `update_run_status` | FOR UPDATE | caller txn (executor/cron; fenced variant used on the hot path) | Read-then-write of run status; serializes against the park sweep and concurrent terminalizers. | no – but see §7 run-row hotspot. |
-| A7 | `db/crud/run.py:3970` | `request_cancellation` | FOR UPDATE | caller txn (**now bounded** – both callers issue `set_mutation_row_lock_timeout` first, FAR-1610) | Sets cancel-wins fields on the run row. Bounding is deliberately the caller's job: `api/routes/runs.py:_cancel_run` and `api/mcp_server.py:_cancel_run_impl` each call `set_mutation_row_lock_timeout` **before** the first lock, so a contended row yields a `55P03` the caller maps to a visible 409 (REST) or a branchable `lock_timeout` result (MCP), never an unbounded wait. | no – gap closed (FAR-1610). |
+| A7 | `db/crud/run.py:3970` | `request_cancellation` | FOR UPDATE | caller txn (**now bounded** – both callers issue `set_mutation_row_lock_timeout` first, FAR-1610) | Sets cancel-wins fields on the run row. Bounding is deliberately the caller's job: `api/routes/runs.py:_cancel_run` and `api/mcp_tools/runs.py:_cancel_run_impl` each call `set_mutation_row_lock_timeout` **before** the first lock, so a contended row yields a `55P03` the caller maps to a visible 409 (REST) or a branchable `lock_timeout` result (MCP), never an unbounded wait. | no – gap closed (FAR-1610). |
 | A8 | `db/crud/variant_group.py:158` | `increment_run_count` | FOR UPDATE | caller txn | Serializes the run-count increment for an A/B variant group. | no. |
 | A9 | `db/crud/variant_group.py:218` | `_lock_variant_group` | FOR UPDATE | caller txn | Shared variant-group lock used by the A/B assignment path. | no. |
 | A10 | `db/crud/pipeline_snapshot_versioning.py:281` | `rollback_to_snapshot` | FOR UPDATE | caller txn | Pipeline row held across version rollback (snapshot pointer/version bump). | watch – held across snapshot version work; see §7. |
@@ -162,7 +162,7 @@ unrelated writer or is held across non-lock work.
 | A16 | `core/pipeline_engine/recovery.py:431` | `_fetch_locked_run` | FOR UPDATE | caller txn, `include_soft_deleted` | Locks the *pipeline* row to single-flight run recovery; re-reads the run after the lock. | no. |
 | A17 | `core/pipeline_engine/recovery.py:712` | `guardrail_override` | FOR UPDATE | caller txn, `include_soft_deleted` | Pipeline lock so a guardrail override cannot race a graph edit. | no. |
 | A18 | `core/pipeline_engine/classify.py:1383` | `_reconcile_classify_run` | FOR UPDATE + `populate_existing` | **own** `session.begin()` | Per-run re-read to terminalize/classify exactly once; each DB call bounded by `asyncio.wait_for(_CLASSIFICATION_WRITE_TIMEOUT_SECONDS)`. | no. |
-| A19 | `api/mcp_server.py:4170` | `_replace_pipeline_graph_txn` | FOR UPDATE | own `_session` txn, **bounded** by `set_mutation_row_lock_timeout` (FAR-1361) | MCP graph-replace transaction takes the pipeline row lock first (FAR-1845 order); the bound is issued before the first lock. | no. |
+| A19 | `api/mcp_tools/pipelines.py` | `_replace_pipeline_graph_txn` | FOR UPDATE | own `_session` txn, **bounded** by `set_mutation_row_lock_timeout` (FAR-1361) | MCP graph-replace transaction takes the pipeline row lock first (FAR-1845 order); the bound is issued before the first lock. | no. |
 
 > Note: A18 and the raw-SQL site R2 (§4) both lock the `runs` row; A15 and R2 are the two
 > halves of the same connector idempotency-gate fence (write vs read).
@@ -610,7 +610,7 @@ re-ran §1's two commands against the branch tip before changing anything:
 | **total** | **65** | **64** |
 
 The +5 since the FAR-1833 snapshot are sites added by unrelated work, all outside
-category C: **A19** `api/mcp_server.py::_replace_pipeline_graph_txn` (already self-bounds
+category C: **A19** `api/mcp_tools/pipelines.py::_replace_pipeline_graph_txn` (already self-bounds
 with `set_mutation_row_lock_timeout`, FAR-1361); **D15**
 `core/cron_helpers.py::_fail_node_deadline_run` (bounded by the reconcile org transaction
 at `cron_helpers.py:9305`, FAR-1601); **D16**
@@ -699,7 +699,7 @@ pinned tests fail otherwise.
 
 **Out-of-scope findings recorded, not fixed here** (both are category A/B, not C):
 
-1. **A1 `api/mcp_server.py::bind_connector_to_node` is unbounded.** It takes the pipeline
+1. **A1 `api/mcp_tools/pipelines.py::bind_connector_to_node` is unbounded.** It takes the pipeline
    row `FOR UPDATE` inside the shared `_session` context manager, which sets RLS but no
    `lock_timeout`; the MCP tool path therefore has a user-facing unbounded wait for a
    contended pipeline row. The row's `txn` note says "caller txn" but not "bounded".

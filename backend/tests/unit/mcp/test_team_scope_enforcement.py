@@ -1775,7 +1775,7 @@ class TestTriggerUserMembershipGate(_OperatorAuthContext):
         with (
             self._patches(_TEAM_B, membership=True),
             patch(
-                "farna.api.mcp_server._validate_ongoing_trigger_create",
+                "farna.api.mcp_tools.triggers._validate_ongoing_trigger_create",
                 AsyncMock(return_value=(_datetime.now(_UTC), None)),
             ),
             patch("farna.api.mcp_server._streak_status_for", AsyncMock(return_value="ok")),
@@ -1798,7 +1798,7 @@ class TestTriggerUserMembershipGate(_OperatorAuthContext):
             with (
                 self._patches(_TEAM_B, membership=False),
                 patch(
-                    "farna.api.mcp_server._validate_ongoing_trigger_create",
+                    "farna.api.mcp_tools.triggers._validate_ongoing_trigger_create",
                     AsyncMock(return_value=(_datetime.now(_UTC), None)),
                 ),
                 patch("farna.api.mcp_server._streak_status_for", AsyncMock(return_value="ok")),

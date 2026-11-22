@@ -16,6 +16,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# The HITL dispatch helpers now live in api/mcp_tools/hitl.py (behaviour-preserving
+# split of api/mcp_server.py), so their patch targets are that module.
+import farna.api.mcp_tools.hitl as hitl_tools
 from farna.api.hitl_answer_validation import (
     AnswerValidationError,
     validate_hitl_answer,
@@ -194,7 +197,7 @@ class TestDispatchHitlApproveAnswer:
         mgr = MagicMock()
         mgr.approve = AsyncMock()
         error = {"error": "invalid_answer", "detail": "nope"}
-        with patch.object(mcp_server, "_validate_mcp_choice_answer", AsyncMock(return_value=(error, None))):
+        with patch.object(hitl_tools, "_validate_mcp_choice_answer", AsyncMock(return_value=(error, None))):
             result = await mcp_server._dispatch_hitl_approve(
                 mgr,
                 AsyncMock(),
@@ -215,7 +218,7 @@ class TestDispatchHitlApproveAnswer:
         mgr = MagicMock()
         mgr.approve = AsyncMock()
         validated = {"kind": "choice", "option_id": "yes"}
-        with patch.object(mcp_server, "_validate_mcp_choice_answer", AsyncMock(return_value=(None, validated))):
+        with patch.object(hitl_tools, "_validate_mcp_choice_answer", AsyncMock(return_value=(None, validated))):
             result = await mcp_server._dispatch_hitl_approve(
                 mgr,
                 AsyncMock(),
@@ -238,7 +241,7 @@ class TestDispatchHitlDeliverManualAnswer:
         mgr = MagicMock()
         mgr.deliver_manual = AsyncMock()
         error = {"error": "invalid_answer", "detail": "nope"}
-        with patch.object(mcp_server, "_validate_mcp_choice_answer", AsyncMock(return_value=(error, None))):
+        with patch.object(hitl_tools, "_validate_mcp_choice_answer", AsyncMock(return_value=(error, None))):
             result = await mcp_server._dispatch_hitl_deliver_manual(
                 mgr,
                 AsyncMock(),
@@ -260,7 +263,7 @@ class TestDispatchHitlDeliverManualAnswer:
         mgr = MagicMock()
         mgr.deliver_manual = AsyncMock()
         validated = {"kind": "choice", "option_id": "yes"}
-        with patch.object(mcp_server, "_validate_mcp_choice_answer", AsyncMock(return_value=(None, validated))):
+        with patch.object(hitl_tools, "_validate_mcp_choice_answer", AsyncMock(return_value=(None, validated))):
             result = await mcp_server._dispatch_hitl_deliver_manual(
                 mgr,
                 AsyncMock(),

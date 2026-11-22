@@ -104,7 +104,7 @@ _C_SITE_LOCK_COUNTS: dict[str, int] = {
 # §4 sites, and sql_text never matches the AST shapes above).
 _ROW_LOCK_FILES: frozenset[str] = frozenset(
     {
-        "api/mcp_server.py",
+        "api/mcp_tools/pipelines.py",
         "api/routes/api_keys.py",
         "api/routes/model_backends.py",
         "api/routes/pipelines.py",

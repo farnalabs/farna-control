@@ -41,6 +41,10 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ROUTES_DIR = BACKEND_DIR / "src" / "farna" / "api" / "routes"
 MCP_SERVER_PATH = BACKEND_DIR / "src" / "farna" / "api" / "mcp_server.py"
+#: Extracted MCP tool domains (behaviour-preserving split of ``mcp_server.py``):
+#: a mutating ``@mcp.tool`` may now be registered from either place, so the
+#: ratchet must scan the union or a relocated writer would go unaudited.
+MCP_TOOLS_DIR = BACKEND_DIR / "src" / "farna" / "api" / "mcp_tools"
 BASELINE_PATH = BACKEND_DIR / "tests" / "architecture" / "audit_coverage_baseline.txt"
 
 #: HTTP methods that mutate state (``GET``/``HEAD``/``OPTIONS`` never do).
@@ -180,16 +184,33 @@ def scan_mcp_source(source: str, filename: str = MCP_SERVER_PATH.name) -> set[st
     return unannotated
 
 
-def scan_mcp_tree(mcp_path: Path = MCP_SERVER_PATH) -> set[str]:
-    """Scan the MCP server module and return all unannotated mutating tools."""
-    try:
-        source = mcp_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:  # pragma: no cover - unreadable file
-        raise RuntimeError(f"cannot read MCP server module {mcp_path}: {exc}") from exc
-    try:
-        return scan_mcp_source(source, mcp_path.name)
-    except SyntaxError as exc:  # pragma: no cover - a broken module
-        raise RuntimeError(f"cannot parse MCP server module {mcp_path}: {exc}") from exc
+def mcp_surface_paths(mcp_path: Path = MCP_SERVER_PATH, tools_dir: Path | None = None) -> list[Path]:
+    """Every module that can register an MCP tool: the server + its domains.
+
+    ``api/mcp_server.py`` still owns most registrations; the extracted domains
+    under ``api/mcp_tools/`` register on the same FastMCP app, so a scanner
+    that read only the server module would silently stop seeing them.
+    """
+    directory = MCP_TOOLS_DIR if tools_dir is None else tools_dir
+    paths = [mcp_path]
+    if directory.is_dir():
+        paths.extend(sorted(path for path in directory.glob("*.py") if path.name != "__init__.py"))
+    return [path for path in paths if path.is_file()]
+
+
+def scan_mcp_tree(mcp_path: Path = MCP_SERVER_PATH, tools_dir: Path | None = None) -> set[str]:
+    """Scan the whole MCP surface and return all unannotated mutating tools."""
+    unannotated: set[str] = set()
+    for path in mcp_surface_paths(mcp_path, tools_dir):
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:  # pragma: no cover - unreadable file
+            raise RuntimeError(f"cannot read MCP server module {path}: {exc}") from exc
+        try:
+            unannotated |= scan_mcp_source(source, path.name)
+        except SyntaxError as exc:  # pragma: no cover - a broken module
+            raise RuntimeError(f"cannot parse MCP server module {path}: {exc}") from exc
+    return unannotated
 
 
 def scan_tree(routes_dir: Path = ROUTES_DIR, mcp_path: Path = MCP_SERVER_PATH) -> set[str]:
@@ -234,9 +255,15 @@ def compare(unannotated: set[str], baseline: set[str]) -> tuple[list[str], list[
     return new_violations, stale_entries
 
 
+def _mcp_surface_names(tools_dir: Path | None = None) -> set[str]:
+    """File names of every module in the MCP surface (identity prefix)."""
+    return {path.name for path in mcp_surface_paths(MCP_SERVER_PATH, tools_dir)}
+
+
 def _hint_for(entry: str) -> str:
     """Per-surface remediation hint for one unannotated writer."""
-    return _MCP_HINT if entry.startswith(MCP_SERVER_PATH.name + ":") else _ROUTE_HINT
+    file_name = entry.split(":", 1)[0]
+    return _MCP_HINT if file_name in _mcp_surface_names() else _ROUTE_HINT
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -259,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     baseline = read_baseline()
     new_violations, stale_entries = compare(unannotated, baseline)
 
-    route_violations = {v for v in unannotated if not v.startswith(MCP_SERVER_PATH.name + ":")}
+    route_violations = {v for v in unannotated if v.split(":", 1)[0] not in _mcp_surface_names()}
     mcp_violations = set(unannotated) - route_violations
     total_routes = _count_mutating_routes()
     total_mcp_tools = _count_mutating_mcp_tools()
@@ -301,13 +328,16 @@ def _count_mutating_routes(routes_dir: Path = ROUTES_DIR) -> int:
     return total
 
 
-def _count_mutating_mcp_tools(mcp_path: Path = MCP_SERVER_PATH) -> int:
-    """Total mutating ``@mcp.tool`` registrations (reporting only)."""
-    try:
-        tree = ast.parse(mcp_path.read_text(encoding="utf-8"), filename=str(mcp_path))
-    except (SyntaxError, OSError, UnicodeDecodeError):  # pragma: no cover
-        return 0
-    return sum(1 for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _is_mutating_mcp_tool(node.name) and any(_is_mcp_tool_decorator(d) for d in node.decorator_list))
+def _count_mutating_mcp_tools(mcp_path: Path = MCP_SERVER_PATH, tools_dir: Path | None = None) -> int:
+    """Total mutating ``@mcp.tool`` registrations across the MCP surface."""
+    total = 0
+    for path in mcp_surface_paths(mcp_path, tools_dir):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, OSError, UnicodeDecodeError):  # pragma: no cover
+            continue
+        total += sum(1 for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _is_mutating_mcp_tool(node.name) and any(_is_mcp_tool_decorator(d) for d in node.decorator_list))
+    return total
 
 
 if __name__ == "__main__":
