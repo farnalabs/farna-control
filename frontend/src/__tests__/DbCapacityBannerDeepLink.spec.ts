@@ -15,6 +15,15 @@ import { getAccessToken } from '../lib/api/client'
 vi.mock('../lib/api/dbCapacity', () => ({ fetchDbCapacity: vi.fn() }))
 vi.mock('../lib/api/client', () => ({ getAccessToken: vi.fn() }))
 
+// FAR-2664: a locked item without a tier must still build a valid locked link.
+// The real manifest gives both remediation pages a tier, so substitute the nav
+// only for the defensive no-tier case.
+const navState = vi.hoisted(() => ({ groups: null as null | unknown[] }))
+vi.mock('../config/navigation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config/navigation')>()
+  return { ...actual, getNavGroups: () => navState.groups ?? actual.getNavGroups() }
+})
+
 const mockedFetch = vi.mocked(fetchDbCapacity)
 
 function jwt(claims: Record<string, unknown>): string {
@@ -43,6 +52,7 @@ async function mountBanner(): Promise<ReturnType<typeof mount>> {
 describe('DbCapacityBanner remediation links (FAR-2664)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    navState.groups = null
   })
 
   it('links an instance administrator straight at both remediation pages', async () => {
@@ -95,5 +105,40 @@ describe('DbCapacityBanner remediation links (FAR-2664)', () => {
     expect(wrapper.get('[data-testid="db-capacity-run-retention-link"]').attributes('href')).toBe(
       '/admin/run-retention',
     )
+  })
+
+  it('treats an absent org role as holding none, sending a system admin to the role lock', async () => {
+    vi.mocked(getAccessToken).mockReturnValue(jwt({ is_system_admin: true }))
+    const wrapper = await mountBanner()
+
+    const retention = wrapper.get('[data-testid="db-capacity-run-retention-link"]').attributes('href')
+    expect(retention).toContain('/locked?')
+    expect(retention).toContain('reason=role')
+  })
+
+  it('omits the tier on a locked item that carries none', async () => {
+    navState.groups = [
+      {
+        id: 'test',
+        label: 'Test',
+        defaultCollapsed: false,
+        items: [
+          {
+            to: '/admin/run-retention',
+            icon: 'Clock',
+            label: 'Run Retention',
+            labelKey: 'k',
+            systemAdminOnly: true,
+            requiredRoles: ['admin'],
+          },
+        ],
+      },
+    ]
+    vi.mocked(getAccessToken).mockReturnValue(jwt({ is_system_admin: false, org_role: 'admin' }))
+    const wrapper = await mountBanner()
+
+    const retention = wrapper.get('[data-testid="db-capacity-run-retention-link"]').attributes('href')
+    expect(retention).toContain('reason=system_admin')
+    expect(retention).not.toContain('tier=')
   })
 })

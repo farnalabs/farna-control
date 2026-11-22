@@ -76,6 +76,15 @@ vi.mock('../lib/api/client', () => ({
   onAuthChange: vi.fn(() => vi.fn()),
 }))
 
+// FAR-2664: the token-spend destination reads the Costs nav item's gates. The
+// real manifest always gates Costs, but the component must tolerate an item
+// with no role/tier gate; `groups` substitutes the nav for those cases only.
+const navState = vi.hoisted(() => ({ groups: null as null | unknown[] }))
+vi.mock('../config/navigation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config/navigation')>()
+  return { ...actual, getNavGroups: () => navState.groups ?? actual.getNavGroups() }
+})
+
 import DashboardView from '../views/DashboardView.vue'
 import StatCard from '../components/StatCard.vue'
 import DashboardSystemOverview from '../components/dashboard/DashboardSystemOverview.vue'
@@ -333,6 +342,44 @@ describe('DashboardView', () => {
   describe('token-spend card destination (FAR-2664)', () => {
     afterEach(() => {
       vi.mocked(getAccessToken).mockReturnValue('mock-token')
+      navState.groups = null
+    })
+
+    it('treats a Costs item with no role gate as reachable for any role', async () => {
+      navState.groups = [
+        {
+          id: 'test',
+          label: 'Test',
+          defaultCollapsed: false,
+          items: [{ to: '/admin/costs', icon: 'Coins', label: 'Costs', labelKey: 'k' }],
+        },
+      ]
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
+
+    it('omits the tier on the role lock when the Costs item carries none', async () => {
+      navState.groups = [
+        {
+          id: 'test',
+          label: 'Test',
+          defaultCollapsed: false,
+          items: [
+            { to: '/admin/costs', icon: 'Coins', label: 'Costs', labelKey: 'k', requiredRoles: ['admin'] },
+          ],
+        },
+      ]
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('reason=role')
+      expect(href).not.toContain('tier=')
     })
 
     it('links an admin straight at Costs', async () => {

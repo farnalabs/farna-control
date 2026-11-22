@@ -29,6 +29,7 @@ import router, {
   enforceRoleTierVisibility,
   focusRouteContent,
   hydrateManifestMeta,
+  lockedRouteFor,
 } from '../router'
 import { clearAccessToken, setAccessToken } from '../lib/api/auth'
 
@@ -353,6 +354,23 @@ describe('enforceRoleTierVisibility', () => {
         tier: 'team',
         reason: 'tier',
       },
+    })
+  })
+
+  it('omits the tier and capability when the route is not in the manifest (FAR-2664)', () => {
+    // Defensive path: a below-tier refusal for a route the manifest does not
+    // describe still lands on the locked page, just without a capability name
+    // or licence to quote.
+    const target = lockedRouteFor({
+      path: '/not-in-manifest',
+      fullPath: '/not-in-manifest',
+      matched: [],
+      meta: {},
+    } as never)
+
+    expect(target).toEqual({
+      path: '/locked',
+      query: { from: '/not-in-manifest', reason: 'tier' },
     })
   })
 

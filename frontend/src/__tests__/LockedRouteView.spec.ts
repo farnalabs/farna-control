@@ -160,4 +160,17 @@ describe('LockedRouteView', () => {
     expect(wrapper.get('[data-testid="locked-route-header"]').text()).toContain('This page')
     expect(wrapper.get('[data-testid="locked-route-header"]').text()).toContain('Team licence')
   })
+
+  it('uses the unknown-tier wording when the guard supplied no tier', () => {
+    // The router always carries a tier for a below-tier lock, but a view that
+    // links here directly (or a manifest entry with no tier) may not — the page
+    // must still name the capability rather than render an empty licence name.
+    seedPlan('community')
+    const wrapper = mountLocked({ from: '/admin/costs', capability: 'Costs', reason: 'tier' })
+
+    expect(wrapper.get('[data-testid="locked-route-header"]').text()).toContain(
+      'needs a higher plan tier',
+    )
+    expect(wrapper.get('[data-testid="locked-route-header"]').text()).toContain('Costs')
+  })
 })
