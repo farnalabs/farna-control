@@ -24,6 +24,7 @@ from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.core.exceptions import OrgDeletedError, PipelineNotRunnableError, RateLimitConflictError
 from farna.core.pipeline_engine.recovery import (
+    ConcurrentRecoveryError,
     GuardrailOverrideError,
     GuardrailOverrideNoCheckpointError,
     GuardrailOverrideRejectedError,
@@ -2701,6 +2702,28 @@ def test_guardrail_override_non_guardrail_run_rejected_409(client: TestClient) -
         )
 
     assert resp.status_code == 409
+    mock_dispatch.assert_not_called()
+
+
+def test_guardrail_override_concurrent_recovery_rejected_409(client: TestClient) -> None:
+    """A concurrent recovery race that loses surfaces as 409 and never
+    dispatches (FAR-208 remediation)."""
+    with (
+        patch("farna.api.routes.runs.set_rls_org"),
+        patch(
+            "farna.api.routes.runs.guardrail_override",
+            new_callable=AsyncMock,
+            side_effect=ConcurrentRecoveryError(_RUN_ID),
+        ),
+        patch("farna.api.routes.runs.dispatch_run", new_callable=AsyncMock) as mock_dispatch,
+    ):
+        resp = client.post(
+            f"/api/v1/runs/{_RUN_ID}/guardrail-override",
+            json={"input_data": {"body": "clean"}},
+        )
+
+    assert resp.status_code == 409
+    assert "Concurrent recovery attempt" in resp.json()["detail"]
     mock_dispatch.assert_not_called()
 
 
