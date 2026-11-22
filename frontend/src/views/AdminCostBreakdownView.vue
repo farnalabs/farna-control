@@ -6,7 +6,7 @@
        :tabs="costPageTabs"
     />
 
-    <FeatureGate feature-name="admin_cost_breakdown" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_cost_breakdown" show-disabled class="space-y-6">
       <LoadingSpinner v-if="loading" />
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadData" />

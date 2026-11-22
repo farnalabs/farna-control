@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="runtime_config" required-tier="team" show-disabled>
+  <FeatureGate feature-name="runtime_config" show-disabled>
   <div class="page-wide">
     <PageHeader :title="$t('views.AdminSystemConfigView.system_admin_config')" :subtitle="$t('views.AdminSystemConfigView.deploymentwide_system_configuration_system_admin_only')">
       <template #right>

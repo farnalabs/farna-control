@@ -170,7 +170,7 @@ const navItems = getNavGroups().flatMap((group) => group.items)
 
 function lockedDestination(item: NavItem, reason: NonTierRefusal): string {
   const params = new URLSearchParams({ from: item.to, reason })
-  if (item.requiredTier) params.set('tier', item.requiredTier)
+  if (item.requiredEntitlement) params.set('entitlement', item.requiredEntitlement)
   return `/locked?${params.toString()}`
 }
 

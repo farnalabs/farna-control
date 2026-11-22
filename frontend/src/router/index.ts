@@ -17,7 +17,7 @@ declare module 'vue-router' {
     parent?: string
     testid?: string
     requiredRoles?: string[]
-    requiredTier?: string
+    requiredEntitlement?: string
     requiredPermissions?: string[]
     featureFlag?: string
     visibility?: 'public' | 'public_preview' | 'private_preview' | 'in_dev'
@@ -33,7 +33,7 @@ interface ManifestEntry {
   parent: string | null
   testid: string
   required_roles: string[] | null
-  required_tier: string
+  required_entitlement: string | null
   required_permissions: string[] | null
   feature_flag: string | null
   visibility?: 'public' | 'public_preview' | 'private_preview' | 'in_dev'
@@ -852,7 +852,7 @@ function metaCarriesGate(meta: RouteLocationTarget['meta'] | undefined): boolean
   return Boolean(
     meta?.requiresSystemAdmin ||
       meta?.requiredRoles?.length ||
-      meta?.requiredTier ||
+      meta?.requiredEntitlement ||
       meta?.requiredPermissions?.length ||
       meta?.visibility === 'private_preview' ||
       meta?.visibility === 'in_dev',
@@ -870,7 +870,7 @@ export function entryCarriesGate(entry: ManifestEntry | undefined): boolean {
   if (!entry) return false
   const groupId = entry.sidebar_group
   return Boolean(
-    entry.required_tier ||
+    entry.required_entitlement ||
       entry.required_roles?.length ||
       entry.required_permissions?.length ||
       entry.visibility === 'private_preview' ||
@@ -926,7 +926,7 @@ export function hydrateManifestMeta(to: RouteLocationTarget): void {
   to.meta.breadcrumb = entry.breadcrumb
   to.meta.testid = entry.testid
   to.meta.requiredRoles = entry.required_roles ?? undefined
-  to.meta.requiredTier = entry.required_tier
+  to.meta.requiredEntitlement = entry.required_entitlement ?? undefined
   to.meta.requiredPermissions = entry.required_permissions ?? undefined
   to.meta.featureFlag = entry.feature_flag ?? undefined
   to.meta.visibility = entry.visibility ?? undefined
@@ -984,10 +984,11 @@ export interface LockedRouteTarget {
 export type GuardDenial = { name: string } | LockedRouteTarget
 
 /**
- * FAR-2664: a below-tier route is a paid capability the caller cannot use —
- * not a broken application. Land on the locked page, which names the
- * capability and offers the upgrade path, instead of bouncing silently to the
- * dashboard with no explanation.
+ * FAR-2664 / FAR-2665: a route outside the licence is a commercial capability
+ * the caller cannot use — not a broken application. Land on the locked page,
+ * which names the capability and offers the upgrade path, instead of bouncing
+ * silently to the dashboard with no explanation. The query carries the
+ * ENTITLEMENT the route needs (never a tier string).
  *
  * The capability label comes from the manifest breadcrumb (the same string the
  * breadcrumb bar and document title use); the view upgrades it to the
@@ -995,24 +996,24 @@ export type GuardDenial = { name: string } | LockedRouteTarget
  */
 export function lockedRouteFor(
   to: Parameters<Parameters<typeof router.beforeEach>[0]>[0],
-  reason: 'tier' | 'role' | 'system_admin' = 'tier',
+  reason: 'entitlement' | 'role' | 'system_admin' = 'entitlement',
 ): LockedRouteTarget {
   const entry = resolveManifestEntry(to)
   const query: Record<string, string> = { from: to.fullPath || to.path || '/' }
   const capability = entry?.breadcrumb
   if (capability) query.capability = capability
-  const tier = to.meta?.requiredTier ?? entry?.required_tier
-  if (tier) query.tier = tier
+  const entitlement = to.meta?.requiredEntitlement ?? entry?.required_entitlement
+  if (entitlement) query.entitlement = entitlement
   query.reason = reason
   return { path: LOCKED_ROUTE_PATH, query }
 }
 
 /**
- * Enforce role, tier, and devMode/visibility access rules.  Returns a
+ * Enforce role, ENTITLEMENT and devMode/visibility access rules.  Returns a
  * redirect/locked route-object when access is denied, or `true` when the
  * caller may continue.  The plan store is lazily fetched so the guard sees the
- * real tier — the first navigation resolves *before* AppLayout.onMounted
- * kicks off `fetchPlan()`.
+ * real licence grant — the first navigation resolves *before*
+ * AppLayout.onMounted kicks off `fetchPlan()`.
  */
 export async function enforceRoleTierVisibility(
   to: Parameters<Parameters<typeof router.beforeEach>[0]>[0],
@@ -1035,43 +1036,39 @@ export async function enforceRoleTierVisibility(
     }
   }
 
-  const needsTierOrVisibility =
-    // Boolean OR is deliberate: a falsy-but-present requiredTier must still
-    // trigger the tier/visibility guard rather than fail open via `??`.
-    Boolean(to.meta?.requiredTier) || // NOSONAR: fail closed on any falsy non-null requiredTier
+  const needsEntitlementOrVisibility =
+    // Boolean OR is deliberate: a falsy-but-present requiredEntitlement must
+    // still trigger the guard rather than fail open via `??`.
+    Boolean(to.meta?.requiredEntitlement) || // NOSONAR: fail closed on any falsy non-null requiredEntitlement
     (to.meta?.visibility === 'private_preview' || to.meta?.visibility === 'in_dev')
 
-  if (needsTierOrVisibility) {
+  if (needsEntitlementOrVisibility) {
     const planStore = usePlanStore()
     if (!planStore.loaded) {
       await planStore.fetchPlan()
     }
     if (
-      to.meta?.requiredTier &&
-      // Tier check keyed on TIER KNOWLEDGE, not flag-map emptiness (FAR-1809).
-      // The old `Object.keys(features).length > 0` used "the flag map is
-      // non-empty" as a proxy for "the plan is known", conflating two distinct
-      // states:
-      //   - KNOWN-EMPTY: a payload applied with zero flags. `loaded` is set
-      //     together with `currentTier`, so a resolved tier MUST still be
-      //     tier-checked — emptiness of the flag map says nothing about the
-      //     tier, and skipping here let a resolved community org through a
-      //     team route.
+      to.meta?.requiredEntitlement &&
+      // Entitlement check keyed on PLAN KNOWLEDGE, not flag-map emptiness
+      // (FAR-1809 / FAR-2665). The two distinct states:
+      //   - KNOWN: a payload applied, so the licence answer is observed truth.
+      //     `loaded` is set together with the plan context, so a resolved
+      //     UNENTITLED org must still be refused — an empty flag map says
+      //     nothing about the grant.
       //   - UNKNOWN: no server payload has ever applied (fetch failed ->
-      //     flagsSource 'unavailable', `loaded` stays false; the tier is the
-      //     'community' bootstrap default, not observed truth). Tier-checking
-      //     that default would bounce licensed users to the dashboard on a
-      //     transient /plan failure — the exact wrong-tier defect FAR-1809
-      //     exists to remove. Fail open here; the backend 402 still enforces
-      //     the real licence on the gated API routes.
+      //     flagsSource 'unavailable', `loaded` stays false). Refusing on the
+      //     bootstrap default would bounce licensed users to the locked page on
+      //     a transient /plan failure — the exact wrong-tier defect FAR-1809
+      //     removed. Fail open here; the backend 402 still enforces the real
+      //     licence on the gated API routes.
       // The devMode/visibility branch below is deliberately NOT flipped: a
       // private_preview surface stays hidden when dev mode is unknown, which
-      // is the safe default for a hidden surface (unchanged, out of scope).
+      // is the safe default for a hidden surface.
       planStore.loaded &&
-      !planStore.isAtMinimumTier(to.meta.requiredTier)
+      !planStore.hasEntitlement(to.meta.requiredEntitlement)
     ) {
       // FAR-2664: the caller is otherwise permitted — this route is simply
-      // above their licence. Show the capability and the upgrade path instead
+      // outside their licence. Show the capability and the upgrade path instead
       // of a silent dashboard bounce. The redirect stays for the genuinely
       // unknown route, and for the role / instance-admin refusals above (a
       // licence upgrade cannot fix those).
@@ -1109,7 +1106,7 @@ async function enforceManifestGate(
     to.meta?.requiresSystemAdmin ||
     to.meta?.requiredRoles?.length ||
     to.meta?.requiredPermissions?.length ||
-    to.meta?.requiredTier ||
+    to.meta?.requiredEntitlement ||
     to.meta?.visibility === 'private_preview' ||
     to.meta?.visibility === 'in_dev'
   ) {

@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="error_tracking" required-tier="team" show-disabled>
+  <FeatureGate feature-name="error_tracking" show-disabled>
   <div class="page-wide pt-4">
     <!-- A single hardcoded tab is not navigation: PageTabs renders a redundant
          one-item control here. The dashboard is the only surface on this route,

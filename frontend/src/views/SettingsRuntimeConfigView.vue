@@ -2,7 +2,7 @@
   <div class="page-wide">
     <PageHeader :title="$t('views.SettingsRuntimeConfigView.runtime_configuration')" :subtitle="$t('views.SettingsRuntimeConfigView.description')" />
 
-    <FeatureGate feature-name="runtime_config" required-tier="team" show-disabled>
+    <FeatureGate feature-name="runtime_config" show-disabled>
 
     <div class="flex items-center gap-3">
       <div v-if="hasDrift" class="flex items-center gap-2 rounded-lg border border-warning/50 bg-warning/10 px-4 py-2 text-sm text-warning-text">

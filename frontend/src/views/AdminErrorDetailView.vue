@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="error_tracking" required-tier="team" show-disabled>
+  <FeatureGate feature-name="error_tracking" show-disabled>
   <div class="page-wide">
     <BackLink :to="isInstanceScope ? '/admin/errors?scope=instance' : '/admin/errors'" :label="$t('views.AdminErrorDetailView.back_to_error_dashboard')" />
     <PageHeader
