@@ -22,7 +22,7 @@
 
 Hetzner, Ubicloud, or any Docker host is **not a new execution tier**. It is
 **T1 – the Bundled Runner – on rented compute**. It already works today:
-point `MODULO_DOCKER_HOST` at the VM (with TLS, per FAR-1038, see operator
+point `FARNA_CONTROL_DOCKER_HOST` at the VM (with TLS, per FAR-1038, see operator
 guide §8) and the Bundled Runner runs there, including from a Farna Control
 deployment running elsewhere. The deliverable for this shape is
 documentation and validation, **not an adapter**.
@@ -130,18 +130,18 @@ TLS (mTLS), `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, the daemon's
   shipped compose-internal `tcp://docker-socket-proxy:2375`) because they do
   not traverse a network. A rented VM reached from a *different* host is
   never loopback – the exemption does not apply to this walkthrough.
-- The `MODULO_DOCKER_ALLOW_INSECURE_ENDPOINT=1` escape hatch exists for
+- The `FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT=1` escape hatch exists for
   isolated private bridges and logs a prominent warning; it is **not** the
   path for a public-IP rented VM. See operator guide §8 caveats.
 
-### Step 5 – Point `MODULO_DOCKER_HOST` at the VM
+### Step 5 – Point `FARNA_CONTROL_DOCKER_HOST` at the VM
 
 On the Farna Control deployment (wherever it runs – it does not need to be on the
 VM), set the endpoint env vars following the documented 4-step chain
-(`MODULO_DOCKER_HOST` → `DOCKER_HOST` → local socket):
+(`FARNA_CONTROL_DOCKER_HOST` → `DOCKER_HOST` → local socket):
 
 ```bash
-export MODULO_DOCKER_HOST=tcp://<vm-public-ip>:2376   # TLS port
+export FARNA_CONTROL_DOCKER_HOST=tcp://<vm-public-ip>:2376   # TLS port
 export DOCKER_TLS_VERIFY=1
 export DOCKER_CERT_PATH=/etc/modulo/docker-certs      # ca.pem, cert.pem, key.pem
 ```
@@ -152,15 +152,15 @@ on all three; a manual remote setup must too – see operator guide §2).
 
 Additional operational env for a shared or multi-deployment engine:
 
-- `MODULO_RUNNER_MACHINE_ID` – set it if more than one deployment shares
+- `FARNA_CONTROL_RUNNER_MACHINE_ID` – set it if more than one deployment shares
   the engine; the reconciler's machine-identity label then scopes each
   deployment's orphan sweep to its own workspaces (operator guide §6).
 - The registration matrix (operator guide §2): `runner_docker` registers
-  when a Docker endpoint env (`MODULO_DOCKER_HOST` or `DOCKER_HOST`) is set.
-  An unrelated `MODULO_RUNNER_*` variable (such as `MODULO_RUNNER_MACHINE_ID`)
+  when a Docker endpoint env (`FARNA_CONTROL_DOCKER_HOST` or `DOCKER_HOST`) is set.
+  An unrelated `FARNA_CONTROL_RUNNER_*` variable (such as `FARNA_CONTROL_RUNNER_MACHINE_ID`)
   does not register it (FAR-996). With no endpoint set it does not register,
   and binding a profile raises a typed dispatch error naming
-  `MODULO_DOCKER_HOST` – never a silent fallback.
+  `FARNA_CONTROL_DOCKER_HOST` – never a silent fallback.
 
 **Runner image on the engine.** The pinned runner image must exist on the
 VM's engine before dispatch can provision a workspace. Check the operator
@@ -221,7 +221,7 @@ non-negotiable for the shape to hold:
    `127.0.0.1`, FAR-1035, which blocks the loopback case – but a dedicated
    host removes the question entirely), and engine-level breakouts are
    engine-level. One deployment per engine, or set
-   `MODULO_RUNNER_MACHINE_ID` when sharing (operator guide §6).
+   `FARNA_CONTROL_RUNNER_MACHINE_ID` when sharing (operator guide §6).
 4. **The workspace bridge network.** Workspaces attach to the dedicated
    `modulo-runner-workspace` bridge ONLY, at create-time via
    `NetworkingConfig` – they never join the compose/backend network and

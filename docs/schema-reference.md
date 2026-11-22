@@ -264,7 +264,7 @@ the canonical file is rolled back; a half-updated state is never left on disk.
 
 ### Environment variable
 
-The `MODULO_SCHEMA_DIR` environment variable points to the `schemas/`
+The `FARNA_CONTROL_SCHEMA_DIR` environment variable points to the `schemas/`
 directory inside the sandbox.
 
 ## Schema inference
