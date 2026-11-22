@@ -37,19 +37,17 @@ class OrgGuardrailsKillSwitchResponse(BaseModel):
     enabled_at: str | None
 
 
+# FAR-2682: deliberate JWT-only route. A member-visible UI preference (the org
+# currency) with no automation consumer and no secret content; the
+# machine-facing cost/billing configuration is an admin surface. Do not widen
+# this in a credential sweep (recorded as a comment: a handler docstring would
+# become the public OpenAPI description).
 @router.get("/settings")
 @handle_db_errors("org.get_settings")
 async def get_org_settings(
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> OrgSettingsResponse:
-    """Read the org's member-visible display settings (currently the currency).
-
-    Deliberate JWT-only route (FAR-2682): a UI preference every member may
-    read, with no automation consumer and no secret content. Its machine-facing
-    sibling (cost/billing configuration) is an admin surface. Do not widen this
-    in a credential sweep.
-    """
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)

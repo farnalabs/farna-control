@@ -240,19 +240,17 @@ async def post_consent(
         ) from None
 
 
+# FAR-2682: deliberate JWT-only route. This is the browser consent preference of
+# the logged-in member/org (its mutation sibling is on the EXEMPT inventory as
+# self-service consent); an ``mk_`` key is a machine identity that cannot give
+# or hold consent. Do not widen this in a credential sweep.
 @router.get("")
 @handle_db_errors("product_analytics.get")
 async def get_product_analytics(
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> ConsentResponse:
-    """Read the current product analytics consent state and instance switch.
-
-    Deliberate JWT-only route (FAR-2682): this is the browser consent
-    preference of the logged-in member/org (its mutation sibling is on the
-    ``EXEMPT`` inventory as self-service consent). An ``mk_`` org API key is a
-    machine identity that cannot give or hold consent; do not widen this.
-    """
+    """Read the current product analytics consent state and instance switch."""
 
     try:
         async with session.begin():

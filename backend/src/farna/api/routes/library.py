@@ -967,6 +967,15 @@ async def ping() -> dict[str, bool]:
     return {"pong": True}
 
 
+# FAR-2682: any-credential read. The data a permitted ``mk_`` key can already
+# reach through another route includes this one: a ``composite`` primitive's
+# ``content_json`` is a masked sub-pipeline graph, and the composite-template
+# by-id read (``GET /api/v1/composite-templates/{id}``) accepts the same key on
+# the same viewer-level read (FAR-2681). The permission assertion is unchanged
+# (``library.search`` -> viewer; kill-switch and grant-set legs still apply).
+# ``_primitive_visible_to`` is a defence-in-depth guard for a deployment running
+# without RLS. Recorded as a comment: a handler docstring would become the
+# public OpenAPI description.
 @router.get("/{primitive_id}")
 @handle_db_errors("library.get_library_primitive_endpoint")
 async def get_library_primitive_endpoint(
@@ -974,19 +983,6 @@ async def get_library_primitive_endpoint(
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> LibraryPrimitiveResponse:
-    """Read one library primitive (FAR-2682: JWT or ``mk_`` org API key).
-
-    The credential is any-credential because the data a permitted key can
-    already reach through another route includes this one: a ``composite``
-    primitive's ``content_json`` is a masked sub-pipeline graph, and the
-    composite-template by-id read (``GET /api/v1/composite-templates/{id}``)
-    accepts the same key on the same viewer-level read (FAR-2681). The
-    permission assertion is unchanged — ``library.search`` still resolves to
-    ``viewer`` and the kill-switch / grant-set legs still apply.
-
-    The request-time visibility guard (:func:`_primitive_visible_to`) is
-    defence-in-depth for a deployment running without RLS.
-    """
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
@@ -1856,6 +1852,11 @@ async def confirm_import_endpoint(
 # ---------------------------------------------------------------------------
 
 
+# FAR-2682: any-credential read on the same viewer-level ``library.search`` floor
+# as the primitive read (the primitive response already carries
+# ``average_rating`` / ``review_count`` for the same id). The guard makes an
+# unknown or foreign id a 404 (previously a 200 with an empty page), so a
+# ratings read can never confirm that a primitive exists in another tenant.
 @router.get("/{primitive_id}/ratings")
 @handle_db_errors("library.list_ratings_endpoint")
 async def list_ratings_endpoint(
@@ -1865,14 +1866,6 @@ async def list_ratings_endpoint(
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> RatingListResponse:
-    """List a primitive's ratings (FAR-2682: JWT or ``mk_`` org API key).
-
-    The same viewer-level ``library.search`` floor as the primitive read, and
-    the same any-credential pair, because the primitive response already carries
-    ``average_rating`` / ``review_count`` for the same id. The guard makes an
-    unknown or foreign id a 404 (previously a 200 with an empty page), so a
-    ratings read can never confirm that a primitive exists in another tenant.
-    """
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
@@ -1893,6 +1886,9 @@ async def list_ratings_endpoint(
     )
 
 
+# FAR-2682: same any-credential pair and viewer-level floor as the ratings list;
+# the lifecycle-map and cross-tenant hide is shared through
+# ``_require_readable_primitive``.
 @router.get("/{primitive_id}/ratings/aggregate")
 @handle_db_errors("library.get_rating_aggregate_endpoint")
 async def get_rating_aggregate_endpoint(
@@ -1900,12 +1896,6 @@ async def get_rating_aggregate_endpoint(
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> RatingAggregateResponse:
-    """Read a primitive's rating aggregate (FAR-2682: JWT or ``mk_`` org API key).
-
-    Same any-credential pair and viewer-level floor as the ratings list; the
-    lifecycle-map and cross-tenant hide is shared through
-    :func:`_require_readable_primitive`.
-    """
     try:
         async with session.begin():
             await _set_rls_context(session, principal)

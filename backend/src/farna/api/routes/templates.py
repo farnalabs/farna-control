@@ -100,6 +100,12 @@ class FromTemplateResponse(BaseModel):
     edge_count: int
 
 
+# FAR-2682: any-credential read. The permission floor is ``pipeline.list``
+# (viewer) — this router's write path already requires ``pipeline.create`` — and
+# the any-credential variant matches the pipeline list / graph reads an ``mk_``
+# key can already make. The org boundary is the RLS org context set below
+# (recorded as a comment: a handler docstring would become the public OpenAPI
+# description).
 @router.get(
     "/templates",
     responses={
@@ -117,14 +123,6 @@ async def list_templates_endpoint(
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission_any_credential(_PERM_TEMPLATES_LIST),
 ) -> TemplateListResponse:
-    """List the pipeline-template catalogue (FAR-2682: JWT or ``mk_`` org API key).
-
-    The permission floor is ``pipeline.list`` (viewer) — this router's write
-    path already requires ``pipeline.create`` — and the any-credential variant
-    matches the pipeline list / graph reads an ``mk_`` key can already make.
-    The org boundary is the RLS org context set below (the org-scoped catalog
-    has no separate explicit clamp, unchanged by this ticket).
-    """
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)

@@ -827,6 +827,10 @@ async def _initialise_stream(ctx: _StreamContext) -> _StreamInit:
 # ── Session endpoints ────────────────────────────────────────────────────
 
 
+# FAR-2682: deliberate JWT-only route. Sessions are keyed on
+# ``ChatSession.account_id`` (the calling account), and the Assistant has its
+# own session auth model (see the EXEMPT inventory). An ``mk_`` key has no chat
+# history; do not widen this in a credential sweep.
 @router.get("/sessions", status_code=status.HTTP_200_OK)
 @handle_db_errors("assistant.list_sessions")
 async def list_sessions(
@@ -835,14 +839,6 @@ async def list_sessions(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> AssistantSessionListResponse:
-    """List the CALLER's own assistant chat sessions.
-
-    Deliberate JWT-only route (FAR-2682): sessions are keyed on
-    ``ChatSession.account_id`` — the calling account. An org API key is a
-    machine identity with no chat history of its own, and the Assistant
-    sessions have their own auth model (see the ``EXEMPT`` inventory). Do not
-    widen this in a credential sweep.
-    """
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
@@ -981,6 +977,9 @@ async def create_session(
         ) from None
 
 
+# FAR-2682: deliberate JWT-only route. Ownership is ``_get_owned_session``
+# against the calling account; an ``mk_`` key has no chat history. Do not widen
+# this in a credential sweep.
 @router.get(
     "/sessions/{session_id}",
     status_code=status.HTTP_200_OK,
@@ -992,12 +991,6 @@ async def get_session(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     principal: Annotated[TenantPrincipal, Depends(get_current_tenant_user)],
 ) -> AssistantSessionResponse:
-    """Read one of the CALLER's own assistant chat sessions.
-
-    Deliberate JWT-only route (FAR-2682): ownership is
-    ``_get_owned_session`` against the calling account. An org API key is a
-    machine identity with no chat history; do not widen this.
-    """
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
@@ -1141,6 +1134,9 @@ async def delete_session(
 # ── Message endpoints ────────────────────────────────────────────────────
 
 
+# FAR-2682: deliberate JWT-only route. The session is resolved through the same
+# ``_get_owned_session`` account check as the session read; an ``mk_`` key has
+# no chat history. Do not widen this in a credential sweep.
 @router.get(
     "/sessions/{session_id}/messages",
     status_code=status.HTTP_200_OK,
@@ -1154,12 +1150,6 @@ async def list_messages(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> AssistantMessageListResponse:
-    """List the messages of one of the CALLER's own assistant sessions.
-
-    Deliberate JWT-only route (FAR-2682): the session is resolved through the
-    same ``_get_owned_session`` account check as the session read. An org API
-    key is a machine identity with no chat history; do not widen this.
-    """
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)

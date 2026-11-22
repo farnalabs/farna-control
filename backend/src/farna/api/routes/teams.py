@@ -371,19 +371,17 @@ class MyTeamResponse(BaseModel):
     role: str
 
 
+# FAR-2682: deliberate JWT-only route. "My teams" is the calling ACCOUNT's
+# membership list; an ``mk_`` key is a machine identity with no memberships (the
+# machine-readable team list is the admin surface). Do not widen this in a
+# credential sweep.
 @router.get("/my")
 @handle_db_errors("teams.my_teams_endpoint")
 async def my_teams_endpoint(
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[MyTeamResponse]:
-    """List the current user's team memberships with team names (profile "My Teams").
-
-    Deliberate JWT-only route (FAR-2682): "my teams" is the calling account's
-    membership list. An ``mk_`` org API key is a machine identity with no
-    memberships, and the machine-readable team list is the admin surface. Do
-    not widen this in a credential sweep.
-    """
+    """List the current user's team memberships with team names (profile "My Teams")."""
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)
