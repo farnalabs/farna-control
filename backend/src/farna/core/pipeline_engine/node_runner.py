@@ -10949,7 +10949,7 @@ async def _sandbox_prepare_dispatch(
         # ``resolve_agent_bindings``. Precedence is deliberate: profile secrets
         # < runner bindings < node ``env_vars_extra`` — THE NODE WINS (see
         # ``_build_sandbox_envs``).
-        _runner_bindings: dict[str, str] = {}
+        _runner_bindings = {}
         if agent_id is not None:
             try:
                 _runner_bindings = await asyncio.wait_for(
@@ -11017,7 +11017,7 @@ async def _sandbox_prepare_dispatch(
         # FAR-802: killswitch — when MWI is disabled (default), refuse to
         # provision inputs with a clear error code so the run is never
         # silently pretending inputs were provisioned.
-        _resolved_workspace_inputs: list[Any] = []
+        _resolved_workspace_inputs = []
         if workspace_inputs:
             from farna.core.pipeline_engine.workspace_input_orchestration import (
                 ProvisioningError as WorkspaceProvisioningError,
@@ -11132,7 +11132,7 @@ async def _sandbox_prepare_dispatch(
         # and the selected-mode host:port allowlist are carried as sandbox
         # metadata (e2b tags) so a server-side template/config can enforce
         # them (the e2b SDK has no native allowlist / cap enforcement).
-        _metadata: dict[str, str] = {}
+        _metadata = {}
         if resource_limits:
             _metadata["resource_limits"] = json.dumps(resource_limits)
         # FAR-1085: use canonical egress resolution instead of ad-hoc mapping.
@@ -11372,7 +11372,7 @@ async def _sandbox_provision_and_materialise(
         # The contract is ADVISORY — Modulo validates independently; these
         # files are inputs for the dispatched runtime's own tooling.
         _sandbox_schema_dir = "/home/user/schemas"
-        _node_schema_profile: SchemaProfile = _resolve_schema_profile(node_def) or "verbatim"
+        _node_schema_profile = _resolve_schema_profile(node_def) or "verbatim"
         # Resolve the provider_id from the node's agent → model backend.
         # Best-effort: the resolver returns None on absence/failure and never raises.
         _schema_provider_id = await _resolve_provider_id_from_agent(
@@ -12578,7 +12578,7 @@ async def _sandbox_capture_output_streams(
     _stdout_cap = stdout_cap
     try:
         elapsed = time.monotonic() - start_time
-        exit_code: int = getattr(cmd_result, "exit_code", -1)
+        exit_code = getattr(cmd_result, "exit_code", -1)
         # The redirected log file is the process's real stdout — prefer the
         # drained content (which also survives a timeout where cmd_result is
         # None and would otherwise surface EMPTY output), falling back to the
