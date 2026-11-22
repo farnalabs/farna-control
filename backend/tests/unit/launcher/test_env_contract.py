@@ -800,11 +800,12 @@ def test_gate_flags_a_redeclared_registered_name() -> None:
 # The documented half: a published knob must be accepted by SOMETHING
 # ---------------------------------------------------------------------------
 
-#: Documented ``FARNA_CONTROL_*`` knobs that NO mechanism accepts today: not a
-#: registry name, not a settings alias, and not read as a literal anywhere in
-#: ``farna/``. Each is a real gap of the FAR-2563 class - an operator who sets
-#: the documented spelling is silently ignored - and the fix is to make it live
-#: and DELETE its line here (the companion test fails on a stale entry).
+#: Documented knobs - canonical ``FARNA_CONTROL_*`` or a documented legacy
+#: ``MODULO_*`` spelling - that NO mechanism accepts today: not a registry name,
+#: not a settings alias, and not read as a literal anywhere in ``farna/``. Each
+#: is a real gap of the FAR-2563 class - an operator who sets the documented
+#: spelling is silently ignored - and the fix is to make it live and DELETE its
+#: line here (the companion test fails on a stale entry).
 DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
     {
         "FARNA_CONTROL_ADMIN_TOKEN",
@@ -814,6 +815,11 @@ DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
         "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS",
         "FARNA_CONTROL_KUBERNETES_ENABLED",
         "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS",
+        # Legacy ``MODULO_`` fallbacks still published on the page but read only
+        # outside ``farna/`` (in packaging/CLI scripts), so the gate does not
+        # count them as accepted; documented and therefore listed here.
+        "MODULO_ADMIN_SECRET",
+        "MODULO_BACKUP_PASSPHRASE",
     }
 )
 

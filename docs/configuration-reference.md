@@ -164,8 +164,8 @@ detection work.
 | `FERNET_KEY_OLD` | No | – | Previous Fernet key for no-downtime rotation; decrypt falls back to this when `FERNET_KEY` is rotated |
 | `FARNA_CONTROL_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
 | `FARNA_CONTROL_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `FARNA_CONTROL_ADMIN_PASSWORD` or `FARNA_CONTROL_USERS` must be set) |
-| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool) |
-| `FARNA_CONTROL_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class) |
+| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool). The legacy `MODULO_ADMIN_SECRET` spelling is still read as a fallback. |
+| `FARNA_CONTROL_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class). The `--token` flag takes precedence. |
 | `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `GUARDRAIL_DESTROY_PEPPER` | For destroy-mode redaction | `""` | HMAC pepper used by guardrails in `destroy` redaction mode to key replacement tokens. Empty (the default) leaves it unset, and a guardrail that declares a destroy-mode redaction rule then fails closed - the rule is rejected at save time and the block is terminal at the edge. Never logged. Rotating it breaks cross-run linkage of already-destroyed tokens by design. |
 | `INVITATION_EXPIRY_HOURS` | No | `72` | How long an in-app invitation token stays consumable |
@@ -488,7 +488,7 @@ Rate limiting uses Redis sliding window (ZADD + ZREMRANGEBYSCORE). Falls back to
 | `DOCKER_TLS_VERIFY` | No | unset | Set to `1` to use TLS for the Docker endpoint. A non-loopback `tcp://` endpoint is rejected at provider registration unless `DOCKER_TLS_VERIFY` or `DOCKER_CERT_PATH` is truthy, or the insecure escape hatch below is set (FAR-1038). |
 | `DOCKER_CERT_PATH` | No | unset | Directory holding `ca.pem` (server TLS) and optionally `cert.pem` / `key.pem` (mutual TLS). A truthy value also satisfies the remote-endpoint TLS gate. |
 | `FARNA_CONTROL_DOCKER_ALLOW_INSECURE_ENDPOINT` | No | unset | Escape hatch: set to a non-empty, non-false value to allow a remote `tcp://` Docker endpoint without TLS. Logs a prominent warning at provider construction; not for a public-IP endpoint. |
-| `FARNA_CONTROL_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider (read directly from env, not via Settings) |
+| `FARNA_CONTROL_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider (read directly from env, not via Settings, through the runtime-config bridge). Provider registration and `E2BRuntimeProvider` construction require this variable (or a runtime override); the upstream `E2B_API_KEY` spelling is honoured only as a fallback in the log-tail probe and node-runner enforcement, not for registration. |
 | `FARNA_CONTROL_KUBERNETES_ENABLED` | For Kubernetes | – | Registers the `kubernetes`/`k8s` runtime provider when set to any value except an explicit negative (`0`, `false`, `no`, `off`); unset/falsy leaves it unregistered. In-cluster auth is used when `KUBERNETES_SERVICE_HOST` is set, otherwise the standard kubeconfig chain (`KUBECONFIG` / default path). |
 | `FARNA_CONTROL_KUBERNETES_NAMESPACE` | No | `modulo` | Namespace the provider creates workspace pods in. |
 | `FARNA_CONTROL_KUBERNETES_SERVICE_ACCOUNT` | No | `default` | ServiceAccount the workspace pods run under. |
@@ -625,7 +625,7 @@ via the admin API. Unknown/absent keys default to safe values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length) |
+| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). The legacy `MODULO_BACKUP_PASSPHRASE` spelling is still read as a fallback. |
 
 See [`docs/operations/backup.md`](./operations/backup.md) for backup configuration.
 
@@ -861,7 +861,7 @@ is best-effort and never gates readiness: it is skipped when no `GITHUB_TOKEN` /
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool |
+| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool (legacy `MODULO_ADMIN_SECRET` still read as a fallback) |
 | `FARNA_CONTROL_ADMIN_TOKEN` | For CLI | – | Admin JWT for `farna-control migrate` CLI tool |
 
 ---
