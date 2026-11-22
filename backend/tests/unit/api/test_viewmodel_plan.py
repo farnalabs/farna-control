@@ -140,19 +140,23 @@ def _make_mock_session() -> AsyncMock:
     return session
 
 
-def _flag(name: str, *, active: bool, tier: str = "community") -> FeatureFlag:
+def _flag(name: str, *, active: bool) -> FeatureFlag:
+    # FAR-2665: a flag declares no tier; its presented tier is a projection of
+    # the entitlement registry.
     return FeatureFlag(
         name=name,
         description=f"{name} description",
-        tier=tier,
         currently_active=active,
     )
 
 
-def _plan_context(flags: list[FeatureFlag], tier: str = "community") -> MagicMock:
+def _plan_context(flags: list[FeatureFlag], tier: str = "community", entitlements: frozenset[str] = frozenset()) -> MagicMock:
     ctx = MagicMock()
     ctx.list_all_features = MagicMock(return_value=flags)
     ctx.tier = MagicMock(return_value=tier)
+    # ``plan_entitlements`` prefers this over the tier fallback (a bare
+    # MagicMock auto-answers every attribute, so it must be set explicitly).
+    ctx.entitlements = MagicMock(return_value=entitlements)
     return ctx
 
 
@@ -216,6 +220,32 @@ def test_plan_bootstrap_200_for_non_system_admin() -> None:
     assert body["dev_mode"] is True
     names = [f["name"] for f in body["flags"]]
     assert "eval_system" in names
+
+
+def test_plan_bootstrap_serves_the_entitlement_registry_and_grant() -> None:
+    """FAR-2665: the SPA gates on entitlements, so the payload must carry them.
+
+    The client derives both directions from this list — the granted set that
+    gates a route, and the flag -> entitlement mapping that decides the lock
+    copy — so the name, the covered flags and the grant must all be present.
+    """
+    org = _make_org()
+    plan_ctx = _plan_context(
+        [_flag("audit_viewer", active=False)],
+        tier="community",
+        entitlements=frozenset({"audit_evidence"}),
+    )
+
+    with _plan_client_as(_VIEWER) as client, _patch_plan_deps(org, plan_ctx):
+        resp = client.get("/api/v1/plan")
+
+    assert resp.status_code == 200
+    by_key = {entry["key"]: entry for entry in resp.json()["entitlements"]}
+    assert set(by_key) == {"identity", "audit_evidence", "cost_governance"}
+    assert by_key["audit_evidence"]["granted"] is True
+    assert by_key["identity"]["granted"] is False
+    assert by_key["identity"]["name"] == "Identity"
+    assert "sso" in by_key["identity"]["flags"]
 
 
 def test_plan_bootstrap_includes_inactive_flags_with_currently_active_false() -> None:

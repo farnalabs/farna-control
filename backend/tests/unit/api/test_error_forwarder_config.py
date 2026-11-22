@@ -341,10 +341,18 @@ class TestListForwarders:
         assert resp.status_code == 403
         assert resp.json()["detail"] == "Organisation membership required"
 
-    def test_list_returns_402_when_gated(self, gated_client: TestClient) -> None:
+    def test_list_returns_402_when_the_flag_is_off(self, gated_client: TestClient) -> None:
+        """FAR-2665: ``error_forwarders`` is Community BEHAVIOUR, not a paywall.
+
+        A 402 is still possible when the flag is switched off for the org, but
+        the detail must say so — claiming "not available on your plan" would
+        send the operator to a purchase that cannot change the answer.
+        """
         resp = gated_client.get("/api/v1/errors/forwarders")
         assert resp.status_code == 402
-        assert "not available on your plan" in resp.json()["detail"].lower()
+        detail = resp.json()["detail"].lower()
+        assert "not enabled for this organisation" in detail
+        assert "not available on your plan" not in detail
 
 
 # ── PUT /api/v1/errors/forwarders/{forwarder_type} ─────────────────────────
