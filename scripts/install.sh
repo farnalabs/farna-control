@@ -84,7 +84,7 @@ set -euo pipefail
 # the user cannot search - e.g. `sudo -u <user>` run from another user's 0700
 # home. Remember where we were invoked so every relative path the caller
 # supplied still resolves against it - --from-file / --from-bundle, every
-# FARNA_CONTROL_* / MODULO_* path override (install root, bin dir, data dir,
+# FARNA_CONTROL_* path override (install root, bin dir, data dir,
 # legacy roots and shims), XDG_DATA_HOME / XDG_STATE_HOME, HOME and TMPDIR -
 # then move to "/", which every user can search. Nothing here writes into the
 # cwd. Any NEW path override must go through absolute_from_invocation too
@@ -129,8 +129,8 @@ REPO="farnalabs/farna-control"
 RELEASES_LATEST_URL="https://github.com/${REPO}/releases/latest"
 RELEASES_DOWNLOAD_URL="https://github.com/${REPO}/releases/download"
 
-INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_INSTALL_ROOT:-${MODULO_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}}")"
-BIN_DIR="$(absolute_from_invocation "${FARNA_CONTROL_BIN_DIR:-${MODULO_BIN_DIR:-${HOME}/.local/bin}}")"
+INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_INSTALL_ROOT:-${HOME}/.local/opt/farna-control}")"
+BIN_DIR="$(absolute_from_invocation "${FARNA_CONTROL_BIN_DIR:-${HOME}/.local/bin}")"
 MARKER_FILE="${INSTALL_ROOT}/.farna-control-native-install"
 
 # Pre-rebrand (FAR-2571) locations. A machine that ran the installer before the
@@ -141,7 +141,7 @@ LEGACY_INSTALL_ROOT="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_INSTALL_
 LEGACY_USER_SHIM="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_USER_SHIM:-${BIN_DIR}/modulo}")"
 # The pre-native system-wide shim: refused in preflight when unmanaged, renamed
 # aside in finalise. One anchored value serves both (FAR-2589).
-LEGACY_SYSTEM_SHIM="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_SHIM_PATH:-${MODULO_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}")"
+LEGACY_SYSTEM_SHIM="$(absolute_from_invocation "${FARNA_CONTROL_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}")"
 
 FORCE=0
 FROM_FILE=""
@@ -586,8 +586,8 @@ apply_legacy_install_migration() {
 
 # A relative override is anchored at the invocation directory: the installer
 # has already left it (FAR-2589).
-if [[ -n "${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR:-}}" ]]; then
-  DATA_DIR="$(absolute_from_invocation "${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR}}")"
+if [[ -n "${FARNA_CONTROL_DATA_DIR:-}" ]]; then
+  DATA_DIR="$(absolute_from_invocation "${FARNA_CONTROL_DATA_DIR}")"
 elif [[ "$(uname -s)" = "Darwin" && -z "${XDG_DATA_HOME:-}" ]]; then
   DATA_DIR="${HOME}/Library/Application Support/Modulo/data"
 else
@@ -653,7 +653,7 @@ run_pre_upgrade_dump() {
   if [[ -f "${old_root}/backend/src/farna/launcher/upgrade.py" ]]; then
     module="farna.launcher.upgrade"
   elif [[ -f "${old_root}/backend/src/modulo/launcher/upgrade.py" ]]; then
-    die "cannot run the pre-upgrade pg_dump: the installed bundle ships the upgrade helper under the pre-rebrand 'modulo' package, which reads MODULO_BUNDLED_BIN_DIR; this installer only sets FARNA_CONTROL_BUNDLED_BIN_DIR, so the helper cannot resolve the bundled pg_dump. Upgrade from a bundle that ships backend/src/farna/launcher/upgrade.py"
+    die "cannot run the pre-upgrade pg_dump: the installed bundle ships the upgrade helper under the pre-rebrand 'modulo' package, which reads FARNA_CONTROL_BUNDLED_BIN_DIR; this installer only sets FARNA_CONTROL_BUNDLED_BIN_DIR, so the helper cannot resolve the bundled pg_dump. Upgrade from a bundle that ships backend/src/farna/launcher/upgrade.py"
   else
     die "cannot run the pre-upgrade pg_dump: the installed bundle predates the launcher upgrade helper (looked for backend/src/farna/launcher/upgrade.py)"
   fi
@@ -1246,10 +1246,6 @@ cat > "${activation_file}" <<EOF
 # This file contains paths only; it never contains runtime credentials.
 export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"
 export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"
-# Keep the bare MODULO_* names as compatibility aliases for older shell
-# integrations. The FARNA_CONTROL_* names are canonical for new installs.
-export MODULO_INSTALL_ROOT="${INSTALL_ROOT}"
-export MODULO_BIN_DIR="${BIN_DIR}"
 case ":\${PATH}:" in
   *":${BIN_DIR}:"*) ;;
   *) export PATH="${BIN_DIR}:\${PATH}" ;;

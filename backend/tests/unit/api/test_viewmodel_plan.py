@@ -80,14 +80,14 @@ def _reset_license_state() -> Generator[None, None, None]:
     set_public_key(_LICENSE_PUBLIC_KEY_HEX)
 
 
-def _make_settings(modulo_dev_mode: bool = True, modulo_license_key: str = "") -> Settings:
+def _make_settings(dev_mode: bool = True, license_key: str = "") -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_dev_mode=modulo_dev_mode,
-        modulo_license_key=modulo_license_key,
+        admin_password="testpass",
+        dev_mode=dev_mode,
+        license_key=license_key,
     )
 
 
@@ -453,7 +453,7 @@ class TestResolveLicenseExpiryLadder:
     def test_env_var_key_used_when_no_org_and_no_in_memory_licence(self) -> None:
         key = _sign_license_payload(_valid_payload(expires_at="2027-01-01T00:00:00+00:00", org_id="env-run"))
 
-        expires_at, org_id = _resolve_license_expiry(_make_settings(modulo_license_key=key), None)
+        expires_at, org_id = _resolve_license_expiry(_make_settings(license_key=key), None)
 
         assert expires_at == "2027-01-01T00:00:00+00:00"
         assert org_id == "env-run"
@@ -461,7 +461,7 @@ class TestResolveLicenseExpiryLadder:
     def test_invalid_env_key_resolves_to_none_none(self) -> None:
         org = _make_org(settings_json={})
 
-        expires_at, org_id = _resolve_license_expiry(_make_settings(modulo_license_key="not-a-valid-key"), org)
+        expires_at, org_id = _resolve_license_expiry(_make_settings(license_key="not-a-valid-key"), org)
 
         assert expires_at is None
         assert org_id is None

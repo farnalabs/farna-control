@@ -37,7 +37,7 @@ def _exporter_identity(override: str | None) -> str:
     """Resolve the stamped exporter identity (never a credential)."""
     if override is not None:
         return override
-    configured = get_settings().modulo_evidence_exporter_identity
+    configured = get_settings().evidence_exporter_identity
     return configured or "modulo"
 
 
@@ -59,7 +59,7 @@ def build_evidence_pack(
     request_id, previous_hash, created_at). ``extra_files`` are additional
     bundle files (path -> bytes); their digests join the manifest's file list.
     The signing key resolves from ``private_key_pem`` or
-    ``MODULO_EVIDENCE_SIGNING_KEY`` and signing fails closed when neither is set.
+    ``FARNA_CONTROL_EVIDENCE_SIGNING_KEY`` and signing fails closed when neither is set.
     """
     resolved_key = resolve_signing_key_pem(private_key_pem)
     resolved_created_at = created_at or datetime.now(UTC).isoformat()

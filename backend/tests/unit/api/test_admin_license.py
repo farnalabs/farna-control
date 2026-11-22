@@ -44,8 +44,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="test-license-key",
+        admin_password="testpass",
+        license_key="test-license-key",
         # No real Redis in unit tests: the route caches the license status under
         # ``license:{org_id}`` (60s TTL) and reads it back before touching the DB.
         # With a live Redis the whole module shares one cache key, so a GET from
@@ -729,7 +729,7 @@ class TestUploadLicense:
         assert resp.status_code == 422
         body = resp.json()
         assert body["reason"] == "anchor_mismatch"
-        assert "MODULO_LICENSE_PUBLIC_KEY" in body["detail"]
+        assert "FARNA_CONTROL_LICENSE_PUBLIC_KEY" in body["detail"]
         assert "anchor mismatch" in body["detail"].lower()
 
     def test_rejects_expired_license(self, client: TestClient) -> None:
@@ -775,9 +775,9 @@ class TestIssueLicense:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="testpass",
-            modulo_license_key="test-license-key",
-            modulo_license_private_key=_TEST_PRIV,
+            admin_password="testpass",
+            license_key="test-license-key",
+            license_private_key=_TEST_PRIV,
             redis_url="",
         )
 
@@ -842,7 +842,7 @@ class TestIssueLicense:
         body = resp.json()
         assert body["reason"] == "signature_mismatch"
         assert "anchor mismatch" in body["detail"].lower()
-        assert "MODULO_LICENSE_PRIVATE_KEY" in body["detail"]
+        assert "FARNA_CONTROL_LICENSE_PRIVATE_KEY" in body["detail"]
 
     def test_issues_with_email_sends_background_email(self, issue_client: TestClient) -> None:
         with patch("farna.api.routes.admin_license.email_team_license", new=AsyncMock()) as mock_email:
@@ -899,7 +899,7 @@ class TestLicenseCacheInvalidationSystemChange:
                 database_url="postgresql+asyncpg://localhost/test",
                 secret_key=_VALID_32,
                 fernet_key=_VALID_32,
-                modulo_admin_password="testpass",
+                admin_password="testpass",
                 redis_url="redis://localhost:6379/0",
             )
 
@@ -1129,7 +1129,7 @@ class TestRemoveSystemLicense:
                 database_url="postgresql+asyncpg://localhost/test",
                 secret_key=_VALID_32,
                 fernet_key=_VALID_32,
-                modulo_admin_password="testpass",
+                admin_password="testpass",
                 redis_url="redis://localhost:6379/0",
             )
 
@@ -1483,7 +1483,7 @@ class TestUploadReportsParked:
             )
         )
         settings = _make_settings()
-        settings.modulo_license_key = key
+        settings.license_key = key
 
         response = admin_license._resolve_effective_license(settings, _mock_org(settings_json={}))
 

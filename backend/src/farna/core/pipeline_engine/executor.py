@@ -1799,7 +1799,7 @@ def _try_agent_failure_elevation(
     try:
         from farna.settings import get_settings
 
-        if get_settings().modulo_agent_failure_elevation_enabled:
+        if get_settings().agent_failure_elevation_enabled:
             return _terminal_failure(
                 broker,
                 "failed",
@@ -6707,7 +6707,7 @@ class PipelineExecutor:
                 "_org_id": scope.org_id,
                 # FAR-1163: seed the pipeline id alongside the other run
                 # identity scalars so node-time readers (gate clamp telemetry,
-                # _run_identity_strs -> MODULO_PIPELINE_ID, loop-intercept
+                # _run_identity_strs -> FARNA_CONTROL_PIPELINE_ID, loop-intercept
                 # guardrail binding) find it at gate/dispatch time. The state
                 # key was READ in those paths but never written before this.
                 "_pipeline_id": scope.pipeline_id,
@@ -6942,7 +6942,7 @@ class PipelineExecutor:
                     index=index,
                     payload=payload,
                 )
-            gate_ok = (delivered or replay_suppressed) and not superseded and not stalled and not cancellation_requested and getattr(get_settings(), "modulo_idempotency_gate_enabled", True) and single_sandbox_node
+            gate_ok = (delivered or replay_suppressed) and not superseded and not stalled and not cancellation_requested and getattr(get_settings(), "idempotency_gate_enabled", True) and single_sandbox_node
         except Exception:
             _log.warning("pipeline.idempotency_gate.check_failed", extra={"run_id": str(run_id)}, exc_info=True)
             gate_ok = False

@@ -7,7 +7,7 @@ Bound to a specific ``(org, run, node, attempt)`` tuple.  Buffers per stream
 Redaction: every flush redacts credentials via ``_redact_raw_output`` with a
 carry-over overlap so a secret split across a flush boundary is still caught.
 
-The writer is a no-op when ``MODULO_ARTIFACTS_ENABLED`` is ``False``.
+The writer is a no-op when ``FARNA_CONTROL_ARTIFACTS_ENABLED`` is ``False``.
 
 Finalize returns ``list[pointer]`` — one per stream that had data.
 """

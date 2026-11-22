@@ -280,7 +280,7 @@ jobs:
             # budget, honouring Retry-After; every other status is terminal.
             # The 400 "Duplicate webhook payload" handled no-op (FAR-1097)
             # and the per-attempt timestamp+HMAC signing (the server enforces
-            # a +/-300s replay window on X-Modulo-Timestamp) are the script's
+            # a +/-300s replay window on X-Farna-Control-Timestamp) are the script's
             # defaults, mirroring the inline ladder this replaced. The script
             # exits 1 when the dispatch is never delivered, and it writes
             # machine-readable results (last HTTP status / class / detail /

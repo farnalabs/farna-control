@@ -50,6 +50,7 @@ from typing import Any
 
 from farna.launcher import manifest as manifest_module
 from farna.launcher.entry import APP_DB_NAME
+from farna.launcher.env_contract import INSTALL_ROOT_ENV, read_env
 from farna.launcher.env_safety import scrub_os_environment
 from farna.launcher.initdb import _binary
 from farna.launcher.manifest import ManifestSecurityError, ReleaseManifest
@@ -471,7 +472,6 @@ def main(argv: list[str] | None = None) -> int:
 #      a state.json-referenced dir; repair a dangling `current` symlink.
 # ---------------------------------------------------------------------------
 
-INSTALL_ROOT_ENV = "FARNA_CONTROL_INSTALL_ROOT"
 UPGRADE_MARKER_FILENAME = "upgrade.json"
 UPGRADE_MARKER_SCHEMA_VERSION = 1
 _RETAINED_VERSIONS = 2
@@ -486,7 +486,7 @@ _PRESSURE_RESTORE_MANIFEST_NAME = _RESTORE_MANIFEST_NAME
 
 def default_install_root() -> Path:
     """Per-user install root (install.sh's own default + env override)."""
-    from_env = os.environ.get(INSTALL_ROOT_ENV)
+    from_env = read_env(os.environ, INSTALL_ROOT_ENV)
     if from_env:
         return Path(from_env).expanduser()
     return Path.home() / ".local" / "opt" / "farna-control"

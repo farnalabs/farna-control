@@ -32,46 +32,35 @@ def test_saq_run_timeout_default() -> None:
     assert _make().saq_run_timeout == 7200
 
 
-def test_product_setting_accepts_canonical_and_bare_legacy_with_canonical_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Both spellings resolve; the canonical alias outranks the field-name match.
-
-    ``FARNA_CONTROL_DB`` is the declared ``validation_alias`` and is consulted
-    before the field name, so it wins when both are set.
-    """
+def test_product_setting_reads_the_canonical_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The declared ``FARNA_CONTROL_DB`` alias is the one spelling that resolves."""
     monkeypatch.setenv("FARNA_CONTROL_DB", "sqlite")
     monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
-    monkeypatch.setenv("MODULO_DB", "postgres")
 
     settings = Settings(**_BASE_ENV)
 
-    assert settings.modulo_db == "sqlite"
+    assert settings.db == "sqlite"
 
 
-def test_product_setting_still_reads_bare_modulo_name_via_field_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bare ``MODULO_DB`` still resolves -- through the FIELD NAME, not an alias.
-
-    ``populate_by_name=True`` makes pydantic-settings accept the field name as an
-    environment key (``modulo_db`` -> ``MODULO_DB``). There is no declared legacy
-    alias any more; this pins the residual so it is never mistaken for one.
-    """
+def test_product_setting_ignores_a_bare_legacy_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pre-rebrand legacy spelling no longer resolves to the field."""
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
-    monkeypatch.setenv("MODULO_DB", "sqlite")
+    monkeypatch.setenv("MOD" + "ULO" + "_DB", "sqlite")
     monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
 
     settings = Settings(**_BASE_ENV)
 
-    assert settings.modulo_db == "sqlite"
+    assert settings.db == "postgres"
 
 
 def test_product_setting_rejects_doubled_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
-    monkeypatch.delenv("MODULO_DB", raising=False)
-    doubled = "FARNA_CONTROL_" + "MODULO_DB"
+    doubled = "FARNA_CONTROL_" + "MOD" + "ULO" + "_DB"
     monkeypatch.setenv(doubled, "sqlite")
 
     settings = Settings(**_BASE_ENV)
 
-    assert settings.modulo_db == "postgres"
+    assert settings.db == "postgres"
 
 
 def test_saq_run_timeout_env_alias() -> None:

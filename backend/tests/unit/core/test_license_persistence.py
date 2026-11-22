@@ -87,8 +87,8 @@ def _key(**kwargs: Any) -> str:
 def _settings(*, env_key: str = "", debug: bool = False) -> SimpleNamespace:
     return SimpleNamespace(
         debug=debug,
-        modulo_license_key=env_key,
-        modulo_license_public_key=_PUBLIC_KEY,
+        license_key=env_key,
+        license_public_key=_PUBLIC_KEY,
     )
 
 

@@ -131,7 +131,7 @@ def _get_async_engine() -> AsyncEngine:
         from farna.db.session import get_shared_engine
 
         settings = get_settings()
-        if settings.modulo_db.lower() == "postgres":
+        if settings.db.lower() == "postgres":
             effective_pool = _effective_db_pool_size(settings.saq_worker_db_pool_size, settings.saq_worker_concurrency)
             if effective_pool != settings.saq_worker_db_pool_size:
                 _log.warning(
@@ -1190,7 +1190,7 @@ async def demo_daily_refresh(_ctx: dict[str, Any]) -> dict[str, Any]:
     durable provenance on existing HITL claims.
     """
     settings = get_settings()
-    if not settings.modulo_demo_enabled:
+    if not settings.demo_enabled:
         return {"status": "disabled"}
     from farna.db.seed_demo import seed_demo_runtime
 
@@ -2334,7 +2334,7 @@ async def _startup_event_bus_hook(_ctx: dict[str, Any]) -> None:
        job can resolve licence state.
     1. (FAR-1771) ``install_event_loop_stall_attribution()`` — opt-in
        worker-side event-loop stall attribution, gated on
-       ``MODULO_SLOW_CALLBACK_WARN_MS`` (0/off = a pure no-op): when enabled
+       ``FARNA_CONTROL_SLOW_CALLBACK_WARN_MS`` (0/off = a pure no-op): when enabled
        it arms asyncio's slow-callback warning and starts the stack sampler
        that lets the readiness stall log name the blocking callback
        (file:line). Installed HERE because this hook is the ONE startup
@@ -2497,7 +2497,7 @@ _SYSTEM_ASYNC_ENGINE: AsyncEngine | None = None
 def _get_system_async_engine() -> AsyncEngine:
     """Engine for cross-org system crons using the farna_control_system role.
 
-    FAIL CLOSED when MODULO_SYSTEM_DATABASE_URL is not set: cross-org system
+    FAIL CLOSED when FARNA_CONTROL_SYSTEM_DATABASE_URL is not set: cross-org system
     crons require the farna_control_system role (LOGIN, BYPASSRLS). Falling back to the
     regular engine would run them as farna_control_app, which is NOBYPASSRLS (see
     bootstrap_role.py: the app role asserts ``rolbypassrls = false``), so any
@@ -2510,7 +2510,7 @@ def _get_system_async_engine() -> AsyncEngine:
     global _SYSTEM_ASYNC_ENGINE
     if _SYSTEM_ASYNC_ENGINE is None:
         settings = get_settings()
-        if settings.modulo_system_database_url:
+        if settings.system_database_url:
             from sqlalchemy.ext.asyncio import create_async_engine
 
             from farna.db.url_utils import split_engine_sslmode
@@ -2519,7 +2519,7 @@ def _get_system_async_engine() -> AsyncEngine:
             # translate it into asyncpg's ``ssl`` connect arg (absent/disable →
             # explicit plaintext; require/verify-* kept fail-closed). Passing
             # the raw URL straight through raises TypeError at first connect.
-            _system_url, _system_ssl_arg = split_engine_sslmode(settings.modulo_system_database_url)
+            _system_url, _system_ssl_arg = split_engine_sslmode(settings.system_database_url)
             _system_connect_args: dict[str, Any] = {}
             if _system_ssl_arg is not None:
                 _system_connect_args["ssl"] = _system_ssl_arg
@@ -2551,9 +2551,9 @@ def _get_system_async_engine() -> AsyncEngine:
         else:
             _log.error(
                 "saq_worker.system_engine_misconfigured",
-                extra={"reason": ("MODULO_SYSTEM_DATABASE_URL not set — refusing to run cross-org system crons as farna_control_app (NOBYPASSRLS); RLS-scoped reads would silently return zero rows. Set the farna_control_system role URL.")},
+                extra={"reason": ("FARNA_CONTROL_SYSTEM_DATABASE_URL not set — refusing to run cross-org system crons as farna_control_app (NOBYPASSRLS); RLS-scoped reads would silently return zero rows. Set the farna_control_system role URL.")},
             )
-            raise RuntimeError("MODULO_SYSTEM_DATABASE_URL is not set: cross-org system crons require the farna_control_system role (LOGIN, BYPASSRLS). Refusing to fail open to farna_control_app (NOBYPASSRLS), which would silently return zero rows.")
+            raise RuntimeError("FARNA_CONTROL_SYSTEM_DATABASE_URL is not set: cross-org system crons require the farna_control_system role (LOGIN, BYPASSRLS). Refusing to fail open to farna_control_app (NOBYPASSRLS), which would silently return zero rows.")
     return _SYSTEM_ASYNC_ENGINE
 
 
@@ -2580,13 +2580,13 @@ def _cleanup_session_factory() -> Any:
     RLS and no farna_control_system role, so the plain factory is both correct and
     the only option — the cross-org purge is exactly right there.
 
-    The dialect is read from ``settings.modulo_db`` — the same signal
+    The dialect is read from ``settings.db`` — the same signal
     :func:`_get_async_engine` uses — WITHOUT connecting: on PostgreSQL the
-    system-engine path still fails LOUD when ``MODULO_SYSTEM_DATABASE_URL``
+    system-engine path still fails LOUD when ``FARNA_CONTROL_SYSTEM_DATABASE_URL``
     is unset (RuntimeError from :func:`_get_system_async_engine`), while
     non-PostgreSQL backends never touch the system engine at all.
     """
-    if get_settings().modulo_db.lower() != "postgres":
+    if get_settings().db.lower() != "postgres":
         return _make_session_factory()
     return _make_system_session_factory()
 

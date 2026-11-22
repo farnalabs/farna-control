@@ -344,8 +344,8 @@ def _install_overrides(
         yield session
 
     settings = Settings(
-        modulo_dev_mode=dev_mode,
-        modulo_public_url="http://test",
+        dev_mode=dev_mode,
+        public_url="http://test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",
@@ -411,8 +411,8 @@ def test_ordinary_caller_denied_403() -> None:
     from farna.settings import Settings
 
     settings = Settings(
-        modulo_dev_mode=True,
-        modulo_public_url="http://test",
+        dev_mode=True,
+        public_url="http://test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",
@@ -443,8 +443,8 @@ def test_internal_caller_without_grant_denied_403() -> None:
     from farna.settings import Settings
 
     settings = Settings(
-        modulo_dev_mode=True,
-        modulo_public_url="http://test",
+        dev_mode=True,
+        public_url="http://test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",
@@ -476,8 +476,8 @@ def test_internal_caller_with_grant_can_access() -> None:
     from farna.settings import Settings
 
     settings = Settings(
-        modulo_dev_mode=True,
-        modulo_public_url="http:test",
+        dev_mode=True,
+        public_url="http:test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",
@@ -507,8 +507,8 @@ def test_internal_jwt_without_grants_can_access() -> None:
     from farna.settings import Settings
 
     settings = Settings(
-        modulo_dev_mode=True,
-        modulo_public_url="http://test",
+        dev_mode=True,
+        public_url="http://test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",
@@ -542,8 +542,8 @@ def test_dev_mode_is_not_required() -> None:
     from farna.settings import Settings
 
     settings = Settings(
-        modulo_dev_mode=False,  # Dev mode OFF
-        modulo_public_url="http://test",
+        dev_mode=False,  # Dev mode OFF
+        public_url="http://test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",
@@ -3175,8 +3175,8 @@ def _install_viewer_overrides(
     )
 
     settings = Settings(
-        modulo_dev_mode=dev_mode,
-        modulo_public_url="http://test",
+        dev_mode=dev_mode,
+        public_url="http://test",
         fernet_key="test" * 8,
         secret_key="test" * 8,
         redis_url="redis://localhost:6379/0",

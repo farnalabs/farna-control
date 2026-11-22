@@ -37,7 +37,7 @@ def _build_repository(
 
 
 class RepositoryHub:
-    """Dispatches to the correct backend repository based on MODULO_DB.
+    """Dispatches to the correct backend repository based on FARNA_CONTROL_DB.
 
     Follows the same dispatcher pattern as ConnectorHub — the factory
     selects a concrete implementation at construction time.
@@ -51,7 +51,7 @@ class RepositoryHub:
         if db_type is None:
             from farna.settings import get_settings
 
-            db_type = get_settings().modulo_db.lower()
+            db_type = get_settings().db.lower()
         self._repo: BaseRepository = _build_repository(db_type, session_factory)
         self._lock_service: BaseLockService = _build_lock_service(db_type)
 

@@ -239,7 +239,7 @@ guarded against tampering at both the ORM and the database layer.
       the two gaps FAR-1549 left visible: the
       SuiteRun lifecycle appends `suite_run_created` (fire, before enqueue) and
       `suite_run_started` / `suite_run_completed` (execution, post-commit) with
-      the same re-select phantom guard, and the `modulo_users` boot seed appends
+      the same re-select phantom guard, and the `users` boot seed appends
       `user_seeded` / `user_rehashed` inside the seeding transaction - the
       credential and any admin-role grant commit atomically with their record,
       and the rehash payload's `role_granted` is computed from the ACTUAL

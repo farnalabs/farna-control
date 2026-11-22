@@ -73,18 +73,18 @@ class _FakeSettings:
     """Deterministic Settings seam: no real environment is read."""
 
     model_fields: ClassVar[dict[str, Any]] = {
-        "modulo_db": None,
-        "modulo_public_url": None,
+        "db": None,
+        "public_url": None,
         "saq_worker_concurrency": None,
         "secret_key": None,
-        "modulo_users": None,
+        "users": None,
         "database_url": None,
     }
-    modulo_db = "postgres"
-    modulo_public_url = "https://modulo.example"
+    db = "postgres"
+    public_url = "https://modulo.example"
     saq_worker_concurrency = 4
     secret_key = SETTINGS_SECRET
-    modulo_users = SETTINGS_USERS
+    users = SETTINGS_USERS
     database_url = "postgresql://user:pass@host:5432/farna_control"
 
 
@@ -172,10 +172,10 @@ def test_settings_inventory_hides_unsafe_values(tmp_path: Path) -> None:
     out = _build_full(tmp_path)
     with zipfile.ZipFile(out) as archive:
         settings_text = archive.read("settings.txt").decode()
-    assert "modulo_db = postgres" in settings_text
-    assert "modulo_public_url = https://modulo.example" in settings_text
+    assert "db = postgres" in settings_text
+    assert "public_url = https://modulo.example" in settings_text
     assert "secret_key: set" in settings_text
-    assert "modulo_users: set" in settings_text
+    assert "users: set" in settings_text
     assert SETTINGS_SECRET not in settings_text
 
 

@@ -49,8 +49,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8000}"
-EMAIL="${MODULO_SMOKE_EMAIL:-admin}"
-PASSWORD="${MODULO_SMOKE_PASSWORD:-admin}"
+EMAIL="${FARNA_CONTROL_SMOKE_EMAIL:-admin}"
+PASSWORD="${FARNA_CONTROL_SMOKE_PASSWORD:-admin}"
 COMPOSE_FILE="docker-compose.yml"
 PROJECT_NAME=""
 DB_SERVICE="db"

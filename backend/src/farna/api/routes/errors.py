@@ -365,7 +365,7 @@ async def create_session_key(
     """Generate a per-session HMAC key for signing error ingest requests.
 
     The key is stored for 1 hour and identified by the authenticated account.
-    Include it as the ``X-Modulo-Error-Token`` header on ``/ingest`` requests.
+    Include it as the ``X-Farna-Control-Error-Token`` header on ``/ingest`` requests.
     """
     store = _get_key_store()
     account_id = str(principal.account_id)
@@ -391,17 +391,17 @@ async def ingest_errors(
 ) -> dict[str, Any]:
     """Ingest one or more error events.
 
-    * Body signed via ``X-Modulo-Error-Token`` header (HMAC-SHA256 of raw body).
+    * Body signed via ``X-Farna-Control-Error-Token`` header (HMAC-SHA256 of raw body).
     * Obtain a key via ``POST /api/v1/errors/session-key`` first.
     * Rate-limited to 10 requests/minute per authenticated session.
     """
     raw_body = await request.body()
-    signature = request.headers.get("X-Modulo-Error-Token", "")
+    signature = request.headers.get("X-Farna-Control-Error-Token", "")
 
     if not signature:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing X-Modulo-Error-Token header",
+            detail="Missing X-Farna-Control-Error-Token header",
         )
 
     store = _get_key_store()

@@ -9,7 +9,7 @@ frames/pages never gain access).
 
 LAN mode: ``FARNA_CONTROL_LAN_ORIGINS`` (comma-separated hostnames) widens the
 allowlist with the explicitly configured LAN hostnames ONLY — an open allow
-everything behaviour would re-open the rebinding class. ``MODULO_LAN_ORIGINS``
+everything behaviour would re-open the rebinding class. ``FARNA_CONTROL_LAN_ORIGINS``
 (the spelling the configuration reference published before the rebrand) is
 accepted as the registered legacy alias (FAR-2563: the middleware used to read
 the canonical name only, so a self-hoster who followed the docs was rejected

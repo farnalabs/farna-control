@@ -182,7 +182,7 @@ and sign your own Team licenses. Run these commands in a checkout of the source.
      endpoint as a system administrator:
 
      ```bash
-     curl -sS -X POST "$MODULO_URL/api/v1/admin/license" \
+     curl -sS -X POST "$FARNA_CONTROL_URL/api/v1/admin/license" \
        -H "Authorization: Bearer $TOKEN" \
        -H 'Content-Type: application/json' \
        -d '{"license_key": "<the key>"}'

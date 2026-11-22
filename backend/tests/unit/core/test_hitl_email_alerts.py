@@ -51,7 +51,7 @@ _RUN_LINK = f"{_PUBLIC_URL}/runs/{_RUN}"
 
 def _settings_mock() -> MagicMock:
     settings = MagicMock()
-    settings.modulo_public_url = _PUBLIC_URL
+    settings.public_url = _PUBLIC_URL
     settings.smtp_host = "smtp.example.com"
     return settings
 

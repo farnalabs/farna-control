@@ -969,7 +969,7 @@ def _get_engine() -> AsyncEngine:
 def _get_system_engine() -> AsyncEngine:
     """Engine for cross-org system crons using the farna_control_system role.
 
-    FAIL CLOSED when MODULO_SYSTEM_DATABASE_URL is not set: cross-org system
+    FAIL CLOSED when FARNA_CONTROL_SYSTEM_DATABASE_URL is not set: cross-org system
     crons require the farna_control_system role (LOGIN, BYPASSRLS). Falling back to the
     regular engine would run them as farna_control_app, which is NOBYPASSRLS (see
     bootstrap_role.py: the app role asserts ``rolbypassrls = false``), so any
@@ -983,7 +983,7 @@ def _get_system_engine() -> AsyncEngine:
     global _SYSTEM_ENGINE
     if _SYSTEM_ENGINE is None:
         settings = get_settings()
-        if settings.modulo_system_database_url:
+        if settings.system_database_url:
             from sqlalchemy.ext.asyncio import create_async_engine
 
             from farna.db.url_utils import split_engine_sslmode
@@ -992,7 +992,7 @@ def _get_system_engine() -> AsyncEngine:
             # translate it into asyncpg's ``ssl`` connect arg (absent/disable →
             # explicit plaintext; require/verify-* kept fail-closed). Passing
             # the raw URL straight through raises TypeError at first connect.
-            system_url, system_ssl_arg = split_engine_sslmode(settings.modulo_system_database_url)
+            system_url, system_ssl_arg = split_engine_sslmode(settings.system_database_url)
             # FAR-1621: mirror ``db.session._build_engine``. The connect
             # ``timeout`` bounds asyncpg's own TCP connect wait (driver default
             # is 60s); the pool knobs make a saturated checkout fail as a
@@ -1029,9 +1029,9 @@ def _get_system_engine() -> AsyncEngine:
         else:
             _log.error(
                 "cron_helpers.system_engine_misconfigured",
-                extra={"reason": ("MODULO_SYSTEM_DATABASE_URL not set — refusing to run cross-org system crons as farna_control_app (NOBYPASSRLS); RLS-scoped reads would silently return zero rows. Set the farna_control_system role URL.")},
+                extra={"reason": ("FARNA_CONTROL_SYSTEM_DATABASE_URL not set — refusing to run cross-org system crons as farna_control_app (NOBYPASSRLS); RLS-scoped reads would silently return zero rows. Set the farna_control_system role URL.")},
             )
-            raise RuntimeError("MODULO_SYSTEM_DATABASE_URL is not set: cross-org system crons require the farna_control_system role (LOGIN, BYPASSRLS). Refusing to fail open to farna_control_app (NOBYPASSRLS), which would silently return zero rows.")
+            raise RuntimeError("FARNA_CONTROL_SYSTEM_DATABASE_URL is not set: cross-org system crons require the farna_control_system role (LOGIN, BYPASSRLS). Refusing to fail open to farna_control_app (NOBYPASSRLS), which would silently return zero rows.")
     return _SYSTEM_ENGINE
 
 

@@ -701,7 +701,7 @@ def _multi_host_credential_helper_script(hosts: dict[str, str]) -> str:
     path, username) on stdin — it never sends the password — so the helper reads
     the host from stdin and matches it against the ordered host list by EXACT
     literal equality (no globs, no file reads — no TOCTOU). Each host's token
-    comes from its own per-host env var (e.g. ``MODULO_GIT_CRED_0``), never a
+    comes from its own per-host env var (e.g. ``FARNA_CONTROL_GIT_CRED_0``), never a
     single shared var, so host A's token is never visible to host B.
 
     *hosts* is an ordered dict mapping hostname -> env var name containing the

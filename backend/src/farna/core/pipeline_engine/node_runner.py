@@ -275,7 +275,7 @@ def _node_input_work_item_refs(node_id: str, run_context: dict[str, Any]) -> lis
     entry, so caller input can never forge a malformed stamp through here.
     This NEVER raises — a read or validation failure degrades to fewer/empty
     refs with a warning log plus a counter event. Capped at the unified
-    ``modulo_work_item_refs_cap`` with the deterministic rank-ascending drop
+    ``work_item_refs_cap`` with the deterministic rank-ascending drop
     order (agent first, then derived, then caller, then array position).
     """
     candidates = [(i, entry) for i, entry in enumerate(_validated_node_input_refs(node_id, run_context))]
@@ -750,7 +750,7 @@ def _bridge_escalation_failure_detail(exit_code: int, stdout_raw: str) -> str | 
     """Failure detail for a loop stopped by an in-loop escalation (FAR-1694 S2).
 
     The sandbox bridge client refuses an ``escalate``-verdict call, prints a
-    ``MODULO_BRIDGE_ESCALATED:<json>`` marker and exits with
+    ``FARNA_CONTROL_BRIDGE_ESCALATED:<json>`` marker and exits with
     ``BRIDGE_ESCALATED_EXIT_CODE``. Returns a summary-only descriptor of the
     escalation (tool / guardrail / reason — never raw args), or ``None`` when
     the run was not stopped by an escalation. The mid-loop suspension that turns
@@ -1719,7 +1719,7 @@ async def _list_fs_entries_via_provider(
 # ---------------------------------------------------------------------------
 #
 # The dispatch runs through the RuntimeProvider ABC unconditionally (FAR-1050
-# R6 retired ``MODULO_E2B_VIA_PROVIDER`` and the legacy direct path): create,
+# R6 retired ``FARNA_CONTROL_E2B_VIA_PROVIDER`` and the legacy direct path): create,
 # stream and kill remain ONE atomic sequence — the provider is resolved once,
 # before create, and disposed in the finally block — so a sandbox is never
 # provider-created but legacy-killed (or the reverse).
@@ -3499,7 +3499,7 @@ def _connector_gate_enabled(on_unknown: str, *, node_id: str | None = None, run_
 
     The SINGLE authority for gate eligibility: the per-op ``on_unknown`` mode is
     not ``off`` (the op bypasses the gate entirely) AND the opt-in killswitch
-    ``modulo_connector_write_gate_enabled`` is enabled. The killswitch read is
+    ``connector_write_gate_enabled`` is enabled. The killswitch read is
     fail-open — an exception reads as disabled (the gate proceeds on the same
     failure).
 
@@ -3514,7 +3514,7 @@ def _connector_gate_enabled(on_unknown: str, *, node_id: str | None = None, run_
     try:
         from farna.settings import get_settings
 
-        return bool(getattr(get_settings(), "modulo_connector_write_gate_enabled", False))
+        return bool(getattr(get_settings(), "connector_write_gate_enabled", False))
     except Exception:
         # Killswitch read failure must not block a write — proceed (fail-open).
         _log.warning(
@@ -3775,7 +3775,7 @@ async def _connector_write_gate(
     Fail-open in every direction (missing run id / session factory / persisted
     key, killswitch off, DB error, malformed key) returns ``None`` — the write
     proceeds, never blocked. The killswitch
-    ``modulo_connector_write_gate_enabled`` is GENUINELY OPT-IN: it defaults to
+    ``connector_write_gate_enabled`` is GENUINELY OPT-IN: it defaults to
     ``False`` (set in ``farna.settings``), so a deploy never silently suppresses
     byte-identical re-executed connector writes — a behavioural change vs. the
     pre-FAR-458 contract where every visit fired. Operators enable it explicitly.
@@ -8473,7 +8473,7 @@ async def _sandbox_acquire_dispatch_marker(
     (pre-D8 marker shape), and the post-create
     ``_sandbox_store_dispatch_marker_sandbox`` rewrite — so the routing state
     is on the marker from the first durable write onward, not only after the
-    create succeeds. The ``MODULO_E2B_VIA_PROVIDER`` flag this field once
+    create succeeds. The ``FARNA_CONTROL_E2B_VIA_PROVIDER`` flag this field once
     reported was RETIRED by FAR-1050 R6 (PR #1033): the provider path is
     unconditional, so ``via_provider`` now survives as a historical
     attribution field only.
@@ -8870,7 +8870,7 @@ async def _sandbox_issue_run_credential_for_sandbox(
     )
     if issued is not None:
         # Provenance is stamped on the run's telemetry (attested evidence), in
-        # addition to the ``MODULO_CREDENTIAL_PROVENANCE`` env stamp applied by
+        # addition to the ``FARNA_CONTROL_CREDENTIAL_PROVENANCE`` env stamp applied by
         # the dispatch site.
         _emit_script_span_event(
             "credential.issued",
@@ -9638,7 +9638,7 @@ class _SandboxNodeConfig:
     workspace_inputs: list[dict[str, Any]]
     # FAR-899: schema validator mode for output validation.
     # Resolved at runtime from the effective-setting store via
-    # resolve_schema_validator_mode(); the env var MODULO_SCHEMA_VALIDATOR_MODE
+    # resolve_schema_validator_mode(); the env var FARNA_CONTROL_SCHEMA_VALIDATOR_MODE
     # is a first-boot seed only.  Default: "lenient".
     schema_validator_mode: str = "lenient"
     # FAR-899: schema identifier and version for logging/repair.
@@ -9972,7 +9972,7 @@ def _build_sandbox_node_envelope(
     state (``via_provider``) onto the envelope, which the P1b splitter folds
     into ``node_telemetry_json`` verbatim — every run is then attributable
     to provider-mediated execution. Both keys are emitted together. The
-    ``MODULO_E2B_VIA_PROVIDER`` flag ``via_provider`` once reported was
+    ``FARNA_CONTROL_E2B_VIA_PROVIDER`` flag ``via_provider`` once reported was
     RETIRED by FAR-1050 R6 (PR #1033) — the provider path is unconditional —
     so the key is a historical attribution field; callers that pass no tier
     (the Bundled Runner route) get neither, so their envelope key set is
@@ -10097,7 +10097,7 @@ def _build_sandbox_envs(
     Model Backend credential injections) merge AFTER the profile/host creds
     but BEFORE the node's ``env_vars_extra``:
 
-    1. MODULO_* system vars (reserved — set exactly once here).
+    1. FARNA_CONTROL_* system vars (reserved — set exactly once here).
     2. Profile/host standing credentials (host API key / GitHub PAT).
     3. Per-agent model-backend runner bindings (decrypt at provision).
     4. Node ``env_vars_extra`` — the sanctioned override; the reviewbot's
@@ -10110,7 +10110,7 @@ def _build_sandbox_envs(
         "FARNA_CONTROL_INPUT_PAYLOAD": input_json,
     }
     if sandbox_mode != "script":
-        sandbox_envs["APP_MODULO_OPENCODE_API_KEY"] = os.environ.get("APP_MODULO_OPENCODE_API_KEY", "")
+        sandbox_envs["FARNA_CONTROL_OPENCODE_API_KEY"] = os.environ.get("FARNA_CONTROL_OPENCODE_API_KEY", "")
         sandbox_envs["GITHUB_TOKEN"] = os.environ.get("GITHUB_DOGFOOD_PAT_ALL", "") or os.environ.get("GITHUB_DOGFOOD_PAT_WR", "") or os.environ.get("GITHUB_TOKEN", "")
     if runner_bindings:
         sandbox_envs.update(runner_bindings)
@@ -10672,7 +10672,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
     #    validation (GraphValidator parity, no silent clamp).
     #  - kubernetes (FAR-1051) -> the provider-mediated path below with the
     #    hub-resolved Kubernetes provider; an unregistered provider raises the
-    #    typed ProviderNotConfiguredError naming MODULO_KUBERNETES_ENABLED
+    #    typed ProviderNotConfiguredError naming FARNA_CONTROL_KUBERNETES_ENABLED
     #    (no silent fallback to E2B or local).
     #  - none -> the historical E2B default route, unchanged.
     #  FAR-1598: BEFORE any of those branches, a bound TEAM-PRIVATE profile
@@ -10949,7 +10949,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         try:
             from farna.settings import get_settings
 
-            _gate_enabled = getattr(get_settings(), "modulo_idempotency_gate_enabled", True)
+            _gate_enabled = getattr(get_settings(), "idempotency_gate_enabled", True)
         except Exception:
             _log.warning(
                 "sandbox_agent.idempotency_gate_killswitch_check_failed",
@@ -11166,9 +11166,9 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             )
             from farna.settings import get_settings as _get_mwi_settings
 
-            if not _get_mwi_settings().modulo_workspace_inputs_enabled:
+            if not _get_mwi_settings().workspace_inputs_enabled:
                 raise WorkspaceProvisioningError(
-                    "Managed workspace inputs are disabled (MODULO_WORKSPACE_INPUTS_ENABLED is not set or false)",
+                    "Managed workspace inputs are disabled (FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED is not set or false)",
                     error_code=_CODE_SANDBOX_WORKSPACE_INPUTS_DISABLED,
                     retryable=False,
                 )
@@ -11608,7 +11608,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
 
         # FAR-418: expose the node's capability_scope.allowed_tools to the sandbox
         # agent runtime (FAR-402 P4 / FAR-418) so the agent's MCP client can
-        # forward it as the ``X-Modulo-Allowed-Tools`` header. The MCP server's
+        # forward it as the ``X-Farna-Control-Allowed-Tools`` header. The MCP server's
         # McpAuthMiddleware lifts that header into the request-scoped allow-list
         # consumed by check_tool_scope, enforcing node-level tool scoping in the
         # production run path. Absent/empty (the UNRESTRICTED default) sets nothing,
@@ -11806,7 +11806,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                     from farna.settings import get_settings as _get_settings
 
                     _settings = _get_settings()
-                    if getattr(_settings, "modulo_artifacts_enabled", True):
+                    if getattr(_settings, "artifacts_enabled", True):
                         _artifact_writer = ArtifactWriter(
                             org_id=org_id,
                             run_id=run_id,
@@ -11904,7 +11904,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             # GITHUB_TOKEN for identity separation (e.g. PR Reviewer uses
             # farna-reviewbot PAT, not the default GITHUB_TOKEN identity).
             # The reserved-prefix validator already prevents overriding
-            # MODULO_* vars, so update() below is the sanctioned override.
+            # FARNA_CONTROL_* vars, so update() below is the sanctioned override.
             # FAR-592 (D6): ``_runner_bindings`` was resolved BEFORE the sandbox
             # was created (see the provision-time block above the
             # ``AsyncSandbox.create`` loop) and merges between the profile

@@ -9,7 +9,6 @@ contract - importable WITHOUT SQLAlchemy/models; asyncpg-level only.
    DATABASE_URL for backwards compatibility
 2. Create the alembic_version table with VARCHAR(255) for branch migrations
 3. Resolve the system database URL from the accepted aliases, in priority order:
-   FARNA_CONTROL_SYSTEM_DATABASE_URL, MODULO_SYSTEM_DATABASE_URL, then
    FARNA_CONTROL_SYSTEM_DATABASE_URL. An explicitly configured value is
    fixed and published under the canonical name. Otherwise, derive a value from
    DATABASE_URL for the entrypoint env-file contract only; never publish that
@@ -146,24 +145,14 @@ def main() -> None:
     _write_env_file("/tmp/database_url.env", runtime_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
     _write_env_file("/tmp/database_admin_url.env", admin_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
 
-    # MODULO_SYSTEM_DATABASE_URL: the farna_control_system role (LOGIN, BYPASSRLS) URL used
+    # FARNA_CONTROL_SYSTEM_DATABASE_URL: the farna_control_system role (LOGIN, BYPASSRLS) URL used
     # by system crons (metrics_dump, analytics_facts_maintenance, journey_reconcile,
     # retention_cleanup, dispatcher_reconcile) and the SSO pre-auth provider lookup.
     # If set, fix it like the others. If not, derive the URL for the entrypoint's
     # env-file contract, but do not pass that derived credential into role
     # reconciliation: bootstrap_role.py must preserve an existing system-role
     # password on warm boots without an explicit system URL.
-    configured_system_url = next(
-        (
-            os.environ.get(name, "")
-            for name in (
-                "FARNA_CONTROL_SYSTEM_DATABASE_URL",
-                "MODULO_SYSTEM_DATABASE_URL",
-            )
-            if os.environ.get(name, "")
-        ),
-        "",
-    )
+    configured_system_url = os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
     if configured_system_url:
         system_url = fix_database_url(configured_system_url)
         os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] = system_url
@@ -184,6 +173,6 @@ def main() -> None:
             _write_env_file("/tmp/system_database_url.env", system_url)  # nosec B108  # noqa: S108  # NOSONAR S5443
         else:
             print(  # noqa: T201
-                "WARNING: cannot derive MODULO_SYSTEM_DATABASE_URL (DATABASE_URL has no usable password/userinfo) - system crons will fall back to farna_control_app",
+                "WARNING: cannot derive FARNA_CONTROL_SYSTEM_DATABASE_URL (DATABASE_URL has no usable password/userinfo) - system crons will fall back to farna_control_app",
                 file=sys.stderr,
             )

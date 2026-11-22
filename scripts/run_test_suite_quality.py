@@ -2,7 +2,7 @@
 """Fast wrapper around the test-style scanner suite.
 
 Runs only the lenses against test files that changed versus a given ref,
-using MODULO_TEST_STYLE_SCOPE + pytest-xdist for speed.  When no test
+using FARNA_CONTROL_TEST_STYLE_SCOPE + pytest-xdist for speed.  When no test
 files changed, exits immediately with 0.
 
 The suite it runs includes the structural BDD guard
@@ -110,7 +110,7 @@ def _collect_changed_test_files(ref: str) -> list[str]:
 
 
 def _build_scope_env(scope_files: list[str]) -> str:
-    """Build the ``MODULO_TEST_STYLE_SCOPE`` value from repo-relative paths.
+    """Build the ``FARNA_CONTROL_TEST_STYLE_SCOPE`` value from repo-relative paths.
 
     *scope_files* are repo-relative (e.g. ``backend/tests/.../*.py``). pytest
     runs with ``cwd=backend/``, so ``_iter_test_modules`` yields paths relative
@@ -251,7 +251,7 @@ def _build_run_env(env_scope: str) -> dict[str, str]:
     """Return the child-process environment, carrying the scope when set."""
     env = os.environ.copy()
     if env_scope:
-        env["MODULO_TEST_STYLE_SCOPE"] = env_scope
+        env["FARNA_CONTROL_TEST_STYLE_SCOPE"] = env_scope
     return env
 
 

@@ -49,7 +49,7 @@ async def get_dev_mode(
         logger.warning("Failed to read dev_mode from DB", exc_info=True)
 
     # 2. Check env var
-    if settings.modulo_dev_mode:
+    if settings.dev_mode:
         return {"enabled": True, "source": "env"}
 
     # 3. Default

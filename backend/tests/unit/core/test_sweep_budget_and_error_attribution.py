@@ -78,7 +78,7 @@ def _make_settings(**overrides: Any) -> MagicMock:
         "redis_url": "redis://localhost:6379/0",
         "saq_redis_pool_size": 5,
         "fernet_key": "b" * 44,
-        "modulo_telemetry_enabled": False,
+        "telemetry_enabled": False,
         "saq_reenqueue_window": 5,
         "saq_job_heartbeat": 30,
         "saq_claimed_nodeless_minutes": 15,
@@ -340,7 +340,7 @@ class TestRunnerSweepsErrorAttribution:
         skip_envelope = {
             "scanned": 0,
             "orphans_destroyed": 0,
-            "skipped": "no Docker endpoint configured (MODULO_DOCKER_HOST unset)",
+            "skipped": "no Docker endpoint configured (FARNA_CONTROL_DOCKER_HOST unset)",
         }
         with (
             patch("farna.core.saq_worker._get_async_engine", return_value=MagicMock()),

@@ -87,9 +87,9 @@ def session_mod() -> Any:
     m._GLOBAL_HOOKS_REGISTERED = orig_hooks
 
 
-def _settings(modulo_db: str, database_url: str, pool_recycle: int = 1500) -> MagicMock:
+def _settings(db: str, database_url: str, pool_recycle: int = 1500) -> MagicMock:
     settings = MagicMock()
-    settings.modulo_db = modulo_db
+    settings.db = db
     settings.database_url = database_url
     settings.db_pool_recycle_seconds = pool_recycle
     return settings
@@ -227,7 +227,7 @@ class TestBuildEngine:
 
     def test_sqlite_url_with_default_postgres_dbtype_still_boots(self, session_mod: Any) -> None:
         """The schema-freshness / gen_openapi defect (FAR-1440): process boots with
-        a SQLite DATABASE_URL while modulo_db stays at its "postgres" default.
+        a SQLite DATABASE_URL while db stays at its "postgres" default.
         The ssl translation must key off the URL's real driver scheme —
         no ValueError, and no ssl connect arg for aiosqlite."""
         with (
@@ -245,9 +245,9 @@ class TestBuildEngine:
 
     def test_every_backend_gets_timeout_connect_arg(self, session_mod: Any) -> None:
         """timeout=10 is the one connect arg shared by all backends."""
-        for modulo_db, url in (("postgres", POSTGRES_URL), ("sqlite", SQLITE_URL)):
+        for db, url in (("postgres", POSTGRES_URL), ("sqlite", SQLITE_URL)):
             with (
-                patch("farna.db.session.get_settings", return_value=_settings(modulo_db, url)),
+                patch("farna.db.session.get_settings", return_value=_settings(db, url)),
                 patch("farna.db.session.create_async_engine") as mock_create,
                 patch("farna.db.session.register_rls_reset_hook"),
             ):

@@ -144,7 +144,7 @@ async def test_stream_without_api_keys_preserves_tool_control_flow(
         api_key=None,
         mcp_api_key=None,
     )
-    settings = SimpleNamespace(modulo_public_url="http://test", fernet_key="unused")
+    settings = SimpleNamespace(public_url="http://test", fernet_key="unused")
 
     with (
         patch("farna.api.routes.assistant.AsyncSession", return_value=stream_session),

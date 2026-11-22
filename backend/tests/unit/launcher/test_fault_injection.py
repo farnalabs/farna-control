@@ -3,7 +3,7 @@
 Every fault below is injected through a seam the merged machinery already
 ships; this suite makes the recovery contracts hard to regress:
 
-* SIGKILL mid-initdb via the deterministic ``MODULO_TEST_PAUSE_AT`` gate
+* SIGKILL mid-initdb via the deterministic ``FARNA_CONTROL_TEST_PAUSE_AT`` gate
   (never a timing-based kill): a killed attempt must leave NO
   half-initialised datadir to adopt on the next boot, the SIGKILL debris
   (temp cluster + plaintext pwfile) must be swept by the next boot's

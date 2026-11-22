@@ -185,7 +185,7 @@ describe('AgentRunnerBindings', () => {
     bindingsByAgent = { 'agent-a': [row('API_KEY', 'backend-1')] }
     mockPut.mockResolvedValue({
       data: null,
-      error: { detail: 'target_env_var MODULO_RESERVED is not allowed' },
+      error: { detail: 'target_env_var FARNA_CONTROL_RESERVED is not allowed' },
     })
     const wrapper = mountBindings('agent-a')
     await nextTick()
@@ -193,7 +193,7 @@ describe('AgentRunnerBindings', () => {
     await wrapper.find('[data-testid="pipeline-editor-runner-binding-save"]').trigger('click')
     await nextTick()
 
-    expect(wrapper.text()).toContain('target_env_var MODULO_RESERVED is not allowed')
+    expect(wrapper.text()).toContain('target_env_var FARNA_CONTROL_RESERVED is not allowed')
   })
 
   it('falls back to the generic save-failed copy when the server error carries no detail', async () => {

@@ -71,10 +71,10 @@ _ENV_KEYS_TO_DROP = (
     "FARNA_CONTROL_LEGACY_SHIM_PATH",
     "FARNA_CONTROL_LEGACY_INSTALL_ROOT",
     "FARNA_CONTROL_LEGACY_USER_SHIM",
-    "MODULO_INSTALL_ROOT",
-    "MODULO_BIN_DIR",
-    "MODULO_DATA_DIR",
-    "MODULO_LEGACY_SHIM_PATH",
+    "FARNA_CONTROL_INSTALL_ROOT",
+    "FARNA_CONTROL_BIN_DIR",
+    "FARNA_CONTROL_DATA_DIR",
+    "FARNA_CONTROL_LEGACY_SHIM_PATH",
 )
 
 
@@ -262,34 +262,20 @@ def test_relative_from_file_resolves_against_the_invocation_directory(tmp_path: 
 # --- every path override is anchored at the invocation directory -------------
 
 
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"FARNA_CONTROL_DATA_DIR": "relative-data"},
-        {"FARNA_CONTROL_DATA_DIR": None, "MODULO_DATA_DIR": "relative-data"},
-    ],
-    ids=["farna_control", "legacy_modulo_alias"],
-)
-def test_relative_data_dir_override_is_anchored_at_the_invocation_directory(tmp_path: Path, overrides: dict[str, str | None]) -> None:
+def test_relative_data_dir_override_is_anchored_at_the_invocation_directory(tmp_path: Path) -> None:
     """The installer writes config.env into the data dir AFTER leaving its cwd,
     so a relative override must still land beside where it was run, not under /."""
+    overrides = {"FARNA_CONTROL_DATA_DIR": "relative-data"}
     result, env = _run_install(tmp_path, cwd_mode=0o755, relative=False, env_overrides=overrides)
 
     _assert_installed(result, env)
     assert (_invocation_dir(tmp_path) / "relative-data" / "config.env").is_file(), _diagnose(result)
 
 
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"FARNA_CONTROL_LEGACY_SHIM_PATH": "relative-shim/modulo"},
-        {"FARNA_CONTROL_LEGACY_SHIM_PATH": None, "MODULO_LEGACY_SHIM_PATH": "relative-shim/modulo"},
-    ],
-    ids=["farna_control", "legacy_modulo_alias"],
-)
-def test_relative_legacy_shim_override_is_anchored_at_the_invocation_directory(tmp_path: Path, overrides: dict[str, str | None]) -> None:
+def test_relative_legacy_shim_override_is_anchored_at_the_invocation_directory(tmp_path: Path) -> None:
     """An unmanaged legacy shim named by a relative override must still be found
     (and refused without --force); resolved against / it would be missed."""
+    overrides = {"FARNA_CONTROL_LEGACY_SHIM_PATH": "relative-shim/modulo"}
     shim = _invocation_dir(tmp_path) / "relative-shim" / "modulo"
     shim.parent.mkdir(parents=True)
     shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -301,12 +287,33 @@ def test_relative_legacy_shim_override_is_anchored_at_the_invocation_directory(t
     assert shim.is_file()
 
 
+def test_a_stale_legacy_data_dir_name_is_ignored(tmp_path: Path) -> None:
+    """A pre-rebrand override name is not honoured: the cutover has one spelling."""
+    legacy = "MOD" + "ULO" + "_DATA_DIR"
+    result, env = _run_install(tmp_path, cwd_mode=0o755, relative=False, env_overrides={legacy: "relative-data"})
+
+    _assert_installed(result, env)
+    assert not (_invocation_dir(tmp_path) / "relative-data").exists(), _diagnose(result)
+
+
+def test_a_stale_legacy_shim_path_name_is_ignored(tmp_path: Path) -> None:
+    """A pre-rebrand shim-path override cannot make the installer refuse a shim."""
+    legacy = "MOD" + "ULO" + "_LEGACY_SHIM_PATH"
+    shim = _invocation_dir(tmp_path) / "relative-shim" / "modulo"
+    shim.parent.mkdir(parents=True)
+    shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+    result, env = _run_install(tmp_path, cwd_mode=0o755, relative=False, env_overrides={legacy: "relative-shim/modulo"})
+
+    _assert_installed(result, env)
+
+
 #: An assignment whose value comes straight from a path-override variable. Every
 #: such override must go through absolute_from_invocation instead. (HOME and
 #: TMPDIR are anchored once, before the installer leaves its cwd, so values
 #: derived from them are already absolute.)
 _UNANCHORED_OVERRIDE = re.compile(
-    r"""^\s*(?:local\s+)?[A-Za-z_][A-Za-z0-9_]*="\$\{(?:(?:FARNA_CONTROL|MODULO)_[A-Z0-9_]*(?:DIR|ROOT|SHIM|PATH)|XDG_[A-Z]+_HOME)\b""",
+    r"""^\s*(?:local\s+)?[A-Za-z_][A-Za-z0-9_]*="\$\{(?:FARNA_CONTROL_[A-Z0-9_]*(?:DIR|ROOT|SHIM|PATH)|XDG_[A-Z]+_HOME)\b""",
     re.MULTILINE,
 )
 
@@ -320,8 +327,8 @@ def test_install_sh_anchors_every_path_override() -> None:
 @pytest.mark.parametrize(
     "historical",
     [
-        '  local legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-${MODULO_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}"',
-        '  DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${MODULO_DATA_DIR}}"',
+        '  local legacy_shim="${FARNA_CONTROL_LEGACY_SHIM_PATH:-${FARNA_CONTROL_LEGACY_SHIM_PATH:-/usr/local/bin/modulo}}"',
+        '  DATA_DIR="${FARNA_CONTROL_DATA_DIR:-${FARNA_CONTROL_DATA_DIR}}"',
         '  STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/farna-control"',
     ],
 )

@@ -226,7 +226,7 @@ export interface paths {
          *
          *     The response embeds the token plaintext exactly once — it is never
          *     persisted (only its SHA-256 hash is stored). ``invite_url`` is anchored to
-         *     ``settings.modulo_public_url`` (same origin decision as
+         *     ``settings.public_url`` (same origin decision as
          *     ``mcp_setup_handoff`` / SSO routes): the admin may copy the link from any
          *     machine/proxy and self-hosted deployments set this once globally; deriving
          *     from the request's Host header would mint proxy-dependent URLs.
@@ -1032,7 +1032,7 @@ export interface paths {
          *        sweep would keep serving the removed licence for up to a minute.
          *
          *     The response is the post-removal instance-wide resolution rather than a
-         *     hard-coded "no licence": ``MODULO_LICENSE_KEY`` is deployment configuration
+         *     hard-coded "no licence": ``FARNA_CONTROL_LICENSE_KEY`` is deployment configuration
          *     (rung 3 of the same ladder), so a deployment licensed by the env var still
          *     resolves to Team after the installed key is cleared. Reporting Community
          *     there would be false; the caller can tell the two apart from ``has_license``.
@@ -1526,18 +1526,18 @@ export interface paths {
          * @description Auto-login the env-configured read-only demo user (FAR-535).
          *
          *     The browser sends NO credentials — the server reads the demo email/password
-         *     from settings (MODULO_DEMO_USER / MODULO_DEMO_PASSWORD). Kill switch: when
-         *     MODULO_DEMO_ENABLED is falsy or either credential is unset the endpoint
+         *     from settings (FARNA_CONTROL_DEMO_USER / FARNA_CONTROL_DEMO_PASSWORD). Kill switch: when
+         *     FARNA_CONTROL_DEMO_ENABLED is falsy or either credential is unset the endpoint
          *     answers a plain 404 so it never reveals that a demo feature exists.
          *
-         *     The minted access token carries the SHORT demo TTL (modulo_demo_token_minutes,
+         *     The minted access token carries the SHORT demo TTL (demo_token_minutes,
          *     default 2h, hard-capped at 4h) and NO refresh token is issued — the demo
          *     session dies with the access token. Note the session persists until its TTL
          *     expiry after the kill switch is flipped (no refresh token can extend it; the
          *     4h cap bounds that residual window). The session is minted ONLY for a viewer
          *     membership in the demo org: if the env user authenticates but has no viewer
          *     membership in the demo org (operator misconfiguration — e.g.
-         *     MODULO_DEMO_USER naming a privileged account) the endpoint answers the same
+         *     FARNA_CONTROL_DEMO_USER naming a privileged account) the endpoint answers the same
          *     plain 404, so a demo request can never mint a token for another org or
          *     elevated role. Credential mismatches answer the SAME plain 404 (not
          *     login's 401): the endpoint takes no client credentials, so a login-identical
@@ -5690,8 +5690,8 @@ export interface paths {
          * Receive Webhook
          * @description Receive an incoming webhook and enqueue a pipeline run.
          *
-         *     Requires X-Modulo-Timestamp header (Unix seconds, ±300s window).
-         *     Requires X-Modulo-Webhook-Secret header if trigger has hmac_secret configured.
+         *     Requires X-Farna-Control-Timestamp header (Unix seconds, ±300s window).
+         *     Requires X-Farna-Control-Webhook-Secret header if trigger has hmac_secret configured.
          *     Alternatively, when no Modulo header is sent, GitHub's ``X-Hub-Signature-256``
          *     (``sha256=`` HMAC-SHA256 of the raw body keyed by the trigger's hmac_secret) is
          *     accepted. That scheme carries no timestamp, so it has no replay window; payload
@@ -5733,7 +5733,7 @@ export interface paths {
          *     ADR 047: replay is a mutating run-creation channel and is NOT exempt. A
          *     principal (if present) must hold the ``run.trigger`` permission (``runner``
          *     minimum). An unauthenticated caller must present a valid HMAC signature
-         *     (``X-Modulo-Webhook-Secret`` + ``X-Modulo-Timestamp``) over the stored
+         *     (``X-Farna-Control-Webhook-Secret`` + ``X-Farna-Control-Timestamp``) over the stored
          *     payload — the same verification ``receive_webhook`` performs. FAR-2251:
          *     GitHub's ``X-Hub-Signature-256`` over the stored body is also accepted
          *     when no Modulo header is present.
@@ -10787,7 +10787,7 @@ export interface paths {
          * @description Generate a per-session HMAC key for signing error ingest requests.
          *
          *     The key is stored for 1 hour and identified by the authenticated account.
-         *     Include it as the ``X-Modulo-Error-Token`` header on ``/ingest`` requests.
+         *     Include it as the ``X-Farna-Control-Error-Token`` header on ``/ingest`` requests.
          */
         post: operations["create_session_key_api_v1_errors_session_key_post"];
         delete?: never;
@@ -10809,7 +10809,7 @@ export interface paths {
          * Ingest Errors
          * @description Ingest one or more error events.
          *
-         *     * Body signed via ``X-Modulo-Error-Token`` header (HMAC-SHA256 of raw body).
+         *     * Body signed via ``X-Farna-Control-Error-Token`` header (HMAC-SHA256 of raw body).
          *     * Obtain a key via ``POST /api/v1/errors/session-key`` first.
          *     * Rate-limited to 10 requests/minute per authenticated session.
          */

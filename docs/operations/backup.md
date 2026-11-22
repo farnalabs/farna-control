@@ -28,7 +28,7 @@ uv run scripts/backup.py --output /backups/daily/modulo-backup-20260624.tar.gz.e
 ```
 
 The script will:
-1. Prompt for an encryption passphrase (or read `MODULO_BACKUP_PASSPHRASE`)
+1. Prompt for an encryption passphrase (or read `FARNA_CONTROL_BACKUP_PASSPHRASE`)
 2. Check available disk space
 3. Dump Postgres schema + data via `pg_dump`
 4. Collect `FERNET_KEY`, `SECRET_KEY`, and other env vars
@@ -49,7 +49,7 @@ The script will:
 ### Environment Variables
 
 - `DATABASE_URL` – Postgres connection string
-- `MODULO_BACKUP_PASSPHRASE` – Encryption passphrase (if not using `--passphrase`)
+- `FARNA_CONTROL_BACKUP_PASSPHRASE` – Encryption passphrase (if not using `--passphrase`)
 
 ### Cron Job Template
 

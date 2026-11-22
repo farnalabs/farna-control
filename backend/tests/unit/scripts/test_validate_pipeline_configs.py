@@ -174,7 +174,7 @@ def test_check_node_config_script_mode_still_checks_template_and_timeout(tmp_pat
 
 def test_check_node_config_env_vars_extra_alias_after_system_vars_ok(tmp_path):
     node = _good_node()
-    node["envs"] = {"env_vars_extra": {"EXTRA": "1"}, "APP_MODULO_OPENCODE_API_KEY": "k"}
+    node["envs"] = {"env_vars_extra": {"EXTRA": "1"}, "FARNA_CONTROL_OPENCODE_API_KEY": "k"}
     with patch.object(vpc, "_fail") as fail:
         vpc._check_node_config(Path(tmp_path), node)
     fail.assert_not_called()

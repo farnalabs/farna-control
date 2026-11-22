@@ -44,7 +44,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="test",
+        admin_password="test",
         redis_url="redis://localhost:6379/0",
     )
 
@@ -328,32 +328,32 @@ class TestPerCheckTimeouts:
 
     def test_settings_defaults_apply(self) -> None:
         settings = _make_settings()
-        assert settings.modulo_health_timeout_seconds == 5.0
+        assert settings.health_timeout_seconds == 5.0
         for field in (
-            "modulo_health_db_timeout_seconds",
-            "modulo_health_redis_timeout_seconds",
-            "modulo_health_checkpointer_timeout_seconds",
-            "modulo_health_migrations_timeout_seconds",
+            "health_db_timeout_seconds",
+            "health_redis_timeout_seconds",
+            "health_checkpointer_timeout_seconds",
+            "health_migrations_timeout_seconds",
         ):
             assert getattr(settings, field) == 0.0
 
     def test_per_check_timeout_falls_back_to_global(self) -> None:
-        settings = _make_settings().model_copy(update={"modulo_health_timeout_seconds": 2.5})
-        assert _per_check_timeout(settings, "modulo_health_db_timeout_seconds") == 2.5
-        assert _per_check_timeout(settings, "modulo_health_redis_timeout_seconds") == 2.5
+        settings = _make_settings().model_copy(update={"health_timeout_seconds": 2.5})
+        assert _per_check_timeout(settings, "health_db_timeout_seconds") == 2.5
+        assert _per_check_timeout(settings, "health_redis_timeout_seconds") == 2.5
 
     def test_per_check_timeout_override_wins(self) -> None:
         settings = _make_settings().model_copy(
             update={
-                "modulo_health_timeout_seconds": 2.5,
-                "modulo_health_redis_timeout_seconds": 0.5,
+                "health_timeout_seconds": 2.5,
+                "health_redis_timeout_seconds": 0.5,
             }
         )
-        assert _per_check_timeout(settings, "modulo_health_db_timeout_seconds") == 2.5
-        assert _per_check_timeout(settings, "modulo_health_redis_timeout_seconds") == 0.5
+        assert _per_check_timeout(settings, "health_db_timeout_seconds") == 2.5
+        assert _per_check_timeout(settings, "health_redis_timeout_seconds") == 0.5
 
     async def test_database_check_times_out(self) -> None:
-        settings = _make_settings().model_copy(update={"modulo_health_timeout_seconds": 0.2})
+        settings = _make_settings().model_copy(update={"health_timeout_seconds": 0.2})
         with (
             patch("farna.api.routes.health.get_settings", return_value=settings),
             patch("farna.api.routes.health.get_or_create_engine", return_value=_HangingEngine()),
@@ -365,7 +365,7 @@ class TestPerCheckTimeouts:
         assert result.latency_ms < 60_000
 
     async def test_redis_check_times_out(self) -> None:
-        settings = _make_settings().model_copy(update={"modulo_health_redis_timeout_seconds": 0.2})
+        settings = _make_settings().model_copy(update={"health_redis_timeout_seconds": 0.2})
 
         async def _hang() -> None:
             await asyncio.sleep(60)
@@ -383,7 +383,7 @@ class TestPerCheckTimeouts:
         assert result.latency_ms < 60_000
 
     async def test_checkpointer_check_times_out(self) -> None:
-        settings = _make_settings().model_copy(update={"modulo_health_checkpointer_timeout_seconds": 0.2})
+        settings = _make_settings().model_copy(update={"health_checkpointer_timeout_seconds": 0.2})
 
         with (
             patch("farna.api.routes.health.get_settings", return_value=settings),
@@ -423,7 +423,7 @@ class TestPerCheckTimeouts:
         assert result.detail == "checkpointer schema accessible"
 
     async def test_migrations_check_times_out(self) -> None:
-        settings = _make_settings().model_copy(update={"modulo_health_migrations_timeout_seconds": 0.2})
+        settings = _make_settings().model_copy(update={"health_migrations_timeout_seconds": 0.2})
         with (
             patch("farna.api.routes.health.get_settings", return_value=settings),
             # ScriptDirectory patched so the probe does not spawn a real
@@ -440,7 +440,7 @@ class TestPerCheckTimeouts:
         assert result.latency_ms < 60_000
 
     async def test_database_check_ok_reports_latency(self) -> None:
-        settings = _make_settings().model_copy(update={"modulo_health_timeout_seconds": 1.0})
+        settings = _make_settings().model_copy(update={"health_timeout_seconds": 1.0})
         with (
             patch("farna.api.routes.health.get_settings", return_value=settings),
             patch("farna.api.routes.health.get_or_create_engine") as engine_factory,
@@ -702,7 +702,7 @@ class TestFetchLatestDeployRunUrl:
     async def test_empty_repo_disables_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GITHUB_TOKEN", "test-token")
         factory = AsyncMock()
-        settings = _make_settings().model_copy(update={"modulo_deploy_run_repo": "  "})
+        settings = _make_settings().model_copy(update={"deploy_run_repo": "  "})
         with patch("farna.api.routes.health.pinned_async_client", factory):
             assert await _fetch_latest_deploy_run_url(settings) is None
         factory.assert_not_awaited()
@@ -2093,7 +2093,7 @@ class TestDbHygieneCheck:
         assert engine.seen_params == {"min_dead": 10_000}
 
     async def test_probe_binds_an_operator_lowered_floor(self) -> None:
-        settings_updates = {"modulo_health_db_hygiene_min_dead_tuples": 500}
+        settings_updates = {"health_db_hygiene_min_dead_tuples": 500}
         result, engine = await self._run(_HYGIENE_HEALTHY_ROW, **settings_updates)
         assert result.status == "ok"
         assert engine.seen_params == {"min_dead": 500}
@@ -2112,7 +2112,7 @@ class TestDbHygieneCheck:
         assert result.status == "ok"
 
     async def test_timeout_reports_degraded_never_unavailable(self) -> None:
-        settings_updates = {"modulo_health_db_hygiene_timeout_seconds": 0.2}
+        settings_updates = {"health_db_hygiene_timeout_seconds": 0.2}
         with (
             patch(
                 "farna.api.routes.health.get_settings",
@@ -2166,7 +2166,7 @@ class TestDbHygieneCheck:
         default_result, _ = await self._run(_HYGIENE_INCIDENT_ROW)
         assert default_result.status == "degraded"
 
-        raised, _ = await self._run(_HYGIENE_INCIDENT_ROW, modulo_health_db_hygiene_dead_ratio=0.99)
+        raised, _ = await self._run(_HYGIENE_INCIDENT_ROW, health_db_hygiene_dead_ratio=0.99)
         assert raised.status == "ok"
         assert raised.detail is not None
         assert "within thresholds" in raised.detail
@@ -2183,42 +2183,42 @@ class TestDbHygieneCheck:
         at_default, _ = await self._run(mid_dead_row)
         assert at_default.status == "ok"
 
-        tightened, _ = await self._run(mid_dead_row, modulo_health_db_hygiene_dead_ratio=0.30)
+        tightened, _ = await self._run(mid_dead_row, health_db_hygiene_dead_ratio=0.30)
         assert tightened.status == "degraded"
         assert tightened.detail is not None
         assert "half_dead" in tightened.detail
 
     def test_settings_defaults(self) -> None:
         settings = _make_settings()
-        assert settings.modulo_health_db_hygiene_timeout_seconds == 1.0
-        assert settings.modulo_health_db_hygiene_min_dead_tuples == 10_000
-        assert settings.modulo_health_db_hygiene_dead_ratio == pytest.approx(0.60)
+        assert settings.health_db_hygiene_timeout_seconds == 1.0
+        assert settings.health_db_hygiene_min_dead_tuples == 10_000
+        assert settings.health_db_hygiene_dead_ratio == pytest.approx(0.60)
 
     def test_db_hygiene_defaults_to_its_own_small_budget(self) -> None:
         """Unlike its neighbours this override defaults to 1s, not 0: the
         probe is one statistics-view read, so it must not inherit the 5s
         global budget that the 504-ing gateway endpoint already runs on."""
-        settings = _make_settings().model_copy(update={"modulo_health_timeout_seconds": 2.5})
-        assert _per_check_timeout(settings, "modulo_health_db_hygiene_timeout_seconds") == 1.0
+        settings = _make_settings().model_copy(update={"health_timeout_seconds": 2.5})
+        assert _per_check_timeout(settings, "health_db_hygiene_timeout_seconds") == 1.0
 
     def test_per_check_timeout_falls_back_to_global_when_cleared(self) -> None:
         """0 keeps the documented escape hatch every other override has."""
         settings = _make_settings().model_copy(
             update={
-                "modulo_health_timeout_seconds": 2.5,
-                "modulo_health_db_hygiene_timeout_seconds": 0.0,
+                "health_timeout_seconds": 2.5,
+                "health_db_hygiene_timeout_seconds": 0.0,
             }
         )
-        assert _per_check_timeout(settings, "modulo_health_db_hygiene_timeout_seconds") == 2.5
+        assert _per_check_timeout(settings, "health_db_hygiene_timeout_seconds") == 2.5
 
     def test_per_check_timeout_override_wins(self) -> None:
         settings = _make_settings().model_copy(
             update={
-                "modulo_health_timeout_seconds": 2.5,
-                "modulo_health_db_hygiene_timeout_seconds": 0.5,
+                "health_timeout_seconds": 2.5,
+                "health_db_hygiene_timeout_seconds": 0.5,
             }
         )
-        assert _per_check_timeout(settings, "modulo_health_db_hygiene_timeout_seconds") == 0.5
+        assert _per_check_timeout(settings, "health_db_hygiene_timeout_seconds") == 0.5
 
 
 class TestDbHygieneAggregation:

@@ -132,7 +132,7 @@ A: Local accounts, OIDC, SAML 2.0, or scoped API keys. SCIM 2.0 is available for
 provisioning and deprovisioning. Two conditions apply: SSO (OIDC/SAML) and SCIM
 are **Team-tier** features - an unlicensed Community install answers HTTP 402 -
 and SCIM additionally requires `FARNA_CONTROL_SCIM_TOKEN` to be configured, answering
-"SCIM is not configured - set MODULO_SCIM_TOKEN" otherwise.
+"SCIM is not configured - set FARNA_CONTROL_SCIM_TOKEN" otherwise.
 
 Evidence: `docs/product-map/auth/oidc-integration.md`;
 `docs/product-map/auth/saml-integration.md`;

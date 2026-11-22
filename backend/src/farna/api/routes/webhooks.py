@@ -3,8 +3,8 @@
 URL: POST /api/v1/triggers/{trigger_id}/webhook
      POST /api/v1/triggers/{trigger_id}/webhook/replay/{event_id}
 
-Auth: HMAC-SHA256 via X-Modulo-Webhook-Secret header (configured per trigger).
-      X-Modulo-Timestamp header is required; validated within ±300s window.
+Auth: HMAC-SHA256 via X-Farna-Control-Webhook-Secret header (configured per trigger).
+      X-Farna-Control-Timestamp header is required; validated within ±300s window.
       Alternatively (FAR-2241), with no Modulo header present, GitHub's
       X-Hub-Signature-256 (sha256=<hmac of raw body>) is accepted; no timestamp,
       so no replay window beyond payload dedup. Modulo headers always win.
@@ -554,7 +554,7 @@ async def _verify_replay_auth(
 
     Replay skips live-payload HMAC (the request body is empty) but an
     unauthenticated caller must still present a valid signature — same
-    ``X-Modulo-Webhook-Secret`` + ``X-Modulo-Timestamp`` headers as
+    ``X-Farna-Control-Webhook-Secret`` + ``X-Farna-Control-Timestamp`` headers as
     ``receive_webhook``, verified over the STORED raw body of the original
     event. Raises the same typed errors: ``TimestampExpiredError`` (400),
     ``HmacValidationError`` (401, including the no-hmac_secret-configured
@@ -572,8 +572,8 @@ async def _verify_replay_auth(
     """
     # ADR 047: unauthenticated replay requires a valid HMAC signature
     # over the stored payload (same check as receive_webhook).
-    hmac_signature = request.headers.get("X-Modulo-Webhook-Secret")
-    modulo_timestamp = request.headers.get("X-Modulo-Timestamp")
+    hmac_signature = request.headers.get("X-Farna-Control-Webhook-Secret")
+    modulo_timestamp = request.headers.get("X-Farna-Control-Timestamp")
     # FAR-2251: same rule as receive_webhook - GitHub's scheme is used only
     # when NO Modulo header is present; otherwise the Modulo path wins.
     modulo_header_present = hmac_signature is not None or modulo_timestamp is not None
@@ -754,7 +754,7 @@ _INTAKE_ERROR_RESPONSES: tuple[tuple[type[Exception], tuple[int, str]], ...] = (
     (TriggerNotFoundError, (status.HTTP_404_NOT_FOUND, MSG_TRIGGER_NOT_FOUND)),
     (TriggerInactiveError, (status.HTTP_404_NOT_FOUND, MSG_TRIGGER_NOT_FOUND)),
     (TriggerConfigInvalidError, (status.HTTP_400_BAD_REQUEST, "Trigger configuration is invalid")),
-    (TimestampExpiredError, (status.HTTP_400_BAD_REQUEST, "X-Modulo-Timestamp is outside the ±300s replay window")),
+    (TimestampExpiredError, (status.HTTP_400_BAD_REQUEST, "X-Farna-Control-Timestamp is outside the ±300s replay window")),
     (HmacValidationError, (status.HTTP_401_UNAUTHORIZED, "HMAC signature verification failed")),
     (DuplicateWebhookError, (status.HTTP_400_BAD_REQUEST, "Duplicate webhook payload")),
     (ReplayNotFoundError, (status.HTTP_404_NOT_FOUND, "Trigger event not found")),
@@ -1453,8 +1453,8 @@ async def receive_webhook(
 ) -> dict[str, Any]:
     """Receive an incoming webhook and enqueue a pipeline run.
 
-    Requires X-Modulo-Timestamp header (Unix seconds, ±300s window).
-    Requires X-Modulo-Webhook-Secret header if trigger has hmac_secret configured.
+    Requires X-Farna-Control-Timestamp header (Unix seconds, ±300s window).
+    Requires X-Farna-Control-Webhook-Secret header if trigger has hmac_secret configured.
     Alternatively, when no Modulo header is sent, GitHub's ``X-Hub-Signature-256``
     (``sha256=`` HMAC-SHA256 of the raw body keyed by the trigger's hmac_secret) is
     accepted. That scheme carries no timestamp, so it has no replay window; payload
@@ -1471,12 +1471,12 @@ async def receive_webhook(
     failure, 429 on flood rejection.
     """
     raw_body = await request.body()
-    hmac_signature = request.headers.get("X-Modulo-Webhook-Secret")
-    modulo_header_present = hmac_signature is not None or request.headers.get("X-Modulo-Timestamp") is not None
+    hmac_signature = request.headers.get("X-Farna-Control-Webhook-Secret")
+    modulo_header_present = hmac_signature is not None or request.headers.get("X-Farna-Control-Timestamp") is not None
     # FAR-2241: GitHub's scheme is used only when NO Modulo header is present;
     # if any is, the Modulo path wins and never falls back to the weaker one.
     github_signature = None if modulo_header_present else request.headers.get("X-Hub-Signature-256")
-    modulo_timestamp = request.headers.get("X-Modulo-Timestamp") or str(int(time.time()))
+    modulo_timestamp = request.headers.get("X-Farna-Control-Timestamp") or str(int(time.time()))
     raw_payload = await _parse_webhook_body(request)
     _require_system_engine(_CODE_WEBHOOKS_RECEIVE_WEBHOOK)
     state = _WebhookState()
@@ -1592,7 +1592,7 @@ async def replay_webhook(
     ADR 047: replay is a mutating run-creation channel and is NOT exempt. A
     principal (if present) must hold the ``run.trigger`` permission (``runner``
     minimum). An unauthenticated caller must present a valid HMAC signature
-    (``X-Modulo-Webhook-Secret`` + ``X-Modulo-Timestamp``) over the stored
+    (``X-Farna-Control-Webhook-Secret`` + ``X-Farna-Control-Timestamp``) over the stored
     payload — the same verification ``receive_webhook`` performs. FAR-2251:
     GitHub's ``X-Hub-Signature-256`` over the stored body is also accepted
     when no Modulo header is present.

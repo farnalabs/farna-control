@@ -100,7 +100,7 @@ class TestIngestFoldsBreadcrumbs:
                 resp = client.post(
                     "/api/v1/errors/ingest",
                     json=body,
-                    headers={"X-Modulo-Error-Token": "test"},
+                    headers={"X-Farna-Control-Error-Token": "test"},
                 )
             assert resp.status_code == 201
             (_, _, events), _ = ingest.call_args
@@ -130,7 +130,7 @@ class TestIngestFoldsBreadcrumbs:
                 resp = client.post(
                     "/api/v1/errors/ingest",
                     json=body,
-                    headers={"X-Modulo-Error-Token": "test"},
+                    headers={"X-Farna-Control-Error-Token": "test"},
                 )
             assert resp.status_code == 201
             (_, _, events), _ = ingest.call_args

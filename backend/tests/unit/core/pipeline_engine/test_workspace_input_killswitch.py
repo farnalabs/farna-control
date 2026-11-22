@@ -29,7 +29,7 @@ class TestWorkspaceInputsKillswitch:
     """FAR-802 killswitch: default OFF short-circuits with clear error code."""
 
     def test_default_settings_killswitch_is_off(self):
-        """Settings.modulo_workspace_inputs_enabled defaults to False."""
+        """Settings.workspace_inputs_enabled defaults to False."""
         from farna.settings import Settings
 
         s = Settings(
@@ -37,19 +37,19 @@ class TestWorkspaceInputsKillswitch:
             secret_key="a" * 32,
             fernet_key="a" * 32,
         )
-        assert s.modulo_workspace_inputs_enabled is False
+        assert s.workspace_inputs_enabled is False
 
     def test_killswitch_can_be_enabled(self):
-        """Settings.modulo_workspace_inputs_enabled can be set to True."""
+        """Settings.workspace_inputs_enabled can be set to True."""
         from farna.settings import Settings
 
         s = Settings(
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_workspace_inputs_enabled=True,
+            workspace_inputs_enabled=True,
         )
-        assert s.modulo_workspace_inputs_enabled is True
+        assert s.workspace_inputs_enabled is True
 
     def test_disabled_error_code_matches_registry(self):
         """The sandbox.workspace_inputs_disabled error code is in the registry."""
@@ -68,7 +68,7 @@ class TestWorkspaceInputsKillswitch:
         )
 
         exc = ProvisioningError(
-            "Managed workspace inputs are disabled (MODULO_WORKSPACE_INPUTS_ENABLED is not set or false)",
+            "Managed workspace inputs are disabled (FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED is not set or false)",
             error_code="sandbox.workspace_inputs_disabled",
             retryable=False,
         )
@@ -326,7 +326,7 @@ class TestWorkspaceInputsKillswitchDispatch:
 
         # Default is OFF; assert the precondition explicitly so the test is
         # meaningful even if the default ever flips.
-        assert get_settings().modulo_workspace_inputs_enabled is False
+        assert get_settings().workspace_inputs_enabled is False
 
         fn = make_sandbox_agent_fn(_workspace_node_def())
         sandbox = _script_sandbox_mock()
@@ -348,7 +348,7 @@ class TestWorkspaceInputsKillswitchDispatch:
         is created (the dispatch proceeds past the killswitch)."""
         from farna.settings import get_settings
 
-        monkeypatch.setattr(get_settings(), "modulo_workspace_inputs_enabled", True)
+        monkeypatch.setattr(get_settings(), "workspace_inputs_enabled", True)
 
         fn = make_sandbox_agent_fn(_workspace_node_def())
         sandbox = _script_sandbox_mock()

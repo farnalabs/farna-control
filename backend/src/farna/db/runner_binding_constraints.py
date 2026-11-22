@@ -13,9 +13,10 @@ import re
 # Protected env vars: exact names (denylist limitation documented in
 # docs/architecture.md — a denylist cannot cover every future reserved name).
 # Families:
-#  * Modulo's own contract vars (the FAR-296 per-run minted path) — MODULO_* /
-#    APP_MODULO_* are ALSO denied by the reserved prefixes; the exact names
-#    stay listed so the constant is self-documenting and individually testable.
+#  * Farna Control's own contract vars (the FAR-296 per-run minted path) —
+#    FARNA_CONTROL_* names are ALSO denied by the reserved prefix; the exact
+#    names stay listed so the constant is self-documenting and individually
+#    testable.
 #  * Loader/interpreter injectives — a bound var overriding any of these
 #    hijacks the sandbox process itself.
 #  * Docker host redirection — DOCKER_HOST lets the agent pivot the runner's
@@ -34,7 +35,7 @@ RESERVED_ENV_VARS: frozenset[str] = frozenset(
         "FARNA_CONTROL_CREDENTIAL_PROVENANCE",
         "FARNA_CONTROL_BRIDGE_ENDPOINT",
         "FARNA_CONTROL_BRIDGE_CONFIG",
-        "APP_MODULO_OPENCODE_API_KEY",
+        "FARNA_CONTROL_OPENCODE_API_KEY",
         "GITHUB_TOKEN",
         "LD_PRELOAD",
         "LD_LIBRARY_PATH",
@@ -49,13 +50,13 @@ RESERVED_ENV_VARS: frozenset[str] = frozenset(
 )
 
 # Prefix families (matched case-insensitively after uppercasing):
-#  - MODULO_* / APP_MODULO_* — Modulo-owned contract vars; the FAR-296
+#  - FARNA_CONTROL_* — Farna Control-owned contract vars; the FAR-296
 #    per-run minted key stays set AFTER the bindings merge, and the
 #    reserved-prefix validator keeps node env vars from overriding them.
 #  - GIT_ — git's proxy/config env family (GIT_PROXY_COMMAND, GIT_CONFIG_*,
 #    GIT_SSL_*, GIT_TERMINAL_PROMPT, GIT_SSH, ...) is effective pipeline
 #    configuration, not an application credential.
-RESERVED_ENV_VAR_PREFIXES: tuple[str, ...] = ("MODULO_", "APP_MODULO_", "GIT_")
+RESERVED_ENV_VAR_PREFIXES: tuple[str, ...] = ("FARNA_CONTROL_", "GIT_")
 
 _ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_]\w*$", re.ASCII)
 _MAX_TARGET_ENV_VAR_LEN = 128

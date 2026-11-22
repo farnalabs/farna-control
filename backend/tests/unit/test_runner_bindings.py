@@ -46,11 +46,11 @@ class TestReservedEnvVarConstant:
         assert is_reserved_env_var("GIT_PROXY_COMMAND")
         assert is_reserved_env_var("GIT_CONFIG_GLOBAL")
         assert is_reserved_env_var("GIT_SSL_NO_VERIFY")
-        assert RESERVED_ENV_VAR_PREFIXES == ("MODULO_", "APP_MODULO_", "GIT_")
+        assert RESERVED_ENV_VAR_PREFIXES == ("FARNA_CONTROL_", "GIT_")
 
     def test_modulo_prefix_family_denied(self) -> None:
         assert is_reserved_env_var("FARNA_CONTROL_RUN_ID")
-        assert is_reserved_env_var("APP_MODULO_OPENCODE_API_KEY")
+        assert is_reserved_env_var("FARNA_CONTROL_OPENCODE_API_KEY")
 
     def test_application_credential_is_allowed(self) -> None:
         assert not is_reserved_env_var("OPENCODE_API_KEY")
@@ -161,7 +161,7 @@ def test_precedence_runner_bindings_between_profile_and_node() -> None:
         runner_bindings={"CUSTOM": "binding", "OPENCODE_API_KEY": "stanza-key"},
     )
     assert envs["FARNA_CONTROL_RUN_ID"] == "r1"
-    assert "APP_MODULO_OPENCODE_API_KEY" in envs  # profile/host creds present
+    assert "FARNA_CONTROL_OPENCODE_API_KEY" in envs  # profile/host creds present
     assert envs["CUSTOM"] == "node"  # THE NODE WINS
     assert envs["OPENCODE_API_KEY"] == "stanza-key"
     assert envs["FARNA_CONTROL_ORG_ID"] == "o1"  # far-296 reserved path untouched
@@ -177,7 +177,7 @@ def test_precedence_runner_bindings_between_profile_and_node() -> None:
         runner_bindings={"K": "v"},
     )
     assert script_envs["K"] == "v"
-    assert "APP_MODULO_OPENCODE_API_KEY" not in script_envs
+    assert "FARNA_CONTROL_OPENCODE_API_KEY" not in script_envs
 
 
 def test_sandbox_exceptions_are_single_definitions():

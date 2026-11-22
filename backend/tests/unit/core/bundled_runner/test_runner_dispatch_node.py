@@ -149,7 +149,7 @@ def patch_node_runner(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         st,
         "get_settings",
-        lambda: SimpleNamespace(modulo_idempotency_gate_enabled=True, modulo_max_local_concurrency=2),
+        lambda: SimpleNamespace(idempotency_gate_enabled=True, max_local_concurrency=2),
         raising=False,
     )
 

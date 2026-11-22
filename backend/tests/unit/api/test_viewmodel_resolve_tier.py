@@ -2,7 +2,7 @@
 
 FAR-1720 made rung 3 verify the env-var licence key via ``parse_and_verify``
 (before that it trusted mere presence — any non-empty
-``settings.modulo_license_key`` returned ``"team"``). FAR-1733 routes that rung
+``settings.license_key`` returned ``"team"``). FAR-1733 routes that rung
 through the shared ``core.license.verify_license_key`` helper, so the ladder
 mirrors ``core.feature_flags._resolve_paid_plan`` rungs 2-3 exactly: the
 in-memory licence wins, the env-var key is trusted only after verification,
@@ -44,13 +44,13 @@ _TEST_PRIV = _TEST_KP["private_key"]
 _TEST_PUB = _TEST_KP["public_key"]
 
 
-def _settings(modulo_license_key: str = "") -> Settings:
+def _settings(license_key: str = "") -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=modulo_license_key,
+        admin_password="testpass",
+        license_key=license_key,
     )
 
 
@@ -103,7 +103,7 @@ class TestResolveTierEnvKeyVerification:
         env-var key must never be trusted on presence (the pre-FAR-1720 rung 3
         returned "team" for ANY non-empty key).
         """
-        assert _resolve_tier(_settings(modulo_license_key="not-a-valid-key")) == "community"
+        assert _resolve_tier(_settings(license_key="not-a-valid-key")) == "community"
 
     def test_expired_env_key_is_not_trusted(self) -> None:
         """A correctly signed key lapsed PAST the delivery grace falls through to community.
@@ -113,17 +113,17 @@ class TestResolveTierEnvKeyVerification:
         key past that window is untrusted.
         """
         key = _sign_license_payload(_valid_payload(expires_at=(datetime.now(UTC) - timedelta(days=LICENCE_GRACE_DAYS + 1)).isoformat()))
-        assert _resolve_tier(_settings(modulo_license_key=key)) == "community"
+        assert _resolve_tier(_settings(license_key=key)) == "community"
 
     def test_valid_env_key_reports_its_tier(self) -> None:
         """A signed env-var key verifies -> the LICENCE's tier, not a presence default."""
         key = _sign_license_payload(_valid_payload(tier="team"))
-        assert _resolve_tier(_settings(modulo_license_key=key)) == "team"
+        assert _resolve_tier(_settings(license_key=key)) == "team"
 
     def test_valid_env_key_reports_payload_tier_verbatim(self) -> None:
         """The tier comes from the verified payload, not a presence-based default."""
         key = _sign_license_payload(_valid_payload(tier="pilot"))
-        assert _resolve_tier(_settings(modulo_license_key=key)) == "pilot"
+        assert _resolve_tier(_settings(license_key=key)) == "pilot"
 
 
 class TestResolveTierLadderOrder:
@@ -141,7 +141,7 @@ class TestResolveTierLadderOrder:
         store_license("stored-key", stored)
         assert _resolve_tier(_settings()) == "team"
         # An invalid env key does not displace the in-memory rung either.
-        assert _resolve_tier(_settings(modulo_license_key="not-a-valid-key")) == "team"
+        assert _resolve_tier(_settings(license_key="not-a-valid-key")) == "team"
 
     def test_valid_org_key_wins_and_is_verified(self) -> None:
         key = _sign_license_payload(_valid_payload(tier="team"))

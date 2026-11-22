@@ -63,7 +63,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -1091,7 +1091,7 @@ def test_model_backend_create_persists_health_check_on_save(client: TestClient) 
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=Fernet.generate_key().decode(),
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
     with (
@@ -1171,7 +1171,7 @@ def test_model_backend_update_persists_health_check_on_key_rotation(client: Test
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=Fernet.generate_key().decode(),
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
     with (
@@ -1294,7 +1294,7 @@ def test_model_backend_recheck_health_persists_result(client: TestClient) -> Non
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=Fernet.generate_key().decode(),
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
     mb.credentials_ciphertext = Fernet(settings.fernet_key.encode()).encrypt(b"sk-test")
 
@@ -1367,7 +1367,7 @@ def test_model_backend_recheck_health_clears_not_applicable_error(client: TestCl
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=Fernet.generate_key().decode(),
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
     mock_session = _make_mock_session()
@@ -1411,7 +1411,7 @@ def test_model_backend_recheck_health_404_when_missing(client: TestClient) -> No
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
     with (

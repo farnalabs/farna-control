@@ -34,7 +34,7 @@ _log = getLogger(__name__)
 # FAR-418: request-scoped node-level allowed_tools allow-list. The agent's MCP
 # tool calls arrive at the MCP server as independent HTTP requests; the calling
 # node's capability_scope.allowed_tools is forwarded by the agent runtime as the
-# ``X-Modulo-Allowed-Tools`` header and lifted into this ContextVar by
+# ``X-Farna-Control-Allowed-Tools`` header and lifted into this ContextVar by
 # McpAuthMiddleware. ``check_tool_scope`` consults it as the default narrowing
 # filter so the production tool-dispatch chokepoint enforces it without every
 # handler call-site having to thread the value. Unset (None) = UNRESTRICTED.
@@ -716,7 +716,7 @@ def check_tool_scope(
     """
     # FAR-418: when no explicit allow-list is passed, fall back to the
     # request-scoped node allowed_tools (set by McpAuthMiddleware from the
-    # agent-supplied ``X-Modulo-Allowed-Tools`` header). This is the production
+    # agent-supplied ``X-Farna-Control-Allowed-Tools`` header). This is the production
     # run-path wiring: an agent node's tool calls are narrowed here, and the
     # UNRESTRICTED default (no header) leaves behaviour unchanged.
     if allowed_tools is None:

@@ -97,7 +97,7 @@ def test_e2b_not_registered_when_canonical_signal_absent(monkeypatch: pytest.Mon
 
 
 def test_docker_registered_when_modulo_docker_host_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Docker is registered when MODULO_DOCKER_HOST is set."""
+    """Docker is registered when FARNA_CONTROL_DOCKER_HOST is set."""
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)
     monkeypatch.setenv("FARNA_CONTROL_DOCKER_HOST", "tcp://localhost:2375")
@@ -117,7 +117,7 @@ def test_docker_registered_when_docker_host_set(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_docker_not_registered_when_unrelated_runner_var_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    """FAR-996: Docker is NOT registered when only an unrelated MODULO_RUNNER_* is set."""
+    """FAR-996: Docker is NOT registered when only an unrelated FARNA_CONTROL_RUNNER_* is set."""
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)

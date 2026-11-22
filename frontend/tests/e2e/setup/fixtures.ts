@@ -42,12 +42,12 @@ async function startLocalSsoBackend(): Promise<SsoBackendProcess> {
       DATABASE_URL: 'sqlite+aiosqlite:///./sso-e2e-fixture.db',
       SECRET_KEY: 'sso-e2e-secret-key-012345678901234567890123',
       FERNET_KEY: 'sso-e2e-fernet-key-012345678901234567890123',
-      MODULO_PUBLIC_URL: `http://127.0.0.1:${port}`,
-      MODULO_FRONTEND_URL: getLocalE2eBaseUrl(),
-      MODULO_MULTI_ORG_ENABLED: 'false',
-      MODULO_AUTH_RATE_LIMIT_ENABLED: 'false',
-      MODULO_REDIS_URL: 'redis://127.0.0.1:0/0',
-      MODULO_DB: 'sqlite',
+      FARNA_CONTROL_PUBLIC_URL: `http://127.0.0.1:${port}`,
+      FARNA_CONTROL_FRONTEND_URL: getLocalE2eBaseUrl(),
+      FARNA_CONTROL_MULTI_ORG_ENABLED: 'false',
+      FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED: 'false',
+      FARNA_CONTROL_REDIS_URL: 'redis://127.0.0.1:0/0',
+      FARNA_CONTROL_DB: 'sqlite',
     },
   })
   child.stdout?.on('data', (chunk) => process.stderr.write(`[sso-fixture] ${chunk}`))

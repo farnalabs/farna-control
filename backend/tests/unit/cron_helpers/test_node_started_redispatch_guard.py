@@ -198,7 +198,7 @@ def _settings(**overrides: object) -> MagicMock:
         "saq_redis_pool_size": 5,
         "saq_run_claim_cap": 20,
         "hitl_review_cancel_grace_seconds": 3600,
-        "modulo_telemetry_enabled": False,
+        "telemetry_enabled": False,
         "dispatcher_reconcile_budget_seconds": 95,
         "dispatcher_reconcile_terminalize_max_per_tick": 25,
         "dispatcher_reconcile_facts_max_per_tick": 25,

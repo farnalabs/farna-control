@@ -39,7 +39,7 @@ def _make_settings(**overrides: Any) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "test",
+        "admin_password": "test",
         "redis_url": "redis://localhost:6379/0",
         # Pin both FAR-1495 fields so no ambient env var can flip an assertion.
         "environment": "staging",  # field name (populate_by_name=True)

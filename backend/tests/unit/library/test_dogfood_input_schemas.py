@@ -73,10 +73,10 @@ def test_invalid_payload_fails_validation(name: str) -> None:
 
 def _reference_files() -> list[Path]:
     if not _DOGFOOD_SCHEMAS_DIR_RAW:
-        pytest.skip("MODULO_DOGFOOD_SCHEMAS_DIR env var not set; set it to the path containing *.schema.json reference copies to enable this test")
+        pytest.skip("FARNA_CONTROL_DOGFOOD_SCHEMAS_DIR env var not set; set it to the path containing *.schema.json reference copies to enable this test")
     schemas_dir = Path(_DOGFOOD_SCHEMAS_DIR_RAW)
     if not schemas_dir.is_dir():
-        pytest.skip(f"MODULO_DOGFOOD_SCHEMAS_DIR points to a non-existent directory: {schemas_dir}")
+        pytest.skip(f"FARNA_CONTROL_DOGFOOD_SCHEMAS_DIR points to a non-existent directory: {schemas_dir}")
     return sorted(schemas_dir.glob("*.schema.json"))
 
 

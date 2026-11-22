@@ -3,7 +3,7 @@
 Locks the POST /api/v1/auth/demo contract: the kill switch answers a plain 404
 when any of FARNA_CONTROL_DEMO_ENABLED / FARNA_CONTROL_DEMO_USER / FARNA_CONTROL_DEMO_PASSWORD is
 unset or empty, a successful call mints an access token carrying the SHORT
-demo TTL (modulo_demo_token_minutes, NOT modulo_access_token_minutes) with NO
+demo TTL (demo_token_minutes, NOT access_token_minutes) with NO
 refresh token and viewer-role demo-org claims, EVERY failure path — including
 a credential mismatch between the env config and the stored account — answers
 the same plain 404 (the endpoint takes no client credentials, so login-identical
@@ -84,13 +84,13 @@ def _settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_auth_rate_limit_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_access_token_minutes=_NORMAL_TOKEN_MINUTES,
-        modulo_demo_enabled=demo_enabled,
-        modulo_demo_user=demo_user,
-        modulo_demo_password=demo_password,
-        modulo_demo_token_minutes=_DEMO_TOKEN_MINUTES,
+        access_token_minutes=_NORMAL_TOKEN_MINUTES,
+        demo_enabled=demo_enabled,
+        demo_user=demo_user,
+        demo_password=demo_password,
+        demo_token_minutes=_DEMO_TOKEN_MINUTES,
     )
 
 
@@ -190,7 +190,7 @@ def test_demo_login_success_mints_short_lived_demo_token(client: TestClient) -> 
     assert claims["org_role"] == "viewer"
     assert claims["is_system_admin"] is False
     # exp-iat must equal the SHORT demo TTL (30 min here), not the normal
-    # modulo_access_token_minutes (60 min here) a /login token would carry.
+    # access_token_minutes (60 min here) a /login token would carry.
     assert claims["exp"] - claims["iat"] == _DEMO_TOKEN_MINUTES * 60
 
 

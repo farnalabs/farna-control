@@ -58,7 +58,7 @@ def run_apply(
 def _http_error_message(exc: ApplyHttpError) -> str:
     """Actionable message for executor-phase HTTP failures."""
     if exc.status_code == 401:
-        return "API key rejected: check MODULO_API_KEY (an org API key, mk_..., with operator role is required)"
+        return "API key rejected: check FARNA_CONTROL_API_KEY (an org API key, mk_..., with operator role is required)"
     if exc.status_code == 404:
         target = exc.path or str(exc)
         return f"server does not expose endpoint {target} - is it running an older version?"
@@ -249,7 +249,7 @@ def _load_config_or_fail(config_path: Path) -> ApplyConfig:
 
 
 def _require_env_credentials() -> tuple[str, str]:
-    """Read MODULO_URL / MODULO_API_KEY, refusing when either is absent."""
+    """Read FARNA_CONTROL_URL / FARNA_CONTROL_API_KEY, refusing when either is absent."""
     base_url = os.environ.get(_ENV_URL)
     api_key = os.environ.get(_ENV_API_KEY)
     if not base_url or not api_key:

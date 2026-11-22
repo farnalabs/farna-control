@@ -60,7 +60,7 @@ def test_build_sandbox_envs_non_script_injects_host_creds(monkeypatch):
         runner_bindings={"OPENAI_API_KEY": "binding-key"},
     )
     assert env["GITHUB_TOKEN"] == "host-pat"
-    assert "APP_MODULO_OPENCODE_API_KEY" in env
+    assert "FARNA_CONTROL_OPENCODE_API_KEY" in env
     assert env["OPENAI_API_KEY"] == "binding-key"
 
 

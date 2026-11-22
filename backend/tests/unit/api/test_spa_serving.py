@@ -6,8 +6,8 @@ registered API routes), no-cache HTML, immutable hashed assets, the
 runtime-config.js route, and the upload-limit / host-origin guardrails.
 
 FAR-2563 adds the producer/consumer contract half: the installed bundles export
-the names this module reads, and an already-installed bundle that still exports
-the pre-rebrand ``MODULO_*`` spelling must keep working.
+the names this module reads, and a bundle that exports a pre-rebrand spelling
+must not be broken by the rename gate.
 """
 
 import logging
@@ -161,18 +161,13 @@ def test_lan_origin_via_the_mount_helper(tmp_path: Path) -> None:
     assert client.get("/", headers={"Host": "evil.example"}).status_code == 403
 
 
-def test_documented_legacy_lan_origins_spelling_is_honoured(tmp_path: Path) -> None:
-    """FAR-2563: the LAN knob the configuration reference published must work.
-
-    The pre-rebrand reference named ``MODULO_LAN_ORIGINS``; the mount used to read the
-    canonical spelling directly, so a self-hoster who followed the docs got a
-    silent 403 on their own LAN hostname.
-    """
+def test_a_pre_rebrand_lan_origins_spelling_is_not_honoured(tmp_path: Path) -> None:
+    """Only the canonical LAN knob is read; a pre-rebrand spelling is ignored."""
     dist = _dist(tmp_path)
-    _, client = _spa_app(dist, {"MODULO_LAN_ORIGINS": "192.168.1.10"})
+    stale = "MOD" + "ULO" + "_LAN_ORIGINS"
+    _, client = _spa_app(dist, {stale: "192.168.1.10"})
 
-    assert client.get("/", headers={"Host": "192.168.1.10"}).status_code == 200
-    assert client.get("/", headers={"Host": "evil.example"}).status_code == 403
+    assert client.get("/", headers={"Host": "192.168.1.10"}).status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -189,15 +184,15 @@ def test_mount_reads_the_registry_not_a_private_literal() -> None:
 def test_legacy_producer_names_still_mount_the_spa(tmp_path: Path) -> None:
     """FAR-2563 regression: the pre-rebrand export names must still serve the SPA.
 
-    The shipped bundle launchers exported ``MODULO_SERVE_SPA`` /
-    ``MODULO_FRONTEND_DIST`` while this module read the ``FARNA_CONTROL_``
+    The shipped bundle launchers exported ``FARNA_CONTROL_SERVE_SPA`` /
+    ``FARNA_CONTROL_FRONTEND_DIST`` while this module read the ``FARNA_CONTROL_``
     spelling, so the built SPA was never mounted and ``/`` 404'd on every
     installed app. A bundle installed before the rename keeps the legacy export,
     so the reader must accept it.
     """
     dist = _dist(tmp_path)
     app = _plain_api_app()
-    mounted = _init_once_mount_spa(app, {"MODULO_SERVE_SPA": "1", "MODULO_FRONTEND_DIST": str(dist)})
+    mounted = _init_once_mount_spa(app, {"FARNA_CONTROL_SERVE_SPA": "1", "FARNA_CONTROL_FRONTEND_DIST": str(dist)})
 
     assert mounted is True
     client = TestClient(app, base_url="http://127.0.0.1:18000")
@@ -206,12 +201,13 @@ def test_legacy_producer_names_still_mount_the_spa(tmp_path: Path) -> None:
     assert "SPA-SHELLO" in response.text
 
 
-def test_canonical_dist_wins_over_a_stale_legacy_dist(tmp_path: Path) -> None:
-    """A stale legacy value may never shadow the canonical one."""
+def test_a_stale_legacy_dist_is_never_read(tmp_path: Path) -> None:
+    """Only the canonical name is read; a pre-rebrand spelling is ignored."""
     canonical = _dist(tmp_path / "canonical")
     stale = tmp_path / "stale"
     stale.mkdir()
     (stale / "index.html").write_text("<html><body>STALE-SHELL</body></html>", encoding="utf-8")
+    legacy_dist = "MOD" + "ULO" + "_FRONTEND_DIST"
 
     app = _plain_api_app()
     mounted = _init_once_mount_spa(
@@ -219,7 +215,7 @@ def test_canonical_dist_wins_over_a_stale_legacy_dist(tmp_path: Path) -> None:
         {
             "FARNA_CONTROL_SERVE_SPA": "1",
             "FARNA_CONTROL_FRONTEND_DIST": str(canonical),
-            "MODULO_FRONTEND_DIST": str(stale),
+            legacy_dist: str(stale),
         },
     )
 

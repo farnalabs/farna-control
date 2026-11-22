@@ -82,8 +82,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_public_url="https://modulo.example.com",
+        admin_password="testpass",
+        public_url="https://modulo.example.com",
         cors_origins="https://modulo.example.com",
     )
 

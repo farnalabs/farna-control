@@ -840,7 +840,7 @@ class ReleasePreflightChecker:
             # spellings as fallbacks while callers migrate their workflow env.
             "FARNA_CONTROL_RELEASE_PR_TOKEN": (
                 "FARNA_CONTROL_RELEASE_PR_TOKEN",
-                "MODULO_RELEASE_PR_TOKEN",
+                "FARNA_CONTROL_RELEASE_PR_TOKEN",
                 "FARNA_CONTROL_RELEASE_PR_TOKEN",
             ),
         }
@@ -872,7 +872,7 @@ class ReleasePreflightChecker:
 
         # The two release secrets are required on EVERY release path, whether or
         # not Windows is included: bundle-release.yml hard-fails on an unsigned
-        # manifest, and MODULO_RELEASE_PR_TOKEN drives the cut/promote PRs.
+        # manifest, and FARNA_CONTROL_RELEASE_PR_TOKEN drives the cut/promote PRs.
         # Only the Azure Trusted Signing secrets belong to the Windows job
         # (windows-installer.yml), which runs only when Windows is included.
         windows_packaging_required = self.include_windows and self.mode in ("cut", "recut")

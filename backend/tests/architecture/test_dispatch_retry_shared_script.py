@@ -6,7 +6,7 @@ Enforced against REPO_ROOT/.github/workflows, with NO allowlist:
 * no workflow computes the webhook HMAC inline or defines the retry policy's
   helpers (that is the duplicated policy this sweep removed);
 * no workflow inlines a five-step webhook retry ladder;
-* every workflow that references a MODULO_*_WEBHOOK_URL secret flows through
+* every workflow that references a FARNA_CONTROL_*_WEBHOOK_URL secret flows through
   the script invocation (`DISPATCH_BODY=... bash scripts/dispatch_with_retry.sh`),
   exactly once per dispatch site.
 
@@ -46,7 +46,7 @@ SCRIPT_MARKER = "bash scripts/dispatch_with_retry.sh"
 #: and must route through the shared script.
 WEBHOOK_SECRET_MARKERS = (
     "FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL",
-    "MODULO_PR_REVIEW_WEBHOOK_URL",
+    "FARNA_CONTROL_PR_REVIEW_WEBHOOK_URL",
 )
 
 #: The retry policy's helpers. Their DEFINITION in a workflow means the policy
@@ -98,7 +98,7 @@ def test_migrated_workflows_invoke_the_script_exactly_once_per_site(
 def test_no_workflow_inlines_webhook_hmac_signing_or_the_policy() -> None:
     inline_markers = [
         "openssl dgst -sha256 -hmac",
-        "X-Modulo-Webhook-Secret: sha256=",
+        "X-Farna-Control-Webhook-Secret: sha256=",
         *INLINE_POLICY_MARKERS,
     ]
     for path in _workflow_files():

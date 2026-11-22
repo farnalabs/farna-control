@@ -2450,7 +2450,7 @@ class TestCopyLibraryPrimitive(_AuthContext):
         mock_sesh = configure_mock_session(AsyncMock(), allow_empty_execute=True)
         mock_session.return_value = _make_session_context(mock_sesh)
         mock_get_primitive.return_value = primitive
-        with patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=False)):
+        with patch("farna.api.mcp_server.get_settings", return_value=MagicMock(dev_mode=False)):
             result = await copy_library_primitive(primitive_id=str(uuid.uuid4()))
         assert result["error"] == "insufficient_scope"
         mock_library_copy.assert_not_awaited()

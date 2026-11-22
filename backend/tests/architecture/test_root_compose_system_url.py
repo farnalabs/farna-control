@@ -49,7 +49,7 @@ def _service_environment(service: str) -> dict[str, object]:
 def test_service_wires_the_system_database_url(service: str) -> None:
     environment = _service_environment(service)
     # The canonical env var name is FARNA_CONTROL_SYSTEM_DATABASE_URL
-    # (the legacy MODULO_SYSTEM_DATABASE_URL alias is also accepted by the app).
+    # (the legacy FARNA_CONTROL_SYSTEM_DATABASE_URL alias is also accepted by the app).
     value = environment.get("FARNA_CONTROL_SYSTEM_DATABASE_URL")
     assert value, (
         f"services.{service} in docker-compose.yml does not pass FARNA_CONTROL_SYSTEM_DATABASE_URL: "

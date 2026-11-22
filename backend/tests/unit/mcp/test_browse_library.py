@@ -287,7 +287,7 @@ class TestSearchLibrary:
         self._auth_ctx(role="viewer")
         with (
             patch("farna.api.mcp_server.validate_current_auth", return_value=True),
-            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=False)),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(dev_mode=False)),
             patch("farna.api.mcp_server._session") as mock_session,
             patch("farna.api.mcp_server.list_primitives") as mock_list,
         ):
@@ -305,7 +305,7 @@ class TestSearchLibrary:
         try:
             with (
                 patch("farna.api.mcp_server.validate_current_auth", return_value=True),
-                patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=True)),
+                patch("farna.api.mcp_server.get_settings", return_value=MagicMock(dev_mode=True)),
                 patch("farna.api.mcp_server._session") as mock_session,
                 patch(
                     "farna.api.mcp_server.list_primitives",

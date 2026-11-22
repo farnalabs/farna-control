@@ -81,10 +81,10 @@ _ENV_KEYS_TO_DROP = (
     "FARNA_CONTROL_LEGACY_SHIM_PATH",
     "FARNA_CONTROL_LEGACY_INSTALL_ROOT",
     "FARNA_CONTROL_LEGACY_USER_SHIM",
-    "MODULO_INSTALL_ROOT",
-    "MODULO_BIN_DIR",
-    "MODULO_DATA_DIR",
-    "MODULO_LEGACY_SHIM_PATH",
+    "FARNA_CONTROL_INSTALL_ROOT",
+    "FARNA_CONTROL_BIN_DIR",
+    "FARNA_CONTROL_DATA_DIR",
+    "FARNA_CONTROL_LEGACY_SHIM_PATH",
 )
 
 
@@ -256,8 +256,8 @@ def test_finalise_writes_a_usable_env_sh_under_set_u(tmp_path: Path) -> None:
     # The generated file carries RESOLVED paths, not install-time names.
     assert f'export FARNA_CONTROL_INSTALL_ROOT="{install_root}"' in text
     assert f'export FARNA_CONTROL_BIN_DIR="{bin_dir}"' in text
-    assert f'export MODULO_INSTALL_ROOT="{install_root}"' in text
-    assert f'export MODULO_BIN_DIR="{bin_dir}"' in text
+    assert f'export FARNA_CONTROL_INSTALL_ROOT="{install_root}"' in text
+    assert f'export FARNA_CONTROL_BIN_DIR="{bin_dir}"' in text
     assert "${INSTALL_ROOT}" not in text
     assert "${BIN_DIR}" not in text
     assert "${FARNA_CONTROL_INSTALL_ROOT}" not in text
@@ -284,7 +284,7 @@ def test_finalise_writes_a_usable_env_sh_under_set_u(tmp_path: Path) -> None:
         [
             _bash(),
             "-c",
-            'set -euo pipefail\nsource "$1"\nprintf "%s\\n" "${FARNA_CONTROL_INSTALL_ROOT}" "${FARNA_CONTROL_BIN_DIR}" "${MODULO_INSTALL_ROOT}" "${MODULO_BIN_DIR}" "${PATH}"',
+            'set -euo pipefail\nsource "$1"\nprintf "%s\\n" "${FARNA_CONTROL_INSTALL_ROOT}" "${FARNA_CONTROL_BIN_DIR}" "${FARNA_CONTROL_INSTALL_ROOT}" "${FARNA_CONTROL_BIN_DIR}" "${PATH}"',
             "env-sh-harness",
             str(activation),
         ],
@@ -324,8 +324,8 @@ def test_the_historical_unbound_heredoc_fails_the_finalise_stage(tmp_path: Path)
     source = script.read_text(encoding="utf-8")
     restored = source
     for fixed, historical in (
-        ('export MODULO_INSTALL_ROOT="${INSTALL_ROOT}"', 'export MODULO_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"'),
-        ('export MODULO_BIN_DIR="${BIN_DIR}"', 'export MODULO_BIN_DIR="${FARNA_CONTROL_BIN_DIR}"'),
+        ('export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"', 'export FARNA_CONTROL_INSTALL_ROOT="${FARNA_CONTROL_INSTALL_ROOT}"'),
+        ('export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"', 'export FARNA_CONTROL_BIN_DIR="${FARNA_CONTROL_BIN_DIR}"'),
     ):
         assert fixed in restored, f"the fix this test guards is gone from install.sh: {fixed}"
         restored = restored.replace(fixed, historical)

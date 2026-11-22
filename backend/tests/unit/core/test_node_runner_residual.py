@@ -698,7 +698,7 @@ async def test_mark_connector_write_no_delivery_reraises_cancellation():
 def _enable_write_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: SimpleNamespace(modulo_connector_write_gate_enabled=True),
+        lambda: SimpleNamespace(connector_write_gate_enabled=True),
     )
 
 
@@ -2077,7 +2077,7 @@ async def test_connector_node_write_gate_suppresses(monkeypatch: pytest.MonkeyPa
     set_connector_hub(hub)
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     suppressed = nr._idempotency_gate_skipped_envelope("conn-node")
@@ -2103,7 +2103,7 @@ async def test_connector_node_write_intent_persisted_before_write(monkeypatch: p
     set_connector_hub(_StubHub(connector=connector))
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     with (
@@ -2126,7 +2126,7 @@ async def test_connector_node_write_intent_persist_failure_never_fails_node(capl
     set_connector_hub(_StubHub())
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     with (
@@ -2185,7 +2185,7 @@ async def test_connector_node_write_intent_persist_reraises_cancellation(monkeyp
     set_connector_hub(_StubHub())
 
     class _S:
-        modulo_connector_write_gate_enabled = True
+        connector_write_gate_enabled = True
 
     monkeypatch.setattr("farna.settings.get_settings", lambda: _S())
     with (
@@ -2990,7 +2990,7 @@ def test_sandbox_node_def_malformed_loop_intercept_raises():
 
 async def test_sandbox_input_payload_truncated_beyond_10k():
     """A >10KB input payload is replaced by a bounded truncation marker in the
-    sandbox envs (MODULO_INPUT_PAYLOAD) — the raw payload never reaches env."""
+    sandbox envs (FARNA_CONTROL_INPUT_PAYLOAD) — the raw payload never reaches env."""
     fn = make_sandbox_agent_fn(_sandbox_node_def())
     sandbox = _make_sandbox_mock()
     with patch("e2b.AsyncSandbox.create", new=AsyncMock(return_value=sandbox)):

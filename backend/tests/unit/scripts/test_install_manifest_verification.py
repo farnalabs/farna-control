@@ -258,8 +258,8 @@ def test_installer_help_documents_embedded_bundle_and_activation_contract() -> N
     assert "source ${activation_file}" in source
     assert 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"' in source
     assert 'export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"' in source
-    assert 'export MODULO_INSTALL_ROOT="${INSTALL_ROOT}"' in source
-    assert 'export MODULO_BIN_DIR="${BIN_DIR}"' in source
+    assert 'export FARNA_CONTROL_INSTALL_ROOT="${INSTALL_ROOT}"' in source
+    assert 'export FARNA_CONTROL_BIN_DIR="${BIN_DIR}"' in source
     assert _DOUBLED_ENV_PREFIX not in source
     assert "SECRET_KEY" not in source[source.index("activation_file=") : source.index("path_updated=")]
 

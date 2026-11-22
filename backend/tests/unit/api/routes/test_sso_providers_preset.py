@@ -28,8 +28,8 @@ def _make_settings(**overrides: object) -> object:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_admin_password": "testpass",
-        "modulo_auth_rate_limit_enabled": False,
+        "admin_password": "testpass",
+        "auth_rate_limit_enabled": False,
         "redis_url": "",
     }
     kwargs.update(overrides)

@@ -99,7 +99,7 @@ and does not cover:
    raw construction there is caught like anywhere else. ``cli/apply`` joins the
    residual list for the same reason the sync world needs a pinless path: the
    click executor is sync and no sync pinned factory exists, and the target is
-   the single operator-configured ``MODULO_URL`` the operator's credentials
+   the single operator-configured ``FARNA_CONTROL_URL`` the operator's credentials
    already address, so it is excluded as documented residual (no
    validate-then-connect attached - test harnesses use unresolvable fixture
    URLs). A NEW raw ``httpx`` construction anywhere else in the tree is still

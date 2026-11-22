@@ -132,11 +132,11 @@ def _oidc_settings(license_key: str = _VALID_LICENSE_KEY) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=license_key,
-        modulo_csrf_enabled=False,
-        modulo_public_url="http://localhost:8000",
-        modulo_oidc_providers=json.dumps(
+        admin_password="testpass",
+        license_key=license_key,
+        csrf_enabled=False,
+        public_url="http://localhost:8000",
+        oidc_providers=json.dumps(
             [
                 {
                     "provider_id": "google",
@@ -154,13 +154,13 @@ def _saml_settings(license_key: str = _VALID_LICENSE_KEY) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=license_key,
-        modulo_csrf_enabled=False,
-        modulo_saml_enabled=True,
-        modulo_saml_entity_id="urn:modulo:sp",
-        modulo_public_url="http://localhost:8000",
-        modulo_saml_idp_metadata_xml=_SAMPLE_IDP_METADATA,
+        admin_password="testpass",
+        license_key=license_key,
+        csrf_enabled=False,
+        saml_enabled=True,
+        saml_entity_id="urn:modulo:sp",
+        public_url="http://localhost:8000",
+        saml_idp_metadata_xml=_SAMPLE_IDP_METADATA,
     )
 
 

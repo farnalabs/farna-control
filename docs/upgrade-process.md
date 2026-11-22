@@ -92,7 +92,7 @@ signature, then verifies both the signed artifact and the bundle's internal
 It writes a path-only activation helper to `~/.local/opt/farna-control/env.sh` and
 prints the exact `source <path>` command at the end. The helper exports the
 canonical `FARNA_CONTROL_INSTALL_ROOT` and `FARNA_CONTROL_BIN_DIR` names and
-also supplies the bare `MODULO_INSTALL_ROOT` and `MODULO_BIN_DIR` compatibility
+also supplies the bare `FARNA_CONTROL_INSTALL_ROOT` and `FARNA_CONTROL_BIN_DIR` compatibility
 aliases. That command must be run by the caller because an installer child
 process cannot modify its parent's shell.
 

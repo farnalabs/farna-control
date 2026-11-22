@@ -965,7 +965,7 @@ class TestFlags:
         assert result.exit_code == 0, f"CLI failed: {result.output}"
 
 
-# ── MODULO_ADMIN_SECRET env var auth ─────────────────────────────────────────
+# ── FARNA_CONTROL_ADMIN_SECRET env var auth ─────────────────────────────────────────
 
 
 # ── Import hash verification ──────────────────────────────────────────────────

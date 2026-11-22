@@ -258,8 +258,8 @@ class TestAcceptance:
         groups = invocation_headers(log_lines)
         assert len(groups) == 2
         for headers in groups:
-            ts = header_values(headers, "X-Modulo-Timestamp")
-            hmac_val = header_values(headers, "X-Modulo-Webhook-Secret")
+            ts = header_values(headers, "X-Farna-Control-Timestamp")
+            hmac_val = header_values(headers, "X-Farna-Control-Webhook-Secret")
             content_type = header_values(headers, "Content-Type")
             assert len(ts) == 1
             assert len(hmac_val) == 1

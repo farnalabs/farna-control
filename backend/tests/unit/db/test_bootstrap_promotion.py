@@ -75,7 +75,7 @@ def test_promoted_bootstrap_main_writes_fixed_env_files(
     # Start with no system URL aliases. The derived URL must stay in the
     # entrypoint env file and must not become the canonical application setting.
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
@@ -103,7 +103,7 @@ def test_promoted_main_uses_legacy_system_url_without_deriving_from_app_password
     monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+asyncpg://admin:pw@db.internal:5432/farna_control")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://app:app-pw@db.internal:5432/farna_control")
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "postgres://farna_control_system:system-pw@db.internal:5432/farna_control")
+    monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "postgres://farna_control_system:system-pw@db.internal:5432/farna_control")
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
@@ -130,7 +130,7 @@ def test_promoted_main_leaves_stale_legacy_system_url_untouched(
         "FARNA_CONTROL_SYSTEM_DATABASE_URL",
         "postgres://farna_control_system:system-pw@db.internal:5432/farna_control",
     )
-    monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "stale-legacy-system-url")
+    monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "stale-legacy-system-url")
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()
@@ -143,7 +143,7 @@ def test_promoted_main_leaves_stale_legacy_system_url_untouched(
 
     expected = "postgresql+asyncpg://farna_control_system:system-pw@db.internal:5432/farna_control"
     assert os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] == expected
-    assert os.environ["MODULO_SYSTEM_DATABASE_URL"] == "stale-legacy-system-url"
+    assert os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] == "stale-legacy-system-url"
     assert written["/tmp/system_database_url.env"] == expected
 
 
@@ -154,7 +154,7 @@ def test_promoted_main_warns_when_system_url_derivation_fails(
     monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+asyncpg://admin:pw@db.internal:5432/farna_control")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://db.internal:5432/farna_control")
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
@@ -166,7 +166,7 @@ def test_promoted_main_warns_when_system_url_derivation_fails(
     bootstrap_module.main()
 
     err = capsys.readouterr().err
-    assert "cannot derive MODULO_SYSTEM_DATABASE_URL" in err
+    assert "cannot derive FARNA_CONTROL_SYSTEM_DATABASE_URL" in err
     assert "no usable password/userinfo" in err
 
 

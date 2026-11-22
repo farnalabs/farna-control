@@ -60,12 +60,12 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_auth_rate_limit_enabled=False,
+        admin_password="testpass",
+        auth_rate_limit_enabled=False,
         redis_url="",
         # Explicit: sibling unit/api conftests leak FARNA_CONTROL_CSRF_ENABLED=false into the
         # process env, and this module's CSRF pair tests must be env-independent.
-        modulo_csrf_enabled=True,
+        csrf_enabled=True,
     )
 
 
@@ -74,11 +74,11 @@ def _make_settings_with_refresh_ttl(ttl_hours: int) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_auth_rate_limit_enabled=False,
+        admin_password="testpass",
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_refresh_token_ttl_hours=ttl_hours,
-        modulo_csrf_enabled=True,
+        refresh_token_ttl_hours=ttl_hours,
+        csrf_enabled=True,
     )
 
 
@@ -259,7 +259,7 @@ def test_refresh_cookie_attributes(client: TestClient, mock_session: AsyncMock) 
     assert "httponly" in refresh_cookie.lower()
     assert "samesite=strict" in refresh_cookie.lower()
     assert "secure" in refresh_cookie.lower()
-    assert f"max-age={_make_settings().modulo_refresh_token_ttl_hours * 3600}" in refresh_cookie.lower()
+    assert f"max-age={_make_settings().refresh_token_ttl_hours * 3600}" in refresh_cookie.lower()
     # The CSRF cookie is NOT httpOnly: the SPA must read it for the header.
     csrf_cookie = next(c for c in set_cookies if c.startswith("XSRF-TOKEN="))
     assert "httponly" not in csrf_cookie.lower()
@@ -359,7 +359,7 @@ def test_refresh_reuse_within_window_mints_tokens(client: TestClient, mock_sessi
 
 
 def test_refresh_rotation_mints_configured_lifetime(client: TestClient, app: FastAPI, mock_session: AsyncMock) -> None:
-    """A non-default modulo_refresh_token_ttl_hours is stamped on the rotated
+    """A non-default refresh_token_ttl_hours is stamped on the rotated
     refresh token — and on the httponly cookie's Max-Age (exp - iat == TTL)."""
     app.dependency_overrides[get_settings] = lambda: _make_settings_with_refresh_ttl(6)
     advance = AsyncMock(return_value=(2, False, False))

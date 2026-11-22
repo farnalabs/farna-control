@@ -594,7 +594,7 @@ class TestDeliverQualityReport:
         assert kwargs["content"] == body_bytes, "sent bytes must match signed bytes exactly"
 
         expected_sig = _sign_payload(secret, body_bytes)
-        assert kwargs["headers"]["X-Modulo-Signature"] == expected_sig
+        assert kwargs["headers"]["X-Farna-Control-Signature"] == expected_sig
 
     async def test_unsigned_delivery_sends_json_without_signature(self) -> None:
         url = SLACK_URL
@@ -609,7 +609,7 @@ class TestDeliverQualityReport:
         kwargs = call.kwargs
         assert "json" in kwargs
         assert "content" not in kwargs
-        assert "X-Modulo-Signature" not in kwargs["headers"]
+        assert "X-Farna-Control-Signature" not in kwargs["headers"]
 
     async def test_signature_is_verifiable_from_raw_body(self) -> None:
         url = SLACK_URL
@@ -623,7 +623,7 @@ class TestDeliverQualityReport:
         call = mock_client.post.await_args
         assert call is not None
         kwargs = call.kwargs
-        received_signature = kwargs["headers"]["X-Modulo-Signature"]
+        received_signature = kwargs["headers"]["X-Farna-Control-Signature"]
         # Recipient recomputes the signature over the exact bytes they received.
         recomputed = hmac.new(secret.encode("utf-8"), kwargs["content"], hashlib.sha256).hexdigest()
         assert received_signature == f"sha256={recomputed}"
@@ -638,7 +638,7 @@ class TestDeliverQualityReport:
 
         call = mock_client.post.await_args
         assert call is not None
-        assert "X-Modulo-Signature" not in call.kwargs["headers"]
+        assert "X-Farna-Control-Signature" not in call.kwargs["headers"]
         assert "json" in call.kwargs
 
     # --- Configurable delivery timeout ---

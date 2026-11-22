@@ -41,7 +41,7 @@ async def test_repository_hub_forwards_context_filter_pagination_and_execute() -
 
 
 def test_repository_hub_uses_settings_when_db_type_omitted(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = MagicMock(modulo_db="POSTGRES")
+    settings = MagicMock(db="POSTGRES")
     monkeypatch.setattr("farna.settings.get_settings", lambda: settings)
     hub = RepositoryHub(session_factory=MagicMock())
     assert isinstance(hub.repo, PostgresRepository)

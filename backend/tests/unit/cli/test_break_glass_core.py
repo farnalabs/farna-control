@@ -41,11 +41,11 @@ _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 def _make_settings() -> SimpleNamespace:
     return SimpleNamespace(
-        modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@localhost:5432/farna_control",
-        modulo_break_glass_secret="p" * 32,
-        modulo_break_glass_standby_secret="s" * 32,
-        modulo_break_glass_ttl_minutes=60,
-        modulo_break_glass_max_ttl_minutes=120,
+        break_glass_database_url="postgresql+asyncpg://bg:bg@localhost:5432/farna_control",
+        break_glass_secret="p" * 32,
+        break_glass_standby_secret="s" * 32,
+        break_glass_ttl_minutes=60,
+        break_glass_max_ttl_minutes=120,
         db_pool_recycle_seconds=1500,
     )
 
@@ -520,7 +520,7 @@ class TestEngineFactory:
         engine_two = bg.get_break_glass_engine(_make_settings())
         assert engine_one is engine_two
         other = SimpleNamespace(
-            modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@other:5432/db",
+            break_glass_database_url="postgresql+asyncpg://bg:bg@other:5432/db",
             db_pool_recycle_seconds=1500,
         )
         engine_other = bg.get_break_glass_engine(other)
@@ -538,7 +538,7 @@ class TestEngineFactory:
             bg._bg_engine = None
             bg._bg_engine_url = None
             settings = SimpleNamespace(
-                modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db",
+                break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db",
                 db_pool_recycle_seconds=1500,
             )
             with patch.object(bg, "create_async_engine", return_value=MagicMock()) as mock_create:
@@ -563,7 +563,7 @@ class TestEngineFactory:
             bg._bg_engine = None
             bg._bg_engine_url = None
             settings = SimpleNamespace(
-                modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=require",
+                break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=require",
                 db_pool_recycle_seconds=1500,
             )
             mock_engine = MagicMock()
@@ -610,7 +610,7 @@ class TestEngineSslPosture:
         with patch.object(bg, "create_async_engine", return_value=MagicMock()) as create:
             engine = bg.get_break_glass_engine(
                 SimpleNamespace(
-                    modulo_break_glass_database_url=url,
+                    break_glass_database_url=url,
                     db_pool_recycle_seconds=1500,
                 )
             )
@@ -625,13 +625,13 @@ class TestEngineSslPosture:
         with patch.object(bg, "create_async_engine", return_value=MagicMock()) as create:
             engine = bg.get_break_glass_engine(
                 SimpleNamespace(
-                    modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=require",
+                    break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=require",
                     db_pool_recycle_seconds=1500,
                 )
             )
             cached = bg.get_break_glass_engine(
                 SimpleNamespace(
-                    modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=require",
+                    break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=require",
                     db_pool_recycle_seconds=1500,
                 )
             )
@@ -646,7 +646,7 @@ class TestEngineSslPosture:
         with patch.object(bg, "create_async_engine") as create, pytest.raises(ValueError, match="sslmode"):
             bg.get_break_glass_engine(
                 SimpleNamespace(
-                    modulo_break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=prefer",
+                    break_glass_database_url="postgresql+asyncpg://bg:bg@h:5432/db?sslmode=prefer",
                     db_pool_recycle_seconds=1500,
                 )
             )
@@ -659,7 +659,7 @@ class TestEngineSslPosture:
         with patch.object(bg, "create_async_engine", return_value=MagicMock()) as create:
             engine = bg.get_break_glass_engine(
                 SimpleNamespace(
-                    modulo_break_glass_database_url="sqlite+aiosqlite:///tmp/breakglass.db",
+                    break_glass_database_url="sqlite+aiosqlite:///tmp/breakglass.db",
                     db_pool_recycle_seconds=1500,
                 )
             )

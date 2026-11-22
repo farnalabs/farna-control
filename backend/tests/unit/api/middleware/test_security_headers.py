@@ -5,7 +5,7 @@ headers middleware. The happy-path headers were already covered; this pass
 adds the configuration-dependent behaviour that was previously untested:
 
 - CSP ``connect-src`` gains ``ws: wss:`` in debug mode and appends
-  ``modulo_monitor_domains`` when configured;
+  ``monitor_domains`` when configured;
 - HSTS is suppressed in debug mode;
 - headers are applied to error (4xx/5xx) responses too, so clients always
   receive the security surface regardless of status.
@@ -46,7 +46,7 @@ def _make_settings(**overrides: object) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
         **overrides,
     )
 
@@ -188,7 +188,7 @@ async def test_hsts_not_sent_in_debug_mode() -> None:
 
 @pytest.mark.anyio
 async def test_monitor_domains_appended_to_csp_connect_src() -> None:
-    settings = _make_settings(modulo_monitor_domains="https://monitor.internal *.ingest.modulo.dev")
+    settings = _make_settings(monitor_domains="https://monitor.internal *.ingest.modulo.dev")
     with patch("farna.api.middleware.security_headers.get_settings", return_value=settings):
         app = _build_app(settings)
         resp = await _get(app)

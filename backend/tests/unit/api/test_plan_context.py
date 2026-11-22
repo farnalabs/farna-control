@@ -30,13 +30,13 @@ _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 
 
-def _make_settings(modulo_license_key: str = "") -> Settings:
+def _make_settings(license_key: str = "") -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=modulo_license_key,
+        admin_password="testpass",
+        license_key=license_key,
     )
 
 

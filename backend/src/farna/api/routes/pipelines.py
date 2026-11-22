@@ -1369,7 +1369,7 @@ class SchemaPin(BaseModel):
         return v
 
 
-_RESERVED_ENV_PREFIXES = ("MODULO_", "OPENCODE_API_KEY")
+_RESERVED_ENV_PREFIXES = ("FARNA_CONTROL_", "OPENCODE_API_KEY")
 
 
 class CapabilityScope(BaseModel):

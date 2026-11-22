@@ -211,14 +211,14 @@ async def discovery_client(
 ) -> AsyncGenerator[AsyncClient, None]:
     settings = Settings(
         database_url=db_url,
-        modulo_db="postgres",
+        db="postgres",
         secret_key="a" * 32,
         fernet_key=_FERNET_KEY,
         redis_url="",
-        modulo_admin_password="",
-        modulo_dev_mode=True,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        admin_password="",
+        dev_mode=True,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
     )
     principal = TenantPrincipal(
         username="integration-user",

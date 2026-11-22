@@ -299,7 +299,7 @@ class TestFeatureFlagNoNameLeak:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_admin_password="test",
+            admin_password="test",
             redis_url="redis://localhost:6379/0",
         )
 
@@ -347,7 +347,7 @@ def _make_health_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="test",
+        admin_password="test",
         redis_url="redis://localhost:6379/0",
     )
 
@@ -478,7 +478,7 @@ class TestAdminEmailDecryptFailure:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key=base64.urlsafe_b64encode(b"a" * 32).decode(),
-            modulo_admin_password="test",
+            admin_password="test",
             redis_url="redis://localhost:6379/0",
         )
 

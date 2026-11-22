@@ -80,8 +80,8 @@ def _build_app(ctx: dict[str, Any]) -> FastAPI:
             database_url="sqlite+aiosqlite:///./test.db",
             secret_key="a" * 32,
             fernet_key="b" * 32,
-            modulo_admin_password="testpass",
-            modulo_csrf_enabled=False,
+            admin_password="testpass",
+            csrf_enabled=False,
         )
 
     async def _db() -> AsyncMock:

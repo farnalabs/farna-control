@@ -97,7 +97,7 @@ ARTIFACT_TYPES: Final[dict[str, ArtifactTypeSpec]] = {
             "that the trail can be browsed, verified or exported here: browsing and "
             "chain-verification, like the offline-verifiable evidence pack, need the "
             "Team-tier audit_viewer feature (plus audit.manage), and the pack "
-            "additionally needs a configured MODULO_EVIDENCE_SIGNING_KEY."
+            "additionally needs a configured FARNA_CONTROL_EVIDENCE_SIGNING_KEY."
         ),
         indexed=True,
         instance_observable=True,
