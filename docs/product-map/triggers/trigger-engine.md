@@ -153,12 +153,12 @@ rate-limited by the `TriggerEngine`.
 - [x] Manual run trigger: `POST /api/v1/runs` returns 202 and starts a pending
       run carrying caller-supplied `run_context`
 - [x] Webhook delivery (`POST /api/v1/triggers/{id}/webhook`): HMAC-SHA256
-      signature and `X-Modulo-Timestamp` freshness (±300s replay window) are
+      signature and `X-Farna-Control-Timestamp` freshness (±300s replay window) are
       required – missing/invalid HMAC or stale timestamp → 401, unknown trigger
       → 404, accepted → 202
 - [x] Webhook delivery also accepts GitHub's `X-Hub-Signature-256`
       (`sha256=` HMAC-SHA256 of the exact raw body, keyed by the trigger's
-      `hmac_secret`) when NO `X-Modulo-*` header is sent, so a native GitHub
+      `hmac_secret`) when NO `X-Farna-Control-*` header is sent, so a native GitHub
       repo webhook can post straight to a trigger. Mismatch, wrong prefix or
       non-hex → 401. If any Farna Control header is present the Farna Control scheme is used
       with no fallback. GitHub's scheme has no timestamp, so there is no replay

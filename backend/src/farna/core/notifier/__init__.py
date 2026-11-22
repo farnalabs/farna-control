@@ -24,7 +24,7 @@ and the subscribable webhook subset in ``api/routes.admin_notifications.py``
 For each event, the notifier:
   1. Queries all active NotificationEndpoints subscribed to the event type.
   2. Builds an HMAC-SHA256 signature over the JSON payload.
-  3. POSTs to the endpoint URL with ``X-Modulo-Signature`` header.
+  3. POSTs to the endpoint URL with ``X-Farna-Control-Signature`` header.
   4. Records delivery outcome in ``notification_delivery_log``.
   5. On HTTP failure: retries up to 3 times with exponential backoff.
   6. On final failure: marks dead_lettered, increments endpoint's dead-letter counter.
@@ -793,8 +793,8 @@ class Notifier:
                     content=body,
                     headers={
                         "Content-Type": "application/json",
-                        "X-Modulo-Signature": signature,
-                        "X-Modulo-Timestamp": datetime.now(UTC).isoformat(),
+                        "X-Farna-Control-Signature": signature,
+                        "X-Farna-Control-Timestamp": datetime.now(UTC).isoformat(),
                         "User-Agent": "Modulo-Notifier/1.0",
                     },
                 )

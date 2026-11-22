@@ -189,21 +189,21 @@ def test_group_to_scim_external_id():
 def test_get_base_url_strips_trailing_slash():
     """Trailing slash is stripped."""
     settings = MagicMock()
-    settings.modulo_public_url = "https://control.farna.dev/"
+    settings.public_url = "https://control.farna.dev/"
     assert _get_base_url(settings) == "https://control.farna.dev"
 
 
 def test_get_base_url_no_trailing_slash():
     """No trailing slash → returned as-is."""
     settings = MagicMock()
-    settings.modulo_public_url = "https://control.farna.dev"
+    settings.public_url = "https://control.farna.dev"
     assert _get_base_url(settings) == "https://control.farna.dev"
 
 
 def test_get_base_url_none_raises():
     """None URL → 500 HTTPException."""
     settings = MagicMock()
-    settings.modulo_public_url = None
+    settings.public_url = None
     with pytest.raises(HTTPException) as exc_info:
         _get_base_url(settings)
     assert exc_info.value.status_code == 500
@@ -212,7 +212,7 @@ def test_get_base_url_none_raises():
 def test_get_base_url_empty_string_raises():
     """Empty string URL → 500 HTTPException."""
     settings = MagicMock()
-    settings.modulo_public_url = ""
+    settings.public_url = ""
     with pytest.raises(HTTPException) as exc_info:
         _get_base_url(settings)
     assert exc_info.value.status_code == 500

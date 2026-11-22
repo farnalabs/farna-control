@@ -40,15 +40,15 @@ def test_secret_key_blocked_value_raises() -> None:
 def test_no_auth_configured_does_not_raise(caplog: pytest.LogCaptureFixture) -> None:
     """Missing admin password + users should warn, not raise."""
     with caplog.at_level(logging.WARNING, logger="farna.settings"):
-        s = _make(modulo_admin_password="", modulo_users="")
-    assert not s.modulo_admin_password
-    assert not s.modulo_users
+        s = _make(admin_password="", users="")
+    assert not s.admin_password
+    assert not s.users
     assert any("no_auth_configured" in r.message or "login is disabled" in r.message for r in caplog.records)
 
 
 def test_admin_password_set_no_warning(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING, logger="farna.settings"):
-        _make(modulo_admin_password="hunter2_but_longer_than_needed")
+        _make(admin_password="hunter2_but_longer_than_needed")
     assert not any("login is disabled" in r.message for r in caplog.records)
 
 

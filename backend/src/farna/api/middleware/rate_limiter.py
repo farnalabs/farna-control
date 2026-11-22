@@ -145,7 +145,7 @@ def _create_registry(settings: Settings) -> RateLimiterRegistry | _NoopRateLimit
     """Create a rate limiter registry, connecting to Redis if configured."""
     global redis_available
 
-    if settings.modulo_db.lower() == "sqlite":
+    if settings.db.lower() == "sqlite":
         _log.info("ratelimit.sqlite_disabled")
         redis_available = False
         return _NoopRateLimiter()
@@ -309,7 +309,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         resolved = settings or get_settings()
-        self._bypass_token = resolved.modulo_ratelimit_bypass_token
+        self._bypass_token = resolved.ratelimit_bypass_token
         self._secret_key = resolved.secret_key
         self._registry = registry or _create_registry(resolved)
 
@@ -450,7 +450,7 @@ _auth_rate_limiter: AuthRateLimiterCls | None = None
 def get_auth_rate_limiter(settings: Settings | None = None) -> AuthRateLimiterCls | None:
     """Return the singleton auth rate limiter, creating it if necessary.
 
-    Returns None when ``modulo_auth_rate_limit_enabled`` is False —
+    Returns None when ``auth_rate_limit_enabled`` is False —
     callers should skip rate limiting entirely.
     """
     global _auth_rate_limiter
@@ -458,10 +458,10 @@ def get_auth_rate_limiter(settings: Settings | None = None) -> AuthRateLimiterCl
         return _auth_rate_limiter
 
     resolved = settings or get_settings()
-    max_attempts = resolved.modulo_auth_max_attempts
-    window_s = resolved.modulo_auth_window_seconds
+    max_attempts = resolved.auth_max_attempts
+    window_s = resolved.auth_window_seconds
 
-    if not resolved.modulo_auth_rate_limit_enabled:
+    if not resolved.auth_rate_limit_enabled:
         _auth_rate_limiter = None
         return None
 
@@ -504,7 +504,7 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         resolved = settings or get_settings()
-        self._bypass_token = resolved.modulo_ratelimit_bypass_token
+        self._bypass_token = resolved.ratelimit_bypass_token
         self._rate_limiter = rate_limiter or get_auth_rate_limiter(resolved)
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:

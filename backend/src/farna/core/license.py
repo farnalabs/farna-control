@@ -45,7 +45,7 @@ a separate process — resolve the same tier as the API.
 
 PRECEDENCE. The persisted system licence is loaded into rung 2 of the ladder
 (``core.feature_flags.resolve_effective_license``), which sits ABOVE the
-deployment's ``MODULO_LICENSE_KEY`` (rung 3). So the env key is the deployment
+deployment's ``FARNA_CONTROL_LICENSE_KEY`` (rung 3). So the env key is the deployment
 FLOOR, an explicit operator install OVERRIDES it, and removing the installed key
 falls back to the floor — then to Community. The org-level key (rung 1) still
 wins over both.
@@ -113,8 +113,8 @@ DEFAULT_RENEWAL_MODE = RENEWAL_MODE_MANUAL
 #: This is the real public half of the DEVELOPMENT signing keypair held in the
 #: Farnalabs vault. It is NOT the anchor Farnalabs signs production licences
 #: with: production keys are signed by a separate keypair whose public half is
-#: published to customers and must be supplied via ``MODULO_LICENSE_PUBLIC_KEY``
-#: (``Settings.modulo_license_public_key``). A production licence therefore
+#: published to customers and must be supplied via ``FARNA_CONTROL_LICENSE_PUBLIC_KEY``
+#: (``Settings.license_public_key``). A production licence therefore
 #: CANNOT verify against this key.
 #:
 #: It stays as the no-configuration default so a developer running the app
@@ -148,20 +148,19 @@ _dev_anchor_trusted: bool = False
 #: Actionable refusal returned when a licence would only verify against the
 #: built-in development key outside debug.
 DEV_ANCHOR_NOT_TRUSTED_ERROR = (
-    "License could not be verified against a trusted key: MODULO_LICENSE_PUBLIC_KEY is not "
+    "License could not be verified against a trusted key: FARNA_CONTROL_LICENSE_PUBLIC_KEY is not "
     "configured, so only the built-in development public key is available and that key is not "
-    "a trust anchor outside debug. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or "
-    "MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key (64 hex chars) that signed this "
-    "license, then restart."
+    "a trust anchor outside debug. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY to the Ed25519 public key "
+    "(64 hex chars) that signed this license, then restart."
 )
 
 #: Actionable startup error for an instance that is configured to ACCEPT a
-#: licence (``FARNA_CONTROL_LICENSE_KEY`` or ``MODULO_LICENSE_KEY``) while only the development anchor exists.
+#: licence (``FARNA_CONTROL_LICENSE_KEY``) while only the development anchor exists.
 DEV_ANCHOR_STARTUP_ERROR = (
-    "FARNA_CONTROL_LICENSE_KEY (or MODULO_LICENSE_KEY) is configured but FARNA_CONTROL_LICENSE_PUBLIC_KEY is not (or is the built-in "
+    "FARNA_CONTROL_LICENSE_KEY is configured but FARNA_CONTROL_LICENSE_PUBLIC_KEY is not (or is the built-in "
     "development key), and debug is off. The built-in development public key is not a trust "
-    "anchor outside debug, so no licence can be verified. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or "
-    "MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key (64 hex chars) that signed your licence, or unset "
+    "anchor outside debug, so no licence can be verified. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY to the "
+    "Ed25519 public key (64 hex chars) that signed your licence, or unset "
     "FARNA_CONTROL_LICENSE_KEY to run on the Community tier."
 )
 
@@ -224,7 +223,7 @@ class PersistedLicenseAnchorError(RuntimeError):
     Raised at startup, and deliberately FATAL, mirroring the env-var rule
     (FAR-2091): outside debug a configured licence with only the built-in
     development anchor can never verify, so booting would silently run a paying
-    customer on Community. The operator must set ``MODULO_LICENSE_PUBLIC_KEY``.
+    customer on Community. The operator must set ``FARNA_CONTROL_LICENSE_PUBLIC_KEY``.
     """
 
 
@@ -369,8 +368,8 @@ REASON_ANCHOR_MISMATCH = "anchor_mismatch"
 REASON_DEV_ANCHOR_NOT_TRUSTED = "dev_anchor_not_trusted"
 REASON_EXPIRED = "expired"
 
-_ANCHOR_MISMATCH_HINT = "This deployment is verifying licences with the built-in development anchor, which cannot verify a production licence. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or MODULO_LICENSE_PUBLIC_KEY) to the Ed25519 public key Farnalabs issued with your licence (anchor mismatch)."
-_SIGNATURE_MISMATCH_HINT = "The key was not signed by the authority this deployment trusts. If Farnalabs issued it, MODULO_LICENSE_PUBLIC_KEY does not match the signing keypair (anchor mismatch)."
+_ANCHOR_MISMATCH_HINT = "This deployment is verifying licences with the built-in development anchor, which cannot verify a production licence. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY (or FARNA_CONTROL_LICENSE_PUBLIC_KEY) to the Ed25519 public key Farnalabs issued with your licence (anchor mismatch)."
+_SIGNATURE_MISMATCH_HINT = "The key was not signed by the authority this deployment trusts. If Farnalabs issued it, FARNA_CONTROL_LICENSE_PUBLIC_KEY does not match the signing keypair (anchor mismatch)."
 
 
 @dataclass
@@ -912,7 +911,7 @@ async def restore_persisted_system_license(session: Any, settings: Any | None = 
 
     Outside debug, a persisted licence combined with only the built-in
     DEVELOPMENT anchor raises :class:`PersistedLicenseAnchorError` — the same
-    fail-closed rule ``MODULO_LICENSE_KEY`` already has, applied to the licence
+    fail-closed rule ``FARNA_CONTROL_LICENSE_KEY`` already has, applied to the licence
     an operator installed at runtime.
     """
     global _persisted_state, _persisted_state_checked_at
@@ -1014,5 +1013,5 @@ def check_production_public_key(settings: Any) -> None:
     """
     if using_builtin_dev_anchor() and not getattr(settings, "debug", False):
         _log.critical(
-            "LICENSE_CRITICAL: the built-in DEVELOPMENT licence anchor is in use outside debug. Production licences are signed by a different keypair and will FAIL verification. Set MODULO_LICENSE_PUBLIC_KEY to the public key Farnalabs issued with your licence.",
+            "LICENSE_CRITICAL: the built-in DEVELOPMENT licence anchor is in use outside debug. Production licences are signed by a different keypair and will FAIL verification. Set FARNA_CONTROL_LICENSE_PUBLIC_KEY to the public key Farnalabs issued with your licence.",
         )

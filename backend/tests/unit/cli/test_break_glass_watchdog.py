@@ -24,7 +24,7 @@ def _make_settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://modulo:modulo@localhost:5432/farna_control",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "test",
+        "admin_password": "test",
         "redis_url": "",
     }
     base.update(overrides)
@@ -33,60 +33,60 @@ def _make_settings(**overrides: object) -> Settings:
 
 class TestEnabledDefaulting:
     def test_enabled_defaults_from_primary_presence(self) -> None:
-        settings = _make_settings(modulo_break_glass_secret=_SECRET)
-        assert settings.modulo_break_glass_enabled is True
+        settings = _make_settings(break_glass_secret=_SECRET)
+        assert settings.break_glass_enabled is True
 
     def test_enabled_defaults_from_standby_presence(self) -> None:
-        settings = _make_settings(modulo_break_glass_standby_secret=_STANDBY)
-        assert settings.modulo_break_glass_enabled is True
+        settings = _make_settings(break_glass_standby_secret=_STANDBY)
+        assert settings.break_glass_enabled is True
 
     def test_enabled_false_when_no_secrets(self) -> None:
         settings = _make_settings()
-        assert settings.modulo_break_glass_enabled is False
+        assert settings.break_glass_enabled is False
 
     def test_enabled_explicit_override_respected(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=False,
-            modulo_break_glass_secret=_SECRET,
+            break_glass_enabled=False,
+            break_glass_secret=_SECRET,
         )
-        assert settings.modulo_break_glass_enabled is False
+        assert settings.break_glass_enabled is False
 
 
 class TestConstructionErrors:
     def test_secrets_must_differ(self) -> None:
         with pytest.raises(ValueError, match="must differ"):
-            _make_settings(modulo_break_glass_secret=_SECRET, modulo_break_glass_standby_secret=_SECRET)
+            _make_settings(break_glass_secret=_SECRET, break_glass_standby_secret=_SECRET)
 
     def test_secrets_may_be_empty(self) -> None:
-        settings = _make_settings(modulo_break_glass_secret="", modulo_break_glass_standby_secret="")
-        assert not settings.modulo_break_glass_secret
+        settings = _make_settings(break_glass_secret="", break_glass_standby_secret="")
+        assert not settings.break_glass_secret
 
     def test_minimum_length_primary(self) -> None:
         with pytest.raises(ValueError, match="at least 24 characters"):
-            _make_settings(modulo_break_glass_secret="short")
+            _make_settings(break_glass_secret="short")
 
     def test_minimum_length_standby(self) -> None:
         with pytest.raises(ValueError, match="at least 24 characters"):
-            _make_settings(modulo_break_glass_standby_secret="short")
+            _make_settings(break_glass_standby_secret="short")
 
     def test_ttl_below_one_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            _make_settings(modulo_break_glass_ttl_minutes=0)
+            _make_settings(break_glass_ttl_minutes=0)
 
     def test_max_ttl_cap_4320(self) -> None:
         with pytest.raises(ValidationError):
-            _make_settings(modulo_break_glass_max_ttl_minutes=4321)
+            _make_settings(break_glass_max_ttl_minutes=4321)
 
     def test_ttl_above_max_rejected(self) -> None:
         with pytest.raises(
             ValueError,
             match=r"FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES must be <= FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES",
         ):
-            _make_settings(modulo_break_glass_ttl_minutes=2000, modulo_break_glass_max_ttl_minutes=500)
+            _make_settings(break_glass_ttl_minutes=2000, break_glass_max_ttl_minutes=500)
 
     def test_invalid_boot_failure_mode(self) -> None:
         with pytest.raises(ValueError, match=r"warn.*fail"):
-            _make_settings(modulo_break_glass_boot_failure_mode="ignore")
+            _make_settings(break_glass_boot_failure_mode="ignore")
 
     def test_ttl_bounds_checked_regardless_of_enabled(self) -> None:
         with pytest.raises(
@@ -94,27 +94,27 @@ class TestConstructionErrors:
             match=r"FARNA_CONTROL_BREAK_GLASS_TTL_MINUTES must be <= FARNA_CONTROL_BREAK_GLASS_MAX_TTL_MINUTES",
         ):
             _make_settings(
-                modulo_break_glass_enabled=False,
-                modulo_break_glass_ttl_minutes=2000,
-                modulo_break_glass_max_ttl_minutes=500,
+                break_glass_enabled=False,
+                break_glass_ttl_minutes=2000,
+                break_glass_max_ttl_minutes=500,
             )
 
 
 class TestBootFindings:
     def test_clean_when_configured(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret=_SECRET,
-            modulo_break_glass_standby_secret=_STANDBY,
-            modulo_break_glass_database_url=_BG_URL,
+            break_glass_enabled=True,
+            break_glass_secret=_SECRET,
+            break_glass_standby_secret=_STANDBY,
+            break_glass_database_url=_BG_URL,
         )
         assert not break_glass_boot_findings(settings)
 
     def test_enabled_with_both_secrets_empty_is_finding(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret="",
-            modulo_break_glass_standby_secret="",
+            break_glass_enabled=True,
+            break_glass_secret="",
+            break_glass_standby_secret="",
         )
         findings = break_glass_boot_findings(settings)
         assert any("both FARNA_CONTROL_BREAK_GLASS_SECRET" in message for _blocking, message in findings)
@@ -122,10 +122,10 @@ class TestBootFindings:
 
     def test_enabled_with_empty_url_is_finding(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret=_SECRET,
-            modulo_break_glass_standby_secret=_STANDBY,
-            modulo_break_glass_database_url="",
+            break_glass_enabled=True,
+            break_glass_secret=_SECRET,
+            break_glass_standby_secret=_STANDBY,
+            break_glass_database_url="",
         )
         findings = break_glass_boot_findings(settings)
         assert any("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL is empty" in message for _blocking, message in findings)
@@ -133,8 +133,8 @@ class TestBootFindings:
 
     def test_disabled_with_empty_url_is_non_blocking_warn(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=False,
-            modulo_break_glass_database_url="",
+            break_glass_enabled=False,
+            break_glass_database_url="",
         )
         findings = break_glass_boot_findings(settings)
         assert any("DATABASE_URL is empty" in message for _blocking, message in findings)
@@ -142,9 +142,9 @@ class TestBootFindings:
 
     def test_one_secret_missing_warns(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret=_SECRET,
-            modulo_break_glass_standby_secret="",
+            break_glass_enabled=True,
+            break_glass_secret=_SECRET,
+            break_glass_standby_secret="",
         )
         findings = break_glass_boot_findings(settings)
         assert any("rotation path is degraded" in message for _blocking, message in findings)
@@ -153,33 +153,33 @@ class TestBootFindings:
 class TestValidateBreakGlassBoot:
     def test_fail_mode_raises(self) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret="",
-            modulo_break_glass_standby_secret="",
-            modulo_break_glass_database_url="",
-            modulo_break_glass_boot_failure_mode="fail",
+            break_glass_enabled=True,
+            break_glass_secret="",
+            break_glass_standby_secret="",
+            break_glass_database_url="",
+            break_glass_boot_failure_mode="fail",
         )
         with pytest.raises(RuntimeError, match="Break-glass boot config assertion FAILED"):
             validate_break_glass_boot(settings)
 
     def test_warn_mode_logs_and_continues(self, caplog: pytest.LogCaptureFixture) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret="",
-            modulo_break_glass_standby_secret="",
-            modulo_break_glass_database_url="",
-            modulo_break_glass_boot_failure_mode="warn",
+            break_glass_enabled=True,
+            break_glass_secret="",
+            break_glass_standby_secret="",
+            break_glass_database_url="",
+            break_glass_boot_failure_mode="warn",
         )
         validate_break_glass_boot(settings)
         assert any("break_glass.boot_config" in rec.message for rec in caplog.records)
 
     def test_clean_passes_silently(self, caplog: pytest.LogCaptureFixture) -> None:
         settings = _make_settings(
-            modulo_break_glass_enabled=True,
-            modulo_break_glass_secret=_SECRET,
-            modulo_break_glass_standby_secret=_STANDBY,
-            modulo_break_glass_database_url=_BG_URL,
-            modulo_break_glass_boot_failure_mode="fail",
+            break_glass_enabled=True,
+            break_glass_secret=_SECRET,
+            break_glass_standby_secret=_STANDBY,
+            break_glass_database_url=_BG_URL,
+            break_glass_boot_failure_mode="fail",
             # The SAQ setup-grace/claim-stale WARN (cutover settings validator)
             # fires on the deployed defaults (600 >= 450); the deployed default
             # is a deliberate warn. Keep grace below the stale fence so this
@@ -192,7 +192,7 @@ class TestValidateBreakGlassBoot:
         assert not caplog.records
 
     def test_disabled_unconfigured_is_warn_not_fail(self, caplog: pytest.LogCaptureFixture) -> None:
-        settings = _make_settings(modulo_break_glass_boot_failure_mode="fail")
+        settings = _make_settings(break_glass_boot_failure_mode="fail")
         # Fully unconfigured (disabled) never fails boot even in fail mode — the
         # URL/secret-presence findings are non-blocking warns when disabled.
         validate_break_glass_boot(settings)

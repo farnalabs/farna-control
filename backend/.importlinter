@@ -109,7 +109,7 @@ ignore_imports =
     farna.db.crud.pipeline -> farna.core.audit_logger
     farna.db.crud.pipeline_snapshot_versioning -> farna.core.audit_logger
     farna.db.session -> farna.core.audit_logger.append_only
-    # FAR-1561 boot user seeding: the MODULO_USERS seeder appends a SYSTEM-actor
+    # FAR-1561 boot user seeding: the FARNA_CONTROL_USERS seeder appends a SYSTEM-actor
     # audit event for the account + admin role grant it creates (same narrow
     # cross-boundary category as the db.crud.* audit exemptions above - the DB
     # layer only invokes the append; audit-chain semantics stay in core).

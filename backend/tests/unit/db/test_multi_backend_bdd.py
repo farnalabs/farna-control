@@ -595,7 +595,7 @@ class TestRegisterTenantFilter:
 
         with patch("farna.db.rls.get_settings") as mock_get_settings:
             mock_settings = MagicMock(spec=Settings)
-            mock_settings.modulo_db = "postgres"
+            mock_settings.db = "postgres"
             mock_get_settings.return_value = mock_settings
 
             from farna.db.rls import register_tenant_filter
@@ -612,7 +612,7 @@ class TestRegisterTenantFilter:
 
         with patch("farna.db.rls.get_settings") as mock_get_settings:
             mock_settings = MagicMock(spec=Settings)
-            mock_settings.modulo_db = "sqlite"
+            mock_settings.db = "sqlite"
             mock_get_settings.return_value = mock_settings
 
             from farna.db.rls import register_tenant_filter

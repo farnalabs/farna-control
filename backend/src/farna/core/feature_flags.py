@@ -535,7 +535,7 @@ def resolve_effective_license(settings: Any, org: Any | None) -> LicenseData | N
        persisted in ``system_config`` (FAR-2153) and restored at startup. This
        rung OVERRIDES rung 3: an explicit operator install beats the deployment
        env key, and removing it falls back to the env key.
-    3. System-level env-var key (``settings.modulo_license_key``) — the
+    3. System-level env-var key (``settings.license_key``) — the
        deployment FLOOR.
 
     ONE walk, shared by ``_resolve_paid_plan`` (the plan context built here),
@@ -586,7 +586,7 @@ def resolve_effective_license(settings: Any, org: Any | None) -> LicenseData | N
 
     # 3. System-level env-var license
     return _verified_license_key(
-        getattr(settings, "modulo_license_key", "") or "",
+        getattr(settings, "license_key", "") or "",
         "Failed to parse env-var license key",
     )
 
@@ -598,7 +598,7 @@ async def _resolve_paid_plan(settings: Any, session: Any, org: Any | None) -> Pl
     1. Org-level license key (from ``org.settings_json["license_key"]``)
     2. System-level in-memory license (``store_license()``; the
        ``system_config`` install restored/refreshed from persistence)
-    3. System-level env-var license (``settings.modulo_license_key``)
+    3. System-level env-var license (``settings.license_key``)
 
     Rung 2 OVERRIDES rung 3: the deployment's env key is the FLOOR and an
     explicit operator install is the override, so removing an install falls back
@@ -659,7 +659,7 @@ async def resolve_plan_context(settings: Any, session: Any, org: Any | None = No
     Resolution order:
     1. Org-level license key (from ``org.settings_json["license_key"]``)
     2. System-level in-memory license (``store_license()``)
-    3. System-level env-var license (``settings.modulo_license_key``)
+    3. System-level env-var license (``settings.license_key``)
     4. Org-level ``plan_id`` — used ONLY for the free "community" tier. Any
        higher tier (e.g. "team") requires a VALID SIGNED LICENSE; a bare
        ``plan_id`` with no license (steps 1-3 all empty) resolves to community.

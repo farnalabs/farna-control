@@ -148,7 +148,7 @@ class ProfileHealthResponse(BaseModel):
 class RunnersStatusResponse(BaseModel):
     aggregate_state: StripState
     #: False when this deployment has no Docker engine endpoint at all (no
-    #: ``MODULO_DOCKER_HOST``/``DOCKER_HOST`` and no local socket). The UI
+    #: ``FARNA_CONTROL_DOCKER_HOST``/``DOCKER_HOST`` and no local socket). The UI
     #: shows a neutral "not available" state instead of "engine unreachable"
     #: (FAR-2239); a configured-but-failing engine keeps ``True``.
     engine_configured: bool = True

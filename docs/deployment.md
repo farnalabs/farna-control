@@ -242,10 +242,10 @@ Authentication is required for all commands. Provide an admin-level JWT:
 farna-control migrate --token <admin-jwt> export-org <org-id>
 ```
 
-Or set the `MODULO_ADMIN_SECRET` environment variable (bypasses JWT validation):
+Or set the `FARNA_CONTROL_ADMIN_SECRET` environment variable (bypasses JWT validation):
 
 ```bash
-export MODULO_ADMIN_SECRET=<shared-secret>
+export FARNA_CONTROL_ADMIN_SECRET=<shared-secret>
 farna-control migrate export-org <org-id>
 ```
 
@@ -407,7 +407,7 @@ For the production launch checklist, see [`docs/public-launch-checklist.md`](./p
 | `FARNA_CONTROL_OIDC_PROVIDERS` | No | `[]` | JSON array of OIDC provider configs. **Deprecated**; use the admin SSO providers UI. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | – | OTel gRPC/HTTP exporter endpoint |
 | `FARNA_CONTROL_E2B_API_KEY` | For E2B | – | E2B sandbox API key for runtime provider |
-| `MODULO_ADMIN_SECRET` | No | – | Shared secret for `farna-control migrate` CLI auth |
+| `FARNA_CONTROL_ADMIN_SECRET` | No | – | Shared secret for `farna-control migrate` CLI auth |
 
 
 ---

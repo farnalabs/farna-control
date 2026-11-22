@@ -75,9 +75,9 @@ def _role_client(role: str | None, session: AsyncMock | None = None) -> TestClie
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
-        modulo_license_key="test-license-key",
-        modulo_csrf_enabled=False,
+        admin_password="testpass",
+        license_key="test-license-key",
+        csrf_enabled=False,
     )
 
     if session is None:

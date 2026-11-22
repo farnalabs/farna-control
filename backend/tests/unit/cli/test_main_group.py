@@ -224,11 +224,11 @@ def test_env_redacts_every_real_credential_carrier(monkeypatch: pytest.MonkeyPat
     assert "admin@modulo.run:plaintext-password-1" not in result.output
     if as_json:
         payload = json.loads(result.output)
-        assert payload["modulo_users"] == "<redacted>"
-        assert payload["modulo_oidc_providers"] == "<redacted>"
+        assert payload["users"] == "<redacted>"
+        assert payload["oidc_providers"] == "<redacted>"
         assert payload["alert_webhook_url"] == "<redacted>"
         assert payload["aws_access_key_id"] == "<redacted>"
-        assert payload["modulo_license_key"] == "<redacted>"
+        assert payload["license_key"] == "<redacted>"
         assert payload["redis_url"] == "redis://<redacted>@cache-host:16379/0"
 
 

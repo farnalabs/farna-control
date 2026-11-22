@@ -248,7 +248,7 @@ async def test_sso_invite_consume_invitation_role_wins(
             database_url=str(db_engine.url),
             secret_key="a" * 32,
             fernet_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-            modulo_sso_default_role="runner",
+            sso_default_role="runner",
         )
 
         from farna.auth.sso import jit_provision_user
@@ -328,7 +328,7 @@ async def test_sso_invite_consume_exactly_once(
             database_url=str(db_engine.url),
             secret_key="a" * 32,
             fernet_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-            modulo_sso_default_role="runner",
+            sso_default_role="runner",
         )
 
         from farna.auth.sso import jit_provision_user

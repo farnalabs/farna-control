@@ -148,8 +148,8 @@ class TestListFeatureFlagsSystemAdminParity(_ParityAuthContext):
         registry.list_flags.return_value = [flag]
         registry.tier_gap_flags.return_value = []
         settings = MagicMock()
-        settings.modulo_license_key = ""
-        settings.modulo_dev_mode = False
+        settings.license_key = ""
+        settings.dev_mode = False
 
         _ctx_role.set("admin")
         _ctx_is_system_admin.set(True)

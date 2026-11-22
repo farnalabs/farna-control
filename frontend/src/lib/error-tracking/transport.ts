@@ -163,7 +163,7 @@ export async function flush(): Promise<void> {
     const signature = await signPayload(body, sessionKey)
     if (gen !== _generation) return
     if (signature) {
-      headers['X-Modulo-Error-Token'] = signature
+      headers['X-Farna-Control-Error-Token'] = signature
     }
 
     const res = await fetch('/api/v1/errors/ingest', {

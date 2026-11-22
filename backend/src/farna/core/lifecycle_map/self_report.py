@@ -120,7 +120,7 @@ def validate_and_normalise_reported_refs(entries: list[dict[str, Any]], max_refs
     * duplicates of an already-seen ``(kind, ref, source)`` triple are
       collapsed (first occurrence wins);
     * the result is capped at ``max_refs`` unique entries (FAR-794 slice 2b:
-      ``None`` resolves to the unified ``modulo_work_item_refs_cap`` setting)
+      ``None`` resolves to the unified ``work_item_refs_cap`` setting)
       — overflow entries are counted as ``capped``. Dedup runs BEFORE the cap,
       so a duplicate of an already-seen entry never consumes the cap, and a
       capped entry's duplicates are not double-counted.

@@ -222,13 +222,13 @@ async def create_provider(session: AsyncSession, **config: Unpack[CreateProvider
     # provider_id is GLOBALLY unique (migration 0158, FAR-464 option a) so a
     # cross-org create must not collide. The caller hands us a farna_control_system
     # (BYPASSRLS) session so ALL orgs' existing slugs are visible; we only use
-    # it when the system role is actually provisioned (MODULO_SYSTEM_DATABASE_URL
+    # it when the system role is actually provisioned (FARNA_CONTROL_SYSTEM_DATABASE_URL
     # set) — otherwise a zero-row fallback read would silently break the
     # intra-org dedupe, so we fall back to the app session (RLS-scoped).
     scan_session = session
     if system_session is not None:
         try:
-            if get_settings().modulo_system_database_url:
+            if get_settings().system_database_url:
                 scan_session = system_session
         except Exception:
             logger.warning("sso_provider.settings_unavailable", exc_info=True)
@@ -239,7 +239,7 @@ async def create_provider(session: AsyncSession, **config: Unpack[CreateProvider
         # (_read_system_oidc_provider, _get_enabled_saml_global, ...) all wrap
         # their system reads in `async with system_session.begin():`. Without it,
         # session.execute() raises InvalidRequestError and the admin create
-        # endpoint 503s whenever MODULO_SYSTEM_DATABASE_URL is set. The app
+        # endpoint 503s whenever FARNA_CONTROL_SYSTEM_DATABASE_URL is set. The app
         # session already has a transaction begun by the caller, so it is used
         # directly.
         async with scan_session.begin():

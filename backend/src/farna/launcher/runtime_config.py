@@ -10,7 +10,7 @@ reads before anything else. Two delivery paths produce it:
 
 ONE allowlist backs both: its top-level keys are exactly
 :data:`RUNTIME_CONFIG_KEYS`, and both paths generate through
-:func:`build_runtime_config_payload` — a malformed ``MODULO_MONITOR_CONFIG``
+:func:`build_runtime_config_payload` — a malformed ``FARNA_CONTROL_MONITOR_CONFIG``
 is reported (stdout) and dropped, never partially served. The allowlist is
 deliberately tiny: ``monitor`` (parsed monitor config) and ``autoLogin`` (the
 demo auto-login pair, which is BY DESIGN a credential delivered to the
@@ -54,7 +54,7 @@ def build_runtime_config_payload(env: Mapping[str, str] | None = None) -> dict[s
 
     Behaviour-identical to the historical inline heredoc in
     ``deploy/fly/entrypoint.sh`` (including the stdout wording for an invalid
-    ``MODULO_MONITOR_CONFIG``).
+    ``FARNA_CONTROL_MONITOR_CONFIG``).
     """
     source = dict(os.environ if env is None else env)
     payload: dict[str, object] = {}

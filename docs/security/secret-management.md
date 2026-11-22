@@ -26,7 +26,7 @@ The following must never appear in the repository:
 - `SECRET_KEY`: JWT signing key
 - `FERNET_KEY`: Fernet encryption key
 - `DATABASE_URL`: database connection string with credentials
-- Any `MODULO_*_KEY`: API keys for integrations
+- Any `FARNA_CONTROL_*_KEY`: API keys for integrations
 - `.env` files: environment variable dumps
 - Service account keys or tokens
 - Any file containing plaintext credentials
@@ -48,7 +48,7 @@ Gitleaks runs as a pre-commit hook and in CI to catch accidental commits of thes
    rotation:
 
    ```bash
-   curl -X POST "$MODULO_URL/api/v1/admin/rotation/rotate-key" \
+   curl -X POST "$FARNA_CONTROL_URL/api/v1/admin/rotation/rotate-key" \
      -H "Authorization: Bearer $ACCESS_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"new_fernet_key": "<new-key>", "old_fernet_key": "<current-key>"}'

@@ -251,7 +251,7 @@ def build_dispatch_marker(attempt_key: str, provider: str, *, via_provider: bool
     state onto the marker AT BUILD TIME so the capacity gate's own
     primary-acquire write is attributable to provider-mediated execution
     from the marker alone (ADR 040 "Flag and revert observability") instead
-    of waiting for the post-create rewrite. The ``MODULO_E2B_VIA_PROVIDER``
+    of waiting for the post-create rewrite. The ``FARNA_CONTROL_E2B_VIA_PROVIDER``
     flag it originally reported was RETIRED by FAR-1050 R6 (PR #1033): the
     provider path is now unconditional, so this key survives purely as a
     historical attribution field on the dispatch marker / telemetry.

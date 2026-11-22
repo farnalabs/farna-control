@@ -16,7 +16,7 @@ functions sequentially per worker, the mutation window is confined to this one
 test, and the ``_parse``/``_all_nodes`` caches are keyed by absolute path, so the
 two scans share cache storage without cross-talk.
 
-Under a scoped ``MODULO_TEST_STYLE_SCOPE`` run the wrapper intentionally scans
+Under a scoped ``FARNA_CONTROL_TEST_STYLE_SCOPE`` run the wrapper intentionally scans
 only changed backend test files, so this module (like the main scanner in scoped
 mode) resolves to an empty scan — the full-suite enforcement runs on every CI
 architecture-test pass, which is the gate that matters here.

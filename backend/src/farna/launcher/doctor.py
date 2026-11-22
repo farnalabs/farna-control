@@ -46,7 +46,7 @@ Full-doctor checks (FAR-676):
     variables in the inherited environment could hijack bundled-binary
     invocations (the launcher scrubs them at boot; report so the operator
     knows where they came from).
-11. ``settings-source`` — ``MODULO_DB`` must not point away from postgres,
+11. ``settings-source`` — ``FARNA_CONTROL_DB`` must not point away from postgres,
     and an ambient DATABASE_URL that conflicts with state.json's port is a
     WARNING (see the exit-table docstring for the documented override).
 12. ``cloud-sync-root`` — WARNING: the data dir sits under a cloud-sync
@@ -514,7 +514,7 @@ def check_ambient_pg_env(_data_dir: Path, _state: Any, probes: DoctorProbes) -> 
 
 
 def check_settings_source(_data_dir: Path, state: Any, probes: DoctorProbes) -> CheckResult:
-    """Check 11 — MODULO_DB named check + env-vs-state.json conflict."""
+    """Check 11 — FARNA_CONTROL_DB named check + env-vs-state.json conflict."""
     try:
         moduledb = probes.env_value("FARNA_CONTROL_DB")
         db_url = probes.env_value("DATABASE_URL")
@@ -532,7 +532,7 @@ def check_settings_source(_data_dir: Path, state: Any, probes: DoctorProbes) -> 
     return CheckResult(
         "settings-source",
         True,
-        "MODULO_DB is unset (postgres default) and no ambient DATABASE_URL conflicts with state.json",
+        "FARNA_CONTROL_DB is unset (postgres default) and no ambient DATABASE_URL conflicts with state.json",
     )
 
 

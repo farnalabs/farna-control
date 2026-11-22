@@ -86,7 +86,7 @@ def _ch() -> Any:
 # WITH a 24h minimum wall-clock window so other customers' quiet stretches never
 # self-deactivate (the boundary must be at least the window old before the
 # streak can fire); a deployment overrides the window to 0 via
-# MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS so a fast-moving repo's quiet stretch
+# FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS so a fast-moving repo's quiet stretch
 # still stops the pool.
 ONGOING_MAX_NO_DELIVERY_STREAK_DEFAULT = 5
 ONGOING_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT = 24
@@ -111,7 +111,7 @@ ONGOING_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT = 24
 #   while a broken intraday (hourly) cron is still surfaced within 2 days of
 #   its last delivery — 7 days (a weekly period) would leave an hourly cron
 #   silent for a week. Per-trigger ``no_delivery_min_window_hours`` and the
-#   ``MODULO_CRON_STREAK_MIN_WINDOW_HOURS`` deployment env override both win
+#   ``FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS`` deployment env override both win
 #   over this default (0 = no window, mirroring the ongoing override).
 CRON_MAX_NO_DELIVERY_STREAK_DEFAULT = 5
 CRON_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT = 48
@@ -140,7 +140,7 @@ ONGOING_STREAK_MASS_CASCADE_ALERT_WINDOW_HOURS = 24
 # Kill switch for the deactivate+notify side-effect. Classification ALWAYS
 # persists (the reconcile sweep is independent); this only gates the sweep's
 # deactivation + notification. Documented constant default, overridable at
-# runtime via MODULO_STREAK_DEACTIVATE_KILL_SWITCH.
+# runtime via FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH.
 STREAK_DEACTIVATE_ENABLED_DEFAULT = True
 
 # Audit event types for the streak engine lifecycle records (append-only).
@@ -414,7 +414,7 @@ def _streak_deactivate_enabled() -> bool:
     Classification ALWAYS persists (the reconcile sweep is independent); this
     only gates the sweep's deactivation + notification. Documented constant
     default (``STREAK_DEACTIVATE_ENABLED_DEFAULT``) overridable at runtime via
-    the ``MODULO_STREAK_DEACTIVATE_KILL_SWITCH`` env var ('0'/'false'/'off'/'no'
+    the ``FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH`` env var ('0'/'false'/'off'/'no'
     disables).
     """
     raw = os.environ.get("FARNA_CONTROL_STREAK_DEACTIVATE_KILL_SWITCH")
@@ -429,12 +429,12 @@ def _streak_min_window_hours_default(trigger_type: str = "ongoing") -> int:
 
     Ongoing: 24h — a quiet stretch must not self-deactivate within the first
     day after a delivery. A deployment overrides this to 0 via
-    ``MODULO_ONGOING_STREAK_MIN_WINDOW_HOURS`` so a fast-moving repo's quiet
+    ``FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS`` so a fast-moving repo's quiet
     stretch still stops the pool.
 
     Cron (FAR-1387): 48h — two full daily periods (see the
     ``CRON_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT`` rationale), overridable via
-    ``MODULO_CRON_STREAK_MIN_WINDOW_HOURS``. An unknown type falls back to the
+    ``FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS``. An unknown type falls back to the
     ongoing default (the covered set is closed — ``STREAK_TRIGGER_TYPES``).
 
     Per-trigger ``no_delivery_min_window_hours`` config overrides both.

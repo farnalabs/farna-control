@@ -123,8 +123,8 @@ def _setup_client(license_key: str, client: Any, ctx: dict[str, Any]) -> None:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_valid_32,
         fernet_key=_valid_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=license_key,
+        admin_password="testpass",
+        license_key=license_key,
     )
 
     _app.dependency_overrides[get_settings] = lambda: _settings

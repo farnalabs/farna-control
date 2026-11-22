@@ -220,8 +220,8 @@ def _redact_url_credentials(url: str) -> str:
 def _is_sensitive_field(name: str) -> bool:
     """Classify via the canonical sensitive-field classifier (single source).
 
-    The ad-hoc token list missed real credential carriers (``modulo_users``
-    is an email:password list, ``modulo_oidc_providers`` embeds OIDC client
+    The ad-hoc token list missed real credential carriers (``users``
+    is an email:password list, ``oidc_providers`` embeds OIDC client
     secrets, webhook URLs carry their token in the URL path) — delegation to
     ``farna.core.secret_patterns.is_sensitive_field_name`` keeps the CLI's
     redaction in lockstep with the API's, the doctor report's and the support

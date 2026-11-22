@@ -377,7 +377,7 @@ async def test_script_mode_does_not_write_prompt_md():
 async def test_script_mode_writes_full_input_json_no_truncation():
     """The FULL run input payload lands in /home/user/input.json — no 10KB cap.
 
-    The llm path truncates MODULO_INPUT_PAYLOAD above 10KB to a stub; script
+    The llm path truncates FARNA_CONTROL_INPUT_PAYLOAD above 10KB to a stub; script
     mode must carry the complete payload through the file channel.
     """
     payload = {"big": "x" * 20000, "nested": {"deep": list(range(500))}}
@@ -399,7 +399,7 @@ async def test_script_mode_writes_full_input_json_no_truncation():
 
 
 async def test_script_mode_env_payload_is_full_not_truncated():
-    """MODULO_INPUT_PAYLOAD also carries the FULL payload in script mode."""
+    """FARNA_CONTROL_INPUT_PAYLOAD also carries the FULL payload in script mode."""
     payload = {"big": "y" * 20000}
     node_def = _script_node_def()
     fn = make_sandbox_agent_fn(node_def)
@@ -582,7 +582,7 @@ async def test_script_mode_does_not_require_agent_prompt():
 
 
 async def test_script_mode_does_not_inject_host_credentials():
-    """Script mode does NOT auto-inject APP_MODULO_OPENCODE_API_KEY / GITHUB_TOKEN.
+    """Script mode does NOT auto-inject FARNA_CONTROL_OPENCODE_API_KEY / GITHUB_TOKEN.
 
     Credential hygiene (FAR-296 Phase 3): a script only gets what the pipeline
     explicitly passes via env_vars — never the long-lived host credentials that
@@ -596,7 +596,7 @@ async def test_script_mode_does_not_inject_host_credentials():
         await fn(_run_state())
 
     envs = sandbox.commands.run.call_args.kwargs["envs"]
-    assert "APP_MODULO_OPENCODE_API_KEY" not in envs
+    assert "FARNA_CONTROL_OPENCODE_API_KEY" not in envs
     assert "GITHUB_TOKEN" not in envs
 
 
@@ -618,7 +618,7 @@ async def test_llm_mode_still_injects_host_credentials():
         await fn(_run_state())
 
     envs = sandbox.commands.run.call_args.kwargs["envs"]
-    assert "APP_MODULO_OPENCODE_API_KEY" in envs
+    assert "FARNA_CONTROL_OPENCODE_API_KEY" in envs
     assert "GITHUB_TOKEN" in envs
 
 
@@ -818,7 +818,7 @@ def _run_state_with_run_id(run_id: str = _RUN_ID, payload: Any = None) -> dict:
 
 
 async def test_script_mode_injects_run_api_key_env():
-    """Script mode mints a per-run runner-role key and injects it as MODULO_API_KEY.
+    """Script mode mints a per-run runner-role key and injects it as FARNA_CONTROL_API_KEY.
 
     The key is short-TTL, per-run, and separate from the long-lived host
     credentials (which Phase 3a already removed from script-mode envs).
@@ -842,7 +842,7 @@ async def test_script_mode_injects_run_api_key_env():
 
 
 async def test_script_mode_mint_failure_fails_open():
-    """A mint failure leaves MODULO_API_KEY absent — the sandbox still runs."""
+    """A mint failure leaves FARNA_CONTROL_API_KEY absent — the sandbox still runs."""
 
     async def _raise_boom(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("mint boom")
@@ -863,7 +863,7 @@ async def test_script_mode_mint_failure_fails_open():
 
 
 async def test_script_mode_mint_none_fails_open():
-    """A mint that returns None (fail-open) leaves MODULO_API_KEY absent."""
+    """A mint that returns None (fail-open) leaves FARNA_CONTROL_API_KEY absent."""
     node_def = _script_node_def()
     fn = make_sandbox_agent_fn(node_def, session_factory=_run_api_key_session_factory())
     sandbox = _script_sandbox_mock()
@@ -882,7 +882,7 @@ async def test_script_mode_mint_none_fails_open():
 
 
 async def test_script_mode_mint_skipped_without_session_factory():
-    """No session_factory -> no mint -> no MODULO_API_KEY (and no crash)."""
+    """No session_factory -> no mint -> no FARNA_CONTROL_API_KEY (and no crash)."""
     node_def = _script_node_def()
     fn = make_sandbox_agent_fn(node_def)
     sandbox = _script_sandbox_mock()
@@ -974,7 +974,7 @@ async def test_sandbox_mint_helper_falls_back_to_first_active_admin():
 
 
 async def test_llm_mode_injects_run_api_key():
-    """FAR-1690 A1: LLM mode ALSO mints/injects the run-scoped MODULO_API_KEY.
+    """FAR-1690 A1: LLM mode ALSO mints/injects the run-scoped FARNA_CONTROL_API_KEY.
 
     Every sandbox dispatch issues a run-scoped credential; the issuance
     provenance ``modulo_minted`` is stamped alongside the key. This is the

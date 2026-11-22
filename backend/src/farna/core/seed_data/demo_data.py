@@ -1,6 +1,6 @@
 """Demo-org seed framework (FAR-450 foundation ticket).
 
-GATED behind ``MODULO_SEED_DEMO_ORGS`` (see ``farna.settings``). Each demo
+GATED behind ``FARNA_CONTROL_SEED_DEMO_ORGS`` (see ``farna.settings``). Each demo
 organisation carries its OWN signed ``license_key`` in
 ``Organisation.settings_json`` so it resolves the intended tier (community or
 team) via ``core.feature_flags.resolve_plan_context`` — a bare ``plan_id``
@@ -232,9 +232,9 @@ async def seed_demo_org(
     raises to avoid cross-tenant escalation (attaching a real account — e.g. a
     superuser — to the demo org).
     """
-    private_key = get_settings().modulo_license_private_key or ""
+    private_key = get_settings().license_private_key or ""
     if not private_key:
-        raise LicenseSigningError(f"No license signing private key configured for demo org {slug!r} (set MODULO_LICENSE_PRIVATE_KEY).")
+        raise LicenseSigningError(f"No license signing private key configured for demo org {slug!r} (set FARNA_CONTROL_LICENSE_PRIVATE_KEY).")
 
     org = await _seed_demo_org_entity(session, slug)
     account = await _seed_demo_admin_account(session, admin_email=admin_email, admin_password=admin_password, org=org)

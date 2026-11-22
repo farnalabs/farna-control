@@ -149,7 +149,7 @@ def ingest_valid(client, ctx, request):
         resp = client.post(
             "/api/v1/errors/ingest",
             json=body,
-            headers={"X-Modulo-Error-Token": "test-hmac-key"},
+            headers={"X-Farna-Control-Error-Token": "test-hmac-key"},
         )
     request.node._resp = resp
     ctx["_last_resp"] = resp
@@ -191,14 +191,14 @@ def ingest_duplicate(client, ctx, request):
         resp1 = client.post(
             "/api/v1/errors/ingest",
             json=body,
-            headers={"X-Modulo-Error-Token": "test-hmac-key"},
+            headers={"X-Farna-Control-Error-Token": "test-hmac-key"},
         )
         ctx["first_resp"] = resp1
 
         resp2 = client.post(
             "/api/v1/errors/ingest",
             json=body,
-            headers={"X-Modulo-Error-Token": "test-hmac-key"},
+            headers={"X-Farna-Control-Error-Token": "test-hmac-key"},
         )
         ctx["second_resp"] = resp2
 
@@ -238,7 +238,7 @@ def ingest_empty_message(client, request):
         resp = client.post(
             "/api/v1/errors/ingest",
             json=body,
-            headers={"X-Modulo-Error-Token": "test-hmac-key"},
+            headers={"X-Farna-Control-Error-Token": "test-hmac-key"},
         )
     request.node._resp = resp
 
@@ -265,7 +265,7 @@ def ingest_batch_5(client, ctx, request):
         resp = client.post(
             "/api/v1/errors/ingest",
             json=body,
-            headers={"X-Modulo-Error-Token": "test-hmac-key"},
+            headers={"X-Farna-Control-Error-Token": "test-hmac-key"},
         )
     request.node._resp = resp
     ctx["_last_resp"] = resp
@@ -301,7 +301,7 @@ def ingest_with_breadcrumbs(client, ctx, request):
         resp = client.post(
             "/api/v1/errors/ingest",
             json=body,
-            headers={"X-Modulo-Error-Token": "test-hmac-key"},
+            headers={"X-Farna-Control-Error-Token": "test-hmac-key"},
         )
         ctx["ingested_events"] = ingest.call_args.args[2]
     request.node._resp = resp

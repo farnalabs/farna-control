@@ -294,7 +294,7 @@ def webhook_client() -> Generator[TestClient, None, None]:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key=_VALID_32,
             fernet_key=_VALID_32,
-            modulo_admin_password="pw",
+            admin_password="pw",
             redis_url="",
         )
 
@@ -704,7 +704,7 @@ class TestTriggerEngineEvaluateCondition:
         # fail on the MagicMock url); indicate Redis is NOT configured so the resolver
         # short-circuits to None (the connector-local bucket is correct here).
         settings.redis_url = ""
-        settings.modulo_db = "postgresql"
+        settings.db = "postgresql"
         with (
             patch("farna.settings.get_settings", return_value=settings),
             patch("farna.core.secrets_backend.create_secrets_backend") as mock_sb,
@@ -1066,7 +1066,7 @@ async def test_handle_webhook_undecryptable_hmac_secret_fails_closed() -> None:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key=base64.urlsafe_b64encode(b"s" * 32).decode(),
-        modulo_admin_password="pw",
+        admin_password="pw",
         redis_url="",
     )
 
@@ -2404,7 +2404,7 @@ async def test_cleanup_expired_payloads_none_expired() -> None:
             "handle_webhook",
             lambda: AsyncMock(side_effect=TimestampExpiredError()),
             400,
-            {"detail": "X-Modulo-Timestamp is outside the ±300s replay window"},
+            {"detail": "X-Farna-Control-Timestamp is outside the ±300s replay window"},
             {},
             {"json": {"action": "push"}},
         ),
@@ -2413,7 +2413,7 @@ async def test_cleanup_expired_payloads_none_expired() -> None:
             lambda: AsyncMock(side_effect=HmacValidationError()),
             401,
             {"detail": "HMAC signature verification failed"},
-            {"X-Modulo-Webhook-Secret": "sha256=bad"},
+            {"X-Farna-Control-Webhook-Secret": "sha256=bad"},
             {"json": {"action": "push"}},
         ),
         (
@@ -2497,10 +2497,10 @@ def test_webhook_route(
         extra_headers = extra_headers()
 
     if "content" in body_kwargs:
-        headers = {"X-Modulo-Timestamp": str(int(time.time()))} | extra_headers
+        headers = {"X-Farna-Control-Timestamp": str(int(time.time()))} | extra_headers
         request_kwargs = {"content": body_kwargs["content"], "headers": headers}
     elif "json" in body_kwargs:
-        headers = {"X-Modulo-Timestamp": str(int(time.time()))} | extra_headers
+        headers = {"X-Farna-Control-Timestamp": str(int(time.time()))} | extra_headers
         request_kwargs = {"json": body_kwargs["json"], "headers": headers}
     else:
         request_kwargs = {"headers": dict(extra_headers)}

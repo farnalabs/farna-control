@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
 def resolve_passphrase(args_passphrase: str | None) -> str:
     if args_passphrase:
         return args_passphrase
-    env = os.environ.get("FARNA_CONTROL_BACKUP_PASSPHRASE") or os.environ.get("MODULO_BACKUP_PASSPHRASE")
+    env = os.environ.get("FARNA_CONTROL_BACKUP_PASSPHRASE")
     if env:
         return env
     return getpass.getpass("Backup passphrase: ")

@@ -56,7 +56,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -65,8 +65,8 @@ def _make_internal_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_dev_mode=True,
+        admin_password="testpass",
+        dev_mode=True,
     )
 
 
@@ -88,13 +88,13 @@ def internal_client() -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-def _settings_with_key(modulo_license_key: str) -> Settings:
+def _settings_with_key(license_key: str) -> Settings:
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key=modulo_license_key,
+        admin_password="testpass",
+        license_key=license_key,
     )
 
 
@@ -1698,7 +1698,7 @@ def _session() -> AsyncMock:
 
 def _settings(license_key: str = "") -> MagicMock:
     settings = MagicMock()
-    settings.modulo_license_key = license_key
+    settings.license_key = license_key
     return settings
 
 

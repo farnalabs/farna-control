@@ -237,8 +237,8 @@ def test_withholdings_are_visible_through_the_reader(tmp_path: Path, monkeypatch
 class _HostSettings:
     """A settings object whose safe-listed URL carries an unclassified token."""
 
-    model_fields: ClassVar[dict[str, Any]] = {"modulo_public_url": None, "secret_key": None}
-    modulo_public_url = f"https://example.test/{UNCLASSIFIED_SECRET}"
+    model_fields: ClassVar[dict[str, Any]] = {"public_url": None, "secret_key": None}
+    public_url = f"https://example.test/{UNCLASSIFIED_SECRET}"
     secret_key = "seeded-value-that-never-appears"
 
 

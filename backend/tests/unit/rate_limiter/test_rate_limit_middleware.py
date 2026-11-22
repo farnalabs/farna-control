@@ -146,7 +146,7 @@ class TestDispatch:
 
     def test_bypass_token_skips_limit(self):
         registry = _registry(allowed=False)
-        settings = make_settings(modulo_ratelimit_bypass_token="bypass-secret")
+        settings = make_settings(ratelimit_bypass_token="bypass-secret")
         app = _make_app(registry=registry, settings=settings)
         with TestClient(app) as client:
             resp = client.post("/api/v1/runs", headers={RATELIMIT_BYPASS_HEADER: "bypass-secret"})
@@ -162,7 +162,7 @@ class TestDispatch:
         the middleware sees exactly what a real client would produce.
         """
         registry = _registry(allowed=False, retry_after=60)
-        settings = make_settings(modulo_ratelimit_bypass_token="bypass-secret")
+        settings = make_settings(ratelimit_bypass_token="bypass-secret")
         app = _make_app(registry=registry, settings=settings)
         with TestClient(app) as client:
             resp = client.post(
@@ -220,7 +220,7 @@ class TestShouldRateLimit:
         assert mw._should_rate_limit(make_mock_request(method="GET", path=path)) is True
 
     def test_skip_when_bypass_header_matches(self):
-        settings = make_settings(modulo_ratelimit_bypass_token="tok")
+        settings = make_settings(ratelimit_bypass_token="tok")
         mw = RateLimitMiddleware(app=FastAPI(), settings=settings, registry=_registry())
         req = make_mock_request(headers={RATELIMIT_BYPASS_HEADER: "tok"})
         assert mw._should_rate_limit(req) is False

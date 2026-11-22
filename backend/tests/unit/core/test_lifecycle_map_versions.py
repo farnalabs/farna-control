@@ -2110,8 +2110,8 @@ def _make_route_app(engine: AsyncEngine) -> FastAPI:
     )
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
-    app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
-    app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
+    app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
+    app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:
         maker = async_sessionmaker(engine, expire_on_commit=False, autobegin=False)
@@ -2705,7 +2705,7 @@ class TestSelfReportRouteStageId:
                 org_role="operator",
                 key_grants=None,
             )
-            app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
+            app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
             maker = async_sessionmaker(engine, expire_on_commit=False, autobegin=False)
 
             async def override_session() -> AsyncGenerator[AsyncSession, None]:
@@ -2757,7 +2757,7 @@ class TestSelfReportRouteStageId:
                 org_role="operator",
                 key_grants=None,
             )
-            app.dependency_overrides[get_settings] = lambda: MagicMock(modulo_dev_mode=True)
+            app.dependency_overrides[get_settings] = lambda: MagicMock(dev_mode=True)
             maker = async_sessionmaker(engine, expire_on_commit=False, autobegin=False)
 
             async def override_session() -> AsyncGenerator[AsyncSession, None]:

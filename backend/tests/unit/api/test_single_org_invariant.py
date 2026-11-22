@@ -47,8 +47,8 @@ def _make_settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_admin_password": "testpass",
-        "modulo_auth_rate_limit_enabled": False,
+        "admin_password": "testpass",
+        "auth_rate_limit_enabled": False,
         "redis_url": "",
     }
     kwargs.update(overrides)
@@ -86,7 +86,7 @@ def _make_plan() -> MagicMock:
 async def test_admin_create_org_blocked_when_multi_org_disabled() -> None:
     """POST /api/v1/admin/orgs returns 403 when multi-org is disabled."""
     settings = _make_settings()
-    assert settings.modulo_multi_org_enabled is False
+    assert settings.multi_org_enabled is False
 
     mock_session = _make_session()
     app.dependency_overrides[get_settings] = lambda: settings
@@ -109,8 +109,8 @@ async def test_admin_create_org_blocked_when_multi_org_disabled() -> None:
 @pytest.mark.asyncio
 async def test_admin_create_org_allowed_when_multi_org_enabled() -> None:
     """POST /api/v1/admin/orgs proceeds when multi-org is enabled."""
-    settings = _make_settings(modulo_multi_org_enabled=True)
-    assert settings.modulo_multi_org_enabled is True
+    settings = _make_settings(multi_org_enabled=True)
+    assert settings.multi_org_enabled is True
 
     mock_session = _make_session()
     # Mock the slug uniqueness check to return None (no conflict)
@@ -156,7 +156,7 @@ async def test_admin_create_org_allowed_when_multi_org_enabled() -> None:
 async def test_login_org_slug_ignored_when_multi_org_disabled() -> None:
     """When multi-org is disabled, org_slug is passed as None to _run_login_transaction."""
     settings = _make_settings()
-    assert settings.modulo_multi_org_enabled is False
+    assert settings.multi_org_enabled is False
 
     mock_session = _make_session()
 
@@ -278,7 +278,7 @@ async def test_login_context_single_org_with_one_org_when_disabled() -> None:
     ``test_login_context_single_org_when_disabled``.
     """
     settings = _make_settings()
-    assert settings.modulo_multi_org_enabled is False
+    assert settings.multi_org_enabled is False
     mock_session = _make_session()
 
     mock_org = SimpleNamespace(slug="org-a", name="Org A")
@@ -302,7 +302,7 @@ async def test_login_context_single_org_with_one_org_when_disabled() -> None:
 @pytest.mark.asyncio
 async def test_login_context_single_org_enabled_preserves_existing() -> None:
     """GET /api/v1/auth/login-context preserves existing multi-org logic when enabled."""
-    settings = _make_settings(modulo_multi_org_enabled=True)
+    settings = _make_settings(multi_org_enabled=True)
     mock_session = _make_session()
 
     # Return 2 login-active orgs → multi_org=true
@@ -351,7 +351,7 @@ async def test_org_login_slug_404_when_multi_org_disabled() -> None:
 @pytest.mark.asyncio
 async def test_org_login_slug_allowed_when_multi_org_enabled() -> None:
     """GET /api/v1/auth/org-login/{slug} works when multi-org is enabled."""
-    settings = _make_settings(modulo_multi_org_enabled=True)
+    settings = _make_settings(multi_org_enabled=True)
     mock_session = _make_session()
 
     mock_org = SimpleNamespace(
@@ -396,11 +396,11 @@ async def test_org_login_slug_allowed_when_multi_org_enabled() -> None:
 async def test_seed_demo_skipped_when_multi_org_disabled() -> None:
     """seed_demo returns None when multi-org is disabled (demo creates a second org)."""
     settings = _make_settings(
-        modulo_demo_enabled=True,
-        modulo_demo_user="demo@test.com",
-        modulo_demo_password="secret123",
+        demo_enabled=True,
+        demo_user="demo@test.com",
+        demo_password="secret123",
     )
-    assert settings.modulo_multi_org_enabled is False
+    assert settings.multi_org_enabled is False
 
     mock_session = AsyncMock()
 
@@ -419,12 +419,12 @@ async def test_seed_demo_skipped_when_multi_org_disabled() -> None:
 async def test_seed_demo_proceeds_when_multi_org_enabled() -> None:
     """seed_demo proceeds when multi-org is enabled."""
     settings = _make_settings(
-        modulo_multi_org_enabled=True,
-        modulo_demo_enabled=True,
-        modulo_demo_user="demo@test.com",
-        modulo_demo_password="secret123",
+        multi_org_enabled=True,
+        demo_enabled=True,
+        demo_user="demo@test.com",
+        demo_password="secret123",
     )
-    assert settings.modulo_multi_org_enabled is True
+    assert settings.multi_org_enabled is True
 
     mock_session = AsyncMock()
 

@@ -353,7 +353,7 @@ async def _check_instance_switch(factory: Any) -> bool:
 
     Delegates to :func:`consent.is_instance_analytics_enabled` so the dump gate
     applies the SAME precedence as every other reader: an explicit operator
-    value (stored ``system_config`` then the ``MODULO_PRODUCT_ANALYTICS_ENABLED``
+    value (stored ``system_config`` then the ``FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED``
     env var) wins, otherwise the installed licence's ``product_analytics_required``
     claim supplies the default, otherwise OFF. The coercion is fail-closed
     (``"false"`` / ``"0"`` / ``"no"`` are OFF), so a stored string can never run

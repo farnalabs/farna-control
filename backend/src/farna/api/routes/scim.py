@@ -1,11 +1,11 @@
 """SCIM 2.0 provisioning endpoints.
 
-Requires MODULO_SCIM_TOKEN env var for auth. Gated behind the "scim"
+Requires FARNA_CONTROL_SCIM_TOKEN env var for auth. Gated behind the "scim"
 feature flag (require_feature). Maps SCIM Users → internal User, SCIM
 Groups → internal Team + TeamMembership.
 
 ADR 047: SCIM is EXEMPT from the org-role sweep at phase 1 — every route
-authenticates via the shared-secret ``MODULO_SCIM_TOKEN`` (an enumerated
+authenticates via the shared-secret ``FARNA_CONTROL_SCIM_TOKEN`` (an enumerated
 channel with a dedicated non-role auth mechanism). No SCIM route passes
 ``org_role`` to the CRUD layer: ``scim_create_user`` defaults to the
 ``runner`` grant and ``scim_update_user`` has a *functional* role-UPDATE
@@ -121,7 +121,7 @@ _SCIM_ADMIN_CALLER_SQL = text("SELECT a.id FROM org_memberships om JOIN accounts
 async def _resolve_scim_admin_caller(session: AsyncSession, org_id: uuid.UUID) -> uuid.UUID | None:
     """Deterministically resolve the SCIM caller for a deactivation.
 
-    SCIM authenticates via the shared MODULO_SCIM_TOKEN (no per-user identity),
+    SCIM authenticates via the shared FARNA_CONTROL_SCIM_TOKEN (no per-user identity),
     so the caller is resolved to the org's first active non-break-glass admin
     (deterministic incl. the ``joined_at, a.id`` tiebreaker). Break-glass
     accounts are excluded; if none exists the deactivation is rejected 409.
@@ -137,7 +137,7 @@ async def get_scim_audit_principal(
 ) -> TenantPrincipal:
     """Acting principal for ``audited(...)`` on the SCIM mutation routes.
 
-    SCIM authenticates with the shared ``MODULO_SCIM_TOKEN``, so there is no
+    SCIM authenticates with the shared ``FARNA_CONTROL_SCIM_TOKEN``, so there is no
     per-user identity to attribute a provisioning write to. ``audited()``
     requires a ``TenantPrincipal`` (it needs an ``account_id`` for
     ``audit_events.actor_user_id``), so the actor is resolved the same way the
@@ -328,7 +328,7 @@ async def get_service_provider_config(
         "authenticationSchemes": [
             {
                 "name": "Bearer Token",
-                "description": "Bearer token from MODULO_SCIM_TOKEN env var",
+                "description": "Bearer token from FARNA_CONTROL_SCIM_TOKEN env var",
                 "specUri": "https://www.rfc-editor.org/rfc/rfc6750",
                 "type": "bearer",
                 "primary": True,

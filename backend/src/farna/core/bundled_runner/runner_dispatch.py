@@ -338,7 +338,7 @@ def _build_dispatch_hub_provider(profile: Any) -> tuple[Any, Any]:
         # FAR-1135: FARNA_CONTROL_MAX_LOCAL_CONCURRENCY is hot-reloadable.
         concurrency = override_int_or(
             "FARNA_CONTROL_MAX_LOCAL_CONCURRENCY",
-            int(getattr(settings, "modulo_max_local_concurrency", 2) or 2),
+            int(getattr(settings, "max_local_concurrency", 2) or 2),
         )
         hub = build_hub(max_local_concurrency=concurrency)
         provider = hub.resolve(profile)
@@ -948,7 +948,7 @@ async def _check_idempotency_gate(
     try:
         from farna.settings import get_settings
 
-        gate_enabled = bool(getattr(get_settings(), "modulo_idempotency_gate_enabled", True))
+        gate_enabled = bool(getattr(get_settings(), "idempotency_gate_enabled", True))
     except Exception:
         gate_enabled = True
     if not gate_enabled:

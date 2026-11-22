@@ -232,8 +232,8 @@ async def _post_webhook(client: AsyncClient, trigger_id: uuid.UUID, secret: str,
         content=body,
         headers={
             "Content-Type": "application/json",
-            "X-Modulo-Timestamp": ts,
-            "X-Modulo-Webhook-Secret": sig,
+            "X-Farna-Control-Timestamp": ts,
+            "X-Farna-Control-Webhook-Secret": sig,
         },
     )
     try:
@@ -258,10 +258,10 @@ async def integration_client(db_url: str, db_engine: AsyncEngine) -> AsyncGenera
         database_url=db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
 
     async def override_session() -> AsyncGenerator:
@@ -435,8 +435,8 @@ async def test_race_backstop_engine_gate_commits_paused_event(
             content=body,
             headers={
                 "Content-Type": "application/json",
-                "X-Modulo-Timestamp": ts,
-                "X-Modulo-Webhook-Secret": sig,
+                "X-Farna-Control-Timestamp": ts,
+                "X-Farna-Control-Webhook-Secret": sig,
             },
         )
 

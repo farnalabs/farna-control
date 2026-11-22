@@ -212,7 +212,7 @@ keys re-read as 'org', silent widening on rollback is PINNED as accepted
 - **Parallel "user API keys" table**: rejected, a second credential model
   duplicates validation, RLS, mint/quota/audit plumbing; the scope axis
   composes with the existing role + team + run binding axes instead.
-- **Greedy org-key user-delegation header (`X-Modulo-Act-As`)**: rejected,
+- **Greedy org-key user-delegation header (`X-Farna-Control-Act-As`)**: rejected,
   gives exactly the configuration-forge capability the design principle
   forbids, guarded only by a convention.
 - **Per-key user binding on every key** (stamping account on every mint):

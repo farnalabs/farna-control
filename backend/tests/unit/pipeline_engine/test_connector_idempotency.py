@@ -147,7 +147,7 @@ async def _run_gate(
         ),
         patch(
             "farna.settings.get_settings",
-            return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=gate_enabled),
+            return_value=types.SimpleNamespace(connector_write_gate_enabled=gate_enabled),
         ),
     ):
         return await _connector_write_gate(
@@ -323,7 +323,7 @@ class TestConnectorWriteGate:
         assert result is None
 
     async def test_fails_open_when_killswitch_disabled(self) -> None:
-        """The killswitch ``modulo_idempotency_gate_enabled=False`` disables the
+        """The killswitch ``idempotency_gate_enabled=False`` disables the
         gate so a connector write is never suppressed."""
         applied = _applied_key({"name": "n1"})
         markers = {"attempt-0": {"_modulo_marker": True, "delivery_done": True, "idempotency_key": applied}}
@@ -338,7 +338,7 @@ class TestConnectorWriteGate:
 
     async def test_fails_open_when_killswitch_missing(self) -> None:
         """MAJOR 2: the connector gate uses its OWN opt-in flag
-        (``modulo_connector_write_gate_enabled``) which defaults to ``False`` in
+        (``connector_write_gate_enabled``) which defaults to ``False`` in
         ``farna.settings`` — so at runtime the gate is GENUINELY opt-in and a
         settings object WITHOUT the attribute (or with it ``False``) must NOT
         enable the gate: the write proceeds (no suppression)."""
@@ -708,7 +708,7 @@ class TestConnectorNewestKeyPromotion:
             ),
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
         ):
             gate_v2 = await _connector_write_gate(
@@ -831,7 +831,7 @@ class TestConnectorFailedWriteRoutesToNoDelivery:
             patch("farna.core.pipeline_engine.node_runner.set_rls_execution_context", new=AsyncMock()),
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
         ):
             # The node path: intent BEFORE the write (the node consults
@@ -873,7 +873,7 @@ class TestConnectorFailedWriteRoutesToNoDelivery:
             with (
                 patch(
                     "farna.settings.get_settings",
-                    return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                    return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
                 ),
                 patch(
                     "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",
@@ -1022,7 +1022,7 @@ class TestConnectorIntentMarkerLifecycle:
         with (
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
             patch(
                 "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",
@@ -1175,14 +1175,14 @@ class TestConnectorIntentMarkerGuard:
     def test_disabled_when_mode_off(self) -> None:
         with patch(
             "farna.settings.get_settings",
-            return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+            return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
         ):
             assert _connector_intent_marker_enabled("off") is False
 
     def test_disabled_when_killswitch_off(self) -> None:
         with patch(
             "farna.settings.get_settings",
-            return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=False),
+            return_value=types.SimpleNamespace(connector_write_gate_enabled=False),
         ):
             assert _connector_intent_marker_enabled("fail_closed") is False
             assert _connector_intent_marker_enabled("fail_open") is False
@@ -1201,7 +1201,7 @@ class TestConnectorIntentMarkerGuard:
         fail_open GATE semantics are unchanged (it never suppresses ambiguity)."""
         with patch(
             "farna.settings.get_settings",
-            return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+            return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
         ):
             assert _connector_intent_marker_enabled("fail_open") is True
             assert _connector_intent_marker_enabled("fail_closed") is True
@@ -1403,7 +1403,7 @@ class TestRaisedConnectorErrorAmbiguous:
         with (
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
             patch(
                 "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",
@@ -1583,7 +1583,7 @@ class TestSameKeyDeliveryEvidencePreserved:
         with (
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
             patch(
                 "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",
@@ -1650,12 +1650,12 @@ class TestGateEligibilityPairing:
     def test_intent_guard_equals_gate_eligibility(self, mode: str) -> None:
         with patch(
             "farna.settings.get_settings",
-            return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+            return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
         ):
             assert _connector_intent_marker_enabled(mode) == _connector_gate_enabled(mode)
         with patch(
             "farna.settings.get_settings",
-            return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=False),
+            return_value=types.SimpleNamespace(connector_write_gate_enabled=False),
         ):
             assert _connector_intent_marker_enabled(mode) == _connector_gate_enabled(mode)
 
@@ -1680,7 +1680,7 @@ class TestGateEligibilityPairing:
             patch("farna.core.pipeline_engine.node_runner.set_rls_execution_context", new=AsyncMock()),
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
             patch(
                 "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",
@@ -1721,7 +1721,7 @@ class TestGateEligibilityPairing:
         with (
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=False),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=False),
             ),
             patch(
                 "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",
@@ -1885,7 +1885,7 @@ class TestSuccessfulWriteStamp:
         with (
             patch(
                 "farna.settings.get_settings",
-                return_value=types.SimpleNamespace(modulo_connector_write_gate_enabled=True),
+                return_value=types.SimpleNamespace(connector_write_gate_enabled=True),
             ),
             patch(
                 "farna.core.pipeline_engine.node_runner._read_connector_idempotency_gate_state",

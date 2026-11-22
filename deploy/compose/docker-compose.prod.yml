@@ -90,19 +90,19 @@ services:
       DATABASE_ADMIN_URL: postgresql+asyncpg://farna_control:${FARNA_CONTROL_DB_PASSWORD:?FARNA_CONTROL_DB_PASSWORD is required - set it in deploy/compose/.env, see .env.prod.example}@postgres:5432/farna_control
       # Settings.redis_url - REQUIRED at runtime (the API refuses to boot when
       # it resolves empty) and previously never reached the container, because
-      # the compose passed MODULO_REDIS_URL, which nothing reads: the backend
+      # the compose passed a pre-rebrand spelling nothing reads: the backend
       # silently fell back to redis://localhost:6379/0, which is wrong inside a
       # container. Default = this file's own `redis` service; set REDIS_URL in
       # .env to use an external/managed Redis instead.
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      # Settings.modulo_public_url (SSO redirects, absolute links).
+      # Settings.public_url (SSO redirects, absolute links).
       FARNA_CONTROL_PUBLIC_URL: ${FARNA_CONTROL_PUBLIC_URL:-http://localhost:80}
       # Settings.environment, and also read straight from os.environ by the
       # logging and error-tracking setup to label the environment of every event.
       FARNA_CONTROL_ENV: production
-      # Settings.modulo_log_level.
+      # Settings.log_level.
       FARNA_CONTROL_LOG_LEVEL: ${FARNA_CONTROL_LOG_LEVEL:-info}
-      # Settings.modulo_license_key.
+      # Settings.license_key.
       FARNA_CONTROL_LICENSE_KEY: ${FARNA_CONTROL_LICENSE_KEY:-}
       # Settings.secret_key - REQUIRED, no default, at least 32 random bytes
       # (the validator also rejects placeholder values). There is no safe

@@ -547,7 +547,7 @@ class TestDriftFailureStillCompletes:
             ),
             patch(
                 "farna.settings.get_settings",
-                new=MagicMock(return_value=MagicMock(modulo_workspace_inputs_enabled=True)),
+                new=MagicMock(return_value=MagicMock(workspace_inputs_enabled=True)),
             ),
         ):
             result = await make_sandbox_agent_fn(node_def)(state)
@@ -627,7 +627,7 @@ class TestAuditWriteUsesFinalAttemptKey:
             ),
             patch(
                 "farna.settings.get_settings",
-                new=MagicMock(return_value=MagicMock(modulo_workspace_inputs_enabled=True)),
+                new=MagicMock(return_value=MagicMock(workspace_inputs_enabled=True)),
             ),
         ):
             result = await make_sandbox_agent_fn(node_def, session_factory=_fake_session_factory())(state)
@@ -699,7 +699,7 @@ class TestAuditWriteUsesFinalAttemptKey:
             ),
             patch(
                 "farna.settings.get_settings",
-                new=MagicMock(return_value=MagicMock(modulo_workspace_inputs_enabled=True)),
+                new=MagicMock(return_value=MagicMock(workspace_inputs_enabled=True)),
             ),
         ):
             result = await make_sandbox_agent_fn(node_def, session_factory=_fake_session_factory())(state)

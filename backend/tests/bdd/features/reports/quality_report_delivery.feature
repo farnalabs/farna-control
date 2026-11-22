@@ -7,14 +7,14 @@ Feature: Quality Report Webhook Delivery
     Given a quality report delivery config with a signing secret "s3cret-key"
     When I deliver the quality report
     Then the delivery request is sent as raw JSON bytes
-    And the delivery request includes an X-Modulo-Signature header
+    And the delivery request includes an X-Farna-Control-Signature header
     And the signature matches an HMAC-SHA256 of the sent bytes computed with "s3cret-key"
 
   Scenario: Delivery without a signing secret omits the signature header
     Given a quality report delivery config without a signing secret
     When I deliver the quality report
     Then the delivery request is sent via the json argument
-    And the delivery request does not include an X-Modulo-Signature header
+    And the delivery request does not include an X-Farna-Control-Signature header
 
   Scenario: Delivery uses the configured timeout
     Given a quality report delivery config with a timeout of 5 seconds

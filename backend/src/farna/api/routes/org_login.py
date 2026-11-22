@@ -197,7 +197,7 @@ async def org_login(
             # effectively unavailable — the frontend never navigates to
             # /login/:slug (login-context reports single-org), and any direct
             # attempt gets a uniform 404.
-            if not settings.modulo_multi_org_enabled:
+            if not settings.multi_org_enabled:
                 raise _GENERIC_404
 
             org = await get_login_active_org_by_slug(session, slug)

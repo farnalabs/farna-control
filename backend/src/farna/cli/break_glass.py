@@ -130,7 +130,7 @@ def get_break_glass_engine(settings: Settings) -> AsyncEngine:
     ``api.dependencies.get_or_create_engine``'s module-level cache.
     """
     global _bg_engine, _bg_engine_url
-    keyed_url = settings.modulo_break_glass_database_url
+    keyed_url = settings.break_glass_database_url
     if _bg_engine is None or _bg_engine_url != keyed_url:
         # FAR-1440: honour the operator's ``sslmode`` on the break-glass URL via
         # the shared translation (absent/disable → explicit plaintext;
@@ -160,7 +160,7 @@ def get_break_glass_engine(settings: Settings) -> AsyncEngine:
 def get_break_glass_session_factory(settings: Settings) -> async_sessionmaker[AsyncSession]:
     """Return a session factory bound to the break-glass engine (cached)."""
     global _bg_factory, _bg_factory_url
-    url = settings.modulo_break_glass_database_url
+    url = settings.break_glass_database_url
     if _bg_factory is None or _bg_factory_url != url:
         _bg_factory = async_sessionmaker(
             get_break_glass_engine(settings),
@@ -179,8 +179,8 @@ def authenticate_operator(secret: str | None, settings: Settings) -> str:
     provided = (secret or "").strip()
     if not provided:
         raise PreconditionError("operator secret required — pass --secret or set FARNA_CONTROL_BREAK_GLASS_OPERATOR_SECRET")
-    primary = settings.modulo_break_glass_secret
-    standby = settings.modulo_break_glass_standby_secret
+    primary = settings.break_glass_secret
+    standby = settings.break_glass_standby_secret
     if primary and hmac.compare_digest(provided, primary):
         return _OPERATOR_PRIMARY_ACTOR
     if standby and hmac.compare_digest(provided, standby):
@@ -661,10 +661,10 @@ def activate_cmd(
     _require_reason(ctx, reason)
     settings = _settings_from_ctx(ctx)
     if ttl_minutes is None:
-        ttl_minutes = settings.modulo_break_glass_ttl_minutes
-    if ttl_minutes < 1 or ttl_minutes > settings.modulo_break_glass_max_ttl_minutes:
+        ttl_minutes = settings.break_glass_ttl_minutes
+    if ttl_minutes < 1 or ttl_minutes > settings.break_glass_max_ttl_minutes:
         click.echo(
-            f"error: --ttl-minutes must be within [1, {settings.modulo_break_glass_max_ttl_minutes}]; got {ttl_minutes}",
+            f"error: --ttl-minutes must be within [1, {settings.break_glass_max_ttl_minutes}]; got {ttl_minutes}",
             err=True,
         )
         ctx.exit(EXIT_PRECONDITIONS)

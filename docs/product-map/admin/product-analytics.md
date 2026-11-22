@@ -53,7 +53,7 @@ organization's plan or tier.
       `test_metrics_ingest.py`, `tests/bdd/features/product_analytics/metrics_ingest.feature`)
 - [x] The outbound batch request carries its HMAC signature, timestamp and sequence in
       `X-Farna-Signature`, `X-Farna-Timestamp` and `X-Farna-Sequence` headers (no
-      `X-Modulo-` headers are sent; `vendor_client.py`,
+      `X-Farna-Control-` headers are sent; `vendor_client.py`,
       `test_vendor_client_coverage_batch_14.py`)
 - [x] A stable instance identity is generated and persisted per install
       (`core/product_analytics/instance_identity.py`, `test_instance_identity.py`)

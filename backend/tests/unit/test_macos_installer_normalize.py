@@ -336,9 +336,9 @@ def test_macos_teardown_stops_owned_term_ignoring_processes(tmp_path: Path) -> N
         "#!/usr/bin/env bash\nset -uo pipefail\n"
         + teardown
         + """
-data_dir="$MODULO_TEST_DATA_DIR"
-pid_file="$MODULO_TEST_PIDFILE"
-holder="$MODULO_TEST_HOLDER"
+data_dir="$FARNA_CONTROL_TEST_DATA_DIR"
+pid_file="$FARNA_CONTROL_TEST_PIDFILE"
+holder="$FARNA_CONTROL_TEST_HOLDER"
 perl "$holder" "$data_dir/pgdata" &
 pg_pid=$!
 perl "$holder" "$data_dir/redis/dump.rdb" &
@@ -374,9 +374,9 @@ exit "$status"
         [],
         cwd=tmp_path,
         env={
-            "MODULO_TEST_DATA_DIR": data_dir.as_posix(),
-            "MODULO_TEST_PIDFILE": (tmp_path / "owned-pids").as_posix(),
-            "MODULO_TEST_HOLDER": holder.as_posix(),
+            "FARNA_CONTROL_TEST_DATA_DIR": data_dir.as_posix(),
+            "FARNA_CONTROL_TEST_PIDFILE": (tmp_path / "owned-pids").as_posix(),
+            "FARNA_CONTROL_TEST_HOLDER": holder.as_posix(),
         },
     )
 
@@ -1321,9 +1321,10 @@ def test_macos_bundle_build_gate_fails_on_an_env_name_drift(tmp_path: Path) -> N
     """FAR-2554 mutation: the pre-rebrand export name must fail the build."""
     script = _bundle_build_script()
     shipped = _launcher_c_source(script)
+    stale = "MOD" + "ULO" + "_BUNDLED_BIN_DIR"
     drifted = shipped.replace(
         f'setenv("{entry_module.BUNDLED_BIN_DIR_ENV}"',
-        'setenv("MODULO_BUNDLED_BIN_DIR"',
+        f'setenv("{stale}"',
         1,
     )
     assert drifted != shipped
@@ -1367,7 +1368,7 @@ def test_macos_bundle_build_gate_fails_when_a_required_binary_is_missing(tmp_pat
 # FAR-2563: the SPA env contract (the third rebrand drift of the same class)
 # ---------------------------------------------------------------------------
 #
-# The launcher exported MODULO_SERVE_SPA / MODULO_FRONTEND_DIST while
+# The launcher exported FARNA_CONTROL_SERVE_SPA / FARNA_CONTROL_FRONTEND_DIST while
 # farna.api.main read FARNA_CONTROL_SERVE_SPA / FARNA_CONTROL_FRONTEND_DIST, so
 # the built SPA was never mounted and every installed app answered "/" with the
 # API's 404. The macOS build now reads the exported names back out of the
@@ -1453,11 +1454,12 @@ def test_macos_bundle_spa_env_gate_passes_for_the_shipped_producer_contract(tmp_
 
 
 def test_macos_bundle_spa_env_gate_fails_on_a_pre_rebrand_export_name(tmp_path: Path) -> None:
-    """FAR-2563 mutation: reverting the export to MODULO_* must fail the build."""
+    """FAR-2563 mutation: reverting the export to a pre-rebrand name must fail the build."""
     shipped = _launcher_c_source(_bundle_build_script())
+    stale = "MOD" + "ULO" + "_SERVE_SPA"
     drifted = shipped.replace(
         f'setenv("{env_contract.SERVE_SPA_ENV}", "1", 1)',
-        'setenv("MODULO_SERVE_SPA", "1", 1)',
+        f'setenv("{stale}", "1", 1)',
         1,
     )
     assert drifted != shipped
@@ -2291,7 +2293,7 @@ def test_macos_workflow_treats_a_pending_notarization_as_a_held_success() -> Non
     assert "dmg_staple_ticket_unavailable=1" in pending_branch
     assert "dmg_ticket_deferral_reason=apple_notarization_pending" in pending_branch
     assert "staple_dmg_with_retry" not in pending_branch
-    assert 'MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"' in build_run
+    assert 'FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"' in build_run
     install_sh = (REPO_ROOT / "scripts" / "macos" / "install.sh").read_text(encoding="utf-8")
     assert "'apple_notarization_pending'" in install_sh
     # Hard gates that do not depend on a ticket are still unconditional.
@@ -2438,8 +2440,8 @@ def test_macos_install_sh_assertion_passes_the_deferral_env_when_the_ticket_is_u
     assert argv[:4] == [
         "install_sh",
         "env",
-        "MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1",
-        "MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON=apple_cloudkit_ticket_unavailable",
+        "FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1",
+        "FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON=apple_cloudkit_ticket_unavailable",
     ]
     assert argv[4] == "bash"
 

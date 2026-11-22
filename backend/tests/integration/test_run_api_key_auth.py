@@ -66,10 +66,10 @@ def _reset_engine_globals() -> Generator[None, None, None]:
 def auth_settings(db_url: str) -> Settings:
     return Settings(
         database_url=db_url,
-        modulo_db="postgres",
+        db="postgres",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_auth_rate_limit_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
     )
 
@@ -257,10 +257,10 @@ def restricted_settings(
     role, password = restricted_role
     return Settings(
         database_url=_restricted_db_url(db_url, role, password),
-        modulo_db="postgres",
+        db="postgres",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_auth_rate_limit_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
     )
 

@@ -4,16 +4,16 @@
 # Demonstrates pipeline list, create, get, update, and delete with curl.
 #
 # Usage:
-#   export MODULO_URL=http://localhost:8000
-#   export MODULO_EMAIL=admin@example.com
-#   export MODULO_PASSWORD=changeme
+#   export FARNA_CONTROL_URL=http://localhost:8000
+#   export FARNA_CONTROL_EMAIL=admin@example.com
+#   export FARNA_CONTROL_PASSWORD=changeme
 #   bash pipelines/curl.sh
 
 set -euo pipefail
 
-BASE_URL="${MODULO_URL:-http://localhost:8000}"
-EMAIL="${MODULO_EMAIL:?MODULO_EMAIL is required}"
-PASSWORD="${MODULO_PASSWORD:?MODULO_PASSWORD is required}"
+BASE_URL="${FARNA_CONTROL_URL:-http://localhost:8000}"
+EMAIL="${FARNA_CONTROL_EMAIL:?FARNA_CONTROL_EMAIL is required}"
+PASSWORD="${FARNA_CONTROL_PASSWORD:?FARNA_CONTROL_PASSWORD is required}"
 
 echo "=== Login ==="
 TOKEN=$(curl -s -X POST "$BASE_URL/api/v1/auth/login" \

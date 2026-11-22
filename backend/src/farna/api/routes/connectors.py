@@ -82,7 +82,7 @@ router = APIRouter(prefix="/api/v1/connectors", tags=["connectors"])
 #: because the configured instance was unreachable. A header (not a body field)
 #: keeps the OpenAPI schema untouched; the warning is ALSO logged server-side so
 #: it is never silent on either side of the wire.
-_VERIFICATION_WARNING_HEADER = "X-Modulo-Verification-Warning"
+_VERIFICATION_WARNING_HEADER = "X-Farna-Control-Verification-Warning"
 #: Header values are one line and bounded — a transport error string can be long.
 _VERIFICATION_WARNING_MAX_LEN = 512
 #: Bound for the 422 verification-failure detail (the upstream reason is useful,
@@ -559,7 +559,7 @@ async def _verify_github_credentials(credentials: str, base_url: str | None = No
     Returns a NON-FATAL warning string when the instance could not be REACHED
     (a typed transport failure, or a raw ``httpx.RequestError``): the token was
     never verified, so the caller surfaces the warning — the
-    ``X-Modulo-Verification-Warning`` response header plus a server-side log —
+    ``X-Farna-Control-Verification-Warning`` response header plus a server-side log —
     instead of treating verification as passed. The connector is created with
     an explicitly-unverified credential; verification is never silently skipped.
 

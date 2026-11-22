@@ -230,7 +230,7 @@ async def _fetch_latest_deploy_run_url(settings: Settings | None = None) -> str 
     the latter returns an unrelated workflow's run.
 
     The repo, workflow file and API base are operator-configurable
-    (``MODULO_DEPLOY_RUN_*``) so a self-hosted deployment resolves to its own
+    (``FARNA_CONTROL_DEPLOY_RUN_*``) so a self-hosted deployment resolves to its own
     fork rather than Modulo's dogfood repo; an empty repo disables the lookup.
     Successes are cached for 5 minutes, failures for 1 minute.
     """
@@ -243,7 +243,7 @@ async def _fetch_latest_deploy_run_url(settings: Settings | None = None) -> str 
             return cached_url
 
     settings = settings or get_settings()
-    repo = settings.modulo_deploy_run_repo.strip()
+    repo = settings.deploy_run_repo.strip()
     if not repo:
         return None
 
@@ -252,8 +252,8 @@ async def _fetch_latest_deploy_run_url(settings: Settings | None = None) -> str 
         _log.debug("No GITHUB_TOKEN or GITHUB_REVIEWBOT_PAT available for deploy run URL fetch")
         return None
 
-    api_base = settings.modulo_deploy_run_api_base.rstrip("/")
-    path = f"/repos/{repo}/actions/workflows/{settings.modulo_deploy_run_workflow}/runs"
+    api_base = settings.deploy_run_api_base.rstrip("/")
+    path = f"/repos/{repo}/actions/workflows/{settings.deploy_run_workflow}/runs"
     headers = {
         "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github+json",
@@ -332,13 +332,13 @@ def _per_check_timeout(settings: Settings, override_field: str) -> float:
     """Resolve the timeout for one dependency check.
 
     Per-check overrides default to 0 (fall back to the global
-    ``modulo_health_timeout_seconds`` value). This gives operators a single
+    ``health_timeout_seconds`` value). This gives operators a single
     knob for the common case and a per-check knob for slow dependencies.
     """
     override: float = getattr(settings, override_field)
     if override and override > 0:
         return override
-    return settings.modulo_health_timeout_seconds
+    return settings.health_timeout_seconds
 
 
 def _timeout_result(
@@ -357,7 +357,7 @@ def _timeout_result(
 
 async def _check_database() -> CheckResult:
     settings = get_settings()
-    timeout = _per_check_timeout(settings, "modulo_health_db_timeout_seconds")
+    timeout = _per_check_timeout(settings, "health_db_timeout_seconds")
     start = time.monotonic()
 
     async def _probe() -> None:
@@ -402,7 +402,7 @@ async def _check_database() -> CheckResult:
 # (get_or_create_engine — no new connection per probe), reading only the
 # in-memory statistics views (pg_stat_user_tables is one row per table, not a
 # scan of table contents) plus the database's own freeze age. Budget: a 1s
-# per-check timeout (modulo_health_db_hygiene_timeout_seconds), the smallest
+# per-check timeout (health_db_hygiene_timeout_seconds), the smallest
 # of any sub-check, and the check runs inside the same asyncio.gather as its
 # siblings so it only costs the endpoint whatever is SLOWER than the current
 # slowest check.
@@ -496,8 +496,8 @@ def _grade_db_hygiene(
 ) -> tuple[Literal["ok", "degraded"], str]:
     """Grade one hygiene reading against the two configured thresholds.
 
-    Both thresholds are settings (``modulo_health_db_hygiene_min_dead_tuples``,
-    ``modulo_health_db_hygiene_dead_ratio``) — see the reasoning on those
+    Both thresholds are settings (``health_db_hygiene_min_dead_tuples``,
+    ``health_db_hygiene_dead_ratio``) — see the reasoning on those
     fields. In short: a ratio is only acted on once the table also carries a
     material absolute number of dead rows (10,000 — a tiny table that is
     momentarily 90% dead is ordinary churn), and the ratio sits at 60%, 3x
@@ -579,7 +579,7 @@ async def _check_db_hygiene() -> CheckResult:
     reading graded over a threshold by :func:`_grade_db_hygiene` gates.
     """
     settings = get_settings()
-    timeout = _per_check_timeout(settings, "modulo_health_db_hygiene_timeout_seconds")
+    timeout = _per_check_timeout(settings, "health_db_hygiene_timeout_seconds")
     start = time.monotonic()
 
     async def _probe() -> DbHygieneReading:
@@ -587,7 +587,7 @@ async def _check_db_hygiene() -> CheckResult:
         async with engine.connect() as conn:
             result = await conn.execute(
                 _DB_HYGIENE_SQL,
-                {"min_dead": settings.modulo_health_db_hygiene_min_dead_tuples},
+                {"min_dead": settings.health_db_hygiene_min_dead_tuples},
             )
             row = result.mappings().first()
         if row is None:
@@ -607,8 +607,8 @@ async def _check_db_hygiene() -> CheckResult:
         reading = await asyncio.wait_for(_probe(), timeout=timeout)
         status, detail = _grade_db_hygiene(
             reading,
-            min_dead_tuples=settings.modulo_health_db_hygiene_min_dead_tuples,
-            dead_ratio_threshold=settings.modulo_health_db_hygiene_dead_ratio,
+            min_dead_tuples=settings.health_db_hygiene_min_dead_tuples,
+            dead_ratio_threshold=settings.health_db_hygiene_dead_ratio,
         )
         if status != "ok":
             _log.warning("health.db_hygiene %s", detail)
@@ -649,7 +649,7 @@ async def _check_db_hygiene() -> CheckResult:
 
 async def _check_redis() -> CheckResult:
     settings = get_settings()
-    timeout = _per_check_timeout(settings, "modulo_health_redis_timeout_seconds")
+    timeout = _per_check_timeout(settings, "health_redis_timeout_seconds")
     start = time.monotonic()
     r = None
     try:
@@ -691,7 +691,7 @@ async def _check_checkpointer() -> CheckResult:
     checkpointer failure that no real checkpointer path experienced.
     """
     settings = get_settings()
-    timeout = _per_check_timeout(settings, "modulo_health_checkpointer_timeout_seconds")
+    timeout = _per_check_timeout(settings, "health_checkpointer_timeout_seconds")
     start = time.monotonic()
 
     async def _probe() -> tuple[Literal["ok", "degraded"], str]:
@@ -827,7 +827,7 @@ async def _migration_detail_parts(
 
 async def _check_migrations() -> CheckResult:
     settings = get_settings()
-    timeout = _per_check_timeout(settings, "modulo_health_migrations_timeout_seconds")
+    timeout = _per_check_timeout(settings, "health_migrations_timeout_seconds")
     start = time.monotonic()
 
     async def _probe() -> tuple[Literal["ok", "degraded"], str]:
@@ -1676,7 +1676,7 @@ async def _check_system_crons() -> CheckResult:
 # the degraded branch below hands that window to
 # ``core.health_alerts.report_event_loop_stall_attribution`` so the log line
 # names the blocking callback (file:line) — the attribution sampler it reads
-# from is opt-in via MODULO_SLOW_CALLBACK_WARN_MS and absent otherwise, in
+# from is opt-in via FARNA_CONTROL_SLOW_CALLBACK_WARN_MS and absent otherwise, in
 # which case the log is exactly the pre-FAR-1771 line.
 _LOOP_LAG_TICK_SECONDS = 0.01
 #: A tick that overslept by at least this much is a STALLED loop, not
@@ -1792,7 +1792,7 @@ async def evaluate_readiness() -> ReadinessResponse:
     lag_degraded = worst_lag_ms >= _LOOP_LAG_DEGRADED_MS
     if lag_degraded:
         # FAR-1771: name the blocking callback (file:line) when stall
-        # attribution is installed (MODULO_SLOW_CALLBACK_WARN_MS). Returns
+        # attribution is installed (FARNA_CONTROL_SLOW_CALLBACK_WARN_MS). Returns
         # None when the knob is off, no sample covers the window, or the
         # window holds nothing of ours to blame (an idle/parked loop) — the
         # log then reads exactly as it did before FAR-1771.

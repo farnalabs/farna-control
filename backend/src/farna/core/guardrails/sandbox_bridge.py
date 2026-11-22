@@ -13,10 +13,10 @@ The server's decision is enforced:
 
   block  -> the tool call is refused (``decide_before`` returns ``(False, ...)``;
             the ``--wrap`` CLI kills the child and exits non-zero after
-            printing a ``MODULO_BRIDGE_BLOCKED`` marker).
+            printing a ``FARNA_CONTROL_BRIDGE_BLOCKED`` marker).
   escalate -> the tool call is refused like a block, but the loop is being
             STOPPED for a human decision (FAR-1694): the ``--wrap`` CLI kills
-            the child, prints a typed ``MODULO_BRIDGE_ESCALATED:<json>`` marker
+            the child, prints a typed ``FARNA_CONTROL_BRIDGE_ESCALATED:<json>`` marker
             and exits with the dedicated ``ESCALATED_EXIT_CODE`` so the host
             can tell an escalation from a block without parsing prose.
   redact -> ``masked_args`` replace the original args before execution.
@@ -24,7 +24,7 @@ The server's decision is enforced:
 
 UNTRUSTED CHANNEL (FAR-1694 S2 security note): the escalation marker and the
 dedicated exit code travel on the wrapped agent's OWN stdout — this wrapper is
-a transparent proxy for that stream (every non-``MODULO_BRIDGE_EVENT`` child
+a transparent proxy for that stream (every non-``FARNA_CONTROL_BRIDGE_EVENT`` child
 line is echoed verbatim) and returns the child's exit code when no refusal
 occurs, so a compromised or prompt-injected agent can forge BOTH the marker and
 exit code 4. The marker is therefore evidence only: it MUST NOT gate a control
@@ -69,14 +69,14 @@ DEFAULT_PATTERNS = (
     "pip install*",
 )
 
-EVENT_MARKER = "MODULO_BRIDGE_EVENT:"
-BLOCKED_MARKER = "MODULO_BRIDGE_BLOCKED:"
+EVENT_MARKER = "FARNA_CONTROL_BRIDGE_EVENT:"
+BLOCKED_MARKER = "FARNA_CONTROL_BRIDGE_BLOCKED:"
 # FAR-1694 S2: emitted when an in-loop ``escalate`` verdict stops the loop. The
 # payload is a single line of JSON (see :func:`_escalation_payload`).
 # UNTRUSTED: the marker rides the agent's own stdout (which this wrapper proxies
 # verbatim), so an agent can forge it — see the module docstring. It must never
 # gate a control decision until S3 authenticates the channel.
-ESCALATED_MARKER = "MODULO_BRIDGE_ESCALATED:"
+ESCALATED_MARKER = "FARNA_CONTROL_BRIDGE_ESCALATED:"
 
 # Dedicated process exit codes for a bridge-enforced loop stop. Distinct so the
 # host can tell an escalation from a block without parsing prose — 3 = blocked,
@@ -93,7 +93,7 @@ class _Refusal:
     """A bridge decision that stops a ``before`` tool call.
 
     ``action`` is ``"block"`` or ``"escalate"``. ``payload`` carries the
-    escalation context for the ``MODULO_BRIDGE_ESCALATED`` marker (empty for a
+    escalation context for the ``FARNA_CONTROL_BRIDGE_ESCALATED`` marker (empty for a
     block, which marks only the tool name).
     """
 
@@ -120,7 +120,7 @@ def _args_sha256(args: dict[str, Any]) -> str:
 
 
 def _escalation_payload(tool_name: str, args: dict[str, Any], decision: dict[str, Any], direction: str) -> dict[str, Any]:
-    """Build the ``MODULO_BRIDGE_ESCALATED`` marker payload for one event.
+    """Build the ``FARNA_CONTROL_BRIDGE_ESCALATED`` marker payload for one event.
 
     Summary-only by design: the tool name, direction, the firing guardrail, a
     non-payload reason, and an args hash. Raw args are NEVER included.
@@ -310,11 +310,11 @@ def _wrap_command(argv: list[str], client: BridgeClient) -> int:
     """Run the wrapped agent command, forwarding tool-call events.
 
     The wrapped command emits tool-call events as stdout lines prefixed with
-    ``MODULO_BRIDGE_EVENT: <json>``. Each event is forwarded to the Modulo
+    ``FARNA_CONTROL_BRIDGE_EVENT: <json>``. Each event is forwarded to the Modulo
     side; a ``before`` refusal kills the child and this wrapper exits non-zero
-    after writing the matching marker — ``MODULO_BRIDGE_BLOCKED:<tool>`` with
+    after writing the matching marker — ``FARNA_CONTROL_BRIDGE_BLOCKED:<tool>`` with
     exit code :data:`BLOCKED_EXIT_CODE` for a block, or
-    ``MODULO_BRIDGE_ESCALATED:<json>`` with exit code
+    ``FARNA_CONTROL_BRIDGE_ESCALATED:<json>`` with exit code
     :data:`ESCALATED_EXIT_CODE` for an escalate (FAR-1694 S2). Best-effort — a
     bridge failure never blocks the command.
     """
@@ -374,14 +374,14 @@ def _spawn_and_collect(process_args: list[str], client: BridgeClient) -> int:
 
 
 def _forward_event_line(line: str, client: BridgeClient) -> _Refusal | None:
-    """Forward one ``MODULO_BRIDGE_EVENT`` stdout line to the Modulo side.
+    """Forward one ``FARNA_CONTROL_BRIDGE_EVENT`` stdout line to the Modulo side.
 
     Returns a :class:`_Refusal` when the Modulo side REFUSES the call (the
     caller must kill the child, emit the matching marker and exit non-zero), or
     ``None`` when the child may continue. A malformed event payload is treated
     as an empty event and forwarded with an empty tool name — fail-open, never
     an echo (event lines are never written back to stdout). A redact decision
-    emits the ``MODULO_BRIDGE_REDACTED`` marker; an ``after`` event is reported
+    emits the ``FARNA_CONTROL_BRIDGE_REDACTED`` marker; an ``after`` event is reported
     via ``notify_after``. Best-effort — a bridge failure never refuses
     (``BridgeClient.decide_before`` fails open).
     """
@@ -405,7 +405,7 @@ def _forward_event_line(line: str, client: BridgeClient) -> _Refusal | None:
                 return _Refusal("escalate", tool_name, payload)
             return _Refusal("block", tool_name, {})
         if masked is not None:
-            _out(f"MODULO_BRIDGE_REDACTED:{json.dumps(masked)}")
+            _out(f"FARNA_CONTROL_BRIDGE_REDACTED:{json.dumps(masked)}")
         return None
     client.notify_after(tool_name, args, result_summary)
     return None

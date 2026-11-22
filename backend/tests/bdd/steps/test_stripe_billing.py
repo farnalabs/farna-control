@@ -87,7 +87,7 @@ def _setup_client(ctx: dict[str, Any]) -> None:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
         stripe_secret_key="sk_test_123" if configured else "",
         stripe_webhook_secret=_SECRET if configured else "",
     )

@@ -6,8 +6,8 @@ canonical JSON, signed with the configured Ed25519 private key, and encoded as
 ``<base64(payload)>.<base64(signature)>`` — exactly the format
 ``parse_and_verify`` decodes.
 
-The signing private key is resolved from ``MODULO_LICENSE_PRIVATE_KEY`` (via
-``Settings.modulo_license_private_key``) or an explicit ``private_key_hex``
+The signing private key is resolved from ``FARNA_CONTROL_LICENSE_PRIVATE_KEY`` (via
+``Settings.license_private_key``) or an explicit ``private_key_hex``
 parameter. It is never hardcoded; signing fails closed when no key is
 configured.
 """
@@ -77,7 +77,7 @@ def encode_license_key(payload: dict[str, Any], private_key_hex: str) -> str:
 def _resolve_private_key(private_key_hex: str | None) -> str:
     if private_key_hex:
         return private_key_hex
-    configured = get_settings().modulo_license_private_key
+    configured = get_settings().license_private_key
     if configured:
         return configured
     raise LicenseSigningError("No license signing private key configured — set FARNA_CONTROL_LICENSE_PRIVATE_KEY or pass private_key_hex.")
@@ -225,7 +225,7 @@ def generate_team_license(
     """Generate an Ed25519-signed team license key for *org_name*.
 
     The signing key is ``private_key_hex`` when provided, otherwise resolved
-    from ``MODULO_LICENSE_PRIVATE_KEY``. Raises :class:`LicenseSigningError`
+    from ``FARNA_CONTROL_LICENSE_PRIVATE_KEY``. Raises :class:`LicenseSigningError`
     when no key is available or the key is malformed.
 
     The FAR-2075 renewal claims are emitted on every key; existing call sites

@@ -86,7 +86,7 @@ def _build_engine(
     on as the checkout-time safety net.
     """
     settings = get_settings()
-    db_type = settings.modulo_db.lower()
+    db_type = settings.db.lower()
 
     # connect_args.timeout applies to every backend (the historical API-engine
     # default, preserved so the API path's behaviour is unchanged). Postgres
@@ -97,8 +97,8 @@ def _build_engine(
     # reliably support extended-protocol reuse) — the Fly/HAProxy compat knobs.
     connect_args: dict[str, Any] = {"timeout": 10}
     url = settings.database_url
-    # Guard on the URL's ACTUAL driver scheme, not on ``settings.modulo_db``:
-    # ``modulo_db`` is an independent knob defaulting to "postgres", so a
+    # Guard on the URL's ACTUAL driver scheme, not on ``settings.db``:
+    # ``db`` is an independent knob defaulting to "postgres", so a
     # SQLite-configured process (schema generation, local dev) would otherwise
     # pass this branch and ``split_postgres_sslmode`` would fail the boot
     # (FAR-1440 schema-freshness defect). The SQLite (test-only) backend keeps

@@ -196,7 +196,7 @@ async def register_oauth_client(
     if not public_url_is_configured(settings):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="MODULO_PUBLIC_URL must be configured for OAuth flow",
+            detail="FARNA_CONTROL_PUBLIC_URL must be configured for OAuth flow",
         )
 
     try:

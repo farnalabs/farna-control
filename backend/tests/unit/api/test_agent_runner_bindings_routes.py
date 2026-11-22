@@ -43,7 +43,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_SECRET_KEY,
         fernet_key=_SECRET_KEY,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 

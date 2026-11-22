@@ -1195,7 +1195,7 @@ _SYSTEM_ADMIN_PRINCIPAL = AuthenticatedPrincipal(
 def marcus_self_hosted_configuration(ctx):
     # Pin the instance switch OFF via the stored config value (not the env
     # fallback) so the default posture is deterministic regardless of the
-    # ambient MODULO_PRODUCT_ANALYTICS_ENABLED.
+    # ambient FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED.
     ctx["egress_config"] = {"product_analytics_enabled": False}
 
     async def _get(session: object, key: str) -> MagicMock | None:
@@ -1757,8 +1757,8 @@ def jordan_webhook_trigger_fires(ctx, request, client):
         patch("farna.api.routes.webhooks.verify_hmac", lambda *a, **k: True),
     ):
         headers = {
-            "X-Modulo-Timestamp": "1700000000",
-            "X-Modulo-Webhook-Secret": "secret",
+            "X-Farna-Control-Timestamp": "1700000000",
+            "X-Farna-Control-Webhook-Secret": "secret",
         }
         resp = client.post(
             f"/api/v1/triggers/{request.node._trigger_name}/webhook",

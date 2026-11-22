@@ -101,7 +101,7 @@ class TestBuildHub:
         assert isinstance(hub.get("runner_docker"), DockerRuntimeProvider)
 
     def test_does_not_register_docker_on_unrelated_runner_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """FAR-996: an unrelated MODULO_RUNNER_* variable must not register Docker."""
+        """FAR-996: an unrelated FARNA_CONTROL_RUNNER_* variable must not register Docker."""
         monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
         monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
         monkeypatch.delenv("DOCKER_HOST", raising=False)
@@ -242,7 +242,7 @@ def test_documented_env_var_actually_registers_provider(
 def test_retry_failure_signal_alone_registers_runner_docker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Parity pin: MODULO_DOCKER_HOST signal registers the provider."""
+    """Parity pin: FARNA_CONTROL_DOCKER_HOST signal registers the provider."""
     monkeypatch.delenv("FARNA_CONTROL_E2B_API_KEY", raising=False)
     monkeypatch.delenv("FARNA_CONTROL_DOCKER_HOST", raising=False)
     monkeypatch.delenv("DOCKER_HOST", raising=False)

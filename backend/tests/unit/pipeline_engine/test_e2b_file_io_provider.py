@@ -16,7 +16,7 @@ Plus the routing invariant: **no** ``sandbox.files`` call is reachable in
 ``node_runner.py`` (asserted through a handle that records every attribute
 touch, so a swallowed exception cannot hide a legacy-path call).
 
-R6 deleted the legacy ``sandbox.files`` arm and the ``MODULO_E2B_VIA_PROVIDER``
+R6 deleted the legacy ``sandbox.files`` arm and the ``FARNA_CONTROL_E2B_VIA_PROVIDER``
 flag, so this file's original flag-OFF matrix — including the tick-for-tick
 parity test between the two arms, which had nothing left to compare against —
 retired with them.

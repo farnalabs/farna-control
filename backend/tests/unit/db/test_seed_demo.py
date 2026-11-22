@@ -129,17 +129,17 @@ _SEED_TABLES = {
 
 def _demo_settings(*, enabled: bool = True, user: str = _DEMO_EMAIL, password: str = _DEMO_PASSWORD) -> Settings:
     # SQLite is test-only: Settings refuses a SQLite DSN unless BOTH the
-    # ``modulo_db`` knob and the test-only opt-in agree (ADR 068).
+    # ``db`` knob and the test-only opt-in agree (ADR 068).
     return Settings(
         database_url="sqlite+aiosqlite://",
-        modulo_db="sqlite",
+        db="sqlite",
         allow_sqlite=True,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_demo_enabled=enabled,
-        modulo_demo_user=user,
-        modulo_demo_password=password,
-        modulo_multi_org_enabled=True,
+        demo_enabled=enabled,
+        demo_user=user,
+        demo_password=password,
+        multi_org_enabled=True,
     )
 
 

@@ -644,7 +644,7 @@ async def _retry_one_delivery(
                 await set_rls_org(session, principal.organisation_id)
                 raw_secret = await decode_stored_secret_scoped(session, ep.secret_ciphertext, settings.fernet_key, org_id=principal.organisation_id)
             sig = hmac.new(raw_secret.encode(), body, hashlib.sha256).hexdigest()
-            headers["X-Modulo-Signature"] = f"sha256={sig}"
+            headers["X-Farna-Control-Signature"] = f"sha256={sig}"
         except Exception:
             logger.exception("Failed to sign retry payload")
 
@@ -1090,7 +1090,7 @@ async def test_webhook(
                 await set_rls_org(session, principal.organisation_id)
                 raw_secret = await decode_stored_secret_scoped(session, ep.secret_ciphertext, settings.fernet_key, org_id=principal.organisation_id)
             sig = hmac.new(raw_secret.encode(), payload, hashlib.sha256).hexdigest()
-            headers["X-Modulo-Signature"] = f"sha256={sig}"
+            headers["X-Farna-Control-Signature"] = f"sha256={sig}"
         except Exception:
             logger.exception("Failed to sign test payload")
 

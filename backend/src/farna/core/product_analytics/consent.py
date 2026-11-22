@@ -197,7 +197,7 @@ class AnalyticsSwitchState:
     ``source`` is one of ``constants.SWITCH_SOURCE_*``:
 
     * ``operator``    - an operator explicitly set ``system_config[INSTANCE_SWITCH_KEY]``
-    * ``environment`` - the operator set ``MODULO_PRODUCT_ANALYTICS_ENABLED``
+    * ``environment`` - the operator set ``FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED``
     * ``licence``     - nothing explicit, but the installed licence requires analytics
     * ``default``     - nothing explicit and no licence requirement: OFF
 
@@ -237,7 +237,7 @@ async def resolve_instance_analytics_switch(session: AsyncSession) -> AnalyticsS
     1. ``system_config["product_analytics_enabled"]`` present -> the operator's
        explicit value (ON *or* OFF). An explicit OFF vetoes even a licence that
        requires analytics.
-    2. ``MODULO_PRODUCT_ANALYTICS_ENABLED`` set -> the deployment operator's
+    2. ``FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED`` set -> the deployment operator's
        value (same veto).
     3. Otherwise the installed licence decides: ``product_analytics_required``
        present -> ON (source ``licence``); absent -> OFF (source ``default``).

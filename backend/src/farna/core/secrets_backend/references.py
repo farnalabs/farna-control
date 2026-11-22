@@ -105,7 +105,7 @@ def _multi_org_enabled() -> bool:
     """
     from farna.settings import get_settings
 
-    return bool(get_settings().modulo_multi_org_enabled)
+    return bool(get_settings().multi_org_enabled)
 
 
 def parse_secret_ref(value: str) -> str:
@@ -149,7 +149,7 @@ async def resolve_credential_reference(
         # silently break existing reads), so in a multi-org deployment we refuse
         # the reference path outright rather than risk reading another
         # organisation's secret. Self-hosted single-org installs
-        # (``modulo_multi_org_enabled=False``, the default) are unaffected.
+        # (``multi_org_enabled=False``, the default) are unaffected.
         # Raised BEFORE any backend read — never a cross-org read.
         raise CredentialReferenceError(
             key,

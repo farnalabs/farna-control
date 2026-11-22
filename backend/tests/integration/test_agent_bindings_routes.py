@@ -117,10 +117,10 @@ async def bindings_client(db_url: str, app_engine: AsyncEngine) -> AsyncGenerato
         database_url=db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:

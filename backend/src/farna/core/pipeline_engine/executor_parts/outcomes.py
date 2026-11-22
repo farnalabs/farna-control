@@ -495,7 +495,7 @@ def _try_agent_failure_elevation(
     try:
         from farna.settings import get_settings
 
-        if get_settings().modulo_agent_failure_elevation_enabled:
+        if get_settings().agent_failure_elevation_enabled:
             return _terminal_failure(
                 broker,
                 "failed",

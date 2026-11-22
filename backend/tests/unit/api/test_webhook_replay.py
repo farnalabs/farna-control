@@ -62,7 +62,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -135,7 +135,7 @@ def _auth_headers(role: str = "admin") -> dict[str, str]:
 def _hmac_headers(body: bytes = _STORED_BODY, secret: str = _HMAC_SECRET) -> dict[str, str]:
     ts = int(time.time())
     signature = "sha256=" + hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
-    return {"X-Modulo-Timestamp": str(ts), "X-Modulo-Webhook-Secret": signature}
+    return {"X-Farna-Control-Timestamp": str(ts), "X-Farna-Control-Webhook-Secret": signature}
 
 
 @pytest.fixture(autouse=True)
@@ -255,7 +255,7 @@ def test_replay_webhook_unauthenticated_without_hmac_returns_401(client: TestCli
     event_id = uuid.uuid4()
     resp = client.post(
         f"/api/v1/triggers/{_TRIGGER_ID}/webhook/replay/{event_id}",
-        headers={"X-Modulo-Timestamp": str(int(time.time()))},
+        headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
     )
 
     assert resp.status_code == 401
@@ -309,7 +309,7 @@ def test_replay_webhook_unauthenticated_bad_hmac_returns_401(client: TestClient)
         wrong = "sha256=" + hmac.new(b"wrong-secret", f"{ts}.".encode() + _STORED_BODY, hashlib.sha256).hexdigest()
         resp = client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook/replay/{event_id}",
-            headers={"X-Modulo-Timestamp": str(ts), "X-Modulo-Webhook-Secret": wrong},
+            headers={"X-Farna-Control-Timestamp": str(ts), "X-Farna-Control-Webhook-Secret": wrong},
         )
         assert resp.status_code == 401
         assert "HMAC" in resp.json()["detail"]
@@ -365,11 +365,11 @@ def test_replay_webhook_github_signature_over_other_body_returns_401(client: Tes
     assert engine.await_count == 0
 
 
-def test_replay_webhook_modulo_header_blocks_github_fallback(client: TestClient) -> None:
-    """Any Modulo header present means the Modulo scheme is used; a valid GitHub
-    signature must not rescue a Modulo-scheme failure."""
+def test_replay_webhook_farna_control_header_blocks_github_fallback(client: TestClient) -> None:
+    """Any Farna Control header present means the Farna Control scheme is used; a
+    valid GitHub signature must not rescue a Farna Control-scheme failure."""
     ts = int(time.time())
-    headers = {"X-Modulo-Timestamp": str(ts), "X-Hub-Signature-256": _gh_replay_signature()}
+    headers = {"X-Farna-Control-Timestamp": str(ts), "X-Hub-Signature-256": _gh_replay_signature()}
     resp, engine = _replay_unauthenticated(client, headers)
     assert resp.status_code == 401
     assert engine.await_count == 0
@@ -604,7 +604,7 @@ def test_replay_webhook_invalid_config_json_returns_400(client: TestClient) -> N
         with patch("farna.api.routes.webhooks.set_rls_org"):
             resp = client.post(
                 f"/api/v1/triggers/{uuid.uuid4()}/webhook/replay/{uuid.uuid4()}",
-                headers={"X-Modulo-Timestamp": str(int(time.time()))},
+                headers={"X-Farna-Control-Timestamp": str(int(time.time()))},
             )
     finally:
         app.dependency_overrides.pop(get_system_db_session, None)

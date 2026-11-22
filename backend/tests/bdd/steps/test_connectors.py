@@ -51,8 +51,8 @@ def _make_health_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key=_FERNET_KEY,
-        modulo_admin_password="testpass",
-        modulo_csrf_enabled=False,
+        admin_password="testpass",
+        csrf_enabled=False,
     )
 
 

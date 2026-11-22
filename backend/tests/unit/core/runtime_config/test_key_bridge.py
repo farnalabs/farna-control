@@ -199,8 +199,8 @@ class TestConsumerWiring:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_scim_token="boot-token",
-            modulo_scim_default_org_id=str(uuid.uuid4()),
+            scim_token="boot-token",
+            scim_default_org_id=str(uuid.uuid4()),
         )
         store = get_runtime_config_store()
         store.set_override("FARNA_CONTROL_SCIM_TOKEN", "hot-token")
@@ -240,8 +240,8 @@ class TestConsumerWiring:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_scim_token="boot-token",
-            modulo_scim_default_org_id=str(uuid.uuid4()),
+            scim_token="boot-token",
+            scim_default_org_id=str(uuid.uuid4()),
         )
         store = get_runtime_config_store()
         store.set_override("FARNA_CONTROL_SCIM_TOKEN", "")
@@ -273,7 +273,7 @@ class TestConsumerWiring:
         from farna.api.frontend_url import resolve_frontend_url
         from farna.core.runtime_config.store import get_runtime_config_store
 
-        settings = self._boot_settings(modulo_public_url="https://boot.example.com")
+        settings = self._boot_settings(public_url="https://boot.example.com")
         store = get_runtime_config_store()
         store.set_override("FARNA_CONTROL_PUBLIC_URL", "https://hot.example.com")
         try:
@@ -290,7 +290,7 @@ class TestConsumerWiring:
         from farna.core.hitl_email_alerts import _run_link
         from farna.core.runtime_config.store import get_runtime_config_store
 
-        settings = self._boot_settings(modulo_public_url="https://boot.example.com")
+        settings = self._boot_settings(public_url="https://boot.example.com")
         run_id = uuid.uuid4()
         store = get_runtime_config_store()
         store.set_override("FARNA_CONTROL_PUBLIC_URL", "https://hot.example.com")

@@ -49,8 +49,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",  # nosec
-        modulo_ratelimit_bypass_token="test-bypass",
+        admin_password="testpass",  # nosec
+        ratelimit_bypass_token="test-bypass",
     )
 
 

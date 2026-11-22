@@ -64,7 +64,7 @@ Lookup uses `fnmatch.fnmatch` — the first matching entry wins, so list specifi
 
 ## Environment Variables
 
-- `MODULO_COST_CURRENCY`: Default currency for cost display (default: `"USD"`)
+- `FARNA_CONTROL_COST_CURRENCY`: Default currency for cost display (default: `"USD"`)
 
 ## Key Files
 
