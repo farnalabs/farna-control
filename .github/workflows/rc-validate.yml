@@ -284,14 +284,77 @@ jobs:
           # v1.2.0 tag. Read the image reference from that immutable predecessor
           # bundle instead of deriving a stable tag that may not exist yet.
           bundle_version="${bundle_tag#bundle-v}"
+          # FAR-2580 renamed the published release artefacts from
+          # modulo-<v>-* to farna-control-<v>-*. bundle-v0.3.328 and earlier
+          # were published before that rename, so a published predecessor
+          # bundle legitimately carries the legacy compose asset name. Only the
+          # filename lookup is tolerant: whichever name the release actually
+          # carries is downloaded, matched against its SHA256SUMS entry,
+          # unpacked and provenance-verified exactly as before.
+          #
+          # Resolved here rather than in scripts/validate_release_tag.py on
+          # purpose: this job checks out the RC TAG's tree, so a helper added
+          # after that RC was cut does not exist in it, and re-validating an
+          # already-cut RC must still be able to resolve its predecessor.
+          if ! compose_asset="$(python3 - "$RUNNER_TEMP/release-pages.json" "$bundle_tag" "$bundle_version" <<'ASSET'
+          import json
+          import sys
+
+          release_pages_path, bundle_tag, bundle_version = sys.argv[1:4]
+          # Post-rename name first: a release that somehow carries both is
+          # resolved to the current artefact of record.
+          candidates = (
+              f"farna-control-{bundle_version}-compose.tar.gz",
+              f"modulo-{bundle_version}-compose.tar.gz",
+          )
+          with open(release_pages_path, encoding="utf-8") as handle:
+              pages = json.load(handle)
+          assets = None
+          for page in pages:
+              for release in page:
+                  if release.get("tag_name") != bundle_tag:
+                      continue
+                  if release.get("draft") is not False or release.get("prerelease") is not False:
+                      sys.exit(f"published predecessor bundle {bundle_tag} is not a published release")
+                  assets = {asset.get("name") for asset in release.get("assets") or [] if isinstance(asset, dict)}
+          if assets is None:
+              sys.exit(f"release history does not contain {bundle_tag}")
+          for candidate in candidates:
+              if candidate in assets:
+                  print(candidate)
+                  break
+          else:
+              sys.exit(f"published predecessor bundle {bundle_tag} has no compose asset matching {' or '.join(candidates)}")
+          ASSET
+          )"; then
+            echo "::error::published predecessor bundle ${bundle_tag} has no compose asset matching farna-control-${bundle_version}-compose.tar.gz or modulo-${bundle_version}-compose.tar.gz; refusing Docker upgrade/rollback coverage"
+            exit 1
+          fi
+          if [ -z "$compose_asset" ]; then
+            echo "::error::could not resolve the compose asset name of published predecessor bundle ${bundle_tag}; refusing Docker upgrade/rollback coverage"
+            exit 1
+          fi
+          case "$compose_asset" in
+            farna-control-"${bundle_version}"-compose.tar.gz)
+              predecessor_naming="farna-control"
+              ;;
+            modulo-"${bundle_version}"-compose.tar.gz)
+              predecessor_naming="legacy-modulo"
+              ;;
+            *)
+              echo "::error::release resolver returned unexpected compose asset '${compose_asset}' for ${bundle_tag}; expected farna-control-${bundle_version}-compose.tar.gz or modulo-${bundle_version}-compose.tar.gz"
+              exit 1
+              ;;
+          esac
+          echo "Using predecessor bundle ${bundle_tag} compose asset ${compose_asset} (${predecessor_naming} naming)."
           gh release download "$bundle_tag" \
             --repo "${{ github.repository }}" \
-            --pattern "farna-control-${bundle_version}-compose.tar.gz" \
+            --pattern "$compose_asset" \
             --dir "$RUNNER_TEMP" \
             --clobber
-          downloaded_archive="$RUNNER_TEMP/farna-control-${bundle_version}-compose.tar.gz"
+          downloaded_archive="$RUNNER_TEMP/${compose_asset}"
           if [ ! -s "$downloaded_archive" ]; then
-            echo "::error::published predecessor bundle ${bundle_tag} has no downloadable compose asset; refusing Docker upgrade/rollback coverage"
+            echo "::error::published predecessor bundle ${bundle_tag} has no downloadable compose asset ${compose_asset}; refusing Docker upgrade/rollback coverage"
             exit 1
           fi
           gh release download "$bundle_tag" \
@@ -374,6 +437,20 @@ jobs:
             --digest "$old_digest" \
             --attestation-json "$RUNNER_TEMP/predecessor-image-attestation.json"
           echo "Verified predecessor image identity: ${old_image} -> ${old_digest}"
+          # Record the predecessor asset name that passed every gate above. The
+          # file is only written once provenance has verified, so the evidence
+          # step can never report a predecessor that failed validation. Every
+          # value is already constrained by the checks above, so the JSON is
+          # safe to interpolate.
+          cat > "$RUNNER_TEMP/predecessor-asset.json" <<JSON
+          {
+            "asset_naming": "${predecessor_naming}",
+            "bundle_tag": "${bundle_tag}",
+            "compose_asset": "${compose_asset}",
+            "image_digest": "${old_digest}",
+            "verified": true
+          }
+          JSON
 
       - name: Run the Docker upgrade / failure / rollback matrix
         shell: bash
@@ -387,6 +464,26 @@ jobs:
             --project-name "rc-matrix-${GITHUB_RUN_ID}" \
             --port "$PORT" \
             --evidence-dir "$RUNNER_TEMP/compose-matrix-evidence"
+
+      - name: Record predecessor bundle asset evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The evidence directory must be absent or empty when the matrix
+          # starts (verify_compose_upgrade_rollback.py refuses a non-empty
+          # one), so the predecessor record is copied in after the matrix and
+          # lands in the same uploaded artefact.
+          predecessor_record="$RUNNER_TEMP/predecessor-asset.json"
+          if [ ! -s "$predecessor_record" ]; then
+            echo "::warning::no verified predecessor compose asset was resolved; nothing to record in the evidence artefact"
+            exit 0
+          fi
+          evidence_dir="$RUNNER_TEMP/compose-matrix-evidence"
+          mkdir -p "$evidence_dir"
+          cp "$predecessor_record" "$evidence_dir/predecessor-asset.json"
+          echo "Recorded predecessor bundle asset evidence:"
+          cat "$evidence_dir/predecessor-asset.json"
 
       - name: Upload Docker acceptance evidence
         if: always()
