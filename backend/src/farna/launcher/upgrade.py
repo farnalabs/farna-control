@@ -42,7 +42,6 @@ import sys
 import tarfile
 import tempfile
 import time
-import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -62,6 +61,13 @@ _log = logging.getLogger(__name__)
 SNAPSHOT_PREFIX = "pre-upgrade-dump-"
 SNAPSHOT_MANIFEST_NAME = "manifest.json"
 SNAPSHOT_MANIFEST_VERSION = 1
+#: Marker written into a snapshot directory while it is being produced. A
+#: directory carrying a LIVE-pid marker is another process's in-flight write and
+#: is never deleted; the snapshot lock makes that rare, this makes it safe.
+SNAPSHOT_IN_PROGRESS_NAME = ".in-progress"
+#: The lock file that serialises snapshot creation and pruning inside one
+#: output directory (two concurrent boots must not delete each other's work).
+SNAPSHOT_LOCK_NAME = ".snapshot.lock"
 # ---- FAR-2667: the snapshot is proven complete at dump time ----------------
 # Retention keeps this many VERIFIED snapshots (Hopper, FAR-2667 note item 3).
 RETENTION_COUNT = 2
@@ -108,7 +114,9 @@ __all__ = [
     "enforce_snapshot_disk_headroom",
     "extract_and_verify_bundle",
     "fetch_release_assets",
+    "live_database_revisions",
     "main",
+    "migration_pending",
     "perform_upgrade",
     "pre_upgrade_dump",
     "prune_snapshots",
@@ -116,6 +124,7 @@ __all__ = [
     "repair_current_symlink",
     "required_snapshot_free_bytes",
     "restore_guidance",
+    "snapshot_dir_lock",
     "sweep_upgrade_caches",
     "take_upgrade_snapshot",
     "verify_dump_complete",
@@ -128,27 +137,16 @@ class UpgradeError(RuntimeError):
 
 
 def _decredential_url(raw_url: str) -> tuple[str, str | None]:
-    """Split the password out of the dump URL (never bare in /proc cmdline)."""
-    parsed = urllib.parse.urlsplit(raw_url)
-    password = parsed.password
-    if password is None:
-        return raw_url, None
-    userinfo = ""
-    if parsed.username:
-        userinfo = urllib.parse.quote(parsed.username, safe="") + "@"
-    netloc = f"{userinfo}{parsed.hostname or ''}"
-    if parsed.port is not None:
-        netloc += f":{parsed.port}"
-    return urllib.parse.urlunsplit(parsed._replace(netloc=netloc)), urllib.parse.unquote(password)
+    """Split the password out of the dump URL (never bare in /proc cmdline).
 
+    Delegates to :func:`farna.db.url_utils.split_postgres_credentials` — the ONE
+    implementation the backup CLI and the psycopg connect path share, so a
+    password containing ``#``, ``?``, ``/`` or ``%`` cannot reparse to a
+    different target in one producer and not the other.
+    """
+    from farna.db.url_utils import split_postgres_credentials
 
-def _pg_child_env(password: str | None) -> dict[str, str]:
-    """Child-scoped env: the password ONLY as PGPASSWORD (never in argv)."""
-    env = dict(os.environ)
-    env.pop("PGPASSWORD", None)
-    if password is not None:
-        env["PGPASSWORD"] = password
-    return env
+    return split_postgres_credentials(raw_url)
 
 
 @dataclass(frozen=True)
@@ -228,34 +226,24 @@ def _adopt_legacy_owner_for_dump(*, port: int, password: str) -> None:
         _log.warning("upgrade.owner_role_adoption_skipped error=%s", exc)
 
 
-def pre_upgrade_dump(
-    data_dir: Path,
-    *,
-    bin_dir: Path | None = None,
-    output_dir: Path | None = None,
-    release: str | None = None,
-) -> PreUpgradeSnapshot:
-    """Perform and verify the NATIVE pre-upgrade pg_dump (FAR-672 / FAR-2667).
+def _owner_database_url(data_dir: Path) -> tuple[str, Any]:
+    """The bundled cluster's OWNER-role URL from the data dir (HMAC-verified).
 
-    Resolves the bundled cluster's owner-role URL from the data dir's
-    HMAC-verified state.json + secrets.json, then hands off to
-    :func:`take_upgrade_snapshot` — the SAME callable the container
-    entrypoint uses, so the native and container paths cannot drift.
+    Refuses (``UpgradeError``) when the data dir is not bootstrapped. The
+    password is URL-quoted: libpq reparses the URL, so a generated password
+    containing ``#``, ``?``, ``/``, ``%`` or ``@`` would otherwise reparse to a
+    different target — a wrong database (or a wrong password) in exactly the
+    step that is supposed to protect the data.
 
-    Produces ``<data-dir>/pre-upgrade-dump-[<release>-]<timestamp>/`` beside
-    the cluster (never inside ``pgdata/``), containing the pg_dump SQL file,
-    a versioned snapshot manifest and the restore-compatible
-    ``backup-info.json``. A dump that cannot be PROVEN complete (no
-    pg_dump completion trailer) is swept and the upgrade aborts.
+    Run as the cluster OWNER (initdb's bootstrap role), never the application
+    role: farna_control_app is NOBYPASSRLS, so a dump (or a revision probe)
+    through it would read only what its session can see and could produce a
+    silently incomplete picture (FAR-2570).
     """
-    from farna.launcher.env_safety import scrub_os_environment
+    from urllib.parse import quote
+
     from farna.launcher.secrets_file import SecretsFileError, _load_existing
     from farna.launcher.state import load_state
-
-    # FIRST ACTION — the dump must never inherit a launcher-hostile PG*
-    # variable (a stale PGPASSWORD/PGHOST would silently redirect it to a
-    # foreign endpoint: same contract as the native boot, ADR 031 Decision 2).
-    scrub_os_environment()
 
     state_path = data_dir / _STATE_FILENAME
     if not state_path.exists():
@@ -289,13 +277,55 @@ def pre_upgrade_dump(
     # role; the helper owns the refusal/attestation semantics.
     _adopt_legacy_owner_for_dump(port=state.postgres_port, password=secrets.postgres_password)
 
-    # The pre-upgrade dump must run as the cluster OWNER (initdb's bootstrap
-    # role), never the application role: farna_control_app is NOBYPASSRLS, so
-    # pg_dump would read only the rows its session can see and produce a
-    # silently incomplete snapshot (FAR-2570).
     from farna.launcher.initdb import BOOTSTRAP_USERNAME
 
-    url_with_password = f"postgresql://{BOOTSTRAP_USERNAME}:{secrets.postgres_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
+    quoted_user = quote(BOOTSTRAP_USERNAME, safe="")
+    quoted_password = quote(secrets.postgres_password, safe="")
+    url = f"postgresql://{quoted_user}:{quoted_password}@{_POSTGRES_HOST}:{state.postgres_port}/{APP_DB_NAME}"
+    return url, state
+
+
+def live_database_revisions(data_dir: Path) -> list[str]:
+    """The DATABASE's recorded revisions, read from the live bundled cluster.
+
+    This is the DB side of the pre-flight checks on the ``--skip-backup`` path,
+    which has no snapshot to read. Probing the DATABASE (rather than the old
+    bundle's script heads) is the difference between "the revision the code
+    ships" and "the revision that is actually applied" — a database already
+    migrated ahead is only detectable by asking it.
+    """
+    url, _state = _owner_database_url(data_dir)
+    return _database_revisions(url)
+
+
+def pre_upgrade_dump(
+    data_dir: Path,
+    *,
+    bin_dir: Path | None = None,
+    output_dir: Path | None = None,
+    release: str | None = None,
+) -> PreUpgradeSnapshot:
+    """Perform and verify the NATIVE pre-upgrade pg_dump (FAR-672 / FAR-2667).
+
+    Resolves the bundled cluster's owner-role URL from the data dir's
+    HMAC-verified state.json + secrets.json, then hands off to
+    :func:`take_upgrade_snapshot` — the SAME callable the container
+    entrypoint uses, so the native and container paths cannot drift.
+
+    Produces ``<data-dir>/pre-upgrade-dump-[<release>-]<timestamp>/`` beside
+    the cluster (never inside ``pgdata/``), containing the pg_dump SQL file,
+    a versioned snapshot manifest and the restore-compatible
+    ``backup-info.json``. A dump that cannot be PROVEN complete (no
+    pg_dump completion trailer) is swept and the upgrade aborts.
+    """
+    from farna.launcher.env_safety import scrub_os_environment
+
+    # FIRST ACTION — the dump must never inherit a launcher-hostile PG*
+    # variable (a stale PGPASSWORD/PGHOST would silently redirect it to a
+    # foreign endpoint: same contract as the native boot, ADR 031 Decision 2).
+    scrub_os_environment()
+
+    url_with_password, state = _owner_database_url(data_dir)
 
     # `parent` is the operator-chosen data/snapshot directory, supplied by the
     # bundled installer via the local `farna-control upgrade --data-dir` CLI -- never an
@@ -339,11 +369,19 @@ def _database_size_bytes(db_url: str, *, timeout_seconds: int = 15) -> int:
 
     Fails CLOSED: an unmeasurable database refuses the upgrade rather than
     skipping the disk guard (a guard that silently passes is not a guard).
+
+    The URL is normalised to libpq and its password is moved OUT of the DSN, so
+    a connection failure's error text (which quotes the DSN) can never carry
+    the superuser password — and a ``postgresql+asyncpg://`` URL, which libpq
+    rejects, works here.
     """
     import psycopg
 
+    from farna.db.url_utils import psycopg_connect_args
+
     try:
-        with psycopg.connect(db_url, connect_timeout=timeout_seconds) as conn, conn.cursor() as cur:
+        dsn, password = psycopg_connect_args(db_url)
+        with psycopg.connect(dsn, connect_timeout=timeout_seconds, password=password) as conn, conn.cursor() as cur:
             cur.execute("SELECT pg_database_size(current_database())")
             row = cur.fetchone()
     except Exception as exc:
@@ -351,6 +389,34 @@ def _database_size_bytes(db_url: str, *, timeout_seconds: int = 15) -> int:
     if not row or not isinstance(row[0], (int, float)):
         raise UpgradeError("Refusing to upgrade: the database size query returned no usable figure, so the snapshot disk guard cannot run. Nothing has been changed.")
     return int(row[0])
+
+
+def _database_revisions(db_url: str, *, timeout_seconds: int = 15) -> list[str]:
+    """The revisions recorded in the target database's ``alembic_version``.
+
+    This is the DATABASE side of the pre-upgrade decision: retained snapshots
+    are compared against it, and it is what the snapshot records as the schema
+    it captured (the dump's contents, not the code's heads). An absent table is
+    a fresh database — ``[]`` — while any read failure reads as ``["unknown"]``
+    so the caller fails closed instead of guessing.
+    """
+    import psycopg
+
+    from farna.db.url_utils import psycopg_connect_args
+
+    try:
+        dsn, password = psycopg_connect_args(db_url)
+        with psycopg.connect(dsn, connect_timeout=timeout_seconds, password=password) as conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.alembic_version') IS NOT NULL")
+            present = cur.fetchone()
+            if not present or not present[0]:
+                return []
+            cur.execute("SELECT version_num FROM alembic_version")
+            rows = cur.fetchall()
+    except Exception as exc:
+        _log.warning("upgrade.database_revisions_unreadable error=%s", exc)
+        return ["unknown"]
+    return sorted({str(row[0]) for row in rows if row and row[0]})
 
 
 def _nearest_existing_path(path: Path) -> Path:
@@ -361,16 +427,21 @@ def _nearest_existing_path(path: Path) -> Path:
     return candidate
 
 
-def enforce_snapshot_disk_headroom(db_url: str, output_dir: Path) -> int:
+def enforce_snapshot_disk_headroom(db_url: str, output_dir: Path, *, current_heads: list[str] | None = None) -> int:
     """Refuse the upgrade unless the snapshot's filesystem has room.
 
     Requirement: free bytes at the OUTPUT filesystem >= max(2 GiB,
-    1.25 x pg_database_size(current_database())). Returns the required byte
+    1.25 x pg_database_size(current_database())) PLUS the bytes of every
+    existing snapshot retention will keep. Without that last term the guard can
+    pass and the write still hits ENOSPC, because retention keeps up to two
+    current-head snapshots and never prunes one recording an older head — the
+    recovery point the current state depends on. Returns the required byte
     count when the guard passes. The message names the required space, the
     available space, the shortfall and that nothing has been changed.
     """
     database_bytes = _database_size_bytes(db_url)
-    required = required_snapshot_free_bytes(database_bytes)
+    retained = _retained_snapshot_bytes(output_dir, current_heads)
+    required = required_snapshot_free_bytes(database_bytes) + retained
     probe = _nearest_existing_path(output_dir)
     try:
         free = shutil.disk_usage(str(probe)).free
@@ -378,7 +449,8 @@ def enforce_snapshot_disk_headroom(db_url: str, output_dir: Path) -> int:
         raise UpgradeError(f"Refusing to upgrade: cannot measure free space at {output_dir} ({exc}). Nothing has been changed.") from exc
     if free < required:
         shortfall = required - free
-        raise UpgradeError(f"Refusing to upgrade: the snapshot needs about {_gib(required)} GB free at {output_dir}; {_gib(free)} GB is available. Free {_gib(shortfall)} GB and re-run. Nothing has been changed.")
+        retained_note = f" ({_gib(retained)} GB of it is snapshots retention keeps)" if retained else ""
+        raise UpgradeError(f"Refusing to upgrade: the snapshot needs about {_gib(required)} GB free at {output_dir}{retained_note}; {_gib(free)} GB is available. Free {_gib(shortfall)} GB and re-run. Nothing has been changed.")
     return required
 
 
@@ -415,13 +487,18 @@ def _snapshot_created_at(directory: Path) -> str:
 
 
 def snapshot_is_intact(directory: Path) -> bool:
-    """Cheap structural check that *directory* is a usable snapshot.
+    """Is *directory* a usable snapshot — structurally AND by checksum?
 
-    Deliberately NOT a checksum of the dump: retention runs on every upgrade
-    and must not re-read gigabytes. Full checksum verification belongs to the
-    restore. This proves the two manifests parse, describe this directory's
-    own dump, agree on its size, and that the dump ends with pg_dump's
+    Retention DELETES on this answer, so it must be at least as strict as the
+    restore it is protecting: a snapshot whose dump has been corrupted must be
+    the one that is pruned, not the good older one beside it. The check is
+    therefore: both manifests parse and describe this directory's own dump,
+    they agree on its size and sha256, and the dump still ends with pg_dump's
     completion trailer.
+
+    The dump is re-hashed (streamed, in 1 MiB chunks) — one sequential read of
+    the file just written, once per upgrade, which is the cost of not keeping a
+    corrupt recovery point.
     """
     if not (directory / SNAPSHOT_MANIFEST_NAME).is_file():
         return False
@@ -442,6 +519,9 @@ def snapshot_is_intact(directory: Path) -> bool:
     checksums = restore_manifest.get("file_checksums")
     if not isinstance(checksums, dict) or not isinstance(checksums.get(dump_name), str):
         return False
+    expected_checksum = checksums[dump_name]
+    if isinstance(manifest.get("dump_sha256"), str) and manifest["dump_sha256"] != expected_checksum:
+        return False
     dump_path = directory / dump_name
     if not dump_path.is_file():
         return False
@@ -449,9 +529,154 @@ def snapshot_is_intact(directory: Path) -> bool:
         if dump_path.stat().st_size != manifest.get("dump_bytes"):
             return False
         verify_dump_complete(dump_path)
+        if _sha256_file(dump_path) != expected_checksum:
+            _log.warning("upgrade.snapshot_checksum_mismatch dir=%s", directory)
+            return False
     except (OSError, UpgradeError):
         return False
     return True
+
+
+def snapshot_in_progress(directory: Path) -> bool:
+    """True when another LIVE process is still writing *directory*.
+
+    The snapshot lock already serialises writers, so this is the secondary
+    guard for a process that died between creating the directory and taking the
+    lock, or for an operator running outside the lock: a marker naming a live
+    pid means the directory is in flight and prune must leave it alone.
+    """
+    marker = directory / SNAPSHOT_IN_PROGRESS_NAME
+    if not marker.is_file():
+        return False
+    try:
+        owner = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    return owner.isdigit() and _pid_alive(int(owner))
+
+
+@contextlib.contextmanager
+def snapshot_dir_lock(output_dir: Path) -> Any:
+    """Serialise snapshot creation and pruning inside *output_dir*.
+
+    Two concurrent boots (or a boot racing an operator's snapshot) must never
+    prune each other's in-flight directory. The lock is an advisory exclusive
+    lock on ``<output_dir>/.snapshot.lock``: ``flock`` on POSIX, ``msvcrt`` on
+    Windows, both released by the kernel when the holder dies — so a crashed
+    snapshot never wedges the next boot.
+    """
+    lock_path = output_dir / SNAPSHOT_LOCK_NAME
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, _PRIVATE_MODE)
+    try:
+        if os.name == "posix":
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        else:  # pragma: no cover - exercised on Windows CI/dev only
+            _win_lock(fd, unlock=False)
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            if os.name == "posix":
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            else:  # pragma: no cover
+                _win_lock(fd, unlock=True)
+        os.close(fd)
+
+
+def _win_lock(fd: int, *, unlock: bool) -> None:  # pragma: no cover - Windows only
+    """Blocking 1-byte msvcrt lock on *fd* (the Windows half of the snapshot lock)."""
+    import msvcrt
+    import time as _time
+
+    if unlock:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+        return
+    while True:
+        try:
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+            return
+        except OSError:
+            _time.sleep(0.1)
+
+
+def _recorded_heads(directory: Path) -> list[str]:
+    """The schema heads a snapshot recorded (restore manifest first)."""
+    for name in (_RESTORE_MANIFEST_NAME, SNAPSHOT_MANIFEST_NAME):
+        path = directory / name
+        if not path.is_file():
+            continue
+        try:
+            body = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        versions = body.get("schema_versions") if isinstance(body, dict) else None
+        if isinstance(versions, list) and versions:
+            return [str(entry) for entry in versions]
+    return []
+
+
+def _heads_differ_from_database(heads: list[str], current_heads: list[str] | None) -> bool:
+    """Does this snapshot record a schema state OTHER than the database's now?
+
+    A snapshot whose recorded heads are older than the database's current head
+    is the recovery point the CURRENT state depends on: it is the only way back
+    to the release that wrote this database before the migration in front of us
+    ran. It is never pruned. Unknown heads cannot be compared, so they are kept
+    too (failing safe on the side that preserves the recovery point).
+    """
+    if current_heads is None or not current_heads:
+        return False
+    if not heads:
+        return False
+    if "unknown" in heads or "unknown" in current_heads:
+        return True
+    return set(heads) != set(current_heads)
+
+
+def _snapshot_dirs(output_dir: Path) -> list[Path]:
+    """Every snapshot directory, newest first."""
+    if not output_dir.is_dir():
+        return []
+    return sorted(
+        (entry for entry in output_dir.iterdir() if entry.is_dir() and entry.name.startswith(SNAPSHOT_PREFIX) and not entry.is_symlink()),
+        key=_snapshot_created_at,
+        reverse=True,
+    )
+
+
+def _snapshot_bytes(directory: Path) -> int:
+    total = 0
+    for entry in directory.rglob("*"):
+        try:
+            if entry.is_file() and not entry.is_symlink():
+                total += entry.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def _retained_snapshot_bytes(output_dir: Path, current_heads: list[str] | None) -> int:
+    """Bytes of existing snapshots retention will KEEP (they need disk too)."""
+    try:
+        entries = _snapshot_dirs(output_dir)
+    except OSError:
+        return 0
+    at_head_kept = 0
+    total = 0
+    for entry in entries:
+        if not snapshot_is_intact(entry):
+            continue
+        if _heads_differ_from_database(_recorded_heads(entry), current_heads):
+            total += _snapshot_bytes(entry)
+            continue
+        if at_head_kept < RETENTION_COUNT:
+            at_head_kept += 1
+            total += _snapshot_bytes(entry)
+    return total
 
 
 def prune_snapshots(
@@ -459,33 +684,71 @@ def prune_snapshots(
     *,
     retain: int = RETENTION_COUNT,
     protect: Path | None = None,
+    current_heads: list[str] | None = None,
+    _lock_held: bool = False,
 ) -> list[str]:
-    """Keep the newest *retain* INTACT snapshots; delete the rest.
+    """Keep the recovery points that matter; delete only the interchangeable rest.
 
     Ordering contract (Hopper, FAR-2667 item 3): the caller runs this only
-    AFTER the new snapshot has verified, so a run can never delete a
-    recovery point before its replacement exists. *protect* is the snapshot
-    just written and is never deleted. A snapshot that is not intact (partial
-    write, interrupted run, corrupt trailer) is not a recovery point, so it is
-    swept — unless it is the protected one.
+    AFTER the new snapshot has verified, so a run can never delete a recovery
+    point before its replacement exists. *protect* is the snapshot just written
+    and is never deleted.
 
-    Never deletes the last surviving intact snapshot: the newest *retain*
-    intact entries are always kept.
+    Keep rules:
+    * a snapshot recording heads OTHER than the database's current head is the
+      pre-upgrade recovery point the current state depends on — never pruned
+      (unknown heads are kept for the same reason: they cannot be proven
+      interchangeable);
+    * of the snapshots at the current head, the newest *retain* are kept;
+    * a directory another LIVE process is still writing is never touched;
+    * anything left that is not intact (partial write, interrupted run, corrupt
+      checksum) is debris and is swept.
+
+    Concurrent boots serialise on :func:`snapshot_dir_lock`. ``_lock_held``
+    lets :func:`take_upgrade_snapshot` prune under the lock it already holds.
     """
     if not output_dir.is_dir():
         return []
-    candidates = sorted(
-        (entry for entry in output_dir.iterdir() if entry.is_dir() and entry.name.startswith(SNAPSHOT_PREFIX) and not entry.is_symlink()),
-        key=_snapshot_created_at,
-        reverse=True,
-    )
-    intact_newest = [entry for entry in candidates if snapshot_is_intact(entry)][:retain]
-    keep = {entry.resolve() for entry in intact_newest}
+    if _lock_held:
+        return _prune_snapshots_locked(output_dir, retain=retain, protect=protect, current_heads=current_heads)
+    with snapshot_dir_lock(output_dir):
+        return _prune_snapshots_locked(output_dir, retain=retain, protect=protect, current_heads=current_heads)
+
+
+def _prune_snapshots_locked(
+    output_dir: Path,
+    *,
+    retain: int,
+    protect: Path | None,
+    current_heads: list[str] | None,
+) -> list[str]:
+    candidates = _snapshot_dirs(output_dir)
+    kept: set[Path] = set()
     if protect is not None:
-        keep.add(protect.resolve())
+        kept.add(protect.resolve())
+    at_head_kept = 0
     pruned: list[str] = []
     for entry in candidates:
-        if entry.resolve() in keep:
+        protected_here = entry.resolve() in kept
+        if snapshot_in_progress(entry) and not protected_here:
+            _log.info("upgrade.snapshot_kept_in_flight dir=%s", entry)
+            continue
+        intact = snapshot_is_intact(entry)
+        older_head = intact and _heads_differ_from_database(_recorded_heads(entry), current_heads)
+        if protected_here:
+            if intact and not older_head:
+                at_head_kept += 1
+            continue
+        if not intact:
+            shutil.rmtree(entry, ignore_errors=True)
+            pruned.append(entry.name)
+            _log.info("upgrade.snapshot_pruned_debris dir=%s", entry)
+            continue
+        if older_head:
+            _log.info("upgrade.snapshot_kept_older_head dir=%s", entry)
+            continue
+        if at_head_kept < retain:
+            at_head_kept += 1
             continue
         shutil.rmtree(entry, ignore_errors=True)
         pruned.append(entry.name)
@@ -504,101 +767,112 @@ def take_upgrade_snapshot(
 ) -> SnapshotRef:
     """The ONE pre-upgrade snapshot callable (native launcher + container).
 
-    1. Refuse unless the output filesystem has max(2 GiB, 1.25 x db) free.
-    2. ``pg_dump --format=plain --clean --if-exists`` into
-       ``<output_dir>/pre-upgrade-dump-[<release>-]<UTC-ts>/database.sql``.
-    3. Prove the dump complete (pg_dump's completion trailer) and record the
-       sha256 + the schema head(s) in both manifests.
-    4. Prune to the newest *retain* verified snapshots (never the new one).
+    1. Serialise on the snapshot lock (concurrent boots never prune each
+       other's in-flight work).
+    2. Refuse unless the output filesystem has max(2 GiB, 1.25 x db) free PLUS
+       the bytes of the snapshots retention will keep.
+    3. ``pg_dump --format=plain --clean --if-exists`` into
+       ``<output_dir>/pre-upgrade-dump-[<release>-]<UTC-ts>/database.sql``, via
+       the shared :func:`farna.db.plain_dump.dump_plain_sql` pipeline.
+    4. Prove the dump complete (pg_dump's final completion trailer line),
+       checksum it, record the DATABASE's revisions in both manifests.
+    5. Prune: keep the newest *retain* at-head snapshots plus every snapshot
+       whose recorded heads precede the database's current head (never the new
+       one).
 
     The directory must never sit inside the Postgres cluster: the callers
-    pass the data dir (sibling of ``pgdata/``) or the ``/backups`` bind mount.
+    pass the data dir (sibling of ``pgdata/``) or the ``/backups`` mount.
 
-    Raises :class:`UpgradeError` on any failure; a failed dump leaves no
-    directory behind, and the caller aborts the upgrade.
+    Raises :class:`UpgradeError` on any failure — including an unusable output
+    directory (whose message names the ownership fix, never a traceback); a
+    failed dump leaves no directory behind, and the caller aborts the upgrade.
     """
     import shutil
 
-    output_dir.mkdir(parents=True, exist_ok=True)  # NOSONAR pythonsecurity:S8707 — operator-chosen snapshot dir
-    enforce_snapshot_disk_headroom(db_url, output_dir)
+    from farna.db import plain_dump
 
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    stamp_prefix = f"{SNAPSHOT_PREFIX}{release}-" if release else SNAPSHOT_PREFIX
-    snapshot_dir = output_dir / f"{stamp_prefix}{stamp}"
-    counter = 0
-    while snapshot_dir.exists():
-        counter += 1
-        snapshot_dir = output_dir / f"{stamp_prefix}{stamp}-{counter}"
-    snapshot_dir.mkdir(parents=True, exist_ok=False)
+    if release is not None:
+        # The token is interpolated into a DIRECTORY NAME. A value carrying a
+        # separator or ".." would write outside the snapshot root, where prune
+        # never looks: validate it as a single safe segment instead.
+        release = _validate_version_segment(release)
 
-    dump_url, postgres_password = _decredential_url(db_url)
-    dump_path = snapshot_dir / _DUMP_NAME
-    argv = [
-        _resolve_pg_dump(bin_dir),
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        "--format=plain",
-        dump_url,
-    ]
     try:
-        _run_dump(argv, dump_path, child_env=_pg_child_env(postgres_password))
-        # pg_dump writes the CLIENT's settings as a preamble; a client newer
-        # than the server emits GUCs the server rejects, which would make this
-        # snapshot unreplayable into the very server it came from. Drop those,
-        # then prove the dump finished.
-        from farna.db import plain_dump
+        output_dir.mkdir(parents=True, exist_ok=True)  # NOSONAR pythonsecurity:S8707 — operator-chosen snapshot dir
+    except OSError as exc:
+        raise UpgradeError(_output_dir_error(output_dir, exc)) from exc
+    with snapshot_dir_lock(output_dir):
+        current_heads = _database_revisions(db_url)
+        enforce_snapshot_disk_headroom(db_url, output_dir, current_heads=current_heads)
 
-        removed = plain_dump.strip_unsupported_preamble_settings(dump_path, plain_dump.server_guc_names(db_url))
-        if removed:
-            _log.warning("upgrade.snapshot_preamble_settings_dropped settings=%s", ",".join(removed))
-        size = verify_dump_complete(dump_path)
-    except ValueError as exc:
-        shutil.rmtree(snapshot_dir, ignore_errors=True)
-        raise UpgradeError(f"pre-upgrade dump FAILED — upgrade ABORTED, no binary swap was made: {exc}") from exc
-    except UpgradeError as exc:
-        # A failed dump never leaves a half-written snapshot masquerading as
-        # one, and the caller never sees a directory to trust. Retention is
-        # NOT run here: nothing has been verified, so nothing may be deleted.
-        shutil.rmtree(snapshot_dir, ignore_errors=True)
-        raise UpgradeError(f"pre-upgrade dump FAILED — upgrade ABORTED, no binary swap was made: {exc}") from exc
-
-    checksum = _sha256_file(dump_path)
-    schema_heads = _alembic_heads()
-    created_at = datetime.now(UTC).isoformat()
-    manifest: dict[str, Any] = {
-        "manifest_version": SNAPSHOT_MANIFEST_VERSION,
-        "snapshot_for_upgrade": True,
-        "dump_complete": True,
-        "dump_format": "plain",
-        "created_at": created_at,
-        "dump_name": _DUMP_NAME,
-        "dump_bytes": size,
-        "dump_sha256": checksum,
-        "schema_heads": schema_heads,
-    }
-    if extra_manifest:
-        manifest.update(extra_manifest)
-    (snapshot_dir / SNAPSHOT_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    _write_restore_manifest(snapshot_dir, created_at=created_at, checksum=checksum, size=size, schema_heads=schema_heads)
-    if os.name == "posix":
-        # Deferred P3: Windows ACL hardening (chmod is a silent no-op there).
-        # DIRECTORIES get 0700 — the e(xecute) bit is the DIRECTORY search
-        # bit: at 0600 the snapshot dir is unsearchable and even the dump
-        # (written moments earlier) can no longer be RESOLVED to read it.
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        stamp_prefix = f"{SNAPSHOT_PREFIX}{release}-" if release else SNAPSHOT_PREFIX
+        snapshot_dir = output_dir / f"{stamp_prefix}{stamp}"
+        counter = 0
+        while snapshot_dir.exists():
+            counter += 1
+            snapshot_dir = output_dir / f"{stamp_prefix}{stamp}-{counter}"
         try:
-            snapshot_dir.chmod(_DIR_PRIVATE_MODE)
-            for entry in (dump_path, snapshot_dir / SNAPSHOT_MANIFEST_NAME, snapshot_dir / _RESTORE_MANIFEST_NAME):
-                entry.chmod(_PRIVATE_MODE)
+            snapshot_dir.mkdir(parents=True, exist_ok=False)
+            (snapshot_dir / SNAPSHOT_IN_PROGRESS_NAME).write_text(str(os.getpid()), encoding="utf-8")
         except OSError as exc:
-            _log.warning("upgrade.snapshot_mode_failed path=%s error=%s", snapshot_dir, exc)
+            raise UpgradeError(_output_dir_error(output_dir, exc)) from exc
 
-    # ORDERING (Hopper, FAR-2667 item 3): dump -> verify -> prune. Reached
-    # only once the new snapshot is verified on disk.
-    pruned = prune_snapshots(output_dir, retain=retain, protect=snapshot_dir)
-    if pruned:
-        _log.info("upgrade.snapshots_pruned names=%s", ",".join(pruned))
+        dump_path = snapshot_dir / _DUMP_NAME
+        try:
+            try:
+                size = plain_dump.dump_plain_sql(db_url, dump_path, pg_dump=_resolve_pg_dump(bin_dir))
+            except (plain_dump.DumpError, ValueError) as exc:
+                raise UpgradeError(f"pre-upgrade dump FAILED — upgrade ABORTED, no binary swap was made: {exc}") from exc
+            except UpgradeError:
+                raise
+            except OSError as exc:
+                raise UpgradeError(_output_dir_error(snapshot_dir, exc)) from exc
+
+            checksum = _sha256_file(dump_path)
+            created_at = datetime.now(UTC).isoformat()
+            schema_heads = current_heads or ["unknown"]
+            manifest: dict[str, Any] = {
+                "manifest_version": SNAPSHOT_MANIFEST_VERSION,
+                "snapshot_for_upgrade": True,
+                "dump_complete": True,
+                "dump_format": "plain",
+                "created_at": created_at,
+                "dump_name": _DUMP_NAME,
+                "dump_bytes": size,
+                "dump_sha256": checksum,
+                "schema_heads": schema_heads,
+            }
+            if extra_manifest:
+                manifest.update(extra_manifest)
+            (snapshot_dir / SNAPSHOT_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+            _write_restore_manifest(snapshot_dir, created_at=created_at, checksum=checksum, size=size, schema_heads=schema_heads)
+            if os.name == "posix":
+                # Deferred P3: Windows ACL hardening (chmod is a silent no-op
+                # there). DIRECTORIES get 0700 — the e(xecute) bit is the
+                # DIRECTORY search bit: at 0600 the snapshot dir is unsearchable
+                # and even the dump (written moments earlier) can no longer be
+                # RESOLVED to read it.
+                try:
+                    snapshot_dir.chmod(_DIR_PRIVATE_MODE)
+                    for entry in (dump_path, snapshot_dir / SNAPSHOT_MANIFEST_NAME, snapshot_dir / _RESTORE_MANIFEST_NAME):
+                        entry.chmod(_PRIVATE_MODE)
+                except OSError as exc:
+                    _log.warning("upgrade.snapshot_mode_failed path=%s error=%s", snapshot_dir, exc)
+        except BaseException:
+            # A failed dump never leaves a half-written snapshot masquerading
+            # as one, and the caller never sees a directory to trust. Retention
+            # is NOT run here: nothing has been verified, so nothing may be
+            # deleted.
+            shutil.rmtree(snapshot_dir, ignore_errors=True)
+            raise
+        (snapshot_dir / SNAPSHOT_IN_PROGRESS_NAME).unlink(missing_ok=True)
+
+        # ORDERING (Hopper, FAR-2667 item 3): dump -> verify -> prune. Reached
+        # only once the new snapshot is verified on disk.
+        pruned = prune_snapshots(output_dir, retain=retain, protect=snapshot_dir, current_heads=current_heads, _lock_held=True)
+        if pruned:
+            _log.info("upgrade.snapshots_pruned names=%s", ",".join(pruned))
 
     snapshot = SnapshotRef(
         directory=snapshot_dir,
@@ -612,6 +886,24 @@ def take_upgrade_snapshot(
     return snapshot
 
 
+def _output_dir_error(path: Path, exc: OSError) -> str:
+    """The actionable abort text for an unusable snapshot/output directory.
+
+    A bare ``PermissionError`` traceback is exactly the failure the container
+    path must never produce: the operator needs to know WHICH directory, WHICH
+    uid, and WHAT to run. The compose deployment pre-creates and chowns
+    ``/backups`` in the image and mounts it as a named volume for this reason;
+    an operator-supplied bind mount must match the container user.
+    """
+    uid = getattr(os, "getuid", lambda: "?")()
+    return (
+        f"the snapshot directory {path} is not writable by this process (uid {uid}): {exc}. "
+        "The container writes snapshots as its own unprivileged user, so the directory must be writable by it — "
+        "use the compose deployment's snapshot volume, or pre-create a bind-mounted directory owned by the container user "
+        f"(chown -R <container-uid>:<container-gid> {path}). Nothing has been changed."
+    )
+
+
 def _database_is_pristine(db_url: str, *, timeout_seconds: int = 15) -> bool:
     """True only for a database with NO application tables (a first install).
 
@@ -622,8 +914,11 @@ def _database_is_pristine(db_url: str, *, timeout_seconds: int = 15) -> bool:
     """
     import psycopg
 
+    from farna.db.url_utils import psycopg_connect_args
+
     try:
-        with psycopg.connect(db_url, connect_timeout=timeout_seconds) as conn, conn.cursor() as cur:
+        dsn, password = psycopg_connect_args(db_url)
+        with psycopg.connect(dsn, connect_timeout=timeout_seconds, password=password) as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'")
             row = cur.fetchone()
     except Exception as exc:
@@ -687,6 +982,29 @@ def _alembic_heads() -> list[str]:
         return ["unknown"]
 
 
+def migration_pending(db_url: str, *, code_heads: list[str] | None = None) -> bool | None:
+    """Is the DATABASE behind the code that is about to boot?
+
+    True  — a migration is pending: a snapshot is the recovery point.
+    False — the database is already at head: nothing this boot runs can change
+            the schema, so a snapshot would only churn recovery points.
+    None  — the question cannot be answered (unreadable database or code tree);
+            the caller takes the snapshot, because an unproven "nothing to do"
+            must never cost the recovery point.
+
+    The comparison is set equality: a database that records a revision the code
+    does not ship is AHEAD, which the FAR-2659 alignment guard refuses before
+    this runs — it is never silently treated as "pending".
+    """
+    heads = code_heads if code_heads is not None else _alembic_heads()
+    if not heads or "unknown" in heads:
+        return None
+    db_heads = _database_revisions(db_url)
+    if not db_heads or "unknown" in db_heads:
+        return None
+    return set(db_heads) != set(heads)
+
+
 def _write_restore_manifest(snapshot_dir: Path, *, created_at: str, checksum: str, size: int, schema_heads: list[str]) -> None:
     """Write the restore-compatible manifest the installer's printed command needs.
 
@@ -725,6 +1043,11 @@ def _write_restore_manifest(snapshot_dir: Path, *, created_at: str, checksum: st
 def _run_dump(argv: list[str], dump_path: Path, *, child_env: dict[str, str] | None = None) -> None:
     """Run one fully-pinned argv pg_dump with output captured to *dump_path*.
 
+    NOT used by the pre-upgrade snapshot any more (it goes through the shared
+    :func:`farna.db.plain_dump.dump_plain_sql` pipeline so the two producers
+    cannot drift); kept as the launcher-side runner for callers that have
+    already resolved their own argv.
+
     Never shell=True, never operator-controlled input: the dump URL is
     composed from the launcher-owned secrets file the same first boot
     generated, with the password OUT OF ARGV (world-readable /proc cmdline)
@@ -760,12 +1083,20 @@ def main(argv: list[str] | None = None) -> int:
       from the data dir's state.json + secrets.json.
     * ``--db-url`` + ``--output-dir`` — the CONTAINER path
       (``deploy/supervisor/entrypoint.sh``, before ``alembic upgrade heads``).
-      ``--skip-if-pristine`` makes a first install (an empty database) a
-      no-op instead of demanding snapshot headroom.
+
+    A snapshot is taken only when a migration is actually PENDING. A pristine
+    database (first install) and a database already at head are both no-ops:
+    one diagnostic line on stderr, nothing on stdout, exit 0. That is what
+    stops a crash-looping release from rotating its own pre-upgrade recovery
+    point away on every restart.
 
     STDOUT CARRIES EXACTLY ONE LINE ON SUCCESS: the snapshot directory (or
-    nothing at all for a pristine database). install.sh captures the whole
+    nothing at all when no snapshot was needed). install.sh captures the whole
     stdout as the path, so every diagnostic goes to stderr.
+
+    EVERY failure exits 1 with one actionable ``ERROR:`` line — never a
+    traceback: an unusable /backups directory, a missing pg_dump and a
+    half-written dump all have to be legible to whoever is watching the boot.
     """
     parser = argparse.ArgumentParser(prog="python -m farna.launcher.upgrade", description="Pre-upgrade database snapshot")
     parser.add_argument("--data-dir", type=Path, default=None, help="Bundled launcher data dir (native path)")
@@ -791,6 +1122,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.skip_if_pristine and _database_is_pristine(args.db_url):
                 print("Fresh database (no application tables) — no pre-upgrade snapshot needed.", file=sys.stderr)  # noqa: T201
                 return 0
+            if migration_pending(args.db_url) is False:
+                print("Database is already at the code's migration head — no migration is pending, so no pre-upgrade snapshot was taken.", file=sys.stderr)  # noqa: T201
+                return 0
             snapshot = take_upgrade_snapshot(args.db_url, args.output_dir, release=args.release, bin_dir=args.bin_dir)
         else:
             assert args.data_dir is not None  # parser-enforced
@@ -798,6 +1132,10 @@ def main(argv: list[str] | None = None) -> int:
     except UpgradeError as exc:
         # Actionable installer/entrypoint abort text: never a bare traceback.
         print(f"ERROR: {exc}", file=sys.stderr)  # noqa: T201
+        return 1
+    except Exception as exc:  # the boot must abort legibly, never trace
+        _log.exception("upgrade.snapshot_unexpected_failure")
+        print(f"ERROR: the pre-upgrade snapshot failed unexpectedly ({type(exc).__name__}: {exc}) — the boot is aborted and NO migration was applied. Nothing has been changed.", file=sys.stderr)  # noqa: T201
         return 1
     # The installer/entrypoint captures the FINAL stdout line as the snapshot path.
     print(snapshot.directory)  # noqa: T201
@@ -954,28 +1292,35 @@ def restore_guidance(
     data_dir: Path,
     prior_link_target: str | None = None,
 ) -> str:
-    """The exact manual restore command restoring BOTH binary AND data.
+    """The exact manual restore command — and exactly what it restores.
 
-    Explicit forward-migrated-schema wording: the old binary is NEVER
-    restored alone - the attempted upgrade's boot may have
-    forward-migrated the schema past the old bundle's head. NO automatic
-    restore ran (none exists in v1; the fast-follow design - temp dir +
-    verify + atomic exchange, gated on never-reached-healthy - is recorded
-    in ADR 031 Decision 7, referenced here per the ADR policy).
+    With a *snapshot*: BOTH the binary and the data. The attempted upgrade's
+    boot may have forward-migrated the schema past the old bundle's head, so
+    restoring the old binary ALONE is not sufficient — the snapshot carries the
+    pre-migration rows AND the pre-migration ``alembic_version``.
+
+    Without a *snapshot* (no migration was pending, or ``--skip-backup`` ran
+    with its own verified snapshot elsewhere): ONLY the ``current`` symlink.
+    The wording says so instead of claiming a data restore that the emitted
+    command does not perform.
+
+    NO automatic restore ran (none exists in v1; the fast-follow design -
+    temp dir + verify + atomic exchange, gated on never-reached-healthy - is
+    recorded in ADR 031 Decision 7, referenced here per the ADR policy).
 
     *prior_link_target* names the version dir that still holds the OLD
     binary's bytes: a re-run of the same version keeps the previous bytes
     at ``versions/<v>.prev-<ts>``, so the link target names THAT dir and
     never the fresh copy sitting at ``versions/<v>``.
     """
-    head = "Manual restore - this restores BOTH the binary AND the data. The attempted upgrade's\nboot may have forward-migrated the database schema past the old bundle's migration\nhead, so restoring the old binary ALONE is not sufficient."
     fault = "NO automatic restore ran (none exists in v1; the fast-follow design is recorded in\nADR 031 Decision 7)."
     link_version = prior_link_target if prior_link_target is not None else previous_version
-    if snapshot is None:
-        link_cmd = f"ln -sfn versions/{link_version} {install_root / 'current'}"
-        return f"{fault}\n{head}\nExact manual restore command:\n  {link_cmd}"
-    restore_cmd = f"farna-control restore {snapshot} --data-dir {data_dir} --yes"
     link_cmd = f"ln -sfn versions/{link_version} {install_root / 'current'}"
+    if snapshot is None:
+        body = "Manual restore - this re-points `current` back to the previous binary ONLY.\nNo pre-upgrade snapshot was taken for this attempt (no migration was pending), so the\nDATABASE IS NOT RESTORED by this command and no data restore is needed."
+        return f"{fault}\n{body}\nExact manual restore command:\n  {link_cmd}"
+    head = "Manual restore - this restores BOTH the binary AND the data. The attempted upgrade's\nboot may have forward-migrated the database schema past the old bundle's migration\nhead, so restoring the old binary ALONE is not sufficient."
+    restore_cmd = f"farna-control restore {snapshot} --data-dir {data_dir} --yes"
     compound = link_cmd + " && " + restore_cmd
     return f"{fault}\n{head}\nPre-upgrade snapshot: {snapshot}\nExact manual restore command:\n  {compound}"
 
@@ -1754,6 +2099,43 @@ def _resolve_upgrade_assets(
     return tarball, version, manifest_file, signature_file
 
 
+def _bundle_alembic_heads(bundle_dir: Path) -> set[str]:
+    """The NEW bundle's migration HEAD(s) (empty when it cannot be read)."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        migrations_dir = bundle_dir / "backend" / "src" / "farna" / "db" / "migrations"
+        if not migrations_dir.is_dir():
+            return set()
+        config = Config()
+        config.set_main_option("script_location", str(migrations_dir))
+        script = ScriptDirectory.from_config(config)
+        return set(script.get_heads())
+    except Exception as exc:
+        _log.warning("upgrade.bundle_heads_unresolved error=%s", exc)
+        return set()
+
+
+def _require_existing_snapshot(data_dir: Path) -> Path:
+    """A ``--skip-backup`` run must have a VERIFIED snapshot already on disk.
+
+    ``--skip-backup`` skips the DUMP, not the recovery point: it is the
+    installer's second pass (the stack had to be stopped for the swap, so the
+    dump taken moments earlier on the first pass is the authoritative one).
+    Proceeding with no snapshot at all would remove the only way back from a
+    forward-migrated schema, which is exactly what the operator is told cannot
+    happen — so refuse, naming the flow.
+    """
+    for entry in _snapshot_dirs(data_dir):
+        if snapshot_is_intact(entry):
+            _log.info("upgrade.skip_backup_snapshot_found dir=%s", entry)
+            return entry
+    raise UpgradeError(
+        f"Refusing --skip-backup: no verified pre-upgrade snapshot exists under {data_dir}. --skip-backup skips the DUMP, not the recovery point — run the upgrade once with the stack live so the snapshot is taken, then re-run with --skip-backup only if the first pass stopped before the swap."
+    )
+
+
 def _run_upgrade_preflight(
     *,
     skip_backup: bool,
@@ -1767,22 +2149,40 @@ def _run_upgrade_preflight(
     """Pre-flight refusals + the enforced dump; returns the snapshot dir.
 
     Runs BEFORE anything version-specific: the PG-major gate, the downgrade
-    check and the quantified disk preflight. On ``skip_backup`` a stopped
-    stack cannot be dumped, so the LIVE alembic probe answers the DB side
-    instead (failing blind when it cannot - see ``check_no_downgrade``;
-    "unknown" is never pass-through).
+    check and the quantified disk preflight. The DB side of both checks is read
+    from the LIVE DATABASE (never from the old bundle's script heads — a
+    database already migrated ahead is only detectable by asking it).
+
+    A snapshot is taken only when a migration is actually pending (the
+    database's revisions differ from the TARGET bundle's heads). A database
+    already at the target head cannot be changed by this boot, so no snapshot
+    is taken and one line says so. On ``skip_backup`` a verified snapshot must
+    already exist, and the live probe answers the downgrade check.
     """
     _check_pg_major(release_manifest.components, data_dir)
+    db_heads = live_database_revisions(data_dir)
     if skip_backup:
-        db_heads = _alembic_heads()
-        snapshot_dir: Path | None = None
+        existing = _require_existing_snapshot(data_dir)
+        snapshot_dir: Path | None = existing
     else:
-        snapshot = pre_upgrade_dump(data_dir, bin_dir=_prior_pg_bin(reserve_target), release=version)
-        snapshot_dir = snapshot.directory
-        db_heads = _snapshot_schema_versions(snapshot_dir)
+        target_heads = _bundle_alembic_heads(bundle_dir)
+        pending = _pending_against(db_heads, target_heads)
+        if pending is False:
+            _log.info("upgrade.no_migration_pending snapshot_skipped=true data_dir=%s heads=%s", data_dir, ",".join(sorted(target_heads)))
+            snapshot_dir = None
+        else:
+            snapshot = pre_upgrade_dump(data_dir, bin_dir=_prior_pg_bin(reserve_target), release=version)
+            snapshot_dir = snapshot.directory
     check_no_downgrade(db_heads, snapshot_dir, bundle_dir)
     _quantified_disk_preflight(tarball, data_dir)
     return snapshot_dir
+
+
+def _pending_against(db_heads: list[str], target_heads: set[str]) -> bool | None:
+    """Is the database behind *target_heads*? ``None`` when either side is unknown."""
+    if not db_heads or "unknown" in db_heads or not target_heads:
+        return None
+    return set(db_heads) != set(target_heads)
 
 
 def perform_upgrade(

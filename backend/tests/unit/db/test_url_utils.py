@@ -22,7 +22,10 @@ from farna.db.url_utils import (
     SYSTEM_ROLE,
     derive_system_database_url,
     fix_database_url,
+    normalise_libpq_url,
+    psycopg_connect_args,
     split_engine_sslmode,
+    split_postgres_credentials,
     split_postgres_sslmode,
 )
 
@@ -266,3 +269,74 @@ def test_derivation_runs_on_the_fixed_database_url() -> None:
     assert fixed == "postgresql+asyncpg://modulo:pw@db.internal:5432/modulo?sslmode=require"
     derived = derive_system_database_url(fixed)
     assert derived == "postgresql+asyncpg://farna_control_system:pw@db.internal:5432/modulo?sslmode=require"
+
+
+# ---------------------------------------------------------------------------
+# FAR-2667 C1: libpq normalisation (the snapshot/dump producers' one entry)
+# ---------------------------------------------------------------------------
+
+LIbpq_CASES = [
+    ("postgresql+asyncpg://u:p@db:5432/x", "postgresql://u:p@db:5432/x"),
+    ("postgresql+psycopg://u:p@db:5432/x", "postgresql://u:p@db:5432/x"),
+    ("postgres://u:p@db:5432/x", "postgresql://u:p@db:5432/x"),
+    ("postgresql://u:p@db:5432/x", "postgresql://u:p@db:5432/x"),
+    (
+        "postgresql+asyncpg://u:p%40ss@db:5432/x?sslmode=require",
+        "postgresql://u:p%40ss@db:5432/x?sslmode=require",
+    ),
+]
+
+
+@pytest.mark.parametrize(("sqlalchemy_url", "expected"), LIbpq_CASES)
+def test_normalise_libpq_url_rewrites_every_producer_scheme(sqlalchemy_url: str, expected: str) -> None:
+    assert normalise_libpq_url(sqlalchemy_url) == expected
+
+
+def test_normalise_libpq_url_refuses_a_non_postgres_scheme() -> None:
+    with pytest.raises(ValueError, match="PostgreSQL"):
+        normalise_libpq_url("sqlite:///tmp.db")
+
+
+@pytest.mark.parametrize("sqlalchemy_url", [case[0] for case in LIbpq_CASES])
+def test_both_url_forms_reach_a_working_psycopg_connection_string(sqlalchemy_url: str) -> None:
+    """C1's proof: libpq itself must ACCEPT the normalised URL.
+
+    psycopg's conninfo parser is libpq's: an ``+asyncpg`` scheme is rejected
+    with ``missing "=" after "postgresql+asyncpg://..."``. The normaliser is
+    what makes the compose path's URL (``postgresql+asyncpg://``) digestible by
+    pg_dump, psql and psycopg. Parsing the result proves it is a real libpq
+    connection string; parsing the original proves the failure class exists.
+    """
+    import psycopg.conninfo
+
+    normalised = normalise_libpq_url(sqlalchemy_url)
+    parsed = psycopg.conninfo.conninfo_to_dict(normalised)
+    assert parsed["dbname"] == "x"
+    if "+" in sqlalchemy_url.split("://", 1)[0]:
+        with pytest.raises(psycopg.ProgrammingError):
+            psycopg.conninfo.conninfo_to_dict(sqlalchemy_url)
+
+
+@pytest.mark.parametrize(
+    ("url", "expected_dsn", "expected_password"),
+    [
+        ("postgresql://u:secret@db:5432/x", "postgresql://u@db:5432/x", "secret"),
+        ("postgresql://u@db:5432/x", "postgresql://u@db:5432/x", None),
+        # A password holding URL syntax characters must survive round-trip.
+        ("postgresql://u:p%23a%3Fss@db:5432/x", "postgresql://u@db:5432/x", "p#a?ss"),
+        # IPv6 literal keeps its brackets in the rebuilt netloc.
+        ("postgresql://u:pw@[::1]:5432/x", "postgresql://u@[::1]:5432/x", "pw"),
+    ],
+)
+def test_split_postgres_credentials_removes_the_password_from_the_dsn(url: str, expected_dsn: str, expected_password: str | None) -> None:
+    dsn, password = split_postgres_credentials(url)
+    assert dsn == expected_dsn
+    assert password == expected_password
+
+
+def test_psycopg_connect_args_moves_the_password_out_of_the_dsn() -> None:
+    """M10: a psycopg error quotes the DSN, so the password must not be in it."""
+    dsn, password = psycopg_connect_args("postgresql+asyncpg://owner:sup3rs3cret@db:5432/x")
+    assert dsn == "postgresql://owner@db:5432/x"
+    assert password == "sup3rs3cret"
+    assert "sup3rs3cret" not in dsn

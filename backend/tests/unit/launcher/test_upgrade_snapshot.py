@@ -77,16 +77,20 @@ def _pinned_pg_dump(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
     if request.node.cls is TestResolvePgDump:
         return
     monkeypatch.setattr(upgrade_module, "_resolve_pg_dump", lambda _bin_dir: "pg_dump")
+    # The database side of the snapshot decision/retention: no live cluster.
+    monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["head1"])
     from farna.db import plain_dump
 
-    # The compatibility rewrite asks the server for its GUC names; these
-    # tests never touch a database.
+    # The compatibility rewrite asks the server for its GUC names, and the
+    # shared pipeline resolves a bare ``pg_dump`` on PATH; these tests never
+    # touch a database or a real client.
     monkeypatch.setattr(plain_dump, "server_guc_names", lambda _url, **_kwargs: {"statement_timeout"})
+    monkeypatch.setattr(plain_dump, "resolve_pg_dump", lambda executable="pg_dump": executable)
 
 
-def _take(output_dir: Path, *, payload: bytes = _COMPLETE_PAYLOAD, retain: int = RETENTION_COUNT) -> Any:
+def _take(output_dir: Path, *, payload: bytes = _COMPLETE_PAYLOAD, retain: int = RETENTION_COUNT, release: str | None = None) -> Any:
     with patch("farna.launcher.upgrade.subprocess.run", new=_fake_completed_run(payload)):
-        return take_upgrade_snapshot(_DB_URL, output_dir, retain=retain)
+        return take_upgrade_snapshot(_DB_URL, output_dir, retain=retain, release=release)
 
 
 # ---------------------------------------------------------------------------
@@ -353,3 +357,200 @@ class TestEntrypointMode:
             upgrade_module.main(["--output-dir", str(tmp_path)])
         with pytest.raises(SystemExit):
             upgrade_module.main(["--data-dir", str(tmp_path), "--db-url", _DB_URL, "--output-dir", str(tmp_path)])
+
+
+# ---------------------------------------------------------------------------
+# FAR-2667 review round: the recovery point must survive, not churn
+# ---------------------------------------------------------------------------
+
+
+class TestMigrationPendingDecision:
+    """A snapshot is taken only when a migration is actually pending (C3)."""
+
+    def test_at_head_is_not_pending(self) -> None:
+        with patch.object(upgrade_module, "_database_revisions", return_value=["a"]):
+            assert upgrade_module.migration_pending("postgresql://x", code_heads=["a"]) is False
+
+    def test_behind_head_is_pending(self) -> None:
+        with patch.object(upgrade_module, "_database_revisions", return_value=["a"]):
+            assert upgrade_module.migration_pending("postgresql://x", code_heads=["a", "b"]) is True
+
+    def test_unknown_reads_as_undecidable(self) -> None:
+        with patch.object(upgrade_module, "_database_revisions", return_value=["unknown"]):
+            assert upgrade_module.migration_pending("postgresql://x", code_heads=["a"]) is None
+        assert upgrade_module.migration_pending("postgresql://x", code_heads=["unknown"]) is None
+
+    def test_main_takes_no_snapshot_at_head(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(upgrade_module, "migration_pending", return_value=False):
+            code = upgrade_module.main(["--db-url", _DB_URL, "--output-dir", str(tmp_path)])
+        captured = capsys.readouterr()
+        assert code == 0
+        assert not captured.out.strip()
+        assert "no migration is pending" in captured.err
+        assert not list(tmp_path.glob(f"{SNAPSHOT_PREFIX}*"))
+
+    def test_main_takes_a_snapshot_when_behind(self, tmp_path: Path, small_database: None, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(upgrade_module, "migration_pending", return_value=True), patch("farna.launcher.upgrade.subprocess.run", new=_fake_completed_run(_COMPLETE_PAYLOAD)):
+            code = upgrade_module.main(["--db-url", _DB_URL, "--output-dir", str(tmp_path)])
+        captured = capsys.readouterr()
+        assert code == 0
+        assert Path(next(line for line in captured.out.splitlines() if line.strip())).is_dir()
+
+
+class TestRetentionKeepsTheRecoveryPoint:
+    """An older-head snapshot is the only way back from the current state (C3)."""
+
+    def test_an_older_head_snapshot_is_never_pruned(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["old-head"])
+        first = _take(tmp_path, retain=1)
+        monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["new-head"])
+        second = _take(tmp_path, retain=1)
+        assert first.directory.exists(), "the pre-upgrade recovery point must survive retention"
+        assert second.directory.exists()
+
+    def test_the_pre_upgrade_snapshot_survives_two_failed_restarts(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A release that migrates then crash-loops must not rotate its own
+        recovery point away: boot 1 snapshots (behind), boots 2 and 3 are at
+        head and take no snapshot at all."""
+        monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["old-head"])
+        first = _take(tmp_path, retain=1)
+        # The failed boot migrated the database forward; every later boot is at head.
+        monkeypatch.setattr(upgrade_module, "migration_pending", lambda _url, **_kwargs: False)
+        for _ in range(2):
+            code = upgrade_module.main(["--db-url", _DB_URL, "--output-dir", str(tmp_path)])
+            assert code == 0
+        assert first.directory.exists()
+        assert snapshot_is_intact(first.directory)
+
+
+class TestUnusableOutputDirectory:
+    """A permission failure is an actionable abort, never a traceback (C2)."""
+
+    def test_permission_error_becomes_an_upgrade_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _denied(*_args: Any, **_kwargs: Any) -> None:
+            raise PermissionError(13, "Permission denied", str(tmp_path))
+
+        monkeypatch.setattr(Path, "mkdir", _denied)
+        with pytest.raises(UpgradeError) as excinfo:
+            take_upgrade_snapshot(_DB_URL, tmp_path)
+        message = str(excinfo.value)
+        assert "not writable" in message
+        assert "chown" in message
+
+    def test_main_prints_one_error_line_and_no_traceback(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(upgrade_module, "migration_pending", return_value=True), patch.object(upgrade_module, "take_upgrade_snapshot", side_effect=UpgradeError("the snapshot directory is not writable by this process (uid 33)")):
+            code = upgrade_module.main(["--db-url", _DB_URL, "--output-dir", str(tmp_path)])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "ERROR:" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_an_unexpected_exception_still_aborts_legibly(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(upgrade_module, "migration_pending", return_value=True), patch.object(upgrade_module, "take_upgrade_snapshot", side_effect=RuntimeError("boom")):
+            code = upgrade_module.main(["--db-url", _DB_URL, "--output-dir", str(tmp_path)])
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "ERROR:" in captured.err
+        assert "RuntimeError" in captured.err
+        assert "Traceback" not in captured.err
+
+
+class TestReleaseSegmentValidation:
+    """The release token lands in a DIRECTORY NAME (M5)."""
+
+    def test_a_path_traversal_release_is_refused(self, tmp_path: Path, small_database: None) -> None:
+        for bad in ("../../etc", "a/b", "..", ""):
+            with pytest.raises(UpgradeError):
+                _take(tmp_path, release=bad)
+        assert not list(tmp_path.iterdir()), "nothing may be written outside (or inside) the snapshot root"
+
+    def test_a_version_like_release_is_accepted(self, tmp_path: Path, small_database: None) -> None:
+        snapshot = _take(tmp_path, release="0.5.0-rc1")
+        assert snapshot.directory.name.startswith("pre-upgrade-dump-0.5.0-rc1-")
+
+
+class TestInFlightSnapshots:
+    """Prune never deletes a directory another live process is writing (M4)."""
+
+    def test_a_live_in_progress_marker_is_kept(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        good = _take(tmp_path)
+        in_flight = tmp_path / f"{SNAPSHOT_PREFIX}in-flight"
+        in_flight.mkdir()
+        (in_flight / upgrade_module.SNAPSHOT_IN_PROGRESS_NAME).write_text("4242", encoding="utf-8")
+        monkeypatch.setattr(upgrade_module, "_pid_alive", lambda pid: pid == 4242)
+        pruned = prune_snapshots(tmp_path, retain=1)
+        assert in_flight.exists()
+        assert in_flight.name not in pruned
+        assert good.directory.exists()
+
+    def test_a_dead_in_progress_marker_is_debris(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        dead = tmp_path / f"{SNAPSHOT_PREFIX}dead"
+        dead.mkdir()
+        (dead / upgrade_module.SNAPSHOT_IN_PROGRESS_NAME).write_text("999999", encoding="utf-8")
+        monkeypatch.setattr(upgrade_module, "_pid_alive", lambda _pid: False)
+        prune_snapshots(tmp_path, retain=1)
+        assert not dead.exists()
+
+
+class TestDiskHeadroomCountsRetainedSnapshots:
+    """The guard accounts for the snapshots retention keeps (M7)."""
+
+    def test_existing_snapshot_bytes_are_added_to_the_requirement(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        existing = _take(tmp_path)
+        kept_bytes = upgrade_module._snapshot_bytes(existing.directory)
+        seen: list[int] = []
+
+        def _usage(_path: str) -> Any:
+            return type("DU", (), {"free": 8 * 1024**3})()
+
+        monkeypatch.setattr(upgrade_module.shutil, "disk_usage", _usage)
+        required = upgrade_module.enforce_snapshot_disk_headroom(_DB_URL, tmp_path, current_heads=["head1"])
+        seen.append(required)
+        assert required == upgrade_module.required_snapshot_free_bytes(1024) + kept_bytes
+        assert kept_bytes > 0
+
+    def test_the_shortfall_message_names_the_retained_snapshots(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        _take(tmp_path)
+        monkeypatch.setattr(upgrade_module.shutil, "disk_usage", lambda _p: type("DU", (), {"free": 0})())
+        with pytest.raises(UpgradeError, match="snapshots retention keeps"):
+            upgrade_module.enforce_snapshot_disk_headroom(_DB_URL, tmp_path, current_heads=["head1"])
+
+
+class TestRetentionVerifiesTheChecksum:
+    """Retention's verdict must be at least as strict as restore's (M14/M16)."""
+
+    def test_a_corrupted_dump_is_not_intact(self, tmp_path: Path, small_database: None) -> None:
+        snapshot = _take(tmp_path)
+        dump = snapshot.dump_path
+        payload = bytearray(dump.read_bytes())
+        payload[0:1] = b"X"  # same size, different bytes
+        dump.write_bytes(bytes(payload))
+        assert snapshot_is_intact(snapshot.directory) is False
+
+    def test_the_corrupt_one_is_pruned_and_the_good_older_one_kept(self, tmp_path: Path, small_database: None) -> None:
+        good = _take(tmp_path, retain=2)
+        corrupt = _take(tmp_path, retain=2)
+        payload = bytearray(corrupt.dump_path.read_bytes())
+        payload[0:1] = b"X"
+        corrupt.dump_path.write_bytes(bytes(payload))
+        prune_snapshots(tmp_path, retain=1, current_heads=["head1"])
+        assert good.directory.exists()
+        assert not corrupt.directory.exists()
+
+
+class TestSharedDumpPipeline:
+    """Both producers call the ONE pipeline (M9/M17)."""
+
+    def test_the_snapshot_uses_the_shared_pipeline_with_the_raw_url(self, tmp_path: Path, small_database: None) -> None:
+        from farna.db import plain_dump
+
+        calls: list[str] = []
+
+        def _pipeline(url: str, output: Path, **_kwargs: Any) -> int:
+            calls.append(url)
+            output.write_bytes(_COMPLETE_PAYLOAD)
+            return len(_COMPLETE_PAYLOAD)
+
+        with patch.object(plain_dump, "dump_plain_sql", _pipeline):
+            take_upgrade_snapshot(_DB_URL, tmp_path)
+        assert calls == [_DB_URL]
