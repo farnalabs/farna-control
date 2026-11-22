@@ -16,11 +16,11 @@
 .github/workflows/branch-fixer.yml	5
 .github/workflows/bundle-release.yml	11
 .github/workflows/changelog-classify.yml	1
-.github/workflows/ci.yml	31
+.github/workflows/ci.yml	32
 .github/workflows/claude-plugin-validate.yml	24
 .github/workflows/dast-auth.yml	6
 .github/workflows/deploy-watchdog.yml	2
-.github/workflows/deploy.yml	99
+.github/workflows/deploy.yml	100
 .github/workflows/fast-lane-post-merge.yml	7
 .github/workflows/fast-lane-suspension.yml	1
 .github/workflows/issue-notify.yml	3
@@ -28,7 +28,7 @@
 .github/workflows/macos-installer.yml	40
 .github/workflows/macos-staple-retry.yml	3
 .github/workflows/main-integration.yml	10
-.github/workflows/merge-queue.yml	12
+.github/workflows/merge-queue.yml	13
 .github/workflows/native-gate0.yml	1
 .github/workflows/native-release-smoke.yml	15
 .github/workflows/pr-conflict-reconcile.yml	8

@@ -2167,7 +2167,11 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
-          FARNA_CONTROL_SELF_REPORT_URL: ${{ secrets.FARNA_CONTROL_SELF_REPORT_URL }}
+          # Transitional dual-accept: the renamed secret is provisioned over time;
+          # fall back to the pre-rebrand secret name until then so the
+          # self-report POST never silently skips (fail-open). Drop the
+          # fallback once the new secret is provisioned everywhere.
+          FARNA_CONTROL_SELF_REPORT_URL: ${{ secrets.FARNA_CONTROL_SELF_REPORT_URL || secrets.MODULO_SELF_REPORT_URL }}
           FARNA_CONTROL_SELF_REPORT_TOKEN: ${{ secrets.FARNA_CONTROL_SELF_REPORT_TOKEN }}
         run: |
           # FAR-145 follow-up (workflow self-report): the Deploy Agent carries PRs

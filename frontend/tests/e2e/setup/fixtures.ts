@@ -46,7 +46,7 @@ async function startLocalSsoBackend(): Promise<SsoBackendProcess> {
       FARNA_CONTROL_FRONTEND_URL: getLocalE2eBaseUrl(),
       FARNA_CONTROL_MULTI_ORG_ENABLED: 'false',
       FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED: 'false',
-      FARNA_CONTROL_REDIS_URL: 'redis://127.0.0.1:0/0',
+      REDIS_URL: 'redis://127.0.0.1:0/0',
       FARNA_CONTROL_DB: 'sqlite',
     },
   })
