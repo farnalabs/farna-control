@@ -16,7 +16,7 @@ with contextlib.suppress(FileNotFoundError, OSError):
     scenarios("../features/mcp/human_only.feature")
 with contextlib.suppress(FileNotFoundError, OSError):
     scenarios("../features/mcp/library_browse.feature")
-from tests.bdd.conftest import ORG_ID, USER_ID, make_mock_pipeline, make_settings
+from tests.bdd.conftest import ORG_ID, USER_ID, make_settings
 
 _PLACEHOLDER_KEY_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 _API_KEY = "mk_testprefix_testsecretkey1234567890abc"
@@ -476,23 +476,6 @@ def error_mentions(text: str, request):
 @given(parsers.parse('the MCP API key has scope "{scope}"'))
 def mcp_key_scope(scope: str, request):
     request.node._mcp_scope = scope
-
-
-@when(parsers.parse('the MCP client sends a tools/call request for "{tool}"'))
-def mcp_tool_call_generic(tool: str, client, request):
-    with (
-        patch("farna.api.mcp_server.set_rls_org"),
-        patch(
-            "farna.api.mcp_server.get_pipeline_by_name",
-            return_value=make_mock_pipeline(name="test"),
-        ),
-    ):
-        resp = client.post(
-            "/mcp/tools/call",
-            json={"tool": tool, "arguments": {}},
-            headers={"Authorization": f"Bearer {getattr(request.node, '_mcp_key', '')}"},
-        )
-    request.node._resp = resp
 
 
 @given(parsers.parse('a run is waiting at gate "{gate}"'))
