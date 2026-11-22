@@ -312,6 +312,36 @@ def test_boot_order_smoke_with_mocked_children(monkeypatch: pytest.MonkeyPatch, 
     assert serve_calls == [("127.0.0.1", 18000)]
 
 
+def test_database_ahead_refuses_before_settings_and_serve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """FAR-2659: the startup guard's non-None exit short-circuits the boot.
+
+    The happy-path smoke test exercises the ``alignment_exit is None`` arc; this
+    pins the other arc: when ``_refuse_on_database_ahead`` returns the distinct
+    status, ``_run_foreground`` must return it WITHOUT building settings,
+    registering SAQ children or serving.
+    """
+    from farna.db import alignment
+
+    order: list[str] = []
+    _install_boot_mocks(monkeypatch, order)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.setattr(alignment, "database_url_from_env", lambda: "postgresql://example/db")
+
+    def _ahead(_url: str) -> alignment.AlignmentResult:
+        raise alignment.DatabaseAheadError("REFUSED: database revision 9999_far_future_release is not known to this release")
+
+    monkeypatch.setattr(alignment, "ensure_release_aligned", _ahead)
+
+    code = run_start(tmp_path / "data", serve=lambda host, port, stop_event: order.append("serve"))
+
+    assert code == alignment.EXIT_DATABASE_AHEAD
+    assert "settings" not in order
+    assert "saq" not in order
+    assert "serve" not in order
+    assert "lock-released" in order
+
+
 def test_serve_phase_exception_becomes_booterror(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A serve-phase failure must reach the operator as an actionable BootError.
 

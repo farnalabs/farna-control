@@ -182,6 +182,12 @@ echo "=== Bootstrapping farna_control_app role ==="
 python3 -m farna.db.bootstrap_role || echo "  WARNING: role bootstrap failed (non-fatal)"
 
 echo "=== Running DB migrations ==="
+# FAR-2659: refuse a database from a newer release BEFORE any migration path
+# (the at-head fast-path probe or the retry loop). This is the ONE shared
+# Python check the native launcher and the compose entrypoint also call; a
+# non-zero exit is the legible refusal and `set -e` stops the container here
+# instead of leaving it in alembic's "Can't locate revision" retry loop.
+python3 -m farna.db.alignment
 # The Fly [release] command (release.sh) now owns migrations (ONCE per deploy BEFORE machines
 # roll out). This boot path is a FAST-PATH SKIP + FALLBACK: when the DB is already at head,
 # skip the advisory-lock migration loop entirely (no lock, no alembic run) — machines previously
