@@ -16,9 +16,11 @@ from sqlalchemy import create_engine, text
 
 from farna.db import alignment
 
-# A revision this release cannot know: this is the rollback shape (the newer
-# release stamped it into alembic_version, then the old image booted).
-_AHEAD_REVISION = "0359_registry_sourced_drop_index"
+# A synthetic revision no release can know: this is the rollback shape (the
+# newer release stamped it into alembic_version, then the old image booted).
+# Deliberately NOT a real in-tree revision id, so the ahead case is genuine even
+# if ``release_revision_ids`` is not monkeypatched.
+_AHEAD_REVISION = "9999_far_future_release"
 
 
 def _sqlite_url_with_versions(tmp_path: Path, versions: tuple[str, ...], *, table: bool = True) -> str:
@@ -90,6 +92,16 @@ def test_read_database_revisions_unreadable_raises_check_error(tmp_path: Path) -
     """A real read failure is surfaced so the caller can fail open."""
     with pytest.raises(alignment.AlignmentCheckError, match="could not read alembic_version"):
         alignment.read_database_revisions(f"sqlite:///{tmp_path.as_posix()}/missing-dir/nope.db")
+
+
+def test_read_database_revisions_malformed_url_raises_check_error() -> None:
+    """A malformed URL is "cannot check", not an escaping ``ValueError``.
+
+    ``make_url`` rejects a non-numeric port with a bare ``ValueError``; it must
+    not escape the documented fail-open contract.
+    """
+    with pytest.raises(alignment.AlignmentCheckError, match="could not read alembic_version"):
+        alignment.read_database_revisions("postgresql+psycopg://u:p@db:not-a-port/farna_control")
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +250,15 @@ def test_main_without_database_url_proceeds_with_warning(monkeypatch: pytest.Mon
 def test_main_unreadable_database_proceeds_with_warning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     """Fail open: a check that cannot run never blocks a forward upgrade."""
     monkeypatch.setenv("DATABASE_ADMIN_URL", f"sqlite:///{tmp_path.as_posix()}/missing-dir/nope.db")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    assert alignment.main([]) == 0
+    assert "skipped" in capsys.readouterr().err
+
+
+def test_main_malformed_database_url_proceeds_with_warning(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """A malformed URL is also a fail-open skip, not an uncaught ``ValueError``."""
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+psycopg://u:p@db:not-a-port/farna_control")
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     assert alignment.main([]) == 0

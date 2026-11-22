@@ -105,8 +105,14 @@ def app_version() -> str:
 def database_url_from_env() -> str | None:
     """The migration/admin database URL from the environment, or ``None``.
 
-    Same precedence as ``farna.db.migrations.env``: ``DATABASE_ADMIN_URL`` (the
-    owner role migrations run as) wins over ``DATABASE_URL``.
+    ``DATABASE_ADMIN_URL`` (the owner role migrations run as) wins over
+    ``DATABASE_URL``.  Unlike ``farna.db.migrations.env`` this reads ONLY the
+    process environment: it deliberately has no ``alembic.ini``
+    ``sqlalchemy.url`` fallback and does not load ``backend/.env``.  That is
+    correct for the guarded startup paths, which always export the URL
+    themselves (the container entrypoints, the Fly release command and the
+    launcher's composed environment); do not read this as full parity with the
+    alembic env.
     """
     for name in ("DATABASE_ADMIN_URL", "DATABASE_URL"):
         value = os.environ.get(name, "").strip()
@@ -167,7 +173,11 @@ def read_database_revisions(database_url: str) -> frozenset[str]:
                 return frozenset()
             rows = connection.execute(text("SELECT version_num FROM alembic_version")).fetchall()
         return frozenset(str(row[0]) for row in rows)
-    except SQLAlchemyError as exc:
+    except (SQLAlchemyError, ValueError) as exc:
+        # ``make_url`` (inside ``_sync_url``) raises a bare ``ValueError`` for a
+        # malformed URL (e.g. a non-numeric port), outside SQLAlchemy's own
+        # hierarchy. Treat it as "cannot check" so ``AlignmentCheckError`` stays
+        # the only failure type the callers must handle.
         raise AlignmentCheckError(f"could not read alembic_version: {exc}") from exc
     finally:
         if engine is not None:

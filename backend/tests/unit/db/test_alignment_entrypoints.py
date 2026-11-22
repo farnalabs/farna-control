@@ -19,6 +19,10 @@ _ENTRYPOINTS = {
     "backend/entrypoint.sh": ("python -m farna.db.alignment", "alembic upgrade 0001_v2_identity_org"),
     "deploy/supervisor/entrypoint.sh": ("python -m farna.db.alignment", "alembic upgrade heads"),
     "deploy/fly/entrypoint.sh": ("python3 -m farna.db.alignment", "alembic upgrade heads"),
+    # The Fly [release] command is the AUTHORITATIVE migrator (it runs before
+    # any machine boots), so it needs the guard too — the entrypoint above is
+    # only reached on the later machine boot.
+    "deploy/fly/release.sh": ("python3 -m farna.db.alignment", "alembic upgrade heads"),
 }
 
 

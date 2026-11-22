@@ -29,6 +29,15 @@ fi
 # Create the farna_control_app role if missing (non-fatal on failure).
 python3 -m farna.db.bootstrap_role || echo "  WARNING: role bootstrap failed (non-fatal)"
 
+# FAR-2659: refuse a database from a newer release BEFORE the migration loop.
+# On Fly this [release] command is the authoritative migrator and runs before
+# any machine boots, so a newer-DB/older-image deploy must be refused here —
+# otherwise it lands in the loop below as alembic's "Can't locate revision"
+# FATAL and the entrypoint guard (which machines would hit later) is never
+# reached. The shared check exits non-zero with one legible line, and `set -e`
+# turns that into a legible refusal of the whole deploy.
+python3 -m farna.db.alignment
+
 # Run migrations ONCE with a bounded retry loop (3 attempts, 5s apart).
 #
 # DISPOSITION (FAR-694, explicit): the migrator is bare-FATAL after its 3
