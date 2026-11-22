@@ -31,7 +31,7 @@ import asyncio
 import hashlib  # noqa: F401
 import json  # noqa: F401
 import logging
-import math
+import math  # noqa: F401
 import os  # noqa: F401
 import socket  # noqa: F401
 import uuid
@@ -40,7 +40,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence  # noqa
 from contextlib import asynccontextmanager, suppress  # noqa: F401
 from dataclasses import dataclass, field  # noqa: F401
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal  # noqa: F401
 from inspect import isawaitable
 from typing import Any, Literal, NamedTuple, NoReturn  # noqa: F401
 
@@ -55,13 +55,17 @@ from farna.connectors._rate_bucket import SharedBudgetUnavailableError
 from farna.connectors.base import node_fires_dispatch_job  # noqa: F401
 from farna.core.audit_logger import append_audit_event
 from farna.core.audit_logger.labels import (
-    SYSTEM_ACTOR,
+    SYSTEM_ACTOR,  # noqa: F401
     compose_run_started_summary,
     resolve_run_actor,
-    short_id,
+    short_id,  # noqa: F401
 )
 from farna.core.connector_hub.locking import _uuid_to_lock_keys
-from farna.core.cost_controller.finalize import FinalizeMetricSink, derive_node_type_map, finalize_cost
+from farna.core.cost_controller.finalize import (
+    FinalizeMetricSink,  # noqa: F401
+    derive_node_type_map,
+    finalize_cost,  # noqa: F401
+)
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
 from farna.core.eval_engine import (
     EvalBlockedError,
@@ -78,14 +82,14 @@ from farna.core.node_output_split import (
     DEFAULT_NODE_TYPE,  # noqa: F401
     SPLITTABLE_NODE_TYPES,  # noqa: F401
     extend_node_type_map_from_edges,
-    node_telemetry,
+    node_telemetry,  # noqa: F401
     resolve_node_contract_output,  # noqa: F401
 )
 from farna.core.notifier import (
     EVENT_BUDGET_EXCEEDED,
     EVENT_EVAL_BLOCKED,
     EVENT_HITL_AWAITING,
-    EVENT_PROVIDER_FAILURE,
+    EVENT_PROVIDER_FAILURE,  # noqa: F401
     EVENT_RUN_FAILED,
     EVENT_RUN_STALLED,
 )
@@ -101,10 +105,10 @@ from farna.core.pipeline_engine.decorator import (
 )
 from farna.core.pipeline_engine.error_codes import (
     _CODE_CONNECTOR_FAILED,
-    _CODE_CONNECTOR_UNKNOWN,
+    _CODE_CONNECTOR_UNKNOWN,  # noqa: F401
     _CODE_HARNESS_RETRY_BUDGET_EXHAUSTED,
-    _CODE_SANDBOX_AGENT_FAILED,
-    _CODE_SANDBOX_NO_OUTPUT_JSON,
+    _CODE_SANDBOX_AGENT_FAILED,  # noqa: F401
+    _CODE_SANDBOX_NO_OUTPUT_JSON,  # noqa: F401
     map_legacy_code,
     sanitize_error_text,  # noqa: F401
     should_notify_terminal_failure,
@@ -117,11 +121,11 @@ from farna.core.pipeline_engine.eval_persist_order import (
 from farna.core.pipeline_engine.event_broker import RunEventBroker, get_registry
 from farna.core.pipeline_engine.evidence import (
     EvidenceProvider,
-    build_default_evidence_provider,
-    compute_work_intact,
-    evidence_enabled,
-    node_declared_success,
-    run_evidence_probe,
+    build_default_evidence_provider,  # noqa: F401
+    compute_work_intact,  # noqa: F401
+    evidence_enabled,  # noqa: F401
+    node_declared_success,  # noqa: F401
+    run_evidence_probe,  # noqa: F401
 )
 from farna.core.pipeline_engine.graph_cache import build_graph_from_json, get_or_compile, struct_hash_with_eval_defs
 from farna.core.pipeline_engine.hitl_context import HitlReviewContext, build_hitl_review_context
@@ -134,7 +138,7 @@ from farna.core.pipeline_engine.model_backend_errors import (
 )
 from farna.core.pipeline_engine.modulo_saver import ModuloPostgresSaver  # noqa: F401
 from farna.core.pipeline_engine.node_runner import (
-    MODULO_SYNTHETIC_FAILURE_MARKER,
+    MODULO_SYNTHETIC_FAILURE_MARKER,  # noqa: F401
     ConnectorNodeFailedError,
     OutputSchemaValidationError,
     SandboxNodeFailedError,
@@ -222,7 +226,12 @@ from farna.otel_bridge import LangGraphOtelBridge, trace_id_for_thread  # noqa: 
 # re-exported here so every existing import path and every
 # ``mock.patch("farna.core.pipeline_engine.executor.<name>")`` target keeps
 # resolving. Do not redefine these names in this module.
+#
+# ``_FinalizeMixin`` / ``_TelemetryMixin`` are the step 2-3 class splits: the
+# finalize and telemetry method groups moved into mixin modules, imported under
+# private aliases so they do NOT join this module's importable surface.
 # ---------------------------------------------------------------------------
+from .executor_parts.finalize import FinalizeMixin as _FinalizeMixin
 from .executor_parts.outcomes import (
     _connector_artifact_error_code,
     _connector_artifact_matches,
@@ -309,6 +318,14 @@ from .executor_parts.support import (
     _StreamState,
     _traceback_detail,
 )
+from .executor_parts.telemetry import TelemetryMixin as _TelemetryMixin
+
+# NOTE on the two private aliases above: ``PipelineExecutor`` gets its finalize
+# and telemetry groups as mixins (steps 2-3 of GAPS-harden-w2-executor.md §5).
+# The mixin classes are composition detail, NOT importable surface, so their
+# bindings are dropped once the class exists (see the ``del`` at the end of this
+# module) — ``dir(farna.core.pipeline_engine.executor)`` stays exactly what it
+# was before the split.
 
 # The names above are re-exports, not local definitions. ``__all__`` marks them as
 # explicitly exported so ``mypy --no-implicit-reexport`` (part of ``strict``) still
@@ -535,7 +552,7 @@ def _enrich_failure_detail(raw_detail: str, exc: BaseException) -> str:
     return enrich_error_detail(raw_detail, exc)
 
 
-class PipelineExecutor:
+class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
     """Execute a single pipeline run (HITL-aware, supports parallel fan-out).
 
     ``astream_events`` delivers every node's events (including nodes running in
@@ -2562,264 +2579,6 @@ class PipelineExecutor:
                 await _teardown_hub(hub)
             set_connector_hub(None)
 
-    def _check_db_cancellation(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-    ) -> Callable[[], Awaitable[bool]]:
-        """Build a DB-backed cancellation check closure for a run."""
-
-        async def _check() -> bool:
-            try:
-                return await asyncio.wait_for(
-                    self._do_db_cancellation_check(org_id, run_id),
-                    timeout=5.0,
-                )
-            except TimeoutError:
-                _log.warning(
-                    "run_context.cancellation_db_timeout",
-                    extra={"run_id": str(run_id)},
-                )
-                return False
-
-        return _check
-
-    async def _do_db_cancellation_check(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-    ) -> bool:
-        """Execute the DB cancellation check query."""
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            run = await get_run(session, run_id)
-            return run is not None and run.cancellation_requested
-
-    def _dispatch_context_write_audit(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-    ) -> Callable[[dict[str, Any]], Awaitable[None]]:
-        """Build the audit hook that records non-context-setter run_context writes.
-
-        Mirrors ``_check_db_cancellation``: opens a fresh session, applies RLS, and
-        appends a ``context_write_by_non_setter`` event to the org's audit chain
-        (§8.18). Failures and timeouts are logged and swallowed so the hook can
-        never mask the ContextSetterViolationError raised by the decorator.
-        """
-
-        async def _audit(payload: dict[str, Any]) -> None:
-            try:
-                await asyncio.wait_for(
-                    self._do_context_write_audit(org_id, run_id, payload),
-                    timeout=5.0,
-                )
-            except TimeoutError:
-                _log.warning(
-                    "run_context.audit_hook_timeout",
-                    extra={"run_id": str(run_id)},
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception(
-                    "run_context.audit_hook_failed",
-                    extra={"run_id": str(run_id)},
-                )
-
-        return _audit
-
-    async def _do_context_write_audit(
-        self,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-        payload: dict[str, Any],
-    ) -> None:
-        """Append the ``context_write_by_non_setter`` audit event for a run."""
-        node_id = payload.get("node_id")
-        role = payload.get("role")
-        summary = f'Non-setter context write on node "{node_id}"' if node_id else "Non-setter context write"
-        if role:
-            summary += f" (role {role})"
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            await append_audit_event(
-                session,
-                org_id=org_id,
-                event_type="context_write_by_non_setter",
-                resource_type="run",
-                resource_id=run_id,
-                payload_json={
-                    "node_id": node_id,
-                    "role": role,
-                    "attempted_keys": list(payload.get("attempted_keys") or []),
-                    "actor": SYSTEM_ACTOR,
-                    "summary": summary,
-                },
-            )
-
-    @staticmethod
-    def _log_accumulation_state(
-        run_id: uuid.UUID,
-        segments_completed: int,
-        node_token_usage: dict[str, dict[str, int]] | None,
-    ) -> None:
-        """Distinguish a genuinely-empty accumulator from an upstream wiring
-        regression (§4.2). A ``{}``/``None`` accumulator is legitimate when ZERO
-        segments streamed; an EMPTY dict after ≥1 segment streamed means the
-        on_chain_end / on_chat_model_end handlers stopped populating it.
-        """
-        if segments_completed > 0 and not node_token_usage:
-            _log.warning(
-                "cost_components_accumulation_broken",
-                extra={"run_id": str(run_id), "segments_completed": segments_completed},
-            )
-        elif segments_completed == 0:
-            _log.info(
-                "cost_components_zero_nodes",
-                extra={"run_id": str(run_id)},
-            )
-
-    @staticmethod
-    def _compute_token_costs(
-        node_token_usage: dict[str, dict[str, int]] | None,
-        input_rate: Decimal,
-        output_rate: Decimal,
-    ) -> tuple[int | None, Decimal | None, dict[str, Any] | None]:
-        """Compute total tokens, total cost, and per-node cost from node token usage."""
-        if node_token_usage is None:
-            return None, None, None
-
-        total_tokens = sum(n.get("total_tokens") or 0 for n in node_token_usage.values())
-        total_cost = Decimal(0)
-        result_usage: dict[str, dict[str, Any]] = {}
-        for node_id, n_data in node_token_usage.items():
-            input_tokens = n_data.get("input_tokens")
-            output_tokens = n_data.get("output_tokens")
-            n_cost = Decimal(str(input_tokens if input_tokens is not None else 0)) * input_rate
-            n_cost += Decimal(str(output_tokens if output_tokens is not None else 0)) * output_rate
-            result_usage[node_id] = {**n_data, "cost_usd": float(n_cost)}
-            total_cost += n_cost
-
-        return total_tokens, total_cost, result_usage
-
-    @staticmethod
-    def _aggregate_sandbox_cost(completed_node_outputs: dict[str, Any] | None) -> Decimal:
-        """Sum per-node sandbox-agent cost estimates into a single Decimal.
-
-        NEW FORMAT (split envelope): each node_output has ``telemetry`` key with
-        ``cost_estimate_usd`` directly.
-
-        LEGACY FORMAT: each completed node's captured output is ``{"artifacts": [...],
-        "output": {...}}``; the inner ``output`` dict carries the numeric
-        ``cost_estimate_usd``.
-
-        Non-dict outputs, missing estimates, non-positive, and non-finite
-        values (NaN/inf, which would otherwise corrupt the run total) contribute
-        zero. Kept as a small pure helper so cost parity is testable and shared
-        between :meth:`execute` and :meth:`resume`.
-        """
-        if not completed_node_outputs:
-            return Decimal(0)
-        sandbox_cost = Decimal(0)
-        for node_output in completed_node_outputs.values():
-            if not isinstance(node_output, dict):
-                continue
-            # New split format: telemetry channel carries cost_estimate_usd
-            telemetry = node_output.get("telemetry")
-            est = None
-            if isinstance(telemetry, dict):
-                est = telemetry.get("cost_estimate_usd")
-            else:
-                # Legacy format fallback
-                out = node_output.get("output")
-                if isinstance(out, dict):
-                    est = out.get("cost_estimate_usd")
-            if isinstance(est, (int, float)) and est > 0 and math.isfinite(est):
-                sandbox_cost += Decimal(str(est))
-        return sandbox_cost
-
-    def _get_evidence_provider(self, org_id: uuid.UUID) -> EvidenceProvider:
-        """The injected evidence provider (tests) or the production
-        E2B+DB-backed provider wired for this run's org.
-        """
-        if self._evidence_provider is not None:
-            return self._evidence_provider
-        return build_default_evidence_provider(self._session_factory, org_id)
-
-    def _compute_run_work_intact(
-        self,
-        final_status: str,
-        error_code: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_ids: set[str],
-    ) -> bool | None:
-        """FAR-152 §15.3 — work_intact computed at terminalization from
-        completed-node artifacts + the full DAG ran. NOT from the async
-        evidence probe (restores the false-failure banner for #1/#3).
-
-        Returns None for non-terminal statuses (nothing to write). An
-        A1-elevated run (``failed`` + ``agent.failed``) is NOT complete — its
-        honest work verdict is False (§15.4), so the zero-work elevation banner
-        is what renders. Same for a ``sandbox.no_output_json`` session-lost run
-        (FAR-227): the agent produced no output at all, so it can never be
-        "work intact". Same for a FAR-510 downgraded run
-        (``failed`` + ``sandbox.agent_failed``): the synthetic failure envelope
-        is not a work artifact — the agent died.
-        """
-        if final_status not in _TERMINAL_STATUSES:
-            return None
-        if final_status == "failed" and error_code in (
-            "agent.failed",
-            _CODE_SANDBOX_NO_OUTPUT_JSON,
-            _CODE_SANDBOX_AGENT_FAILED,
-        ):
-            return False
-        return compute_work_intact(completed_node_outputs, node_ids)
-
-    async def _run_post_terminal_evidence_probes(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        completed_node_outputs: dict[str, Any],
-    ) -> None:
-        """FAR-152 §15.3 — post-commit async evidence probe for no-op-eligible
-        nodes (declared ``outcome:success``) on a complete run. Runs off the
-        critical path (after terminalization commits), bounded ≤3s per probe,
-        gated by the EvidenceProvider seam. Fail-open — a probe failure never
-        affects the run.
-        """
-        if final_status != "complete" or not evidence_enabled():
-            return
-        evidence_nodes = [node_id for node_id, out in completed_node_outputs.items() if node_declared_success(out)]
-        if not evidence_nodes:
-            return
-        provider = self._get_evidence_provider(org_id)
-        results = await asyncio.gather(
-            *[
-                run_evidence_probe(
-                    provider=provider,
-                    session_factory=self._session_factory,
-                    run_id=run_id,
-                    node_id=node_id,
-                    organisation_id=org_id,
-                )
-                for node_id in evidence_nodes
-            ],
-            return_exceptions=True,
-        )
-        for node_id, res in zip(evidence_nodes, results, strict=False):
-            if isinstance(res, Exception):
-                _log.warning(
-                    "heuristic.probe_task_failed",
-                    extra={"run_id": str(run_id), "node_id": node_id},
-                    exc_info=res,
-                )
-
     async def _enforce_resume_sandbox_capacity(
         self,
         session: AsyncSession,
@@ -3830,741 +3589,6 @@ class PipelineExecutor:
             await _teardown_hub(model_backend_hub)
         if final_status not in ("awaiting_human", "complete"):
             get_registry().close(run_id)
-
-    async def _record_eval_blocked_audit(
-        self,
-        *,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        error_detail: str | None,
-    ) -> None:
-        """Record an ``eval.blocked`` audit event — failure-isolated.
-
-        Runs in its own session/transaction so a blocked-eval audit failure
-        never interrupts terminalization. The payload carries the sanitized
-        detail plus the run's pipeline id so the event links back to the graph.
-        """
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            # FAR-1141 / ADR-042: the run's execution origin travels with this
-            # run-keyed payload so the audit log can tell a dispatched run from
-            # one Modulo executed. Best-effort and read INSIDE this audit's own
-            # transaction, with the serializer's ``None``-row form as the degrade
-            # arm: any read failure yields the key with NULL (logged) and never
-            # suppresses the audit event itself.
-            provenance: dict[str, Any] = run_provenance_fields(None)
-            try:
-                provenance = run_provenance_fields(await get_run(session, run_id))
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.warning(
-                    "audit.eval_blocked_origin_unavailable",
-                    extra={"run_id": str(run_id)},
-                    exc_info=True,
-                )
-            try:
-                await append_audit_event(
-                    session,
-                    org_id=org_id,
-                    event_type="eval.blocked",
-                    resource_type="run",
-                    resource_id=run_id,
-                    payload_json={
-                        "pipeline_id": str(pipeline_id),
-                        **provenance,
-                        "error_detail": _sanitize_detail(error_detail, limit=None),
-                        "actor": SYSTEM_ACTOR,
-                        "summary": f"Guardrail eval blocked the run (pipeline {short_id(pipeline_id)})",
-                    },
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception("audit.eval_blocked_failed", extra={"run_id": str(run_id)})
-
-    @staticmethod
-    def _sandbox_failure_scan_views(value: Any) -> list[dict[str, Any]]:
-        """FAR-510 — the dict views of one per-node output value that may carry
-        the sandbox envelope fields (``status`` / the synthetic-failure marker).
-
-        NEW FORMAT (split envelope): value has ``output`` (pure return) and
-        ``telemetry`` keys. The telemetry view carries the envelope fields.
-
-        LEGACY FORMAT: A full runner envelope ``{artifacts, output}`` yields the
-        value itself (flat / legacy mixed bodies), the outer ``output`` telemetry
-        view, and the first artifact's inner ``output``.
-
-        A post-P1b stored ``outputs_json`` value is the PURE agent return
-        (``None`` or agent-authored business JSON) — scanned top-level only; the
-        marker requirement in the predicate keeps agent-authored JSON
-        collision-free.
-        """
-        views: list[dict[str, Any]] = []
-        if not isinstance(value, dict):
-            return views
-        # New split format: telemetry channel
-        telemetry = value.get("telemetry")
-        if isinstance(telemetry, dict):
-            views.append(telemetry)
-        # Legacy format: artifacts and output
-        views.append(value)
-        outer = value.get("output")
-        if isinstance(outer, dict):
-            views.append(outer)
-        artifacts = value.get("artifacts")
-        if isinstance(artifacts, list) and artifacts and isinstance(artifacts[0], dict):
-            inner = artifacts[0].get("output")
-            if isinstance(inner, dict):
-                views.append(inner)
-        return views
-
-    @staticmethod
-    def _is_sandbox_synthetic_failure_view(view: dict[str, Any]) -> bool:
-        """FAR-510 — the marker-based downgrade predicate.
-
-        Requires ``status == "failed"`` AND the runner's machine marker
-        (``MODULO_SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
-        agent-authored failure shape (honest exit-code failure, business JSON
-        self-reporting failure) is never downgraded.
-        """
-        return view.get("status") == "failed" and view.get(MODULO_SYNTHETIC_FAILURE_MARKER) is True
-
-    def _downgrade_connector_failures(
-        self,
-        *,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-        stored_node_outputs: dict[str, Any] | None = None,
-        stored_node_telemetry: dict[str, Any] | None = None,
-    ) -> tuple[str, str | None, str | None]:
-        """Downgrade an explicit connector failure envelope before finalization."""
-        if final_status != "complete":
-            return final_status, error_code, error_detail
-        stored_outputs = stored_node_outputs or {}
-        stored_telemetry = stored_node_telemetry or {}
-        node_ids = set(completed_node_outputs) | set(stored_outputs) | set(stored_telemetry)
-        failures = [
-            _connector_failure_for_node(
-                node_id,
-                node_type_map,
-                completed_node_outputs,
-                stored_outputs,
-                stored_telemetry,
-            )
-            for node_id in node_ids
-        ]
-        observed = [failure for failure in failures if failure is not None]
-        if not observed:
-            return final_status, error_code, error_detail
-        details = sorted({reason for reason, _ in observed})
-        chosen_code = _CODE_CONNECTOR_UNKNOWN if any(code == _CODE_CONNECTOR_UNKNOWN for _, code in observed) else _CODE_CONNECTOR_FAILED
-        return "failed", chosen_code, "; ".join(details)
-
-    def _downgrade_masked_sandbox_failures(
-        self,
-        *,
-        run_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-        stored_node_outputs: dict[str, Any] | None = None,
-        stored_node_telemetry: dict[str, Any] | None = None,
-    ) -> tuple[str, str | None, str | None]:
-        """FAR-510 — downgrade a masked sandbox-agent failure to an honest fail.
-
-        The sandbox_agent runner's synthetic failure paths (generic exception,
-        schema validation) do NOT raise — they RETURN a failure envelope
-        stamped with the ``MODULO_SYNTHETIC_FAILURE_MARKER`` machine marker.
-        Node completion is output-presence-based, so that node counts as
-        completed and the run would finalize ``complete`` — a failed dispatch
-        masked as success.
-
-        Only a ``complete`` final_status is inspected (failed/eval_failed/etc.
-        are already honest). A match is a completed output on a node the
-        ``node_type_map`` says is ``sandbox_agent`` for which ANY scanned view
-        shows ``status == "failed"`` AND the synthetic-failure marker (see
-        :meth:`_is_sandbox_synthetic_failure_view`). Returns the inputs
-        unchanged when nothing matches.
-
-        The scan checks the per-node UNION of three views — the live
-        ``completed_node_outputs`` envelope, the run's STORED cumulative
-        ``outputs_json`` value, and the STORED ``node_telemetry_json`` view
-        (via the legacy-safe ``node_output_split.node_telemetry`` accessor,
-        which falls back to the legacy mixed-envelope inner output for pre-P1b
-        rows). A HITL resume only re-emits the resumed segment's node events,
-        so a masked failure from a PRIOR segment is only visible in the stored
-        columns — and those hold the POST-split shapes (``outputs_json`` =
-        pure return or ``None``; telemetry = the envelope fields), which are
-        DIFFERENT shapes from the live envelope by design. No view clobbers
-        another: a match in ANY view downgrades.
-        """
-        if final_status != "complete":
-            return final_status, error_code, error_detail
-        stored_outputs = stored_node_outputs or {}
-        stored_telemetry = stored_node_telemetry or {}
-        node_ids = set(completed_node_outputs) | set(stored_outputs) | set(stored_telemetry)
-        found: list[str] = []
-        for node_id in node_ids:
-            if node_type_map.get(node_id) != "sandbox_agent":
-                continue
-            views = self._sandbox_failure_scan_views(completed_node_outputs.get(node_id))
-            views.extend(self._sandbox_failure_scan_views(stored_outputs.get(node_id)))
-            views.extend(self._sandbox_failure_scan_views(node_telemetry(stored_telemetry, stored_outputs, node_id)))
-            if any(self._is_sandbox_synthetic_failure_view(view) for view in views):
-                found.append(node_id)
-        if not found:
-            return final_status, error_code, error_detail
-        _log.warning(
-            "pipeline.masked_sandbox_failure_downgraded",
-            extra={"run_id": str(run_id), "node_ids": sorted(found)},
-        )
-        return "failed", _CODE_SANDBOX_AGENT_FAILED, "Sandbox agent node(s) failed: " + ", ".join(sorted(found))
-
-    async def _load_stored_node_columns(self, *, run_id: uuid.UUID, org_id: uuid.UUID) -> tuple[dict[str, Any], dict[str, Any]]:
-        """FAR-510 — the run's STORED cumulative per-node columns.
-
-        Returns ``(outputs_json, node_telemetry_json)``. A HITL resume only
-        re-emits the resumed segment's node events, so the live
-        ``completed_node_outputs`` can miss a masked sandbox failure from a
-        prior segment; the stored row is the cumulative truth. Since the P1b
-        write-flip the two columns hold DIFFERENT shapes (pure return vs
-        telemetry envelope), so BOTH are loaded and the downgrade scans a
-        per-node view of each. Best-effort (guard-the-guard): any failure —
-        including a missing row or a non-dict column — yields empty dicts so
-        the downgrade falls back to scanning the live dict only. It must never
-        crash finalization.
-
-        FAR-583: the blobs reassemble from ``run_node_outputs`` via the repo
-        reader (with the empty/mismatch legacy fallback) inside the SAME
-        transaction that loads the run row — one batched query, never a
-        per-node lazy load.
-        """
-        if self._session_factory is None:
-            return {}, {}
-        outputs_json: dict[str, Any] = {}
-        telemetry_json: dict[str, Any] = {}
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                run = await get_run(session, run_id)
-                if run is not None:
-                    blobs = await read_run_blobs(session, run_id=run_id, organisation_id=org_id)
-                    outputs_json = dict(blobs.outputs) if isinstance(blobs.outputs, dict) else {}
-                    telemetry_json = dict(blobs.telemetry) if isinstance(blobs.telemetry, dict) else {}
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.masked_sandbox_failure_stored_scan_unavailable",
-                extra={"run_id": str(run_id)},
-                exc_info=True,
-            )
-            return {}, {}
-        return outputs_json, telemetry_json
-
-    async def _downgrade_hitl_terminate_rejection(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-    ) -> tuple[str, str | None, str | None]:
-        """Downgrade ``complete`` to ``rejected`` for a HITL terminate-rejection (FAR-1487).
-
-        Keyed on BOTH signals - never the agent's/graph's echo alone:
-
-        1. the gate artifact (``result == "rejected"`` + ``reject_disposition ==
-           "terminate"``, for the gate ids latched by the stream), AND
-        2. the COMMITTED ``hitl_claims`` row for (this run, that gate) with
-           ``decision == "rejected"``.
-
-        A coalesced-supersede system rejection (committed
-        ``decision_payload.reason == SUPERSEDE_REASON`` with NO deciding
-        account) lands as ``hitl.superseded`` - bookkeeping on an outdated work
-        item, never a human "no" - so it is not counted as a human reject.
-        Fail-safe: a lookup failure leaves the status untouched.
-        """
-        gate_ids = sorted(self._terminating_rejected_gates)
-        if not gate_ids or self._session_factory is None:
-            return final_status, error_code, error_detail
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                claims = (
-                    (
-                        await session.execute(
-                            select(HitlClaim).where(
-                                HitlClaim.run_id == run_id,
-                                HitlClaim.organisation_id == org_id,
-                                HitlClaim.review_id.in_(gate_ids),
-                                HitlClaim.decision == "rejected",
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("pipeline.hitl_reject_downgrade_lookup_failed", extra={"run_id": str(run_id)})
-            return final_status, error_code, error_detail
-        if not claims:
-            return final_status, error_code, error_detail
-        # Prefer a human rejection when several gates rejected (a human said
-        # "no" somewhere); only an all-system supersede is labelled superseded.
-        superseded_only = all(_is_supersede_rejection(c) for c in claims)
-        _log.info(
-            "pipeline.hitl_rejected",
-            extra={"run_id": str(run_id), "gates": gate_ids, "superseded": superseded_only},
-        )
-        if superseded_only:
-            return "rejected", "hitl.superseded", "Superseded by a newer version of the work item."
-        return "rejected", "hitl.rejected", "Rejected by a reviewer at a HITL gate; the run ended."
-
-    async def _finalize_then_publish_completed(self, *, defer_close: bool, **finalize_kwargs: Any) -> Run:
-        """Run ``_finalize_run_after_stream`` then publish ``run_completed`` (FAR-1534).
-
-        ``defer_close`` is True when the stream ended ``complete``: the broker
-        was deliberately left open so the event is only emitted once finalize
-        has committed the terminal status — a would-be ``complete`` that
-        finalize downgrades (FAR-1487 ``rejected``, FAR-510 ``failed``) never
-        shows live clients ``complete``. The payload stays ``{}`` for a genuine
-        ``complete`` and carries ``{"status": <final>}`` for a downgraded run.
-        The broker is always closed (even when finalize raises) so SSE
-        subscribers are released.
-        """
-        run_id: uuid.UUID = finalize_kwargs["run_id"]
-        try:
-            final_run = await self._finalize_run_after_stream(**finalize_kwargs)
-            if defer_close:
-                self._publish_run_completed(run_id, final_run.status)
-            return final_run
-        finally:
-            if defer_close:
-                get_registry().close(run_id)
-
-    @staticmethod
-    def _publish_run_completed(run_id: uuid.UUID, final_status: str) -> None:
-        """Best-effort ``run_completed`` publish carrying the committed status."""
-        broker = get_registry().get_or_create(run_id)
-        try:
-            broker.publish("run_completed", {} if final_status == "complete" else {"status": final_status})
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("pipeline.run_completed_publish_failed", extra={"run_id": str(run_id)})
-
-    async def _run_finalize_cost_transaction(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        node_token_usage: dict[str, Any] | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-        work_intact: bool | None,
-    ) -> None:
-        """Own + run the finalisation transaction, re-running it on a lock failure.
-
-        The transaction is owned HERE (``session.begin()``), so re-owning it on a
-        whole-transaction lock failure (40P01 deadlock / 55P03 lock_timeout) is
-        feasible and is the only recovery — the transaction is aborted, so a
-        retry must re-run it from the top, not attempt savepoint surgery.
-        Idempotent-safe: a rolled-back transaction commits NOTHING (including
-        the org accrual, which lives inside the ledger savepoint), so a re-run
-        cannot double-count and the ``finalize_cost`` duplicate-terminal guard
-        is re-derived from the DB each attempt.
-
-        The bounded retry rides out transient contention; if it persists, the
-        exception propagates — ``run_executor_with_watchdog`` terminal-fails the
-        run as ``executor_failed`` (truthful, non-silent), never a raw 500.
-
-        FAR-1642 retry-idempotent metrics: each attempt buffers its
-        ``limit_refused`` / ``duplicate_terminal`` counters on a FRESH
-        :class:`FinalizeMetricSink` and the sink is flushed only AFTER this
-        attempt's transaction commits — so a rolled-back attempt emits nothing
-        and a retried finalisation emits exactly one sample per event, instead
-        of one per attempt. A discarded sink (attempt failed) is simply dropped.
-        """
-        for attempt in range(1, FINALIZE_LOCK_RETRY_ATTEMPTS + 1):
-            metric_sink = FinalizeMetricSink()
-            try:
-                async with self._session_factory() as session, session.begin():
-                    await set_rls_org(session, org_id)
-                    await set_rls_execution_context(session)
-                    await finalize_cost(
-                        session,
-                        run_id=run_id,
-                        org_id=org_id,
-                        status=final_status,
-                        segment_node_token_usage=node_token_usage,
-                        segment_completed_node_outputs=completed_node_outputs,
-                        node_type_map=node_type_map,
-                        error_code=error_code,
-                        error_detail=error_detail,
-                        is_terminal=final_status in _TERMINAL_STATUSES,
-                        session_factory=self._session_factory,
-                        claim_token=self._claim_token,
-                        metric_sink=metric_sink,
-                    )
-                    await _apply_work_intact_best_effort(session, run_id, work_intact, claim_token=self._claim_token)
-                # Committed — the buffered counters are now real (exactly once).
-                metric_sink.flush()
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                if attempt < FINALIZE_LOCK_RETRY_ATTEMPTS and _is_finalize_lock_retryable(exc):
-                    _log.warning(
-                        "pipeline.finalize_lock_retry",
-                        extra={
-                            "run_id": str(run_id),
-                            "attempt": attempt,
-                            "max_attempts": FINALIZE_LOCK_RETRY_ATTEMPTS,
-                            "sqlstate": sqlstate_of(exc),
-                        },
-                    )
-                    await asyncio.sleep(_FINALIZE_LOCK_RETRY_DELAY_SECONDS * attempt)
-                    continue
-                raise
-
-    async def _finalize_run_after_stream(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        node_type_map: dict[str, str],
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        node_token_usage: dict[str, Any] | None,
-        completed_node_outputs: dict[str, Any],
-        node_ids: set[str],
-    ) -> Run:
-        """Finalize a streamed run (execute + resume share this tail).
-
-        Computes ``work_intact``, runs ``finalize_cost``, records the
-        compensating daily fact when needed, fetches the final row, and fires
-        the post-terminal evidence probes. ``final_status`` reflects the
-        terminal/awaiting_human outcome of the stream, after the FAR-510
-        masked-sandbox-failure downgrade.
-        """
-        # FAR-510 / FAR-1487: downgrade a stream that would otherwise finalize
-        # ``complete`` on a masked sandbox or connector failure. Runs BEFORE the
-        # eval_blocked audit, work_intact, and finalize_cost so every downstream
-        # consumer sees the honest status.
-        final_status, error_code, error_detail = await self._downgrade_final_status_after_stream(
-            run_id=run_id,
-            org_id=org_id,
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-        )
-
-        # Record audit events for block failures on resume.
-        eval_blocked = final_status == "eval_failed" and error_code == "eval_blocked"
-        if eval_blocked:
-            await self._record_eval_blocked_audit(
-                org_id=org_id,
-                run_id=run_id,
-                pipeline_id=pipeline_id,
-                error_detail=error_detail,
-            )
-
-        # Resume recomputes from LIVE components over the cumulative merged set
-        # (two-state rule, §4.4); finalize_cost reads the stored cumulative set,
-        # merges the resumed segment (segment-wins), and recomputes.
-        # FAR-152 §15.3 — work_intact computed at terminalization (same rule as
-        # execute()).
-        work_intact = self._compute_run_work_intact(final_status, error_code, completed_node_outputs, node_ids)
-        await self._run_finalize_cost_transaction(
-            run_id=run_id,
-            org_id=org_id,
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            node_token_usage=node_token_usage,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-            work_intact=work_intact,
-        )
-
-        # Terminal-failure notification. Fired ONLY after the
-        # terminal write above has COMMITTED and ONLY for a non-retryable
-        # critical code (see ``should_notify_terminal_failure``) — routine
-        # retryable failures stay silent, and a finalize lock retry (which
-        # re-runs the transaction) can never double-notify because the dispatch
-        # sits outside the retry loop. Failure-isolated inside the helper.
-        if final_status == "failed":
-            await self._dispatch_run_failed(
-                org_id=org_id,
-                run_id=run_id,
-                pipeline_id=pipeline_id,
-                error_code=error_code,
-            )
-
-        # FAR-291: run-termination compensation for a guardrail-blocked
-        # MID-RUN terminalization. The terminal status write (finalize_cost
-        # above) has already landed; a run whose earlier nodes pushed a PR /
-        # flipped a Linear status before a later node's output was
-        # guardrail-blocked now gets those side effects compensated. Best-effort
-        # + failure-isolated (guard-the-guard): a compensation failure never
-        # crashes terminalization. Uses its own fresh session + hub.
-        if eval_blocked:
-            await self._compensate_blocked_run_best_effort(
-                org_id=org_id,
-                run_id=run_id,
-                executed_nodes=completed_node_outputs,
-            )
-
-        # Fetch the final run in a fresh session — finalize_cost's ledger block
-        # may have aborted the transaction in the whole-tx-abort reduced-escape
-        # path (the run row was re-terminalized there).
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            final_run = await get_run(session, run_id)
-
-        if final_run is None:
-            raise RunNotFoundError(run_id)
-
-        # FAR-2006 / FAR-2138 / FAR-152 §15.3 / FAR-1690 A3: alerting,
-        # terminal-status notifications, post-commit evidence probes and the
-        # teardown seal — dispatched from this ONE shared finalization tail so
-        # every terminal path is covered.
-        await self._run_post_finalize_side_effects(
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            final_status=final_status,
-            error_code=error_code,
-            final_run=final_run,
-            completed_node_outputs=completed_node_outputs,
-        )
-        return final_run
-
-    async def _downgrade_final_status_after_stream(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        error_detail: str | None,
-        completed_node_outputs: dict[str, Any],
-        node_type_map: dict[str, str],
-    ) -> tuple[str, str | None, str | None]:
-        """Downgrade a streamed ``complete`` that hides a masked node failure.
-
-        FAR-510: a sandbox_agent node whose dispatch died to a generic
-        exception RETURNS a failed envelope instead of raising, and node
-        completion is output-presence-based — so a failed dispatch would
-        otherwise finalize the run ``complete``. The scan also covers the
-        run's STORED cumulative outputs (resume parity: a HITL resume only
-        re-emits the resumed segment, so a masked failure from a prior
-        segment is only visible in the stored row). The extra run-row read
-        happens on the complete path ONLY — failed/awaiting_human skip it.
-        """
-        stored_node_outputs: dict[str, Any] = {}
-        stored_node_telemetry: dict[str, Any] = {}
-        if final_status == "complete":
-            # FAR-1487: a stamped terminate-rejection ENDs the graph, which is
-            # a NORMAL stream exit - without this downgrade the run would be
-            # finalized ``complete`` (the same bug one layer up).
-            final_status, error_code, error_detail = await self._downgrade_hitl_terminate_rejection(
-                run_id=run_id,
-                org_id=org_id,
-                final_status=final_status,
-                error_code=error_code,
-                error_detail=error_detail,
-            )
-        if final_status == "complete":
-            stored_node_outputs, stored_node_telemetry = await self._load_stored_node_columns(run_id=run_id, org_id=org_id)
-        final_status, error_code, error_detail = self._downgrade_connector_failures(
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-            stored_node_outputs=stored_node_outputs,
-            stored_node_telemetry=stored_node_telemetry,
-        )
-        final_status, error_code, error_detail = self._downgrade_masked_sandbox_failures(
-            run_id=run_id,
-            final_status=final_status,
-            error_code=error_code,
-            error_detail=error_detail,
-            completed_node_outputs=completed_node_outputs,
-            node_type_map=node_type_map,
-            stored_node_outputs=stored_node_outputs,
-            stored_node_telemetry=stored_node_telemetry,
-        )
-        return final_status, error_code, error_detail
-
-    async def _run_post_finalize_side_effects(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-        final_run: Run,
-        completed_node_outputs: dict[str, Any],
-    ) -> None:
-        """Fire the alerting / notification / evidence / seal tail.
-
-        Runs after the terminal write has COMMITTED, reading the COMMITTED row
-        (``final_run``) rather than the pre-finalize locals.
-        """
-        # FAR-2006: a non-retryable provider auth/billing refusal is exactly
-        # the class that must page. Dispatched from the ONE shared finalization
-        # tail so every terminal path (transient short-circuit, retry-policy
-        # exhaustion, generic catch) is covered without a second call site.
-        await self._alert_provider_failure(
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            final_status=final_status,
-            error_code=error_code,
-        )
-
-        # FAR-2138 — terminal-outcome notifications for the statuses that carry
-        # their own event (stalled / budget_exceeded / eval_blocked). Read from
-        # the COMMITTED row, never the pre-finalize locals: the per-agent token
-        # budget override lands INSIDE finalize_cost above, so only the row
-        # carries the resulting ``budget_exceeded`` status. Dispatched from this
-        # ONE shared tail so execute and resume are both covered.
-        await self._dispatch_terminal_status_notification(
-            org_id=org_id,
-            run_id=run_id,
-            pipeline_id=pipeline_id,
-            final_run=final_run,
-        )
-
-        # FAR-152 §15.3 — post-commit async evidence probe (same rule as
-        # execute()). Bounded ≤3s per node, gated by the EvidenceProvider seam.
-        await self._run_post_terminal_evidence_probes(
-            run_id=run_id,
-            org_id=org_id,
-            final_status=final_status,
-            completed_node_outputs=completed_node_outputs,
-        )
-        # FAR-1690 A3 (run_teardown.RunTeardownSeal): the sealed terminal step —
-        # revoke the run's per-run API key (FAR-296 Phase 3b), then destroy every
-        # workspace labelled modulo.run.id = run_id, then write one
-        # run.teardown_sealed fact. Revoke-first, fail-closed. Failure-isolated
-        # so a seal failure never crashes terminalization (the key's short-TTL
-        # expiry in validate_api_key is the credential backstop; the
-        # workspace-orphan reconciler reclaims a workspace the seal could not).
-        try:
-            await self._seal_run_teardown(run_id=run_id, org_id=org_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("run_teardown.seal_failed", extra={"run_id": str(run_id)})
-
-    async def _alert_provider_failure(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        final_status: str,
-        error_code: str | None,
-    ) -> None:
-        """Dispatch the provider-refusal alert (FAR-2006) — failure-isolated.
-
-        A 401/402 provider refusal is terminal and never retried, so without a
-        real alert the only trace is a log line plus an ``error_code`` row —
-        exactly how a whole night ran at zero throughput with nothing
-        surfaced. Uses the existing Notifier path (webhook + in-app) with a
-        DEDICATED event so an operator can page on provider refusals without
-        subscribing to every failed run.
-
-        Called from the one shared finalization tail, so every terminal path
-        is covered. Fail-open WITH a log: an alerting failure must never crash
-        terminalization (the run is already terminal), but it also must never
-        be silent.
-        """
-        if self._notifier is None or final_status != "failed":
-            return
-        canonical = map_legacy_code(error_code)
-        if canonical not in NON_RETRYABLE_PROVIDER_CODES:
-            return
-
-        pipeline_name: str | None = None
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                pipeline_name = await _safe_pipeline_name(session, pipeline_id, org_id, run_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.provider_failure_alert_name_lookup_failed",
-                extra={"run_id": str(run_id), "pipeline_id": str(pipeline_id)},
-                exc_info=True,
-            )
-
-        payload: dict[str, Any] = {
-            "run_id": str(run_id),
-            "pipeline_id": str(pipeline_id),
-            "pipeline_name": pipeline_name or "unknown pipeline",
-            "error_code": canonical,
-        }
-        try:
-            await self._notifier.dispatch_event(
-                org_id=org_id,
-                event_type=EVENT_PROVIDER_FAILURE,
-                payload=payload,
-                run_id=run_id,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception(
-                "pipeline.provider_failure_alert_failed",
-                extra={"run_id": str(run_id), "error_code": canonical},
-            )
-
-    async def _seal_run_teardown(self, *, run_id: uuid.UUID, org_id: uuid.UUID) -> None:
-        """Run the sealed joint revoke+destroy step for a terminalized run (FAR-1690 A3).
-
-        Failure-isolated at the call site — a seal failure never crashes
-        terminalization. ``seal_run_teardown`` itself raises
-        ``RunTeardownSealError`` when the credential revoke could not be
-        confirmed (after writing the ``sealed=False`` fact); that surfaces here
-        as a loud log line, and the compensating sweep retries.
-        """
-        if self._session_factory is None:
-            return
-        from farna.core.run_teardown import seal_run_teardown
-
-        await seal_run_teardown(
-            run_id=run_id,
-            org_id=org_id,
-            session_factory=self._session_factory,
-        )
 
     async def execute(
         self,
@@ -7230,3 +6254,17 @@ class PipelineExecutor:
             if run_root_token is not None:
                 context_api.detach(run_root_token)
             self._otel_bridge.end_run_root()
+
+
+# ---------------------------------------------------------------------------
+# End of the PipelineExecutor class body.
+#
+# ``_FinalizeMixin`` / ``_TelemetryMixin`` are private aliases for the two mixin
+# bases (steps 2-3 of GAPS-harden-w2-executor.md section 5). They are composition
+# detail, not importable surface: dropping the bindings here keeps ``dir()`` on
+# this module exactly what it was before the split. Everything the rest of the
+# codebase imports or ``mock.patch``es still resolves, because the methods live
+# on the class through the MRO and the moved bodies resolve their free names via
+# ``executor_parts.support._ref``.
+# ---------------------------------------------------------------------------
+del _FinalizeMixin, _TelemetryMixin
