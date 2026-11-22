@@ -460,22 +460,11 @@ def response_carries_error(request):
     assert "error" in _mcp_response_payload(request)
 
 
-@then(parsers.parse("the response contains isError true"))
-def response_is_error(request):
-    data = _mcp_response_payload(request)
-    assert data.get("isError") is True
-
-
 @then(parsers.parse('the error mentions "{text}"'))
 def error_mentions(text: str, request):
     data = _mcp_response_payload(request)
     content = str(data.get("detail", data.get("error", data))).lower()
     assert text.lower() in content
-
-
-@given(parsers.parse('the MCP API key has scope "{scope}"'))
-def mcp_key_scope(scope: str, request):
-    request.node._mcp_scope = scope
 
 
 @given(parsers.parse('a run is waiting at gate "{gate}"'))
