@@ -1324,7 +1324,12 @@ def restore_guidance(
         body = "Manual restore - this re-points `current` back to the previous binary ONLY.\nNo pre-upgrade snapshot was taken for this attempt (no migration was pending), so the\nDATABASE IS NOT RESTORED by this command and no data restore is needed."
         return f"{fault}\n{body}\nExact manual restore command:\n  {link_cmd}"
     head = "Manual restore - this restores BOTH the binary AND the data. The attempted upgrade's\nboot may have forward-migrated the database schema past the old bundle's migration\nhead, so restoring the old binary ALONE is not sufficient."
-    restore_cmd = f"farna-control restore {snapshot} --data-dir {data_dir} --yes"
+    # `--db-url "$DATABASE_ADMIN_URL"` (a shell reference, never a literal
+    # credential) makes the recovery connect to the OWNER database the upgrade
+    # dumped from; without it a native operator shell with no DATABASE_URL set
+    # has nothing for the restore to connect to. The database must be reachable
+    # when this runs (start the previous release first if it is bundled).
+    restore_cmd = f'farna-control restore {snapshot} --data-dir {data_dir} --yes --db-url "$DATABASE_ADMIN_URL"'
     compound = link_cmd + " && " + restore_cmd
     return f"{fault}\n{head}\nPre-upgrade snapshot: {snapshot}\nExact manual restore command:\n  {compound}"
 
@@ -1727,18 +1732,34 @@ def _snapshot_schema_versions(snapshot_dir: Path) -> list[str]:
     return [str(entry) for entry in versions] if isinstance(versions, list) else []
 
 
-def _bundle_alembic_revisions(bundle_dir: Path) -> set[str]:
-    """Every revision id the NEW bundle's migrations tree ships."""
+def _bundle_script_directory(bundle_dir: Path) -> Any | None:
+    """The NEW bundle's alembic ``ScriptDirectory``, or None when unreadable.
+
+    The ONE place the Config + ScriptDirectory wiring lives: the revisions
+    and heads resolvers both need the same migrations tree, so they share
+    this resolver rather than duplicating it.
+    """
     try:
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
         migrations_dir = bundle_dir / "backend" / "src" / "farna" / "db" / "migrations"
         if not migrations_dir.is_dir():
-            return set()
+            return None
         config = Config()
         config.set_main_option("script_location", str(migrations_dir))
-        script = ScriptDirectory.from_config(config)
+        return ScriptDirectory.from_config(config)
+    except Exception as exc:
+        _log.warning("upgrade.bundle_script_directory_unresolved error=%s", exc)
+        return None
+
+
+def _bundle_alembic_revisions(bundle_dir: Path) -> set[str]:
+    """Every revision id the NEW bundle's migrations tree ships."""
+    script = _bundle_script_directory(bundle_dir)
+    if script is None:
+        return set()
+    try:
         return {revision.revision for revision in script.walk_revisions()}
     except Exception as exc:
         _log.warning("upgrade.target_heads_unresolved error=%s", exc)
@@ -2105,16 +2126,10 @@ def _resolve_upgrade_assets(
 
 def _bundle_alembic_heads(bundle_dir: Path) -> set[str]:
     """The NEW bundle's migration HEAD(s) (empty when it cannot be read)."""
+    script = _bundle_script_directory(bundle_dir)
+    if script is None:
+        return set()
     try:
-        from alembic.config import Config
-        from alembic.script import ScriptDirectory
-
-        migrations_dir = bundle_dir / "backend" / "src" / "farna" / "db" / "migrations"
-        if not migrations_dir.is_dir():
-            return set()
-        config = Config()
-        config.set_main_option("script_location", str(migrations_dir))
-        script = ScriptDirectory.from_config(config)
         return set(script.get_heads())
     except Exception as exc:
         _log.warning("upgrade.bundle_heads_unresolved error=%s", exc)

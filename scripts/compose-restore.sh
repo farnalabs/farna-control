@@ -133,17 +133,24 @@ printf 'Verifying snapshot %s before touching anything...\n' "$container_snapsho
 compose run --rm --no-deps --entrypoint sh "$app_service" -c \
   'test -d "$1" || { echo "refusing to restore: no snapshot directory at $1" >&2; exit 1; }' \
   sh "$container_snapshot"
-compose run --rm --no-deps "$app_service" \
-  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run >/dev/null
+# The all-in-one image ENTRYPOINT is /entrypoint.sh (it ignores its arguments
+# and execs supervisord), and the installed executable is `farna-control`, not
+# `restore` — so run through `sh -c` and name the real binary. `$DATABASE_ADMIN_URL`
+# is single-quoted ON PURPOSE: it exists only in the container's compose
+# environment, never in the operator's shell (which runs under `set -u`), so it
+# must be expanded IN-CONTAINER, not here.
+compose run --rm --no-deps --entrypoint sh "$app_service" \
+  -c 'exec farna-control restore "$1" --db-url "$DATABASE_ADMIN_URL" --dry-run' \
+  sh "$container_snapshot" >/dev/null
 
 printf 'Verifying the TARGET database matches the snapshot...\n'
 # Without --data-dir there is no state.json identity to compare, so the
 # equivalent guard verifies the TARGET's recorded schema against the snapshot's:
 # a database that is not the one this snapshot came from (different revision,
 # or not a bootstrapped Farna Control database at all) is refused.
-compose run --rm --no-deps "$app_service" \
-  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run \
-  --verify-target-schema >/dev/null
+compose run --rm --no-deps --entrypoint sh "$app_service" \
+  -c 'exec farna-control restore "$1" --db-url "$DATABASE_ADMIN_URL" --dry-run --verify-target-schema' \
+  sh "$container_snapshot" >/dev/null
 
 printf 'Stopping the writers (compose service "%s")...\n' "$app_service"
 compose stop "$app_service"
@@ -154,9 +161,9 @@ printf 'Restoring %s ...\n' "$container_snapshot"
 # is already running; do not restart it. --safety-dump-dir /backups keeps the
 # pre-restore safety dump of the CURRENT database on the volume instead of
 # inside the disposable container.
-compose run --rm --no-deps "$app_service" \
-  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" \
-  --yes --verify-target-schema --safety-dump-dir /backups
+compose run --rm --no-deps --entrypoint sh "$app_service" \
+  -c 'exec farna-control restore "$1" --db-url "$DATABASE_ADMIN_URL" --yes --verify-target-schema --safety-dump-dir /backups' \
+  sh "$container_snapshot"
 
 printf '\nRestore complete. Writers stay stopped.\n'
 print_start_command

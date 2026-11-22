@@ -185,9 +185,10 @@ services:
       # or DB_CAPACITY_SOURCE=disabled to turn detection off entirely.
       DB_CAPACITY_PATH: ${DB_CAPACITY_PATH:-/var/lib/farna/db-volume}
       # FARNA_CONTROL_SNAPSHOT_DIR: where the entrypoint's pre-upgrade
-      # snapshot goes (FAR-2667). It MUST be the /backups bind mount below and
-      # never the postgres_data volume: a host path survives image replacement
-      # and `compose down`, does not double the volume the capacity monitor
+      # snapshot goes (FAR-2667). It MUST be the /backups named volume
+      # (snapshot_data) declared below and never the postgres_data volume: the
+      # volume survives image replacement and `compose down` (but not
+      # `compose down -v`), does not double the volume the capacity monitor
       # watches, and is reachable while Postgres is stopped - which is when a
       # restore runs.
       FARNA_CONTROL_SNAPSHOT_DIR: /backups

@@ -808,7 +808,7 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     )
     assert captured.returncode == 0, captured.stderr
     captured_output = captured.stdout.strip()
-    expected_restore_args = f"restore {data_dir / 'pre-upgrade-dump-fake-1'} --data-dir {data_dir} --yes"
+    expected_restore_args = f"restore {data_dir / 'pre-upgrade-dump-fake-1'} --data-dir {data_dir} --yes --db-url"
     assert captured_output, "the restore command produced no recorded argv"
     assert "restore" in captured_output
     assert str(data_dir / "pre-upgrade-dump-fake-1") in captured_output
@@ -1093,38 +1093,33 @@ def test_no_live_process_excludes_the_upgrading_process_itself(tmp_path, monkeyp
         live_child.wait(timeout=10)
 
 
-def _seed_verified_snapshot(data_dir: Path, *, schema_versions: list[str] | None = None) -> Path:
-    """An intact pre-upgrade snapshot under *data_dir* (what `--skip-backup` needs).
+def _seed_verified_snapshot(data_dir: Path, *, schema_heads: list[str] | None = None) -> Path:
+    """A structurally-and-checksum VERIFIED pre-upgrade snapshot (FAR-2667).
 
-    Mirrors the manifest pair `take_upgrade_snapshot` writes and
-    `snapshot_is_intact` verifies: a pg_dump completion trailer plus matching
-    sha256 in both manifests.
+    Mirrors what ``pre_upgrade_dump`` writes: a trailer-complete dump plus the
+    two manifests ``snapshot_is_intact`` verifies. ``schema_heads=None``
+    records no ``schema_versions`` (the "snapshot cannot answer either" case
+    the skip-backup blind refusal must treat as unknown).
     """
-    import hashlib
-
-    snapshot = data_dir / f"{upgrade_module.SNAPSHOT_PREFIX}seeded"
+    snapshot = data_dir / f"{SNAPSHOT_PREFIX}seeded"
     snapshot.mkdir()
-    payload = b"-- the seeded dump\n-- PostgreSQL database dump complete\n"
+    payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
     (snapshot / "database.sql").write_bytes(payload)
     checksum = hashlib.sha256(payload).hexdigest()
-    manifest = {
-        "snapshot_for_upgrade": True,
-        "dump_name": "database.sql",
-        "dump_bytes": len(payload),
-        "dump_sha256": checksum,
-    }
-    restore_manifest: dict[str, Any] = {"file_checksums": {"database.sql": checksum}}
-    if schema_versions is not None:
-        manifest["schema_heads"] = list(schema_versions)
-        restore_manifest["schema_versions"] = list(schema_versions)
-    (snapshot / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    (snapshot / "backup-info.json").write_text(json.dumps(restore_manifest), encoding="utf-8")
+    (snapshot / SNAPSHOT_MANIFEST_NAME).write_text(
+        json.dumps({"snapshot_for_upgrade": True, "dump_name": "database.sql", "dump_bytes": len(payload), "dump_sha256": checksum}),
+        encoding="utf-8",
+    )
+    restore_manifest: dict[str, Any] = {"dump_bytes": len(payload), "file_checksums": {"database.sql": checksum}}
+    if schema_heads is not None:
+        restore_manifest["schema_versions"] = schema_heads
+    (snapshot / _RESTORE_MANIFEST_NAME).write_text(json.dumps(restore_manifest), encoding="utf-8")
     return snapshot
 
 
 def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched_trust_store):
-    """--skip-backup skips the DUMP but requires a VERIFIED snapshot already on
-    disk (the live first pass took it); it never re-dumps."""
+    """Finding 6: --skip-backup requires an ALREADY-VERIFIED snapshot and NEVER
+    runs the dump again (a stopped stack cannot be dumped)."""
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
@@ -1133,7 +1128,7 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
     monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _data_dir: ["3ab2c1d"])
 
-    def _dump_must_not_run(_data_dir, *, bin_dir=None, **_kwargs):
+    def _dump_must_not_run(_data_dir, *, bin_dir=None):
         raise AssertionError("skip_backup must NEVER call pre_upgrade_dump")
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump_must_not_run)
@@ -1141,8 +1136,8 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
     data_dir = tmp_path / "data"
     install_root = tmp_path / "install-root"
     _upgrade_seed_data_dir(data_dir)
+    snapshot_dir = _seed_verified_snapshot(data_dir, schema_heads=["3ab2c1d"])
     _upgrade_seed_install_root(install_root, previous_version="1.2.0")
-    existing_snapshot = _seed_verified_snapshot(data_dir, schema_versions=["3ab2c1d"])
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
@@ -1154,15 +1149,14 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
         fetch=_upgrade_fetch_seam(release_fixture),
         boot=lambda boot_argv, *, api_port: 0,
     )
-    assert result.snapshot == existing_snapshot
+    assert result.snapshot == snapshot_dir
     marker = json.loads((data_dir / upgrade_module.UPGRADE_MARKER_FILENAME).read_text(encoding="utf-8"))
-    assert marker["pre_upgrade_snapshot"] == str(existing_snapshot)
+    assert marker["pre_upgrade_snapshot"] == str(snapshot_dir)
 
 
 def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch, patched_trust_store):
-    """A skip-backup run whose live probe reads "unknown" and whose snapshot
-    records no schema versions REFUSES - never a silent 'unknown == known'
-    pass-through."""
+    """Finding 6: a skip-backup run whose live probe AND the snapshot read
+    "unknown" REFUSES - never a silent 'unknown == known' pass-through."""
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
@@ -1173,8 +1167,8 @@ def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch
     data_dir = tmp_path / "data"
     install_root = tmp_path / "install-root"
     _upgrade_seed_data_dir(data_dir)
+    _seed_verified_snapshot(data_dir)  # no schema_heads -> the snapshot cannot answer either
     _upgrade_seed_install_root(install_root, previous_version="1.2.0")
-    _seed_verified_snapshot(data_dir)  # intact, but records NO schema versions
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
