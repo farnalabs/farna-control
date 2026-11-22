@@ -9,6 +9,7 @@ proceed so a normal forward upgrade is unaffected.
 
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 import pytest
@@ -262,6 +263,24 @@ def test_main_malformed_database_url_proceeds_with_warning(monkeypatch: pytest.M
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     assert alignment.main([]) == 0
+    assert "skipped" in capsys.readouterr().err
+
+
+def test_module_entrypoint_runs_as_main(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """``if __name__ == "__main__"`` must actually dispatch to ``main()``.
+
+    Running the module file as a script (``run_name="__main__"``) is the only
+    way the ``python -m farna.db.alignment`` entrypoints hit that guard; the
+    import-time false arc is covered everywhere else. A malformed URL keeps it
+    fast and fail-open (no real database is contacted).
+    """
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+psycopg://u:p@db:not-a-port/farna_control")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        runpy.run_path(alignment.__file__, run_name="__main__")
+
+    assert excinfo.value.code == 0
     assert "skipped" in capsys.readouterr().err
 
 
