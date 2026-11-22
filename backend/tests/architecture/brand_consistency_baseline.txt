@@ -1198,7 +1198,7 @@ backend/tests/unit/scripts/test_run_release_preflight.py	25
 backend/tests/unit/scripts/test_same_repo_author_guard.py	5
 backend/tests/unit/scripts/test_support_bundle_sh.py	12
 backend/tests/unit/scripts/test_validate_pipeline_configs.py	5
-backend/tests/unit/scripts/test_verify_compose_upgrade_rollback.py	5
+backend/tests/unit/scripts/test_verify_compose_upgrade_rollback.py	9
 backend/tests/unit/scripts/test_windows_artifact_provenance.py	15
 backend/tests/unit/scripts/test_windows_installer_service.py	8
 backend/tests/unit/secrets_backend/test_aws_backend.py	1
@@ -1577,7 +1577,7 @@ scripts/support-bundle.sh	15
 scripts/test-windows-installer.ps1	42
 scripts/validate_pipeline_configs.py	5
 scripts/verify_backup_restore.py	6
-scripts/verify_compose_upgrade_rollback.py	4
+scripts/verify_compose_upgrade_rollback.py	5
 scripts/windows/build-launcher.ps1	7
 scripts/windows/modulo-launcher.c	2
 sonar-project.properties	1
