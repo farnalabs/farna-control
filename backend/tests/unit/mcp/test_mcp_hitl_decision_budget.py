@@ -95,7 +95,7 @@ class TestHitlDecisionBudgetAllowed(_AuthContext):
         return TokenBucketRegistry(rate=_REFILL_RATE, burst=3)
 
     def _exhausted(self) -> TokenBucketRegistry:
-        return TokenBucketRegistry(rate=0.0, burst=1)
+        return TokenBucketRegistry(rate=_REFILL_RATE, burst=1)
 
     async def test_allowed_within_burst_then_denied(self) -> None:
         from farna.api.mcp_server import _hitl_decision_budget_allowed
