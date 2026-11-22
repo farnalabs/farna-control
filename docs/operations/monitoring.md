@@ -34,7 +34,7 @@ Set to `builtin` to exclude all third-party SDKs from the bundle:
 docker build --build-arg VITE_MONITOR_BACKEND=builtin -t modulo .
 ```
 
-### Runtime (`MODULO_MONITOR_CONFIG`)
+### Runtime (`FARNA_CONTROL_MONITOR_CONFIG`)
 
 Set as a container environment variable. Controls which backends activate at
 runtime without rebuilding the Docker image. Takes precedence over build-time.
@@ -44,7 +44,7 @@ runtime without rebuilding the Docker image. Takes precedence over build-time.
 services:
   app:
     environment:
-      MODULO_MONITOR_CONFIG: '{"monitorBackends":["builtin","sentry"],"sentry":{"dsn":"https://xxx@o123.ingest.sentry.io/123"}}'
+      FARNA_CONTROL_MONITOR_CONFIG: '{"monitorBackends":["builtin","sentry"],"sentry":{"dsn":"https://xxx@o123.ingest.sentry.io/123"}}'
 ```
 
 ### Per-backend env vars
@@ -56,7 +56,7 @@ services:
 | `VITE_GRAFANA_FARO_URL` | Grafana Faro collector URL | Yes (for Grafana Faro) |
 
 These can be set at build time (`ARG`/`ENV` in Dockerfile) or at runtime via
-`MODULO_MONITOR_CONFIG`.
+`FARNA_CONTROL_MONITOR_CONFIG`.
 
 ## CSP
 
@@ -88,14 +88,14 @@ rejected to prevent CSP injection.
 
 ## Upgrade Impact (from no monitoring to monitoring)
 
-- **No `MODULO_MONITOR_CONFIG` set**: only the `builtin` backend activates.
+- **No `FARNA_CONTROL_MONITOR_CONFIG` set**: only the `builtin` backend activates.
   No data leaves the deployment. No behavior change.
 - **npm dependencies increase**: the default Docker build installs all
   optional SDKs (`@sentry/vue`, `@datadog/browser-rum`, `@grafana/faro-web-sdk`).
   Run `pnpm install --no-optional` to exclude them (the frontend uses pnpm, not npm).
 - **Existing errors**: the `source: 'frontend'` bugfix means frontend errors
   now successfully reach the DB for the first time. This is a free improvement.
-- **No rebuild needed to switch backends**: use `MODULO_MONITOR_CONFIG` at
+- **No rebuild needed to switch backends**: use `FARNA_CONTROL_MONITOR_CONFIG` at
   runtime.
 
 ## Privacy Data Sheets

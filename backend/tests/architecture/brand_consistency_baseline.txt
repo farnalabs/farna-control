@@ -299,7 +299,10 @@ backend/src/farna/core/pipeline_engine/egress.py	8
 backend/src/farna/core/pipeline_engine/error_codes.py	3
 backend/src/farna/core/pipeline_engine/eval_persist_order.py	4
 backend/src/farna/core/pipeline_engine/evidence.py	10
-backend/src/farna/core/pipeline_engine/executor.py	18
+backend/src/farna/core/pipeline_engine/executor.py	6
+backend/src/farna/core/pipeline_engine/executor_parts/finalize.py	5
+backend/src/farna/core/pipeline_engine/executor_parts/outcomes.py	1
+backend/src/farna/core/pipeline_engine/executor_parts/run_shape.py	5
 backend/src/farna/core/pipeline_engine/failure_context.py	2
 backend/src/farna/core/pipeline_engine/git_content.py	15
 backend/src/farna/core/pipeline_engine/hitl_context.py	1
@@ -1142,6 +1145,7 @@ backend/tests/unit/pipeline_engine/test_executor_agent_failure.py	4
 backend/tests/unit/pipeline_engine/test_executor_branch_coverage.py	1
 backend/tests/unit/pipeline_engine/test_executor_coverage.py	2
 backend/tests/unit/pipeline_engine/test_executor_node_cancelled_retry.py	15
+backend/tests/unit/pipeline_engine/test_executor_parts_changed_lines.py	1
 backend/tests/unit/pipeline_engine/test_executor_retry_policy.py	1
 backend/tests/unit/pipeline_engine/test_guardrail_override_resume_claim.py	1
 backend/tests/unit/pipeline_engine/test_idempotency.py	15
@@ -1338,6 +1342,7 @@ docs/product-map/improve/variants.md	1
 docs/product-map/infra/apt-distribution.md	1
 docs/product-map/infra/backup-restore.md	2
 docs/product-map/infra/health-checks.md	1
+docs/product-map/infra/native-single-install.md	6
 docs/product-map/infra/support-diagnostics.md	2
 docs/product-map/library/library.md	4
 docs/product-map/licensing/license.md	1
