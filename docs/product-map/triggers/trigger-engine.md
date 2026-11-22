@@ -225,7 +225,7 @@ rate-limited by the `TriggerEngine`.
       "tripped" count) WITHOUT auto-deactivating - deactivation is opt-in per
       cron via `config_json no_delivery_auto_deactivate` (default OFF), cron
       applies its own 48h minimum wall-clock window
-      (MODULO_CRON_STREAK_MIN_WINDOW_HOURS override), and cron audit records
+      (FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS override), and cron audit records
       use `cron_trigger.*` event types, never the `ongoing_trigger.*` stream
       (`core/trigger_streak.py`, `test_trigger_streak_engine.py`)
 - [x] The streak walk treats a `no_delivery` run with reason `no_work` (a

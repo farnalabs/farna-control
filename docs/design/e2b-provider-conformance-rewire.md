@@ -1,7 +1,7 @@
 # Design: E2B Provider-Conformance Rewire - inventory and flag-gated plan (FAR-1050 deliverable 1)
 
 **Status:** Inventory + plan only. This document changes no production behavior; it is the precondition slice for the dispatch rewire. Slice R4 subsequently shipped (PR #981, merged 2026-09-25); section 7 is the factual status update recording what R4 found. Slice R5 (the dispatch flip) landed: `MODULO_E2B_VIA_PROVIDER` defaulted to **ON** (`backend/src/farna/settings.py`) - see section 8. **Slice R6 (legacy retirement + A21 activation, PR #1033, merged 2026-09-28) has since RETIRED the flag entirely:** `settings.py` no longer defines `modulo_e2b_via_provider`, the legacy direct path and its flag-OFF arms are deleted, and every E2B dispatch runs through the RuntimeProvider ABC unconditionally (see section 9). Sections 2, 3 and 8 below record the plan and the flip **as they stood while the flag was live** - read them as history, not as current behavior. The one artifact that survives is the `via_provider` key on the dispatch marker and node telemetry, now a purely historical attribution field.
-**Governs:** FAR-1050 deliverable 1 - bringing the E2B managed-sandbox path onto the frozen `RuntimeProvider` contract (ADR 040). FAR-1050 slice 1 shipped the additive `RuntimeProviderError` family; slice 2 shipped `destroy_workspace_by_ref` + `exec_command_stream` parity on `E2BRuntimeProvider` (PR #923 lineage). The remaining work is the dispatch rewire: `_sandbox_agent_impl` calls the E2B SDK directly and bypasses the ABC.
+**Governs:** FAR-1050 deliverable 1 - bringing the E2B managed-sandbox path onto the frozen `RuntimeProvider` contract (ADR 040). FAR-1050 slice 1 shipped the additive `RuntimeProviderError` family; slice 2 shipped `destroy_workspace_by_ref` + `exec_command_stream` parity on `E2BRuntimeProvider` (PR #923 lineage). The dispatch rewire itself has since shipped: slice R6 deleted the legacy direct path and its flag, so `_sandbox_agent_impl` now provisions through the RuntimeProvider ABC (`create_workspace`) and no longer calls the E2B SDK directly. What follows is the inventory and plan as recorded before that rewire, plus the factual status updates in sections 7 to 9.
 **Related:** ADR 040 `Repos/devtools/adr/040-runtime-provider-contract-and-tier-conformance.md` (conformance clause, sanctioned-site requirement, A21 gating, "its own release with its own flag and revert point"); ADR 051 `Repos/devtools/adr/051-managed-sandbox-adapter-pattern.md` (FAR-1050 deliverable 2, the T2a adapter pattern - note the brief's "ADR 042 managed-sandbox-adapter-pattern" resolves to ADR 051; ADR 042 is the governed-run contract).
 
 ## 0. Methodology (reproducible)
@@ -10,7 +10,7 @@ Run from the worktree root. `rg` was unavailable on this machine, so `Select-Str
 
 ```powershell
 # 1. node_runner full E2B reference enumeration (do not sample)
-Select-String -Path backend\src\modulo\core\pipeline_engine\node_runner.py -Pattern "e2b|E2B|E2b"
+Select-String -Path backend\src\farna\core\pipeline_engine\node_runner.py -Pattern "e2b|E2B|E2b"
 # -> 104 matches across 96 lines (brief's ~92; measured, not sampled)
 
 # 2. All bound forms across product code (imports, annotations, hostname)
@@ -27,7 +27,7 @@ Get-ChildItem -Recurse -Filter *.py backend\src | ForEach-Object {
         ForEach-Object { $_.Matches.Count } | Measure-Object -Sum).Sum; if ($c) { "$c`t$($_.FullName)" } }
 
 # 5. duck-typed SDK-object usage (no import, but operates on an AsyncSandbox)
-Select-String -Path backend\src\modulo\core\pipeline_engine\*.py -Pattern "sandbox\.commands\.run|sandbox\.files\.|sandbox\.kill"
+Select-String -Path backend\src\farna\core\pipeline_engine\*.py -Pattern "sandbox\.commands\.run|sandbox\.files\.|sandbox\.kill"
 ```
 
 Portable equivalents: `grep -rnE "from e2b|import e2b\b|AsyncSandbox|api\.e2b\.app" backend/src --include="*.py"`, `grep -rn "apply_sandbox_policy" backend/src --include="*.py"`, `grep -cE "e2b|E2B" <file>`.
