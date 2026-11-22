@@ -398,3 +398,4 @@ minimumReleaseAgeExclude:
   - '@lucide/vue@1.76.0'
   - 'autoprefixer@10.7.0'
   - '@lucide/vue@1.77.0'
+  - 'fast-check@4.11.0'
