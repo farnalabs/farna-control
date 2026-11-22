@@ -33,14 +33,11 @@ const BACKEND_ONLY_EXCEPTIONS = new Set(['scim', 'system_maps'])
 
 /**
  * Known acceptable exceptions — frontend-gated team features with no backend
- * route gate yet:
- *   - pipeline_delete: UI hard-delete button is featureEnabled-gated but the
- *     DELETE /api/v1/pipelines route has no require_feature("pipeline_delete")
- *     yet. It IS frontend-enforced (so it is not in the backend test's
- *     KNOWN_UNENFORCED_TEAM_FLAGS gap set), but the backend route gate is
- *     still missing — hence this exception.
+ * route gate yet. Empty since FAR-2663: ``pipeline_delete`` was the last entry
+ * and the flag is retired (deletion is guarded by the ``pipeline.delete`` RBAC
+ * permission, and neither the UI nor a route references the flag any more).
  */
-const FRONTEND_ONLY_EXCEPTIONS = new Set(['pipeline_delete'])
+const FRONTEND_ONLY_EXCEPTIONS = new Set<string>()
 
 /**
  * Backend-gated features whose frontend gate uses the manifest route-guard

@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="plugin_management" required-tier="community" show-disabled>
+  <FeatureGate feature-name="plugin_management" required-tier="team" show-disabled>
 
     <div class="page-wide">
     <PageHeader :title="$t('views.AdminConnectorsView.title')" :subtitle="$t('views.AdminConnectorsView.subtitle')">
