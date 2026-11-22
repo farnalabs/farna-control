@@ -10243,10 +10243,11 @@ async def _sweep_workspace_input_drift_flags(factory: Any) -> dict[str, Any]:
     return {"scanned": scanned, "corrected": corrected}
 
 
-async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates each arm
-    redis_client: AsyncRedis, summary: dict[str, Any]
-) -> None:
-    """FAR-189/FAR-190 compensating sweeps + the healthz stats write (best-effort)."""
+async def _sweep_classification_counts(summary: dict[str, Any]) -> None:
+    """Best-effort run-classification sweep; counts land in *summary*.
+
+    Extracted unchanged from ``_run_reconcile_sweeps`` (complexity bound).
+    """
     try:
         classification = await run_classification_reconcile()
         summary["classification_classified"] = classification.get("classified", 0)
@@ -10264,10 +10265,16 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         raise
     except Exception:
         _log.warning("dispatcher_reconcile.classification_sweep_failed", exc_info=True)
-    # FAR-801: workspace-input drift flag compensating sweep — corrects
-    # terminal runs whose audit row has drift_detected=true but the runs
-    # column is NULL (the drift write was missed or the audit row was
-    # written after terminalization).
+
+
+async def _sweep_workspace_input_drift(summary: dict[str, Any]) -> None:
+    """FAR-801: workspace-input drift flag compensating sweep.
+
+    Corrects terminal runs whose audit row has drift_detected=true but the runs
+    column is NULL (the drift write was missed or the audit row was written
+    after terminalization). Extracted unchanged from ``_run_reconcile_sweeps``
+    (complexity bound).
+    """
     try:
         drift_result = await _sweep_workspace_input_drift_flags(_open_system_factory())
         summary["drift_sweep_corrected"] = drift_result.get("corrected", 0)
@@ -10284,6 +10291,13 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         raise
     except Exception:
         _log.warning("dispatcher_reconcile.drift_sweep_failed", exc_info=True)
+
+
+async def _sweep_delivery_streaks(redis_client: AsyncRedis, summary: dict[str, Any]) -> None:
+    """Best-effort no-delivery-streak enforcement sweep.
+
+    Extracted unchanged from ``_run_reconcile_sweeps`` (complexity bound).
+    """
     try:
         streak = await enforce_no_delivery_streaks(redis_client=redis_client)
         summary["streak_scanned"] = streak.get("scanned", 0)
@@ -10306,12 +10320,18 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         raise
     except Exception:
         _log.warning("dispatcher_reconcile.streak_sweep_failed", exc_info=True)
-    # FAR-1344 — capacity alerting: the queue-pressure ladder, per-pipeline
-    # backpressure and org capacity saturation. Signal + alert only (never a
-    # refusal); the numbers come from FAR-1343's capacity reader, and this sweep
-    # is what turns "the queue is climbing" into a notification BEFORE work
-    # starts failing. Isolated: a failure here is a WARNING, never an abort of
-    # the reconcile tick.
+
+
+async def _sweep_capacity_alerts(redis_client: AsyncRedis, summary: dict[str, Any]) -> None:
+    """FAR-1344 — capacity alerting: the queue-pressure ladder, per-pipeline
+    backpressure and org capacity saturation.
+
+    Signal + alert only (never a refusal); the numbers come from FAR-1343's
+    capacity reader, and this sweep is what turns "the queue is climbing" into
+    a notification BEFORE work starts failing. Isolated: a failure here is a
+    WARNING, never an abort of the reconcile tick. Extracted unchanged from
+    ``_run_reconcile_sweeps`` (complexity bound).
+    """
     try:
         from farna.core.capacity_alerts import evaluate_capacity_alerts
 
@@ -10335,12 +10355,19 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         raise
     except Exception:
         _log.warning("dispatcher_reconcile.capacity_alerts_failed", exc_info=True)
-    # FAR-2116 — pipeline-decay alerting: a webhook-triggered pipeline whose
-    # rolling 2h success rate collapses (or whose node-deadline watchdog keeps
-    # firing) is alerted through the same Notifier. This is the gap neither
-    # readiness nor capacity alerting covered: the Branch Fixer ran at a 35%
-    # success rate for ~5 days with the app perfectly healthy. Isolated — a
-    # failure here is a WARNING, never an abort of the reconcile tick.
+
+
+async def _sweep_pipeline_decay_alerts(redis_client: AsyncRedis, summary: dict[str, Any]) -> None:
+    """FAR-2116 — pipeline-decay alerting.
+
+    A webhook-triggered pipeline whose rolling 2h success rate collapses (or
+    whose node-deadline watchdog keeps firing) is alerted through the same
+    Notifier. This is the gap neither readiness nor capacity alerting covered:
+    the Branch Fixer ran at a 35% success rate for ~5 days with the app
+    perfectly healthy. Isolated — a failure here is a WARNING, never an abort
+    of the reconcile tick. Extracted unchanged from ``_run_reconcile_sweeps``
+    (complexity bound).
+    """
     try:
         from farna.core.pipeline_decay_alerts import evaluate_pipeline_decay_alerts
 
@@ -10365,6 +10392,13 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         raise
     except Exception:
         _log.warning("dispatcher_reconcile.pipeline_decay_alerts_failed", exc_info=True)
+
+
+async def _sweep_run_api_keys(summary: dict[str, Any]) -> None:
+    """Best-effort run API-key revocation sweep.
+
+    Extracted unchanged from ``_run_reconcile_sweeps`` (complexity bound).
+    """
     try:
         from farna.auth.api_key import revoke_run_api_key_sweep
 
@@ -10385,6 +10419,13 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         raise
     except Exception:
         _log.warning("dispatcher_reconcile.run_api_key_sweep_failed", exc_info=True)
+
+
+async def _sweep_rollback_thresholds(summary: dict[str, Any]) -> None:
+    """Best-effort rollback-threshold evaluation sweep.
+
+    Extracted unchanged from ``_run_reconcile_sweeps`` (complexity bound).
+    """
     try:
         from farna.core.rollback_thresholds import evaluate_rollback_thresholds
 
@@ -10397,17 +10438,23 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         summary["rollback_thresholds_checked"] = 0
         summary["rollback_thresholds_flagged"] = 0
         _log.warning("dispatcher_reconcile.rollback_thresholds_failed", exc_info=True)
+
+
+async def _sweep_runner_dispatch_markers(summary: dict[str, Any]) -> None:
+    """D8 (FAR-594): the state-aware runner dispatch-marker reconciliation sweep.
+
+    Clears non-fence markers on terminal runs and stale (>25h) markers,
+    transitions stale non-terminal RUNNING runs terminal, never touches
+    script_executing fence components or reconciler-recoverable rows (parity by
+    construction: the sweep evaluates THIS module's re-dispatch predicates),
+    and asserts the live count ≤ cap (runner.capacity.violation — the D8
+    rollback signal). A PARTIAL failure (qa F5) raises RunnerMarkerSweepError:
+    the partial counts still land in the summary; the failure is logged loudly
+    (the 5-min cron wrapper additionally persists the liveness key +
+    re-raises). Extracted unchanged from ``_run_reconcile_sweeps`` (complexity
+    bound).
+    """
     try:
-        # D8 (FAR-594): the state-aware runner dispatch-marker reconciliation
-        # sweep — clears non-fence markers on terminal runs and stale (>25h)
-        # markers, transitions stale non-terminal RUNNING runs terminal,
-        # never touches script_executing fence components or reconciler-
-        # recoverable rows (parity by construction: the sweep evaluates THIS
-        # module's re-dispatch predicates), and asserts the live count ≤ cap
-        # (runner.capacity.violation — the D8 rollback signal). A PARTIAL
-        # failure (qa F5) raises RunnerMarkerSweepError: the partial counts
-        # still land in the summary; the failure is logged loudly (the 5-min
-        # cron wrapper additionally persists the liveness key + re-raises).
         from farna.core.runner_capacity import RunnerMarkerSweepError, reconcile_runner_dispatch_markers
 
         try:
@@ -10447,10 +10494,16 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         summary["runner_markers_transitioned"] = 0
         summary["runner_capacity_violations"] = 0
         _log.warning("dispatcher_reconcile.runner_marker_sweep_failed", exc_info=True)
-    # FAR-902: schema enforcement aggregate counters compensating sweep —
-    # corrects terminal runs whose run_daily_facts enforcement columns are
-    # NULL but whose run_node_outputs rows have schema_enforcement_json data.
-    # The predicate matches the partial index ix_run_node_outputs_enforcement_pending.
+
+
+async def _sweep_schema_enforcement_facts(summary: dict[str, Any]) -> None:
+    """FAR-902: schema enforcement aggregate counters compensating sweep.
+
+    Corrects terminal runs whose run_daily_facts enforcement columns are NULL
+    but whose run_node_outputs rows have schema_enforcement_json data. The
+    predicate matches the partial index ix_run_node_outputs_enforcement_pending.
+    Extracted unchanged from ``_run_reconcile_sweeps`` (complexity bound).
+    """
     try:
         from farna.core.analytics.enforcement_sweep import sweep_schema_enforcement_facts
 
@@ -10471,6 +10524,21 @@ async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates
         summary["enforcement_sweep_scanned"] = 0
         summary["enforcement_sweep_corrected"] = 0
         _log.warning("dispatcher_reconcile.enforcement_sweep_failed", exc_info=True)
+
+
+async def _run_reconcile_sweeps(  # NOSONAR S3776 - sweep orchestrator delegates each arm
+    redis_client: AsyncRedis, summary: dict[str, Any]
+) -> None:
+    """FAR-189/FAR-190 compensating sweeps + the healthz stats write (best-effort)."""
+    await _sweep_classification_counts(summary)
+    await _sweep_workspace_input_drift(summary)
+    await _sweep_delivery_streaks(redis_client, summary)
+    await _sweep_capacity_alerts(redis_client, summary)
+    await _sweep_pipeline_decay_alerts(redis_client, summary)
+    await _sweep_run_api_keys(summary)
+    await _sweep_rollback_thresholds(summary)
+    await _sweep_runner_dispatch_markers(summary)
+    await _sweep_schema_enforcement_facts(summary)
 
 
 async def _update_reconcile_telemetry(summary: dict[str, Any]) -> None:
@@ -11173,10 +11241,17 @@ async def _reconcile_node_started_executor_lost(
     return enqueue_failed_redispatched
 
 
-async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state machine delegates each repair arm
+def _row_is_enqueue_failed(row: Any) -> bool:
+    """B3 shape: pending + dispatched + dispatcher NULL + enqueue_failed_at set.
+
+    Extracted unchanged from ``_reconcile_one_row`` (complexity bound).
+    """
+    return row.status == "pending" and row.dispatched_at is not None and getattr(row, "dispatcher", None) is None and getattr(row, "enqueue_failed_at", None) is not None
+
+
+async def _reconcile_early_detect_nodeless_arm(
     session: AsyncSession,
     q: RedisQueue,
-    redis_client: AsyncRedis,
     org_id: uuid.UUID,
     row: Any,
     nodeless_window: int,
@@ -11184,55 +11259,14 @@ async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state ma
     summary: dict[str, Any],
     terminalized_run_ids: list[tuple[uuid.UUID, uuid.UUID]],
     *,
-    early_detect_minutes: int | None = None,
-    floor_nodeless_window: int | None = None,
-    stale_window: int,
-) -> int:
-    """Reconcile ONE matched run row; returns the updated enqueue-failed counter.
+    early_detect_minutes: int | None,
+) -> int | None:
+    """FAR-873 early-detect for fresh-heartbeat nodeless zombies.
 
-    Handles the nodeless zombie (via ``_reconcile_nodeless_repair``), FAR-873
-    early-detect, B3 enqueue-failed branch, F6a resume guard, the FAR-1728
-    guardrail-override resume self-heal, capacity check, the job re-check, and
-    the re-dispatch decision for a single row.
-    ``summary`` and ``terminalized_run_ids`` are mutated in place.
-
-    FAR-1740: *nodeless_window* is the row's PER-PIPELINE window (derived by the
-    caller from the pipeline's longest node timeout). *floor_nodeless_window* is
-    the global floor it was derived from — a WIDENED window (floor < window)
-    additionally arms the tail guard below, so a zero-progress running row is
-    never re-dispatched by the generic recovery path before its window elapses.
-    ``stale_window`` (the SAME value the SQL stale-heartbeat legs bind, from
-    ``ReconcileTuning``) feeds the override-resume row recheck AND the
-    FAR-1803 node-started/executor-lost classification below.
+    Returns the (unchanged) enqueue-failed counter when this arm handled the
+    row, ``None`` when the caller must fall through to the full nodeless
+    repair. Extracted unchanged from ``_reconcile_one_row`` (complexity bound).
     """
-    # FAR-1803 — classify the node-started / executor-lost class FIRST, before
-    # any repair branch can touch it. The class is never re-dispatched (a
-    # started node may have executed side effects — FAR-1649) and never
-    # silently skipped: it gets its own counter so a readiness read can never
-    # report 0 while such runs exist (the observed defect: every counter 0
-    # while runs sat ``running`` for hours).
-    #
-    # FAR-1999 — the terminalisation bound for this class is now the run's
-    # DURABLE node deadline, not the ~135-minute mid-graph age gate. When the
-    # row shows ZERO node progress (no checkpoint, no finalised output, no
-    # token usage) and its first node started longer ago than the graph's
-    # maximum node ``timeout_seconds``, the node deadline has provably passed
-    # and the executor that would have enforced it is dead, so the row is
-    # reaped here. A row that is still inside its node budget (or has made any
-    # progress) keeps the old hold-and-report path and is left to the age gate
-    # — which remains the safety net if this reaper cannot act (e.g. no time
-    # anchor).
-    node_started_result = await _reconcile_node_started_executor_lost(
-        session,
-        org_id,
-        row,
-        summary,
-        terminalized_run_ids,
-        enqueue_failed_redispatched,
-        stale_window,
-    )
-    if node_started_result is not None:
-        return node_started_result
     # FAR-873: early-detect for fresh-heartbeat nodeless zombies.  Fire BEFORE
     # the full nodeless repair so a wedged-worker zombie is re-dispatched ~20
     # min sooner.  The throttle uses the FULL nodeless_window (not the
@@ -11295,94 +11329,26 @@ async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state ma
         key_suffix = uuid.uuid4().hex
         await _redispatch_nodeless(session, q, org_id, row, job_type, key_suffix, summary, terminalized_run_ids)
         return enqueue_failed_redispatched
-    # Throttled or not early-detect — fall through to the full nodeless
-    # repair which may handle it via a different branch (stale heartbeat, etc.).
+    return None
 
-    # Claimed-but-never-executed zombie repair — see
-    # ``_reconcile_nodeless_repair`` / ``_redispatch_nodeless``.
-    handled = await _reconcile_nodeless_repair(
-        session,
-        q,
-        org_id,
-        row,
-        nodeless_window,
-        enqueue_failed_redispatched,
-        summary,
-        terminalized_run_ids,
-    )
-    if handled is not None:
-        return handled
 
-    # FAR-1740 tail guard: the SQL scan's global window is a SUPERSET of every
-    # per-pipeline window, so a row from a pipeline whose window was WIDENED
-    # above the floor can reach here younger than its own window. The nodeless
-    # repair above already refused it (too young), but the generic recovery
-    # path below would re-dispatch a job-gone row as ``execute_run`` — rotating
-    # claim_count and killing the in-flight attempt. Hold back a zero-progress
-    # RUNNING saq row until its per-pipeline window elapses (once it does, the
-    # full repair above owns it). Gated on a widened window, so direct callers
-    # (tests) and non-widened pipelines are unaffected; the existing
-    # ``node_started_running`` belt still owns node-started rows.
-    if _held_back_by_widened_window(
-        row,
-        nodeless_window=nodeless_window,
-        floor_nodeless_window=floor_nodeless_window,
-    ):
-        summary["skipped"] += 1
-        return enqueue_failed_redispatched
+async def _reconcile_resume_identity_arm(
+    session: AsyncSession,
+    q: RedisQueue,
+    org_id: uuid.UUID,
+    row: Any,
+    *,
+    stale_window: int,
+    is_enqueue_failed: bool,
+    enqueue_failed_redispatched: int,
+    summary: dict[str, Any],
+) -> int | None:
+    """FAR-2122 unowned-resume + FAR-1728 guardrail-override resume self-heal.
 
-    # B3 enqueue-failed branch: pending + dispatched + dispatcher
-    # NULL + enqueue_failed_at set.
-    is_enqueue_failed = row.status == "pending" and row.dispatched_at is not None and getattr(row, "dispatcher", None) is None and getattr(row, "enqueue_failed_at", None) is not None
-    early = await _reconcile_enqueue_failed(
-        redis_client,
-        session,
-        org_id,
-        row,
-        is_enqueue_failed,
-        enqueue_failed_redispatched,
-        summary,
-        terminalized_run_ids,
-    )
-    if early is not None:
-        return early
-
-    job_key = f"run:{row.id}"
-    job, ok = await _read_reconcile_job(session, q, org_id, row, job_key, "read", summary)
-    if not ok:
-        return enqueue_failed_redispatched
-    if job is not None:
-        summary["skipped"] += 1  # job still exists — nothing to repair
-        return enqueue_failed_redispatched
-
-    # F6a auto-approve guard + durable resume payload (B1-reconcile) — see
-    # ``_resolve_hitl_resume_or_skip``.
-    skip, resume_data = await _resolve_hitl_resume_or_skip(session, org_id, row, summary)
-    if skip:
-        return enqueue_failed_redispatched
-
-    # Capacity check for capacity-deferred runs (pending + no
-    # dispatched_at). Re-dispatch only when the pipeline has free
-    # capacity (plan F3b/F3c).
-    if row.status == "pending" and row.dispatched_at is None:
-        deferred = await _capacity_defer_pending_run(session, row, summary)
-        if deferred:
-            return enqueue_failed_redispatched
-
-    # NO SAQ-internal eviction (B2): a version-pinned DEL/ZREM/LREM of
-    # saq:abort:*/incomplete/queued/active is TOCTOU-unsafe across machines
-    # and can permanently strand a job. The atomic claim UPDATE is the real
-    # dedupe — a second worker claiming the same run loses. Re-check
-    # q.job() AFTER the decision and immediately before enqueue: if a job now
-    # exists under the original key, a concurrent worker already re-enqueued
-    # it — skip.
-    job, ok = await _read_reconcile_job(session, q, org_id, row, job_key, "re-check", summary)
-    if not ok:
-        return enqueue_failed_redispatched
-    if job is not None:
-        summary["skipped"] += 1
-        return enqueue_failed_redispatched
-
+    Returns the re-dispatch counter when either leg handled the row, ``None``
+    when the caller must continue. Extracted unchanged from
+    ``_reconcile_one_row`` (complexity bound).
+    """
     # FAR-2122 — recover a node-started row whose SAQ dispatcher identity was
     # lost. The durable phase means execute_run is unsafe; require a root
     # checkpoint before claiming a resume. A row WITHOUT one is left to
@@ -11475,40 +11441,52 @@ async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state ma
             enqueue_failed_redispatched,
             summary,
         )
+    return None
 
-    # FAR-1649 qa iteration 3 — row-level belt for the RUNNING SQL exclusions
-    # (the scan's predicate can only reach such a row via another branch, or
-    # via a phase that transitioned between SELECT and now). The FAR-1728
-    # guardrail-override resume class exits through its own leg ABOVE and
-    # never reaches this belt; every other RUNNING node-started row is held
-    # back here. RUNNING-ONLY by
-    # design: a ``pending`` node-started row has exactly two producers, BOTH
-    # idempotency-gated and both DELIBERATELY re-dispatchable — the fenced
-    # pending-reset (reenqueue-window leg) and the FAR-1627 worker-shutdown
-    # handback (capacity-deferred leg; its gate terminal-fails a
-    # non-idempotent node-started run instead of resetting it — see
-    # ``worker_handoff._handback_decision``), so widening this belt back to
-    # ``pending`` would strand those rows again (iteration 2's regression). A
-    # pending row also has no phase race for this belt to
-    # close: the only transition out of ``pending`` is a claim, which
-    # atomically stamps ``dispatch_phase='claimed'`` in the same UPDATE.
-    #
-    # FAILS CLOSED (mirrors ``_is_nodeless_zombie_row``): a row source that
-    # does not expose ``dispatch_phase`` at all carries no evidence that NO
-    # node started, so it is held back exactly like a node-started row —
-    # missing evidence is never "safe to re-execute" evidence. The two guards
-    # must not disagree on the same input.
-    #
-    # Truthfulness note: in production this belt should never fire — the
-    # RUNNING selection legs exclude the class in SQL, so the scan never
-    # returns such a row. It is a defence-in-depth row guard (race window +
-    # future-leg regression), NOT a production-observed signal;
-    # ``node_started_deferred`` counts belt hits only, so a non-zero
-    # production value is itself a regression alarm. A held-back RUNNING row
-    # is NOT stranded: the in-process watchdogs own it while the executor is
-    # alive and, once dead, the mid-graph age gate's truthful
-    # ``run.no_progress`` (whose detail carries ``dispatch_phase=``)
-    # terminalises it at the age bound.
+
+def _reconcile_node_started_running_belt(
+    row: Any,
+    org_id: uuid.UUID,
+    summary: dict[str, Any],
+    enqueue_failed_redispatched: int,
+) -> int | None:
+    """FAR-1649 row-level belt for the RUNNING SQL exclusions.
+
+    (The scan's predicate can only reach such a row via another branch, or via
+    a phase that transitioned between SELECT and now.) The FAR-1728
+    guardrail-override resume class exits through its own leg ABOVE and never
+    reaches this belt; every other RUNNING node-started row is held back here.
+    RUNNING-ONLY by design: a ``pending`` node-started row has exactly two
+    producers, BOTH idempotency-gated and both DELIBERATELY re-dispatchable —
+    the fenced pending-reset (reenqueue-window leg) and the FAR-1627
+    worker-shutdown handback (capacity-deferred leg; its gate terminal-fails a
+    non-idempotent node-started run instead of resetting it — see
+    ``worker_handoff._handback_decision``), so widening this belt back to
+    ``pending`` would strand those rows again (iteration 2's regression). A
+    pending row also has no phase race for this belt to close: the only
+    transition out of ``pending`` is a claim, which atomically stamps
+    ``dispatch_phase='claimed'`` in the same UPDATE.
+
+    FAILS CLOSED (mirrors ``_is_nodeless_zombie_row``): a row source that does
+    not expose ``dispatch_phase`` at all carries no evidence that NO node
+    started, so it is held back exactly like a node-started row — missing
+    evidence is never "safe to re-execute" evidence. The two guards must not
+    disagree on the same input.
+
+    Truthfulness note: in production this belt should never fire — the RUNNING
+    selection legs exclude the class in SQL, so the scan never returns such a
+    row. It is a defence-in-depth row guard (race window + future-leg
+    regression), NOT a production-observed signal; ``node_started_deferred``
+    counts belt hits only, so a non-zero production value is itself a
+    regression alarm. A held-back RUNNING row is NOT stranded: the in-process
+    watchdogs own it while the executor is alive and, once dead, the mid-graph
+    age gate's truthful ``run.no_progress`` (whose detail carries
+    ``dispatch_phase=``) terminalises it at the age bound.
+
+    Returns the (unchanged) enqueue-failed counter when the row is held back,
+    ``None`` when the caller must continue. Extracted unchanged from
+    ``_reconcile_one_row`` (complexity bound).
+    """
     node_started_running = row.status == "running" and (not hasattr(row, "dispatch_phase") or getattr(row, "dispatch_phase", None) == PHASE_FIRST_NODE_DISPATCHED)
     if node_started_running:
         summary["node_started_deferred"] += 1
@@ -11520,49 +11498,64 @@ async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state ma
             getattr(row, "claim_count", None),
         )
         return enqueue_failed_redispatched
+    return None
 
-    # FAR-2076 — the retry-budget gate on the re-enqueue backstop.
-    #
-    # Every ``execute_run`` re-dispatch here grants one more execution, for ANY
-    # non-terminal row — not just ``pending``. A ``running`` PRE-NODE row
-    # (phase ``claimed``/``loading_setup``/``setup_complete``, heartbeat stale,
-    # ``started_at`` younger than the nodeless window) is selected by the
-    # generic stale-heartbeat leg and reached the final enqueue with
-    # ``retries=0``; SAQ still granted one attempt and the graph executed a
-    # fourth time under ``max_retries: 2``. The gate therefore keys on the
-    # RESOLVED job type (``_reconcile_job_type``) for every non-terminal row.
-    # Each mechanism that produced the row consulted the
-    # ``retry_policy`` against a DIFFERENT budget (or, like this backstop,
-    # counted nothing at all), so a run could execute past ``1 + max_retries``.
-    # This is the LAST gate before the enqueue, so it bounds every producer —
-    # the fenced pending-reset (policy / transient retry / watchdog), the
-    # FAR-1627 worker-shutdown handback and the enqueue-failed leg.
-    #
-    # A row ALREADY beyond budget is terminal-failed with the distinct
-    # ``retry_budget_exhausted`` code instead of re-dispatched — and instead
-    # of being silently skipped, which would strand it until the age backstop
-    # and misreport it as ``no_progress``. A within-budget row keeps the exact
-    # recovery behaviour this leg exists for (durability preserved).
-    #
-    # Capacity-marked pending rows are NOT excluded. The old exclusion existed
-    # only because the previous measure counted a capacity claim as an
-    # execution; the durable counter is NOT incremented by a capacity demotion,
-    # so a capacity-marked row below the ceiling must still be re-dispatched and
-    # one at/above the ceiling must be terminal-failed like any other pending
-    # execution. Excluding them would let an at-ceiling run execute again.
-    #
-    # The measure is the durable ``runs.execution_attempt_count`` ONLY (FAR-2076).
-    # ``claim_count`` must never be consulted here: it grows on
-    # capacity-demoted and resume claims, so it over-counted healthy runs and
-    # terminal-failed them with budget to spare — the whole-point defect of the
-    # first attempt at this fix.
-    #
-    # A budget-exhausted ``pending`` row is terminal-failed below. A
-    # budget-exhausted ``running`` row is NOT: the guarded UPDATE only matches
-    # ``status='pending'`` (deliberately — a running row is owned by the
-    # nodeless/age backstop, and the UPDATE must never race a live executor),
-    # so it is skipped this tick and left to that backstop.
-    job_type = _reconcile_job_type(row.status)
+
+async def _reconcile_retry_budget_gate(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    row: Any,
+    job_type: str,
+    summary: dict[str, Any],
+    terminalized_run_ids: list[tuple[uuid.UUID, uuid.UUID]],
+    enqueue_failed_redispatched: int,
+) -> int | None:
+    """FAR-2076 — the retry-budget gate on the re-enqueue backstop.
+
+    Every ``execute_run`` re-dispatch grants one more execution, for ANY
+    non-terminal row — not just ``pending``. A ``running`` PRE-NODE row (phase
+    ``claimed``/``loading_setup``/``setup_complete``, heartbeat stale,
+    ``started_at`` younger than the nodeless window) is selected by the
+    generic stale-heartbeat leg and reached the final enqueue with
+    ``retries=0``; SAQ still granted one attempt and the graph executed a
+    fourth time under ``max_retries: 2``. The gate therefore keys on the
+    RESOLVED job type (``_reconcile_job_type``) for every non-terminal row.
+    Each mechanism that produced the row consulted the ``retry_policy`` against
+    a DIFFERENT budget (or, like this backstop, counted nothing at all), so a
+    run could execute past ``1 + max_retries``. This is the LAST gate before
+    the enqueue, so it bounds every producer — the fenced pending-reset
+    (policy / transient retry / watchdog), the FAR-1627 worker-shutdown
+    handback and the enqueue-failed leg.
+
+    A row ALREADY beyond budget is terminal-failed with the distinct
+    ``retry_budget_exhausted`` code instead of re-dispatched — and instead of
+    being silently skipped, which would strand it until the age backstop and
+    misreport it as ``no_progress``. A within-budget row keeps the exact
+    recovery behaviour this leg exists for (durability preserved).
+
+    Capacity-marked pending rows are NOT excluded. The old exclusion existed
+    only because the previous measure counted a capacity claim as an execution;
+    the durable counter is NOT incremented by a capacity demotion, so a
+    capacity-marked row below the ceiling must still be re-dispatched and one
+    at/above the ceiling must be terminal-failed like any other pending
+    execution. Excluding them would let an at-ceiling run execute again.
+
+    The measure is the durable ``runs.execution_attempt_count`` ONLY
+    (FAR-2076). ``claim_count`` must never be consulted here: it grows on
+    capacity-demoted and resume claims, so it over-counted healthy runs and
+    terminal-failed them with budget to spare — the whole-point defect of the
+    first attempt at this fix.
+
+    A budget-exhausted ``pending`` row is terminal-failed below. A
+    budget-exhausted ``running`` row is NOT: the guarded UPDATE only matches
+    ``status='pending'`` (deliberately — a running row is owned by the
+    nodeless/age backstop, and the UPDATE must never race a live executor), so
+    it is skipped this tick and left to that backstop.
+
+    Returns the (unchanged) enqueue-failed counter when the gate handled the
+    row, ``None`` when the caller must continue to the re-dispatch. Extracted
+    unchanged from ``_reconcile_one_row`` (complexity bound).
+    """
     is_execute_execution = job_type == "execute_run" and row.status not in TERMINAL_STATUSES
     if is_execute_execution:
         policy = getattr(row, "retry_policy", None)
@@ -11614,6 +11607,245 @@ async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state ma
                 # that no longer holds — the next tick re-evaluates.
                 summary["skipped"] += 1
             return enqueue_failed_redispatched
+    return None
+
+
+async def _reconcile_one_row(  # NOSONAR S3776 - ordered reconciliation state machine delegates each repair arm
+    session: AsyncSession,
+    q: RedisQueue,
+    redis_client: AsyncRedis,
+    org_id: uuid.UUID,
+    row: Any,
+    nodeless_window: int,
+    enqueue_failed_redispatched: int,
+    summary: dict[str, Any],
+    terminalized_run_ids: list[tuple[uuid.UUID, uuid.UUID]],
+    *,
+    early_detect_minutes: int | None = None,
+    floor_nodeless_window: int | None = None,
+    stale_window: int,
+) -> int:
+    """Reconcile ONE matched run row; returns the updated enqueue-failed counter.
+
+    Handles the nodeless zombie (via ``_reconcile_nodeless_repair``), FAR-873
+    early-detect, B3 enqueue-failed branch, F6a resume guard, the FAR-1728
+    guardrail-override resume self-heal, capacity check, the job re-check, and
+    the re-dispatch decision for a single row.
+    ``summary`` and ``terminalized_run_ids`` are mutated in place.
+
+    FAR-1740: *nodeless_window* is the row's PER-PIPELINE window (derived by the
+    caller from the pipeline's longest node timeout). *floor_nodeless_window* is
+    the global floor it was derived from — a WIDENED window (floor < window)
+    additionally arms the tail guard below, so a zero-progress running row is
+    never re-dispatched by the generic recovery path before its window elapses.
+    ``stale_window`` (the SAME value the SQL stale-heartbeat legs bind, from
+    ``ReconcileTuning``) feeds the override-resume row recheck AND the
+    FAR-1803 node-started/executor-lost classification below.
+    """
+    # FAR-1803 — classify the node-started / executor-lost class FIRST, before
+    # any repair branch can touch it. The class is never re-dispatched (a
+    # started node may have executed side effects — FAR-1649) and never
+    # silently skipped: it gets its own counter so a readiness read can never
+    # report 0 while such runs exist (the observed defect: every counter 0
+    # while runs sat ``running`` for hours).
+    #
+    # FAR-1999 — the terminalisation bound for this class is now the run's
+    # DURABLE node deadline, not the ~135-minute mid-graph age gate. When the
+    # row shows ZERO node progress (no checkpoint, no finalised output, no
+    # token usage) and its first node started longer ago than the graph's
+    # maximum node ``timeout_seconds``, the node deadline has provably passed
+    # and the executor that would have enforced it is dead, so the row is
+    # reaped here. A row that is still inside its node budget (or has made any
+    # progress) keeps the old hold-and-report path and is left to the age gate
+    # — which remains the safety net if this reaper cannot act (e.g. no time
+    # anchor).
+    node_started_result = await _reconcile_node_started_executor_lost(
+        session,
+        org_id,
+        row,
+        summary,
+        terminalized_run_ids,
+        enqueue_failed_redispatched,
+        stale_window,
+    )
+    if node_started_result is not None:
+        return node_started_result
+    early_detect_result = await _reconcile_early_detect_nodeless_arm(
+        session,
+        q,
+        org_id,
+        row,
+        nodeless_window,
+        enqueue_failed_redispatched,
+        summary,
+        terminalized_run_ids,
+        early_detect_minutes=early_detect_minutes,
+    )
+    if early_detect_result is not None:
+        return early_detect_result
+    # Throttled or not early-detect — fall through to the full nodeless
+    # repair which may handle it via a different branch (stale heartbeat, etc.).
+
+    # Claimed-but-never-executed zombie repair — see
+    # ``_reconcile_nodeless_repair`` / ``_redispatch_nodeless``.
+    handled = await _reconcile_nodeless_repair(
+        session,
+        q,
+        org_id,
+        row,
+        nodeless_window,
+        enqueue_failed_redispatched,
+        summary,
+        terminalized_run_ids,
+    )
+    if handled is not None:
+        return handled
+
+    # FAR-1740 tail guard: the SQL scan's global window is a SUPERSET of every
+    # per-pipeline window, so a row from a pipeline whose window was WIDENED
+    # above the floor can reach here younger than its own window. The nodeless
+    # repair above already refused it (too young), but the generic recovery
+    # path below would re-dispatch a job-gone row as ``execute_run`` — rotating
+    # claim_count and killing the in-flight attempt. Hold back a zero-progress
+    # RUNNING saq row until its per-pipeline window elapses (once it does, the
+    # full repair above owns it). Gated on a widened window, so direct callers
+    # (tests) and non-widened pipelines are unaffected; the existing
+    # ``node_started_running`` belt still owns node-started rows.
+    if _held_back_by_widened_window(
+        row,
+        nodeless_window=nodeless_window,
+        floor_nodeless_window=floor_nodeless_window,
+    ):
+        summary["skipped"] += 1
+        return enqueue_failed_redispatched
+
+    # B3 enqueue-failed branch: pending + dispatched + dispatcher
+    # NULL + enqueue_failed_at set.
+    is_enqueue_failed = _row_is_enqueue_failed(row)
+    early = await _reconcile_enqueue_failed(
+        redis_client,
+        session,
+        org_id,
+        row,
+        is_enqueue_failed,
+        enqueue_failed_redispatched,
+        summary,
+        terminalized_run_ids,
+    )
+    if early is not None:
+        return early
+
+    job_key = f"run:{row.id}"
+    job, ok = await _read_reconcile_job(session, q, org_id, row, job_key, "read", summary)
+    if not ok:
+        return enqueue_failed_redispatched
+    if job is not None:
+        summary["skipped"] += 1  # job still exists — nothing to repair
+        return enqueue_failed_redispatched
+
+    # F6a auto-approve guard + durable resume payload (B1-reconcile) — see
+    # ``_resolve_hitl_resume_or_skip``.
+    skip, resume_data = await _resolve_hitl_resume_or_skip(session, org_id, row, summary)
+    if skip:
+        return enqueue_failed_redispatched
+
+    # Capacity check for capacity-deferred runs (pending + no
+    # dispatched_at). Re-dispatch only when the pipeline has free
+    # capacity (plan F3b/F3c).
+    if row.status == "pending" and row.dispatched_at is None:
+        deferred = await _capacity_defer_pending_run(session, row, summary)
+        if deferred:
+            return enqueue_failed_redispatched
+
+    # NO SAQ-internal eviction (B2): a version-pinned DEL/ZREM/LREM of
+    # saq:abort:*/incomplete/queued/active is TOCTOU-unsafe across machines
+    # and can permanently strand a job. The atomic claim UPDATE is the real
+    # dedupe — a second worker claiming the same run loses. Re-check
+    # q.job() AFTER the decision and immediately before enqueue: if a job now
+    # exists under the original key, a concurrent worker already re-enqueued
+    # it — skip.
+    job, ok = await _read_reconcile_job(session, q, org_id, row, job_key, "re-check", summary)
+    if not ok:
+        return enqueue_failed_redispatched
+    if job is not None:
+        summary["skipped"] += 1
+        return enqueue_failed_redispatched
+
+    resume_identity_result = await _reconcile_resume_identity_arm(
+        session,
+        q,
+        org_id,
+        row,
+        stale_window=stale_window,
+        is_enqueue_failed=is_enqueue_failed,
+        enqueue_failed_redispatched=enqueue_failed_redispatched,
+        summary=summary,
+    )
+    if resume_identity_result is not None:
+        return resume_identity_result
+
+    node_started_belt_result = _reconcile_node_started_running_belt(
+        row,
+        org_id,
+        summary,
+        enqueue_failed_redispatched,
+    )
+    if node_started_belt_result is not None:
+        return node_started_belt_result
+
+    # FAR-2076 — the retry-budget gate on the re-enqueue backstop.
+    #
+    # Every ``execute_run`` re-dispatch here grants one more execution, for ANY
+    # non-terminal row — not just ``pending``. A ``running`` PRE-NODE row
+    # (phase ``claimed``/``loading_setup``/``setup_complete``, heartbeat stale,
+    # ``started_at`` younger than the nodeless window) is selected by the
+    # generic stale-heartbeat leg and reached the final enqueue with
+    # ``retries=0``; SAQ still granted one attempt and the graph executed a
+    # fourth time under ``max_retries: 2``. The gate therefore keys on the
+    # RESOLVED job type (``_reconcile_job_type``) for every non-terminal row.
+    # Each mechanism that produced the row consulted the
+    # ``retry_policy`` against a DIFFERENT budget (or, like this backstop,
+    # counted nothing at all), so a run could execute past ``1 + max_retries``.
+    # This is the LAST gate before the enqueue, so it bounds every producer —
+    # the fenced pending-reset (policy / transient retry / watchdog), the
+    # FAR-1627 worker-shutdown handback and the enqueue-failed leg.
+    #
+    # A row ALREADY beyond budget is terminal-failed with the distinct
+    # ``retry_budget_exhausted`` code instead of re-dispatched — and instead
+    # of being silently skipped, which would strand it until the age backstop
+    # and misreport it as ``no_progress``. A within-budget row keeps the exact
+    # recovery behaviour this leg exists for (durability preserved).
+    #
+    # Capacity-marked pending rows are NOT excluded. The old exclusion existed
+    # only because the previous measure counted a capacity claim as an
+    # execution; the durable counter is NOT incremented by a capacity demotion,
+    # so a capacity-marked row below the ceiling must still be re-dispatched and
+    # one at/above the ceiling must be terminal-failed like any other pending
+    # execution. Excluding them would let an at-ceiling run execute again.
+    #
+    # The measure is the durable ``runs.execution_attempt_count`` ONLY (FAR-2076).
+    # ``claim_count`` must never be consulted here: it grows on
+    # capacity-demoted and resume claims, so it over-counted healthy runs and
+    # terminal-failed them with budget to spare — the whole-point defect of the
+    # first attempt at this fix.
+    #
+    # A budget-exhausted ``pending`` row is terminal-failed below. A
+    # budget-exhausted ``running`` row is NOT: the guarded UPDATE only matches
+    # ``status='pending'`` (deliberately — a running row is owned by the
+    # nodeless/age backstop, and the UPDATE must never race a live executor),
+    # so it is skipped this tick and left to that backstop.
+    job_type = _reconcile_job_type(row.status)
+    budget_result = await _reconcile_retry_budget_gate(
+        session,
+        org_id,
+        row,
+        job_type,
+        summary,
+        terminalized_run_ids,
+        enqueue_failed_redispatched,
+    )
+    if budget_result is not None:
+        return budget_result
 
     # Discriminator (F6a): awaiting_human/claimed/hitl_parked -> resume_run;
     # pending/running -> execute_run. Re-dispatch with a FRESH
