@@ -257,13 +257,14 @@ def _workflow_run_blocks(workflow: Path) -> list[str]:
 def test_no_workflow_self_reports_to_the_retired_lifecycle_map_endpoint():
     """No GitHub Actions workflow may POST a ``workflow_self_report`` payload to
     ``.../journeys/self-report``. That endpoint is gated behind developer mode
-    and the lifecycle-map surface retires at GA, so the POST can never succeed;
-    the dead plumbing was deleted from ``merge-queue.yml`` (FAR-2691) after
-    ``ci.yml`` and ``deploy.yml``. This guard keeps it from drifting back —
-    reintroducing the step would restore a call that always fails."""
+    and the lifecycle-map surface retires at GA, so the POST cannot succeed
+    against a default deployment; the dead plumbing was deleted from
+    ``merge-queue.yml`` (FAR-2691) after ``ci.yml`` and ``deploy.yml``. This
+    guard keeps it from drifting back — reintroducing the step would restore a
+    call that fails against any normal deployment."""
     violations = []
     workflows = REPO / ".github" / "workflows"
-    for path in sorted(workflows.glob("*.yml")):
+    for path in sorted((*workflows.glob("*.yml"), *workflows.glob("*.yaml"))):
         for block in _workflow_run_blocks(path):
             if "workflow_self_report" in block:
                 violations.append(f"  .github/workflows/{path.name}: still emits a workflow_self_report payload — the lifecycle-map self-report endpoint is retired (FAR-2691)")

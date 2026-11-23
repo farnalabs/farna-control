@@ -295,13 +295,11 @@ async def test_list_contribution_versions_passes_the_callers_org() -> None:
     org_id = uuid.uuid4()
     group_id = uuid.uuid4()
     prim = _primitive(_ORG_A, "Contribution", primitive_type="test_fixture", version_group_id=group_id)
-    seed_resolver = AsyncMock(return_value=prim)
     version_lister = AsyncMock(return_value=[prim])
+    seed_resolver = AsyncMock(return_value=prim)
 
     with (
         patch(f"{_SERVICE}.set_rls_org", new=AsyncMock()),
-        # FAR-2696: the seed is resolved through the org-clamped ``get_primitive``
-        # with an explicit org filter, not the id-only ``get_library_primitive``.
         patch(f"{_SERVICE}.get_primitive", new=seed_resolver),
         patch(f"{_SERVICE}.list_primitives_by_version_group", new=version_lister),
     ):
