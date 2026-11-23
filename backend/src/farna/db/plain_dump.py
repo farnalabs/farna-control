@@ -342,7 +342,7 @@ def dump_plain_sql(
     fd = os.open(str(output), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _PRIVATE_MODE)
     try:
         with os.fdopen(fd, "wb") as out:
-            completed = subprocess.run(  # nosec B603 — pinned argv, trusted synthesized input  # noqa: S603
+            completed = subprocess.run(  # nosec B603 — pinned argv, trusted synthesized input  # noqa: S603  # NOSONAR S8705 — argv[0] is resolve_pg_dump()'s validated path, the flags are literals, and dsn comes from the operator's own DATABASE_URL; the executable is a trusted path from this binary, never an untrusted caller-supplied CLI argument, and there is no shell
                 argv,
                 stdout=out,
                 stderr=subprocess.PIPE,

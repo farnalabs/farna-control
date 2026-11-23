@@ -1117,23 +1117,32 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("pass exactly one of --data-dir (native) or --db-url (container)")
     if args.db_url is not None and args.output_dir is None:
         parser.error("--db-url requires --output-dir")
+    # Narrow the mutually-exclusive source WITHOUT an assert inside the
+    # try-except below: that block catches Exception, so an assert there would
+    # be swallowed (Sonar S5779). The parser above has already enforced exactly
+    # one source, and --db-url requires --output-dir.
+    db_url = args.db_url
+    data_dir = args.data_dir
+    output_dir = args.output_dir
+    if db_url is not None:
+        assert output_dir is not None  # parser-enforced
+    else:
+        assert data_dir is not None  # parser-enforced
     try:
-        if args.db_url is not None:
-            assert args.output_dir is not None  # parser-enforced
+        if db_url is not None:
             # The compose path passes a SQLAlchemy asyncpg URL; psycopg and
             # pg_dump require the libpq form. take_upgrade_snapshot normalises
             # (and strips the password) in the ONE shared place, so the probes
             # here go through the same helper rather than a second rewrite.
-            if args.skip_if_pristine and _database_is_pristine(args.db_url):
+            if args.skip_if_pristine and _database_is_pristine(db_url):
                 print("Fresh database (no application tables) — no pre-upgrade snapshot needed.", file=sys.stderr)  # noqa: T201
                 return 0
-            if migration_pending(args.db_url) is False:
+            if migration_pending(db_url) is False:
                 print("Database is already at the code's migration head — no migration is pending, so no pre-upgrade snapshot was taken.", file=sys.stderr)  # noqa: T201
                 return 0
-            snapshot = take_upgrade_snapshot(args.db_url, args.output_dir, release=args.release, bin_dir=args.bin_dir)
+            snapshot = take_upgrade_snapshot(db_url, output_dir, release=args.release, bin_dir=args.bin_dir)
         else:
-            assert args.data_dir is not None  # parser-enforced
-            snapshot = pre_upgrade_dump(args.data_dir, bin_dir=args.bin_dir, release=args.release)
+            snapshot = pre_upgrade_dump(data_dir, bin_dir=args.bin_dir, release=args.release)
     except UpgradeError as exc:
         # Actionable installer/entrypoint abort text: never a bare traceback.
         print(f"ERROR: {exc}", file=sys.stderr)  # noqa: T201
