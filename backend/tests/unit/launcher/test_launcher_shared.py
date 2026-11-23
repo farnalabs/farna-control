@@ -226,7 +226,7 @@ def _upgrade_dump_seam(data_dir: Path, *, recorded_heads: list[str] | None = Non
     heads = recorded_heads or ["3ab2c1d"]
     payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None):
         snapshot_dir = data_dir / "pre-upgrade-dump-fake-1"
         snapshot_dir.mkdir()
         (snapshot_dir / "database.sql").write_bytes(payload)

@@ -670,7 +670,7 @@ def test_perform_upgrade_downgrade_refuses(tmp_path, monkeypatch, patched_trust_
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None):
         return _upgrade_dump_seam(data_dir, recorded_heads=["head-the-target-never-shipped"])(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -767,7 +767,7 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -827,7 +827,7 @@ def test_upgrade_marker_written_before_boot(tmp_path, monkeypatch, patched_trust
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -1172,7 +1172,7 @@ def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
-    with pytest.raises(upgrade_module.UpgradeError, match="cannot verify the database"):
+    with pytest.raises(upgrade_module.UpgradeError, match="Refusing --skip-backup: no verified pre-upgrade snapshot"):
         upgrade_module.perform_upgrade(
             data_dir,
             install_root=install_root,
@@ -1218,7 +1218,7 @@ def test_reupgrade_of_the_same_version_keeps_the_prior_bytes_for_restore(tmp_pat
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -2990,7 +2990,7 @@ class TestPerformUpgradeHappyPath:
         staging.mkdir()
         release_fixture = _upgrade_release_fixture(staging)
 
-        def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+        def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None):
             return _upgrade_dump_seam(data_dir)(data_dir)
 
         monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
