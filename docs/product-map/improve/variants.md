@@ -20,8 +20,9 @@ Variant groups – batch comparison on `/variants/compare`. A variant group bund
 weighted variants (optional `run_context_overrides`) and fires one run per
 variant; the page hosts an inline variant-group builder (create + batch-fire),
 and comparison surfaces eval scores per node, prompt diffs and eval
-coverage gaps. A batch-compare flow (`/variants/compare/:batchId`) is activated
-by the `variant_batch_compare` feature flag.
+coverage gaps. A batch-compare flow (`/variants/compare/:batchId`) serves the
+batch-compare view directly; it is a community-tier page with no feature flag
+(the phantom `variant_batch_compare` flag was removed in FAR-926).
 
 ## Behaviors
 
@@ -54,8 +55,10 @@ by the `variant_batch_compare` feature flag.
       page renders a per-node token table per expanded variant run
       (`VariantBatchCompareView.vue`, `VariantBatchCompareView.spec.ts`,
       `test_variant_batches.py`, `test_variants.py`)
-- [x] The variant batch-compare UI is gated by the `variant_batch_compare` feature flag
-      and hard-replaces the legacy AB-test view when enabled (frontend router guard)
+- [x] The variant batch-compare UI at `/variants/compare/:batchId` is ungated
+      (community tier, no feature flag): the phantom `variant_batch_compare`
+      flag was removed in FAR-926 and the route serves `VariantBatchCompareView`
+      directly (frontend router)
 - [x] Variant groups are created and batch-fired from the inline builder on
       `/variants/compare` (`components/variants/VariantGroupBuilder.vue`), which
       honors the `pipeline_id` deep-link from a pipeline's "Run as variant" action
@@ -93,7 +96,7 @@ by the `variant_batch_compare` feature flag.
       (`variant_groups.degraded_evals`) and, when on, adds
       `_degraded_evals: true` to every run's input payload
       (`_merge_variant_payload`, `db/crud/variant_group.py`). It does NOT skip
-      or weaken eval execution — the builder help line and the table badge
+      or weaken eval execution – the builder help line and the table badge
       tooltip say so, so a pipeline only reacts to the marker if its templates
       read `input._degraded_evals`. The comparisons table shows the "degraded"
       badge from the group response, so the flag round-trips
@@ -111,7 +114,7 @@ the per-token breakdown comparison the manifest previously parked as the lone
 
 ## QA History
 
-- 2026-11-21: **FAR-2611**: `degraded_evals` was API-only — `VariantGroupBuilder`
+- 2026-11-21: **FAR-2611**: `degraded_evals` was API-only – `VariantGroupBuilder`
   always sent `false`, so the FAR-2598 comparisons table could never show its
   "Degraded evals" column. The backend consumer was read before writing copy:
   the flag is persisted on `variant_groups` and, when on,
