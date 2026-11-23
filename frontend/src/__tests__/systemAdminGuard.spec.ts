@@ -136,13 +136,19 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
   })
 
   describe('enforceRoleTierVisibility blocks non-system-admins from system routes', () => {
-    it('redirects a system-group route when the token is not a system admin', async () => {
+    it('sends a system-group route to the locked page naming the instance-admin restriction', async () => {
       decodeJwtPayload.mockReturnValue({ is_system_admin: false })
       const result = await enforceRoleTierVisibility(
         makeRoute('admin-feature-flags', { requiresSystemAdmin: true }),
         'tok',
       )
-      expect(result).toEqual({ name: 'dashboard' })
+      // FAR-2688: this assertion previously pinned `{ name: 'dashboard' }` —
+      // the silent bounce, i.e. the defect itself. It now asserts the locked
+      // destination and the system_admin reason the locked page renders.
+      expect(result).toEqual({
+        path: '/locked',
+        query: { from: '/', capability: 'Feature Flags', reason: 'system_admin' },
+      })
     })
 
     it('allows a system-group route when the token is a system admin', async () => {
@@ -154,13 +160,18 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
       expect(result).toBe(true)
     })
 
-    it('redirects housekeeping when not a system admin', async () => {
+    it('sends housekeeping to the locked page when not a system admin', async () => {
       decodeJwtPayload.mockReturnValue({ is_system_admin: false })
       const result = await enforceRoleTierVisibility(
         makeRoute('admin-housekeeping', { requiresSystemAdmin: true }),
         'tok',
       )
-      expect(result).toEqual({ name: 'dashboard' })
+      // FAR-2688: replaced a `{ name: 'dashboard' }` assertion that pinned the
+      // silent bounce.
+      expect(result).toEqual({
+        path: '/locked',
+        query: { from: '/', capability: 'Housekeeping', reason: 'system_admin' },
+      })
     })
 
     it('allows housekeeping when system admin', async () => {
@@ -172,12 +183,17 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
       expect(result).toBe(true)
     })
 
-    it('redirects a route gated only by the route-level manifest field when not a system admin', async () => {
+    it('sends a route gated only by the route-level manifest field to the locked page when not a system admin', async () => {
       decodeJwtPayload.mockReturnValue({ is_system_admin: false })
       const route = makeRoute('admin-system-orgs')
       hydrateManifestMeta(route)
       const result = await enforceRoleTierVisibility(route, 'tok')
-      expect(result).toEqual({ name: 'dashboard' })
+      // FAR-2688: replaced a `{ name: 'dashboard' }` assertion that pinned the
+      // silent bounce.
+      expect(result).toEqual({
+        path: '/locked',
+        query: { from: '/', capability: 'Organisations', reason: 'system_admin' },
+      })
     })
 
     it('allows a route gated only by the route-level manifest field when a system admin', async () => {
@@ -194,9 +210,13 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
   // gate must be derived from the manifest — never duplicated as inline meta.
   describe('FAR-1797: route-entry system-admin gates are pinned to the real router records', () => {
     const systemRoutes = [
-      { name: 'admin-system-orgs', path: '/admin/system/orgs' },
-      { name: 'admin-system-config', path: '/admin/system/config' },
-      { name: 'admin-product-analytics', path: '/admin/product-analytics' },
+      { name: 'admin-system-orgs', path: '/admin/system/orgs', capability: 'Organisations' },
+      { name: 'admin-system-config', path: '/admin/system/config', capability: 'System Config' },
+      {
+        name: 'admin-product-analytics',
+        path: '/admin/product-analytics',
+        capability: 'Product Analytics',
+      },
     ]
 
     it('binds every REAL-manifest system-admin route name to a real router record on the same path', () => {
@@ -242,14 +262,20 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
       }
     })
 
-    it('each route redirects a non-system-admin and admits a system admin via the manifest-derived gate', async () => {
-      for (const { name } of systemRoutes) {
+    it('each route lands a non-system-admin on the locked page and admits a system admin via the manifest-derived gate', async () => {
+      for (const { name, capability } of systemRoutes) {
         decodeJwtPayload.mockReturnValue({ is_system_admin: false })
         const deniedRoute = makeRoute(name)
         hydrateManifestMeta(deniedRoute)
         expect(deniedRoute.meta.requiresSystemAdmin).toBe(true)
         const denied = await enforceRoleTierVisibility(deniedRoute, 'tok')
-        expect(denied).toEqual({ name: 'dashboard' })
+        // FAR-2688: replaced a `{ name: 'dashboard' }` assertion that pinned
+        // the silent bounce. The locked page must name the capability and the
+        // instance-admin reason.
+        expect(denied).toEqual({
+          path: '/locked',
+          query: { from: '/', capability, reason: 'system_admin' },
+        })
 
         decodeJwtPayload.mockReturnValue({ is_system_admin: true })
         const allowedRoute = makeRoute(name)
@@ -257,6 +283,33 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
         const allowed = await enforceRoleTierVisibility(allowedRoute, 'tok')
         expect(allowed).toBe(true)
       }
+    })
+  })
+
+  // FAR-2688: the fix replaces a silent bounce with a redirect, so it must be
+  // proved that the destination cannot bounce back — otherwise the pair is a
+  // loop instead of an explanation.
+  describe('FAR-2688: the system-admin denial cannot loop', () => {
+    it('lands on /locked, which carries no gate of its own', async () => {
+      const record = router.getRoutes().find((route) => route.name === 'locked-route')
+      expect(record).toBeDefined()
+      expect(record!.path).toBe('/locked')
+      // The guard reads its gate from the manifest via hydrateManifestMeta, so
+      // BOTH the record meta and the manifest entry must be ungated — either
+      // one re-arming the gate would send the locked page straight back.
+      expect(record!.meta.requiresSystemAdmin).toBeFalsy()
+      expect(record!.meta.requiredRoles).toBeUndefined()
+      expect(record!.meta.requiredTier).toBeUndefined()
+      expect(record!.meta.requiredPermissions).toBeUndefined()
+      expect(record!.meta.featureFlag).toBeUndefined()
+      expect(REAL_MANIFEST.routes['/locked']).toBeUndefined()
+
+      // Enforce the gate on the locked route as the SAME caller the
+      // system-admin gate just refused: it must be admitted in one hop.
+      decodeJwtPayload.mockReturnValue({ is_system_admin: false })
+      const lockedRoute = makeRoute('locked-route')
+      hydrateManifestMeta(lockedRoute)
+      await expect(enforceRoleTierVisibility(lockedRoute, 'tok')).resolves.toBe(true)
     })
   })
 })

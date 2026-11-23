@@ -125,6 +125,12 @@ describe('LockedRouteView', () => {
     expect(closed.text()).toContain('system administrator can lift')
     expect(closed.text()).not.toContain('needs a role change')
     expect(closed.text()).toContain('organisation administrator cannot grant it')
+    // FAR-2688: the system-admin branch must offer no link back into the route
+    // that was just refused. The only "open" affordance lives inside the
+    // tier-lock branch; here the sole way out is the Dashboard, so a denied
+    // navigation can never be re-entered from this page (no redirect loop).
+    expect(wrapper.find('[data-testid="locked-route-open"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="locked-route-dashboard"]').attributes('href')).toBe('/')
   })
 
   it('shows the capability as available once the licence covers it', () => {
