@@ -20,13 +20,24 @@ _BASELINE_SCHEMA = (_VERSIONS / "0350_baseline_schema.py").read_text(encoding="u
 _BASELINE_RLS = (_VERSIONS / "0351_baseline_rls.py").read_text(encoding="utf-8")
 _BASELINE_PRIVILEGES = (_VERSIONS / "0352_baseline_privileges.py").read_text(encoding="utf-8")
 
+#: ORM table names that were renamed after the native baseline was frozen, mapped
+#: back to the name the baseline creates. The baseline enables RLS and creates the
+#: isolation policy on the original name; migration ``0362_rename_legacy_db_objects``
+#: then renames the table, and a metadata-only ``ALTER ... RENAME`` carries the RLS
+#: posture, policy, grants and constraints with it. Mapping back keeps this
+#: coverage check asserting that the baseline protects the table.
+_BASELINE_TABLE_NAMES: dict[str, str] = {
+    "farna_journey_facts": "modulo_journey_facts",
+}
+
 
 def test_baseline_preserves_org_isolation_and_force_rls() -> None:
     """Every org-scoped ORM table is enabled, forced, and policy-protected."""
     org_tables = {name for name, table in Base.metadata.tables.items() if "organisation_id" in table.c and name not in {"organisations", "invitations"}}
     force_tables = {line.split("public.", 1)[1].split(" FORCE", 1)[0] for line in _BASELINE_RLS.splitlines() if " FORCE ROW LEVEL SECURITY;" in line}
     for table in org_tables:
-        assert f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY;" in _BASELINE_RLS
+        baseline_name = _BASELINE_TABLE_NAMES.get(table, table)
+        assert f"ALTER TABLE public.{baseline_name} ENABLE ROW LEVEL SECURITY;" in _BASELINE_RLS
     policy_tables = {line.split("public.", 1)[1].split(" ", 1)[0] for line in _BASELINE_RLS.splitlines() if "CREATE POLICY rls_org_isolation ON public." in line}
     assert {"agents", "runs"} <= policy_tables
     assert "CREATE POLICY rls_org_isolation ON public.pipelines" in _BASELINE_RLS or "pipelines" in _BASELINE_RLS

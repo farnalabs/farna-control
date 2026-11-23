@@ -41,7 +41,7 @@ from farna.compliance.pack import (
 _REQUIRED_ROW_TEXT_FIELDS = (
     "clause",
     "clause_intent",
-    "modulo_control",
+    "farna_control",
     "customer_location",
     "responsibility",
 )
@@ -78,7 +78,7 @@ def _row(**overrides: object) -> MappingRow:
         "framework": "soc2",
         "clause": "CC7.2",
         "clause_intent": "The entity monitors system components.",
-        "modulo_control": "Modulo records events.",
+        "farna_control": "Modulo records events.",
         "artifact_type": "audit_chain",
         "customer_location": "GET /api/v1/admin/audit",
         "coverage": COVERAGE_SUPPORTED,
@@ -242,7 +242,7 @@ class TestContentHash:
     def test_hash_changes_when_an_assertion_changes(self) -> None:
         pack = load_mapping_pack()
         target = pack.rows[0].id
-        changed_frameworks = {framework_id: framework.model_copy(update={"rows": tuple(row.model_copy(update={"modulo_control": "a different claim"}) if row.id == target else row for row in framework.rows)}) for framework_id, framework in pack.frameworks.items()}
+        changed_frameworks = {framework_id: framework.model_copy(update={"rows": tuple(row.model_copy(update={"farna_control": "a different claim"}) if row.id == target else row for row in framework.rows)}) for framework_id, framework in pack.frameworks.items()}
         changed = MappingPack.model_validate({**pack.model_dump(), "frameworks": changed_frameworks})
 
         assert changed.content_hash() != pack.content_hash()
@@ -252,7 +252,7 @@ class TestContentHash:
 
         The hash must not exclude it: a silent edit to a reviewer-facing note
         is as much an unbumped assertion change as an edit to
-        ``modulo_control``.
+        ``farna_control``.
         """
         pack = load_mapping_pack()
         target = pack.rows[0].id
@@ -523,7 +523,7 @@ def _raw_row(
         "id": row_id,
         "clause": clause,
         "clause_intent": "The clause intent is stated in a sentence.",
-        "modulo_control": "Modulo records the fact and produces the evidence.",
+        "farna_control": "Modulo records the fact and produces the evidence.",
         "artifact_type": artifact_type,
         "customer_location": "GET /api/v1/admin/audit",
         "coverage": coverage,
