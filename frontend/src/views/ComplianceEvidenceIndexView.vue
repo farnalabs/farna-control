@@ -5,12 +5,14 @@
       :subtitle="$t('views.ComplianceEvidenceIndex.subtitle')"
     />
 
-    <div
-      class="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm"
+    <BaseCard
+      variant="context"
+      padding="md"
+      class="text-sm"
       data-testid="compliance-evidence-index-scope-note"
     >
       {{ $t('views.ComplianceEvidenceIndex.scope_note') }}
-    </div>
+    </BaseCard>
 
     <div
       v-if="loading"
@@ -114,9 +116,15 @@
         </BaseCard>
       </dl>
 
-      <section class="space-y-3" aria-labelledby="evidence-index-coverage-heading" data-testid="compliance-evidence-index-coverage">
-        <h2 id="evidence-index-coverage-heading" class="text-lg font-semibold">{{ $t('views.ComplianceEvidenceIndex.coverage_heading') }}</h2>
-        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-coverage-heading" tabindex="0" data-testid="compliance-evidence-index-coverage-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
+      <DataCard
+        :title="$t('views.ComplianceEvidenceIndex.coverage_heading')"
+        heading-level="h2"
+        variant="bordered"
+        role="region"
+        :aria-label="$t('views.ComplianceEvidenceIndex.coverage_heading')"
+        data-testid="compliance-evidence-index-coverage"
+      >
+        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" :aria-label="$t('views.ComplianceEvidenceIndex.coverage_heading')" tabindex="0" data-testid="compliance-evidence-index-coverage-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
           <table class="w-full text-left text-sm">
             <thead>
               <tr>
@@ -134,16 +142,21 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </DataCard>
 
-      <section class="space-y-3" aria-labelledby="evidence-index-artifacts-heading">
-        <div class="flex items-baseline justify-between gap-3">
-          <h2 id="evidence-index-artifacts-heading" class="text-lg font-semibold">{{ $t('views.ComplianceEvidenceIndex.artifacts_heading') }}</h2>
+      <DataCard
+        :title="$t('views.ComplianceEvidenceIndex.artifacts_heading')"
+        heading-level="h2"
+        variant="bordered"
+        role="region"
+        :aria-label="$t('views.ComplianceEvidenceIndex.artifacts_heading')"
+      >
+        <template #headerActions>
           <p aria-live="polite" class="text-sm text-muted-foreground" data-testid="compliance-evidence-index-artifact-count">
             {{ $t('views.ComplianceEvidenceIndex.artifact_count', { count: indexData.artifacts.length }) }}
           </p>
-        </div>
-        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-artifacts-heading" tabindex="0" data-testid="compliance-evidence-index-artifacts-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
+        </template>
+        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" :aria-label="$t('views.ComplianceEvidenceIndex.artifacts_heading')" tabindex="0" data-testid="compliance-evidence-index-artifacts-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
           <table class="w-full min-w-[1050px] text-left text-sm">
             <thead>
               <tr>
@@ -219,7 +232,7 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </DataCard>
 
       <section
         class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm"
@@ -241,6 +254,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'

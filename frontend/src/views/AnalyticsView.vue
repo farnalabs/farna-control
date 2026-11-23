@@ -56,7 +56,11 @@
         />
 
         <div v-else class="space-y-4">
-          <DataCard data-testid="analytics-overview-chart" :title="chartTitle" heading-level="h2">
+          <DataCard
+            :title="chartTitle"
+            heading-level="h2"
+            data-testid="analytics-overview-chart"
+          >
             <template #headerActions>
               <button
                 type="button"
@@ -77,22 +81,22 @@
               data-testid="analytics-capacity-summary"
               aria-live="polite"
             >
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_avg_queue_wait') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatCapacityMs(store.capacitySummary.avgQueueWaitMs) }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_failures') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ store.capacitySummary.totalCapacityFailures.toLocaleString() }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_avg_wait') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatCapacityMs(store.capacitySummary.avgCapacityWaitMs) }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_stalls') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ store.capacitySummary.totalStalls.toLocaleString() }}</p>
-              </div>
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_avg_queue_wait')"
+                :value="formatCapacityMs(store.capacitySummary.avgQueueWaitMs)"
+              />
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_failures')"
+                :value="store.capacitySummary.totalCapacityFailures.toLocaleString()"
+              />
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_avg_wait')"
+                :value="formatCapacityMs(store.capacitySummary.avgCapacityWaitMs)"
+              />
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_stalls')"
+                :value="store.capacitySummary.totalStalls.toLocaleString()"
+              />
             </div>
 
             <AnalyticsChart
@@ -174,7 +178,8 @@ import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";
 import CapacityQueuePanel from "../components/analytics/CapacityQueuePanel.vue";
 import DataCard from "../components/ui/DataCard.vue";
 import CollapsibleCard from "../components/ui/CollapsibleCard.vue";
-import CardSkeleton from '../components/ui/CardSkeleton.vue'
+import CardSkeleton from "../components/ui/CardSkeleton.vue";
+import StatCard from "../components/ui/StatCard.vue";
 import { formatApiError } from "../lib/api/formatError";
 import { errorCodeLabel, executionOriginLabel } from "../utils/runUtils";
 import {

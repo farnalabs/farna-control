@@ -2074,12 +2074,13 @@ def _fingerprint(draft: Any) -> str:
 def _stage_type(node: dict[str, Any]) -> str:
     """Map a discovery node to an honest lifecycle-map stage type.
 
-    Trigger nodes are ``pipeline`` graph nodes but carry no Modulo pipeline of
-    their own, so ``manual`` describes them accurately; connectors and folders
-    are external systems and stay ``placeholder`` (never published as Modulo).
+    Trigger nodes are ``pipeline`` graph nodes but carry no Farna Control
+    pipeline of their own, so ``manual`` describes them accurately; connectors
+    and folders are external systems and stay ``placeholder`` (never published
+    as Farna Control).
     """
     if node["node_type"] == "pipeline":
-        return "manual" if node["config_json"].get("source_kind") == "trigger" else "modulo"
+        return "manual" if node["config_json"].get("source_kind") == "trigger" else "farna_control"
     return "placeholder"
 
 

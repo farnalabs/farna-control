@@ -31,10 +31,10 @@
 
       <template v-else-if="step === 1">
         <DataCard
-          padding="lg"
           :title="$t('views.CopyPipelineWizard.select_source_pipeline')"
           :description="$t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt')"
           heading-level="h2"
+          padding="lg"
         >
           <FilterBar class="mb-4"
             :search="{ placeholder: $t('views.CopyPipelineWizard.search_pipelines_by_name') }"
@@ -105,10 +105,10 @@
 
       <template v-else-if="step === 2">
         <DataCard
-          padding="lg"
-          class="mb-6"
           :title="$t('views.CopyPipelineWizard.copy_configuration')"
           heading-level="h2"
+          padding="lg"
+          class="mb-6"
         >
           <div class="space-y-4">
             <div>
@@ -209,10 +209,10 @@
 
       <template v-else-if="step === 3">
         <DataCard
-          padding="lg"
-          class="mb-6"
           :title="$t('views.CopyPipelineWizard.review_copy')"
           heading-level="h2"
+          padding="lg"
+          class="mb-6"
         >
           <div class="space-y-4">
             <div class="bg-muted rounded-lg p-4">
@@ -359,13 +359,13 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Check, ChevronRight, X, XCircle } from '@lucide/vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
 import BackLink from '../components/BackLink.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
-import DataCard from '../components/ui/DataCard.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'

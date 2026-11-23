@@ -198,9 +198,9 @@
       <!-- Trend chart section -->
       <DataCard
         v-if="planStore.featureEnabled('dashboard_charts')"
-        data-testid="dashboard-run-activity"
         :title="$t('views.DashboardView.run_activity')"
         heading-level="h2"
+        data-testid="dashboard-run-activity"
       >
         <div v-if="trendData.length > 1" class="space-y-4">
           <div>

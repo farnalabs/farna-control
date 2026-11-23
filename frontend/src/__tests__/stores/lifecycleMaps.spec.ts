@@ -52,7 +52,7 @@ const stage = (overrides: Partial<LifecycleMapStage> = {}): LifecycleMapStage =>
   id: 'stage-1',
   name: 'Build',
   description: null,
-  type: 'modulo',
+  type: 'farna_control',
   owner_badge: null,
   graduated: false,
   pipeline_id: null,
@@ -63,7 +63,7 @@ const stage = (overrides: Partial<LifecycleMapStage> = {}): LifecycleMapStage =>
 const canvasStage = (overrides: Partial<LifecycleStage> = {}): LifecycleStage => ({
   id: 'stage-1',
   name: 'Build',
-  type: 'modulo',
+  type: 'farna_control',
   x: 0,
   y: 0,
   pipeline_id: null,

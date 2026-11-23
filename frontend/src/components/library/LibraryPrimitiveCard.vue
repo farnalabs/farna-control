@@ -12,7 +12,7 @@
         <h3 class="mt-2 text-base font-medium text-foreground">{{ prim.name }}</h3>
       </div>
       <span
-        v-if="badge === 'modulo' && prim.source === 'modulo'"
+        v-if="badge === 'modulo' && prim.source === 'farna_control'"
         class="text-xs text-primary-text font-medium bg-primary/10 px-2 py-0.5 rounded"
       >
         {{ $t('views.LibraryView.modulo_badge') }}

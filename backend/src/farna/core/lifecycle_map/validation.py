@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-STAGE_TYPES = frozenset({"modulo", "external", "manual", "placeholder"})
+STAGE_TYPES = frozenset({"farna_control", "external", "manual", "placeholder"})
 
 _STAGE_TYPE_KEYS = ("type", "stage_type")
 _SOURCE_KEYS = ("source", "source_stage_id", "from_stage_id")
