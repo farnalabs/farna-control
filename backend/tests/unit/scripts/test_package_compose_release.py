@@ -174,6 +174,40 @@ def test_generate_quickstart_md():
     assert "sha256sum --check SHA256SUMS" in md
 
 
+def test_quickstart_never_claims_tag_alone_moves_the_image() -> None:
+    """The packaged image is a literal release tag, so no `TAG` switch moves it.
+
+    The generated text used to open by saying `docker compose up -d` with a new
+    `TAG` runs the migrations, and then (correctly) say that `TAG` does not move
+    the image. Only one of those can be true of the shipped bundle, where
+    :func:`transform_compose_content` has already replaced the one `${TAG}`
+    image reference with the literal release tag.
+    """
+    md = generate_quickstart_md("0.4.0", "v0.4.0")
+
+    assert "TAG=" not in md, "the quickstart shows a TAG=... switch; the packaged bundle's image cannot be moved that way"
+    for line in md.splitlines():
+        if "docker compose up" in line:
+            assert "TAG" not in line, f"the quickstart's start command implies TAG selects the image: {line!r}"
+
+
+def test_quickstart_names_only_files_the_bundle_ships() -> None:
+    """Every path a printed command uses must exist in the extracted bundle."""
+    md = generate_quickstart_md("0.4.0", "v0.4.0")
+    bundled = set(_bundled_files())
+
+    scripts = set(re.findall(r"\./([A-Za-z0-9_.-]+)", md))
+    assert scripts, "the quickstart prints no command that runs a bundled file"
+    assert scripts <= bundled, f"quickstart references file(s) the bundle does not ship: {sorted(scripts - bundled)}"
+
+    compose_files = set(re.findall(r"-f\s+(\S+\.ya?ml)", md))
+    assert compose_files <= bundled, f"quickstart references compose file(s) the bundle does not ship: {sorted(compose_files - bundled)}"
+
+    # The upgrade instruction must name the file that carries the pin, so the
+    # operator can see what a new bundle changes.
+    assert "docker-compose.prod.yml" in md
+
+
 def test_build_compose_release_end_to_end(tmp_path: Path):
     tarball_path = build_compose_release(
         version="0.4.0",

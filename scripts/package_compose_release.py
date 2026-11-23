@@ -166,9 +166,23 @@ Once that returns 200, open [http://localhost](http://localhost).
 
 ## Upgrades and recovery
 
-`docker compose up -d` with a new `TAG` runs the migrations. BEFORE they run,
-and only when a migration is pending, the container takes a verified `pg_dump`
-snapshot of the database into the `snapshot_data` volume (mounted at
+This bundle's `docker-compose.prod.yml` pins the image to *this* release, so
+`docker compose up -d` always starts the version in this directory's bundle.
+`TAG` is not a way to upgrade: it selects no image, and only labels
+`FARNA_CONTROL_VERSION`, the name of the snapshot directory.
+
+To upgrade, download the next release's bundle and extract it over this
+directory (it ships `.env.example`, never your `.env`, so your secrets are
+kept), then start it from there:
+
+```bash
+docker compose up -d
+```
+
+The farna-control container is recreated on the new release's image and its
+pending migrations run at start. BEFORE they run, and only when a migration is
+pending, the container takes a verified `pg_dump` snapshot of the database into
+the `snapshot_data` volume (mounted at
 `/backups`) and prints its path. Retention keeps the two newest verified
 snapshots, the snapshot the upgrade just wrote, and the newest snapshot that
 records the database's current schema revision (the recovery point). A snapshot
@@ -183,11 +197,9 @@ the previous release:
 ./compose-rollback.sh <previous-version>
 ```
 
-This bundle's `docker-compose.prod.yml` pins the image to *this* release, so
-`TAG=<previous-version> docker compose up -d` does **not** move it (`TAG` only
-labels the snapshot directory name). `compose-rollback.sh` starts the previous
-release through a one-off compose override, leaving the pinned file and its
-checksum untouched.
+`compose-rollback.sh` starts the previous release through a one-off compose
+override for the version you name, leaving this bundle's pinned
+`docker-compose.prod.yml` and its checksum untouched.
 
 `compose-restore.sh` requires the explicit `--confirm` argument. It then
 verifies the snapshot's manifest and checksums in a one-off container, refuses
