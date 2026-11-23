@@ -28,6 +28,22 @@ interface ApiResult<T> {
  * `/admin/feature-flags` + `/admin/license` pair used to serve, so no field
  * renames — FAR-1809 just collapses those two reads into this one.
  */
+/**
+ * One commercial entitlement in the plan bootstrap (FAR-2665). ``granted`` is
+ * the licence answer; ``flags`` is the behaviour flags the capability covers.
+ * The SPA derives BOTH directions from this list — the granted set that gates a
+ * route, and the flag -> entitlement mapping that tells a commercial lock from
+ * an organisation-disabled flag — so no view needs a static tier prop that can
+ * drift from the backend.
+ */
+export interface PlanEntitlement {
+  key: string;
+  name: string;
+  description: string;
+  granted: boolean;
+  flags: string[];
+}
+
 interface PlanPayload {
   license: {
     tier: string;
@@ -36,6 +52,7 @@ interface PlanPayload {
   };
   dev_mode?: boolean;
   flags: Array<{ name: string; currently_active: boolean }>;
+  entitlements?: PlanEntitlement[];
 }
 
 interface TiersPayload {
@@ -177,6 +194,11 @@ export const usePlanStore = defineStore("plan", () => {
   const flagsSource = ref<"none" | "cache" | "server" | "unavailable">(
     cachedFlags ? "cache" : "none",
   );
+  // FAR-2665: the commercial grant set, read from the SAME plan payload as the
+  // tier and flags. Deliberately NOT persisted to the flag cache (that cache is
+  // a first-paint boolean map); an entitlement-gated item stays hidden until the
+  // payload lands, exactly as a tier-gated item did.
+  const entitlements = ref<PlanEntitlement[]>([]);
   const devMode = ref(false);
   const isLoading = ref(false);
   const loaded = ref(false);
@@ -197,6 +219,31 @@ export const usePlanStore = defineStore("plan", () => {
     const override = orgOverrides.value[name];
     if (override !== undefined && override !== null) return override;
     return features.value[name] ?? false;
+  }
+
+  const grantedEntitlementKeys = computed(
+    () => new Set(entitlements.value.filter((e) => e.granted).map((e) => e.key)),
+  );
+
+  /** The entitlement key covering a flag, or null for Community behaviour. */
+  function entitlementForFlag(flagName: string): string | null {
+    const match = entitlements.value.find((e) => e.flags.includes(flagName));
+    return match ? match.key : null;
+  }
+
+  /** Whether the licence grants ``key`` (false until the plan payload lands). */
+  function hasEntitlement(key: string): boolean {
+    return grantedEntitlementKeys.value.has(key);
+  }
+
+  /** True when the flag is part of a commercial capability (drives lock copy). */
+  function isEntitledFlag(flagName: string): boolean {
+    return entitlementForFlag(flagName) !== null;
+  }
+
+  /** The capability's display name from the payload, else its key. */
+  function getEntitlementLabel(key: string): string {
+    return entitlements.value.find((e) => e.key === key)?.name ?? key;
   }
 
   function getTierLabel(tierId: string): string {
@@ -255,6 +302,7 @@ export const usePlanStore = defineStore("plan", () => {
         map[flag.name] = flag.currently_active;
       }
       features.value = map;
+      entitlements.value = res.data.entitlements ?? [];
       flagsSource.value = "server";
       loaded.value = true;
       writeFlagCache(map);
@@ -545,6 +593,11 @@ export const usePlanStore = defineStore("plan", () => {
     featureEnabled,
     getTierLabel,
     isAtMinimumTier,
+    entitlements,
+    hasEntitlement,
+    entitlementForFlag,
+    isEntitledFlag,
+    getEntitlementLabel,
     isCommunityTier,
     fetchOrgFlagOverride,
     setOrgFlagOverride,

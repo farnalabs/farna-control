@@ -221,8 +221,13 @@ def step_delete_team(request: Any, name: str, ctx: dict[str, Any], client: Any =
 
 @when("I GET /api/v1/teams")
 def step_get_teams_gated(request: Any, client: Any, ctx: dict[str, Any]) -> None:
-    """GET /api/v1/teams under a plan without ``team_rbac`` — the router-level
-    ``require_feature("team_rbac")`` gate returns a real 402."""
+    """GET /api/v1/teams under a Community plan — the router-level
+    ``require_entitlement("identity")`` gate returns a real 402 naming Identity.
+
+    FAR-2665: teams are gated by the commercial Identity entitlement (sso / scim
+    / team_rbac), not by the ``team_rbac`` behaviour flag. A community-tier plan
+    grants no entitlement, so the call is refused before the handler runs.
+    """
 
     class _NoTeamRbacPlan:
         def feature_enabled(self, name: str) -> bool:

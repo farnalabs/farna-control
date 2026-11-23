@@ -121,7 +121,7 @@ it('keeps organisation email settings reachable for a community org admin', asyn
   expect(route.path).toBe('/settings/email')
   expect(route.meta.requiresSystemAdmin).toBeUndefined()
   expect(route.meta.requiredRoles).toEqual(['admin'])
-  expect(route.meta.requiredTier).toBe('community')
+  expect(route.meta.requiredEntitlement).toBeUndefined()
   await expect(enforceRoleTierVisibility(route as never, adminToken())).resolves.toBe(true)
 })
 
@@ -134,7 +134,7 @@ const planStore = {
   features: {} as Record<string, unknown>,
   devMode: false,
   userPermissions: [] as string[],
-  isAtMinimumTier: vi.fn(() => true),
+  hasEntitlement: vi.fn(() => true),
   featureEnabled: vi.fn(() => false),
   fetchPlan: vi.fn(async () => {}),
   fetchPermissions: vi.fn(async () => {}),
@@ -146,7 +146,7 @@ beforeEach(() => {
   planStore.features = {}
   planStore.devMode = false
   planStore.userPermissions = []
-  planStore.isAtMinimumTier.mockReturnValue(true)
+  planStore.hasEntitlement.mockReturnValue(true)
   planStore.featureEnabled.mockReturnValue(false)
   planStore.fetchPlan.mockResolvedValue(undefined)
   planStore.fetchPermissions.mockResolvedValue(undefined)
@@ -275,13 +275,14 @@ describe('enforceRoleTierVisibility', () => {
     )
     // FAR-2688: this previously pinned `{ name: 'dashboard' }` — the silent
     // bounce, i.e. the defect. It now asserts the locked destination and the
-    // system_admin reason, with the real manifest's capability and tier.
+    // system_admin reason, with the real manifest's capability. FAR-2665
+    // replaced the tier with an entitlement, and this route declares none, so
+    // no entitlement key is carried.
     expect(result).toEqual({
       path: '/locked',
       query: {
         from: '/',
         capability: 'Organisations',
-        tier: 'community',
         reason: 'system_admin',
       },
     })
@@ -296,51 +297,74 @@ describe('enforceRoleTierVisibility', () => {
     expect(result).toBe(true)
   })
 
-  it('redirects when requiredRoles is set and the org role is missing', async () => {
+  it('sends a role refusal to the locked page naming the role, not the Dashboard (FAR-2687)', async () => {
     decodeJwtPayload.mockReturnValue({})
+    // A name absent from the manifest keeps this test on the bare helper: no
+    // capability label or tier is added, so only the role shape is asserted
+    // (the real-route cases below cover the manifest-derived query).
     const result = await enforceRoleTierVisibility(
-      makeRoute('admin-org', { requiredRoles: ['admin'] }),
+      makeRoute('bare-role-route', { requiredRoles: ['admin'] }),
       'tok',
     )
-    expect(result).toEqual({ name: 'dashboard' })
+    // The role list rides along so the locked page can name what to ask for;
+    // the previous silent `{ name: 'dashboard' }` gave the caller no reason.
+    expect(result).toEqual({
+      path: '/locked',
+      query: { from: '/', role: 'admin', reason: 'role' },
+    })
   })
 
-  it('redirects when requiredRoles is set and the org role does not match', async () => {
+  it('sends a non-matching role to the locked page (FAR-2687)', async () => {
     decodeJwtPayload.mockReturnValue({ org_role: 'member' })
     const result = await enforceRoleTierVisibility(
-      makeRoute('admin-org', { requiredRoles: ['admin'] }),
+      makeRoute('bare-role-route', { requiredRoles: ['admin'] }),
       'tok',
     )
-    expect(result).toEqual({ name: 'dashboard' })
+    expect(result).toEqual({
+      path: '/locked',
+      query: { from: '/', role: 'admin', reason: 'role' },
+    })
+  })
+
+  it('carries every role of an any-of list, not only the first (FAR-2687)', async () => {
+    decodeJwtPayload.mockReturnValue({ org_role: 'viewer' })
+    const result = await enforceRoleTierVisibility(
+      makeRoute('bare-any-of-route', { requiredRoles: ['operator', 'admin'] }),
+      'tok',
+    )
+    expect(result).toEqual({
+      path: '/locked',
+      query: { from: '/', role: 'operator,admin', reason: 'role' },
+    })
   })
 
   it('allows when requiredRoles is set and the org role matches', async () => {
     decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
     const result = await enforceRoleTierVisibility(
-      makeRoute('admin-org', { requiredRoles: ['admin'] }),
+      makeRoute('bare-role-route', { requiredRoles: ['admin'] }),
       'tok',
     )
     expect(result).toBe(true)
   })
 
-  it('sends a below-tier route to the locked page, not the Dashboard (FAR-2664)', async () => {
+  it('sends an unentitled route to the locked page, not the Dashboard (FAR-2664/FAR-2665)', async () => {
     decodeJwtPayload.mockReturnValue({})
     planStore.features = { something: 1 }
-    planStore.isAtMinimumTier.mockReturnValue(false)
+    planStore.hasEntitlement.mockReturnValue(false)
     const result = await enforceRoleTierVisibility(
-      makeRoute('some-tier-route', { requiredTier: 'team' }),
+      makeRoute('some-tier-route', { requiredEntitlement: 'identity' }),
       'tok',
     )
     expect(result).toEqual({
       path: '/locked',
-      query: { from: '/', tier: 'team', reason: 'tier' },
+      query: { from: '/', entitlement: 'identity', reason: 'entitlement' },
     })
   })
 
-  it('names a real Team route and the licence it needs on the locked page (FAR-2664)', async () => {
-    // Pin the acceptance criterion against a REAL Team capability: a community
-    // admin deep-linking /settings/sso must be told it needs the Team licence,
-    // not silently returned to the Dashboard.
+  it('names a real commercial route and the capability it needs on the locked page (FAR-2664/FAR-2665)', async () => {
+    // Pin the acceptance criterion against a REAL commercial capability: an
+    // admin without the Identity entitlement deep-linking /settings/sso must be
+    // told it needs Identity, not silently returned to the Dashboard.
     decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
     const resolved = router.resolve('/settings/sso')
     const route = {
@@ -353,7 +377,7 @@ describe('enforceRoleTierVisibility', () => {
     hydrateManifestMeta(route as never)
 
     planStore.loaded = true
-    planStore.isAtMinimumTier.mockReturnValue(false)
+    planStore.hasEntitlement.mockReturnValue(false)
 
     const result = await enforceRoleTierVisibility(route as never, adminToken())
 
@@ -362,16 +386,16 @@ describe('enforceRoleTierVisibility', () => {
       query: {
         from: '/settings/sso',
         capability: 'SSO',
-        tier: 'team',
-        reason: 'tier',
+        entitlement: 'identity',
+        reason: 'entitlement',
       },
     })
   })
 
-  it('omits the tier and capability when the route is not in the manifest (FAR-2664)', () => {
-    // Defensive path: a below-tier refusal for a route the manifest does not
+  it('omits the entitlement and capability when the route is not in the manifest (FAR-2664)', () => {
+    // Defensive path: an unentitled refusal for a route the manifest does not
     // describe still lands on the locked page, just without a capability name
-    // or licence to quote.
+    // or entitlement to quote.
     const target = lockedRouteFor({
       path: '/not-in-manifest',
       fullPath: '/not-in-manifest',
@@ -381,62 +405,82 @@ describe('enforceRoleTierVisibility', () => {
 
     expect(target).toEqual({
       path: '/locked',
-      query: { from: '/not-in-manifest', reason: 'tier' },
+      query: { from: '/not-in-manifest', reason: 'entitlement' },
     })
   })
 
-  it('allows on requiredTier when at the minimum tier', async () => {
+  it('omits the role query when a role refusal names no roles (FAR-2687)', () => {
+    // Defensive path: a role refusal for a route that declares no required
+    // roles carries no `role` query, so the locked page falls back to the
+    // generic wording rather than naming an empty list.
+    const target = lockedRouteFor(
+      {
+        path: '/no-roles',
+        fullPath: '/no-roles',
+        matched: [],
+        meta: {},
+      } as never,
+      'role',
+    )
+
+    expect(target).toEqual({
+      path: '/locked',
+      query: { from: '/no-roles', reason: 'role' },
+    })
+  })
+
+  it('allows on requiredEntitlement when the plan grants it', async () => {
     decodeJwtPayload.mockReturnValue({})
-    planStore.isAtMinimumTier.mockReturnValue(true)
+    planStore.hasEntitlement.mockReturnValue(true)
     const result = await enforceRoleTierVisibility(
-      makeRoute('some-tier-route', { requiredTier: 'team' }),
+      makeRoute('some-tier-route', { requiredEntitlement: 'identity' }),
       'tok',
     )
     expect(result).toBe(true)
   })
 
-  it('fetches the plan when not yet loaded before evaluating tier', async () => {
+  it('fetches the plan when not yet loaded before evaluating the entitlement', async () => {
     decodeJwtPayload.mockReturnValue({})
     planStore.loaded = false
     const result = await enforceRoleTierVisibility(
-      makeRoute('some-tier-route', { requiredTier: 'team' }),
+      makeRoute('some-tier-route', { requiredEntitlement: 'identity' }),
       'tok',
     )
     expect(planStore.fetchPlan).toHaveBeenCalled()
     expect(result).toBe(true)
   })
 
-  it('applies the tier check to a KNOWN-EMPTY flag map — empty ≠ unknown (FAR-1809)', async () => {
-    // A payload applied with zero flags still means the TIER is known
-    // (`loaded` is written together with `currentTier`). The old guard read
-    // `Object.keys(features).length > 0`, so a resolved community org sailed
-    // through a team route whenever the flag map came back empty.
+  it('applies the entitlement check to a KNOWN-EMPTY flag map — empty ≠ unknown (FAR-1809)', async () => {
+    // A payload applied with zero flags still means the LICENCE ANSWER is known
+    // (`loaded` is written with the plan context). The old guard read
+    // `Object.keys(features).length > 0`, so a resolved unentitled org sailed
+    // through a paid route whenever the flag map came back empty.
     decodeJwtPayload.mockReturnValue({})
     planStore.loaded = true
     planStore.features = {} // known-empty, not unknown
-    planStore.isAtMinimumTier.mockReturnValue(false)
+    planStore.hasEntitlement.mockReturnValue(false)
     const result = await enforceRoleTierVisibility(
-      makeRoute('some-tier-route', { requiredTier: 'team' }),
+      makeRoute('some-tier-route', { requiredEntitlement: 'identity' }),
       'tok',
     )
     expect(result).toEqual({
       path: '/locked',
-      query: { from: '/', tier: 'team', reason: 'tier' },
+      query: { from: '/', entitlement: 'identity', reason: 'entitlement' },
     })
   })
 
-  it('skips the tier check while the tier is unknown — no payload ever applied (FAR-1809)', async () => {
+  it('skips the entitlement check while the plan is unknown — no payload ever applied (FAR-1809)', async () => {
     // `loaded` false after the guard's own fetch = the plan bootstrap settled
-    // unreadable ('unavailable') or produced nothing, so `currentTier` is the
-    // 'community' bootstrap DEFAULT, not observed truth. Tier-checking that
-    // default would bounce a licensed user to the dashboard on a transient
-    // plan failure; the backend 402 still enforces the real licence.
+    // unreadable ('unavailable') or produced nothing, so the entitlement set is
+    // the empty bootstrap DEFAULT, not observed truth. Refusing on that default
+    // would bounce a licensed user to the locked page on a transient plan
+    // failure; the backend 402 still enforces the real licence.
     decodeJwtPayload.mockReturnValue({})
     planStore.loaded = false
     planStore.features = {}
-    planStore.isAtMinimumTier.mockReturnValue(false) // would redirect if consulted
+    planStore.hasEntitlement.mockReturnValue(false) // would redirect if consulted
     const result = await enforceRoleTierVisibility(
-      makeRoute('some-tier-route', { requiredTier: 'team' }),
+      makeRoute('some-tier-route', { requiredEntitlement: 'identity' }),
       'tok',
     )
     expect(planStore.fetchPlan).toHaveBeenCalled()
@@ -473,8 +517,8 @@ describe('enforceRoleTierVisibility', () => {
     expect(result).toEqual({ name: 'dashboard' })
   })
 
-  it('lets a community-tier admin through /admin/org with the REAL manifest entry (FAR-1269)', async () => {
-    // Drive the guard with /admin/org's actual required_tier/required_roles
+  it('lets an unentitled admin through /admin/org with the REAL manifest entry (FAR-1269)', async () => {
+    // Drive the guard with /admin/org's actual entitlement/role gate
     // from frontend/src/manifest.yaml, in the exact plan state that used to
     // redirect community admins to the dashboard (a RESOLVED plan — the
     // guard's fail-open applies only while the tier is UNKNOWN, `loaded`
@@ -482,21 +526,20 @@ describe('enforceRoleTierVisibility', () => {
     // not plan-gated, so this route must admit the community admin.
     const manifest = yaml.load(
       readFileSync(resolve(__dirname, '../manifest.yaml'), 'utf-8'),
-    ) as { routes: Record<string, { required_tier?: string | null; required_roles?: string[] | null }> }
+    ) as { routes: Record<string, { required_entitlement?: string | null; required_roles?: string[] | null }> }
     const entry = manifest.routes['/admin/org']
     expect(entry).toBeDefined()
-    expect(entry.required_tier).toBe('community')
+    expect(entry.required_entitlement == null).toBe(true)
 
     decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
     planStore.features = { hitl_reviews: true }
-    // A community org is at the minimum tier only when the route's required
-    // tier is itself 'community'.
-    planStore.isAtMinimumTier.mockReturnValue(entry.required_tier === 'community')
+    // An unentitled route needs no licence grant.
+    planStore.hasEntitlement.mockReturnValue(entry.required_entitlement == null)
 
     const result = await enforceRoleTierVisibility(
       makeRoute('admin-org', {
         requiredRoles: entry.required_roles ?? undefined,
-        requiredTier: entry.required_tier ?? undefined,
+        requiredEntitlement: entry.required_entitlement ?? undefined,
       }),
       'tok',
     )
@@ -598,5 +641,169 @@ describe('/evals/editor write gate (FAR-2609)', () => {
     const result = await enforceRoleTierVisibility(hydratedEvalEditor(), adminToken())
 
     expect(result).toBe(true)
+  })
+})
+
+describe('FAR-2687: a role denial lands on the locked page', () => {
+  function hydrated(path: string): any {
+    const resolved = router.resolve(path)
+    const route = {
+      name: resolved.name,
+      matched: resolved.matched,
+      path: resolved.path,
+      fullPath: resolved.fullPath,
+      meta: {} as Record<string, unknown>,
+    }
+    hydrateManifestMeta(route as never)
+    return route
+  }
+
+  it('sends a viewer away from the admin-only /admin/users to the role lock, not the Dashboard', async () => {
+    // Real manifest entry: required_roles ['admin'], no entitlement, no
+    // permissions and no visibility flag — so a viewer's refusal can ONLY be
+    // the role check. Before FAR-2687 this returned { name: 'dashboard' }.
+    decodeJwtPayload.mockReturnValue({ org_role: 'viewer' })
+    const route = hydrated('/admin/users')
+    expect(route.meta.requiredRoles).toEqual(['admin'])
+    expect(route.meta.requiredEntitlement).toBeUndefined()
+
+    const result = await enforceRoleTierVisibility(route, 'tok')
+
+    expect(result).toEqual({
+      path: '/locked',
+      query: {
+        from: '/admin/users',
+        capability: 'Users',
+        role: 'admin',
+        reason: 'role',
+      },
+    })
+  })
+
+  it('sends a viewer away from the operator-floor /lifecycle-maps to the role lock', async () => {
+    // Real manifest entry: required_roles ['operator', 'admin'], no
+    // entitlement. The permission and dev-mode gates are satisfied below so the
+    // ROLE floor is the only thing refusing this caller.
+    decodeJwtPayload.mockReturnValue({ org_role: 'viewer' })
+    planStore.devMode = true
+    planStore.userPermissions = ['library.search.in_dev']
+    const route = hydrated('/lifecycle-maps')
+    expect(route.meta.requiredRoles).toEqual(['operator', 'admin'])
+
+    const result = await enforceRoleTierVisibility(route, 'tok')
+
+    expect(result).toEqual({
+      path: '/locked',
+      query: {
+        from: '/lifecycle-maps',
+        capability: 'Lifecycle Maps',
+        role: 'operator,admin',
+        reason: 'role',
+      },
+    })
+  })
+
+  it('still admits a caller who holds the required role', async () => {
+    decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
+    // /lifecycle-maps also gates on a permission and developer mode, so both
+    // must be satisfied for the role to be the thing under test.
+    planStore.devMode = true
+    planStore.userPermissions = ['library.search.in_dev']
+
+    await expect(enforceRoleTierVisibility(hydrated('/admin/users'), 'tok')).resolves.toBe(true)
+    await expect(enforceRoleTierVisibility(hydrated('/lifecycle-maps'), 'tok')).resolves.toBe(true)
+  })
+
+  it('tells a caller who fails BOTH the role and the entitlement about the role first', async () => {
+    // /settings/sso declares the identity entitlement AND the admin role. The
+    // guard checks roles before entitlements, so a non-admin is refused by the
+    // role — the reason the locked page shows must be the one that is true, and
+    // a licence upgrade would not open this page for them either.
+    decodeJwtPayload.mockReturnValue({ org_role: 'viewer' })
+    planStore.hasEntitlement.mockReturnValue(false)
+
+    const result = await enforceRoleTierVisibility(hydrated('/settings/sso'), 'tok')
+
+    expect(result).toEqual({
+      path: '/locked',
+      query: {
+        from: '/settings/sso',
+        capability: 'SSO',
+        entitlement: 'identity',
+        role: 'admin',
+        reason: 'role',
+      },
+    })
+  })
+})
+
+describe('FAR-2687: the locked page cannot loop', () => {
+  it('is reachable by a caller the role gate just refused', async () => {
+    // The loop the fix must not create: a denial that lands on a page which is
+    // itself refused. /locked is deliberately absent from the manifest, so it
+    // carries no role/tier/system-admin gate and the guard admits it.
+    decodeJwtPayload.mockReturnValue({ org_role: 'viewer' })
+    const route = router.resolve('/locked')
+    const target = {
+      name: route.name,
+      matched: route.matched,
+      path: route.path,
+      fullPath: route.fullPath,
+      meta: {} as Record<string, unknown>,
+    }
+    hydrateManifestMeta(target as never)
+
+    expect(target.meta.requiredRoles).toBeUndefined()
+    await expect(enforceRoleTierVisibility(target as never, 'tok')).resolves.toBe(true)
+  })
+
+  it('lands a role-denied navigation on /locked with the role copy, and stays there', async () => {
+    // End-to-end through the real guard: push an admin-only route as a viewer,
+    // then confirm the destination is the locked page itself (not a further
+    // bounce), and that re-resolving it is stable.
+    decodeJwtPayload.mockReturnValue({ org_role: 'viewer' })
+    setAccessToken('opaque-test-token')
+    await router.push({ name: 'dashboard' })
+
+    await router.push('/admin/users')
+
+    expect(router.currentRoute.value.name).toBe('locked-route')
+    expect(router.currentRoute.value.path).toBe('/locked')
+    expect(router.currentRoute.value.query.reason).toBe('role')
+    expect(router.currentRoute.value.query.role).toBe('admin')
+
+    // Re-entering the locked page (a reload of the URL it settled on) is
+    // admitted — no second redirect.
+    await router.push('/locked?reason=role&role=admin&from=%2Fadmin%2Fusers')
+    expect(router.currentRoute.value.name).toBe('locked-route')
+  })
+
+  it('lets a caller who holds the role through to the route, end to end', async () => {
+    // The other half of the contract: the fix must not over-deny. An admin
+    // deep-linking the same page the viewer was refused must land on it.
+    decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
+    setAccessToken('opaque-test-token')
+    await router.push({ name: 'dashboard' })
+
+    await router.push('/admin/users')
+
+    expect(router.currentRoute.value.name).toBe('admin-users')
+    expect(router.currentRoute.value.path).toBe('/admin/users')
+  })
+
+  it('lands an entitlement-denied navigation on /locked with the entitlement copy, unchanged', async () => {
+    decodeJwtPayload.mockReturnValue({ org_role: 'admin' })
+    planStore.hasEntitlement.mockReturnValue(false)
+    setAccessToken('opaque-test-token')
+    await router.push({ name: 'dashboard' })
+
+    await router.push('/settings/sso')
+
+    expect(router.currentRoute.value.name).toBe('locked-route')
+    expect(router.currentRoute.value.query.reason).toBe('entitlement')
+    expect(router.currentRoute.value.query.entitlement).toBe('identity')
+    // An entitlement lock must NOT name a role: the entitlement copy never
+    // renders one, and the URL must stay exactly what FAR-2664 produced.
+    expect(router.currentRoute.value.query.role).toBeUndefined()
   })
 })

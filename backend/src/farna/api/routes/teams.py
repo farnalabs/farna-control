@@ -19,7 +19,7 @@ from farna.api.constants import (
     MSG_TEAM_NOT_FOUND,
 )
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
-from farna.api.dependencies import get_db_session, require_feature, require_permission
+from farna.api.dependencies import get_db_session, require_entitlement, require_permission
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.auth.team_rbac import (
@@ -74,7 +74,7 @@ _log = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/teams",
     tags=["teams"],
-    dependencies=[require_feature("team_rbac")],
+    dependencies=[require_entitlement("identity")],
 )
 
 
@@ -371,6 +371,10 @@ class MyTeamResponse(BaseModel):
     role: str
 
 
+# FAR-2682: deliberate JWT-only route. "My teams" is the calling ACCOUNT's
+# membership list; an ``mk_`` key is a machine identity with no memberships (the
+# machine-readable team list is the admin surface). Do not widen this in a
+# credential sweep.
 @router.get("/my")
 @handle_db_errors("teams.my_teams_endpoint")
 async def my_teams_endpoint(

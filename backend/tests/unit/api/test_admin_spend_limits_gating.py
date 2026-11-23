@@ -174,12 +174,12 @@ class TestSpendLimitsGatingFeatureDisabled:
     def test_get_spend_limits_returns_402(self, client: TestClient) -> None:
         resp = client.get("/api/v1/admin/costs/limits")
         assert resp.status_code == 402
-        assert "admin_spend_limits" in resp.text
+        assert "cost_governance" in resp.text
 
     def test_set_org_spend_limit_returns_402(self, client: TestClient) -> None:
         resp = client.put("/api/v1/admin/costs/limits/org", json={"daily_spend_limit": 100.0})
         assert resp.status_code == 402
-        assert "admin_spend_limits" in resp.text
+        assert "cost_governance" in resp.text
 
     def test_set_team_spend_limit_returns_402(self, client: TestClient) -> None:
         resp = client.put(
@@ -187,7 +187,7 @@ class TestSpendLimitsGatingFeatureDisabled:
             json={"daily_spend_limit": 50.0},
         )
         assert resp.status_code == 402
-        assert "admin_spend_limits" in resp.text
+        assert "cost_governance" in resp.text
 
 
 # ── Feature enabled: requests should succeed ───────────────────────────────────
@@ -370,10 +370,16 @@ class TestNonLimitCostSurfacesGatedByGoverningFeature:
 
         assert resp.status_code == 200, f"Expected 200 with admin_cost_controls enabled (no spend limits), got {resp.status_code}"
 
-    def test_get_limits_still_402_without_spend_limits(self, controls_only_client: TestClient) -> None:
+    def test_any_group_flag_grants_the_whole_cost_governance_group(self, controls_only_client: TestClient) -> None:
+        """FAR-2665: spend limits, cost controls and breakdown are ONE entitlement.
+
+        The pre-FAR-2665 split (controls without spend limits, etc.) is gone by
+        design — the consolidation means any flag in ``cost_governance`` grants
+        the capability, so the limits surface passes here instead of 402ing on
+        a sibling flag that is the same commercial grant.
+        """
         resp = controls_only_client.get("/api/v1/admin/costs/limits")
-        assert resp.status_code == 402
-        assert "admin_spend_limits" in resp.text
+        assert resp.status_code != 402
 
     def test_get_anomalies_succeeds_with_breakdown_but_no_spend_limits(self, breakdown_only_client: TestClient) -> None:
         with (

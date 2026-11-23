@@ -299,7 +299,7 @@ describe('FAR-938: SYSTEM sidebar group system_admin_only guard', () => {
       // one re-arming the gate would send the locked page straight back.
       expect(record!.meta.requiresSystemAdmin).toBeFalsy()
       expect(record!.meta.requiredRoles).toBeUndefined()
-      expect(record!.meta.requiredTier).toBeUndefined()
+      expect(record!.meta.requiredEntitlement).toBeUndefined()
       expect(record!.meta.requiredPermissions).toBeUndefined()
       expect(record!.meta.featureFlag).toBeUndefined()
       expect(REAL_MANIFEST.routes['/locked']).toBeUndefined()

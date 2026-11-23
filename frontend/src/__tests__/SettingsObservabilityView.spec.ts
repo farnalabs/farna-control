@@ -86,16 +86,20 @@ describe('SettingsObservabilityView', () => {
     expect(wrapper.text()).toContain('Observability')
   })
 
-  it('shows locked message when observability is disabled by plan', async () => {
+  it('shows the behaviour-off lock when observability is disabled by plan', async () => {
     // Mount without the FeatureGate passthrough stub so the real gate renders
     // its locked composition; the default GET mock returns no active flag.
+    // FAR-2665: `observability` is Community behaviour (no entitlement), so the
+    // lock must say the org switched it off — a "Team Feature" upgrade banner
+    // would be false and the pricing link could not change the answer.
     const wrapper = mount(SettingsObservabilityView, {
       global: { plugins: [createPinia()] },
     })
     await nextTick()
     await nextTick()
 
-    expect(wrapper.text()).toContain('Available on higher plan tier')
+    expect(wrapper.text()).toContain('turned off for your organization')
+    expect(wrapper.text()).not.toContain('Team Feature')
   })
 
   it('shows loading skeleton while fetching settings', async () => {

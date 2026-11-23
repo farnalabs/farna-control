@@ -84,14 +84,14 @@ interface TabLock {
 const UPGRADE_PATH = '/settings/license'
 
 interface ManifestRouteEntry {
-  required_tier?: string | null
+  required_entitlement?: string | null
 }
 
 const manifestRoutes =
   (manifest as { routes?: Record<string, ManifestRouteEntry | undefined> }).routes ?? {}
 
-function requiredTier(to: string): string | null {
-  return manifestRoutes[parseTabTarget(to).path]?.required_tier ?? null
+function requiredEntitlement(to: string): string | null {
+  return manifestRoutes[parseTabTarget(to).path]?.required_entitlement ?? null
 }
 
 const { t } = useI18n()
@@ -108,11 +108,12 @@ const route = useRoute()
 const planStore = getActivePinia() ? usePlanStore() : null
 
 /**
- * FAR-47: tier-gated tabs are never hidden — they stay in the bar, occupy
- * their space, and render a padlock + "Available on the <plan> plan" tooltip
- * linking to the license page. The locked state is resolved once per render
- * from the manifest's route metadata (the same source the router guard and
- * sidebar use), so every PageTabs consumer gets it without per-view wiring.
+ * FAR-47: commercially gated tabs are never hidden — they stay in the bar,
+ * occupy their space, and render a padlock + upgrade tooltip linking to the
+ * license page. FAR-2665: the locked state is resolved from the route's
+ * `required_entitlement` and the plan payload's entitlement grant (the same
+ * source the router guard and sidebar use), so every PageTabs consumer gets it
+ * without per-view wiring.
  */
 const renderedTabs = computed(() =>
   props.tabs.map((tab) => {
@@ -122,20 +123,16 @@ const renderedTabs = computed(() =>
 )
 
 function lockFor(tab: Tab): TabLock | null {
-  const tier = requiredTier(tab.to)
-  // A community-tier route is free on every plan, so it is never plan-locked.
-  // The explicit tier-id check also keeps it unlocked while the tier catalog
-  // is unknown (an unranked currentTier makes isAtMinimumTier return false).
-  if (!tier || tier === 'community') return null
-  // Until the plan sources resolve, the active tier is not yet known (it
-  // defaults to `community`), so `isAtMinimumTier` cannot distinguish an
-  // entitled user from an under-tier one. Locking here would flash a padlock
-  // at a tier-entitled user and then flip it off (FAR-47 review). Leave the
-  // tab unlocked until the plan has resolved — the analogue of the sidebar's
-  // `tierInfoLoaded` gating in config/navigation.ts.
+  const entitlement = requiredEntitlement(tab.to)
+  // A route with no entitlement is free on every plan, so it is never locked.
+  if (!entitlement) return null
+  // Until the plan payload resolves the licence answer is unknown. Locking
+  // here would flash a padlock at an entitled user and then flip it off
+  // (FAR-47 review). Leave the tab unlocked until the plan has resolved — the
+  // analogue of the sidebar's `planLoaded` gating in config/navigation.ts.
   if (!planStore?.loaded) return null
-  if (planStore.isAtMinimumTier(tier)) return null
-  const plan = planStore.getTierLabel(tier)
+  if (planStore.hasEntitlement(entitlement)) return null
+  const plan = planStore.getEntitlementLabel(entitlement)
   return {
     tooltip: t('components.PageTabs.available_on_plan', { plan }),
     aria: t('components.PageTabs.locked_aria', { label: tab.label, plan }),
