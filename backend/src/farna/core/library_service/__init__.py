@@ -535,7 +535,7 @@ async def list_contributions(
     result = await _with_org_txn(
         session,
         org_id,
-        lambda s: list_library_primitives(s, page=page, page_size=page_size, primitive_type="test_fixture"),
+        lambda s: list_library_primitives(s, org_id=org_id, page=page, page_size=page_size, primitive_type="test_fixture"),
     )
     return _apply_contribution_status_filter(result, contribution_status)
 
@@ -552,7 +552,7 @@ async def list_org_contributions(
     result = await _with_org_txn(
         session,
         org_id,
-        lambda s: list_library_primitives(s, page=page, page_size=page_size),
+        lambda s: list_library_primitives(s, org_id=org_id, page=page, page_size=page_size),
     )
     return _apply_contribution_status_filter(result, contribution_status)
 
@@ -674,7 +674,7 @@ async def list_contribution_versions(
         if prim.version_group_id is None:
             return [prim], prim
 
-        results = await list_primitives_by_version_group(s, prim.version_group_id)
+        results = await list_primitives_by_version_group(s, prim.version_group_id, org_id=org_id)
         # Include the seed primitive (the one whose version_group_id was set to
         # its own id) — it won't appear in the version-group query because it
         # may not yet have the version_group_id set if it predates the feature.

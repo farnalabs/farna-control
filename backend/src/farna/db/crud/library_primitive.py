@@ -85,7 +85,7 @@ async def get_library_primitive(
 
 def _build_list_conditions(
     *,
-    org_id: uuid.UUID | None,
+    org_id: uuid.UUID,
     primitive_type: str | None,
     primitive_types: list[str] | None,
     search: str | None,
@@ -99,13 +99,23 @@ def _build_list_conditions(
 
     The returned list always holds at least the soft-delete predicate, so
     callers may apply ``.where(*conditions)`` unconditionally.
+
+    FAR-2692: the ``organisation_id`` predicate is unconditional and the
+    argument is required. An optional org argument let a caller silently fall
+    back to an RLS-only read, which a ``BYPASSRLS`` (or misconfigured-RLS)
+    connection turns into a cross-tenant list. This clamp cannot hide the
+    Native library built-ins: ``source='modulo'`` primitives are merged from the
+    in-code registry in ``core.library_service.list_primitives`` and are not
+    rows in the caller's slice, and the ``library_primitives`` RLS policy
+    already restricts rows to ``organisation_id = current_setting(...)`` — so
+    the clamp reproduces the visibility RLS already enforces.
     """
     tiers = ["in_dev"] if excluded_tiers is None else excluded_tiers
 
-    conditions: list[ColumnElement[bool]] = [LibraryPrimitive.deleted_at.is_(None)]
-
-    if org_id is not None:
-        conditions.append(LibraryPrimitive.organisation_id == org_id)
+    conditions: list[ColumnElement[bool]] = [
+        LibraryPrimitive.deleted_at.is_(None),
+        LibraryPrimitive.organisation_id == org_id,
+    ]
 
     if primitive_types:
         conditions.append(LibraryPrimitive.primitive_type.in_(primitive_types))
@@ -199,7 +209,7 @@ async def _page_by_offset(
 async def list_library_primitives(
     session: AsyncSession,
     *,
-    org_id: uuid.UUID | None = None,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
     primitive_type: str | None = None,
@@ -209,6 +219,14 @@ async def list_library_primitives(
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
 ) -> PageResult[LibraryPrimitive]:
+    """List the caller's library primitives.
+
+    ``org_id`` is REQUIRED keyword-only (FAR-2692): it is applied as an
+    explicit ``organisation_id`` predicate on the shared condition list, so the
+    COUNT, the offset page and the cursor page are all clamped. A caller can no
+    longer fall back to the RLS-only read that a ``BYPASSRLS`` connection
+    exposes. Built-ins are unaffected — see ``_build_list_conditions``.
+    """
 
     conditions = _build_list_conditions(
         org_id=org_id,
@@ -340,8 +358,19 @@ async def update_library_primitive(
 async def list_primitives_by_version_group(
     session: AsyncSession,
     version_group_id: uuid.UUID,
+    *,
+    org_id: uuid.UUID,
 ) -> list[LibraryPrimitive]:
-    stmt = select(LibraryPrimitive).where(LibraryPrimitive.version_group_id == version_group_id).order_by(LibraryPrimitive.created_at.desc())
+    """List every version in a version group, clamped to the caller's org.
+
+    FAR-2692: the parent ``version_group_id`` alone is not an org boundary —
+    carry an explicit ``organisation_id`` predicate so a ``BYPASSRLS`` (or
+    misconfigured-RLS) session cannot read another org's versions for a group
+    id it guessed. ``org_id`` is REQUIRED so a future caller cannot fall back
+    to the parent-id-only shape (same method as ``list_ratings_for_primitive``,
+    FAR-2686).
+    """
+    stmt = select(LibraryPrimitive).where(LibraryPrimitive.version_group_id == version_group_id, LibraryPrimitive.organisation_id == org_id).order_by(LibraryPrimitive.created_at.desc())
     result = await session.execute(stmt)
     return list(result.scalars())
 
