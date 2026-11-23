@@ -353,6 +353,12 @@ def test_workspace_spec_carries_structured_labels_and_network() -> None:
         # FAR-1690: the typed egress posture rides the workspace metadata —
         # never a boolean. The default (unrestricted) posture asserts none.
         "modulo.egress.posture": "none",
+        # FAR-2693 dual-write: the current key is stamped alongside the
+        # legacy spelling so the reconciler can prefer it.
+        "farna-control.run.id": "run-123",
+        "farna-control.org.id": str(_ORG),
+        "farna-control.node.id": "node-9",
+        "farna-control.egress.posture": "none",
     }
     assert spec.workspace_network == "modulo-runner-workspace"
     assert spec.egress_policy == "outbound"
@@ -548,9 +554,15 @@ def test_workspace_spec_unknown_canonical_policy_fails_closed(
 
 def test_workspace_spec_blank_metadata_values_dropped() -> None:
     spec = _workspace_spec_for_dispatch(_profile("runner_docker"), org_id=None, run_id="", node_id="node-9", run_uuid=None)
-    # Empty run/org values are dropped; the FAR-1690 typed egress posture
-    # ("none" for the default posture) is always present.
-    assert spec.workspace_metadata == {"modulo.node.id": "node-9", "modulo.egress.posture": "none"}
+    # Empty run/org values are dropped (both spellings, FAR-2693); the
+    # FAR-1690 typed egress posture ("none" for the default posture) is
+    # always present under both keys.
+    assert spec.workspace_metadata == {
+        "modulo.node.id": "node-9",
+        "modulo.egress.posture": "none",
+        "farna-control.node.id": "node-9",
+        "farna-control.egress.posture": "none",
+    }
 
 
 # ---------------------------------------------------------------------------

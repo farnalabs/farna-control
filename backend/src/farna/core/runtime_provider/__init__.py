@@ -805,9 +805,10 @@ class RuntimeProvider(ABC):
         """Enumerate THIS deployment's workspaces on the substrate (FAR-1275).
 
         The listing primitive behind non-Docker orphan reclamation: the
-        caller supplies the deployment identity (``modulo.machine.id`` —
-        the same value ``FARNA_CONTROL_RUNNER_MACHINE_ID``/hostname stamps onto
-        every workspace the provider creates) and every returned entry is a
+        caller supplies the deployment identity (``farna-control.machine.id``
+        — the same value ``FARNA_CONTROL_RUNNER_MACHINE_ID``/hostname stamps
+        onto every workspace the provider creates; readers also accept the
+        pre-rename legacy key, FAR-2693) and every returned entry is a
         workspace this deployment provisioned. It is the enumeration
         counterpart to :meth:`destroy_workspace_by_ref`: the reconciler
         cross-references the returned ``run_id`` values against ACTIVE

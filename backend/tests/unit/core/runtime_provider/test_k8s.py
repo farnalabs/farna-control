@@ -37,6 +37,7 @@ from aiohttp import WSMsgType
 from kubernetes_asyncio.client.exceptions import ApiException
 
 import farna.core.runtime_provider.k8s as k8s_mod
+from farna.core.bundled_runner import runner_reconciler
 from farna.core.runtime_provider import (
     BackendUnreachableError,
     ExecResult,
@@ -916,11 +917,15 @@ class TestListWorkspacePods:
 
         entries = await provider.list_workspace_pods()
 
-        # Server-side selector: foreign pods never reach the client-side pass.
-        core.list_namespaced_pod.assert_awaited_once_with(
-            namespace="modulo",
-            label_selector=f"{k8s_mod._PROVIDER_LABEL}={k8s_mod._PROVIDER_LABEL_VALUE}",
-        )
+        # Server-side selectors: one per provider-label spelling (FAR-2693),
+        # so foreign pods never reach the client-side pass while a
+        # pre-rename pod is still listed.
+        assert [call.kwargs["label_selector"] for call in core.list_namespaced_pod.await_args_list] == [
+            f"{k8s_mod._PROVIDER_LABEL}={k8s_mod._PROVIDER_LABEL_VALUE}",
+            f"{k8s_mod._LEGACY_PROVIDER_LABEL}={k8s_mod._PROVIDER_LABEL_VALUE}",
+        ]
+        assert {call.kwargs["namespace"] for call in core.list_namespaced_pod.await_args_list} == {k8s_mod._DEFAULT_NAMESPACE}
+        # Returned by both listings, listed once.
         assert [entry.ref for entry in entries] == ["modulo-ws-ours"]
         # The reconciler's own label vocabulary survives the listing.
         assert entries[0].labels["modulo.run.id"] == "run-1"
@@ -992,6 +997,70 @@ class TestListWorkspacePods:
 
         with pytest.raises(ConnectionRefusedError):
             await provider.list_workspace_pods()
+
+    async def test_lists_a_pod_carrying_only_the_legacy_identity_keys(self) -> None:
+        """FAR-2693: a pod created before the rename carries only the legacy
+        provider label / machine annotation / creation marker. It must still be
+        listed (and therefore reclaimable) by this deployment."""
+        core = AsyncMock()
+        identity = KubernetesRuntimeProvider._deployment_identity()
+        now = int(time.time())
+        legacy = _listed_pod(
+            "ws-legacy",
+            labels={
+                k8s_mod._LEGACY_PROVIDER_LABEL: k8s_mod._PROVIDER_LABEL_VALUE,
+                k8s_mod._LEGACY_POD_CREATED_AT_LABEL: str(now - 40),
+                runner_reconciler._LEGACY_CONTAINER_RUN_ID_LABEL: "run-legacy",
+            },
+            annotations={k8s_mod._LEGACY_MACHINE_ID_ANNOTATION: identity},
+        )
+        core.list_namespaced_pod.return_value = SimpleNamespace(items=[legacy])
+        provider = _provider(core=core)
+
+        entries = await provider.list_workspace_pods()
+
+        assert [entry.ref for entry in entries] == ["ws-legacy"]
+        age = entries[0].created_age_s
+        assert age >= 35.0
+        assert age <= 70.0
+
+    async def test_lists_a_pod_carrying_only_the_current_identity_keys(self) -> None:
+        """The current-key path must work on its own: a pod stamped only with
+        the current provider label / machine annotation is listed."""
+        core = AsyncMock()
+        identity = KubernetesRuntimeProvider._deployment_identity()
+        now = int(time.time())
+        current = _listed_pod(
+            "ws-current",
+            labels={
+                k8s_mod._PROVIDER_LABEL: k8s_mod._PROVIDER_LABEL_VALUE,
+                k8s_mod._CREATED_AT_LABEL: str(now - 10),
+                runner_reconciler._RUN_ID_LABEL: "run-current",
+            },
+            annotations={k8s_mod._MACHINE_ANNOTATION: identity},
+        )
+        core.list_namespaced_pod.return_value = SimpleNamespace(items=[current])
+        provider = _provider(core=core)
+
+        entries = await provider.list_workspace_pods()
+
+        assert [entry.ref for entry in entries] == ["ws-current"]
+
+    async def test_destroy_accepts_a_pod_carrying_only_the_legacy_provider_label(self) -> None:
+        """FAR-2693: a pre-rename pod carries only the legacy provider label;
+        the destroy primitive must still recognise it as ours and delete it
+        (a legacy pod treated as foreign would be a permanent leak)."""
+        core = AsyncMock()
+        core.read_namespaced_pod.return_value = _listed_pod(
+            "ws-legacy",
+            labels={k8s_mod._LEGACY_PROVIDER_LABEL: k8s_mod._PROVIDER_LABEL_VALUE},
+        )
+        provider = _provider(core=core)
+
+        destroyed = await provider.destroy_workspace_by_ref("ws-legacy")
+
+        assert destroyed is True
+        core.delete_namespaced_pod.assert_awaited_once_with(name="ws-legacy", namespace=k8s_mod._DEFAULT_NAMESPACE)
 
 
 # ---------------------------------------------------------------------------

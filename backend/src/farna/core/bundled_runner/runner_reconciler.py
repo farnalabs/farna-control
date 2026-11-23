@@ -19,16 +19,18 @@ its ref-only destroy — closing the non-Docker gap where a workspace whose
 ref was lost (worker restart / crash / force-drop) was unreclaimable.
 
 Semantics committed by this delivery:
-  - **Orphan = a labelled workspace whose ``modulo.run.id`` label
-    matches NO active (``running``/``awaiting_human``) run and whose age
-    exceeds the 5-min grace period.**
+  - **Orphan = a labelled workspace whose run-id label matches NO active
+    (``running``/``awaiting_human``) run and whose age exceeds the 5-min
+    grace period.** FAR-2693: the run-id, machine-id and creation-marker
+    reads prefer the current ``farna-control.*`` key and fall back to the
+    legacy spelling, so a workspace created before the rename is still
+    reclaimed.
   - **Fail-safe: ANY cross-reference query error aborts the sweep, destroys
     nothing, and emits** ``runner.reconciler.sweep_aborted``.
-  - **Machine-scoped via the deployment-identity label**
-    (``modulo.machine.id``, sourced from ``FARNA_CONTROL_RUNNER_MACHINE_ID`` with a
-    hostname fallback): two Modulo deployments sharing one engine, one
-    Kubernetes namespace or one E2B account never destroy each other's
-    workspaces.
+  - **Machine-scoped via the deployment-identity label** (sourced from
+    ``FARNA_CONTROL_RUNNER_MACHINE_ID`` with a hostname fallback): two Farna
+    Control deployments sharing one engine, one Kubernetes namespace or one
+    E2B account never destroy each other's workspaces.
   - **Log-only soak mode first** (settings flag
     ``runner_reconciler_destroy_enabled``, default False): orphans are
     logged loudly, not destroyed, until the operator flips the flag.
@@ -66,10 +68,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from farna.core.workspace_labels import CREATED_AT, MACHINE_ID, RUN_ID, preferred
+
 _log = logging.getLogger(__name__)
 
-_RUN_ID_LABEL = "modulo.run.id"
-_MACHINE_LABEL = "modulo.machine.id"
+_RUN_ID_LABEL = RUN_ID
+_MACHINE_LABEL = MACHINE_ID
+_CREATED_AT_LABEL = CREATED_AT
+# FAR-2693: the pre-rename keys. Every read falls back to them so a workspace
+# created before the dual-write release is still reaped; remove once no live
+# workspace can predate it (see farna.core.workspace_labels).
+_LEGACY_CONTAINER_RUN_ID_LABEL = "modulo.run.id"
+_LEGACY_CONTAINER_MACHINE_LABEL = "modulo.machine.id"
+_LEGACY_CONTAINER_CREATED_AT_LABEL = "modulo.created_at"
 _GRACE_SECONDS_DEFAULT = 300
 _MAX_LIFETIME_SECONDS_DEFAULT = 86400
 
@@ -122,33 +133,46 @@ class _DockerWorkspaceSource:
         return self._client
 
     async def list_labelled_workspaces(self) -> list[_LabelledContainer]:
-        """List modulo-labelled workspace containers + their ages."""
+        """List this deployment's labelled workspace containers + their ages.
+
+        FAR-2693 dual-read: the listing is issued once per machine-id label
+        (current, then legacy) and merged, de-duplicated by container id, so
+        a container created before the rename — carrying only the legacy
+        label — is still found and reaped. Containers without a run id (either
+        spelling) are skipped in code.
+        """
         client = self._get_client()
-        filters = {"label": [f"{_MACHINE_LABEL}={deployment_identity()}", _RUN_ID_LABEL]}
-        results = await client.containers.list(filters=filters)
+        identity = deployment_identity()
         now = time.time()
         entries: list[_LabelledContainer] = []
-        for container in results:
-            # Real aiodocker DockerContainer objects carry the inspect payload
-            # in ``_container`` (no public Labels attribute); test doubles set
-            # ``Labels`` directly.
-            raw = getattr(container, "_container", None)
-            labels: dict[str, str] = {}
-            if isinstance(raw, dict):
-                labels = raw.get("Labels") or {}
-            if not labels:
-                labels = getattr(container, "Labels", None) or getattr(container, "_Labels", None) or {}
-            run_id = labels.get(_RUN_ID_LABEL, "")
-            if not run_id:
-                continue
-            created = float(labels.get("modulo.created_at", "0") or 0)
-            entries.append(
-                _LabelledContainer(
-                    id=getattr(container, "Id", "") or getattr(container, "id", ""),
-                    run_id=run_id,
-                    created_age_s=(now - created) if created else 0.0,
+        seen: set[str] = set()
+        for machine_label in (_MACHINE_LABEL, _LEGACY_CONTAINER_MACHINE_LABEL):
+            results = await client.containers.list(filters={"label": [f"{machine_label}={identity}"]})
+            for container in results:
+                # Real aiodocker DockerContainer objects carry the inspect payload
+                # in ``_container`` (no public Labels attribute); test doubles set
+                # ``Labels`` directly.
+                raw = getattr(container, "_container", None)
+                labels: dict[str, str] = {}
+                if isinstance(raw, dict):
+                    labels = raw.get("Labels") or {}
+                if not labels:
+                    labels = getattr(container, "Labels", None) or getattr(container, "_Labels", None) or {}
+                run_id = preferred(labels, _RUN_ID_LABEL, _LEGACY_CONTAINER_RUN_ID_LABEL)
+                if not run_id:
+                    continue
+                container_id = getattr(container, "Id", "") or getattr(container, "id", "")
+                if container_id in seen:
+                    continue
+                seen.add(container_id)
+                created = float(preferred(labels, _CREATED_AT_LABEL, _LEGACY_CONTAINER_CREATED_AT_LABEL, "0") or 0)
+                entries.append(
+                    _LabelledContainer(
+                        id=container_id,
+                        run_id=run_id,
+                        created_age_s=(now - created) if created else 0.0,
+                    )
                 )
-            )
         return entries
 
     async def destroy_by_container_id(self, container_id: str) -> None:
@@ -193,9 +217,9 @@ class _KubernetesWorkspaceSource:
     provider owns the client configuration chain (in-cluster / kubeconfig),
     the namespace resolution (``FARNA_CONTROL_KUBERNETES_NAMESPACE``) and the
     deployment-identity annotation, and it owns the ref-only destroy
-    primitive — which refuses any pod without the
-    ``modulo.provider=kubernetes`` label, so the sweep can never delete a
-    foreign pod. The concrete provider module is imported dynamically (the
+    primitive — which refuses any pod without a provider label of ours
+    (current or legacy), so the sweep can never delete a foreign pod. The
+    concrete provider module is imported dynamically (the
     ``no-concrete-runtime-provider-imports`` contract keeps concrete
     providers inside the ``runtime_provider`` package boundary), and only
     when the Kubernetes half of the sweep is actually applicable.
@@ -219,14 +243,15 @@ class _KubernetesWorkspaceSource:
         applies the provider-label selector and the machine-identity
         annotation match); the run id and creation marker are read from the
         pod labels using THIS module's label vocabulary, exactly as the
-        Docker source does for container labels. Pods without a
-        ``modulo.run.id`` label are skipped for the same reason as on
-        Docker: without a run id there is no cross-reference to fail-safe on.
+        Docker source does for container labels (current key first, legacy
+        fallback). Pods without a run-id label are skipped for the same
+        reason as on Docker: without a run id there is no cross-reference to
+        fail-safe on.
         """
         pods = await self._get_provider().list_workspace_pods()
         entries: list[_LabelledContainer] = []
         for pod in pods:
-            run_id = str(pod.labels.get(_RUN_ID_LABEL, "") or "")
+            run_id = preferred(pod.labels, _RUN_ID_LABEL, _LEGACY_CONTAINER_RUN_ID_LABEL)
             if not run_id:
                 continue
             entries.append(
@@ -289,11 +314,11 @@ class _E2BWorkspaceSource:
         The enumeration returns every identity-matched sandbox; the run id
         and creation marker are read from the returned entries exactly as
         the Docker source reads them from container labels. Sandboxes
-        without a ``modulo.run.id`` are skipped for the same reason as on
-        Docker/Kubernetes: without a run id there is no cross-reference to
-        fail-safe on. Listing failures propagate (the ABC contract) so a
-        configured-but-unreachable E2B API surfaces as a reported sweep
-        failure, never a silent empty list.
+        without a run-id label (either spelling) are skipped for the same
+        reason as on Docker/Kubernetes: without a run id there is no
+        cross-reference to fail-safe on. Listing failures propagate (the ABC
+        contract) so a configured-but-unreachable E2B API surfaces as a
+        reported sweep failure, never a silent empty list.
         """
         entries = await self._get_provider().list_workspaces_by_identity(deployment_identity())
         listed: list[_LabelledContainer] = []
@@ -597,7 +622,7 @@ async def _close_sources(sources: list[tuple[str, _WorkspaceSource]]) -> None:
 
 
 async def destroy_workspaces_for_run(run_id: str) -> dict[str, int]:
-    """Destroy every labelled workspace whose ``modulo.run.id`` == *run_id*.
+    """Destroy every labelled workspace whose run-id label == *run_id*.
 
     The run-scoped reclamation the RunTeardownSeal destroy leg drives (FAR-1690
     A3). Provider-neutral, exactly like :func:`reconcile_runner_workspaces`:

@@ -33,6 +33,9 @@ from farna.core.runtime_provider.e2b import (
     _CREATED_AT_METADATA_KEY,
     _DEPLOYMENT_IDENTITY_ENV,
     _DEPLOYMENT_IDENTITY_METADATA_KEY,
+    _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY,
+    _LEGACY_RUN_ID_METADATA_KEY,
+    _LEGACY_SANDBOX_CREATED_AT_METADATA_KEY,
     _LIST_MAX_PAGES,
     _RUN_ID_METADATA_KEY,
     E2BRuntimeProvider,
@@ -89,6 +92,19 @@ def _fake_sandbox_cls(monkeypatch: pytest.MonkeyPatch, paginator: Any) -> MagicM
     """Patch ``e2b.AsyncSandbox`` so ``list`` returns *paginator*."""
     fake_cls = MagicMock()
     fake_cls.list = MagicMock(return_value=paginator)
+    monkeypatch.setattr("e2b.AsyncSandbox", fake_cls)
+    return fake_cls
+
+
+def _fake_sandbox_cls_per_query(monkeypatch: pytest.MonkeyPatch, paginator_factory: Any) -> MagicMock:
+    """Patch ``e2b.AsyncSandbox`` so each ``list`` call gets its own paginator.
+
+    ``list_workspaces_by_identity`` issues one metadata query per identity key
+    (current and legacy — FAR-2693), so a shared paginator would be consumed
+    by the first call and look empty to the second.
+    """
+    fake_cls = MagicMock()
+    fake_cls.list = MagicMock(side_effect=lambda **kwargs: paginator_factory(kwargs["query"].metadata))
     monkeypatch.setattr("e2b.AsyncSandbox", fake_cls)
     return fake_cls
 
@@ -212,9 +228,13 @@ async def test_list_maps_matching_sandboxes_and_filters_on_identity(
     provider = E2BRuntimeProvider(api_key="sk-test")
     entries = await provider.list_workspaces_by_identity(_IDENTITY)
 
-    query = fake_cls.list.call_args.kwargs["query"]
-    assert query.metadata == {_DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY}
     assert fake_cls.list.call_args.kwargs["api_key"] == "sk-test"
+    # FAR-2693 dual-read: the enumeration issues the current-key query AND the
+    # legacy-key query (so a sandbox created before the rename is still found).
+    assert [call.kwargs["query"].metadata for call in fake_cls.list.call_args_list] == [
+        {_DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY},
+        {_LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY},
+    ]
 
     assert len(entries) == 2
     assert entries[0].provider_ref == "sbx-1"
@@ -322,6 +342,94 @@ async def test_list_tolerates_a_malformed_creation_marker(monkeypatch: pytest.Mo
 
     assert len(entries) == 1
     assert entries[0].created_age_s == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 3. FAR-2693: both read paths — legacy-only and current-only sandboxes
+# ---------------------------------------------------------------------------
+
+
+async def test_list_reads_a_sandbox_carrying_only_the_legacy_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sandbox created before the rename carries ONLY the legacy keys; the
+    dual-read enumeration must still return it (otherwise it is stranded and
+    never reaped) with its run id and creation age intact."""
+    created_marker = str(int(time.time()) - 120)
+    legacy_sandbox = _sandbox_info(
+        "sbx-legacy",
+        {
+            _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY,
+            _LEGACY_RUN_ID_METADATA_KEY: "run-legacy",
+            _LEGACY_SANDBOX_CREATED_AT_METADATA_KEY: created_marker,
+        },
+    )
+
+    def _paginator_for(metadata: dict[str, str]) -> _FakePaginator:
+        if _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY in metadata:
+            return _FakePaginator([[legacy_sandbox]])
+        return _FakePaginator([[]])
+
+    _fake_sandbox_cls_per_query(monkeypatch, _paginator_for)
+
+    provider = E2BRuntimeProvider(api_key="sk-test")
+    entries = await provider.list_workspaces_by_identity(_IDENTITY)
+
+    assert [entry.provider_ref for entry in entries] == ["sbx-legacy"]
+    assert entries[0].run_id == "run-legacy"
+    assert entries[0].created_age_s >= 120
+
+
+async def test_list_reads_a_sandbox_carrying_only_the_current_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The current-key path must work on its own: a sandbox stamped only with
+    ``farna-control.*`` keys is returned by the current-key query."""
+    created_marker = str(int(time.time()) - 45)
+    current_sandbox = _sandbox_info(
+        "sbx-current",
+        {
+            _DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY,
+            _RUN_ID_METADATA_KEY: "run-current",
+            _CREATED_AT_METADATA_KEY: created_marker,
+        },
+    )
+
+    def _paginator_for(metadata: dict[str, str]) -> _FakePaginator:
+        if _DEPLOYMENT_IDENTITY_METADATA_KEY in metadata:
+            return _FakePaginator([[current_sandbox]])
+        return _FakePaginator([[]])
+
+    _fake_sandbox_cls_per_query(monkeypatch, _paginator_for)
+
+    provider = E2BRuntimeProvider(api_key="sk-test")
+    entries = await provider.list_workspaces_by_identity(_IDENTITY)
+
+    assert [entry.provider_ref for entry in entries] == ["sbx-current"]
+    assert entries[0].run_id == "run-current"
+    assert entries[0].created_age_s >= 45
+
+
+async def test_list_deduplicates_a_sandbox_returned_by_both_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dual-written sandbox carries both identity keys, so BOTH metadata
+    queries return it. The merged listing must contain it once — a duplicate
+    would make the sweep process (and report) the same workspace twice."""
+    dual_sandbox = _sandbox_info(
+        "sbx-dual",
+        {
+            _DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY,
+            _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY: _IDENTITY,
+            _RUN_ID_METADATA_KEY: "run-dual",
+        },
+    )
+    _fake_sandbox_cls_per_query(monkeypatch, lambda _metadata: _FakePaginator([[dual_sandbox]]))
+
+    provider = E2BRuntimeProvider(api_key="sk-test")
+    entries = await provider.list_workspaces_by_identity(_IDENTITY)
+
+    assert [entry.provider_ref for entry in entries] == ["sbx-dual"]
 
 
 async def test_abc_default_on_a_non_overriding_provider_is_typed() -> None:

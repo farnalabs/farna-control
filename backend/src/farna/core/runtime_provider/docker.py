@@ -18,6 +18,7 @@ from farna.core.runtime_provider import ExecProcess, ExecResult, ExecStreamChunk
 from farna.core.runtime_provider.endpoint_tls import (
     validate_docker_endpoint_tls as _validate_docker_endpoint_tls,
 )
+from farna.core.workspace_labels import CREATED_AT, MACHINE_ID, stamp
 
 _log = logging.getLogger(__name__)
 
@@ -68,10 +69,17 @@ _RUNNER_USER = "1001:1001"
 # Dedicated workspace bridge network default (compose overlay-declared).
 _DEFAULT_WORKSPACE_NETWORK = "modulo-runner-workspace"
 # Deployment-identity label (reconciler machine scoping, ADR 029): sourced
-# from this env var with a hostname fallback — two Modulo deployments sharing
-# one engine must not destroy each other's workspaces.
+# from this env var with a hostname fallback — two Farna Control deployments
+# sharing one engine must not destroy each other's workspaces.
 _DEPLOYMENT_IDENTITY_ENV = "FARNA_CONTROL_RUNNER_MACHINE_ID"
-_DEPLOYMENT_IDENTITY_LABEL = "modulo.machine.id"
+_DEPLOYMENT_IDENTITY_LABEL = MACHINE_ID
+_CREATED_AT_LABEL = CREATED_AT
+# FAR-2693: the pre-rename keys. Stamped alongside the current ones and read
+# as a fallback, so workspaces created before the dual-write release stay
+# reclaimable; remove once no live workspace can predate it (see
+# farna.core.workspace_labels for the removal condition).
+_LEGACY_DEPLOYMENT_IDENTITY_LABEL = "modulo.machine.id"
+_LEGACY_WORKSPACE_CREATED_AT_LABEL = "modulo.created_at"
 
 
 # FAR-1038: remote-endpoint TLS enforcement lives in the neutral
@@ -245,35 +253,32 @@ class DockerRuntimeProvider(RuntimeProvider):
         metadata and win outright (assignment, not ``setdefault``) — the
         ordering mirror of ``KubernetesRuntimeProvider._build_metadata``
         (FAR-1051). Identity is this provider's OWN fact, never caller input:
-        an operator-supplied ``workspace_metadata`` carrying
-        ``modulo.machine.id`` (hides the container from this deployment's
-        orphan sweep, which filters on it — two deployments sharing one
-        engine would never reclaim it) or ``modulo.created_at`` (a backdated
-        or future stamp defeats the 5-minute grace window AND the 24-hour
-        max-lifetime backstop, or marks the container forever-new) must never
-        re-stamp them — the reconciler's leak repair keys on exactly these
-        labels, so a shadowed value is a permanent orphan leak. Non-reserved
-        keys (``modulo.run.id`` / ``modulo.org.id`` / ``modulo.node.id``,
-        the egress allowlist, anything else the caller carries) still flow
-        through unchanged.
+        an operator-supplied ``workspace_metadata`` carrying the machine-id
+        key (hides the container from this deployment's orphan sweep, which
+        filters on it — two deployments sharing one engine would never
+        reclaim it) or the creation marker (a backdated or future stamp
+        defeats the 5-minute grace window AND the 24-hour max-lifetime
+        backstop, or marks the container forever-new) must never re-stamp
+        them — the reconciler's leak repair keys on exactly these labels, so
+        a shadowed value is a permanent orphan leak. Non-reserved keys
+        (``farna-control.run.id`` / ``.org.id`` / ``.node.id``, the egress
+        allowlist, anything else the caller carries) still flow through
+        unchanged.
 
         Cross-tier decision (FAR-1493): identity is provider-authoritative on
         EVERY tier that carries an identity surface — Docker stamps the two
-        labels above; Kubernetes stamps ``modulo.provider`` /
-        ``modulo.created_at`` labels + ``modulo.provider`` /
-        ``modulo.machine.id`` annotations (both assigned after metadata).
-        NOTE the tiers disagree on ``modulo.provider``: the Kubernetes tier
-        reserves and stamps it (its list/destroy primitives select on it),
-        while this Docker tier has NEVER stamped a ``modulo.provider`` label
-        and nothing on the Docker side reads one — the reconciler's Docker
-        source filters on ``modulo.machine.id`` + ``modulo.run.id`` only.
-        The reserved set here is therefore unchanged (``setdefault`` ->
-        assignment for the two keys this provider actually stamps); the
-        discrepancy is reported, not silently reconciled. The E2B and Local
-        tiers carry NO such identity surface: E2B forwards
-        ``workspace_metadata`` as sandbox metadata (a passive tag carrier —
-        no provider-identity keys stamped, no reconciler filter reads them)
-        and Local ignores ``workspace_metadata`` entirely (host-process
+        labels above; Kubernetes stamps the provider / creation-marker labels
+        plus the provider / machine-id annotations (both assigned after
+        metadata). NOTE the tiers disagree on the provider label: the
+        Kubernetes tier reserves and stamps it (its list/destroy primitives
+        select on it), while this Docker tier has NEVER stamped one and
+        nothing on the Docker side reads one — the reconciler's Docker source
+        filters on the machine-id + run-id keys only. The reserved set here
+        is therefore unchanged (``setdefault`` -> assignment for the two keys
+        this provider actually stamps); the discrepancy is reported, not
+        silently reconciled. The E2B tier stamps the same identity/creation
+        keys into sandbox metadata (its reconciler source enumerates on
+        them); Local ignores ``workspace_metadata`` entirely (host-process
         workspaces carry no provider-side carrier), so no shadowing is
         possible there and no change is needed.
         """
@@ -282,9 +287,15 @@ class DockerRuntimeProvider(RuntimeProvider):
         # (FAR-1493). The deployment-identity label scopes machine-scoped
         # reconciler filters (two deployments sharing one engine never
         # destroy each other's workspaces); the creation marker drives
-        # reconciler grace/max-lifetime ages.
-        workspace_labels[_DEPLOYMENT_IDENTITY_LABEL] = self._deployment_identity()
-        workspace_labels["modulo.created_at"] = str(int(time.time()))
+        # reconciler grace/max-lifetime ages. FAR-2693 dual-write: both the
+        # current and the legacy key carry the same value.
+        stamp(
+            workspace_labels,
+            _DEPLOYMENT_IDENTITY_LABEL,
+            _LEGACY_DEPLOYMENT_IDENTITY_LABEL,
+            self._deployment_identity(),
+        )
+        stamp(workspace_labels, _CREATED_AT_LABEL, _LEGACY_WORKSPACE_CREATED_AT_LABEL, str(int(time.time())))
         return workspace_labels
 
     def _resolve_network_mode(self, spec: WorkspaceSpec) -> str:
