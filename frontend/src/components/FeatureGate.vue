@@ -110,7 +110,14 @@ const entitlementKey = computed(() => {
   return null;
 });
 
-const isCommercialGate = computed(() => entitlementKey.value !== null);
+// A commercial lock is only truthful when the licence does NOT grant the
+// capability. When it IS granted but the operator kill switch has switched the
+// implementing flag off, no purchase can fix it, so the behaviour copy is the
+// correct one (FAR-1283 + FAR-2665). Keying on the entitlement mapping alone
+// would offer "View Plans" for a capability the org already owns.
+const isCommercialGate = computed(
+  () => entitlementKey.value !== null && !planStore.hasEntitlement(entitlementKey.value),
+);
 
 const gateTitle = computed(() =>
   isCommercialGate.value

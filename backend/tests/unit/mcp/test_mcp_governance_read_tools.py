@@ -9,11 +9,14 @@ Authz: every tool maps to the same permission key as the corresponding REST
 route and is gated through ``_check_agent_tool_scope``; list_feature_flags
 additionally enforces the strict system-admin gate REST's
 ``require_system_permission`` applies. Plan-feature parity with the REST routes
-is enforced through ``_require_plan_feature``: ``list_teams`` carries
-``team_rbac``, ``get_audit_log`` carries ``audit_viewer`` (FAR-2119), and
-(FAR-2129) ``list_plugins`` carries ``plugin_management``,
-``list_sso_providers`` carries ``sso`` and ``get_schema_versions`` carries
-``schema_version_history``. The pipeline-diff tool must mask
+is enforced through ``_require_plan_feature``: ``get_audit_log`` carries
+``audit_viewer`` (FAR-2119), and (FAR-2129) ``list_plugins`` carries
+``plugin_management``, ``list_sso_providers`` carries ``sso`` and
+``get_schema_versions`` carries ``schema_version_history``. ``list_teams``
+instead mirrors REST's ``require_entitlement("identity")`` through
+``_require_plan_entitlement`` (FAR-2665) so killing one member flag of the
+Identity bundle does not refuse MCP while the REST route stays open. The
+pipeline-diff tool must mask
 credential-bearing node fields (FAR-1181 parity with the REST route), and the
 SSO listing must never surface client secrets.
 """
@@ -141,6 +144,16 @@ class _DisabledPlan:
         return False
 
 
+class _FlagStatePlan:
+    """A plan where only the named behaviour flags are active (FAR-2665)."""
+
+    def __init__(self, active_flags: set[str]) -> None:
+        self._active = active_flags
+
+    def feature_enabled(self, name: str) -> bool:
+        return name in self._active
+
+
 def _patch_plan(enabled: bool) -> tuple:
     """Patch org lookup + plan resolution so the tools' feature gate is on/off."""
     plan = _EnabledPlan() if enabled else _DisabledPlan()
@@ -257,7 +270,7 @@ class TestListTeams(AuthContext):
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     @patch("farna.api.mcp_server._session")
     @patch("farna.db.crud.team.list_teams", new_callable=AsyncMock)
-    async def test_feature_gate_off_returns_feature_required(
+    async def test_entitlement_unavailable_returns_feature_required(
         self,
         mock_list: AsyncMock,
         mock_session: AsyncMock,
@@ -270,9 +283,37 @@ class TestListTeams(AuthContext):
             result = await list_teams()
 
         assert result["error"] == "feature_required"
-        assert "team_rbac" in result["detail"]
+        assert "Identity" in result["detail"]
         # The gate must refuse BEFORE any team data is read.
         mock_list.assert_not_awaited()
+
+    @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
+    @patch("farna.api.mcp_server._session")
+    @patch("farna.db.crud.team.list_teams", new_callable=AsyncMock)
+    async def test_team_rbac_killed_but_identity_live_is_allowed(
+        self,
+        mock_list: AsyncMock,
+        mock_session: AsyncMock,
+        mock_validate: AsyncMock,
+    ) -> None:
+        # REST gates GET /api/v1/teams on the Identity ENTITLEMENT (sso / scim /
+        # team_rbac), so killing team_rbac alone must not refuse the MCP tool
+        # while sso/scim keep the entitlement live.
+        mock_list.return_value = _page([])
+        mock_session.return_value = make_session_context(make_session_scope())
+        plan = _FlagStatePlan({"sso", "scim"})
+        with (
+            patch(
+                "farna.db.crud.organisation.get_organisation",
+                new=AsyncMock(return_value=MagicMock(settings_json={})),
+            ),
+            patch("farna.core.feature_flags.resolve_plan_context", new=AsyncMock(return_value=plan)),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock()),
+        ):
+            result = await list_teams()
+
+        assert "error" not in result
+        mock_list.assert_awaited_once()
 
 
 class TestListUsers(AuthContext):

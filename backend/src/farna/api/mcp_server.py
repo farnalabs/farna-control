@@ -3861,6 +3861,36 @@ async def _require_plan_feature(org_id: uuid.UUID, settings: Any, feature_name: 
     return None
 
 
+async def _require_plan_entitlement(org_id: uuid.UUID, settings: Any, entitlement_key: str) -> dict[str, Any] | None:
+    """Org-aware ENTITLEMENT gate for an MCP tool (FAR-2665).
+
+    Mirrors the REST ``require_entitlement`` dependency so a tool that mirrors
+    an entitled route reaches the SAME answer. An entitlement bundles several
+    behaviour flags, so it stays available while ANY implementing flag is still
+    active: gating on one member flag (say ``team_rbac``) would refuse a
+    capability the REST surface still honours whenever the operator kills only
+    that one flag.
+
+    Returns the standard ``feature_required`` error dict when the org does not
+    hold ``entitlement_key`` (not granted, or every implementing flag is
+    switched off), else ``None``.
+    """
+    from farna.core.entitlements import entitlement_available, get_entitlement
+    from farna.core.feature_flags import resolve_plan_context
+    from farna.db.crud.organisation import get_organisation
+
+    async with _session(org_id) as s:
+        org = await get_organisation(s, org_id)
+    async with _session(org_id) as s:
+        plan_ctx = await resolve_plan_context(settings, s, org)
+    if entitlement_available(plan_ctx, entitlement_key):
+        return None
+    return {
+        "error": "feature_required",
+        "detail": f"{get_entitlement(entitlement_key).name} is not available for this organisation",
+    }
+
+
 async def _require_analytics_feature(org_id: uuid.UUID, settings: Any) -> dict[str, Any] | None:
     return await _require_plan_feature(org_id, settings, "analytics_page")
 
@@ -11026,8 +11056,12 @@ async def list_teams(page: int = 1, page_size: int = 20) -> dict[str, Any]:
         from farna.db.crud.team import list_teams as db_list_teams
 
         org_id = _ctx_org_id_val()
-        # REST parity: GET /api/v1/teams is router-gated by require_entitlement("identity")
-        feat_err = await _require_plan_feature(org_id, get_settings(), "team_rbac")
+        # REST parity: GET /api/v1/teams is router-gated by
+        # require_entitlement("identity") — the Identity bundle (sso / scim /
+        # team_rbac). Gate the MCP tool on the SAME entitlement, not on a
+        # single member flag: killing team_rbac alone must not refuse MCP while
+        # the REST route stays open on sso/scim.
+        feat_err = await _require_plan_entitlement(org_id, get_settings(), "identity")
         if feat_err:
             return feat_err
         pg = max(1, page)

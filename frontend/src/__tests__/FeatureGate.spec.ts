@@ -83,6 +83,31 @@ describe('FeatureGate', () => {
     expect(lock.find('a').exists()).toBe(true)
   })
 
+  it('shows the behaviour copy when the entitlement is granted but the flag is switched off', () => {
+    // FAR-1283 + FAR-2665: an operator kill switch (feature_flag_catalog
+    // is_active=false) turns the flag off while the licence still GRANTS the
+    // entitlement. No purchase can re-enable it, so the gate must not claim
+    // "Team Feature" / "Available on higher plan tier" or offer View Plans.
+    const store = usePlanStore()
+    store.$patch({
+      features: { team_rbac: false },
+      entitlements: entitlements([{ key: 'identity', granted: true }]),
+    })
+
+    const wrapper = mount(FeatureGate, {
+      props: { featureName: 'team_rbac' },
+      slots: { default: 'Gated Content' },
+    })
+
+    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
+    expect(lock.exists()).toBe(true)
+    expect(lock.text()).toContain('Feature not available')
+    expect(lock.text()).toContain('turned off for your organization')
+    expect(lock.text()).not.toContain('Team Feature')
+    expect(lock.text()).not.toContain('Available on higher plan tier')
+    expect(lock.find('a').exists()).toBe(false)
+  })
+
   it('locks directly on a requiredEntitlement (no per-capability flag)', () => {
     const store = usePlanStore()
     store.$patch({
