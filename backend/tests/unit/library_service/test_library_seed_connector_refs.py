@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from farna.core.library_service import _MODULO_PRIMITIVES
+from farna.core.library_service import _BUILTIN_PRIMITIVES
 
 
 def _seeded_agent_entries() -> list[tuple[str, dict[str, Any]]]:
     entries: list[tuple[str, dict[str, Any]]] = []
-    for prim in _MODULO_PRIMITIVES:
+    for prim in _BUILTIN_PRIMITIVES:
         content = prim.content_json or {}
         if prim.primitive_type == "agent":
             entries.append((prim.slug, content))

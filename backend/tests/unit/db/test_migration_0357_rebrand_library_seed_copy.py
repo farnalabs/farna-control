@@ -30,7 +30,7 @@ import pytest
 import sqlalchemy as sa
 from alembic import op
 
-from farna.core.library_service._seed_data import _MODULO_PRIMITIVES
+from farna.core.library_service._seed_data import _BUILTIN_PRIMITIVES
 from farna.core.library_service.install import _build_bundle_from_pins
 
 _BRAND_NOUN = "Modulo"
@@ -257,10 +257,10 @@ def test_constants_cover_a_real_seeded_definition() -> None:
     """
     module = _load_migration()
 
-    live_descriptions = {primitive.description for primitive in _MODULO_PRIMITIVES if primitive.slug == "simplest-workflow"}
+    live_descriptions = {primitive.description for primitive in _BUILTIN_PRIMITIVES if primitive.slug == "simplest-workflow"}
     assert live_descriptions <= {module._WORKFLOW_DESCRIPTION_BEFORE, module._WORKFLOW_DESCRIPTION_AFTER}
 
-    live_authors = {primitive.author for primitive in _MODULO_PRIMITIVES}
+    live_authors = {primitive.author for primitive in _BUILTIN_PRIMITIVES}
     assert live_authors <= {module._SEED_AUTHOR_BEFORE, module._SEED_AUTHOR_AFTER}
 
 
@@ -274,8 +274,8 @@ def test_no_collection_install_bundle_carries_the_brand_noun() -> None:
     question of whether a migration is needed for the materialised copy too.
     """
     offenders: list[str] = []
-    by_slug = {primitive.slug: primitive for primitive in _MODULO_PRIMITIVES}
-    collections = [primitive for primitive in _MODULO_PRIMITIVES if primitive.primitive_type == "library_collection"]
+    by_slug = {primitive.slug: primitive for primitive in _BUILTIN_PRIMITIVES}
+    collections = [primitive for primitive in _BUILTIN_PRIMITIVES if primitive.primitive_type == "library_collection"]
     assert collections
 
     for collection in collections:

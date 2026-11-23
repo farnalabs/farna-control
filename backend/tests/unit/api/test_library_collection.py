@@ -1992,11 +1992,11 @@ class TestSeedPrReviewAgent:
     """Verify the PR Review Agent seed entry exists with correct fields."""
 
     def test_seed_pr_review_agent_exists(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         key = ("agent", "pr-review-agent")
-        assert key in _MODULO_BY_SLUG, f"Missing seed entry for {key}"
-        agent = _MODULO_BY_SLUG[key]
+        assert key in _BUILTIN_BY_SLUG, f"Missing seed entry for {key}"
+        agent = _BUILTIN_BY_SLUG[key]
         assert agent.primitive_type == "agent"
         assert "code-review" in agent.tags
         assert "pr" in agent.tags
@@ -2007,9 +2007,9 @@ class TestSeedPrReviewAgent:
         assert "code_review" in github_refs[0]["capabilities"]
 
     def test_seed_pr_review_agent_prompt_mentions_decision_schema(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
-        agent = _MODULO_BY_SLUG[("agent", "pr-review-agent")]
+        agent = _BUILTIN_BY_SLUG[("agent", "pr-review-agent")]
         prompt = agent.content_json["prompt_template"]
         assert "APPROVE" in prompt
         assert "REQUEST_CHANGES" in prompt
@@ -2020,20 +2020,20 @@ class TestSeedGitHubPrReviewerBundle:
     """Verify the GitHub PR Reviewer bundle seed entry exists with correct fields."""
 
     def test_seed_github_pr_reviewer_bundle_exists(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         key = ("library_collection", "github-pr-reviewer")
-        assert key in _MODULO_BY_SLUG, f"Missing seed entry for {key}"
-        coll = _MODULO_BY_SLUG[key]
+        assert key in _BUILTIN_BY_SLUG, f"Missing seed entry for {key}"
+        coll = _BUILTIN_BY_SLUG[key]
         assert coll.primitive_type == "library_collection"
         assert coll.status == "published"
         assert "code-review" in coll.tags
         assert "quick-start" in coll.tags
 
     def test_bundle_pins_reference_existing_primitives(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
-        coll = _MODULO_BY_SLUG[("library_collection", "github-pr-reviewer")]
+        coll = _BUILTIN_BY_SLUG[("library_collection", "github-pr-reviewer")]
         pins = coll.content_json["manifest_pins"]
         pin_slugs = [pin["slug"] for pin in pins]
         assert pin_slugs == ["pr-review-decision", "pr-review-agent", "pr-review-pipeline"]
@@ -2045,21 +2045,21 @@ class TestSeedGitHubPrReviewerBundle:
                 key = ("agent", pin["slug"])
             else:
                 key = ("pipeline_template", pin["slug"])
-            assert key in _MODULO_BY_SLUG, f"Pinned slug '{pin['slug']}' not found in seed data"
+            assert key in _BUILTIN_BY_SLUG, f"Pinned slug '{pin['slug']}' not found in seed data"
 
     def test_bundle_connector_requirements(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
-        coll = _MODULO_BY_SLUG[("library_collection", "github-pr-reviewer")]
+        coll = _BUILTIN_BY_SLUG[("library_collection", "github-pr-reviewer")]
         reqs = coll.content_json["connector_requirements"]
         assert len(reqs) == 1
         assert reqs[0]["connector_type_id"] == "github"
         assert "code_review" in reqs[0]["capabilities"]
 
     def test_bundle_trust_header(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
-        coll = _MODULO_BY_SLUG[("library_collection", "github-pr-reviewer")]
+        coll = _BUILTIN_BY_SLUG[("library_collection", "github-pr-reviewer")]
         assert coll.content_json["trust_header"] == {"source": "modulo", "verified": True}
 
 
@@ -2099,28 +2099,28 @@ class TestAllNewBundlesExist:
     """Verify all 6 FAR-787 collection bundles are in the seed data."""
 
     def test_all_collections_exist(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_BUNDLE_SLUGS:
             key = ("library_collection", slug)
-            assert key in _MODULO_BY_SLUG, f"Missing collection bundle for {slug}"
+            assert key in _BUILTIN_BY_SLUG, f"Missing collection bundle for {slug}"
 
     def test_all_collections_are_library_collection_type(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_BUNDLE_SLUGS:
-            coll = _MODULO_BY_SLUG[("library_collection", slug)]
+            coll = _BUILTIN_BY_SLUG[("library_collection", slug)]
             assert coll.primitive_type == "library_collection"
 
     def test_all_collections_are_published(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_BUNDLE_SLUGS:
-            coll = _MODULO_BY_SLUG[("library_collection", slug)]
+            coll = _BUILTIN_BY_SLUG[("library_collection", slug)]
             assert coll.status == "published", f"Collection '{slug}' is not published"
 
     def test_all_collections_have_expected_tags(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         expected_tags = {
             "prompt-to-pr": {"library_collection", "code-generation", "pr", "github", "sandbox"},
@@ -2131,7 +2131,7 @@ class TestAllNewBundlesExist:
             "license-checker": {"library_collection", "license", "compliance", "dependencies"},
         }
         for slug, expected in expected_tags.items():
-            coll = _MODULO_BY_SLUG[("library_collection", slug)]
+            coll = _BUILTIN_BY_SLUG[("library_collection", slug)]
             assert set(coll.tags) == expected, f"Tags mismatch for '{slug}'"
 
 
@@ -2139,10 +2139,10 @@ class TestAllBundlePinsResolve:
     """Verify every pinned slug across all 6 bundles exists as a primitive."""
 
     def test_all_pins_resolve(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_BUNDLE_SLUGS:
-            coll = _MODULO_BY_SLUG[("library_collection", slug)]
+            coll = _BUILTIN_BY_SLUG[("library_collection", slug)]
             pins = coll.content_json.get("manifest_pins", [])
             assert pins, f"Collection '{slug}' has no manifest pins"
             for pin in pins:
@@ -2150,37 +2150,37 @@ class TestAllBundlePinsResolve:
                 # Pin type can be schema, agent, or pipeline_template — check all
                 found = False
                 for ptype in ("schema", "agent", "pipeline_template"):
-                    if (ptype, pin_slug) in _MODULO_BY_SLUG:
+                    if (ptype, pin_slug) in _BUILTIN_BY_SLUG:
                         found = True
                         break
                 assert found, f"Pin '{pin_slug}' in collection '{slug}' not found in seed data"
 
     def test_all_agents_have_prompts(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_AGENT_SLUGS:
             key = ("agent", slug)
-            assert key in _MODULO_BY_SLUG, f"Missing agent primitive for {slug}"
-            agent = _MODULO_BY_SLUG[key]
+            assert key in _BUILTIN_BY_SLUG, f"Missing agent primitive for {slug}"
+            agent = _BUILTIN_BY_SLUG[key]
             prompt = agent.content_json.get("prompt_template", "")
             assert prompt, f"Agent '{slug}' has empty prompt_template"
 
     def test_all_pipelines_have_nodes_and_edges(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_PIPELINE_SLUGS:
             key = ("pipeline_template", slug)
-            assert key in _MODULO_BY_SLUG, f"Missing pipeline template for {slug}"
-            pipeline = _MODULO_BY_SLUG[key]
+            assert key in _BUILTIN_BY_SLUG, f"Missing pipeline template for {slug}"
+            pipeline = _BUILTIN_BY_SLUG[key]
             content = pipeline.content_json
             assert content.get("graph_nodes"), f"Pipeline '{slug}' has empty graph_nodes"
             assert "edges" in content, f"Pipeline '{slug}' missing edges key"
 
     def test_bundle_connector_requirements_present(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_BUNDLE_SLUGS:
-            coll = _MODULO_BY_SLUG[("library_collection", slug)]
+            coll = _BUILTIN_BY_SLUG[("library_collection", slug)]
             reqs = coll.content_json.get("connector_requirements", [])
             assert reqs, f"Collection '{slug}' has no connector_requirements"
             for req in reqs:
@@ -2188,10 +2188,10 @@ class TestAllBundlePinsResolve:
                 assert "capabilities" in req, f"Collection '{slug}' connector req missing capabilities"
 
     def test_bundle_trust_headers_present(self) -> None:
-        from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+        from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 
         for slug in _NEW_BUNDLE_SLUGS:
-            coll = _MODULO_BY_SLUG[("library_collection", slug)]
+            coll = _BUILTIN_BY_SLUG[("library_collection", slug)]
             trust = coll.content_json.get("trust_header")
             assert trust == {"source": "modulo", "verified": True}, f"Collection '{slug}' missing or wrong trust_header"
 
