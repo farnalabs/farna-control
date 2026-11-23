@@ -15,7 +15,7 @@ export interface LifecycleMapStage {
   id: string
   name: string
   description: string | null
-  type: 'modulo' | 'external' | 'manual' | 'placeholder'
+  type: 'farna_control' | 'external' | 'manual' | 'placeholder'
   owner_badge: string | null
   graduated: boolean
   pipeline_id: string | null
@@ -78,7 +78,7 @@ export interface PipelineSummary {
 export interface LifecycleStage {
   id: string
   name: string
-  type: 'modulo' | 'external' | 'manual' | 'placeholder'
+  type: 'farna_control' | 'external' | 'manual' | 'placeholder'
   x?: number
   y?: number
   pipeline_id: string | null

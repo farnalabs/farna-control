@@ -418,7 +418,7 @@ async def test_import_envelope_recreates_version_chain(session: AsyncMock) -> No
             "version": 3,
             "stages": [
                 {"id": "s1", "name": "Inbox", "type": "manual"},
-                {"id": "s2", "name": "Review", "type": "modulo"},
+                {"id": "s2", "name": "Review", "type": "farna_control"},
             ],
             "edges": [{"id": "e1", "source": "s1", "target": "s2"}],
         },
@@ -438,7 +438,7 @@ async def test_import_envelope_recreates_version_chain(session: AsyncMock) -> No
     first_replay = mock_save.await_args_list[0]
     assert first_replay.kwargs["stages"][1]["id"] == "s2"
     second_replay = mock_save.await_args_list[1]
-    assert second_replay.kwargs["stages"][1]["type"] == "modulo"
+    assert second_replay.kwargs["stages"][1]["type"] == "farna_control"
 
 
 async def test_import_envelope_reorders_versions_deterministically(session: AsyncMock) -> None:

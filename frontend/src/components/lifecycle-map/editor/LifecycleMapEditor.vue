@@ -456,7 +456,7 @@ async function onGraduateConfirm(stageId: string, pipelineId: string) {
     node.data = {
       name: node.data?.name ?? '',
       description: node.data?.description ?? '',
-      stage_type: 'modulo',
+      stage_type: 'farna_control',
       pipeline_id: pipelineId,
       external_url: node.data?.external_url ?? null,
       owner: node.data?.owner ?? null,

@@ -63,7 +63,7 @@ const mapDetail = {
   owner: 'alice',
   owner_team_id: 'team-1',
   stages: [
-    { id: 'stage-1', name: 'Build', description: null, type: 'modulo', owner_badge: null, graduated: false, pipeline_id: 'pipe-1', external_url: null },
+    { id: 'stage-1', name: 'Build', description: null, type: 'farna_control', owner_badge: null, graduated: false, pipeline_id: 'pipe-1', external_url: null },
     { id: 'stage-2', name: 'Deploy', description: 'Deploy stage', type: 'external', owner_badge: null, graduated: true, pipeline_id: null, external_url: 'https://deploy.example.com' },
     { id: 'stage-3', name: 'Manual', description: null, type: 'manual', owner_badge: null, graduated: false, pipeline_id: null, external_url: null },
   ],

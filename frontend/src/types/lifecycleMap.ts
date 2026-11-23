@@ -1,4 +1,4 @@
-export type StageType = 'modulo' | 'external' | 'manual' | 'placeholder'
+export type StageType = 'farna_control' | 'external' | 'manual' | 'placeholder'
 export type TriggerType = 'pipeline_completed' | 'webhook' | 'cron' | 'manual' | 'external'
 export type EstimatedFrequency = 'daily' | 'per-pr' | 'hourly' | 'custom'
 
