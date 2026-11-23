@@ -186,7 +186,7 @@ async def test_template_crud_filters_type_category_search_and_preview(
     rls_session.add_all([matching, other_type])
     await rls_session.flush()
 
-    page = await list_templates(rls_session, category="delivery", search="release")
+    page = await list_templates(rls_session, org_id=test_org, category="delivery", search="release")
     assert page.total == 1
     assert page.items[0].id == matching.id
     assert page.has_more is False

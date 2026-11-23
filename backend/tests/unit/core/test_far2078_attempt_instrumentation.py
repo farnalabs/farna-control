@@ -302,7 +302,7 @@ async def test_a_fenced_reset_retains_the_attempts_reason_and_error_code(
     assert run_row[1] is None, "the reset clears the run-level reason (the bug this table exists for)"
 
     async with sqlite_maker() as session:
-        attempts = await attempt_crud.list_attempts(session, RUN)
+        attempts = await attempt_crud.list_attempts(session, RUN, org_id=ORG)
     assert len(attempts) == 1
     assert attempts[0].terminal_reason == ATTEMPT_TERMINAL_REASON_RESET
     assert attempts[0].error_code == "executor_stalled"
@@ -549,7 +549,7 @@ async def test_start_then_close_round_trips_through_the_real_table(
     assert closed == 0
 
     async with sqlite_maker() as session:
-        attempts = await attempt_crud.list_attempts(session, RUN)
+        attempts = await attempt_crud.list_attempts(session, RUN, org_id=ORG)
     assert attempts[0].terminal_reason == ATTEMPT_TERMINAL_REASON_COMPLETED
     assert attempts[0].ended_at is not None
 

@@ -1,6 +1,7 @@
 import { formatApiError } from '../lib/api/formatError'
 import { decodeJwtPayload } from '../lib/jwt'
 import { createRouter, createWebHistory, type RouteMeta } from 'vue-router'
+import { getActivePinia } from 'pinia'
 import { getAccessToken } from '../lib/api/client'
 import { usePlanStore } from '../stores/planStore'
 import i18n from '../i18n'
@@ -17,7 +18,7 @@ declare module 'vue-router' {
     parent?: string
     testid?: string
     requiredRoles?: string[]
-    requiredTier?: string
+    requiredEntitlement?: string
     requiredPermissions?: string[]
     featureFlag?: string
     visibility?: 'public' | 'public_preview' | 'private_preview' | 'in_dev'
@@ -33,7 +34,7 @@ interface ManifestEntry {
   parent: string | null
   testid: string
   required_roles: string[] | null
-  required_tier: string
+  required_entitlement: string | null
   required_permissions: string[] | null
   feature_flag: string | null
   visibility?: 'public' | 'public_preview' | 'private_preview' | 'in_dev'
@@ -635,14 +636,14 @@ const router = createRouter({
        path: '/system-maps',
        name: 'system-maps',
        component: SystemMapsView,
-        meta: { visibility: 'public' },
+        meta: { visibility: 'private_preview' },
      },
      {
        path: '/system-maps/:id',
        name: 'system-map-detail',
        component: SystemMapDetailView,
        props: true,
-        meta: { visibility: 'public' },
+        meta: { visibility: 'private_preview' },
      },
      {
        path: '/lifecycle-maps',
@@ -852,7 +853,7 @@ function metaCarriesGate(meta: RouteLocationTarget['meta'] | undefined): boolean
   return Boolean(
     meta?.requiresSystemAdmin ||
       meta?.requiredRoles?.length ||
-      meta?.requiredTier ||
+      meta?.requiredEntitlement ||
       meta?.requiredPermissions?.length ||
       meta?.visibility === 'private_preview' ||
       meta?.visibility === 'in_dev',
@@ -870,7 +871,7 @@ export function entryCarriesGate(entry: ManifestEntry | undefined): boolean {
   if (!entry) return false
   const groupId = entry.sidebar_group
   return Boolean(
-    entry.required_tier ||
+    entry.required_entitlement ||
       entry.required_roles?.length ||
       entry.required_permissions?.length ||
       entry.visibility === 'private_preview' ||
@@ -926,7 +927,7 @@ export function hydrateManifestMeta(to: RouteLocationTarget): void {
   to.meta.breadcrumb = entry.breadcrumb
   to.meta.testid = entry.testid
   to.meta.requiredRoles = entry.required_roles ?? undefined
-  to.meta.requiredTier = entry.required_tier
+  to.meta.requiredEntitlement = entry.required_entitlement ?? undefined
   to.meta.requiredPermissions = entry.required_permissions ?? undefined
   to.meta.featureFlag = entry.feature_flag ?? undefined
   to.meta.visibility = entry.visibility ?? undefined
@@ -984,10 +985,16 @@ export interface LockedRouteTarget {
 export type GuardDenial = { name: string } | LockedRouteTarget
 
 /**
- * FAR-2664: a below-tier route is a paid capability the caller cannot use —
- * not a broken application. Land on the locked page, which names the
- * capability and offers the upgrade path, instead of bouncing silently to the
- * dashboard with no explanation.
+ * FAR-2664 / FAR-2665: a route outside the licence is a commercial capability
+ * the caller cannot use — not a broken application. Land on the locked page,
+ * which names the capability and offers the upgrade path, instead of bouncing
+ * silently to the dashboard with no explanation. The query carries the
+ * ENTITLEMENT the route needs (never a tier string).
+ *
+ * FAR-2687: the same applies to a role refusal — the page names the role(s)
+ * that would open the capability. The reason is what selects which explanation
+ * the locked page shows; the `role` query is only meaningful for `'role'`, so a
+ * below-tier lock keeps exactly the URL it had before.
  *
  * The capability label comes from the manifest breadcrumb (the same string the
  * breadcrumb bar and document title use); the view upgrades it to the
@@ -995,24 +1002,48 @@ export type GuardDenial = { name: string } | LockedRouteTarget
  */
 export function lockedRouteFor(
   to: Parameters<Parameters<typeof router.beforeEach>[0]>[0],
-  reason: 'tier' | 'role' | 'system_admin' = 'tier',
+  reason: 'entitlement' | 'role' | 'system_admin' = 'entitlement',
 ): LockedRouteTarget {
   const entry = resolveManifestEntry(to)
   const query: Record<string, string> = { from: to.fullPath || to.path || '/' }
   const capability = entry?.breadcrumb
   if (capability) query.capability = capability
-  const tier = to.meta?.requiredTier ?? entry?.required_tier
-  if (tier) query.tier = tier
+  const entitlement = to.meta?.requiredEntitlement ?? entry?.required_entitlement
+  if (entitlement) query.entitlement = entitlement
+  if (reason === 'role') {
+    // The roles that would grant access (the manifest list is any-of). Carried
+    // as a comma-separated key list so the view can translate each one; omit it
+    // entirely when the entry declares no roles, and the view falls back to the
+    // generic wording.
+    const requiredRoles = to.meta?.requiredRoles ?? entry?.required_roles
+    if (requiredRoles?.length) query.role = requiredRoles.join(',')
+  }
   query.reason = reason
   return { path: LOCKED_ROUTE_PATH, query }
 }
 
 /**
- * Enforce role, tier, and devMode/visibility access rules.  Returns a
+ * The plan store when a Pinia instance is active, else null.
+ *
+ * Production installs Pinia (`app.use(pinia)`) before `app.use(router)`, so the
+ * guard always has a store. A handful of spec files drive this same real guard
+ * callback WITHOUT installing Pinia (they exercise the manifest-binding
+ * backstop, not navigation state); returning null lets the pure
+ * manifest-backstop assertions run instead of throwing a "no active Pinia"
+ * error into the guard's catch-all, which would bounce every navigation to the
+ * dashboard.
+ */
+function activePlanStore(): ReturnType<typeof usePlanStore> | null {
+  const pinia = getActivePinia()
+  return pinia ? usePlanStore(pinia) : null
+}
+
+/**
+ * Enforce role, ENTITLEMENT and devMode/visibility access rules.  Returns a
  * redirect/locked route-object when access is denied, or `true` when the
  * caller may continue.  The plan store is lazily fetched so the guard sees the
- * real tier — the first navigation resolves *before* AppLayout.onMounted
- * kicks off `fetchPlan()`.
+ * real licence grant — the first navigation resolves *before*
+ * AppLayout.onMounted kicks off `fetchPlan()`.
  */
 export async function enforceRoleTierVisibility(
   to: Parameters<Parameters<typeof router.beforeEach>[0]>[0],
@@ -1021,57 +1052,75 @@ export async function enforceRoleTierVisibility(
   const payload = decodeJwtPayload(token)
 
   if (to.meta?.requiresSystemAdmin && !payload?.is_system_admin) {
-    return { name: 'dashboard' }
+    // FAR-2688: an instance-admin refusal is not a broken application — land
+    // on the locked page, which names the instance-level restriction and the
+    // one person who can lift it, instead of a silent bounce to the Dashboard.
+    // The locked page carries no gate of its own (it is not in the manifest),
+    // so this cannot loop. The copy and the view branch already existed
+    // (FAR-2664); only this denial was still returning the Dashboard.
+    return lockedRouteFor(to, 'system_admin')
   }
 
   if (!(await hasRequiredPermissions(to))) {
+    // FAR-2688 (deliberate): a permission refusal keeps the Dashboard bounce.
+    // Unlike role / instance-admin / tier — all decided from OBSERVED token
+    // claims or a resolved tier — the permission list is resolved
+    // asynchronously and FAILS CLOSED: `fetchPermissions` sets
+    // `permissionsSource='unavailable'` with an empty list on a 4xx/5xx/
+    // timeout, which is indistinguishable here from a caller who genuinely
+    // holds none (stores/planStore.ts, FAR-2020). Explaining "your role cannot
+    // open this" would therefore assert a role change is needed during a
+    // transient fetch failure, when a retry is the actual fix. An explanation
+    // needs the unknown state separated from the observed one first; until
+    // then a silent bounce states nothing false.
     return { name: 'dashboard' }
   }
 
   if (to.meta?.requiredRoles?.length) {
     const orgRole = payload?.org_role
     if (typeof orgRole !== 'string' || !to.meta.requiredRoles.includes(orgRole)) {
-      return { name: 'dashboard' }
+      // FAR-2687: a role denial is not a broken application, exactly like a
+      // below-tier one — land on the locked page, which names the role the
+      // caller needs and the administrator who can grant it, instead of a
+      // silent bounce to the Dashboard. The locked page carries no role gate
+      // of its own (it is not in the manifest), so this cannot loop.
+      return lockedRouteFor(to, 'role')
     }
   }
 
-  const needsTierOrVisibility =
-    // Boolean OR is deliberate: a falsy-but-present requiredTier must still
-    // trigger the tier/visibility guard rather than fail open via `??`.
-    Boolean(to.meta?.requiredTier) || // NOSONAR: fail closed on any falsy non-null requiredTier
+  const needsEntitlementOrVisibility =
+    // Boolean OR is deliberate: a falsy-but-present requiredEntitlement must
+    // still trigger the guard rather than fail open via `??`.
+    Boolean(to.meta?.requiredEntitlement) || // NOSONAR: fail closed on any falsy non-null requiredEntitlement
     (to.meta?.visibility === 'private_preview' || to.meta?.visibility === 'in_dev')
 
-  if (needsTierOrVisibility) {
+  if (needsEntitlementOrVisibility) {
     const planStore = usePlanStore()
     if (!planStore.loaded) {
       await planStore.fetchPlan()
     }
     if (
-      to.meta?.requiredTier &&
-      // Tier check keyed on TIER KNOWLEDGE, not flag-map emptiness (FAR-1809).
-      // The old `Object.keys(features).length > 0` used "the flag map is
-      // non-empty" as a proxy for "the plan is known", conflating two distinct
-      // states:
-      //   - KNOWN-EMPTY: a payload applied with zero flags. `loaded` is set
-      //     together with `currentTier`, so a resolved tier MUST still be
-      //     tier-checked — emptiness of the flag map says nothing about the
-      //     tier, and skipping here let a resolved community org through a
-      //     team route.
+      to.meta?.requiredEntitlement &&
+      // Entitlement check keyed on PLAN KNOWLEDGE, not flag-map emptiness
+      // (FAR-1809 / FAR-2665). The two distinct states:
+      //   - KNOWN: a payload applied, so the licence answer is observed truth.
+      //     `loaded` is set together with the plan context, so a resolved
+      //     UNENTITLED org must still be refused — an empty flag map says
+      //     nothing about the grant.
       //   - UNKNOWN: no server payload has ever applied (fetch failed ->
-      //     flagsSource 'unavailable', `loaded` stays false; the tier is the
-      //     'community' bootstrap default, not observed truth). Tier-checking
-      //     that default would bounce licensed users to the dashboard on a
-      //     transient /plan failure — the exact wrong-tier defect FAR-1809
-      //     exists to remove. Fail open here; the backend 402 still enforces
-      //     the real licence on the gated API routes.
+      //     flagsSource 'unavailable', `loaded` stays false). Refusing on the
+      //     bootstrap default would bounce licensed users to the locked page on
+      //     a transient /plan failure — the exact wrong-tier defect FAR-1809
+      //     removed. Fail open here; the backend 402 still enforces the real
+      //     licence on the gated API routes.
       // The devMode/visibility branch below is deliberately NOT flipped: a
       // private_preview surface stays hidden when dev mode is unknown, which
-      // is the safe default for a hidden surface (unchanged, out of scope).
+      // is the safe default for a hidden surface.
       planStore.loaded &&
-      !planStore.isAtMinimumTier(to.meta.requiredTier)
+      !planStore.hasEntitlement(to.meta.requiredEntitlement)
     ) {
       // FAR-2664: the caller is otherwise permitted — this route is simply
-      // above their licence. Show the capability and the upgrade path instead
+      // outside their licence. Show the capability and the upgrade path instead
       // of a silent dashboard bounce. The redirect stays for the genuinely
       // unknown route, and for the role / instance-admin refusals above (a
       // licence upgrade cannot fix those).
@@ -1109,7 +1158,7 @@ async function enforceManifestGate(
     to.meta?.requiresSystemAdmin ||
     to.meta?.requiredRoles?.length ||
     to.meta?.requiredPermissions?.length ||
-    to.meta?.requiredTier ||
+    to.meta?.requiredEntitlement ||
     to.meta?.visibility === 'private_preview' ||
     to.meta?.visibility === 'in_dev'
   ) {
@@ -1144,6 +1193,18 @@ async function enforceRouteFeatureFlag(
     await planStore.fetchPlan()
   }
   if (!planStore.featureEnabled(to.meta.featureFlag)) {
+    // FAR-2688 (deliberate): a disabled feature flag keeps the Dashboard
+    // bounce, and says so here rather than inventing copy. `featureEnabled` is
+    // false BOTH when the flag is genuinely off and when the plan payload
+    // never resolved (it reads `orgOverrides[flag] ?? features[flag] ??
+    // false`), so the two states are indistinguishable at this point and any
+    // user-facing explanation could be false during a transient plan failure.
+    // The only flag-gated route (`/admin/notification-delivery`) is filtered
+    // out of the nav while its flag is off, so this is reachable only by a
+    // stale deep link; and no role, purchase or request can grant a flag, so
+    // none of the locked page's three reasons (tier / role / system_admin)
+    // would be true. Explaining it needs an "unknown plan" state separated
+    // from "flag off" first — a separate change, not a generic mechanism here.
     return { name: 'dashboard' }
   }
   return true
@@ -1195,6 +1256,27 @@ router.beforeEach(async (to) => {
     if ((to.name === 'login' || to.name === 'org-login') && token) return { name: 'dashboard' }
     if (to.name === 'login' || to.name === 'org-login') return true // login page without token — allowed
     if (!token) return { name: 'login' }
+
+    // FAR-2665: the plan/flags payload must resolve before the FIRST
+    // authenticated navigation completes when there is no persisted layout to
+    // trust. Dropping the universal community tier gate from ordinary routes
+    // means the per-route gate no longer fetches the payload for them, so
+    // without this `main.ts` would mount AppLayout before `/api/v1/plan` landed
+    // and paint nav chrome against an unresolved flag map (the FAR-1237
+    // mobile-nav flash: `mobile-nav-flash.spec.ts` asserts NOTHING paints while
+    // the flags are unknown). The gate is deliberately keyed on
+    // `flagsSource === 'none'` — no cache, no server payload — rather than
+    // `!loaded`: a CACHE hit already knows the layout from the persisted map,
+    // and blocking it on a slow server read would regress the cached
+    // first-paint the same suite pins. The fetch never rejects
+    // (`settlePlanSource` swallows), so a failed read settles to the
+    // `unavailable` drawer fallback instead of hanging the navigation.
+    // Entitlement-gated routes still fetch in `enforceRoleTierVisibility` when
+    // the grant is needed, so this is additive, never a replacement.
+    const planStore = activePlanStore()
+    if (planStore && planStore.flagsSource === 'none') {
+      await planStore.fetchPlan()
+    }
 
     // Role / tier / visibility enforcement, plus the FAR-1950 fail-closed
     // backstop for a manifest-gated path that hydration did not reach.

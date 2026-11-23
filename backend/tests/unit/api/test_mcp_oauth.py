@@ -48,7 +48,7 @@ def _make_settings() -> Settings:
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
         admin_password="testpass",
-        public_url="https://modulo.example.com",
+        public_url="https://farna-control.example.com",
     )
 
 

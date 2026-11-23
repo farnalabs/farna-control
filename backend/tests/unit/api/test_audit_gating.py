@@ -1,4 +1,9 @@
-"""Tests for audit_viewer feature gating via require_feature('audit_viewer')."""
+"""Tests for the Audit and evidence entitlement gating (FAR-2665).
+
+The audit list/export/scan/evidence-pack require the ``audit_evidence``
+commercial entitlement. The chain-integrity check (``/verify``) is FREE —
+detecting a broken chain is a safety control.
+"""
 
 import uuid
 from collections.abc import AsyncGenerator, Generator
@@ -124,15 +129,16 @@ def client_with_audit() -> Generator[TestClient, None, None]:
 # ── Audit endpoints return 402 when feature disabled ──
 
 
-def _assert_feature_402(resp):
+def _assert_entitlement_402(resp):
     assert resp.status_code == 402
     body = resp.json()
     detail = body["detail"]
     if isinstance(detail, dict):
         assert detail["code"] == "feature_required"
-        assert detail["feature"] == "audit_viewer"
+        assert detail["feature"] == "audit_evidence"
     else:
-        assert "audit_viewer" in detail.lower()
+        assert "audit and evidence" in detail.lower()
+    assert body["instance"] == "audit_evidence"
 
 
 class TestAuditGating:
@@ -143,26 +149,36 @@ class TestAuditGating:
         leaving the list route open let a Community admin read the same events
         over the API.
         """
-        _assert_feature_402(client_no_audit.get("/api/v1/admin/audit"))
+        _assert_entitlement_402(client_no_audit.get("/api/v1/admin/audit"))
 
     def test_batch_detail_returns_402_when_disabled(self, client_no_audit: TestClient) -> None:
-        _assert_feature_402(client_no_audit.post("/api/v1/admin/audit/batch-detail", json={"event_ids": []}))
+        _assert_entitlement_402(client_no_audit.post("/api/v1/admin/audit/batch-detail", json={"event_ids": []}))
 
-    def test_verify_chain_returns_402_when_disabled(self, client_no_audit: TestClient) -> None:
-        """FAR-2062 sweep: chain verification is an audit read path and is gated."""
-        _assert_feature_402(client_no_audit.get("/api/v1/admin/audit/verify"))
+    def test_verify_chain_is_free_even_without_the_entitlement(self, client_no_audit: TestClient) -> None:
+        """FAR-2665: detecting a broken chain is a SAFETY control, so it is free.
+
+        Aggregation, retention and export stay behind ``audit_evidence``; the
+        integrity check must be reachable so anyone can prove the chain is
+        intact (the RBAC permission still decides who may ask).
+        """
+        with (
+            patch("farna.api.routes.audit.verify_chain", return_value={"valid": True}),
+            patch("farna.api.routes.audit.set_rls_org"),
+        ):
+            resp = client_no_audit.get("/api/v1/admin/audit/verify")
+        assert resp.status_code == 200
 
     def test_export_returns_402_when_disabled(self, client_no_audit: TestClient) -> None:
-        _assert_feature_402(client_no_audit.get("/api/v1/admin/audit/export"))
+        _assert_entitlement_402(client_no_audit.get("/api/v1/admin/audit/export"))
 
     def test_scan_returns_402_when_disabled(self, client_no_audit: TestClient) -> None:
-        _assert_feature_402(client_no_audit.get("/api/v1/admin/audit/scan"))
+        _assert_entitlement_402(client_no_audit.get("/api/v1/admin/audit/scan"))
 
     def test_evidence_pack_returns_402_when_disabled(self, client_no_audit: TestClient) -> None:
-        _assert_feature_402(client_no_audit.get("/api/v1/admin/audit/evidence-pack"))
+        _assert_entitlement_402(client_no_audit.get("/api/v1/admin/audit/evidence-pack"))
 
     def test_verification_key_returns_402_when_disabled(self, client_no_audit: TestClient) -> None:
-        _assert_feature_402(client_no_audit.get("/api/v1/admin/audit/verification-key"))
+        _assert_entitlement_402(client_no_audit.get("/api/v1/admin/audit/verification-key"))
 
 
 # ── Audit endpoints succeed when feature enabled ──

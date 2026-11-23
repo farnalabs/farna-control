@@ -45,7 +45,7 @@ class TestNotifyImportersOfUpdate:
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
             patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=None),
-            patch("farna.core.library_service.update_library_primitive", new_callable=AsyncMock) as updater,
+            patch("farna.core.library_service.mark_update_available", new_callable=AsyncMock) as updater,
         ):
             await notify_importers_of_update(session, uuid.uuid4(), uuid.uuid4())
 
@@ -59,7 +59,7 @@ class TestNotifyImportersOfUpdate:
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
             patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=prim),
-            patch("farna.core.library_service.update_library_primitive", new_callable=AsyncMock) as updater,
+            patch("farna.core.library_service.mark_update_available", new_callable=AsyncMock) as updater,
         ):
             await notify_importers_of_update(session, uuid.uuid4(), uuid.uuid4())
 
@@ -67,6 +67,7 @@ class TestNotifyImportersOfUpdate:
 
     async def test_updates_auto_update_copies(self) -> None:
         session = _mock_session()
+        org_id = uuid.uuid4()
         group_id = uuid.uuid4()
         prim = _fake_primitive(version="1.1")
         prim.version_group_id = group_id
@@ -82,18 +83,21 @@ class TestNotifyImportersOfUpdate:
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
             patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=prim),
-            patch("farna.core.library_service.update_library_primitive", new_callable=AsyncMock) as updater,
+            patch("farna.core.library_service.mark_update_available", new_callable=AsyncMock) as updater,
         ):
-            await notify_importers_of_update(session, uuid.uuid4(), uuid.uuid4())
+            await notify_importers_of_update(session, org_id, uuid.uuid4())
 
-        # Only the auto_update copy is touched.
+        # Only the auto_update copy is touched, and the caller's org rides into
+        # the clamped stamp (FAR-2696).
         updater.assert_awaited_once()
-        assert updater.await_args.args[1] == copy1.id
-        assert updater.await_args.args[2]["update_available_version_id"] == prim.id
+        assert updater.await_args.kwargs["org_id"] == org_id
+        assert updater.await_args.kwargs["recipient_id"] == copy1.id
+        assert updater.await_args.kwargs["version_id"] == prim.id
 
     async def test_updates_installed_collection_rows(self) -> None:
         """FAR-759: installed collection rows in the version group are stamped too."""
         session = _mock_session()
+        org_id = uuid.uuid4()
         group_id = uuid.uuid4()
         prim = _fake_primitive(version="1.1")
         prim.version_group_id = group_id
@@ -107,13 +111,14 @@ class TestNotifyImportersOfUpdate:
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
             patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=prim),
-            patch("farna.core.library_service.update_library_primitive", new_callable=AsyncMock) as updater,
+            patch("farna.core.library_service.mark_update_available", new_callable=AsyncMock) as updater,
         ):
-            await notify_importers_of_update(session, uuid.uuid4(), uuid.uuid4())
+            await notify_importers_of_update(session, org_id, uuid.uuid4())
 
         updater.assert_awaited_once()
-        assert updater.await_args.args[1] == installed.id
-        assert updater.await_args.args[2]["update_available_version_id"] == prim.id
+        assert updater.await_args.kwargs["org_id"] == org_id
+        assert updater.await_args.kwargs["recipient_id"] == installed.id
+        assert updater.await_args.kwargs["version_id"] == prim.id
 
     async def test_per_copy_update_error_is_logged_not_raised(self, caplog: pytest.LogCaptureFixture) -> None:
         session = _mock_session()
@@ -130,7 +135,7 @@ class TestNotifyImportersOfUpdate:
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
             patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=prim),
             patch(
-                "farna.core.library_service.update_library_primitive",
+                "farna.core.library_service.mark_update_available",
                 new_callable=AsyncMock,
                 side_effect=SQLAlchemyError("boom"),
             ),

@@ -194,12 +194,19 @@ async def close_attempt(
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
-async def list_attempts(session: AsyncSession, run_id: uuid.UUID) -> Sequence[RunAttempt]:
+async def list_attempts(session: AsyncSession, run_id: uuid.UUID, *, org_id: uuid.UUID) -> Sequence[RunAttempt]:
     """Every attempt for *run_id*, ordered by ``attempt_index`` ascending.
 
     Served by ``uq_run_attempts_run_attempt_index`` (leftmost prefix
     ``run_id`` + the ordering column), which is why the table needs no second
     index on the pair.
+
+    FAR-2689: the run id alone is not an org boundary. ``run_attempts`` carries
+    its own ``organisation_id`` (NOT NULL, derived from the run by
+    :func:`start_attempt`), so the explicit predicate is free and cannot hide a
+    legitimate row — it is exactly the tenant anchor the table's RLS policy
+    already applies. ``org_id`` is REQUIRED so a future caller cannot fall back
+    to the parent-id-only shape.
     """
-    result = await session.execute(select(RunAttempt).where(RunAttempt.run_id == run_id).order_by(RunAttempt.attempt_index.asc()))
+    result = await session.execute(select(RunAttempt).where(RunAttempt.run_id == run_id, RunAttempt.organisation_id == org_id).order_by(RunAttempt.attempt_index.asc()))
     return result.scalars().all()

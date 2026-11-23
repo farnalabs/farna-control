@@ -273,7 +273,7 @@ class Harness:
             "GITHUB_REPOSITORY": "farnalabs/modulo",
             "DISPATCH_URL": "https://dispatch.example.invalid/hook",
             "DISPATCH_SECRET": "stub-secret",
-            "DISPATCH_LABEL": "Modulo Branch Fixer",
+            "DISPATCH_LABEL": "Farna Control Branch Fixer",
             "DISPATCH_BUDGET_SECONDS": "5",
         }
         step_env.update(extra_env)

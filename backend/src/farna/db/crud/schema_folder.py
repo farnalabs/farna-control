@@ -41,8 +41,10 @@ async def create_folder(
     return folder
 
 
-async def list_folders(session: AsyncSession) -> list[SchemaFolder]:
-    result = await session.execute(select(SchemaFolder).order_by(SchemaFolder.sort_order, SchemaFolder.name))
+async def list_folders(session: AsyncSession, *, org_id: uuid.UUID) -> list[SchemaFolder]:
+    # FAR-2686: explicit organisation predicate, never RLS alone. There are no
+    # shared/sentinel-org folders; REQUIRED so a caller cannot fall back.
+    result = await session.execute(select(SchemaFolder).where(SchemaFolder.organisation_id == org_id).order_by(SchemaFolder.sort_order, SchemaFolder.name))
     return list(result.scalars().all())
 
 

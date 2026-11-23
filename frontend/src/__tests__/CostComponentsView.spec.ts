@@ -10,11 +10,20 @@ const defaultComponents = [
   { id: 'comp-3', name: 'sandbox_infra', display_name: 'Sandbox Infra', kind: 'calculated', rate_usd: '0.020000', rate_fallback: 'e2b_rate', formula: 'wall_clock_hours * rate', report_key: null, enabled: false, sort_order: 2, deleted_at: null },
 ]
 
+// FAR-2665: flags are behaviour-only; the commercial mapping that decides the
+// gate's upgrade copy comes from the plan payload's `entitlements` registry.
+const PLAN_ENTITLEMENTS = [
+  { key: 'identity', name: 'Identity', description: '', granted: true, flags: ['sso', 'scim', 'team_rbac'] },
+  { key: 'audit_evidence', name: 'Audit and evidence', description: '', granted: true, flags: ['audit_viewer', 'admin_run_retention'] },
+  { key: 'cost_governance', name: 'Cost governance', description: '', granted: true, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+]
+
 const defaultPlan = {
   data: {
     license: { tier: 'team', expires_at: null, org_id: null },
     dev_mode: false,
-    flags: [{ name: 'admin_cost_breakdown', description: 'Cost Breakdown', tier: 'team', currently_active: true, depends_on: null }],
+    flags: [{ name: 'admin_cost_breakdown', currently_active: true }],
+    entitlements: PLAN_ENTITLEMENTS,
   },
   error: undefined,
 }
@@ -125,7 +134,14 @@ describe('CostComponentsView', () => {
     mockGet.mockImplementation((path: string) => {
       if (path === '/api/v1/plan') {
         return Promise.resolve({
-          data: { license: { tier: 'community', expires_at: null, org_id: null }, dev_mode: false, flags: [{ name: 'admin_cost_breakdown', description: 'Cost Breakdown', tier: 'team', currently_active: false, depends_on: null }] },
+          data: {
+            license: { tier: 'community', expires_at: null, org_id: null },
+            dev_mode: false,
+            flags: [{ name: 'admin_cost_breakdown', currently_active: false }],
+            entitlements: PLAN_ENTITLEMENTS.map((entry) =>
+              entry.key === 'cost_governance' ? { ...entry, granted: false } : entry,
+            ),
+          },
           error: undefined,
         })
       }

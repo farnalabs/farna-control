@@ -11,19 +11,19 @@ const mockManifest = vi.hoisted(() => ({
     monitor: { label: 'MONITOR', order: 3, default_expanded: true },
   },
   routes: {
-    '/': { name: 'dashboard', breadcrumb: 'Dashboard', sidebar_group: 'build', sidebar_order: 1, type: 'page', required_tier: null, required_roles: null, required_permissions: null, exact: true },
-    '/pipelines': { name: 'pipeline-list', breadcrumb: 'Pipelines', sidebar_group: 'build', sidebar_order: 2, type: 'list_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null, exact: true },
-    '/runs': { name: 'runs-list', breadcrumb: 'Runs', sidebar_group: 'build', sidebar_order: 3, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null, exact: true },
-    '/settings/license': { name: 'settings-license', breadcrumb: 'License', sidebar_group: 'admin', sidebar_order: 1, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/': { name: 'dashboard', breadcrumb: 'Dashboard', sidebar_group: 'build', sidebar_order: 1, type: 'page', required_entitlement: null, required_roles: null, required_permissions: null, exact: true },
+    '/pipelines': { name: 'pipeline-list', breadcrumb: 'Pipelines', sidebar_group: 'build', sidebar_order: 2, type: 'list_page', required_entitlement: 'identity', required_roles: ['admin'], required_permissions: null, exact: true },
+    '/runs': { name: 'runs-list', breadcrumb: 'Runs', sidebar_group: 'build', sidebar_order: 3, type: 'list_page', required_entitlement: null, required_roles: null, required_permissions: null, exact: true },
+    '/settings/license': { name: 'settings-license', breadcrumb: 'License', sidebar_group: 'admin', sidebar_order: 1, type: 'form_page', required_entitlement: null, required_roles: null, required_permissions: null },
     // FAR-2602: a list row plus a detail route that has NO nav row of its own,
     // mirroring the real `/runs` + `/runs/:id` pair (detail routes declare the
     // list page as their `parent`).
-    '/admin/error-log': { name: 'admin-error-log', breadcrumb: 'Error Log', sidebar_group: 'admin', sidebar_order: 2, type: 'list_page', required_tier: null, required_roles: null, required_permissions: null },
-    '/admin/error-log/:id': { name: 'admin-error-detail', breadcrumb: 'Error Detail', parent: '/admin/error-log', sidebar_group: 'admin', sidebar_order: 3, type: 'detail_page', required_tier: null, required_roles: null, required_permissions: null },
-    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 1, type: 'form_page', required_tier: null, required_roles: null, required_permissions: null, visibility: 'private_preview' },
-    '/admin/notification-delivery': { name: 'admin-notification-delivery', breadcrumb: 'Webhook Notifications', sidebar_group: 'monitor', sidebar_order: 2, feature_flag: 'webhook_notification_log', type: 'list_page', required_tier: 'team', required_roles: ['admin'], required_permissions: null },
-    '/my-profile': { name: 'my-profile', breadcrumb: 'My Profile', sidebar_group: null, sidebar_order: null, type: 'page', required_tier: null, required_roles: null, required_permissions: null },
-    '/runs/:id': { name: 'run-detail', breadcrumb: 'Run Detail', sidebar_group: 'build', sidebar_order: 4, type: 'detail_page', required_tier: null, required_roles: null, required_permissions: null },
+    '/admin/error-log': { name: 'admin-error-log', breadcrumb: 'Error Log', sidebar_group: 'admin', sidebar_order: 2, type: 'list_page', required_entitlement: null, required_roles: null, required_permissions: null },
+    '/admin/error-log/:id': { name: 'admin-error-detail', breadcrumb: 'Error Detail', parent: '/admin/error-log', sidebar_group: 'admin', sidebar_order: 3, type: 'detail_page', required_entitlement: null, required_roles: null, required_permissions: null },
+    '/evals/editor': { name: 'eval-editor', breadcrumb: 'Evals', sidebar_group: 'monitor', sidebar_order: 1, type: 'form_page', required_entitlement: null, required_roles: null, required_permissions: null, visibility: 'private_preview' },
+    '/admin/notification-delivery': { name: 'admin-notification-delivery', breadcrumb: 'Webhook Notifications', sidebar_group: 'monitor', sidebar_order: 2, feature_flag: 'webhook_notification_log', type: 'list_page', required_entitlement: 'identity', required_roles: ['admin'], required_permissions: null },
+    '/my-profile': { name: 'my-profile', breadcrumb: 'My Profile', sidebar_group: null, sidebar_order: null, type: 'page', required_entitlement: null, required_roles: null, required_permissions: null },
+    '/runs/:id': { name: 'run-detail', breadcrumb: 'Run Detail', sidebar_group: 'build', sidebar_order: 4, type: 'detail_page', required_entitlement: null, required_roles: null, required_permissions: null },
   },
 }))
 
@@ -65,6 +65,22 @@ function mountSidebar(props = {}) {
     },
   })
   return { wrapper, store: usePlanStore() }
+}
+
+// FAR-2665: the nav gates a commercial item on the plan payload's entitlement
+// grant (not a tier). Seed one entitlement on the store so a test controls the
+// grant explicitly; `store.loaded = true` is the separate "the payload landed"
+// signal the nav requires before it will reveal an entitlement-gated item.
+function setIdentityEntitlement(store: ReturnType<typeof usePlanStore>, granted: boolean) {
+  store.entitlements = [
+    {
+      key: 'identity',
+      name: 'Identity',
+      description: 'SSO, SCIM and team RBAC',
+      granted,
+      flags: ['sso', 'scim', 'team_rbac'],
+    },
+  ]
 }
 
 // The app-wide setup mock returns one mutable route object shared by every
@@ -141,32 +157,53 @@ describe('SidebarNav', () => {
     expect(hrefs).toContain('/runs')
   })
 
-  it('hides tier- and role-gated items from viewers on the community tier', async () => {
-    const { wrapper } = mountSidebar({ userRole: 'viewer' })
+  it('hides entitlement- and role-gated items from viewers', async () => {
+    const { wrapper, store } = mountSidebar({ userRole: 'viewer' })
+    setIdentityEntitlement(store, true)
+    store.loaded = true
     await flushPromises()
     const hrefs = wrapper.findAll('a[data-testid="router-link-stub"]').map((l) => l.attributes('href'))
+    // Role is the discriminator here: the licence grants Identity, but a viewer
+    // is not a team admin, so the item stays hidden.
     expect(hrefs).not.toContain('/pipelines')
   })
 
-  it('shows tier- and role-gated items to admins on a sufficient tier', async () => {
+  it('shows entitlement- and role-gated items to admins when the entitlement is granted', async () => {
     const { wrapper, store } = mountSidebar({ isSystemAdmin: true, userRole: 'admin' })
-    store.currentTier = 'team'
+    setIdentityEntitlement(store, true)
+    store.loaded = true
     await flushPromises()
     const hrefs = wrapper.findAll('a[data-testid="router-link-stub"]').map((l) => l.attributes('href'))
     expect(hrefs).toContain('/pipelines')
   })
 
-  it('hides tier-gated items when the plan is not loaded yet', async () => {
+  it('hides an entitlement-gated item when the licence does not grant it', async () => {
     const { wrapper, store } = mountSidebar({ isSystemAdmin: true, userRole: 'admin' })
-    store.tierRanks = {}
+    setIdentityEntitlement(store, false)
+    store.loaded = true
     await flushPromises()
     const hrefs = wrapper.findAll('a[data-testid="router-link-stub"]').map((l) => l.attributes('href'))
+    // Same admin role and a resolved plan, but no Identity grant — the item is
+    // hidden, which is what fails if the isEntitlementGranted check is removed.
     expect(hrefs).not.toContain('/pipelines')
   })
 
-  it('shows the Webhook Notifications item to team admins by default (FAR-2235)', async () => {
+  it('hides entitlement-gated items when the plan is not loaded yet', async () => {
     const { wrapper, store } = mountSidebar({ isSystemAdmin: true, userRole: 'admin' })
-    store.currentTier = 'team'
+    setIdentityEntitlement(store, true)
+    store.loaded = false
+    await flushPromises()
+    const hrefs = wrapper.findAll('a[data-testid="router-link-stub"]').map((l) => l.attributes('href'))
+    // The grant is known in the store, but the plan payload has not landed, so
+    // the nav must not flash the paid item. This fails if the planLoaded check
+    // is removed.
+    expect(hrefs).not.toContain('/pipelines')
+  })
+
+  it('shows the Webhook Notifications item to admins with the Identity entitlement (FAR-2235)', async () => {
+    const { wrapper, store } = mountSidebar({ isSystemAdmin: true, userRole: 'admin' })
+    setIdentityEntitlement(store, true)
+    store.loaded = true
     store.features['webhook_notification_log'] = true
     await flushPromises()
     const hrefs = wrapper.findAll('a[data-testid="router-link-stub"]').map((l) => l.attributes('href'))
@@ -175,7 +212,8 @@ describe('SidebarNav', () => {
 
   it('shows the Webhook Deliveries item when the community flag is explicitly enabled (FAR-656)', async () => {
     const { wrapper, store } = mountSidebar({ isSystemAdmin: true, userRole: 'admin' })
-    store.currentTier = 'team'
+    setIdentityEntitlement(store, true)
+    store.loaded = true
     store.features['webhook_notification_log'] = true
     await flushPromises()
     const links = wrapper.findAll('a[data-testid="router-link-stub"]')
@@ -186,7 +224,8 @@ describe('SidebarNav', () => {
 
   it('hides the flag-gated Webhook Notifications item from viewers even when the flag is enabled (FAR-656)', async () => {
     const { wrapper, store } = mountSidebar({ userRole: 'viewer' })
-    store.currentTier = 'community'
+    setIdentityEntitlement(store, true)
+    store.loaded = true
     store.features['webhook_notification_log'] = true
     await flushPromises()
     const hrefs = wrapper.findAll('a[data-testid="router-link-stub"]').map((l) => l.attributes('href'))

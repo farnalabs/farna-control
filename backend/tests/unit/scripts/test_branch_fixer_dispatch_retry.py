@@ -1,7 +1,7 @@
 """Behavioural tests for the CI -> Branch Fixer webhook dispatch.
 
 The dispatch is shell code in ``.github/workflows/ci.yml`` (job
-``notify-pr-failure``, step ``Trigger Modulo Branch Fixer``) that delegates the
+``notify-pr-failure``, step ``Trigger Farna Control Branch Fixer``) that delegates the
 retry policy to ``scripts/dispatch_with_retry.sh``. No other suite executes the
 step, so a regression in the CI caller's contract - the durable PR comment, the
 exit 1 vs exit 2 distinction, the run summary - is invisible until a real CI
@@ -43,7 +43,7 @@ pytestmark = pytest.mark.posix_only
 
 #: The step that owns the PR-failure dispatch (its body is executed below).
 PR_JOB = "notify-pr-failure"
-DISPATCH_STEP_NAME = "Trigger Modulo Branch Fixer"
+DISPATCH_STEP_NAME = "Trigger Farna Control Branch Fixer"
 
 #: GitHub expressions the step interpolates, resolved as GitHub would resolve
 #: them. An unknown expression is a deliberate failure: the test must not

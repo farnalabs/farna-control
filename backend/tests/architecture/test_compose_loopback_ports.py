@@ -9,9 +9,9 @@ host and therefore those ports (control-plane DB, queue broker, app server).
 The guard is deliberately scoped to compose files that ship with the
 product.  CI-only overlays (runner-ci.yml) are excluded.  The production
 override (docker-compose.prod.yml) is excluded from the whole-file check
-above because its `modulo` service intentionally publishes on all
+above because its `farna-control` service intentionally publishes on all
 interfaces, but it is still checked service-scoped: every service in it
-other than `modulo` must bind loopback.  That app-level exception is
+other than `farna-control` must bind loopback.  That app-level exception is
 documented in docs/security/bundled-runner-trust-boundary.md.
 """
 
@@ -34,15 +34,15 @@ _COMPOSE_FILES: list[Path] = [
 ]
 
 # docker-compose.prod.yml is EXCLUDED from the whole-file check above: the
-# modulo service publishes on ${PORT:-80} by design (the app must be reachable
+# farna-control service publishes on ${PORT:-80} by design (the app must be reachable
 # from outside).  Its port policy is documented in the trust-boundary doc.
 #
 # It is still checked SERVICE-SCOPED (see _SERVICE_SCOPED_FILES below): every
-# service in it OTHER than `modulo` must bind loopback — that covers the
+# service in it OTHER than `farna-control` must bind loopback — that covers the
 # watchdog dashboard this file now carries, and means a future non-app service
 # added to the file cannot silently publish on all interfaces.
 _SERVICE_SCOPED_FILES: list[tuple[Path, set[str]]] = [
-    (_REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.yml", {"modulo"}),
+    (_REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.yml", {"farna-control"}),
 ]
 
 
@@ -113,7 +113,7 @@ def test_default_compose_ports_are_loopback_only(compose_path: Path) -> None:
 def test_service_scoped_compose_ports_are_loopback_only(compose_path: Path, exceptions: set[str]) -> None:
     """In the prod override, every service EXCEPT the named ones binds loopback.
 
-    `modulo` is the deliberate exception (the app publishes ${PORT:-80} on all
+    `farna-control` is the deliberate exception (the app publishes ${PORT:-80} on all
     interfaces by design).  The watchdog dashboard it carries must be
     loopback-only like every other non-app port.
     """

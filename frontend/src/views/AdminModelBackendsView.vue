@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="model_backend_management" required-tier="community" show-disabled>
+  <FeatureGate feature-name="model_backend_management" show-disabled>
     <div class="page-wide">
       <PageHeader :title="$t('views.AdminModelBackendsView.model_backends')" :subtitle="$t('views.AdminModelBackendsView.manage_llm_backend_connections_and_credentials')">
         <template #right>

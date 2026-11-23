@@ -48,7 +48,7 @@
       </div>
     </div>
 
-    <FeatureGate feature-name="team_rbac" required-tier="team" show-disabled>
+    <FeatureGate feature-name="team_rbac" show-disabled>
       <div class="card p-6">
         <h2 class="text-base font-semibold mb-4">{{ $t('views.MyProfileView.my_teams') }}</h2>
         <div v-if="myTeamsLoading" data-testid="my-profile-my-teams-loading">

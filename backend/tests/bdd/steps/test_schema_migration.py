@@ -363,7 +363,7 @@ def _call_migrate(request, client, dry_run: bool = False, data_override: dict | 
 
         mock_get_schema.side_effect = _get_schema_side
 
-        def _latest_side(session, schema_id):
+        def _latest_side(session, schema_id, org_id):
             for ctx in (source_ctx, target_ctx):
                 if ctx["schema"].id == schema_id:
                     return ctx["version"]

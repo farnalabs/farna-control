@@ -7,13 +7,13 @@ type: application
 version: 0.3.329
 appVersion: "0.3.329"
 keywords:
-  - modulo
+  - farna-control
   - agent-governance
   - sdlc
   - helm
 home: https://farna.dev/control/
 sources:
-  - https://github.com/farnalabs/modulo
+  - https://github.com/farnalabs/farna-control
 maintainers:
   - name: FarnaLabs
     url: https://farnalabs.com

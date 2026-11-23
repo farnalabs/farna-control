@@ -153,10 +153,10 @@ def make_env(
         "CANNED_LOG": str(log),
         "CANNED_STATE_DIR": str(state_dir),
         # Bounded, deterministic delays: 1s exponential backoff, no jitter.
-        "DISPATCH_URL": "https://modulo.test/app/api/v1/webhooks/branch-fixer",
+        "DISPATCH_URL": "https://farna-control.test/app/api/v1/webhooks/branch-fixer",
         "DISPATCH_BODY": '{"repository":{"full_name":"farnalabs/modulo"},"prNumber":7}',
         "DISPATCH_SECRET": "test-hmac-secret",
-        "DISPATCH_LABEL": "Modulo Branch Fixer",
+        "DISPATCH_LABEL": "Farna Control Branch Fixer",
         "DISPATCH_BASE_DELAY": "1",
         "DISPATCH_MAX_DELAY": "1",
         "DISPATCH_JITTER_MAX": "0",
@@ -232,7 +232,7 @@ class TestAcceptance:
     def test_202_accepted_on_first_attempt(self, tmp_path: Path) -> None:
         proc = run_dispatch(tmp_path, codes="202", body='{"run_id":"r1"}')
         assert proc.returncode == 0
-        assert "Modulo Branch Fixer accepted (run: r1)" in proc.stdout
+        assert "Farna Control Branch Fixer accepted (run: r1)" in proc.stdout
         assert invocation_count(tmp_path) == 1
 
     def test_coalesced_status_is_a_notice_not_a_failure(self, tmp_path: Path) -> None:
@@ -457,7 +457,7 @@ class TestFailureReporting:
         proc = run_dispatch(tmp_path, codes="429", body='{"detail":"busy"}', summary=summary, extra_env={"DISPATCH_MAX_ATTEMPTS": "1"})
         assert proc.returncode == 1
         text = summary.read_text(encoding="utf-8")
-        assert "### Modulo Branch Fixer dispatch failed: capacity saturated" in text
+        assert "### Farna Control Branch Fixer dispatch failed: capacity saturated" in text
         assert "Last HTTP:" in text
         assert "Next step:" in text
 

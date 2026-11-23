@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Modulo support bundle - Docker Compose collector (FAR-2306)
+# Farna Control support bundle - Docker Compose collector (FAR-2306)
 # =============================================================================
 #
 # WHY THIS EXISTS
@@ -832,7 +832,7 @@ missing_json_list="$(cut -f1 "$MISSING_FILE" | sed 's/.*/"&"/' | paste -sd, -)" 
 
 MANIFEST="$MEMBERS/MANIFEST.txt"
 {
-  printf 'Modulo support bundle\n'
+  printf 'Farna Control support bundle\n'
   printf '=====================\n'
   printf 'bundle_format_version: %s\n' "$FORMAT_VERSION"
   printf 'ref: %s\n' "$REF"

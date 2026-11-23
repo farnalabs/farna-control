@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="audit_viewer" required-tier="team" show-disabled>
+  <FeatureGate feature-name="audit_viewer" show-disabled>
 
     <div class="page-wide">
     <PageHeader :title="$t('views.AdminAuditView.audit_log')" :subtitle="$t('views.AdminAuditView.tamper_evident_event_trail')">

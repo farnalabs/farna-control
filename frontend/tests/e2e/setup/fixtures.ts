@@ -4,7 +4,7 @@ import { test as base, expect, type Page } from '@playwright/test'
 import { startCoverage, stopCoverage } from './coverage'
 import { getLocalE2eBaseUrl, getTestEnv, type TestEnv } from './env'
 import { loginThroughUi } from './login'
-import { installTeamTierNavigationGuard } from './target-tier'
+import { installEntitlementNavigationGuard } from './target-tier'
 
 type SsoBackendProcess = { stop: () => Promise<void> }
 
@@ -79,7 +79,7 @@ export const test = base.extend<{ env: TestEnv; localSsoBackend: SsoBackendProce
     // can only redirect to the dashboard there. Skip such a navigation with a
     // clear reason instead of failing the heading assertion (see
     // setup/target-tier.ts). Inert on local / a Team-licensed target.
-    installTeamTierNavigationGuard(page, env, (reason) => testInfo.skip(true, reason))
+    installEntitlementNavigationGuard(page, env, (reason) => testInfo.skip(true, reason))
     const enabled = process.env.VITE_COVERAGE === 'true'
     if (enabled) await startCoverage(page)
     await use(page)
@@ -134,6 +134,57 @@ export function mintMockAccessToken(overrides: Record<string, unknown> = {}): st
 const MOCK_ACCESS_TOKEN = mintMockAccessToken()
 const MOCK_REFRESH_TOKEN = 'mock-refresh-token-for-e2e-tests'
 
+// FAR-2665: the plan payload now carries the commercial ENTITLEMENT grant, and
+// a behaviour flag is no longer opened by a tier. Before FAR-2665 the local
+// mock answered with `flags: []` plus `license.tier: 'enterprise'`, and the
+// FeatureGate's `required-tier` fallback (enterprise rank 2 >= community/team)
+// opened every gated page. That fallback is gone, so the mock must model the
+// fully-licensed, everything-enabled target explicitly: every gated behaviour
+// flag active and every entitlement granted. Without it `flags: []` fails every
+// FeatureGate closed (#settingsmcpview-client never renders) and hides the
+// entitlement-gated routes (/settings/sso, /admin/audit, /admin/costs, ...).
+const MOCK_ENTITLEMENTS = [
+  { key: 'identity', name: 'Identity', description: 'SSO, SCIM and team RBAC', granted: true, flags: ['sso', 'scim', 'team_rbac'] },
+  { key: 'audit_evidence', name: 'Audit and evidence', description: 'Audit viewer and run retention', granted: true, flags: ['audit_viewer', 'admin_run_retention'] },
+  { key: 'cost_governance', name: 'Cost governance', description: 'Spend limits, cost controls and breakdown', granted: true, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+]
+
+// Every behaviour flag a view gates on with a `feature-name` FeatureGate. On
+// main each was opened by the tier fallback above; keep them all active so the
+// mock target stays the fully-enabled instance those specs were written for.
+const MOCK_ACTIVE_FLAGS = [
+  'assistant',
+  'audit_viewer',
+  'plugin_management',
+  'admin_cost_breakdown',
+  'admin_cost_controls',
+  'error_tracking',
+  'model_backend_management',
+  'webhook_notification_log',
+  'team_rbac',
+  'admin_run_retention',
+  'environment_profiles',
+  'admin_spend_limits',
+  'runtime_config',
+  'user_management',
+  'eval_system',
+  'schema_version_history',
+  'email_config',
+  'error_forwarders',
+  'mcp_server',
+  'observability',
+  'rate_limits',
+  'sso',
+  'webhook_trigger',
+]
+
+const MOCK_PLAN = {
+  license: { tier: 'enterprise', org_id: '1', expires_at: null },
+  dev_mode: true,
+  flags: MOCK_ACTIVE_FLAGS.map((name) => ({ name, currently_active: true })),
+  entitlements: MOCK_ENTITLEMENTS,
+}
+
 // Shared date spine for the dashboard summary/trends fixtures. Kept as data
 // (rather than inlined per series) so the seven trends arrays stay the same
 // length and every series lines up on the same dates for the charts.
@@ -174,22 +225,14 @@ export async function setupLocalMockApi(page: Page) {
       // planStore bootstraps from the caller-scoped GET /api/v1/plan (FAR-1809
       // collapsed the old instance-admin /api/v1/admin/feature-flags reads into
       // it); the instance-admin endpoint still backs the admin feature-flags
-      // page, so answer both with the plan payload shape.
+      // page, so answer both with the plan payload shape. FAR-2665: the payload
+      // also carries the entitlement grant — see MOCK_PLAN.
       // dev_mode: true so private_preview routes (evals, runs-diff, feedback
       // inbox, saved views, node categories, feature flags, monitoring,
       // error forwarders, runtime config, rate limits, ...) resolve on the
       // local mock-API target instead of redirecting to the dashboard. Local
       // e2e mirrors staging, which also runs with dev mode on.
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ flags: [], license: { tier: 'enterprise' }, dev_mode: true }) })
-    }
-    if (url.includes('/api/v1/plan')) {
-      // FAR-1809: the caller-scoped plan bootstrap (`GET /api/v1/plan`) that
-      // replaced the instance-admin `/admin/feature-flags` + `/admin/license`
-      // pair the app's planStore used to read. Same vocabulary (tier, licence
-      // view, dev_mode, effective flag map) — dev_mode: true so private_preview
-      // routes resolve on the local mock-API target instead of redirecting to
-      // the dashboard (local e2e mirrors staging, which also runs dev mode on).
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ flags: [], license: { tier: 'enterprise', org_id: '1', expires_at: null }, dev_mode: true }) })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PLAN) })
     }
     if (url.includes('/api/v1/admin/license')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ expires_at: null, org_id: '1', tier: 'enterprise' }) })

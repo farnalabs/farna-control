@@ -37,7 +37,7 @@ from farna.api.db_error_handling import (
 )
 from farna.api.dependencies import (
     get_db_session,
-    require_feature,
+    require_entitlement,
     require_system_or_org_admin,
 )
 from farna.auth.dependencies import get_current_tenant_user
@@ -180,7 +180,7 @@ def _delete_run_artifacts(runs: list[Run], org_id: uuid.UUID | None) -> None:
             )
 
 
-@router.get("/candidates", dependencies=[require_feature("admin_run_retention")])
+@router.get("/candidates", dependencies=[require_entitlement("audit_evidence")])
 @handle_db_errors("admin.run_retention.candidates")
 async def candidates(
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -280,7 +280,7 @@ async def candidates(
 # a complete one. Closing that gap needs a post-return mechanism (e.g. an
 # error frame / trailer), which is deliberately out of scope for the decorator
 # convention and left as a documented decision rather than an inert wrapper.
-@router.post("/export", dependencies=[require_feature("admin_run_retention")])
+@router.post("/export", dependencies=[require_entitlement("audit_evidence")])
 async def export(
     req: ExportRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
@@ -344,7 +344,7 @@ async def export(
                 fail_closed=True,
             )
         ),
-        require_feature("admin_run_retention"),
+        require_entitlement("audit_evidence"),
     ],
 )
 @handle_db_errors("admin.run_retention.purge")

@@ -58,7 +58,7 @@ def test_build_list_conditions_emits_every_filter_in_chain_order() -> None:
 
 def test_build_list_conditions_defaults_to_excluding_in_dev_tier() -> None:
     conditions = _build_list_conditions(
-        org_id=None,
+        org_id=_ORG,
         primitive_type=None,
         primitive_types=None,
         search=None,
@@ -66,10 +66,19 @@ def test_build_list_conditions_defaults_to_excluding_in_dev_tier() -> None:
         excluded_tiers=None,
     )
 
-    # deleted_at IS NULL, source != 'community' (retired), tier NOT IN ('in_dev').
-    assert len(conditions) == 3
+    # The org clamp is unconditional (FAR-2692), plus deleted_at IS NULL,
+    # source != 'community' (retired) and tier NOT IN ('in_dev').
+    assert len(conditions) == 4
     assert "library_primitives.source != 'community'" in _compile(
-        org_id=None,
+        org_id=_ORG,
+        primitive_type=None,
+        primitive_types=None,
+        search=None,
+        source=None,
+        excluded_tiers=None,
+    )
+    assert f"library_primitives.organisation_id = '{_ORG}'" in _compile(
+        org_id=_ORG,
         primitive_type=None,
         primitive_types=None,
         search=None,
@@ -77,7 +86,7 @@ def test_build_list_conditions_defaults_to_excluding_in_dev_tier() -> None:
         excluded_tiers=None,
     )
     assert "library_primitives.tier NOT IN ('in_dev')" in _compile(
-        org_id=None,
+        org_id=_ORG,
         primitive_type=None,
         primitive_types=None,
         search=None,
@@ -91,7 +100,7 @@ def test_build_list_conditions_treats_an_empty_excluded_tiers_list_as_no_filter(
     # "exclude nothing". Collapsing the two with a falsy check would silently
     # start excluding in_dev again.
     sql = _compile(
-        org_id=None,
+        org_id=_ORG,
         primitive_type=None,
         primitive_types=None,
         search=None,
@@ -104,7 +113,7 @@ def test_build_list_conditions_treats_an_empty_excluded_tiers_list_as_no_filter(
 
 def test_build_list_conditions_prefers_the_types_list_over_the_scalar_type() -> None:
     sql = _compile(
-        org_id=None,
+        org_id=_ORG,
         primitive_type="agent",
         primitive_types=["schema"],
         search=None,

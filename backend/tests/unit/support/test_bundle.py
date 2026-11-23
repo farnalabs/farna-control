@@ -12,7 +12,7 @@ Covers the contract the ticket pins down:
 * ``--list`` / ``--show`` never print an unredacted value (d);
 * unknown-member forward compatibility (e);
 * crash-loop log collapse (f);
-* ``modulo doctor --report`` still produces a valid v1 bundle (g).
+* ``farna-control doctor --report`` still produces a valid v1 bundle (g).
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ def _build_full(tmp_path: Path) -> Path:
         out,
         sources=BundleSources(
             data_dir=tmp_path,
-            doctor_output="modulo doctor: healthy",
+            doctor_output="farna-control doctor: healthy",
             settings=_FakeSettings(),
             environ={},
             enable_db=False,

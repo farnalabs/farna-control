@@ -435,6 +435,27 @@ def test_list_schema_fields_happy_path(client: tuple[TestClient, AsyncMock]) -> 
     assert fields[0]["required"] is True
 
 
+def test_list_schema_fields_real_loader_returns_200(client: tuple[TestClient, AsyncMock]) -> None:
+    """Exercise the REAL ``_load_latest_definition`` body (FAR-2689).
+
+    The happy-path test above patches ``_load_latest_definition`` wholesale, so
+    the loader's own org-clamped ``_get_latest_version`` call never runs. Patch
+    the loader's callees instead and assert the caller's org id is threaded
+    through the real body.
+    """
+    http, session = client
+    version = _make_schema_version(_SCHEMA_ID)
+    latest = AsyncMock(return_value=version)
+    with ExitStack() as stack:
+        stack.enter_context(patch(f"{_PREFIX}set_rls_org", new_callable=AsyncMock))
+        stack.enter_context(patch(f"{_PREFIX}get_schema", new=AsyncMock(return_value=_make_schema())))
+        stack.enter_context(patch(f"{_PREFIX}_get_latest_version", new=latest))
+        resp = http.get(f"/api/v1/schemas/{_SCHEMA_ID}/fields")
+
+    assert resp.status_code == 200, resp.text
+    latest.assert_awaited_once_with(session, _SCHEMA_ID, _ORG_ID)
+
+
 def test_list_schema_fields_assert_error_matrix(client: tuple[TestClient, AsyncMock]) -> None:
     http, _session = client
     _assert_error_matrix(

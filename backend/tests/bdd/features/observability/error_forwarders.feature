@@ -83,8 +83,8 @@ Feature: Error Forwarders
     Then the response status is 501
     And the error mentions "migration"
 
-  Scenario: Feature gating returns 402 when disabled
+  Scenario: The operator kill switch returns 402 when error forwarders are switched off
     Given the "error_forwarders" feature is not enabled on my plan
     When I GET "/api/v1/errors/forwarders"
     Then the response status is 402
-    And the error mentions "not available on your plan"
+    And the error mentions "not enabled for this organisation"

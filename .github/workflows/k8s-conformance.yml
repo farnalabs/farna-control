@@ -14,7 +14,7 @@ name: "K8s conformance (kind + managed)"
 #      suite: a deliberately broken adapter must FAIL, and a
 #      kill-before-collect must be detected rather than reported as a
 #      synthetic success. It also lints the Helm chart (helm lint
-#      deploy/helm/modulo) - since FAR-1558 the trigger paths and the
+#      deploy/helm/farna-control) - since FAR-1558 the trigger paths and the
 #      step-level gate both cover deploy/helm/**, and a chart-only change
 #      lints WITHOUT creating the cluster (the `chart` output gates the helm
 #      install + lint; the cluster steps stay on `changed`). A green
@@ -326,7 +326,7 @@ jobs:
         # the suite cannot exercise anyway. Kept on `changed || chart` (not
         # `chart` alone) so conformance runs keep linting too, exactly as
         # before.
-        run: helm lint deploy/helm/modulo
+        run: helm lint deploy/helm/farna-control
 
       - name: Sync backend deps
         if: steps.detect.outputs.changed == 'true'

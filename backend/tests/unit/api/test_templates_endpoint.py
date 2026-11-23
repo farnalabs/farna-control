@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 
 from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
-from farna.auth.dependencies import get_current_tenant_user, get_current_user
+from farna.auth.dependencies import (
+    get_current_tenant_user,
+    get_current_tenant_user_or_api_key,
+    get_current_user,
+)
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
@@ -98,6 +102,14 @@ def client() -> Generator[TestClient, None, None]:
         account_id=_USER_ID,
         org_role="admin",
     )
+    # FAR-2682: the template LIST is a pipeline read resolved via the
+    # any-credential dependency; both credential stacks share this principal.
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(
+        username="testuser",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="admin",
+    )
     mock_plan = MagicMock()
     mock_plan.feature_enabled.return_value = True
     app.dependency_overrides[get_plan_context] = lambda: mock_plan
@@ -115,12 +127,13 @@ def unauth_client() -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-def _set_tenant_principal(role: str) -> None:
+def _set_tenant_principal(role: str, *, via_api_key: bool = False) -> None:
     app.dependency_overrides[get_current_tenant_user] = lambda: TenantPrincipal(
         username="tenantuser",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,
         org_role=role,
+        via_api_key=via_api_key,
     )
 
 
@@ -204,6 +217,44 @@ def test_list_templates_empty(client: TestClient) -> None:
 def test_list_templates_requires_auth(unauth_client: TestClient) -> None:
     resp = unauth_client.get("/api/v1/templates")
     assert resp.status_code in {403, 401}
+
+
+def test_list_templates_scopes_to_caller_org_for_a_jwt(client: TestClient) -> None:
+    """FAR-2684: a browser JWT's org is threaded into the CRUD query."""
+    _set_tenant_principal("viewer", via_api_key=False)
+    page_result = MagicMock()
+    page_result.items = []
+    page_result.total = 0
+    page_result.page = 1
+    page_result.page_size = 20
+
+    with patch("farna.api.routes.templates.list_templates", new_callable=AsyncMock) as mock_list:
+        mock_list.return_value = page_result
+        resp = client.get("/api/v1/templates")
+
+    assert resp.status_code == 200
+    mock_list.assert_awaited_once()
+    assert mock_list.await_args is not None
+    assert mock_list.await_args.kwargs["org_id"] == _ORG_ID
+
+
+def test_list_templates_scopes_to_caller_org_for_an_org_api_key(client: TestClient) -> None:
+    """FAR-2684: an org API-key principal's org is threaded into the CRUD query."""
+    _set_tenant_principal("operator", via_api_key=True)
+    page_result = MagicMock()
+    page_result.items = []
+    page_result.total = 0
+    page_result.page = 1
+    page_result.page_size = 20
+
+    with patch("farna.api.routes.templates.list_templates", new_callable=AsyncMock) as mock_list:
+        mock_list.return_value = page_result
+        resp = client.get("/api/v1/templates")
+
+    assert resp.status_code == 200
+    mock_list.assert_awaited_once()
+    assert mock_list.await_args is not None
+    assert mock_list.await_args.kwargs["org_id"] == _ORG_ID
 
 
 # ---------------------------------------------------------------------------

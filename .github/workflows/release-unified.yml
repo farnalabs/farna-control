@@ -840,9 +840,27 @@ jobs:
         if: inputs.mode == 'cut'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2690: release-freeze / release-publication-hold are
+          # ruleset-protected (delete + force allowed only for the repo admin
+          # role), so these marker operations authenticate as an admin with
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this one command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           hold_lookup_rc=0
           git ls-remote --exit-code origin refs/heads/release-publication-hold >/dev/null 2>/tmp/release-publication-hold-error || hold_lookup_rc=$?
           case "$hold_lookup_rc" in
@@ -859,7 +877,7 @@ jobs:
               ;;
           esac
           git branch -f release-publication-hold HEAD
-          git push origin refs/heads/release-publication-hold
+          marker_git push "$MARKER_REMOTE" refs/heads/release-publication-hold:refs/heads/release-publication-hold
           echo "established=true" >> "$GITHUB_OUTPUT"
           echo "Established release-publication-hold before the version-bump PR."
 
@@ -903,7 +921,7 @@ jobs:
               # bump-version.py updates it. Staging it here keeps the release PR
               # consistent with the always-on UV lockfile freshness CI gate.
               uv lock --project backend
-              git add backend/pyproject.toml backend/uv.lock frontend/package.json deploy/helm/modulo/Chart.yaml
+              git add backend/pyproject.toml backend/uv.lock frontend/package.json deploy/helm/farna-control/Chart.yaml
               if git diff --cached --quiet; then
                 echo "::error::bump-version.py changed nothing - refusing to create an empty release PR."
                 exit 1
@@ -1267,14 +1285,32 @@ jobs:
         if: always() && inputs.mode == 'cut' && steps.publication-hold.outputs.established == 'true' && (steps.cut-commit.outcome != 'success' || steps.schema-freshness.outcome != 'success')
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2690: release-freeze / release-publication-hold are
+          # ruleset-protected (delete + force allowed only for the repo admin
+          # role), so these marker operations authenticate as an admin with
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this one command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           hold_lookup_rc=0
           git ls-remote --exit-code origin refs/heads/release-publication-hold >/dev/null 2>/tmp/release-publication-hold-error || hold_lookup_rc=$?
           case "$hold_lookup_rc" in
             0)
-              if ! git push origin --delete refs/heads/release-publication-hold; then
+              if ! marker_git push "$MARKER_REMOTE" --delete refs/heads/release-publication-hold; then
                 echo "::error::Could not remove release-publication-hold after a failed cut preparation."
                 exit 1
               fi
@@ -1298,10 +1334,28 @@ jobs:
         if: inputs.mode == 'cut'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2690: release-freeze / release-publication-hold are
+          # ruleset-protected (delete + force allowed only for the repo admin
+          # role), so these marker operations authenticate as an admin with
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this one command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           BASE="v${VERSION}"
 
           # Next free RC number for this version.
@@ -1320,7 +1374,7 @@ jobs:
           # latest freeze.
           if [ "${{ inputs.freeze }}" = "true" ]; then
             git branch -f release-freeze HEAD
-            git push origin refs/heads/release-freeze --force
+            marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             echo "Release freeze established on refs/heads/release-freeze."
           else
             echo "Release freeze skipped (inputs.freeze != true); merge queue will not be paused."
@@ -1328,7 +1382,7 @@ jobs:
 
           # The hold only covers the version-bump push. Once the authoritative
           # release-freeze exists, remove the temporary suppression marker.
-          if ! git push origin --delete refs/heads/release-publication-hold; then
+          if ! marker_git push "$MARKER_REMOTE" --delete refs/heads/release-publication-hold; then
             echo "::error::Could not remove release-publication-hold after establishing release-freeze; refusing to continue with a stale suppression marker."
             exit 1
           fi
@@ -1342,14 +1396,32 @@ jobs:
         if: always() && inputs.mode == 'cut' && steps.publication-hold.outputs.established == 'true' && steps.cut.outcome != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2690: release-freeze / release-publication-hold are
+          # ruleset-protected (delete + force allowed only for the repo admin
+          # role), so these marker operations authenticate as an admin with
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this one command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           hold_lookup_rc=0
           git ls-remote --exit-code origin refs/heads/release-publication-hold >/dev/null 2>/tmp/release-publication-hold-error || hold_lookup_rc=$?
           case "$hold_lookup_rc" in
             0)
-              if ! git push origin --delete refs/heads/release-publication-hold; then
+              if ! marker_git push "$MARKER_REMOTE" --delete refs/heads/release-publication-hold; then
                 echo "::error::Could not remove release-publication-hold after a failed release cut."
                 exit 1
               fi
@@ -1373,10 +1445,18 @@ jobs:
         if: inputs.mode == 'recut'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
+          # A freeze move needs the admin credential. Check it before creating
+          # an RC tag: a recut that dies after tagging would strand a tag with
+          # no freeze to match it, and the tag push cannot be undone here.
+          if [ "${{ inputs.freeze }}" = "true" ] && [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to move the ruleset-protected release-freeze ref."
+            exit 1
+          fi
           BASE="v${VERSION}"
 
           # A recut must represent the fix currently on main, never re-use the
@@ -1398,10 +1478,25 @@ jobs:
           git push origin "$RC_TAG"
 
           # Move the freeze to the new RC commit so main remains frozen at the
-          # exact commit sent to deploy and rc-validate.
+          # exact commit sent to deploy and rc-validate. Only this conditional
+          # marker push needs the admin credential; a recut with freeze disabled
+          # performs no marker operation at all.
           if [ "${{ inputs.freeze }}" = "true" ]; then
+            # FAR-2690: release-freeze is ruleset-protected (delete + force
+            # allowed only for the repo admin role), so this marker push
+            # authenticates as an admin with RELEASE_MARKER_TOKEN (already
+            # verified above, before the RC tag was created).
+            echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+            # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+            # points it at a local bare repo; a GHES install or a fork points it at its own host.
+            MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+            # checkout persists the workflow token as an http extraheader that git
+            # sends INSTEAD of the URL credential; clear it for this command.
+            marker_git() {
+              GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+            }
             git branch -f release-freeze HEAD
-            git push origin refs/heads/release-freeze --force
+            marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             echo "Release freeze moved to ${RC_TAG} on refs/heads/release-freeze."
           else
             echo "Release freeze skipped (inputs.freeze != true); merge queue will not be paused."
@@ -1420,6 +1515,7 @@ jobs:
           # authenticate as the trusted bot identity; never fall back to the
           # workflow token, which the same-repo author guard rejects.
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_RELEASE_PR_TOKEN }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
         shell: bash
         run: |
@@ -1428,6 +1524,23 @@ jobs:
             echo "::error::FARNA_CONTROL_RELEASE_PR_TOKEN is missing or empty; refusing to drive the promote PR with github-actions[bot]."
             exit 1
           fi
+          # FAR-2690: release-freeze / release-publication-hold are
+          # ruleset-protected (delete + force allowed only for the repo admin
+          # role), so these marker operations authenticate as an admin with
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this one command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           GA_TAG="v${VERSION}"
           BRANCH="release/promote-${VERSION}"
 
@@ -1502,8 +1615,8 @@ jobs:
               ;;
           esac
           git branch -f release-publication-hold HEAD
-          git push origin refs/heads/release-publication-hold
-          git push origin --delete refs/heads/release-freeze
+          marker_git push "$MARKER_REMOTE" refs/heads/release-publication-hold:refs/heads/release-publication-hold
+          marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze
           echo "Swapped release-freeze for release-publication-hold while the promote PR merges."
           git fetch origin --tags
           PREV_FILE="$(mktemp)"
@@ -1715,9 +1828,9 @@ jobs:
             # GA publication step runs under it, and the finalisation step
             # below is the only place allowed to lift it.
             git branch -f release-freeze HEAD
-            git push origin refs/heads/release-freeze --force
+            marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             # The temporary suppression marker is now redundant with the freeze.
-            if ! git push origin --delete refs/heads/release-publication-hold; then
+            if ! marker_git push "$MARKER_REMOTE" --delete refs/heads/release-publication-hold; then
               echo "::error::Could not remove release-publication-hold after re-establishing release-freeze; refusing a stale suppression marker."
               exit 1
             fi
@@ -2012,8 +2125,8 @@ jobs:
           echo "${GH_TOKEN}" | helm registry login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
           # Package and push chart
-          helm package deploy/helm/modulo --destination /tmp/helm-pkg --version "$VERSION_NUM" --app-version "$VERSION_NUM"
-          CHART_TGZ="/tmp/helm-pkg/modulo-${VERSION_NUM}.tgz"
+          helm package deploy/helm/farna-control --destination /tmp/helm-pkg --version "$VERSION_NUM" --app-version "$VERSION_NUM"
+          CHART_TGZ="/tmp/helm-pkg/farna-control-${VERSION_NUM}.tgz"
           helm push "$CHART_TGZ" "oci://ghcr.io/${IMAGE_NAMESPACE}/charts"
 
       # -----------------------------------------------------------------------
@@ -2062,7 +2175,7 @@ jobs:
             --from "$PREV" --to "$GA_TAG" \
             --version "$VERSION" --output CHANGELOG.md > "$NOTES_FILE"
 
-          RELEASE_TITLE="Modulo ${GA_TAG}"
+          RELEASE_TITLE="Farna Control ${GA_TAG}"
           if gh release view "$GA_TAG" >/dev/null 2>&1; then
             gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
             echo "GitHub Release updated for ${GA_TAG} with title ${RELEASE_TITLE}."
@@ -2076,14 +2189,32 @@ jobs:
         if: inputs.mode == 'promote' && failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2690: release-freeze / release-publication-hold are
+          # ruleset-protected (delete + force allowed only for the repo admin
+          # role), so these marker operations authenticate as an admin with
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this one command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           GA_TAG="v${VERSION}"
           if git rev-parse -q --verify "refs/tags/${GA_TAG}" >/dev/null 2>&1; then
             git branch -f release-freeze HEAD
-            git push origin refs/heads/release-freeze --force
+            marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             echo "Re-established release-freeze after failed GA publication."
           elif git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>&1; then
             echo "GA tag ${GA_TAG} was not created; existing release-freeze remains active."
@@ -2095,7 +2226,7 @@ jobs:
             git fetch origin main
             RESTORE_SHA="$(git rev-parse origin/main)"
             git branch -f release-freeze "$RESTORE_SHA"
-            git push origin refs/heads/release-freeze --force
+            marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             echo "Restored release-freeze at ${RESTORE_SHA} after failed GA promotion."
           fi
           # A failed promotion must not leave the temporary suppression marker
@@ -2104,7 +2235,7 @@ jobs:
           git ls-remote --exit-code origin refs/heads/release-publication-hold >/dev/null 2>/tmp/release-publication-hold-error || hold_lookup_rc=$?
           case "$hold_lookup_rc" in
             0)
-              if ! git push origin --delete refs/heads/release-publication-hold; then
+              if ! marker_git push "$MARKER_REMOTE" --delete refs/heads/release-publication-hold; then
                 echo "::error::Could not remove release-publication-hold after a failed GA promotion."
                 exit 1
               fi
@@ -2125,14 +2256,31 @@ jobs:
         if: inputs.mode == 'promote' && success()
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2690: release-freeze is ruleset-protected (delete allowed only
+          # for the repo admin role), so this marker delete authenticates as an
+          # admin with RELEASE_MARKER_TOKEN.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to delete the ruleset-protected release-freeze ref."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
           if ! git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>&1; then
             echo "::error::release-freeze is missing at final GA publication step; refusing to lift an unknown hold."
             exit 1
           fi
-          git push origin --delete refs/heads/release-freeze
+          marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze
           echo "All GA publication steps succeeded; freeze lifted and merge queue resumes."
 
       # Final step of the release job: normalise the release candidate tag into
@@ -2857,7 +3005,7 @@ jobs:
           # invalidates every verify-against-the-manifest already downloaded.
           # An existing release gets an upload (which fails loudly on an
           # existing asset); a new one is created with its assets atomically.
-          RELEASE_TITLE="Modulo ${RC_TAG}"
+          RELEASE_TITLE="Farna Control ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
             gh release edit "$TAG" --title "$RELEASE_TITLE" "${PUBLISH_ARGS[@]}"
@@ -3422,7 +3570,7 @@ jobs:
           set -euo pipefail
           python3 -m venv /tmp/modulo-pypi-smoke
           /tmp/modulo-pypi-smoke/bin/python -m pip install --disable-pip-version-check --no-cache-dir dist/*.whl
-          /tmp/modulo-pypi-smoke/bin/modulo apply --help
+          /tmp/modulo-pypi-smoke/bin/farna-control apply --help
 
       - name: Publish farna-control via Trusted Publishing
         # PyPI Trusted Publisher must be registered by a human for this
@@ -3677,6 +3825,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ inputs.version }}
+          RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -3770,7 +3919,24 @@ jobs:
           fi
 
           # 4. Proven ours and unpublished: clear it so the merge queue resumes.
-          if ! git push origin --delete refs/heads/release-freeze; then
+          # FAR-2690: release-freeze is ruleset-protected (delete allowed only
+          # for the repo admin role), so this marker delete authenticates as an
+          # admin with RELEASE_MARKER_TOKEN. Evaluated here rather than at the
+          # top so the early "preserve" exits above stay credential-free.
+          if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to delete the ruleset-protected release-freeze ref."
+            exit 1
+          fi
+          echo "::add-mask::${RELEASE_MARKER_TOKEN}"
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
+          # INSTEAD of the URL credential; clear it for this command.
+          marker_git() {
+            GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
+          }
+          if ! marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze; then
             echo "::error::Could not delete refs/heads/release-freeze after a failed cut/recut; the merge queue remains paused."
             exit 1
           fi

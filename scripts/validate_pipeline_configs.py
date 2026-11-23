@@ -1,4 +1,4 @@
-"""Validate Modulo pipeline configuration patterns.
+"""Validate Farna Control pipeline configuration patterns.
 
 Checks for known bug patterns in sandbox_agent pipeline configs:
 1. Empty ``agent_prompt`` that would cause opencode to hang (llm mode)

@@ -79,7 +79,7 @@
             />
 
             <div class="space-y-6">
-              <FeatureGate feature-name="schema_version_history" required-tier="community" show-disabled>
+              <FeatureGate feature-name="schema_version_history" show-disabled>
                 <SchemaVersionHistory
                   :versions="versions"
                   :loading="loadingVersions"

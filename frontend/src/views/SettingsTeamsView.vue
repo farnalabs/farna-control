@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="team_rbac" required-tier="team" show-disabled>
+  <FeatureGate feature-name="team_rbac" show-disabled>
     <div class="page-wide">
     <PageHeader :title="$t('views.SettingsTeamsView.page_title')" :subtitle="$t('views.SettingsTeamsView.page_subtitle')">
       <template #right>

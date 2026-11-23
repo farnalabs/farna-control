@@ -2,7 +2,7 @@
   <div data-theme="agent" class="page-wide">
     <PageHeader :title="$t('views.SettingsRateLimitsView.rate_limits')" data-testid="rate-limits-title" :subtitle="$t('views.SettingsRateLimitsView.view_perroute_rate_limiting_rules_and_current_usage')" />
 
-    <FeatureGate feature-name="rate_limits" required-tier="team" show-disabled>
+    <FeatureGate feature-name="rate_limits" show-disabled>
 
     <div v-if="loading" class="space-y-6">
       <div class="card p-6 animate-pulse">

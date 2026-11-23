@@ -1,4 +1,4 @@
-Modulo has been installed!
+Farna Control has been installed!
 
 Release: {{ .Release.Name }}
 Namespace: {{ include "farna-control.namespace" . }}
@@ -17,12 +17,12 @@ Frontend:
 === Access ===
 
 {{- if .Values.ingress.enabled }}
-Ingress is enabled. Access Modulo at:
+Ingress is enabled. Access Farna Control at:
 {{- range .Values.ingress.hosts }}
   https://{{ .host }}
 {{- end }}
 {{- else }}
-Port-forward to access Modulo locally:
+Port-forward to access Farna Control locally:
 
   # Frontend (port 80)
   kubectl port-forward svc/{{ include "farna-control.fullname" . }}-frontend 8080:{{ .Values.frontend.service.port }} -n {{ include "farna-control.namespace" . }}
@@ -37,7 +37,7 @@ Then open: http://localhost:8080
 
 Create an admin user by setting FARNA_CONTROL_USERS in the backend env:
 
-  helm upgrade {{ .Release.Name }} ./deploy/helm/modulo \
+  helm upgrade {{ .Release.Name }} ./deploy/helm/farna-control \
     --set backend.env.FARNA_CONTROL_USERS="admin:$(openssl passwd -6 your-password)"
 
 Or use existingSecret to reference a pre-created Kubernetes Secret.

@@ -300,7 +300,7 @@ class TestListRatings:
         result_mock.scalars.return_value = []
         _given_execute(mock_session, count_mock, result_mock)
 
-        ratings = await list_ratings_for_primitive(mock_session, prim_id)
+        ratings = await list_ratings_for_primitive(mock_session, prim_id, org_id=uuid.uuid4())
         assert isinstance(ratings, PageResult)
         assert not ratings.items
         assert ratings.total == 0
@@ -318,7 +318,7 @@ class TestListRatings:
         result_mock.scalars.return_value = [rating_1, rating_2]
         _given_execute(mock_session, count_mock, result_mock)
 
-        ratings = await list_ratings_for_primitive(mock_session, prim_id)
+        ratings = await list_ratings_for_primitive(mock_session, prim_id, org_id=uuid.uuid4())
         assert len(ratings.items) == 2
         assert ratings.total == 2
 

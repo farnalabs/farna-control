@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="eval_system" required-tier="community" show-disabled>
+  <FeatureGate feature-name="eval_system" show-disabled>
 
     <div class="page-wide">
     <PageHeader
