@@ -8,7 +8,7 @@ workspace can outlive a revoke and vice-versa. This module makes them ONE step:
 
 1. **revoke the run's credentials** — every Modulo-minted per-run key linked to
    the run (``auth.api_key.revoke_run_api_key``);
-2. **destroy every workspace labelled ``modulo.run.id = <run_id>``** — across the
+2. **destroy every workspace labelled with the run id = <run_id>** — across the
    deployment's applicable runtime tiers (Docker / Kubernetes / E2B), reusing the
    provider-neutral sources the workspace-orphan reconciler owns;
 3. **write ONE ``run.teardown_sealed`` fact** to ``system_audit_events``,
@@ -106,7 +106,7 @@ async def _revoke_credentials(
 
 
 async def _destroy_run_workspaces(run_id: uuid.UUID) -> dict[str, int]:
-    """Destroy every workspace labelled ``modulo.run.id == run_id`` (best-effort).
+    """Destroy every workspace labelled with this run id (best-effort).
 
     Imported lazily so this module (and the executor's terminalisation path) does
     not pull the runtime-provider stack at import time; the reconciler owns the

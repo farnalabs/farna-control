@@ -12,6 +12,7 @@
         <DataCard
           :title="$t('views.AdminCostControlsView.budget_overview')"
           :description="$t('views.AdminCostControlsView.current_billing_period_spend_vs_budget')"
+          heading-level="h2"
         >
           <template #default>
             <LoadingSpinner v-if="costsLoading" />
@@ -62,7 +63,7 @@
            heading-level="h2"
          >
            <template #default>
-            <EmptyState v-if="teams.length === 0" :title="$t('views.AdminCostControlsView.no_teams_found')" />
+            <EmptyState v-if="teams.length === 0" variant="bare" :title="$t('views.AdminCostControlsView.no_teams_found')" />
             <DataTable
               v-else
               :columns="[
@@ -103,6 +104,7 @@
          <DataCard
            :title="$t('views.AdminCostControlsView.alert_thresholds')"
            :description="$t('views.AdminCostControlsView.receive_notifications_when_spend_reaches_thresholds')"
+           heading-level="h2"
          >
            <template #default>
             <div class="space-y-3">
@@ -142,6 +144,7 @@
          <DataCard
            :title="$t('views.AdminCostControlsView.circuit_breaker')"
            :description="$t('views.AdminCostControlsView.automatically_stop_agent_runs_when_budget_exceeded')"
+           heading-level="h2"
          >
            <template #default>
             <div class="flex items-center justify-between rounded-lg border p-4">
@@ -163,6 +166,7 @@
          <DataCard
            :title="$t('views.AdminCostControlsView.billing_settings')"
            :description="$t('views.AdminCostControlsView.configure_currency_and_billing_period')"
+           heading-level="h2"
          >
            <template #default>
             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">

@@ -22,14 +22,13 @@
       -->
       <ErrorAlert v-if="error" :message="error" :retryable="false" />
 
-      <div
+      <ErrorAlert
         v-if="contextError"
-        role="alert"
-        class="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive-text"
+        class="text-sm"
         data-testid="oauth-consent-context-error"
-      >
-        {{ contextError }}
-      </div>
+        :message="contextError"
+        :retryable="false"
+      />
 
       <output
         v-if="success"

@@ -127,6 +127,24 @@ describe('AdminCostControlsView', () => {
     wrapper.unmount()
   })
 
+  it('gives every titled card an h2 so the outline never skips a level (FAR-2694)', async () => {
+    const wrapper = await mountView()
+
+    const titledCards = [
+      'Budget Overview',
+      'Team Budgets',
+      'Alert Thresholds',
+      'Circuit Breaker',
+      'Billing Settings',
+    ]
+    for (const title of titledCards) {
+      const card = cardForHeading(wrapper, title)
+      expect(card.querySelector('.card-header h2'), `"${title}" must render its heading as an h2`).not.toBeNull()
+      expect(card.querySelector('.card-header h3'), `"${title}" must not fall back to the CardHeader default h3`).toBeNull()
+    }
+    wrapper.unmount()
+  })
+
   it('lets the Budget Overview card pad its own content instead of a hand-rolled p-6 (FAR-2694)', async () => {
     const wrapper = await mountView()
 
