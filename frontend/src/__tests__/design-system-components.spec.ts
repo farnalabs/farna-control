@@ -21,7 +21,7 @@ import CardTable from '../components/ui/CardTable.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import MetricCard from '../components/ui/MetricCard.vue'
 import SummaryCard from '../components/ui/SummaryCard.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 
 describe('useDeltaFormatting', () => {
   it.each([

@@ -68,7 +68,7 @@ vi.mock('../lib/api/client', () => ({
 }))
 
 import AdminCostBreakdownView from '../views/AdminCostBreakdownView.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 
 describe('AdminCostBreakdownView', () => {
   beforeEach(() => {

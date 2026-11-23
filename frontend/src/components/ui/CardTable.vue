@@ -5,6 +5,12 @@
   card's bottom border-radius (BaseCard/DataCard with `class="overflow-hidden"`).
   The scroll container is focusable and, when `label` is supplied, carries an
   accessible name so keyboard users can scroll it.
+
+  Extra attributes (`class`, `role`, `data-*`) are forwarded to the SCROLL
+  CONTAINER, not this component's root, because the scroll container IS the
+  table region a caller styles: a caller that already owns the shell passes its
+  shell class here (e.g. `class="table-wrapper ..."`), and `describedby` keeps
+  an sr-only instruction paragraph attached to the same focusable element.
 -->
 <template>
   <div>
@@ -15,9 +21,11 @@
       {{ heading }}
     </div>
     <div
+      v-bind="$attrs"
       class="overflow-x-auto"
       tabindex="0"
       :aria-label="label"
+      :aria-describedby="describedby"
     >
       <slot />
     </div>
@@ -25,8 +33,12 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ inheritAttrs: false })
+
 defineProps<{
   heading?: string
   label?: string
+  /** id(s) of an always-rendered description of this scroll region. */
+  describedby?: string
 }>()
 </script>

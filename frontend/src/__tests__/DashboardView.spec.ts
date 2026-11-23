@@ -86,7 +86,7 @@ vi.mock('../config/navigation', async (importOriginal) => {
 })
 
 import DashboardView from '../views/DashboardView.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import DashboardSystemOverview from '../components/dashboard/DashboardSystemOverview.vue'
 
 function setupDefaultMocks() {

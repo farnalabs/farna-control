@@ -116,7 +116,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { useApi } from '../composables/useApi'
 

@@ -61,14 +61,14 @@
 </template>
 
 <script setup lang="ts">
-import BaseCard from './ui/BaseCard.vue'
+import BaseCard from './BaseCard.vue'
 import { computed } from 'vue'
 import {
   formatDeltaAbs,
   useDeltaPctText,
   useDeltaArrow,
   useDeltaClass,
-} from '../composables/useDeltaFormatting'
+} from '../../composables/useDeltaFormatting'
 
 export interface StatDelta {
   current?: number | null
