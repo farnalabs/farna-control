@@ -13,6 +13,9 @@ import {
   useDeltaPctText,
 } from '../composables/useDeltaFormatting'
 
+import EmptyState from '../components/shared/EmptyState.vue'
+import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import DataCard from '../components/ui/DataCard.vue'
@@ -661,3 +664,101 @@ describe('SummaryCard', () => {
       expect(wrapper.findAll('.text-foreground').some((item) => item.text().includes('7'))).toBe(true)
     })
   })
+
+describe('EmptyState variant', () => {
+  it('keeps the card shell by default (byte-identical to the original)', () => {
+    const wrapper = mount(EmptyState, {
+      props: { title: 'Nothing here', description: 'Add something to see it.' },
+    })
+
+    expect(wrapper.classes()).toContain('card')
+    expect(wrapper.classes()).toContain('p-8')
+    expect(wrapper.classes()).toContain('text-center')
+    expect(wrapper.text()).toContain('Nothing here')
+    expect(wrapper.text()).toContain('Add something to see it.')
+  })
+
+  it('renders the same anatomy WITHOUT the card shell when variant is bare', () => {
+    // A bare empty state is placed inside an existing card/panel, so carrying
+    // the card shell would nest a card in a card. It must keep the icon, the
+    // title/description and the centring.
+    const wrapper = mount(EmptyState, {
+      props: { title: 'Nothing here', description: 'Add something to see it.', variant: 'bare' },
+    })
+
+    expect(wrapper.classes()).not.toContain('card')
+    expect(wrapper.classes()).not.toContain('p-8')
+    expect(wrapper.classes()).toContain('text-center')
+    expect(wrapper.find('svg').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Nothing here')
+    expect(wrapper.text()).toContain('Add something to see it.')
+  })
+
+  it('replaces the default icon through the #icon slot', () => {
+    const wrapper = mount(EmptyState, {
+      props: { title: 'Nothing here' },
+      slots: { icon: '<span data-testid="custom-icon">icon</span>' },
+    })
+
+    expect(wrapper.find('[data-testid="custom-icon"]').exists()).toBe(true)
+    // The hard-coded two-hexagon svg is only the fallback.
+    expect(wrapper.find('svg').exists()).toBe(false)
+  })
+})
+
+describe('ErrorAlert slots', () => {
+  it('renders default-slot body content instead of the message text', () => {
+    const wrapper = mount(ErrorAlert, {
+      props: { message: 'plain message' },
+      slots: { default: '<ul data-testid="body"><li>first problem</li></ul>' },
+    })
+
+    expect(wrapper.find('[data-testid="body"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('first problem')
+    expect(wrapper.text()).not.toContain('plain message')
+    // Body content lives inside the ONE live region, never a second one.
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+  })
+
+  it('renders the #actions slot controls', () => {
+    const wrapper = mount(ErrorAlert, {
+      props: { message: 'boom' },
+      slots: { actions: '<button type="button" data-testid="body-action">Try again</button>' },
+    })
+
+    expect(wrapper.find('[data-testid="body-action"]').exists()).toBe(true)
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+  })
+})
+
+describe('FormDialog width', () => {
+  function mountDialog(props: Record<string, unknown> = {}) {
+    return mount(FormDialog, {
+      props: { open: true, title: 'Confirm action', ...props },
+      global: {
+        stubs: {
+          Dialog: {
+            props: ['visible'],
+            template: '<div v-if="visible" data-testid="dialog"><slot name="header" /><slot /><slot name="footer" /></div>',
+          },
+          Button: {
+            props: ['disabled', 'loading'],
+            template: '<button :disabled="disabled"><slot /></button>',
+          },
+        },
+      },
+    })
+  }
+
+  it('applies the historical 28rem width when width is omitted', () => {
+    const dialog = mountDialog().find('[data-testid="dialog"]')
+
+    expect(dialog.attributes('style')).toContain('width: 28rem')
+  })
+
+  it('applies a caller-supplied width to the dialog style', () => {
+    const dialog = mountDialog({ width: '40rem' }).find('[data-testid="dialog"]')
+
+    expect(dialog.attributes('style')).toContain('width: 40rem')
+  })
+})

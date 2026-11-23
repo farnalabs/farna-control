@@ -54,6 +54,7 @@
       >
         <EmptyState
           v-if="rules.length === 0"
+          variant="bare"
           :title="$t('views.SettingsRateLimitsView.no_rate_limit_rules_configured')"
         />
         <div v-else class="table-wrapper">

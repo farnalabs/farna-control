@@ -120,6 +120,7 @@
           <template #default>
             <EmptyState
               v-if="teams.length === 0"
+              variant="bare"
               :title="$t('views.AdminSpendLimitsView.no_teams_found')"
               :description="$t('views.AdminSpendLimitsView.no_teams_found_description')"
               data-testid="admin-spend-limits-teams-empty"
@@ -192,6 +193,7 @@
               </div>
               <EmptyState
                 v-else
+                variant="bare"
                 :title="$t('views.AdminSpendLimitsView.no_team_cost_data_available')"
                 :description="$t('views.AdminSpendLimitsView.no_team_cost_data_description')"
                 data-testid="admin-spend-limits-costs-empty"

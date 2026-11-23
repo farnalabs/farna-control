@@ -1,14 +1,16 @@
 <template>
-  <Dialog :visible="open" :modal="true" :dismissable-mask="true" class="sm:max-w-lg" @update:visible="$emit('close')">
-    <template #header>
-      <div>
-        <div class="text-lg font-semibold">{{ $t('components.lifecycle-map.editor.GraduationDialog.graduate_stage') }}</div>
-        <div class="mt-0.5 text-sm text-muted-foreground">
-          {{ $t('components.lifecycle-map.editor.GraduationDialog.graduating_stage_prefix') }} <strong>{{ stageName }}</strong> {{ $t('components.lifecycle-map.editor.GraduationDialog.graduating_stage_suffix') }}
-        </div>
-      </div>
-    </template>
-
+  <FormDialog
+    :open="open"
+    :title="$t('components.lifecycle-map.editor.GraduationDialog.graduate_stage')"
+    :description="`${$t('components.lifecycle-map.editor.GraduationDialog.graduating_stage_prefix')} ${stageName} ${$t('components.lifecycle-map.editor.GraduationDialog.graduating_stage_suffix')}`"
+    width="32rem"
+    confirm-text="Graduate Stage"
+    confirm-loading-text="Graduating..."
+    :confirm-disabled="!canGraduate"
+    :loading="graduating"
+    @update:open="$emit('close')"
+    @confirm="handleGraduate"
+  >
     <div class="space-y-4 py-2">
       <!-- Graduation action error: emitted from the confirm handler; no
            refetch loader — the Graduate button is the retry path. -->
@@ -66,23 +68,13 @@
 </Select>
       </div>
     </div>
-
-    <template #footer>
-      <div class="flex gap-2 justify-end">
-        <Button severity="secondary" outlined @click="$emit('close')">{{ $t('common.cancel') }}</Button>
-        <Button :disabled="!canGraduate || graduating" @click="handleGraduate">
-          {{ graduating ? 'Graduating...' : 'Graduate Stage' }}
-        </Button>
-      </div>
-    </template>
-  </Dialog>
+  </FormDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
 import Select from '../../shared/AppSelect.vue'
+import FormDialog from '../../shared/FormDialog.vue'
 import ErrorAlert from '../../shared/ErrorAlert.vue'
 import type { PipelineSummary } from '../../../types/lifecycleMap'
 
