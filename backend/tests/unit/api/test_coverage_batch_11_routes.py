@@ -252,8 +252,6 @@ async def test_contributions_all_endpoints_and_error_handlers() -> None:
 @pytest.mark.anyio
 async def test_error_notification_rules_handlers_and_branches() -> None:
     principal = _tenant()
-    plan = MagicMock()
-    plan.feature_enabled.return_value = True
     rule = _rule()
     session = _session(results=[_result(scalars=[rule]), _result(scalar_one=1)])
 
@@ -270,7 +268,6 @@ async def test_error_notification_rules_handlers_and_branches() -> None:
             error_notification_rules.ErrorNotificationRuleCreate(name="n", action_type="in_app"),
             session,
             principal,
-            plan,
         )
         assert created["name"] == "n"
 
@@ -280,7 +277,6 @@ async def test_error_notification_rules_handlers_and_branches() -> None:
             error_notification_rules.ErrorNotificationRuleCreate(name="n", action_type="in_app"),
             session,
             principal,
-            plan,
         )
     assert caught.value.status_code == 422
 
@@ -300,7 +296,6 @@ async def test_error_notification_rules_handlers_and_branches() -> None:
             ),
             session,
             principal,
-            plan,
         )
         assert up["name"] == "updated"
         await error_notification_rules.delete_notification_rule(rule.id, session, principal)
@@ -317,22 +312,13 @@ async def test_error_notification_rules_handlers_and_branches() -> None:
                 error_notification_rules.ErrorNotificationRuleUpdate(name="fail"),
                 session_fail,
                 principal,
-                plan,
             )
         assert caught.value.status_code == expected
-
-    # Tier update check refusal
-    with pytest.raises(HTTPException) as caught:
-        error_notification_rules._validate_webhook_tier_for_update(error_notification_rules.ErrorNotificationRuleUpdate(action_type="webhook"), False)
-    assert caught.value.status_code == 402
-    with pytest.raises(HTTPException) as caught:
-        error_notification_rules._validate_webhook_tier_for_update(error_notification_rules.ErrorNotificationRuleUpdate(webhook_url="https://x"), False)
-    assert caught.value.status_code == 402
 
     session.execute = AsyncMock(return_value=_result(scalar_one_or_none=None))
     with patch.object(error_notification_rules, "set_rls_org", AsyncMock()):
         with pytest.raises(HTTPException) as caught:
-            await error_notification_rules.update_notification_rule(rule.id, error_notification_rules.ErrorNotificationRuleUpdate(name="u"), session, principal, plan)
+            await error_notification_rules.update_notification_rule(rule.id, error_notification_rules.ErrorNotificationRuleUpdate(name="u"), session, principal)
         assert caught.value.status_code == 404
         with pytest.raises(HTTPException) as caught:
             await error_notification_rules.delete_notification_rule(rule.id, session, principal)
@@ -342,8 +328,8 @@ async def test_error_notification_rules_handlers_and_branches() -> None:
     none_org_user = TenantPrincipal(username="u", organisation_id=None, account_id=USER_ID, org_role="admin")
     for call in (
         lambda: error_notification_rules.list_notification_rules(session=session, principal=none_org_user),
-        lambda: error_notification_rules.create_notification_rule(error_notification_rules.ErrorNotificationRuleCreate(name="n"), session, none_org_user, plan),
-        lambda: error_notification_rules.update_notification_rule(rule.id, error_notification_rules.ErrorNotificationRuleUpdate(name="n"), session, none_org_user, plan),
+        lambda: error_notification_rules.create_notification_rule(error_notification_rules.ErrorNotificationRuleCreate(name="n"), session, none_org_user),
+        lambda: error_notification_rules.update_notification_rule(rule.id, error_notification_rules.ErrorNotificationRuleUpdate(name="n"), session, none_org_user),
         lambda: error_notification_rules.delete_notification_rule(rule.id, session, none_org_user),
     ):
         with pytest.raises(HTTPException) as caught:
@@ -368,7 +354,7 @@ async def test_error_notification_rules_handlers_and_branches() -> None:
             if func is error_notification_rules.list_notification_rules:
                 call = func(session=broken, principal=principal)
             elif func is error_notification_rules.create_notification_rule:
-                call = func(prefix[0], broken, principal, plan)
+                call = func(prefix[0], broken, principal)
             else:
                 call = func(prefix[0], broken, principal)
             with (
