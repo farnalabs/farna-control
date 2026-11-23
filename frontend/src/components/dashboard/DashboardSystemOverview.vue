@@ -132,6 +132,9 @@ const LEGACY_COLLAPSE_STORAGE_KEY = 'dashboard-system-overview-collapsed'
  * the removal are guarded, and a failure simply means "no legacy preference".
  */
 function consumeLegacyCollapsePreference(): boolean | null {
+  /* v8 ignore next 1: this is a client-only SPA, so jsdom and the browser always
+     define `window`; the try/catch below already treats a missing window as "no
+     legacy preference", making this guard an SSR-only early return. */
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(LEGACY_COLLAPSE_STORAGE_KEY)

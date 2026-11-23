@@ -453,6 +453,39 @@ describe('DashboardSystemOverview', () => {
     expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBe('true')
   })
 
+  it('treats an unavailable legacy storage read as no legacy preference', async () => {
+    // Storage can be blocked (private mode, blocked cookies). A throwing read
+    // must be swallowed so the card still renders rather than failing to mount.
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
+      if (key === 'dashboard-system-overview-collapsed') throw new Error('storage blocked')
+      return null
+    })
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(getItem).toHaveBeenCalledWith('dashboard-system-overview-collapsed')
+  })
+
+  it('treats an unrecognised stored collapse value as unset', async () => {
+    // Only the exact strings the serializer writes are meaningful; any other
+    // stored value is treated as "no preference" rather than truthy.
+    localStorage.setItem('dashboard-system-overview-collapsed:v2', 'maybe')
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.get('[data-testid="system-map-overview-content"]').text()).toContain(
+      'System overview is collapsed',
+    )
+  })
+
   it('lets an explicit v2 expand win over the collapsed default', async () => {
     localStorage.setItem('dashboard-system-overview-collapsed:v2', 'false')
     const { wrapper, store } = mountOverview()
