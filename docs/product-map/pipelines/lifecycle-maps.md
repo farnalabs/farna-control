@@ -95,7 +95,7 @@ through, with edges representing transitions between stages.
       `visibility: in_dev`, operator/admin, `library.search.in_dev`) AND the
       per-visit "Show work items" checkbox (default unchecked) is ticked -
       the customer-configurable `lifecycle_map_journeys` flag this originally
-      used was retired (FAR-2595), and the view reads dev mode instead. With
+      used was retired (FAR-2200), and the view reads dev mode instead. With
       either gate off the view makes no journeys API call, passes an empty
       journeys list to the renderer and hides all journey UI while
       stages/edges render normally
