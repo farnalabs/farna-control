@@ -65,7 +65,7 @@ const props = defineProps<{
 
 const stageTypeLabel = computed(() => {
   switch (props.data.stage_type) {
-    case 'modulo': return 'Farna Control'
+    case 'farna_control': return 'Farna Control'
     case 'external': return 'External'
     case 'manual': return 'Manual'
     case 'placeholder': return 'Placeholder'
@@ -75,7 +75,7 @@ const stageTypeLabel = computed(() => {
 
 const borderClass = computed(() => {
   switch (props.data.stage_type) {
-    case 'modulo': return 'border-primary/60'
+    case 'farna_control': return 'border-primary/60'
     case 'external': return 'border-dashed border-sky-500/60'
     case 'manual': return 'border-dotted border-amber-500/60'
     case 'placeholder': return 'border border-dashed border-muted-foreground/30 bg-muted/30'
@@ -85,7 +85,7 @@ const borderClass = computed(() => {
 
 const bgClass = computed(() => {
   switch (props.data.stage_type) {
-    case 'modulo': return 'bg-primary/5'
+    case 'farna_control': return 'bg-primary/5'
     case 'external': return 'bg-sky-500/5'
     case 'manual': return 'bg-amber-500/5'
     case 'placeholder': return 'bg-muted/20'
@@ -95,7 +95,7 @@ const bgClass = computed(() => {
 
 const labelClass = computed(() => {
   switch (props.data.stage_type) {
-    case 'modulo': return 'text-primary-text'
+    case 'farna_control': return 'text-primary-text'
     case 'external': return 'text-sky-500'
     case 'manual': return 'text-amber-500'
     case 'placeholder': return 'text-muted-foreground'

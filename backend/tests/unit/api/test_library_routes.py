@@ -1314,7 +1314,7 @@ def test_split_primitive_types_variants() -> None:
 def test_trust_tier_for_provenance() -> None:
     from farna.api.routes.library import _trust_tier_for
 
-    assert _trust_tier_for("modulo", None) == "modulo"
+    assert _trust_tier_for("farna_control", None) == "farna_control"
     assert _trust_tier_for("registry", True) == "green"
     assert _trust_tier_for("registry", False) == "amber"
     assert _trust_tier_for("local", None) is None

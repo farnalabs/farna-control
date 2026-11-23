@@ -85,7 +85,7 @@ def test_primitive_has_correct_version():
 
 def test_primitive_has_correct_source():
     prim = _find_seed_primitive()
-    assert prim.source == "modulo"
+    assert prim.source == "farna_control"
 
 
 def test_primitive_description_not_empty():

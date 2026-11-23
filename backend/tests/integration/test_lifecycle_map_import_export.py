@@ -144,7 +144,7 @@ async def test_import_v2_envelope_recreates_version_chain_with_real_persistence(
         source.id,
         stages=[
             {"id": "s1", "name": "Inbox", "type": "manual"},
-            {"id": "s2", "name": "Review", "type": "modulo"},
+            {"id": "s2", "name": "Review", "type": "farna_control"},
         ],
         edges=[{"id": "e1", "source": "s1", "target": "s2"}],
         notes="third pass",
@@ -168,7 +168,7 @@ async def test_import_v2_envelope_recreates_version_chain_with_real_persistence(
     assert imported.id != source.id
     assert imported.name == "Release SDLC (imported)"
     assert imported.version == len(snapshots)
-    assert imported.content_json["stages"][1]["type"] == "modulo"
+    assert imported.content_json["stages"][1]["type"] == "farna_control"
     assert imported.content_json["edges"][0]["source"] == "s1"
     assert imported.content_json["notes"] == "third pass"
 
@@ -181,4 +181,4 @@ async def test_import_v2_envelope_recreates_version_chain_with_real_persistence(
     assert imported_prim is not None
     assert imported_prim.content_json["export"]["format_version"] == "2"
     assert imported_prim.content_json["export"]["versions"][-1]["version"] == len(snapshots)
-    assert imported_prim.content_json["export"]["versions"][-1]["stages"][1]["type"] == "modulo"
+    assert imported_prim.content_json["export"]["versions"][-1]["stages"][1]["type"] == "farna_control"

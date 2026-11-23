@@ -310,8 +310,8 @@ def _require_organisation_id(principal: TenantPrincipal) -> uuid.UUID:
 
 def _trust_tier_for(source: str, verified: bool | None) -> str | None:
     """Compute the trust tier label from a primitive's provenance."""
-    if source == "modulo":
-        return "modulo"
+    if source == "farna_control":
+        return "farna_control"
     if source == "registry" and verified is True:
         return "green"
     if source == "registry":

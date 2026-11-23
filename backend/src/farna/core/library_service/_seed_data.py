@@ -61,9 +61,9 @@ def _build_builtin(
     verified: bool | None,
     contribution_status: str | None,
 ) -> LibraryPrimitive:
-    """Construct an in-memory built-in primitive (native ``modulo`` source).
+    """Construct an in-memory built-in primitive (native ``farna_control`` source).
 
-    Built-ins are the Native library (``source="modulo"``); the retired
+    Built-ins are the Native library (``source="farna_control"``); the retired
     ``community`` source is no longer seeded. They live in the modulo sentinel
     org so they are visible to every organisation, and are ``tier="native"``.
     """
@@ -117,7 +117,7 @@ def _make_modulo(
         description,
         content_json,
         tags,
-        source="modulo",
+        source="farna_control",
         author="Farna Control",
         verified=None,
         contribution_status=CONTRIBUTION_PUBLISHED if primitive_type == "test_fixture" else None,

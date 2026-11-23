@@ -199,7 +199,7 @@ class TestCloneBuiltin:
             name="Agent",
             slug="agent",
             content_json={"prompt_template": "do"},
-            source="modulo",
+            source="farna_control",
             tags=["x"],
             description="d",
             verified=True,
@@ -219,7 +219,7 @@ class TestCloneBuiltin:
         )
         clone = _clone_builtin(src)
         assert clone.id == src.id
-        assert clone.source == "modulo"
+        assert clone.source == "farna_control"
         assert clone.content_json == {"prompt_template": "do"}
         assert clone.tags == ["x"]
         assert clone.verified is True
@@ -244,7 +244,7 @@ class TestResolveCollection:
         coll = _prim(uuid.uuid4(), primitive_type="library_collection", organisation_id=uuid.uuid4())
         session = MagicMock()
         session.get = AsyncMock(return_value=None)
-        resolved = _prim(coll.id, primitive_type="library_collection", source="modulo", organisation_id=uuid.uuid4())
+        resolved = _prim(coll.id, primitive_type="library_collection", source="farna_control", organisation_id=uuid.uuid4())
         with patch.object(install_mod, "get_primitive", new=AsyncMock(return_value=resolved)):
             assert await _resolve_collection(session, _ORG_ID, coll.id) is resolved
 

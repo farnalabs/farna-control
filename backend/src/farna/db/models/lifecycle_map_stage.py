@@ -22,7 +22,7 @@ class LifecycleMapStage(OrgScoped):
     __tablename__ = "lifecycle_map_stages"
     __table_args__ = (
         CheckConstraint(
-            "stage_type IN ('modulo', 'external', 'manual', 'placeholder')",
+            "stage_type IN ('farna_control', 'external', 'manual', 'placeholder')",
             name="ck_lifecycle_map_stages_type",
         ),
         UniqueConstraint("map_id", "version", "stage_id", name="uq_lifecycle_map_stages_map_version_stage"),

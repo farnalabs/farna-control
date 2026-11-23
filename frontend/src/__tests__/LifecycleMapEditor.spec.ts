@@ -19,7 +19,7 @@ const stageA = {
   id: 'stage-a',
   name: 'Stage A',
   description: '',
-  stage_type: 'modulo',
+  stage_type: 'farna_control',
   pipeline_id: null,
   external_url: null,
   owner: null,
@@ -642,7 +642,7 @@ describe('LifecycleMapEditor interactions', () => {
     ;(wrapper.vm as unknown as { onGraduateClick: (data: { id: string; name: string; stage_type: string }) => void }).onGraduateClick({
       id: 'stage-a',
       name: 'Stage A',
-      stage_type: 'modulo',
+      stage_type: 'farna_control',
     })
 
     expect((wrapper.vm as unknown as { graduationStageId: string }).graduationStageId).toBe('stage-a')
@@ -663,7 +663,7 @@ describe('LifecycleMapEditor interactions', () => {
 
     const updatedNode = (wrapper.vm as unknown as { flowNodes: Array<{ id: string; data: { graduated: boolean; stage_type: string; pipeline_id: string } }> }).flowNodes.find((n) => n.id === 'stage-a')
     expect(updatedNode!.data.graduated).toBe(true)
-    expect(updatedNode!.data.stage_type).toBe('modulo')
+    expect(updatedNode!.data.stage_type).toBe('farna_control')
     expect(updatedNode!.data.pipeline_id).toBe('pipe-1')
     expect(putMock).toHaveBeenCalledOnce()
     expect((wrapper.vm as unknown as { showGraduation: boolean }).showGraduation).toBe(false)
@@ -912,7 +912,7 @@ describe('LifecycleMapEditor typed state fallbacks', () => {
 
     const node = (wrapper.vm as unknown as { flowNodes: Array<{ id: string; data: Record<string, unknown> }> }).flowNodes.find((n) => n.id === 'stage-x')
     expect(node!.data).toMatchObject({
-      name: '', description: '', stage_type: 'modulo', pipeline_id: 'pipe-1', graduated: true,
+      name: '', description: '', stage_type: 'farna_control', pipeline_id: 'pipe-1', graduated: true,
     })
     expect(putMock).toHaveBeenCalledOnce()
   })

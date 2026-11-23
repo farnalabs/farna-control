@@ -417,7 +417,7 @@ def test_discovery_persists_deterministic_report_and_suggested_edges(
     assert persisted["edges"][0]["config_json"]["suggested"] is True
     stage_types = {stage["name"]: stage["type"] for stage in persisted["stages"]}
     assert stage_types == {
-        "build": "modulo",
+        "build": "farna_control",
         "webhook": "manual",
         "github": "placeholder",
         "Build Folder": "placeholder",

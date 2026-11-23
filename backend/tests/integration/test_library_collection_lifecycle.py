@@ -961,7 +961,7 @@ async def test_shipped_install_persists_only_collection_row_under_sentinel_rls(
         sentinel_rows = rows.all()
     assert len(sentinel_rows) == 1
     persisted = sentinel_rows[0]
-    assert persisted.source == "modulo"
+    assert persisted.source == "farna_control"
     assert persisted.slug == collection.slug
     assert persisted.version == collection.version
     assert install.collection_id == persisted.id
