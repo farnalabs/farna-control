@@ -21,6 +21,14 @@ Renames are metadata-only (``ALTER ... RENAME``): row data, table OIDs, grants,
 RLS policies, index definitions and constraint definitions are all preserved.
 Nothing here rewrites a table or changes a column type.
 
+The primary-key and unique constraints each have a backing index with the same
+name. Verified on PostgreSQL 16: ``ALTER TABLE ... RENAME CONSTRAINT`` renames
+that backing index too, so no separate ``ALTER INDEX`` is required for those
+two; only the two plain indexes (which carry no constraint) are renamed
+explicitly. ``tests/unit/db/test_migration_0362_rename_legacy_db_objects.py``
+proves against a real database that no legacy-prefixed relation survives, and
+that row-level security (enabled by the baseline) survives the table rename.
+
 Idempotency: every rename is guarded on the old name existing and the new name
 not existing, so a re-run, or a database that already reached the new shape,
 is a no-op. A fresh install runs the baseline (old names) and then this
