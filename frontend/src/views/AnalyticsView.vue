@@ -32,11 +32,7 @@
         data-testid="analytics-error"
       />
 
-      <div v-if="store.loading" class="card p-4" data-testid="analytics-loading">
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-lg bg-muted" />
-        </div>
-      </div>
+      <CardSkeleton v-if="store.loading" data-testid="analytics-loading" :lines="3" />
 
       <template v-else-if="store.results">
         <div
@@ -185,6 +181,7 @@ import AnalyticsChart from "../components/analytics/AnalyticsChart.vue";
 import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";
 import CapacityQueuePanel from "../components/analytics/CapacityQueuePanel.vue";
 import DataCard from "../components/ui/DataCard.vue";
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import { formatApiError } from "../lib/api/formatError";
 import { errorCodeLabel, executionOriginLabel } from "../utils/runUtils";
 import {

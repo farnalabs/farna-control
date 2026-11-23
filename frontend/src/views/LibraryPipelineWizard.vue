@@ -15,20 +15,9 @@
 
     <section class="mx-auto max-w-3xl py-8">
       <div v-if="loading" class="space-y-6" data-testid="library-wizard-loading-skeleton">
-        <div class="card p-6">
-          <SkeletonBlock height-class="h-6 w-64" />
-          <SkeletonBlock class="mt-3" height-class="h-4 w-3/4" />
-          <SkeletonBlock class="mt-6" height-class="h-14 w-full" />
-        </div>
-        <div class="card p-6">
-          <SkeletonBlock height-class="h-5 w-48" />
-          <SkeletonBlock class="mt-4" height-class="h-10 w-full" />
-          <SkeletonBlock class="mt-4" height-class="h-24 w-full" />
-        </div>
-        <div class="card p-6">
-          <SkeletonBlock height-class="h-5 w-40" />
-          <SkeletonBlock class="mt-4" height-class="h-10 w-full" />
-        </div>
+        <CardSkeleton class="p-6" :lines="3" />
+        <CardSkeleton class="p-6" :lines="2" />
+        <CardSkeleton class="p-6" :lines="1" />
       </div>
 
       <ErrorAlert v-else-if="error" :message="error" :on-retry="reload" class="mb-6" />
@@ -197,9 +186,9 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
-import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'

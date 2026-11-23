@@ -22,15 +22,7 @@
     </PageHeader>
     <!-- Loading skeleton grid -->
     <div v-if="loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <div v-for="n in 6" :key="n" class="card p-4">
-        <div class="flex items-center gap-3">
-          <div class="h-9 w-9 animate-pulse rounded-lg bg-muted" />
-          <div class="min-w-0 flex-1 space-y-2">
-            <div class="h-3 w-20 animate-pulse rounded bg-muted" />
-            <div class="h-6 w-12 animate-pulse rounded bg-muted" />
-          </div>
-        </div>
-      </div>
+      <CardSkeleton v-for="n in 6" :key="n" :lines="2" />
     </div>
     <!-- Full-page error -->
     <ErrorAlert v-else-if="error && !summary" :message="error" :on-retry="retryDashboard" />
@@ -285,6 +277,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
 import StatCard from '../components/StatCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import { DataTable, type Column } from '../components/ui/data-table'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'
 import { RUN_STATUS } from '../constants/filters'

@@ -37,19 +37,10 @@
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
       <div class="space-y-4" aria-busy="true">
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div v-for="n in 3" :key="'summary-' + n" class="card p-4">
-            <div class="h-3 w-20 animate-pulse rounded bg-muted" />
-            <div class="mt-2 h-5 w-16 animate-pulse rounded bg-muted" />
-          </div>
+          <CardSkeleton v-for="n in 3" :key="'summary-' + n" :heading="false" :lines="2" />
         </div>
-        <div class="card p-4">
-          <SkeletonBlock height-class="h-5 w-32" />
-          <SkeletonBlock class="mt-3" height-class="h-9 w-64" />
-        </div>
-        <div class="card p-4">
-          <SkeletonBlock height-class="h-5 w-48" />
-          <SkeletonBlock class="mt-2" height-class="h-16 w-full" />
-        </div>
+        <CardSkeleton :lines="1" />
+        <CardSkeleton :lines="2" />
       </div>
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadDetail" />
@@ -314,6 +305,7 @@
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import StatCard from '../components/StatCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'

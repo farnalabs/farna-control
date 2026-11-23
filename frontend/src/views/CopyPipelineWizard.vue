@@ -55,12 +55,11 @@
             </button>
           </div>
 
-          <div v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0" class="card p-8 text-center">
-            <p class="text-lg font-medium">{{ $t('views.CopyPipelineWizard.no_pipelines_available') }}</p>
-            <p class="mt-1 text-sm text-muted-foreground">
-              {{ $t('views.CopyPipelineWizard.create_one_from_the_library_first') }}
-            </p>
-          </div>
+          <EmptyState
+            v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0"
+            :title="$t('views.CopyPipelineWizard.no_pipelines_available')"
+            :description="$t('views.CopyPipelineWizard.create_one_from_the_library_first')"
+          />
 
           <div v-else-if="filteredPipelines.length === 0" class="py-12 text-center text-sm text-muted-foreground">
             {{ $t('views.CopyPipelineWizard.no_pipelines_match_your_search') }}
@@ -362,6 +361,7 @@ import { useDataFetch } from '../composables/useDataFetch'
 import BackLink from '../components/BackLink.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
 import type { OwnershipValue } from '../components/OwnershipPicker.vue'

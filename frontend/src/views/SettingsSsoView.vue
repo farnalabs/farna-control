@@ -31,12 +31,11 @@
           />
         </div>
 
-        <div v-if="providers.length === 0" class="card p-8 text-center">
-          <p class="text-lg font-medium">{{ $t('views.SettingsSsoView.no_providers_title') }}</p>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ $t('views.SettingsSsoView.no_providers_description') }}
-          </p>
-        </div>
+        <EmptyState
+          v-if="providers.length === 0"
+          :title="$t('views.SettingsSsoView.no_providers_title')"
+          :description="$t('views.SettingsSsoView.no_providers_description')"
+        />
 
         <div class="space-y-3">
           <div
@@ -195,6 +194,7 @@ import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import SsoProviderForm, { type SsoPresetInfo, type SsoFormState } from '../components/SsoProviderForm.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'

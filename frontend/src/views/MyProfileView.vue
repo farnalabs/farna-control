@@ -16,18 +16,10 @@
       />
     </div>
 
-    <div v-else-if="profileLoading" class="card p-6 space-y-6" data-testid="my-profile-profile-loading">
+    <div v-else-if="profileLoading" data-testid="my-profile-profile-loading">
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
-      <div class="space-y-4" aria-busy="true">
-        <div class="flex items-center gap-4 pb-4 border-b border-border">
-          <SkeletonBlock height-class="h-14 w-14 rounded-full" />
-          <div class="space-y-2">
-            <SkeletonBlock height-class="h-5 w-40" />
-            <SkeletonBlock height-class="h-4 w-56" />
-            <SkeletonBlock height-class="h-4 w-16" />
-          </div>
-        </div>
-        <SkeletonBlock height-class="h-4 w-48" />
+      <div aria-busy="true">
+        <CardSkeleton :lines="4" />
       </div>
     </div>
 
@@ -182,6 +174,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import ChangePasswordForm from '../components/shared/ChangePasswordForm.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import Button from 'primevue/button'

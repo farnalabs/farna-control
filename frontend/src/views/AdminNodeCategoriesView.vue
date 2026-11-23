@@ -37,12 +37,11 @@
         />
       </div>
 
-      <div v-if="categories.length === 0 && editorMode === null" class="card p-8 text-center">
-        <p class="text-lg font-medium">{{ $t('views.AdminNodeCategoriesView.no_node_categories_configured') }}</p>
-        <p class="mt-1 text-sm text-muted-foreground">
-          {{ $t('views.AdminNodeCategoriesView.no_node_categories_description') }}
-        </p>
-      </div>
+      <EmptyState
+        v-if="categories.length === 0 && editorMode === null"
+        :title="$t('views.AdminNodeCategoriesView.no_node_categories_configured')"
+        :description="$t('views.AdminNodeCategoriesView.no_node_categories_description')"
+      />
 
       <div v-if="categories.length > 0" class="table-wrapper">
         <table class="w-full text-left text-sm">
@@ -123,6 +122,7 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'
