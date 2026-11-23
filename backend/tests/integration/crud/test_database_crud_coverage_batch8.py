@@ -73,7 +73,7 @@ pytestmark = pytest.mark.integration
 async def test_pipeline_folder_crud_and_tenant_safe_moves(rls_session: AsyncSession, test_org: uuid.UUID, test_user: uuid.UUID) -> None:
     parent = await create_pipeline_folder(rls_session, org_id=test_org, name="Parent", account_id=test_user)
     child = await create_pipeline_folder(rls_session, org_id=test_org, name="Child", account_id=test_user, parent_id=parent.id)
-    assert [folder.name for folder in await list_pipeline_folders(rls_session)] == ["Child", "Parent"]
+    assert [folder.name for folder in await list_pipeline_folders(rls_session, org_id=test_org)] == ["Child", "Parent"]
     assert await get_pipeline_folder(rls_session, child.id) is child
     with pytest.raises(ValueError, match="descendants"):
         await update_pipeline_folder(rls_session, parent.id, {"parent_id": child.id})
@@ -104,7 +104,7 @@ async def test_pipeline_folder_crud_and_tenant_safe_moves(rls_session: AsyncSess
 async def test_schema_folder_crud_and_org_ownership_guard(rls_session: AsyncSession, test_org: uuid.UUID, test_user: uuid.UUID) -> None:
     parent = await create_schema_folder(rls_session, org_id=test_org, name="Schemas", account_id=test_user)
     child = await create_schema_folder(rls_session, org_id=test_org, name="Child", account_id=test_user, parent_id=parent.id)
-    assert len(await list_schema_folders(rls_session)) == 2
+    assert len(await list_schema_folders(rls_session, org_id=test_org)) == 2
     assert await get_schema_folder(rls_session, child.id) is child
     assert await update_schema_folder(rls_session, child.id, {"name": "Updated", "parent_id": None}) is child
     assert child.name == "Updated"
