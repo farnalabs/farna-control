@@ -434,7 +434,7 @@ describe('AgentOutputDiffView', () => {
     await new Promise(r => setTimeout(r, 0))
     await nextTick()
 
-    const viewers = wrapper.findAll('[data-testid="json-viewer"]')
+    const viewers = wrapper.findAll('.json-viewer')
     expect(viewers.length).toBeGreaterThanOrEqual(2)
     const text = viewers.map(v => v.text()).join(' ')
     expect(text).toContain('summary')

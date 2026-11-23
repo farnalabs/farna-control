@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex items-stretch" data-testid="sparkline">
+  <div class="relative flex items-stretch" :data-testid="`sparkline-${sparkUid}`">
     <!-- Y-axis labels: rendered as plain HTML, NOT inside the svg below. The
          svg uses preserveAspectRatio="none" so its polyline/area can fill an
          arbitrary card box, but that means everything inside the svg's
@@ -27,7 +27,7 @@
     <div
       ref="containerRef"
       class="relative min-w-0 flex-1"
-      data-testid="sparkline-plot"
+      :data-testid="`sparkline-plot-${sparkUid}`"
       @pointermove="onPointerMove"
       @pointerleave="onPointerLeave"
     >
@@ -69,7 +69,7 @@
              regardless of the chart's X/Y scale factors. -->
         <path
           v-if="lastPoint"
-          data-testid="sparkline-endpoint"
+          :data-testid="`sparkline-endpoint-${sparkUid}`"
           :d="`M ${xFor(lastPoint.index)} ${yFor(lastPoint.value)} l 0 0`"
           :stroke="color"
           stroke-width="5"
@@ -106,7 +106,7 @@
         class="flex h-full w-full items-center justify-center rounded-md border border-dashed border-border px-2 text-center text-xs text-muted-foreground"
         role="img"
         :aria-label="accessibleLabel"
-        data-testid="sparkline-no-data"
+        :data-testid="`sparkline-no-data-${sparkUid}`"
       >
         {{ t('components.Sparkline.no_data') }}
       </div>
@@ -118,7 +118,7 @@
         v-if="tooltipVisible"
         class="pointer-events-none absolute z-10 rounded-md border bg-background px-2 py-1 text-xs shadow"
         :style="tooltipStyle"
-        data-testid="sparkline-tooltip"
+        :data-testid="`sparkline-tooltip-${sparkUid}`"
         aria-hidden="true"
       >
         {{ tooltipText }}
@@ -128,10 +128,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
+
+// FAR-2714: several sparklines render on one page (the dashboard has seven),
+// so every testid this component emits needs a per-instance suffix.
+const sparkUid = useId();
 
 // Module-level counter + hash so the gradient id is URL-safe and unique per
 // instance. A raw color string like "var(--color-primary)" contains

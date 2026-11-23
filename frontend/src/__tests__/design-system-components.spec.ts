@@ -522,7 +522,7 @@ describe('StatCard', () => {
     const fallback = mount(StatCard, { props: { label: 'Runs', value: 12 } })
 
     expect(custom.find('[data-testid="custom-stat"]').exists()).toBe(true)
-    expect(fallback.find('[data-testid="dashboard-stats-card"]').exists()).toBe(false)
+    expect(fallback.find('[data-testid="dashboard-stats-card-pipelines"]').exists()).toBe(false)
     expect(fallback.attributes('data-testid')).toBeUndefined()
   })
 

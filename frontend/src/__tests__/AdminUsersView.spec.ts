@@ -474,7 +474,7 @@ describe('AdminUsersView', () => {
       currentTier: 'community',
     })
 
-    expect(wrapper.find('[data-testid="feature-gate"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
     expect(wrapper.find('table').exists()).toBe(true)

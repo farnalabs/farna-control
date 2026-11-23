@@ -45,7 +45,7 @@ describe('CardHeader mobile layout (FAR-2537)', () => {
 
   it('gives the actions full width that wraps below sm and stays a no-shrink row at sm', () => {
     const wrapper = mount(CardHeader, { props: { title: 'T' }, slots: { actions: '<button>Act</button>' } })
-    const actions = wrapper.get('[data-testid="card-header-actions"]').classes()
+    const actions = wrapper.get('[data-testid^="card-header-actions-"]').classes()
     expect(actions).toContain('w-full')
     expect(actions).toContain('flex-wrap')
     expect(actions).toContain('sm:w-auto')
