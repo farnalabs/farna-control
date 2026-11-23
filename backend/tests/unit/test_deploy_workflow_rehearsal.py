@@ -1075,11 +1075,7 @@ def test_release_pr_driving_steps_use_the_trusted_bot_token() -> None:
         assert env.get("GH_TOKEN") == _RELEASE_PR_TOKEN_SECRET, f"{label} drives the release PR with GH_TOKEN={env.get('GH_TOKEN')!r}; a github.token PR is authored by github-actions[bot] and skipped by the same-repo author guard"
         assert "GITHUB_TOKEN" not in env, f"{label} must keep the branch push on the checkout github.token credential"
         script = cast(str, step["run"])
-        # FAR-2690 moved the ruleset-protected marker pushes onto an admin
-        # credential while leaving ordinary pushes on github.token; the prose
-        # comment that records this legitimately names ``github.token``. What
-        # matters is that the step never *uses* the workflow token expression.
-        assert "${{ github.token }}" not in script
+        assert "github.token" not in script
         assert "FARNA_CONTROL_RELEASE_PR_TOKEN" in script, f"{label} must fail closed with an ::error:: naming FARNA_CONTROL_RELEASE_PR_TOKEN"
         assert '[ -z "${GH_TOKEN:-}" ]' in script, f"{label} must reject an empty GH_TOKEN"
         guard_index = script.index('[ -z "${GH_TOKEN:-}" ]')
@@ -1178,6 +1174,37 @@ def _cut_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
 def _write_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+#: The git config override every marker command carries. Git sends the header a
+#: checkout persisted INSTEAD of a URL credential, so the marker path must clear
+#: it or the admin credential in the URL is ignored (FAR-2690).
+_MARKER_EXTRAHEADER = "http.https://github.com/.extraheader="
+
+#: The admin credential the ruleset-protected marker steps require. Kept
+#: distinct from ``GH_TOKEN`` so a test can prove the marker path never rides
+#: the release-PR token.
+_MARKER_TOKEN = "test-release-marker-admin-token"
+
+
+def _marker_remote_for(repo: Path) -> str:
+    """A distinct spelling of a local bare repo used as the admin marker remote.
+
+    ``file://`` resolves to the same repository as the harness's ``origin``, but
+    it is a different argv string, so an executed step proves the marker push
+    targeted the admin remote rather than ``origin`` — with no network involved.
+    """
+    return f"file://{repo}"
+
+
+def _marker_push_line(remote: str, *args: str) -> str:
+    """The argv line a ``marker_git push`` leaves in a harness git log."""
+    return " ".join(["git", "-c", _MARKER_EXTRAHEADER, "push", remote, *args])
+
+
+def _marker_remote_from_log(log_text: str) -> list[str]:
+    """Every logged marker invocation (they all carry the extraheader override)."""
+    return [line for line in log_text.splitlines() if _MARKER_EXTRAHEADER in line]
 
 
 def _cut_harness(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
@@ -1304,7 +1331,10 @@ esac
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "GITHUB_REPOSITORY": "example/repo",
             "GH_TOKEN": "test-release-pr-token",
-            "RELEASE_MARKER_TOKEN": "test-release-marker-token",
+            "RELEASE_MARKER_TOKEN": _MARKER_TOKEN,
+            # Offline stand-in for the admin marker remote: a distinct spelling
+            # of the same bare repo the checkout calls `origin`.
+            "RELEASE_MARKER_REMOTE": _marker_remote_for(remote),
             "GIT_CONFIG_COUNT": "1",
             "GIT_CONFIG_KEY_0": "remote.origin.fetch",
             "GIT_CONFIG_VALUE_0": "+refs/heads/*:refs/remotes/origin/*",
@@ -1974,17 +2004,28 @@ esac
         tmp_path / "bin" / "git",
         f"""#!/usr/bin/env bash
 printf 'git %s\\n' \"$*\" >> {shlex.quote(str(cleanup_log))}
-if [ \"$1 $2 $3 $4\" = 'ls-remote --exit-code origin refs/heads/release-publication-hold' ]; then exit 0; fi
 exit 0
 """,
     )
     cleanup = _run_bash(_release_job_run("Clean up publication hold after failed cut preparation"), cwd=tmp_path, env=env)
     assert cleanup.returncode == 0, cleanup.stderr
     commands = cleanup_log.read_text(encoding="utf-8")
-    # FAR-2690: the protected-marker delete authenticates with the admin
-    # RELEASE_MARKER_TOKEN, so it targets the marker remote rather than `origin`.
-    assert "--delete refs/heads/release-publication-hold" in commands
-    assert "push https://x-access-token:" in commands
+    remote = env["RELEASE_MARKER_REMOTE"]
+    # The hold is deleted through the admin marker remote, not `origin`.
+    assert _marker_push_line(remote, "--delete", "refs/heads/release-publication-hold") in commands
+    assert " push origin " not in commands
+
+
+#: Command words that issue a `git push`. `marker_git` is the admin-credentialed
+#: wrapper the ruleset-protected marker refs are pushed through (FAR-2690), so a
+#: scanner that only understood `git push` would stop guarding them entirely.
+_CUT_PUSH_ISSUERS = frozenset({"git", "marker_git"})
+
+#: The only force push a protected cut may perform: the release-freeze marker,
+#: moved to the new RC commit through the admin credential. The legacy
+#: `git push origin refs/heads/release-freeze --force` is deliberately NOT
+#: allowed - the ruleset rejects it, so it would be a broken release path.
+_ALLOWED_CUT_FORCE_PUSHES = [["marker_git", "push", "$MARKER_REMOTE", "refs/heads/release-freeze:refs/heads/release-freeze", "--force"]]
 
 
 def _shell_tokens(script: str) -> list[str]:
@@ -2016,7 +2057,10 @@ def _assert_protected_cut_commands_are_safe(cut_path: str) -> None:
             continue
         if token == "gh" and tokens[index + 1 : index + 3] == ["pr", "merge"]:
             violations.append("gh pr merge")
-        if token != "git" or index + 1 >= len(tokens) or tokens[index + 1] != "push":
+        # `marker_git` is the admin-credentialed wrapper around `git push` for
+        # the ruleset-protected marker refs, so it must be scanned identically -
+        # otherwise every marker push would silently escape this guard.
+        if token not in _CUT_PUSH_ISSUERS or index + 1 >= len(tokens) or tokens[index + 1] != "push":
             continue
         end = index + 2
         while end < len(tokens) and tokens[end] not in {";", "&&", "||", "&", "|", ")", "}"}:
@@ -2026,7 +2070,7 @@ def _assert_protected_cut_commands_are_safe(cut_path: str) -> None:
             violations.append("git push to main")
         if {"--force", "-f", "--force-with-lease"}.intersection(invocation):
             force_pushes.append(invocation)
-            if invocation != ["git", "push", "origin", "refs/heads/release-freeze", "--force"]:
+            if invocation not in _ALLOWED_CUT_FORCE_PUSHES:
                 violations.append("unexpected force push: " + " ".join(invocation))
     if "--admin" in tokens:
         violations.append("gh pr merge --admin")
@@ -2034,7 +2078,7 @@ def _assert_protected_cut_commands_are_safe(cut_path: str) -> None:
     if not force_pushes:
         return
     assert len(force_pushes) == 2
-    assert all(push == ["git", "push", "origin", "refs/heads/release-freeze", "--force"] for push in force_pushes)
+    assert all(push in _ALLOWED_CUT_FORCE_PUSHES for push in force_pushes)
 
 
 def _cut_path_scripts() -> list[tuple[Path, str]]:
@@ -2100,7 +2144,12 @@ def test_release_cut_cleanup_is_failure_safe() -> None:
         step = workflow["jobs"]["release"]["steps"][names.index(name)]
         assert "always()" in step["if"]
         assert "steps.publication-hold.outputs.established == 'true'" in step["if"]
+        # The hold is ruleset-protected, so the delete runs through the admin
+        # marker remote with the checkout credential header cleared, never as a
+        # plain `git push origin --delete`.
         assert 'marker_git push "$MARKER_REMOTE" --delete refs/heads/release-publication-hold' in step["run"]
+        assert "git push origin --delete refs/heads/release-publication-hold" not in step["run"]
+        assert "RELEASE_MARKER_TOKEN" in step["env"]
 
 
 def _hold_step_script(name: str) -> str:
@@ -2109,12 +2158,17 @@ def _hold_step_script(name: str) -> str:
     return script
 
 
+#: The admin marker remote the hold/marker steps are pointed at. Nothing
+#: resolves it: the stub `git` below records the argv and never touches a repo.
+_HOLD_MARKER_REMOTE = "file:///marker/remote.git"
+
+
 def _run_hold_lookup_script(
     tmp_path: Path,
     script: str,
     *,
     lookup_rc: int,
-    token: str | None = "test-release-marker-token",
+    token: str | None = _MARKER_TOKEN,
 ) -> subprocess.CompletedProcess[str]:
     bin_dir = tmp_path / "hold-bin"
     bin_dir.mkdir()
@@ -2137,7 +2191,7 @@ exit 0
         "GITHUB_OUTPUT": str(tmp_path / "output"),
         "VERSION": "1.2.3",
         "GH_TOKEN": "test",
-        "GITHUB_REPOSITORY": "example/repo",
+        "RELEASE_MARKER_REMOTE": _HOLD_MARKER_REMOTE,
     }
     if token is None:
         env.pop("RELEASE_MARKER_TOKEN", None)
@@ -2158,10 +2212,31 @@ def test_release_publication_hold_establishment_refuses_existing_hold(tmp_path: 
     assert "git branch -f release-publication-hold" not in (tmp_path / "hold-commands.log").read_text(encoding="utf-8")
 
 
+@pytest.mark.posix_only
+def test_release_publication_hold_establishment_pushes_through_the_admin_remote(tmp_path: Path) -> None:
+    result = _run_hold_lookup_script(
+        tmp_path,
+        _hold_step_script("Establish release publication hold (cut only)"),
+        lookup_rc=2,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    commands = (tmp_path / "hold-commands.log").read_text(encoding="utf-8")
+    # The protected hold is created on the admin marker remote, with the
+    # checkout's credential header cleared, and never as a plain origin push.
+    assert (
+        _marker_push_line(
+            _HOLD_MARKER_REMOTE,
+            "refs/heads/release-publication-hold:refs/heads/release-publication-hold",
+        )
+        in commands
+    )
+    assert " push origin " not in commands
+
+
 @pytest.mark.parametrize("token", [None, ""])
 @pytest.mark.posix_only
 def test_release_publication_hold_establishment_fails_closed_without_the_marker_token(tmp_path: Path, token: str | None) -> None:
-    # The guard's entire safety property: with no admin credential the step must
+    # The guard's whole safety property: with no admin credential the step must
     # refuse before it pushes (or deletes) a ruleset-protected marker ref.
     result = _run_hold_lookup_script(
         tmp_path,
@@ -2170,12 +2245,8 @@ def test_release_publication_hold_establishment_fails_closed_without_the_marker_
         token=token,
     )
     assert result.returncode != 0
-    assert "RELEASE_MARKER_TOKEN" in result.stdout + result.stderr
-    log = tmp_path / "hold-commands.log"
-    commands = log.read_text(encoding="utf-8") if log.exists() else ""
-    assert "push" not in commands
-    assert "--delete" not in commands
-    assert "git branch -f release-publication-hold" not in commands
+    assert "RELEASE_MARKER_TOKEN is missing or empty" in result.stdout + result.stderr
+    assert not (tmp_path / "hold-commands.log").exists(), "the guard must refuse before any git command runs"
 
 
 def _hold_lookup_fragment(script: str) -> str:
@@ -2241,17 +2312,22 @@ def test_release_publication_hold_establishment_handles_absent_and_remote_error(
 def test_release_publication_hold_cleanup_is_explicitly_fail_closed(tmp_path: Path, step_name: str, lookup_rc: int) -> None:
     result = _run_hold_lookup_script(tmp_path, _hold_step_script(step_name), lookup_rc=lookup_rc)
     commands = (tmp_path / "hold-commands.log").read_text(encoding="utf-8")
+    delete_invocation = _marker_push_line(_HOLD_MARKER_REMOTE, "--delete", "refs/heads/release-publication-hold")
     if lookup_rc == 0:
         assert result.returncode == 0, result.stderr + result.stdout
-        assert "--delete refs/heads/release-publication-hold" in commands
+        assert delete_invocation in commands
+        # The protected hold is only ever deleted through the admin remote.
+        assert " push origin " not in commands
     elif lookup_rc == 2:
         assert result.returncode == 0, result.stderr + result.stdout
         assert "release-publication-hold" in result.stdout
-        assert "--delete refs/heads/release-publication-hold" not in commands
+        assert delete_invocation not in commands
+        assert " push origin " not in commands
     else:
         assert result.returncode != 0
         assert "preserving unknown hold state" in result.stdout
-        assert "--delete refs/heads/release-publication-hold" not in commands
+        assert delete_invocation not in commands
+        assert " push origin " not in commands
 
 
 def _promote_step() -> dict[str, Any]:
@@ -2267,6 +2343,62 @@ def test_release_promote_drives_every_gh_call_with_the_trusted_bot_token(tmp_pat
     token_log = Path(env["HARNESS_DIR"], "commands.log.tokens")
     tokens = {line for line in token_log.read_text(encoding="utf-8").splitlines() if line}
     assert tokens == {env["GH_TOKEN"]}
+
+
+@pytest.mark.posix_only
+def test_release_promote_marker_refs_use_the_admin_remote_and_clear_the_extraheader(tmp_path: Path) -> None:
+    result, _root, _rc_sha, _pr_sha, env = _promote_harness(tmp_path, scenario="valid")
+    assert result.returncode == 0, result.stderr + result.stdout
+    log_text = (tmp_path / "git-commands.log").read_text(encoding="utf-8")
+    marker_invocations = _marker_remote_from_log(log_text)
+    assert marker_invocations, "the promote path must drive every marker push through marker_git"
+
+    remote = env["RELEASE_MARKER_REMOTE"]
+    assert remote != "origin"
+    for invocation in marker_invocations:
+        args = shlex.split(invocation)[1:]
+        # The extraheader clearing rides on the command path, and the push
+        # target is the admin remote - never the checkout's `origin`.
+        assert args[:3] == ["-c", _MARKER_EXTRAHEADER, "push"], invocation
+        assert args[3] == remote, invocation
+
+    joined = "\n".join(marker_invocations)
+    assert "refs/heads/release-publication-hold:refs/heads/release-publication-hold" in joined
+    assert "--delete refs/heads/release-freeze" in joined
+    assert "refs/heads/release-freeze:refs/heads/release-freeze --force" in joined
+
+    # No ruleset-protected ref travelled over `origin`.
+    origin_marker = [line for line in log_text.splitlines() if " push origin " in line and ("release-freeze" in line or "release-publication-hold" in line)]
+    assert not origin_marker
+
+
+@pytest.mark.parametrize("step_name", ["Cut release candidate and freeze main", "Recut from current main"])
+@pytest.mark.parametrize("token", [None, ""])
+@pytest.mark.posix_only
+def test_release_marker_steps_fail_closed_without_the_marker_token_before_tagging(tmp_path: Path, step_name: str, token: str | None) -> None:
+    """A missing admin credential must stop the step before it tags an RC.
+
+    The guard is placed ahead of the RC tag on both the cut and the recut path,
+    so a misconfigured run cannot strand a tag with no freeze to match it.
+    """
+    repo, log, env = _cut_harness(tmp_path)
+    guarded = dict(env)
+    if token is None:
+        guarded.pop("RELEASE_MARKER_TOKEN")
+    else:
+        guarded["RELEASE_MARKER_TOKEN"] = token
+    guarded["RELEASE_MARKER_REMOTE"] = "file:///never/pushed.git"
+
+    script = _release_job_run(step_name).replace("${{ inputs.freeze }}", "true")
+    result = _run_bash(script, cwd=repo, env=guarded)
+    output = result.stdout + result.stderr
+
+    assert result.returncode != 0
+    assert "RELEASE_MARKER_TOKEN is missing or empty" in output
+    assert not _cut_git("tag", "--list", "v0.2.0-rc*", cwd=repo).stdout.strip()
+    assert not _cut_git("ls-remote", "--tags", "origin", "refs/tags/v0.2.0-rc*", cwd=repo).stdout.strip()
+    # Fail closed before ANY git command runs: no tag, no push, no lookup.
+    assert not log.exists(), "the guard must exit before any git command runs"
 
 
 @pytest.mark.parametrize("token", [None, ""])
@@ -2301,9 +2433,9 @@ def test_release_promote_fails_closed_without_the_release_marker_token(tmp_path:
         guarded_env.pop("RELEASE_MARKER_TOKEN", None)
     else:
         guarded_env["RELEASE_MARKER_TOKEN"] = token
-    # The promote guard sits above every marker operation; reset the git log so
+    # The marker guard sits above every marker operation; clear the git log so
     # the assertions observe only this credential-less attempt.
-    git_log = Path(env["HARNESS_DIR"], "commands.log")
+    git_log = tmp_path / "git-commands.log"
     git_log.write_text("", encoding="utf-8")
     script = _promote_step()["run"]
     result = subprocess.run(  # noqa: S603 - workflow text is repository-owned and test-controlled
@@ -2316,11 +2448,8 @@ def test_release_promote_fails_closed_without_the_release_marker_token(tmp_path:
         timeout=30,
     )
     assert result.returncode != 0
-    assert "RELEASE_MARKER_TOKEN" in result.stdout + result.stderr
-    commands = git_log.read_text(encoding="utf-8")
-    assert "--delete refs/heads/release-freeze" not in commands
-    assert "release-publication-hold" not in commands
-    assert " release-freeze:refs/heads/release-freeze" not in commands
+    assert "RELEASE_MARKER_TOKEN is missing or empty" in result.stdout + result.stderr
+    assert not git_log.read_text(encoding="utf-8"), "the guard must refuse before any git command runs"
 
 
 def test_release_promote_uses_a_single_protected_pr_and_exact_merged_sha() -> None:
@@ -2392,27 +2521,16 @@ def _promote_harness(tmp_path: Path, *, scenario: str, ci_sha: str | None = None
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    # FAR-2690: the protected-marker pushes/deletes target an explicit
-    # admin-authenticated GitHub URL rather than `origin`. Route that exact
-    # marker remote to the local bare origin so the rehearsal exercises the
-    # real script without touching the network.
-    marker_remote = "https://x-access-token:test-release-marker-token@github.com/example/repo.git"
+    # Log every git invocation, then hand over to the real git: the marker
+    # pushes must be observable so a test can prove they target the admin
+    # remote rather than `origin`.
     real_git = which("git")
     assert real_git is not None
     _write_executable(
         bin_dir / "git",
         f"""#!/usr/bin/env bash
-set -euo pipefail
-printf 'git %s\\n' "$*" >> "$HARNESS_DIR/commands.log"
-args=()
-for arg in "$@"; do
-  if [ "$arg" = {shlex.quote(marker_remote)} ]; then
-    args+=({shlex.quote(str(origin))})
-  else
-    args+=("$arg")
-  fi
-done
-exec {shlex.quote(real_git)} "${{args[@]}}"
+printf 'git %s\\n' "$*" >> {shlex.quote(str(tmp_path / "git-commands.log"))}
+exec {shlex.quote(real_git)} "$@"
 """,
     )
     gh = bin_dir / "gh"
@@ -2620,7 +2738,11 @@ exec /usr/bin/python3 "$@"
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "GITHUB_REPOSITORY": "example/repo",
         "GH_TOKEN": "test-release-pr-token",
-        "RELEASE_MARKER_TOKEN": "test-release-marker-token",
+        "RELEASE_MARKER_TOKEN": _MARKER_TOKEN,
+        # The admin marker remote is a distinct spelling of the same local bare
+        # repo, so the protected pushes are genuinely exercised with no network
+        # while staying distinguishable from `origin` in the git log.
+        "RELEASE_MARKER_REMOTE": _marker_remote_for(origin),
         "VERSION": "1.2.3",
         "SCENARIO": scenario,
         "ROOT": str(root),
@@ -2952,14 +3074,20 @@ def test_release_promote_freeze_cleanup_is_final_and_failure_safe() -> None:
     assert steps[lift_idx]["if"] == "inputs.mode == 'promote' && success()"
     # The promote step swaps release-freeze for release-publication-hold so the
     # merge queue can run, then re-establishes the freeze at the exact GA commit.
-    release_freeze_force = 'marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force'
-    release_freeze_delete = 'marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze'
-    assert release_freeze_delete in steps[promote_idx]["run"]
+    # Every one of those marker writes is ruleset-protected, so each runs
+    # through the admin marker remote with the checkout header cleared.
+    lift_freeze = 'marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze'
+    force_freeze = 'marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force'
+    assert lift_freeze in steps[promote_idx]["run"]
     assert "git branch -f release-freeze HEAD" in steps[promote_idx]["run"]
-    assert release_freeze_force in steps[promote_idx]["run"]
-    assert "release-publication-hold" in steps[promote_idx]["run"]
-    assert release_freeze_delete in steps[lift_idx]["run"]
-    assert release_freeze_force in steps[reestablish_idx]["run"]
+    assert force_freeze in steps[promote_idx]["run"]
+    assert 'marker_git push "$MARKER_REMOTE" refs/heads/release-publication-hold:refs/heads/release-publication-hold' in steps[promote_idx]["run"]
+    assert lift_freeze in steps[lift_idx]["run"]
+    assert force_freeze in steps[reestablish_idx]["run"]
+    for index in (promote_idx, reestablish_idx, lift_idx):
+        assert "git push origin --delete refs/heads/release-freeze" not in steps[index]["run"]
+        assert "git push origin refs/heads/release-freeze --force" not in steps[index]["run"]
+        assert _MARKER_EXTRAHEADER in steps[index]["run"]
 
 
 def test_release_promote_has_no_bypass_or_silent_fallback() -> None:
@@ -3025,6 +3153,12 @@ _RC_TAG_OBJECT_SHA = "3" * 40
 _RC_COMMIT_SHA = "4" * 40
 _OTHER_RELEASE_FREEZE_SHA = "2" * 40
 
+#: The admin marker remote the finalizer is pointed at. The stub `git` records
+#: the argv; nothing resolves this path.
+_FREEZE_MARKER_REMOTE = "file:///marker/remote.git"
+
+_FREEZE_DELETE_ARGS = ("--delete", "refs/heads/release-freeze")
+
 
 def _freeze_cleanup_workflow() -> dict[str, Any]:
     return cast(dict[str, Any], yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8")))
@@ -3062,7 +3196,7 @@ def _run_freeze_cleanup(
     rc_tags_rc: int = 0,
     rc_listing: str | None = None,
     delete_rc: int = 0,
-    token: str | None = "test-release-marker-token",
+    token: str | None = _MARKER_TOKEN,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir = tmp_path / "freeze-bin"
     bin_dir.mkdir()
@@ -3073,6 +3207,9 @@ def _run_freeze_cleanup(
         f"""#!/usr/bin/env bash
 set -u
 printf 'git %s\\n' "$*" >> {shlex.quote(str(log))}
+# The marker path prefixes every call with `-c <extraheader>`; strip it so the
+# stub still answers the ls-remote/push it is emulating.
+if [ "$1" = "-c" ]; then shift 2; fi
 if [ "$1" = "ls-remote" ]; then
   case "${{@: -1}}" in
     refs/tags/bundle-v*) exit {bundle_rc} ;;
@@ -3092,13 +3229,9 @@ REFS
   echo "unexpected ls-remote ref: $*" >&2
   exit 99
 fi
-for arg in "$@"; do
-  # FAR-2690 routes the protected-marker delete through `git -c ... push
-  # <admin-remote> --delete ...`, so `push` is no longer the first argument.
-  if [ "$arg" = "push" ]; then
-    exit {delete_rc}
-  fi
-done
+if [ "$1" = "push" ]; then
+  exit {delete_rc}
+fi
 echo "unexpected git call: $*" >&2
 exit 99
 """,
@@ -3107,7 +3240,7 @@ exit 99
         **os.environ,
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "VERSION": _FREEZE_CLEANUP_VERSION,
-        "GITHUB_REPOSITORY": "example/repo",
+        "RELEASE_MARKER_REMOTE": _FREEZE_MARKER_REMOTE,
     }
     if token is None:
         env.pop("RELEASE_MARKER_TOKEN", None)
@@ -3117,7 +3250,8 @@ exit 99
 
 
 def _delete_invocations(log: Path) -> list[str]:
-    return [line for line in log.read_text(encoding="utf-8").splitlines() if "--delete refs/heads/release-freeze" in line]
+    """Every pushed delete of the marker ref recorded by a harness git stub."""
+    return [line for line in log.read_text(encoding="utf-8").splitlines() if " push " in line and "--delete" in line]
 
 
 @pytest.mark.posix_only
@@ -3130,9 +3264,8 @@ def test_freeze_cleanup_deletes_this_versions_freeze_after_a_failed_cut(tmp_path
     assert f"ls-remote --exit-code origin refs/tags/bundle-v{_FREEZE_CLEANUP_VERSION}" in commands
     assert "ls-remote --exit-code origin refs/heads/release-freeze" in commands
     assert f"ls-remote --tags origin refs/tags/v{_FREEZE_CLEANUP_VERSION}-rc*" in commands
-    deletes = _delete_invocations(log)
-    assert len(deletes) == 1
-    assert deletes[0].endswith("--delete refs/heads/release-freeze")
+    assert _delete_invocations(log) == [_marker_push_line(_FREEZE_MARKER_REMOTE, *_FREEZE_DELETE_ARGS)]
+    assert " push origin " not in commands
     assert "merge queue may resume" in result.stdout
 
 
@@ -3193,9 +3326,7 @@ def test_freeze_cleanup_fails_loudly_when_the_delete_is_refused(tmp_path: Path) 
     result, log = _run_freeze_cleanup(tmp_path, delete_rc=1)
     assert result.returncode != 0
     assert "Could not delete refs/heads/release-freeze" in result.stdout + result.stderr
-    deletes = _delete_invocations(log)
-    assert len(deletes) == 1
-    assert deletes[0].endswith("--delete refs/heads/release-freeze")
+    assert _delete_invocations(log) == [_marker_push_line(_FREEZE_MARKER_REMOTE, *_FREEZE_DELETE_ARGS)]
 
 
 @pytest.mark.parametrize("token", [None, ""])
@@ -3205,7 +3336,7 @@ def test_freeze_cleanup_fails_closed_without_the_marker_token(tmp_path: Path, to
     # credential guard (not an earlier preserve exit), then refuse the delete.
     result, log = _run_freeze_cleanup(tmp_path, token=token)
     assert result.returncode != 0
-    assert "RELEASE_MARKER_TOKEN" in result.stdout + result.stderr
+    assert "RELEASE_MARKER_TOKEN is missing or empty" in result.stdout + result.stderr
     assert not _delete_invocations(log)
 
 
@@ -3229,17 +3360,24 @@ def test_freeze_cleanup_is_a_dedicated_finalizer_job_after_publication() -> None
     # outcome. Every freeze delete inside `release` stays promote-only.
     release_steps = cast(list[dict[str, Any]], jobs["release"]["steps"])
     assert _FREEZE_CLEANUP_STEP_NAME not in _step_names(release_steps)
-    delete_cmd = "--delete refs/heads/release-freeze"
+    delete_cmd = 'marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze'
     deleting = [step for step in release_steps if delete_cmd in str(step.get("run", ""))]
     assert deleting, "the promote path must still lift the freeze"
     assert all("promote" in str(step.get("if", "")) for step in deleting)
+    # A plain origin delete would be rejected by the ruleset, so it must not
+    # survive anywhere on the release path.
+    assert not [step for step in release_steps if "git push origin --delete refs/heads/release-freeze" in str(step.get("run", ""))]
 
 
 def test_freeze_cleanup_script_is_real_and_never_swallows_errors() -> None:
     script = _freeze_cleanup_script()
     assert script.strip()
     assert "set -euo pipefail" in script
+    # The ruleset-protected delete goes through the admin marker remote with the
+    # checkout credential header cleared, not a plain origin push.
     assert 'marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze' in script
+    assert _MARKER_EXTRAHEADER in script
+    assert "git push origin --delete refs/heads/release-freeze" not in script
     assert "|| true" not in script
 
 
