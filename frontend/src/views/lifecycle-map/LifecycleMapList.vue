@@ -37,13 +37,13 @@
 
     <section class="page-wide">
       <div v-if="store.isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div v-for="i in 6" :key="i" class="card p-5 animate-pulse">
+        <BaseCard v-for="i in 6" :key="i" padding="lg" class="animate-pulse">
           <div class="h-5 w-3/4 bg-muted rounded mb-2" />
           <div class="h-3 w-full bg-muted rounded mb-1" />
           <div class="h-3 w-2/3 bg-muted rounded mb-4" />
           <div class="h-4 w-16 bg-muted rounded mb-3" />
           <div class="h-8 w-full bg-muted rounded" />
-        </div>
+        </BaseCard>
       </div>
 
       <ErrorAlert v-else-if="store.error" :message="store.error" :on-retry="loadMaps" class="mb-6" />
@@ -70,9 +70,9 @@
           v-for="m in pagedMaps"
           :key="m.id"
           variant="bordered"
-          padding="none"
+          padding="lg"
           data-testid="lifecycle-map-list-card"
-          card-class="card-hover w-full p-5 text-left cursor-pointer"
+          card-class="card-hover w-full text-left cursor-pointer"
           @click="openMap(m)"
           @keydown.enter.self="openMap(m)"
           @keydown.space.self.prevent="openMap(m)"
@@ -224,6 +224,7 @@ import { useApi } from '../../composables/useApi'
 import { formatApiError } from '../../lib/api/formatError'
 import Select from '../../components/shared/AppSelect.vue'
 import DataCard from '../../components/ui/DataCard.vue'
+import BaseCard from '../../components/ui/BaseCard.vue'
 
 const router = useRouter()
 const route = useRoute()
