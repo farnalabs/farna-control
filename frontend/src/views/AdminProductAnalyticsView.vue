@@ -14,7 +14,7 @@
         </div>
 
         <!-- Transparency data -->
-        <SectionCard :title="$t('views.AdminProductAnalyticsView.delivery_status')">
+        <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminProductAnalyticsView.delivery_status')">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.last_successful_dump') }}</span>
@@ -29,9 +29,9 @@
               </p>
             </div>
           </div>
-        </SectionCard>
+        </DataCard>
 
-        <SectionCard :title="$t('views.AdminProductAnalyticsView.consent_and_enforcement')">
+        <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminProductAnalyticsView.consent_and_enforcement')">
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.consent_level') }}</span>
@@ -66,9 +66,9 @@
               </p>
             </div>
           </div>
-        </SectionCard>
+        </DataCard>
 
-        <SectionCard :title="$t('views.AdminProductAnalyticsView.instance_switch_control')">
+        <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminProductAnalyticsView.instance_switch_control')">
           <div class="space-y-3">
             <p class="text-sm text-muted-foreground" data-testid="instance-switch-source">
               {{ switchSourceCopy }}
@@ -100,7 +100,7 @@
               {{ saveError }}
             </p>
           </div>
-        </SectionCard>
+        </DataCard>
       </div>
     </template>
     </div>
@@ -110,7 +110,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { parseISO } from 'date-fns'
 import PageHeader from '../components/shared/PageHeader.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { useProductAnalyticsStore } from '../stores/productAnalyticsStore'

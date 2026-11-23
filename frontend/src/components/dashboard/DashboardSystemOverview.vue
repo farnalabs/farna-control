@@ -1,10 +1,12 @@
 <template>
-  <SectionCard
+  <DataCard
+    variant="bordered"
+    heading-level="h2"
     :title="$t('views.DashboardView.system_overview')"
     :description="$t('views.DashboardView.system_overview_description')"
     data-testid="dashboard-system-overview"
   >
-    <template #header>
+    <template #headerActions>
       <button
         v-if="canDiscover"
         type="button"
@@ -82,11 +84,11 @@
         </div>
       </div>
     </div>
-  </SectionCard>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
-import SectionCard from '../shared/SectionCard.vue'
+import DataCard from '../ui/DataCard.vue'
 import EmptyState from '../shared/EmptyState.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import { computed, onMounted, ref, watch } from 'vue'

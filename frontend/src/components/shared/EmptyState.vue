@@ -1,5 +1,5 @@
 <template>
-  <div class="card p-8 text-center">
+  <BaseCard padding="xl" class="text-center">
     <svg
       width="48"
       height="48"
@@ -21,10 +21,12 @@
     <div v-if="$slots.default" class="mt-6">
       <slot />
     </div>
-  </div>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
+import BaseCard from '../ui/BaseCard.vue'
+
 defineProps<{
   title: string;
   description?: string;

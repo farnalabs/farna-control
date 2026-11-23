@@ -140,7 +140,7 @@ async function mountAssistant(overrides: {
 }
 
 function section(wrapper: ReturnType<typeof mount>, title: string) {
-  // SectionCard renders its title in an <h2> inside a .card wrapper
+  // DataCard renders its title in an <h2> inside a .card wrapper
   const cards = wrapper.findAll('.card')
   return cards.find((c) => c.find('h2').text().includes(title))
 }
