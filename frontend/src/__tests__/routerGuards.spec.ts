@@ -267,13 +267,25 @@ describe('/evals/proposals permission gate (FAR-2621)', () => {
 })
 
 describe('enforceRoleTierVisibility', () => {
-  it('redirects a requiresSystemAdmin route when the token is not a system admin', async () => {
+  it('sends a requiresSystemAdmin route to the locked page when the token is not a system admin', async () => {
     decodeJwtPayload.mockReturnValue({ is_system_admin: false })
     const result = await enforceRoleTierVisibility(
       makeRoute('admin-system-orgs', { requiresSystemAdmin: true }),
       'tok',
     )
-    expect(result).toEqual({ name: 'dashboard' })
+    // FAR-2688: this previously pinned `{ name: 'dashboard' }` — the silent
+    // bounce, i.e. the defect. It now asserts the locked destination and the
+    // system_admin reason, with the real manifest's capability. FAR-2665
+    // replaced the tier with an entitlement, and this route declares none, so
+    // no entitlement key is carried.
+    expect(result).toEqual({
+      path: '/locked',
+      query: {
+        from: '/',
+        capability: 'Organisations',
+        reason: 'system_admin',
+      },
+    })
   })
 
   it('allows a requiresSystemAdmin route when the token is a system admin', async () => {

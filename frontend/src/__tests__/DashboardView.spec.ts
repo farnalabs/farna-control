@@ -390,6 +390,30 @@ describe('DashboardView', () => {
       expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
     })
 
+    it('omits the role param when the Costs item is refused for instance admin', async () => {
+      // The real manifest does not make Costs instance-admin-gated, but the
+      // destination is shared logic and must tolerate that refusal: a
+      // `system_admin` reason carries no role to name, so no `role=` param.
+      navState.groups = [
+        {
+          id: 'test',
+          label: 'Test',
+          defaultCollapsed: false,
+          items: [
+            { to: '/admin/costs', icon: 'Coins', label: 'Costs', labelKey: 'k', systemAdminOnly: true },
+          ],
+        },
+      ]
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('admin'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('reason=system_admin')
+      expect(href).not.toContain('role=')
+    })
+
     it('sends a role the Costs route refuses to the honest lock, not the Dashboard', async () => {
       vi.mocked(getAccessToken).mockReturnValue(jwtForUser('viewer'))
       const wrapper = mount(DashboardView)

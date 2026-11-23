@@ -334,6 +334,14 @@ const costsDestination = computed(() => {
   if (!refusal) return '/admin/costs'
   const params = new URLSearchParams({ from: costsNavItem.to, reason: refusal })
   if (costsNavItem.requiredEntitlement) params.set('entitlement', costsNavItem.requiredEntitlement)
+  // FAR-2688: carry the roles that would grant access so the locked page can
+  // name them instead of falling back to the generic "ask for the role that
+  // includes it". The naming copy is FAR-2687 (open PR at the time of writing);
+  // carrying the parameter here is additive — until it lands the locked page
+  // simply ignores it, and a below-tier/tier lock is unchanged.
+  if (refusal === 'role' && costsNavItem.requiredRoles?.length) {
+    params.set('role', costsNavItem.requiredRoles.join(','))
+  }
   return `/locked?${params.toString()}`
 })
 

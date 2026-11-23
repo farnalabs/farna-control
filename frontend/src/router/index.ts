@@ -1052,10 +1052,27 @@ export async function enforceRoleTierVisibility(
   const payload = decodeJwtPayload(token)
 
   if (to.meta?.requiresSystemAdmin && !payload?.is_system_admin) {
-    return { name: 'dashboard' }
+    // FAR-2688: an instance-admin refusal is not a broken application — land
+    // on the locked page, which names the instance-level restriction and the
+    // one person who can lift it, instead of a silent bounce to the Dashboard.
+    // The locked page carries no gate of its own (it is not in the manifest),
+    // so this cannot loop. The copy and the view branch already existed
+    // (FAR-2664); only this denial was still returning the Dashboard.
+    return lockedRouteFor(to, 'system_admin')
   }
 
   if (!(await hasRequiredPermissions(to))) {
+    // FAR-2688 (deliberate): a permission refusal keeps the Dashboard bounce.
+    // Unlike role / instance-admin / tier — all decided from OBSERVED token
+    // claims or a resolved tier — the permission list is resolved
+    // asynchronously and FAILS CLOSED: `fetchPermissions` sets
+    // `permissionsSource='unavailable'` with an empty list on a 4xx/5xx/
+    // timeout, which is indistinguishable here from a caller who genuinely
+    // holds none (stores/planStore.ts, FAR-2020). Explaining "your role cannot
+    // open this" would therefore assert a role change is needed during a
+    // transient fetch failure, when a retry is the actual fix. An explanation
+    // needs the unknown state separated from the observed one first; until
+    // then a silent bounce states nothing false.
     return { name: 'dashboard' }
   }
 
@@ -1176,6 +1193,18 @@ async function enforceRouteFeatureFlag(
     await planStore.fetchPlan()
   }
   if (!planStore.featureEnabled(to.meta.featureFlag)) {
+    // FAR-2688 (deliberate): a disabled feature flag keeps the Dashboard
+    // bounce, and says so here rather than inventing copy. `featureEnabled` is
+    // false BOTH when the flag is genuinely off and when the plan payload
+    // never resolved (it reads `orgOverrides[flag] ?? features[flag] ??
+    // false`), so the two states are indistinguishable at this point and any
+    // user-facing explanation could be false during a transient plan failure.
+    // The only flag-gated route (`/admin/notification-delivery`) is filtered
+    // out of the nav while its flag is off, so this is reachable only by a
+    // stale deep link; and no role, purchase or request can grant a flag, so
+    // none of the locked page's three reasons (tier / role / system_admin)
+    // would be true. Explaining it needs an "unknown plan" state separated
+    // from "flag off" first — a separate change, not a generic mechanism here.
     return { name: 'dashboard' }
   }
   return true
