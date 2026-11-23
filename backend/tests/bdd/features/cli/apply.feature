@@ -1,12 +1,12 @@
-Feature: Declarative Configuration CLI (`modulo apply`)
+Feature: Declarative Configuration CLI (`farna-control apply`)
   As an operator
   I want to manage an org's schemas, model backends, pipelines and triggers
-    from a single YAML file via `modulo apply -f <config.yaml>`
+    from a single YAML file via `farna-control apply -f <config.yaml>`
   So that infrastructure is applied declaratively and CI can gate on config
     drift with `--diff` (feat-apply)
 
   Background:
-    Given a modulo apply test context
+    Given a farna-control apply test context
 
   # -- Config format & loading -------------------------------------------
   # (backend/src/farna/cli/apply/loader.py + models.py)

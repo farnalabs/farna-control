@@ -50,7 +50,7 @@ case "$tag" in
     ;;
 esac
 
-app_service="${FARNA_CONTROL_APP_SERVICE:-modulo}"
+app_service="${FARNA_CONTROL_APP_SERVICE:-farna-control}"
 
 compose_file="${COMPOSE_FILE:-}"
 if [ -z "$compose_file" ]; then

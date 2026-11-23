@@ -1,17 +1,20 @@
 schema_version: 1
 
+# FAR-2665: a route declares ROLES/PERMISSIONS plus, when the capability is
+# commercial, a `required_entitlement` that names an entry in
+# backend/src/farna/core/entitlements.py. There is deliberately no tier key: a
+# tier is a projection of the entitlement grant, and the guard reads the grant
+# from the /api/v1/plan payload.
 x-community: &community
-    required_tier: community
     required_roles:
     required_permissions:
 
-x-team: &team
-    required_tier: team
+# Admin-only, free. (Renamed from `team`: "team" described a tier, not a role.)
+x-admin: &admin
     required_roles: [admin]
     required_permissions:
 
-x-team-viewer: &team_viewer
-    required_tier: team
+x-admin-viewer: &admin_viewer
     required_roles: [admin, viewer]
     required_permissions:
 
@@ -411,8 +414,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 60
         type: form_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         visibility: private_preview
         deprecated: false
 
@@ -436,7 +438,8 @@ routes:
         sidebar_group: administration
         sidebar_order: 50
         type: list_page
-        <<: *team
+        <<: *admin
+        required_entitlement: identity
         deprecated: false
 
     /settings/sso:
@@ -447,7 +450,8 @@ routes:
         sidebar_group: administration
         sidebar_order: 60
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: identity
         deprecated: false
 
     /settings/license:
@@ -515,7 +519,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
+        <<: *admin
     /settings/rate-limits:
         name: settings-rate-limits
         breadcrumb: Rate Limits
@@ -527,7 +531,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
+        <<: *admin
     /settings/hitl-review:
         name: settings-hitl-review
         breadcrumb: HITL Review
@@ -563,7 +567,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
+        <<: *admin
     /settings/notifications:
         name: settings-notifications
         breadcrumb: Notification Preferences
@@ -595,8 +599,7 @@ routes:
         type: form_page
         deprecated: false
 
-        <<: *team
-        required_tier: community
+        <<: *admin
     /settings/monitoring:
         name: settings-monitoring
         breadcrumb: Browser Monitoring
@@ -636,15 +639,16 @@ routes:
         type: form_page
         # FAR-1269: the org HITL review window (GET/PUT
         # /api/v1/admin/org/hitl-review-window) is not plan-gated, so this page
-        # must be reachable on EVERY tier. Community tier + an explicit
-        # ["admin"] role list is the FAR-462 pattern (same as /admin/users):
-        # the router enforces required_roles and required_tier as separate
-        # gates, so navigation stays admin-only while the tier stays
-        # community. Every team-only section on the page remains behind the
-        # in-page team_rbac FeatureGate (dimmed + upgrade overlay on
-        # Community); three org-scoped, community-tier cards render OUTSIDE
-        # it so a community admin can use them: the HITL review window, the
-        # human-linked MCP HITL authority, and the organisation feature flags.
+        # must be reachable on EVERY plan. The FAR-462 pattern (same as
+        # /admin/users) is an explicit ["admin"] role list and NO
+        # required_entitlement: the router enforces roles and the entitlement
+        # grant as separate gates, so navigation stays admin-only while the page
+        # carries no commercial requirement. Every Team section on the page
+        # remains behind the in-page team_rbac FeatureGate (dimmed + upgrade
+        # overlay without the Identity entitlement); three org-scoped cards
+        # render OUTSIDE it so an unentitled admin can use them: the HITL review
+        # window, the human-linked MCP HITL authority, and the organisation
+        # feature flags.
         <<: *community
         required_roles: [admin]
         deprecated: false
@@ -657,7 +661,8 @@ routes:
         sidebar_group: runs
         sidebar_order: 60
         type: list_page
-        <<: *team
+        <<: *admin
+        required_entitlement: audit_evidence
         deprecated: false
 
     /admin/costs:
@@ -668,7 +673,8 @@ routes:
         sidebar_group: runs
         sidebar_order: 70
         type: page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
         exact: true
 
@@ -680,7 +686,8 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
 
     /admin/costs/controls:
@@ -691,7 +698,8 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
 
     /admin/costs/components:
@@ -702,7 +710,8 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
 
     /admin/connectors:
@@ -713,8 +722,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 10
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/model-backends:
@@ -725,8 +733,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 20
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/node-categories:
@@ -744,8 +751,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 80
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         visibility: private_preview
         deprecated: false
 
@@ -760,8 +766,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
-        required_tier: community
+        <<: *admin
     /admin/housekeeping:
         name: admin-housekeeping
         breadcrumb: Housekeeping
@@ -781,8 +786,7 @@ routes:
         sidebar_group: pipelines
         sidebar_order: 40
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/run-retention:
@@ -795,7 +799,8 @@ routes:
         type: page
         deprecated: false
 
-        <<: *team
+        <<: *admin
+        required_entitlement: audit_evidence
     /admin/runners/concurrency:
         name: admin-runners-concurrency
         breadcrumb: Runner Concurrency
@@ -804,8 +809,7 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/evidence-redaction:
@@ -858,7 +862,7 @@ routes:
         sidebar_group: runs
         sidebar_order: 50
         type: list_page
-        <<: *team_viewer
+        <<: *admin_viewer
         deprecated: false
 
     /admin/errors/:id:
@@ -872,7 +876,7 @@ routes:
         pattern: /admin/errors/:id
         dynamic_params:
           - id
-        <<: *team_viewer
+        <<: *admin_viewer
         deprecated: false
 
     /admin/notification-delivery:
@@ -884,8 +888,7 @@ routes:
         sidebar_order: 110
         feature_flag: webhook_notification_log
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/trigger-events:
@@ -896,8 +899,7 @@ routes:
         sidebar_group: pipelines
         sidebar_order: 60
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/product-analytics:
@@ -909,13 +911,12 @@ routes:
         sidebar_order:
         system_admin_only: true
         type: page
-        <<: *team
+        <<: *admin
         # A system_admin_only route is an INSTANCE-level gate; the org-ROLE
         # requirement *team carries does not apply (FAR-1795), so it is
         # overridden to none. The TIER is community: the ratified Team bundle
         # does not name product analytics, and this is an instance-level admin
         # surface, so a system admin on a community install must reach it.
-        required_tier: community
         required_roles:
         deprecated: false
 
@@ -951,7 +952,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 50
         type: list_page
-        <<: *team
+        <<: *admin
         visibility: private_preview
         deprecated: false
 
@@ -1058,8 +1059,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 30
         type: page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
         exact: true
 
@@ -1071,8 +1071,7 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/runners/profiles/:id/edit:
@@ -1086,8 +1085,7 @@ routes:
         pattern: /admin/runners/profiles/:id/edit
         dynamic_params:
           - id
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/my-profile:
@@ -7952,11 +7950,11 @@ features:
         deferrals:
             - Per-org analytics rate limiting is a best-effort in-memory window (60/min), not a shared Redis-scaled limiter
     feat-apply:
-        description: '`modulo apply` — declarative configuration CLI (FAR-681)'
+        description: '`farna-control apply` — declarative configuration CLI (FAR-681)'
         status: covered
         behaviours:
             # Config format & loading (backend/src/farna/cli/apply/)
-            - "[x] `modulo apply -f <file>` loads single- or multi-document YAML (api_version modulo.dev/v1 major-gated; minor suffixes merge leniently) declaring entities.schemas / entities.model_backends / entities.pipelines / entities.triggers; duplicate names per kind (triggers keyed as pipeline/name) and trigger forward-references to a pipeline declared only in a LATER document are load-time errors"
+            - "[x] `farna-control apply -f <file>` loads single- or multi-document YAML (api_version farna.dev/v1 major-gated; minor suffixes merge leniently) declaring entities.schemas / entities.model_backends / entities.pipelines / entities.triggers; duplicate names per kind (triggers keyed as pipeline/name) and trigger forward-references to a pipeline declared only in a LATER document are load-time errors"
             - "[x] Secrets are refs-only: backend api_key / credential_ref and trigger config_json secret-shaped entries (sensitive LEAF keys or server-maskable values) must be ${env:VAR} or secretref://<key> references — inline secret literals are forbidden at validation; ${env:} refs are resolved client-side (missing/empty var blocks that entity), secretref:// is resolved SERVER-SIDE against the org vault at write time (FAR-1640, core/secrets_backend/references.py) and a missing/foreign key fails the entity with a typed credential_reference_error (422) naming the key, and hmac_secret/signing_secret are Fernet-encrypted server-side on write"
             - "[x] A model backend credential may instead be declared as credential_ref: <key> (FAR-1216) — the declarative short form naming a bare org-vault key; exactly one of api_key / credential_ref is required, the CLI normalises credential_ref to the server's secretref://<key> token (one wire form, one server resolver, so there is no parallel mechanism), and the key is validated at PLAN time against the org vault so a missing key blocks the entity (in the plan's blocked list, with a reason naming the key) before any write — the value never crosses the client boundary. Plan-time validation reads the vault keys through the server's MCP list_secrets tool, which requires the apply key to hold the secret.manage scope; an operator key that cannot list secrets blocks the entity rather than silently passing, and the validator fails CLOSED if the listing surface is unreachable. credential_ref applies to model backends only in this increment — connectors and SSO credentials are out of scope (cli/apply/models.py credential_reference/_exactly_one_credential, cli/apply/executor.py _block_missing_credential_refs, test_apply_credential_ref.py)"
             # Plan / apply engine
@@ -7969,11 +7967,11 @@ features:
             - "[x] `--diff` (drift mode) is read-only: it fetches the live org state and reports the plan-shape report explicitly labelled mode=drift WITHOUT writing anything (the run returns after the plan phase — no POST/PATCH/PUT code path is reachable), adds a per-entity breakdown (drift_detail): a graph node/edge added/removed/modified breakdown matched by id for drifted pipelines (top-level-only pipeline drift gets no entry) plus a managed-field added/removed/modified breakdown for drifted schemas / model backends / triggers (keyed <kind>:<name>), and the table output prefixes verbs (drift create / drift update) plus per-entity drift detail lines"
             # Git-sourced content (FAR-220)
             - "[x] Git-sourced content: a sandbox_agent node's agent_prompt / agent_commands items / script_command may be a whole-field git+<repo-url>[@<ref>]#<path> ref instead of inline content; apply resolves a movable ref to its commit SHA at plan time (bounded git ls-remote, identity fast-path when already pinned) and writes the canonical pinned form so the desired view, the write payload, the stored graph and every run snapshot carry the same pinned SHA; malformed or unresolvable refs BLOCK the entity (fail closed) and graph-save validation rejects unpinned/invalid git refs (including composite sandbox sub-nodes) so run snapshots always surface the resolved commit; at run time the agent-command rendering point fetches the file at exactly that pinned commit and substitutes it (public repos in this increment), with unpinned refs and fetch failures failing the node closed"
-            - "[x] `--diff` covers git-sourced content: the resolved pin hashes into the desired view, so a moved branch/tag, a changed spec, or an unpinned deployed graph reports updated (exit 1), and drift_detail emits a git_content list ({node, field, desired, current} with the full old/new refs) rendered as drift detail git-content lines showing the actual commit transition before `modulo apply` converges the pin"
+            - "[x] `--diff` covers git-sourced content: the resolved pin hashes into the desired view, so a moved branch/tag, a changed spec, or an unpinned deployed graph reports updated (exit 1), and drift_detail emits a git_content list ({node, field, desired, current} with the full old/new refs) rendered as drift detail git-content lines showing the actual commit transition before `farna-control apply` converges the pin"
             # Pipeline runtime limits (FAR-1294)
-            - "[x] `modulo apply` manages the pipeline runtime limits node_timeout_seconds (per-node timeout, >= 1, platform default 300) and max_duration_seconds (wall-clock run-duration cap, >= 1, platform default 3600) — but ONLY when declared: an omitted key leaves a UI/API-set value untouched, and because the REST API rejects an explicit null for both (the columns are never 'no timeout'/'no cap'), a DECLARED null is a load-time error with an actionable message instead of a mid-apply 422, while YAML booleans (`on`/`yes` — which pydantic's lax int coercion would turn into a one-second kill-switch) are rejected at load; each declared limit is hashed into the canonical managed view, so `--diff` reports drift on it and the executor writes it in the create/PATCH payload only when declared (cli/apply/models.py validates + gates via manages_node_timeout/manages_max_duration, cli/apply/pipeline_apply.py writes them; test_apply_models.py)"
+            - "[x] `farna-control apply` manages the pipeline runtime limits node_timeout_seconds (per-node timeout, >= 1, platform default 300) and max_duration_seconds (wall-clock run-duration cap, >= 1, platform default 3600) — but ONLY when declared: an omitted key leaves a UI/API-set value untouched, and because the REST API rejects an explicit null for both (the columns are never 'no timeout'/'no cap'), a DECLARED null is a load-time error with an actionable message instead of a mid-apply 422, while YAML booleans (`on`/`yes` — which pydantic's lax int coercion would turn into a one-second kill-switch) are rejected at load; each declared limit is hashed into the canonical managed view, so `--diff` reports drift on it and the executor writes it in the create/PATCH payload only when declared (cli/apply/models.py validates + gates via manages_node_timeout/manages_max_duration, cli/apply/pipeline_apply.py writes them; test_apply_models.py)"
             # Per-pipeline Paused execution state (FAR-1530)
-            - "[x] `modulo apply` can PAUSE a pipeline declaratively (FAR-1530): a declared `run_enabled: false` is an opt-in, one-way pause management — `run_enabled: true` and an explicit `null` are rejected at config load with an actionable message (a config may pause, never force-resume: a live operator or circuit-breaker cause must not be clobbered), an omitted key leaves a live pause untouched, and because the pause/resume routes are the only writers of the run-state columns the PATCH payload never carries `run_enabled`; a declared `false` hashes into the canonical managed view so `--diff` reports drift against a running pipeline and converges by calling POST /api/v1/pipelines/{id}/pause AFTER the create/PATCH (a dry-run never pauses, an already-paused pipeline is unchanged with no writes) (cli/apply/models.py manages_run_enabled + _run_enabled_may_only_pause, cli/apply/pipeline_apply.py, test_apply_run_enabled.py)"
+            - "[x] `farna-control apply` can PAUSE a pipeline declaratively (FAR-1530): a declared `run_enabled: false` is an opt-in, one-way pause management — `run_enabled: true` and an explicit `null` are rejected at config load with an actionable message (a config may pause, never force-resume: a live operator or circuit-breaker cause must not be clobbered), an omitted key leaves a live pause untouched, and because the pause/resume routes are the only writers of the run-state columns the PATCH payload never carries `run_enabled`; a declared `false` hashes into the canonical managed view so `--diff` reports drift against a running pipeline and converges by calling POST /api/v1/pipelines/{id}/pause AFTER the create/PATCH (a dry-run never pauses, an already-paused pipeline is unchanged with no writes) (cli/apply/models.py manages_run_enabled + _run_enabled_may_only_pause, cli/apply/pipeline_apply.py, test_apply_run_enabled.py)"
             # Output
             - "[x] Output: human-friendly table (render_table: create/update/block/fail/unchanged lines + summary counts, or drift-prefixed variants) or --output json / --json (the full report); 401 surfaces 'check FARNA_CONTROL_API_KEY', 404 'server does not expose endpoint ... / older version', network errors surface as 'apply failed: ...'"
     feat-audit:
@@ -8002,7 +8000,7 @@ features:
             - "[x] GET /scan is the server-side scan export companion to /export (same filters, audit_viewer + audit.manage gates, org-scoped RLS): it streams the WHOLE matching event set in ONE response (NDJSON by default, or a Content-Disposition CSV attachment with the scan columns) with no offset/limit pagination — the server keyset-paginates over the stable (created_at ASC, id ASC) order in fixed page-size batches so memory stays bounded for any org size, and an invalid user_id is 422 while pre-stream DB errors surface as a proper status (backend/src/farna/core/audit_logger/__init__.py stream_export_chain, backend/src/farna/api/routes/audit.py scan_chain_endpoint, test_audit_scan_route.py, TestScanChain in test_audit.py)"
 
             # Offline-verifiable evidence (FAR-1697)
-            - "[x] An audit export can be emitted as offline-verifiable evidence: GET /api/v1/admin/audit/evidence-pack (audit_viewer + audit.manage) returns a self-contained pack - the audit events as audit-events.ndjson, a canonical manifest (organisation id, exporter identity, created_at, run ids, per-file SHA-256 + size, and the re-derived chain summary valid/event_count/head_hash/first_gap_index/first_tampered_id/truncated), an Ed25519 signature over the canonical manifest, and the PEM verification key as an artefact - while GET /api/v1/admin/audit/verification-key publishes the org's public key + key_id fingerprint; a party holding ONLY the artefact + the pre-published key verifies authorship, re-derives every file digest and re-derives the embedded audit chain with no Modulo service and no login (the `modulo evidence verify` CLI), and any tampered file, mutated event, falsified chain claim or swapped key fails as valid=false (backend/src/farna/core/evidence_pack/, backend/src/farna/api/routes/audit.py evidence_pack_endpoint + verification_key_endpoint, backend/src/farna/cli/evidence.py, test_evidence_pack.py)"
+            - "[x] An audit export can be emitted as offline-verifiable evidence: GET /api/v1/admin/audit/evidence-pack (audit_viewer + audit.manage) returns a self-contained pack - the audit events as audit-events.ndjson, a canonical manifest (organisation id, exporter identity, created_at, run ids, per-file SHA-256 + size, and the re-derived chain summary valid/event_count/head_hash/first_gap_index/first_tampered_id/truncated), an Ed25519 signature over the canonical manifest, and the PEM verification key as an artefact - while GET /api/v1/admin/audit/verification-key publishes the org's public key + key_id fingerprint; a party holding ONLY the artefact + the pre-published key verifies authorship, re-derives every file digest and re-derives the embedded audit chain with no Modulo service and no login (the `farna-control evidence verify` CLI), and any tampered file, mutated event, falsified chain claim or swapped key fails as valid=false (backend/src/farna/core/evidence_pack/, backend/src/farna/api/routes/audit.py evidence_pack_endpoint + verification_key_endpoint, backend/src/farna/cli/evidence.py, test_evidence_pack.py)"
 
             # Pipeline graph mutation audit (FAR-1471)
             - "[x] Every pipeline graph mutation is ALWAYS audited: each successful replace_pipeline_graph write and each rollback_to_snapshot appends one pipeline.graph_updated event in the SAME transaction as the write (a graph write can never commit without its event), carrying a concise before/after summary — node/edge counts plus the added/removed/agent_commands-changed node IDS ONLY, never node payloads, env_vars, context_files or parameter values, so no masked secret enters the chain; MCP graph writes attribute the event to the caller's account id as changed_by (a session without one records null, never a bogus id), replacing the prior HITL-only audit that left plain writes such as an agent_commands edit unattributable (backend/src/farna/db/crud/pipeline.py graph_update_audit_payload + GRAPH_UPDATED_EVENT, backend/src/farna/db/crud/pipeline_snapshot_versioning.py, backend/src/farna/api/mcp_server.py, test_pipeline_graph_updated_audit.py)"
@@ -8130,7 +8128,7 @@ features:
             - "[x] Ceiling enforcement runs before the daily-ledger write: a run exceeding its per-run ceiling or the org cumulative ceiling has its ledger refused (never billed beyond the ceiling) and terminalizes as 'cost_ceiling_exceeded' — except an explicit cancelled status, which is preserved; within ceilings the org cumulative spend is incremented (test_cost_finalize_ceiling.py)"
             - "[x] POST /api/v1/admin/costs/circuit-breaker/{pipeline_id}/reset re-enables a tripped pipeline and re-activates its non-deleted triggers; a missing pipeline is 404"
             # Configurable, Community-tier pipeline spend circuit breaker (FAR-1182)
-            - "[x] The pipeline monthly spend circuit breaker threshold (circuit_breaker_threshold, USD, null = disabled, must be > 0 and fit Numeric(14,6)) is configurable on pipeline create / PATCH / GET (plus circuit_breaker_tripped / circuit_breaker_tripped_at on the response), on the MCP create_pipeline + set_pipeline_circuit_breaker tools, and in modulo apply (managed only when the key is declared; explicit null disables) (test_pipeline_circuit_breaker_threshold.py, test_apply_circuit_breaker.py)"
+            - "[x] The pipeline monthly spend circuit breaker threshold (circuit_breaker_threshold, USD, null = disabled, must be > 0 and fit Numeric(14,6)) is configurable on pipeline create / PATCH / GET (plus circuit_breaker_tripped / circuit_breaker_tripped_at on the response), on the MCP create_pipeline + set_pipeline_circuit_breaker tools, and in farna-control apply (managed only when the key is declared; explicit null disables) (test_pipeline_circuit_breaker_threshold.py, test_apply_circuit_breaker.py)"
             - "[x] Every threshold change (create with a value, set, change, clear) writes a pipeline.circuit_breaker_threshold_changed audit event with previous/new USD and the actor; an unchanged write records nothing; a reset writes pipeline.circuit_breaker_reset"
             - "[x] The pipeline circuit breaker is Community-tier: setting the threshold and the admin reset carry no plan feature gate (Modulo never paywalls basic safety); the reset stays behind the org-admin cost.manage permission (403 for operators and below)"
             - "[x] Threshold changes follow one permission rule (FAR-1184): lowering the threshold or setting one where none existed needs only pipeline.update, while raising it or clearing an existing one requires cost.manage — a refused change returns 403 on REST (the MCP tools return a permission_denied result instead) and writes a pipeline.circuit_breaker_threshold_change_denied audit event (test_pipeline_circuit_breaker_threshold.py)"
@@ -8494,7 +8492,7 @@ features:
             - "[x] Org admins manage the low-sensitivity community feature flags for their own organisation through GET/PUT/DELETE /api/v1/admin/org/feature-flags[/{flag_name}] (org.feature_flags.manage, admin, non-delegable) and the Organisation feature flags card on /admin/org; the set is fail-closed (FeatureFlag.org_admin_settable defaults False, team-tier flags and mcp_human_linked_hitl_authority are refused, and the DB catalog preserves the code-level classification), writes persist to the org feature_overrides map, invalidate the flag cache and emit the existing feature_flag_override_set / feature_flag_override_cleared audit events, and every other flag remains system-administrator-only (backend/src/farna/api/routes/admin_org_feature_flags.py, backend/src/farna/core/feature_flags.py, frontend/src/views/AdminOrgSettingsView.vue)"
             - "[x] Org-level feature-flag override governance is auditable end to end: every set/clear/toggle of an org feature_overrides entry (PUT /api/v1/admin/feature-flags/{flag}, PUT/DELETE /{flag}/org-override) appends a tamper-evident audit event to the org chain (feature_flag_override_set / feature_flag_override_cleared, resource_type org, payload {flag_name, enabled}) — fail-open, so a broken audit append never rolls back the already-committed override (backend/src/farna/api/routes/admin_feature_flags.py, backend/tests/unit/api/test_admin_feature_flags.py)"
             - "[x] The org-settings UI ships at /admin/org: product-analytics (product-analytics-toggle) toggles render, the product-analytics error strip dismisses via shared ErrorAlert, and the page intentionally exposes no self-service organisation-delete affordance (FAR-2225: active-org deletion is refused 403 by every self-service route) — surface documented in the manifest elements inventory; backend admin-org endpoints drive it (docs/product-map/admin/org.md)"
-            - "[x] The /admin/org page is reachable on every plan tier (FAR-1269): the route is community-tier with an explicit [admin] role list (required_roles and required_tier are enforced as separate guards), the team-only sections (org info, data export, product analytics) stay behind the team_rbac FeatureGate disabled overlay, and three org-scoped community-tier cards render outside the gate so a community admin can use them on any tier: the HITL review window, the human-linked MCP HITL authority, and the organisation feature flags"
+            - "[x] The /admin/org page is reachable on every plan (FAR-1269): the route carries an explicit [admin] role list and no required_entitlement (roles and the entitlement grant are enforced as separate guards), the Team-only sections (org info, data export, product analytics) stay behind the team_rbac FeatureGate disabled overlay, and three org-scoped cards render outside the gate so an unentitled admin can use them on any plan: the HITL review window, the human-linked MCP HITL authority, and the organisation feature flags"
             - "[x] The org-management flows ship on the real REST surfaces: self-service org profile read/rename + API-key regeneration are admin-gated unit coverage (api/routes/admin.py, tests/unit/api/test_admin.py — slug immutability and operator/viewer 403 pinned); member invites are BDD-executed (system_admin_users.feature); API-key create/revoke + non-admin 403 are BDD-executed (auth/api_keys.feature); viewer denial is BDD-executed at the org-context boundary (viewmodel_current.feature)"
     feat-pipelines:
         description: Visual pipeline editor, composite editor, and node categories

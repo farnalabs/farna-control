@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: Modulo
+  - name: Farna Control
     orgId: 1
-    folder: Modulo
+    folder: Farna Control
     type: file
     disableDeletion: true
     editable: false

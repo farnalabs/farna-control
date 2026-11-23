@@ -1,4 +1,8 @@
-"""Tests for team_rbac feature gating on team endpoints."""
+"""Tests for the Identity entitlement gating on team endpoints (FAR-2665).
+
+Team endpoints require the ``identity`` commercial entitlement (sso / scim /
+team_rbac), so a Community plan gets 402 naming Identity.
+"""
 
 import uuid
 from collections.abc import AsyncGenerator, Generator
@@ -62,7 +66,7 @@ def _make_mock_session() -> AsyncMock:
 
 @pytest.fixture
 def free_client() -> Generator[TestClient, None, None]:
-    """Client with no license key — team_rbac is disabled."""
+    """Client with no license key — the Identity entitlement is not granted."""
     mock_session = _make_mock_session()
 
     async def override_session() -> AsyncGenerator[AsyncMock, None]:
@@ -86,7 +90,7 @@ def free_client() -> Generator[TestClient, None, None]:
 
 @pytest.fixture
 def licensed_client() -> Generator[TestClient, None, None]:
-    """Client with a license key — team_rbac is enabled."""
+    """Client with a license key — the Identity entitlement is granted."""
     mock_session = _make_mock_session()
 
     async def override_session() -> AsyncGenerator[AsyncMock, None]:
@@ -109,37 +113,37 @@ def licensed_client() -> Generator[TestClient, None, None]:
 
 
 class TestTeamGating:
-    """Team /api/v1/teams endpoints return 402 when team_rbac is disabled."""
+    """Team /api/v1/teams endpoints return 402 without the Identity entitlement."""
 
     def test_list_teams_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.get("/api/v1/teams")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_create_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.post("/api/v1/teams", json={"name": "New Team"})
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_get_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.get(f"/api/v1/teams/{_TEAM_ID}")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_update_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.patch(f"/api/v1/teams/{_TEAM_ID}", json={"name": "Updated"})
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_delete_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.delete(f"/api/v1/teams/{_TEAM_ID}")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_list_members_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.get(f"/api/v1/teams/{_TEAM_ID}/members")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_add_member_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.post(
@@ -147,36 +151,36 @@ class TestTeamGating:
             json={"user_id": str(_USER_ID), "role": "viewer"},
         )
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_remove_member_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.delete(f"/api/v1/teams/{_TEAM_ID}/members/{uuid.uuid4()}")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
 
 class TestAdminTeamGating:
-    """Admin /api/v1/admin/teams endpoints return 402 when team_rbac is disabled."""
+    """Admin /api/v1/admin/teams endpoints return 402 without Identity."""
 
     def test_admin_create_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.post("/api/v1/admin/teams", json={"name": "Admin Team"})
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_admin_list_teams_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.get("/api/v1/admin/teams")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_admin_update_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.put(f"/api/v1/admin/teams/{_TEAM_ID}", json={"name": "Updated"})
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
     def test_admin_delete_team_returns_402_when_disabled(self, free_client: TestClient) -> None:
         resp = free_client.delete(f"/api/v1/admin/teams/{_TEAM_ID}")
         assert resp.status_code == 402
-        assert "team_rbac" in resp.json()["detail"].lower()
+        assert "identity" in resp.json()["detail"].lower()
 
 
 class TestTeamSuccess:

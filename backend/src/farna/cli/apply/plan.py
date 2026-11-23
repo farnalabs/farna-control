@@ -1,4 +1,4 @@
-"""Plan decision engine for ``modulo apply`` (FAR-681, slice 1).
+"""Plan decision engine for ``farna-control apply`` (FAR-681, slice 1).
 
 Name-based upsert scoped to the org (the HTTP transport is RLS-bound). A
 decision is one of:
@@ -183,7 +183,7 @@ def _trigger_current_view(current: dict[str, Any], desired_view: dict[str, Any])
 def _system_map_managed_desired_view(desired_view: dict[str, Any]) -> dict[str, Any]:
     """Desired system-map view without the create-only revision block.
 
-    ``modulo apply`` creates a map's declared revision only on CREATE. The
+    ``farna-control apply`` creates a map's declared revision only on CREATE. The
     system-map list endpoint exposes only map metadata (``published_revision_id``
     — never revision content), so an existing map can never report its revision
     back. Hashing the declared revision against every existing map classified

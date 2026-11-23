@@ -396,8 +396,8 @@ def test_viewmodel_current_feature_flags_full_set_with_org_overlay(client: TestC
     plan_ctx = MagicMock()
     plan_ctx.list_all_features = MagicMock(
         return_value=[
-            FeatureFlag(name="eval_system", description="d", tier="community", currently_active=True),
-            FeatureFlag(name="analytics_page", description="d", tier="community", currently_active=True),
+            FeatureFlag(name="eval_system", description="d", currently_active=True),
+            FeatureFlag(name="analytics_page", description="d", currently_active=True),
         ]
     )
 

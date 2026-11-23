@@ -45,7 +45,7 @@ def _override(**kwargs: object) -> Settings:
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
         "license_key": "test-license",
-        "public_url": "https://modulo.example.com",
+        "public_url": "https://farna-control.example.com",
         "saml_enabled": True,
         "oidc_providers": json.dumps(
             [

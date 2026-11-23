@@ -73,12 +73,35 @@ async def get_variant_group(session: AsyncSession, group_id: uuid.UUID, *, inclu
 async def list_variant_groups(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     pipeline_id: uuid.UUID | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[VariantGroup], int]:
-    q = select(VariantGroup).join(Pipeline, Pipeline.id == VariantGroup.pipeline_id).where(Pipeline.deleted_at.is_(None), VariantGroup.deleted_at.is_(None))
-    count_q = select(func.count()).select_from(VariantGroup).join(Pipeline, Pipeline.id == VariantGroup.pipeline_id).where(Pipeline.deleted_at.is_(None), VariantGroup.deleted_at.is_(None))
+    # FAR-2686: explicit organisation predicate on the group table, on BOTH the
+    # COUNT and the item query. The Pipeline join is only for its soft-delete
+    # flag; the org scope is the variant group's own column. ``organisation_id``
+    # is NOT NULL and there are no shared/sentinel-org groups. REQUIRED so a
+    # future caller cannot fall back to the RLS-only shape.
+    q = (
+        select(VariantGroup)
+        .join(Pipeline, Pipeline.id == VariantGroup.pipeline_id)
+        .where(
+            VariantGroup.organisation_id == org_id,
+            Pipeline.deleted_at.is_(None),
+            VariantGroup.deleted_at.is_(None),
+        )
+    )
+    count_q = (
+        select(func.count())
+        .select_from(VariantGroup)
+        .join(Pipeline, Pipeline.id == VariantGroup.pipeline_id)
+        .where(
+            VariantGroup.organisation_id == org_id,
+            Pipeline.deleted_at.is_(None),
+            VariantGroup.deleted_at.is_(None),
+        )
+    )
     if pipeline_id is not None:
         q = q.where(VariantGroup.pipeline_id == pipeline_id)
         count_q = count_q.where(VariantGroup.pipeline_id == pipeline_id)

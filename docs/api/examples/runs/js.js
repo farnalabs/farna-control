@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Modulo API Example: Run Lifecycle - fetch
+ * Farna Control API Example: Run Lifecycle - fetch
  *
  * Demonstrates triggering a run, polling status, getting IO, and cancelling.
  *

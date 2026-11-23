@@ -83,15 +83,18 @@ class TestTierGapFlags:
         gaps = registry.tier_gap_flags()
         assert not gaps
 
-    def test_no_gaps_when_v1(self) -> None:
+    def test_an_undeclared_paid_tier_grants_nothing(self) -> None:
+        """FAR-2665: only a declared paid tier grants the entitlements.
+
+        A tier id the catalogue does not ship is not a licence grant — treating
+        it as one would hand every capability to a mistyped plan. The gap
+        report is entitlement-based now, so an ungranted paid tier reports the
+        same gaps Community does.
+        """
         registry = FeatureFlagRegistry(current_tier="v1", has_license_key=True)
         gaps = registry.tier_gap_flags()
-        assert not gaps
-
-    def test_no_gaps_when_v2(self) -> None:
-        registry = FeatureFlagRegistry(current_tier="v2", has_license_key=True)
-        gaps = registry.tier_gap_flags()
-        assert not gaps
+        assert gaps
+        assert any(flag.name == "sso" for flag in gaps)
 
 
 class TestRefresh:
@@ -127,11 +130,11 @@ class TestRefresh:
         assert flag is not None
         assert flag.currently_active is True
 
-    def test_unknown_tier_falls_back_to_rank_zero(self) -> None:
+    def test_unknown_tier_grants_no_entitlement(self) -> None:
         FeatureFlagRegistry._overrides.clear()
         registry = FeatureFlagRegistry(current_tier="nonexistent")
-        # Unknown tier defaults to rank 0 via TIER_RANK.get(tier, 0)
-        # Community flags (rank 0) are active; team+ flags (rank >= 1) are not
+        # An unknown tier is not a declared paid tier, so it grants nothing:
+        # community behaviour flags stay active and entitled flags stay off.
         for flag in registry.list_flags():
             if flag.tier != "community":
                 assert flag.currently_active is False
@@ -326,10 +329,15 @@ class TestDbCatalogTeamTierFlags:
         for name in ("runtime_config", "rate_limits", "error_tracking"):
             assert ctx.feature_enabled(name) is True, f"{name} should be enabled on team tier"
 
-    async def test_community_tier_keeps_upserted_flags_locked(self) -> None:
+    async def test_community_tier_reads_the_code_registry_not_the_db_tier(self) -> None:
+        """FAR-2665: a stale DB ``tier_id`` can neither lock a free flag nor unlock a paid one."""
         from farna.core.feature_flags import DbPlanContext
 
         session = _make_session()
+        db_flags = [
+            *self._db_flags(),  # the lowered flags, still persisted as tier_id='team'
+            {"name": "sso", "description": "SSO", "tier_id": "community", "depends_on": None, "is_active": True},
+        ]
         db_tiers = [
             {"tier_id": "community", "rank": 0},
             {"tier_id": "team", "rank": 1},
@@ -337,12 +345,15 @@ class TestDbCatalogTeamTierFlags:
 
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=db_tiers),
-            patch("farna.db.crud.tier_catalog.list_feature_flags", return_value=self._db_flags()),
+            patch("farna.db.crud.tier_catalog.list_feature_flags", return_value=db_flags),
         ):
             ctx = await DbPlanContext.from_db(session, "community")
 
+        # Lowered to Community (FAR-2665) — a stale team row cannot hold them back.
         for name in ("runtime_config", "rate_limits", "error_tracking"):
-            assert ctx.feature_enabled(name) is False, f"{name} should be locked on community tier"
+            assert ctx.feature_enabled(name) is True, f"{name} is Community and must not be held back by the DB tier"
+        # Entitled — a stale community row cannot unlock it without the licence.
+        assert ctx.feature_enabled("sso") is False, "sso needs the identity entitlement, not a DB tier row"
 
 
 class TestRetiredInternalFlags:

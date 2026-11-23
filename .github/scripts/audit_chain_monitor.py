@@ -462,7 +462,7 @@ def _reason(
 def build_email(*, state: MonitorState, action: str, run_url: str) -> tuple[str, str]:
     """The (subject, body) an operator receives for a transition."""
     if action == EMAIL_RECOVERY:
-        subject = "[Modulo] AUDIT-CHAIN MONITOR RECOVERED: the audit chain is verified again"
+        subject = "[Farna Control] AUDIT-CHAIN MONITOR RECOVERED: the audit chain is verified again"
         lines = [
             "The audit-chain continuity monitor has RECOVERED.",
             "",
@@ -479,7 +479,7 @@ def build_email(*, state: MonitorState, action: str, run_url: str) -> tuple[str,
         ]
         return subject, "\n".join(lines)
 
-    subject = f"[Modulo] AUDIT-CHAIN MONITOR BLIND: audit chain NOT verified (incident {state.incident_id})"
+    subject = f"[Farna Control] AUDIT-CHAIN MONITOR BLIND: audit chain NOT verified (incident {state.incident_id})"
     lines = [
         "The audit-chain continuity monitor is BLIND.",
         "",

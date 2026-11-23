@@ -1,5 +1,5 @@
 # ============================================================================
-# Modulo Helm Chart — values.eks.example.yaml
+# Farna Control Helm Chart — values.eks.example.yaml
 # ============================================================================
 # Validated EKS example. Uses AWS managed services:
 #   - Amazon RDS (Postgres 16) — set postgres.external.*
@@ -13,8 +13,8 @@
 #   4. Secrets stored in AWS Secrets Manager or Kubernetes Secrets
 #
 # Usage:
-#   helm install modulo ./deploy/helm/modulo \
-#     -f deploy/helm/modulo/values.eks.example.yaml \
+#   helm install farna-control ./deploy/helm/farna-control \
+#     -f deploy/helm/farna-control/values.eks.example.yaml \
 #     --set postgres.password=<rds-password> \
 #     --set backend.env.SECRET_KEY=<32-byte-key> \
 #     --set backend.env.FERNET_KEY=<32-byte-key>
@@ -23,7 +23,7 @@
 # -- Namespace --------------------------------------------------------------
 namespace:
   create: true
-  name: modulo
+  name: farna-control
   annotations:
     app.kubernetes.io/managed-by: helm
 
@@ -108,7 +108,7 @@ backend:
       memory: 2Gi
       ephemeralStorage: 2Gi
   env:
-    FARNA_CONTROL_PUBLIC_URL: "https://modulo.example.com"
+    FARNA_CONTROL_PUBLIC_URL: "https://farna-control.example.com"
     FARNA_CONTROL_LOG_LEVEL: info
     FARNA_CONTROL_ENV: production
     FARNA_CONTROL_MAX_LOCAL_CONCURRENCY: "4"
@@ -191,14 +191,14 @@ ingress:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
   hosts:
-    - host: modulo.example.com
+    - host: farna-control.example.com
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: modulo-tls
       hosts:
-        - modulo.example.com
+        - farna-control.example.com
 
 # -- HPA (backend + frontend) -----------------------------------------------
 autoscaling:

@@ -37,7 +37,7 @@ from farna.auth.oauth import VALID_SCOPES
 from farna.core.runtime_config.store import get_runtime_config_store
 from farna.settings import Settings, get_settings
 
-_PUBLIC = "https://modulo.example.com"
+_PUBLIC = "https://farna-control.example.com"
 
 _AUTHORIZATION_SERVER_PATH = "/.well-known/oauth-authorization-server"
 _PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource"

@@ -637,7 +637,7 @@ class TestSamlMetadataParsing:
             mock_db.return_value = None
             mock_fetch.return_value = self.SAMPLE_IDP_METADATA
 
-            url, _req_id = await saml_get_auth_url(settings, "https://modulo.example.com/api/v1/auth/saml/acs", session, session)
+            url, _req_id = await saml_get_auth_url(settings, "https://farna-control.example.com/api/v1/auth/saml/acs", session, session)
             assert "idp.example.com" in url
             assert "SAMLRequest" in url
 
@@ -1951,7 +1951,7 @@ class TestSamlGetAuthUrlDb:
             entity_id="https://idp.example.com",
         )
         session = _mock_session(scalar=provider)
-        url, _ = await saml_get_auth_url(settings, "https://modulo.example.com/api/v1/auth/saml/acs", session, session)
+        url, _ = await saml_get_auth_url(settings, "https://farna-control.example.com/api/v1/auth/saml/acs", session, session)
         assert "idp.example.com" in url
         assert "SAMLRequest" in url
 

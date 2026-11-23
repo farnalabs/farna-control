@@ -2,7 +2,7 @@
   <div data-theme="agent" class="page-wide">
     <PageHeader :title="$t('views.SettingsEmailView.email_settings')" :subtitle="$t('views.SettingsEmailView.configure_smtp_provider_for_transactional_emails')" />
 
-    <FeatureGate feature-name="email_config" required-tier="community" show-disabled>
+    <FeatureGate feature-name="email_config" show-disabled>
 
       <LoadingSpinner v-if="loading" />
 

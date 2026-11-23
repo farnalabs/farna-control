@@ -200,8 +200,8 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       from the view
 - [x] The proposal queue's audience is permissions, not a role check (FAR-2621):
       the `/evals/proposals` route declares `required_permissions:
-      [feedback.list]` — exactly the read `GET /api/v1/feedback/proposals`
-      enforces (viewer floor) — so a read-only caller keeps the useful view of
+      [feedback.list]` – exactly the read `GET /api/v1/feedback/proposals`
+      enforces (viewer floor) – so a read-only caller keeps the useful view of
       which eval gaps were detected. Each action renders only for a caller
       holding the permission its own endpoint enforces: publish requires
       `feedback.review` AND `gate.create` (the route dependency plus the
@@ -230,7 +230,7 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       while its publish/dismiss buttons were rendered for every reader, so a
       caller who could read the queue could press an action the API refuses.
       Verified each endpoint's real guard in `backend/src/farna/api/routes/
-      feedback.py` rather than inferring from names — list is `feedback.list`
+      feedback.py` rather than inferring from names – list is `feedback.list`
       (viewer), publish is `feedback.review` + the in-handler `gate.create`
       check, dismiss is `feedback.update` (via `PATCH /feedback/{id}/status`).
       The route now declares `[feedback.list]`, the actions are hidden per

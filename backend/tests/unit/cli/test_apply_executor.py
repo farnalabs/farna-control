@@ -27,7 +27,7 @@ from farna.cli.apply.executor import (
 from farna.cli.apply.loader import parse_apply_documents
 
 CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   schemas:
     - name: alpha
@@ -325,7 +325,7 @@ class TestHeaders:
 
 
 GREEN_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   schemas:
     - name: first
@@ -344,7 +344,7 @@ class TestPagination:
         respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": "100"}).respond(json={"items": page1, "total": 3, "page": 1, "page_size": 100})
         respx.get("https://api.test/api/v1/schemas", params={"page": "2", "page_size": "100"}).respond(json={"items": page2, "total": 3, "page": 2, "page_size": 100})
         respx.get("https://api.test/api/v1/model-backends", params=_BACKENDS_LIST_PARAMS).respond(json={"items": [], "total": 0})
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities: {}")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities: {}")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             current = executor.fetch_current(config)
@@ -353,7 +353,7 @@ class TestPagination:
     @respx.mock
     def test_versions_fetch_passes_page_size(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SK", "v")
-        config_text = "api_version: modulo.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n"
+        config_text = "api_version: farna.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n"
         schema_id = str(uuid.uuid4())
         respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": "100"}).respond(json={"items": [_schema_item("alpha", "Alpha schema", schema_id=schema_id)], "total": 1})
         respx.get("https://api.test/api/v1/model-backends", params=_BACKENDS_LIST_PARAMS).respond(json={"items": [], "total": 0})
@@ -373,7 +373,7 @@ class TestPagination:
         respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": "100"}).respond(json={"items": [], "total": 0})
         with_dev = respx.get("https://api.test/api/v1/model-backends", params=_BACKENDS_LIST_PARAMS).respond(status_code=403, json={"detail": "operator role required"})
         without_dev = respx.get("https://api.test/api/v1/model-backends", params={"page": "1", "page_size": str(PAGE_SIZE)}).respond(json={"items": [_backend_item("openai", "openai")], "total": 1})
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities: {}")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities: {}")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             current = executor.fetch_current(config)
@@ -386,7 +386,7 @@ class TestPagination:
         """Only 403 (in_dev disclosure) falls back; other errors propagate."""
         respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": "100"}).respond(json={"items": [], "total": 0})
         respx.get("https://api.test/api/v1/model-backends", params=_BACKENDS_LIST_PARAMS).respond(status_code=500, json={"detail": "boom"})
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities: {}")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities: {}")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             with pytest.raises(ApplyHttpError) as exc_info:
@@ -394,7 +394,7 @@ class TestPagination:
         assert exc_info.value.status_code == 500
 
 
-_SECRETREF_CONFIG_TEXT = "api_version: modulo.dev/v1\nentities:\n  model_backends:\n    - name: openai\n      display_name: OpenAI\n      provider: openai\n      model_id: gpt-x\n      api_key: secretref://vault/openai-key\n"
+_SECRETREF_CONFIG_TEXT = "api_version: farna.dev/v1\nentities:\n  model_backends:\n    - name: openai\n      display_name: OpenAI\n      provider: openai\n      model_id: gpt-x\n      api_key: secretref://vault/openai-key\n"
 
 
 class TestRefForwarding:
@@ -458,7 +458,7 @@ class TestVersionImmutability:
     def test_conflicting_version_string_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SK", "v")
         config_text = (
-            "api_version: modulo.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n            properties:\n              changed: {}\n"
+            "api_version: farna.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n            properties:\n              changed: {}\n"
         )
         existing = _schema_item("alpha", "Alpha schema")
         existing["versions"] = [
@@ -484,7 +484,7 @@ class TestVersionImmutability:
     @respx.mock
     def test_identical_version_is_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SK", "v")
-        config_text = "api_version: modulo.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n"
+        config_text = "api_version: farna.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n"
         existing = _schema_item("alpha", "Alpha schema")
         existing["versions"] = [
             {
@@ -572,7 +572,7 @@ class TestFailureIsolation:
         respx.get("https://api.test/api/v1/model-backends", params=_BACKENDS_LIST_PARAMS).respond(json={"items": [], "total": 0})
         respx.post("https://api.test/api/v1/schemas").mock(return_value=httpx.Response(201, json=_schema_item("alpha", None, schema_id=schema_id)))
         respx.post(f"https://api.test/api/v1/schemas/{schema_id}/versions").mock(return_value=httpx.Response(500, json={"detail": "version boom"}))
-        config_text = "api_version: modulo.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n"
+        config_text = "api_version: farna.dev/v1\nentities:\n  schemas:\n    - name: alpha\n      description: Alpha schema\n      versions:\n        - version: v1\n          version_number: 1\n          definition_json:\n            type: object\n"
         config = parse_apply_documents(config_text)
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
@@ -661,7 +661,7 @@ class TestHttpErrorSemantics:
     def test_3xx_treated_as_error(self) -> None:
         """Redirect responses (follow_redirects=False) are errors, not successes."""
         route = respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": str(PAGE_SIZE)}).respond(status_code=302, headers={"Location": "https://api.test/elsewhere"})
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities: {}")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities: {}")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             with pytest.raises(ApplyHttpError) as exc_info:
@@ -672,7 +672,7 @@ class TestHttpErrorSemantics:
     @respx.mock
     def test_get_404_carries_status_and_path(self) -> None:
         respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": str(PAGE_SIZE)}).respond(status_code=404, json={"detail": "not found"})
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities: {}")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities: {}")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             with pytest.raises(ApplyHttpError) as exc_info:
@@ -683,7 +683,7 @@ class TestHttpErrorSemantics:
     @respx.mock
     def test_invalid_json_response_raises_apply_http_error(self) -> None:
         respx.get("https://api.test/api/v1/schemas", params={"page": "1", "page_size": str(PAGE_SIZE)}).respond(status_code=200, content=b"not-json{")
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities: {}")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities: {}")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             with pytest.raises(ApplyHttpError) as exc_info:
@@ -692,7 +692,7 @@ class TestHttpErrorSemantics:
 
 
 GOLDEN_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   schemas:
     - name: stable
@@ -865,7 +865,7 @@ class TestGoldenSnapshot:
 
 
 _SYSTEM_MAPS_ONLY_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   system_maps:
     - name: alpha

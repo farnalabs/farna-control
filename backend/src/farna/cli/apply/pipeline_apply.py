@@ -1,4 +1,4 @@
-"""Pipeline entity resolution + execution for ``modulo apply`` (FAR-681 slice 2).
+"""Pipeline entity resolution + execution for ``farna-control apply`` (FAR-681 slice 2).
 
 Agent name-refs: config graph nodes reference agents by NAME; the executor
 resolves names to ids via the fetched /agents map and BLOCKS the entity when

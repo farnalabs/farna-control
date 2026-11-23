@@ -242,13 +242,12 @@ class TestGetAvailableFeaturesSuccess(AuthContext):
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
-            FeatureFlag(name="mcp_server", description="MCP", tier="community", currently_active=True),
-            FeatureFlag(name="webhook_trigger", description="Webhook", tier="community", currently_active=True),
-            FeatureFlag(name="sso", description="SSO", tier="team", currently_active=False),
+            FeatureFlag(name="mcp_server", description="MCP", currently_active=True),
+            FeatureFlag(name="webhook_trigger", description="Webhook", currently_active=True),
+            FeatureFlag(name="sso", description="SSO", currently_active=False),
             FeatureFlag(
                 name="lifecycle_map_journeys",
                 description="Retired internal Lifecycle Map journey display",
-                tier="community",
                 currently_active=True,
             ),
         ]
@@ -286,7 +285,6 @@ class TestGetAvailableFeaturesSuccess(AuthContext):
             FeatureFlag(
                 name="lifecycle_map_journeys",
                 description="Retired internal Lifecycle Map journey display",
-                tier="community",
                 currently_active=True,
             ),
         ]
@@ -335,13 +333,12 @@ class TestSystemMapsInternalFlagMCP:
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
-            FeatureFlag(name="mcp_server", description="MCP", tier="community", currently_active=True),
-            FeatureFlag(name="webhook_trigger", description="Webhook", tier="community", currently_active=True),
-            FeatureFlag(name="sso", description="SSO", tier="team", currently_active=False),
+            FeatureFlag(name="mcp_server", description="MCP", currently_active=True),
+            FeatureFlag(name="webhook_trigger", description="Webhook", currently_active=True),
+            FeatureFlag(name="sso", description="SSO", currently_active=False),
             FeatureFlag(
                 name="system_maps",
                 description="Beta System Maps (Delivery System Maps)",
-                tier="community",
                 currently_active=True,
             ),
         ]
@@ -380,7 +377,6 @@ class TestSystemMapsInternalFlagMCP:
             FeatureFlag(
                 name="system_maps",
                 description="Beta System Maps (Delivery System Maps)",
-                tier="community",
                 currently_active=True,
             ),
         ]
@@ -419,7 +415,6 @@ class TestSystemMapsInternalFlagMCP:
             FeatureFlag(
                 name="system_maps",
                 description="Beta System Maps (Delivery System Maps)",
-                tier="community",
                 currently_active=True,
             ),
         ]
@@ -557,13 +552,11 @@ class TestListFeatureFlagsVisibility(AuthContext):
         unrelated_flag = FeatureFlag(
             name="schema_version_history",
             description="Snapshot diff + rollback",
-            tier="team",
             currently_active=False,
         )
         system_maps_flag = FeatureFlag(
             name="system_maps",
             description="Beta System Maps",
-            tier="community",
             currently_active=False,
         )
         registry = MagicMock(

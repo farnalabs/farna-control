@@ -29,7 +29,7 @@
 # by a wrapper: a recovery command that confirms itself is a command that wipes
 # the wrong database without anyone saying so.
 #
-# It stops the writers itself (the `modulo` container), restores through a
+# It stops the writers itself (the `farna-control` container), restores through a
 # one-off container, and LEAVES EVERYTHING STOPPED. It never starts the
 # application: a restart would hand a half-verified database to an app that
 # then refuses to boot. The exact start command is printed on failure as well
@@ -42,7 +42,7 @@
 set -Eeuo pipefail
 
 # The compose service that runs the application (and the only writer).
-app_service="${FARNA_CONTROL_APP_SERVICE:-modulo}"
+app_service="${FARNA_CONTROL_APP_SERVICE:-farna-control}"
 
 usage() {
   printf 'usage: %s --confirm <snapshot-dir> [compose-file]\n' "$(basename "$0")" >&2

@@ -65,7 +65,7 @@ async def list_folders_endpoint(
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
-            folders = await list_folders(session)
+            folders = await list_folders(session, org_id=principal.organisation_id)
     except ProgrammingError:
         logger.exception("schema_folders.list")
         raise HTTPException(

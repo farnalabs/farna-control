@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Modulo API Example: Authentication (Login) - fetch
+ * Farna Control API Example: Authentication (Login) - fetch
  *
  * Demonstrates login, token refresh, and logout using fetch.
  *

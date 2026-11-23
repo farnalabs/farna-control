@@ -155,9 +155,9 @@ _SERVICE_SCRIPTS: tuple[ServiceScript, ...] = (
     # docker-compose smoke test (operator-facing knobs).
     ServiceScript("scripts/smoke-compose.sh", reads=(_pattern(SHELL_READ),)),
     # Helm chart pods: the env entries the app containers receive.
-    ServiceScript("deploy/helm/modulo/templates/backend-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
-    ServiceScript("deploy/helm/modulo/templates/saq-runner-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
-    ServiceScript("deploy/helm/modulo/templates/saq-system-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
+    ServiceScript("deploy/helm/farna-control/templates/backend-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
+    ServiceScript("deploy/helm/farna-control/templates/saq-runner-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
+    ServiceScript("deploy/helm/farna-control/templates/saq-system-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
 )
 
 #: The canonical names each producer is REQUIRED to write, in the same production
@@ -187,12 +187,12 @@ _REQUIRED_CANONICAL_PRODUCTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = 
         (env_contract.INSTALL_ROOT_ENV, env_contract.DATA_DIR_ENV),
     ),
     (
-        "deploy/helm/modulo/templates/backend-deployment.yaml",
+        "deploy/helm/farna-control/templates/backend-deployment.yaml",
         _pattern(K8S_ENV_WRITE),
         (env_contract.SYSTEM_DATABASE_URL_ENV,),
     ),
     (
-        "deploy/helm/modulo/templates/saq-system-deployment.yaml",
+        "deploy/helm/farna-control/templates/saq-system-deployment.yaml",
         _pattern(K8S_ENV_WRITE),
         (env_contract.SYSTEM_DATABASE_URL_ENV,),
     ),
@@ -815,11 +815,6 @@ DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
         "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS",
         "FARNA_CONTROL_KUBERNETES_ENABLED",
         "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS",
-        # Legacy ``MODULO_`` fallbacks still published on the page but read only
-        # outside ``farna/`` (in packaging/CLI scripts), so the gate does not
-        # count them as accepted; documented and therefore listed here.
-        "MODULO_ADMIN_SECRET",
-        "MODULO_BACKUP_PASSPHRASE",
     }
 )
 

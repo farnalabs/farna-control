@@ -468,7 +468,7 @@ uv run scripts/restore.py --input /backups/daily/backup-20260624.tar.gz.enc --fu
 systemctl start modulo
 
 # 5. Check health
-curl https://modulo.example.com/health
+curl https://farna-control.example.com/health
 ```
 
 ## Disaster Recovery Guide

@@ -188,7 +188,7 @@ async def list_schemas_endpoint(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            result = await list_schemas(session, cursor=None, limit=page_size, folder_id=folder_id)
+            result = await list_schemas(session, org_id=principal.organisation_id, cursor=None, limit=page_size, folder_id=folder_id)
     except IntegrityError:
         logger.exception("schemas.list_schemas_endpoint")
         raise HTTPException(

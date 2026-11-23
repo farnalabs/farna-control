@@ -1,6 +1,6 @@
-"""Drift mode + reporting for ``modulo apply`` (FAR-681, slice 3).
+"""Drift mode + reporting for ``farna-control apply`` (FAR-681, slice 3).
 
-``modulo apply --diff`` reads the live org state and reports drift against
+``farna-control apply --diff`` reads the live org state and reports drift against
 the declarative config WITHOUT writing anything. It reuses the SAME plan
 engine (``plan.build_plan`` + canonical hashes) — the report shape is the
 plan report explicitly labelled as drift (``"mode": "drift"``), with a

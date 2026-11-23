@@ -46,7 +46,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  modulo:
+  farna-control:
     # The all-in-one image: ONE container running supervisord with the API
     # (uvicorn), nginx, and BOTH SAQ queue workers - the `runs` worker and the
     # `system` worker that fires cron/polling triggers (FAR-1509; see
@@ -236,7 +236,7 @@ services:
   # is loopback-bound inside the container, so backend:8000 (the root compose's
   # target) does not exist here.
   #
-  # No `depends_on` on `modulo`, deliberately: this service reports the app
+  # No `depends_on` on `farna-control`, deliberately: this service reports the app
   # being unhealthy, so it must start regardless. Monitoring is on from the
   # first `up`; email alerting stays off until SMTP_HOST / SMTP_PORT /
   # EMAIL_FROM / ALERT_EMAIL_TO are set (the same variables the app uses for
@@ -245,7 +245,7 @@ services:
     build: ../watchdog
     restart: unless-stopped
     environment:
-      WATCHDOG_PROBE_URL: http://modulo:80/healthz/ready
+      WATCHDOG_PROBE_URL: http://farna-control:80/healthz/ready
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -257,7 +257,7 @@ services:
     ports:
       # Loopback-only dashboard. 8083 rather than the root compose's 8082 so
       # a root-compose stack and this one can share a host; it collides with
-      # nothing in this file (the modulo app publishes ${PORT:-80}:80).
+      # nothing in this file (the Farna Control app publishes ${PORT:-80}:80).
       - "127.0.0.1:8083:8080"
     healthcheck:
       test: ["CMD", "/bin/busybox", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]

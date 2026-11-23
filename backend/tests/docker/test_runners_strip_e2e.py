@@ -443,7 +443,7 @@ async def _ensure_image_present(url: str | None, image: str) -> None:
 
 async def _kill_local_container_by_label(label: str) -> None:
     # NOTE: the shared compose-rig dind container carries the label
-    # ``modulo.test=runner-ci-dind`` (deploy/compose/runner-ci.yml), so
+    # ``farna-control.test=runner-ci-dind`` (deploy/compose/runner-ci.yml), so
     # killing ``runner-ci-dind`` takes down the SAME dind engine the harness
     # rig and the other docker-marked suites rely on. This helper is intended
     # only for the engine-kill scenario (Scenario 3); callers are
@@ -451,7 +451,7 @@ async def _kill_local_container_by_label(label: str) -> None:
     # rig down at the end regardless, but a later test file / local re-run
     # must not be left with a dead dind).
     async with aiodocker.Docker() as docker:
-        containers = await docker.containers.list(filters={"label": [f"modulo.test={label}"]})
+        containers = await docker.containers.list(filters={"label": [f"farna-control.test={label}"]})
         for container in containers:
             with contextlib.suppress(Exception):
                 await container.kill()
@@ -707,7 +707,7 @@ async def test_engine_kill_flips_strip_and_emits_notification_and_error_event(
     # teardown still cleans the rig, so never surface a red failure here.
     with contextlib.suppress(Exception):
         async with aiodocker.Docker() as docker:
-            containers = await docker.containers.list(all=True, filters={"label": [f"modulo.test={_DINO_LABEL}"]})
+            containers = await docker.containers.list(all=True, filters={"label": [f"farna-control.test={_DINO_LABEL}"]})
             for container in containers:
                 with contextlib.suppress(Exception):
                     await container.start()

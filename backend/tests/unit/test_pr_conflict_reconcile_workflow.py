@@ -69,7 +69,7 @@ def test_filters_on_conflicting() -> None:
 
 
 def test_dispatches_branch_fixer_by_name() -> None:
-    """After FAR-807, the exact workflow name 'Fix: Modulo Branch Fixer' is no
+    """After FAR-807, the exact workflow name 'Fix: Farna Control Branch Fixer' is no
     longer referenced (the old gh run list dedup that cited it was removed).
     The dispatch step must still exist and reference 'Branch Fixer'."""
     raw = _raw()
@@ -125,7 +125,7 @@ def test_fail_open_warning_path_exists() -> None:
 
 
 def test_no_inert_gh_run_list_dedup() -> None:
-    """The old dedup used `gh run list --workflow "Fix: Modulo Branch Fixer"` which
+    """The old dedup used `gh run list --workflow "Fix: Farna Control Branch Fixer"` which
     never matched because the Branch Fixer is triggered via webhook, not GitHub
     Actions. This guard must be absent after FAR-807."""
     raw = _raw()

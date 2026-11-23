@@ -1,4 +1,4 @@
-"""FAR-1530: ``modulo apply`` and the per-pipeline Paused execution state.
+"""FAR-1530: ``farna-control apply`` and the per-pipeline Paused execution state.
 
 ``run_enabled`` is opt-in (FAR-1182/FAR-1221 precedent) with a HARDER rule
 than any sibling field: the ONLY value a config may express is ``false``
@@ -41,7 +41,7 @@ _PAUSE_RE = re.compile(r"https://api\.test/api/v1/pipelines/[^/]+/pause")
 def _config(run_enabled_line: str | None) -> str:
     extra = f"\n      {run_enabled_line}" if run_enabled_line is not None else ""
     return f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample

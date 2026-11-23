@@ -46,7 +46,7 @@ from farna.core.runtime_provider.docker import DockerRuntimeProvider
 pytestmark = [pytest.mark.docker]
 
 _PROXY_IMAGE = "lscr.io/linuxserver/socket-proxy:latest"
-_PROXY_LABEL = "modulo.test=d4-proxy"
+_PROXY_LABEL = "farna-control.test=d4-proxy"
 _PROXY_STATE: dict[str, str | None] = {"network": None, "name": None}
 
 
@@ -112,7 +112,7 @@ def workspace_network() -> str:
     async def _manage(action: str) -> None:
         async with aiodocker.Docker() as docker:
             if action == "create":
-                await docker.networks.create({"Name": name, "Driver": "bridge", "Labels": {"modulo.test": "d4-docker-marked"}})
+                await docker.networks.create({"Name": name, "Driver": "bridge", "Labels": {"farna-control.test": "d4-docker-marked"}})
             else:
                 with contextlib.suppress(Exception):
                     network = await docker.networks.get(name)
@@ -362,7 +362,7 @@ async def _labelled_container(name: str, run_id: str, age_s: int) -> str:
                     "modulo.run.id": run_id,
                     "modulo.machine.id": os.environ.get("FARNA_CONTROL_RUNNER_MACHINE_ID") or socket.gethostname(),
                     "modulo.created_at": str(int(time.time()) - age_s),
-                    "modulo.test": "d4-reconciler",
+                    "farna-control.test": "d4-reconciler",
                 },
                 "HostConfig": {"AutoRemove": False},
             },
@@ -454,7 +454,7 @@ async def _start_socket_proxy() -> str | None:
                         "Binds": ["/var/run/docker.sock:/var/run/docker.sock:ro"],
                         "PortBindings": {"2375/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]},
                     },
-                    "Labels": {"modulo.test": "d4-proxy"},
+                    "Labels": {"farna-control.test": "d4-proxy"},
                 },
                 name=name,
             )
@@ -596,7 +596,7 @@ async def test_engine_kill_mid_exec_is_retryable_never_success() -> None:
                     "AutoRemove": True,
                     "PortBindings": {"2375/tcp": [{"HostIp": "127.0.0.1", "HostPort": ""}]},
                 },
-                "Labels": {"modulo.test": "d4-dind"},
+                "Labels": {"farna-control.test": "d4-dind"},
             },
             name=f"modulo-dind-{uuid.uuid4().hex[:8]}",
         )

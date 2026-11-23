@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Docs validity sweep for the Modulo product docs.
+"""Docs validity sweep for the Farna Control product docs.
 
 Scans ``README.md`` and ``docs/**/*.md`` for three classes of defect:
 
@@ -107,7 +107,7 @@ PATH_PREFIXES: tuple[str, ...] = (
 # Paths that intentionally do not resolve inside this checkout.
 INTENTIONAL_MISSING: dict[str, str] = {
     ".github/workflows/uptime-monitor.yml": ("removed deliberately (FAR-400 / FAR-1156); the doc records the removal"),
-    ".github/workflows/modulo-apply.yml": ("a workflow file the reader saves in their own repository"),
+    ".github/workflows/farna-control-apply.yml": ("a workflow file the reader saves in their own repository"),
     "tools/list": "an MCP protocol method, not a filesystem path",
 }
 

@@ -1,4 +1,4 @@
-name: "Fix: Modulo Branch Fixer"
+name: "Fix: Farna Control Branch Fixer"
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   trigger-modulo-fixer:
-    name: Trigger Modulo Branch Fixer
+    name: Trigger Farna Control Branch Fixer
     runs-on: ubicloud-standard-2
     # Manual-delivery label protocol:
     # The `manual-delivery` label on a PR tells the ci.yml caller
@@ -104,12 +104,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Send webhook to Modulo Branch Fixer
+      - name: Send webhook to Farna Control Branch Fixer
         id: webhook
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           PR_NUMBER: ${{ inputs.pr_number }}
           BRANCH: ${{ inputs.branch }}
           FEEDBACK: ${{ inputs.feedback }}

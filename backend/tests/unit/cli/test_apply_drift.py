@@ -1,4 +1,4 @@
-"""Unit tests for ``modulo apply --diff`` drift mode (FAR-681 slice 3).
+"""Unit tests for ``farna-control apply --diff`` drift mode (FAR-681 slice 3).
 
 Drift mode is read-only by construction: the executor returns after the
 plan phase (the same gate the dry-run return takes), proving no
@@ -33,7 +33,7 @@ from tests.unit.cli.test_apply_executor import (
 )
 
 _MATCH_SCHEMA_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   schemas:
     - name: alpha
@@ -41,7 +41,7 @@ entities:
 """
 
 _TRIGGERS_ONLY_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   triggers:
     - pipeline: sample
@@ -55,7 +55,7 @@ entities:
 """
 
 _BACKENDS_ONLY_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: openai
@@ -594,7 +594,7 @@ class TestRuntimeStateExcluded:
 _AGENT_FF = "00000000-0000-0000-0000-0000000000ff"
 
 _EXTRA_NODE_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -627,7 +627,7 @@ _SAME_GRAPH = {
 }
 
 _PLAIN_PIPELINE_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample

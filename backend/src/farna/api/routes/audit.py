@@ -27,7 +27,7 @@ from farna.api.db_error_handling import (
 from farna.api.dependencies import (
     get_db_session,
     get_or_create_engine,
-    require_feature,
+    require_entitlement,
     require_permission,
 )
 from farna.auth.jwt import TenantPrincipal
@@ -74,7 +74,7 @@ class BatchDetailRequest(BaseModel):
     event_ids: list[str]
 
 
-@router.get("", dependencies=[require_feature("audit_viewer")])
+@router.get("", dependencies=[require_entitlement("audit_evidence")])
 @handle_db_errors("audit.list_audit_events_endpoint")
 async def list_audit_events_endpoint(
     cursor: str | None = Query(None, max_length=256, description="Cursor: JSON {c:created_at, i:id}"),
@@ -149,7 +149,7 @@ async def list_audit_events_endpoint(
 # FAR-1472 exemption (read-only POST): reads a batch of audit events by id and
 # writes nothing, so chaining an audit event per lookup would only add noise to
 # the append-only chain. Deliberately left in audit_coverage_baseline.txt.
-@router.post("/batch-detail", dependencies=[require_feature("audit_viewer")])
+@router.post("/batch-detail", dependencies=[require_entitlement("audit_evidence")])
 async def batch_detail_endpoint(
     req: BatchDetailRequest,
     session: AsyncSession = Depends(get_db_session),
@@ -188,7 +188,7 @@ async def batch_detail_endpoint(
     return result
 
 
-@router.get("/verify", dependencies=[require_feature("audit_viewer")])
+@router.get("/verify")
 @handle_db_errors("audit.verify_chain_endpoint")
 async def verify_chain_endpoint(
     session: AsyncSession = Depends(get_db_session),
@@ -223,7 +223,7 @@ async def verify_chain_endpoint(
     return result
 
 
-@router.get("/export", dependencies=[require_feature("audit_viewer")])
+@router.get("/export", dependencies=[require_entitlement("audit_evidence")])
 async def export_chain_endpoint(
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
@@ -321,7 +321,7 @@ async def _scan_body(
         yield chunk
 
 
-@router.get("/scan", dependencies=[require_feature("audit_viewer")])
+@router.get("/scan", dependencies=[require_entitlement("audit_evidence")])
 async def scan_chain_endpoint(
     format: str = Query("json", pattern="^(json|csv)$"),
     event_type: str | None = Query(None, max_length=64, description="Filter by event type"),
@@ -399,7 +399,7 @@ async def _collect_pack_events(settings: Settings, org_id: _UUID) -> tuple[list[
     return events, truncated
 
 
-@router.get("/evidence-pack", dependencies=[require_feature("audit_viewer")])
+@router.get("/evidence-pack", dependencies=[require_entitlement("audit_evidence")])
 async def evidence_pack_endpoint(
     run_id: str | None = Query(None, max_length=128, description="Optional run id to name in the pack manifest"),
     settings: Settings = Depends(get_settings),
@@ -451,7 +451,7 @@ async def evidence_pack_endpoint(
 
 @router.get(
     "/verification-key",
-    dependencies=[require_feature("audit_viewer"), require_permission(_CODE_AUDIT_MANAGE)],
+    dependencies=[require_entitlement("audit_evidence"), require_permission(_CODE_AUDIT_MANAGE)],
 )
 async def verification_key_endpoint() -> dict[str, object]:
     """Publish the org's Ed25519 evidence verification key (public, not secret).

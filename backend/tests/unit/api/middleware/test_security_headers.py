@@ -188,14 +188,14 @@ async def test_hsts_not_sent_in_debug_mode() -> None:
 
 @pytest.mark.anyio
 async def test_monitor_domains_appended_to_csp_connect_src() -> None:
-    settings = _make_settings(monitor_domains="https://monitor.internal *.ingest.modulo.dev")
+    settings = _make_settings(monitor_domains="https://monitor.internal *.ingest.farna.dev")
     with patch("farna.api.middleware.security_headers.get_settings", return_value=settings):
         app = _build_app(settings)
         resp = await _get(app)
 
     assert resp.status_code == 200
     csp = resp.headers["Content-Security-Policy"]
-    assert "https://monitor.internal *.ingest.modulo.dev" in csp
+    assert "https://monitor.internal *.ingest.farna.dev" in csp
     assert "connect-src 'self' *.ingest.sentry.io *.datadoghq.com *.dd.dg *.rum.browserevents.com" in csp
 
 

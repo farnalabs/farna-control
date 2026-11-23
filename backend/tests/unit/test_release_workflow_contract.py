@@ -143,11 +143,11 @@ def _real_attestation_payload(sha256: str) -> list[dict[str, Any]]:
 
 def test_bundle_release_uses_product_title_without_changing_bundle_identity() -> None:
     workflow = _release_workflow_text()
-    publication = workflow[workflow.index('RELEASE_TITLE="Modulo ${RC_TAG}"') :]
+    publication = workflow[workflow.index('RELEASE_TITLE="Farna Control ${RC_TAG}"') :]
     existing_release, new_release = publication.split("          else\n", maxsplit=1)
 
     assert "TAG: bundle-v${{ inputs.version }}" in workflow
-    assert 'RELEASE_TITLE="Modulo ${RC_TAG}"' in publication
+    assert 'RELEASE_TITLE="Farna Control ${RC_TAG}"' in publication
     assert 'gh release edit "$TAG" --title "$RELEASE_TITLE"' in existing_release
     assert 'gh release upload "$TAG" "${ASSETS[@]}"' in existing_release
     assert 'gh release create "$TAG"' in new_release
@@ -158,10 +158,10 @@ def test_bundle_release_uses_product_title_without_changing_bundle_identity() ->
 
 def test_ga_release_uses_product_title_while_tag_stays_machine_facing() -> None:
     workflow = _release_workflow_text()
-    promotion = workflow[workflow.index('RELEASE_TITLE="Modulo ${GA_TAG}"') :]
+    promotion = workflow[workflow.index('RELEASE_TITLE="Farna Control ${GA_TAG}"') :]
 
     assert 'GA_TAG="v${VERSION}"' in workflow
-    assert 'RELEASE_TITLE="Modulo ${GA_TAG}"' in promotion
+    assert 'RELEASE_TITLE="Farna Control ${GA_TAG}"' in promotion
     assert 'gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE"' in promotion
     assert 'gh release create "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE"' in promotion
     assert '--title "$GA_TAG"' not in promotion
@@ -688,7 +688,8 @@ def test_rc_validation_uses_predecessor_bundle_image_tag_before_promotion() -> N
 
     assert 'gh release download "$bundle_tag"' in matrix
     assert 'compose_file="$bundle_dir/docker-compose.prod.yml"' in matrix
-    assert 'image = compose.get("services", {}).get("modulo", {}).get("image")' in matrix
+    assert 'service = services.get("farna-control") or services.get("modulo") or {}' in matrix
+    assert 'image = service.get("image")' in matrix
     assert 'old_tag="$(COMPOSE_FILE="$compose_file" BUNDLE_VERSION="$bundle_version" \\' in matrix
     assert "uv run --no-project --no-sync --no-build --with pyyaml==6.0.3 python - <<'PY'" in matrix
     assert 'BUNDLE_VERSION="$bundle_version" python3' not in matrix

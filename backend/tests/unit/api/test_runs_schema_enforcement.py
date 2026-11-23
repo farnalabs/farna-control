@@ -267,3 +267,88 @@ def test_flip_guard_not_safe_with_lenient_warnings(client: tuple[TestClient, Asy
     assert body["total_records"] == 2
     assert body["affected_outcomes"] == ["lenient_validation_bypassed"]
     assert "NOT safe to flip" in body["advisory"]
+
+
+# ── FAR-2683: both schema-enforcement reads now carry an authz gate ─────────
+#
+# The per-run read is a run child read, so it takes the same viewer-level
+# ``run.status`` (any-credential) gate as the run detail / events / attempts
+# endpoints. The org-wide flip-guard is a read-only aggregate over run
+# enforcement records — the same data class as ``/runs/stats`` — so it takes the
+# viewer-level ``run.list`` floor. Before FAR-2683 neither route had a
+# permission gate at all (only a tenant principal).
+
+
+def _guest_tenant() -> TenantPrincipal:
+    return TenantPrincipal(
+        username="guest@test",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="guest",
+    )
+
+
+def _viewer_tenant() -> TenantPrincipal:
+    return TenantPrincipal(
+        username="viewer@test",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="viewer",
+    )
+
+
+def test_flip_guard_unknown_role_forbidden(client: tuple[TestClient, AsyncMock]) -> None:
+    http, _session = client
+    app.dependency_overrides[get_current_tenant_user] = _guest_tenant
+    resp = http.get("/api/v1/runs/schema-enforcement/flip-guard")
+
+    assert resp.status_code == 403, resp.text
+    assert "run.list" in resp.json()["detail"]
+
+
+def test_flip_guard_viewer_succeeds(client: tuple[TestClient, AsyncMock]) -> None:
+    http, session = client
+    app.dependency_overrides[get_current_tenant_user] = _viewer_tenant
+    session.execute = AsyncMock(return_value=_result(rows=[({"outcome": "native_decoded_and_validated"},)]))
+    resp = http.get("/api/v1/runs/schema-enforcement/flip-guard")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["total_records"] == 1
+
+
+def test_get_run_schema_enforcement_unknown_role_forbidden(client: tuple[TestClient, AsyncMock]) -> None:
+    http, _session = client
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = _guest_tenant
+    resp = http.get(f"/api/v1/runs/{_RUN_ID}/schema-enforcement")
+
+    assert resp.status_code == 403, resp.text
+    assert "run.status" in resp.json()["detail"]
+
+
+def test_get_run_schema_enforcement_viewer_api_key_succeeds(client: tuple[TestClient, AsyncMock]) -> None:
+    """A viewer credential (the any-credential leg) that can read the run can read this."""
+    http, session = client
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = _viewer_tenant
+    run = MagicMock()
+    run.schema_validator_mode = "lenient"
+    run.schema_validation_outcome = "no_schema"
+    session.execute = AsyncMock(return_value=_result(rows=[]))
+    with patch.object(runs_module, "_do_get_run", new_callable=AsyncMock, return_value=run):
+        resp = http.get(f"/api/v1/runs/{_RUN_ID}/schema-enforcement")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["run_id"] == str(_RUN_ID)
+
+
+def test_get_run_schema_enforcement_cross_org_run_is_404(client: tuple[TestClient, AsyncMock]) -> None:
+    """A run the caller's org cannot see is indistinguishable from a missing one.
+
+    ``_do_get_run`` is NOT patched here, so the real org-scoped
+    ``_run_detail_statement`` runs and its empty result (another org's run is
+    filtered out) surfaces as 404 — never a 200 with another org's records.
+    """
+    http, _session = client
+    resp = http.get(f"/api/v1/runs/{_RUN_ID}/schema-enforcement")
+
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["detail"] == "Run not found"

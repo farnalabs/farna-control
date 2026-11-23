@@ -4,7 +4,7 @@ A copy-paste GitHub Actions workflow that gives the [`farna-control apply` CLI](
 a Terraform-style CI loop: every pull request posts a **plan** – the upsert diff
 the CLI would write – as a comment on the PR, and merging to `main` runs the
 **apply** against each environment. Save the YAML below as
-`.github/workflows/modulo-apply.yml` in the repo that holds your apply config.
+`.github/workflows/farna-control-apply.yml` in the repo that holds your apply config.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ the CLI would write – as a comment on the PR, and merging to `main` runs the
   reviewers) to an environment, every job that names it – plan jobs included –
   pauses until the rules pass, so keep rules only where you want a hold.
 - **The apply config** – the YAML file `farna-control apply -f` consumes, committed to
-  this repo (the example uses `modulo.yaml`).
+  this repo (the example uses `farna-control.yaml`).
 - **CLI installation in CI** – `pip install farna-control` (or
   `uv tool install farna-control`), the distribution this repo declares in
   `backend/pyproject.toml` (`[project].name`), which installs the
@@ -88,7 +88,7 @@ jobs:
       - name: Plan
         run: |
           set -o pipefail
-          farna-control apply --plan -f modulo.yaml | tee plan-staging.txt
+          farna-control apply --plan -f farna-control.yaml | tee plan-staging.txt
       - name: Comment the plan on the PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -127,7 +127,7 @@ jobs:
       - name: Plan
         run: |
           set -o pipefail
-          farna-control apply --plan -f modulo.yaml | tee plan-production.txt
+          farna-control apply --plan -f farna-control.yaml | tee plan-production.txt
       - name: Comment the plan on the PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -159,7 +159,7 @@ jobs:
         # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
         run: pip install farna-control
       - name: Apply
-        run: farna-control apply -f modulo.yaml
+        run: farna-control apply -f farna-control.yaml
 
   apply-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -178,7 +178,7 @@ jobs:
         # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
         run: pip install farna-control
       - name: Apply
-        run: farna-control apply -f modulo.yaml
+        run: farna-control apply -f farna-control.yaml
 ```
 
 ## Approval model

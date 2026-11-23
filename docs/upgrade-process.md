@@ -12,7 +12,7 @@ The **single source of truth** for the product version is `backend/pyproject.tom
 |------|-------|
 | `backend/uv.lock` | `version` on the editable `farna-control` package entry |
 | `frontend/package.json` | `"version"` |
-| `deploy/helm/modulo/Chart.yaml` | `version` and `appVersion` |
+| `deploy/helm/farna-control/Chart.yaml` | `version` and `appVersion` |
 
 All of these files carry a plain numeric `X.Y.Z`. A pre-release suffix (`-rc1`) lives in the **git tag only** (e.g. `v0.4.0-rc1`) and is never written into the files.
 
@@ -107,7 +107,7 @@ root rename needs it stopped while the enforced dump needs a live stack: take an
 out-of-band database backup first (see
 [backup](./operations/backup.md) – a `--data-dir` backup cannot run while the
 launcher is live, so use its `--db-url`/`pg_dump` form), stop it
-(`modulo stop`), then re-run this installer with `--skip-backup` – the loud
+(`farna-control stop`), then re-run this installer with `--skip-backup` – the loud
 acknowledgement that the out-of-band backup is the authoritative snapshot (a
 stopped stack cannot be dumped). The bundled data dir keeps its
 `~/.local/share/modulo/data` location so an upgrade never strands existing data.
@@ -233,14 +233,14 @@ For the operator upgrade itself:
 
 ```bash
 # 1. Pull the exact new image named by TAG.
-TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml pull modulo
+TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml pull farna-control
 
 # 2. Restart with that immutable image (takes the pre-upgrade snapshot, then
 #    runs migrations on startup).
-TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo
+TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d farna-control
 
 # 3. Verify migration completed and readiness is healthy.
-TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml logs modulo | grep -i alembic
+TAG=<new-version> docker compose -f deploy/compose/docker-compose.prod.yml logs farna-control | grep -i alembic
 curl http://localhost:80/healthz/ready
 ```
 
@@ -483,7 +483,7 @@ only while it is being rolled forward.
 
 ```bash
 # Docker Compose – pin the previous image version and restart
-docker compose -f deploy/compose/docker-compose.prod.yml stop modulo
+docker compose -f deploy/compose/docker-compose.prod.yml stop farna-control
 docker tag ghcr.io/farnalabs/farna-control:old ghcr.io/farnalabs/farna-control:<previous-version>
 TAG=<previous-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d
 
@@ -505,13 +505,13 @@ The order is mandatory: **stop or hold the purge image, restore the database, ro
 
 ```bash
 # Check current Alembic version
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo uv run alembic current
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control uv run alembic current
 
 # Preview the downgrade SQL
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo uv run alembic downgrade --sql -1
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control uv run alembic downgrade --sql -1
 
 # Downgrade (use with extreme caution – data loss possible)
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo uv run alembic downgrade -1
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control uv run alembic downgrade -1
 ```
 
 **Prefer a forward-fix over downgrading.** Write a new migration that reverts the schema change rather than using `alembic downgrade`. Not all migrations include a `downgrade()` function.

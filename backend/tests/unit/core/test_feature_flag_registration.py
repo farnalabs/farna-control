@@ -165,32 +165,45 @@ class TestUserManagementFlag:
 
 
 class TestFeatureFlagModel:
+    """FAR-2665: a flag is BEHAVIOUR ONLY and declares no tier.
+
+    ``tier`` is a read-only projection of the entitlement registry, so these
+    tests pin that a construction cannot pass one and that the projection is
+    derived from the flag's name.
+    """
+
     def test_creates_with_minimal_fields(self) -> None:
-        flag = FeatureFlag(name="test_flag", tier="community", description="test")
+        flag = FeatureFlag(name="test_flag", description="test")
         assert flag.name == "test_flag"
-        assert flag.tier == "community"
         assert flag.description == "test"
         assert flag.depends_on is None
         assert flag.currently_active is False
 
-    def test_currently_active_can_be_set_false(self) -> None:
-        flag = FeatureFlag(name="inactive_flag", tier="team", description="test", currently_active=False)
-        assert flag.currently_active is False
+    def test_tier_is_not_a_constructor_field(self) -> None:
+        with pytest.raises(TypeError):
+            FeatureFlag(name="tier_flag", description="test", tier="community")  # type: ignore[call-arg]
 
-    def test_currently_active_reflects_tier_comparison(self) -> None:
-        flag = FeatureFlag(name="team_flag", tier="team", description="test")
+    def test_tier_projection_is_community_for_a_behaviour_flag(self) -> None:
+        assert FeatureFlag(name="eval_system", description="test").tier == "community"
+
+    def test_tier_projection_is_team_for_an_entitled_flag(self) -> None:
+        """Derived from ``core.entitlements`` — never declared on the flag."""
+        assert FeatureFlag(name="sso", description="test").tier == "team"
+
+    def test_currently_active_can_be_set_false(self) -> None:
+        flag = FeatureFlag(name="inactive_flag", description="test", currently_active=False)
         assert flag.currently_active is False
 
     def test_non_blocked_flag_with_currently_active(self) -> None:
-        flag = FeatureFlag(name="active_flag", tier="community", description="test", currently_active=True)
+        flag = FeatureFlag(name="active_flag", description="test", currently_active=True)
         assert flag.currently_active is True
 
     def test_depends_on_relationship(self) -> None:
-        child = FeatureFlag(name="child_flag", tier="team", description="test", depends_on="parent_flag")
+        child = FeatureFlag(name="child_flag", description="test", depends_on="parent_flag")
         assert child.depends_on == "parent_flag"
 
     def test_description_defaults_to_empty(self) -> None:
-        flag = FeatureFlag(name="no_desc", tier="community", description="")
+        flag = FeatureFlag(name="no_desc", description="")
         assert not flag.description
 
 
@@ -334,4 +347,4 @@ class TestOrgAdminSettableClassification:
             assert flag.org_admin_settable is False, f"{name} must not be org-admin-settable"
 
     def test_unknown_flag_defaults_to_system_admin_only(self) -> None:
-        assert FeatureFlag(name="new_flag", description="unclassified", tier="community").org_admin_settable is False
+        assert FeatureFlag(name="new_flag", description="unclassified").org_admin_settable is False
