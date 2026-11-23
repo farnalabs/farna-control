@@ -36,13 +36,12 @@ FEATURES = TESTS / "bdd" / "features"
 QUARANTINE_FILE = REPO / ".quarantine.yml"
 
 #: Workflow self-report payloads (GitHub Actions → POST .../journeys/self-report)
-#: must name the lifecycle-map stage the workflow completes. The merge/deploy
-#: stages are EXTERNAL (a GitHub Actions workflow, no ``pipeline_id``), so the
-#: endpoint can only advance journeys into them via ``stage_id`` — a payload
-#: that drops it silently leaves journeys stuck at their old stage.
+#: must name the lifecycle-map stage the workflow completes. The merge stage is
+#: EXTERNAL (a GitHub Actions workflow, no ``pipeline_id``), so the endpoint can
+#: only advance journeys into it via ``stage_id`` — a payload that drops it
+#: silently leaves journeys stuck at their old stage.
 SELF_REPORT_WORKFLOWS: dict[str, str] = {
     "merge-queue.yml": "merge",
-    "deploy.yml": "deploy",
 }
 
 #: Scenarios deliberately excluded from every run via the
@@ -265,13 +264,12 @@ def _workflow_run_blocks(workflow: Path) -> list[str]:
 
 
 def test_workflow_self_report_payloads_name_the_stage():
-    """The merge-queue and deploy workflows POST a self-report payload to
-    ``.../journeys/self-report`` naming the lifecycle-map stage they complete.
-    The merge/deploy stages are external (GitHub Actions, no ``pipeline_id``),
-    so the endpoint advances journeys into them via ``stage_id`` — a payload
-    that drops it silently leaves journeys stuck at their old stage. Drift
-    here is invisible to the unit tests, which exercise the endpoint with
-    hand-built bodies."""
+    """The merge-queue workflow POSTs a self-report payload to
+    ``.../journeys/self-report`` naming the lifecycle-map stage it completes.
+    The merge stage is external (GitHub Actions, no ``pipeline_id``), so the
+    endpoint advances journeys into it via ``stage_id`` — a payload that drops
+    it silently leaves journeys stuck at its old stage. Drift here is invisible
+    to the unit tests, which exercise the endpoint with hand-built bodies."""
     violations = []
     for filename, expected_stage in SELF_REPORT_WORKFLOWS.items():
         path = REPO / ".github" / "workflows" / filename
