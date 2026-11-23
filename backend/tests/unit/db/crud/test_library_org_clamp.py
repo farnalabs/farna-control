@@ -306,6 +306,7 @@ async def test_list_contribution_versions_passes_the_callers_org() -> None:
         await list_contribution_versions(_service_session(), org_id, prim.id)
 
     assert seed_resolver.await_args.kwargs["explicit_org_filter"] == org_id
+    assert seed_resolver.await_args.args[1] == org_id
     assert version_lister.await_args.kwargs["org_id"] == org_id
     assert version_lister.await_args.args[1] == group_id
 
