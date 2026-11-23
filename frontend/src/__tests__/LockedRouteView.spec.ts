@@ -107,6 +107,60 @@ describe('LockedRouteView', () => {
     expect(wrapper.get('[data-testid="locked-route-dashboard"]').attributes('href')).toBe('/')
   })
 
+  it('names the role that would open the page, and how to ask for it (FAR-2687)', () => {
+    seedPlan('community')
+    const wrapper = mountLocked({
+      from: '/lifecycle-maps',
+      capability: 'Lifecycle Maps',
+      role: 'operator,admin',
+      reason: 'role',
+    })
+
+    const closed = wrapper.get('[data-testid="locked-route-closed"]')
+    // An any-of role floor names every role the manifest lists, translated —
+    // "ask for the role that includes it" left the caller to guess.
+    expect(closed.text()).toContain('This page requires one of these roles: Operator, Admin.')
+    expect(closed.text()).toContain('ask an organisation administrator to give you one of them')
+    // A role lock never offers a plan upgrade: no purchase changes a role.
+    expect(wrapper.find('[data-testid="feature-gate"]').exists()).toBe(false)
+    // And it offers no "open the capability" link back into the route it just
+    // refused — that link only exists once the licence covers it, and a link
+    // into a denied route is the shape that could bounce the caller straight
+    // back here (a loop).
+    expect(wrapper.find('[data-testid="locked-route-open"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="locked-route-dashboard"]').attributes('href')).toBe('/')
+  })
+
+  it('names a single required role naturally, translating it (FAR-2687)', () => {
+    seedPlan('community')
+    const wrapper = mountLocked({ from: '/admin/users', capability: 'Users', role: 'admin', reason: 'role' })
+
+    // One role reads as "requires the Admin role", not "one of these roles: Admin".
+    expect(wrapper.get('[data-testid="locked-route-closed"]').text()).toContain(
+      'This page requires the Admin role.',
+    )
+  })
+
+  it('shows an unrecognised role key verbatim rather than dropping it (FAR-2687)', () => {
+    seedPlan('community')
+    const wrapper = mountLocked({ from: '/x', capability: 'X', role: 'auditor', reason: 'role' })
+
+    // A role added to the manifest before its locale label exists still reads
+    // as the role, not as an empty "requires the  role".
+    expect(wrapper.get('[data-testid="locked-route-closed"]').text()).toContain(
+      'This page requires the auditor role.',
+    )
+  })
+
+  it('falls back to the generic role wording when the guard named no role', () => {
+    seedPlan('community')
+    const wrapper = mountLocked({ from: '/admin/costs', capability: 'Costs', reason: 'role' })
+
+    expect(wrapper.get('[data-testid="locked-route-closed"]').text()).toContain(
+      'it needs a role change from your organisation administrator',
+    )
+  })
+
   it('explains an instance-admin refusal', () => {
     seedPlan('team')
     const wrapper = mountLocked({
