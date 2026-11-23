@@ -640,7 +640,7 @@ backend/tests/unit/scripts/test_install_manifest_verification.py	8
 backend/tests/unit/scripts/test_install_support_block.py	1
 backend/tests/unit/scripts/test_install_unreadable_cwd.py	6
 backend/tests/unit/scripts/test_linux_deb_contract.py	3
-backend/tests/unit/scripts/test_package_compose_release.py	23
+backend/tests/unit/scripts/test_package_compose_release.py	16
 backend/tests/unit/scripts/test_pr_review_set_pr_details.py	3
 backend/tests/unit/scripts/test_restore.py	13
 backend/tests/unit/scripts/test_run_prepush_gated_check.py	2
@@ -943,7 +943,6 @@ scripts/bump-version.py	4
 scripts/bundle-versions.env	1
 scripts/check_doc_validity.py	19
 scripts/compose-restore.sh	2
-scripts/compose-rollback.sh	1
 scripts/create-macos-info-plist.sh	3
 scripts/dispatch_with_retry.sh	2
 scripts/install.sh	21
