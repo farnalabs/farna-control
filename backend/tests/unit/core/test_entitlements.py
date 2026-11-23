@@ -141,3 +141,25 @@ class TestPlanEntitlementsHelper:
                 return "community"
 
         assert not plan_entitlements(_Ctx())
+
+    def test_a_grant_set_containing_a_non_string_is_not_trusted(self) -> None:
+        """A mock-shaped resolver can return non-strings; that is not a grant set.
+
+        The shape check must fall through to the licence-derived answer rather
+        than accept a set polluted with non-string entries — a bare Mock
+        auto-answers ``entitlements()`` and would otherwise be read as a grant.
+        """
+
+        class _Ctx:
+            def entitlements(self) -> list[object]:
+                return ["identity", object()]
+
+        assert plan_entitlements(_Ctx()) == frozenset()
+
+    def test_a_context_with_no_resolvers_grants_nothing(self) -> None:
+        """A minimal pre-protocol double (no tier/feature_enabled) grants nothing."""
+
+        class _Ctx:
+            pass
+
+        assert plan_entitlements(_Ctx()) == frozenset()

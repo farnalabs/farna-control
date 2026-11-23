@@ -197,6 +197,18 @@ describe('usePlanStore', () => {
     expect(store.featureEnabled('parallel_branches')).toBe(true)
   })
 
+  it('isEntitledFlag distinguishes a capability flag from a Community behaviour flag', () => {
+    const store = usePlanStore()
+    store.entitlements = [
+      { key: 'identity', name: 'Identity', description: 'Identity and access', granted: true, flags: ['sso', 'scim'] },
+    ]
+
+    expect(store.isEntitledFlag('sso')).toBe(true)
+    expect(store.entitlementForFlag('sso')).toBe('identity')
+    expect(store.isEntitledFlag('mcp_server')).toBe(false)
+    expect(store.entitlementForFlag('mcp_server')).toBeNull()
+  })
+
   it('getTierLabel falls back to a capitalized tier id for unknown tiers', async () => {
     const store = usePlanStore()
     await store.fetchPlan()

@@ -428,7 +428,7 @@ class PlanContext(Protocol):
 
     def has_license_key(self) -> bool: ...
 
-    def entitlements(self) -> frozenset[str]: ...
+    def entitlements(self) -> frozenset[str]: ...  # pragma: no cover - Protocol stub body, never executed
 
 
 class DbPlanContext:

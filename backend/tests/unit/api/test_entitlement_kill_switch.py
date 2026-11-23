@@ -247,3 +247,18 @@ def test_switching_off_one_flag_does_not_withdraw_the_whole_capability() -> None
     """
     assert entitlement_available(_FlagStatePlan({"sso"}), "identity")
     assert not entitlement_available(_FlagStatePlan(set()), "identity")
+
+
+def test_entitlement_available_trusts_the_licence_when_the_plan_cannot_read_flags() -> None:
+    """A plan context without ``feature_enabled`` falls back to the licence grant.
+
+    A minimal legacy double cannot answer the kill switch, so the helper must
+    not invent a refusal it cannot substantiate: the granted capability stays
+    available rather than being silently withdrawn.
+    """
+
+    class _LicenceOnlyPlan:
+        def tier(self) -> str:
+            return "team"
+
+    assert entitlement_available(_LicenceOnlyPlan(), "identity")
