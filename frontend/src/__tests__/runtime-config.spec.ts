@@ -58,4 +58,11 @@ describe('getAutoLoginConfig', () => {
 
     expect(getAutoLoginConfig()).toEqual({ username: 'current', password: 'current', org_slug: 'demo' })
   })
+
+  it('treats an empty current object as absent and still uses the pre-rebrand global', () => {
+    window.__FARNA_CONFIG__ = {}
+    setLegacyConfig({ autoLogin: { username: 'demo', password: 'demo' } })
+
+    expect(getAutoLoginConfig()).toEqual({ username: 'demo', password: 'demo', org_slug: 'demo' })
+  })
 })

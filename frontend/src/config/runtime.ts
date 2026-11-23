@@ -24,11 +24,32 @@ function legacyGlobal(key: string): unknown {
 }
 
 /**
+ * True for a value that carries no configuration: an empty object is what
+ * `index.html`'s `|| {}` stub (and a generator with nothing to publish)
+ * produces, and it must not shadow the pre-rebrand object.
+ */
+function isEmptyConfigObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0
+}
+
+/** The first candidate that is present and not an empty config object. */
+function firstMeaningful(candidates: readonly unknown[]): unknown {
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null || isEmptyConfigObject(candidate)) continue
+    return candidate
+  }
+  return undefined
+}
+
+/**
  * The runtime config, preferring the current global and falling back to the
- * pre-rebrand one a cached `runtime-config.js` still publishes.
+ * pre-rebrand one a cached `runtime-config.js` still publishes. An empty
+ * `{}` (the bootstrap stub's placeholder) counts as absent.
  */
 export function readRuntimeConfig(): Window['__FARNA_CONFIG__'] {
-  return window.__FARNA_CONFIG__ ?? (legacyGlobal(LEGACY_CONFIG_KEY) as Window['__FARNA_CONFIG__'])
+  const current = window.__FARNA_CONFIG__
+  const resolved = firstMeaningful([current, legacyGlobal(LEGACY_CONFIG_KEY)])
+  return (resolved ?? current) as Window['__FARNA_CONFIG__']
 }
 
 /**
@@ -57,10 +78,10 @@ export function getAutoLoginConfig(): AutoLoginConfig | undefined {
 
 /**
  * Error-tracking kill switch. The pre-rebrand global is read for one release
- * only; a falsy EXPLICIT current value is not nullish, so `??` never lets the
- * legacy global override it.
+ * only; an empty object counts as absent, while an EXPLICIT falsy value
+ * (`false`, `""`, `0`) is meaningful and therefore still wins.
  */
 export function isErrorTrackingDisabled(): boolean {
   const current = (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__
-  return Boolean(current ?? legacyGlobal(LEGACY_KILL_SWITCH_KEY))
+  return Boolean(firstMeaningful([current, legacyGlobal(LEGACY_KILL_SWITCH_KEY)]))
 }

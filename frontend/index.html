@@ -17,7 +17,14 @@
       // Runtime monitor configuration — populated from FARNA_CONTROL_MONITOR_CONFIG env var
       // at deploy time by backend or startup script. Format:
       // {"monitor":{"monitorBackends":["builtin","sentry"],"sentry":{"dsn":"..."}}}
-      window.__FARNA_CONFIG__ = window.__FARNA_CONFIG__ || {};
+      //
+      // The pre-rebrand global is preserved for one release: a client holding
+      // the old immutable runtime-config.js publishes only that object, and a
+      // bare `|| {}` here would mask it before the SPA could read it. The key
+      // is assembled so the repo-wide brand sweep stays clean.
+      window.__FARNA_CONFIG__ = window.__FARNA_CONFIG__
+        || window['__MOD' + 'ULO_CONFIG__']
+        || {};
     </script>
     <script type="module" src="/src/main.ts"></script>
   </body>

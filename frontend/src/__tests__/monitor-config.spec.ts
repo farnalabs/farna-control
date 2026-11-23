@@ -33,7 +33,9 @@ describe('loadMonitorConfig', () => {
   })
 
   it('disables tracking for any truthy disable flag value', () => {
-    for (const value of ['true', '1', 1, {}]) {
+    // An EMPTY object is deliberately not in this list: it is the bootstrap
+    // stub's placeholder and counts as absent (see the legacy-fallback tests).
+    for (const value of ['true', '1', 1, { enabled: true }]) {
       (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = value
       expect(loadMonitorConfig().enabled).toBe(false)
     }
@@ -55,6 +57,12 @@ describe('loadMonitorConfig', () => {
     (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = false
     setLegacyDisabled(true)
     expect(loadMonitorConfig().enabled).toBe(true)
+  })
+
+  it('treats an empty-object current value as absent and uses the pre-rebrand switch', () => {
+    (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = {}
+    setLegacyDisabled(true)
+    expect(loadMonitorConfig().enabled).toBe(false)
   })
 
   it('returns environment from import.meta.env.MODE', () => {
