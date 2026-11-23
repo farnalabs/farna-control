@@ -79,6 +79,20 @@ def _make_rating(
     return rating
 
 
+def _visible_primitive(primitive_type: str = "schema") -> MagicMock:
+    """A primitive readable by the test caller (own org) for the read guards.
+
+    The FAR-2682 ratings read routes resolve the primitive via ``get_primitive``
+    and 404 an unknown/foreign id. The mock session has no primitive row, so the
+    rating-read steps that assert a 200 stub this resolver to a visible row.
+    """
+    primitive = MagicMock()
+    primitive.id = uuid.uuid4()
+    primitive.organisation_id = ORG_ID
+    primitive.primitive_type = primitive_type
+    return primitive
+
+
 # ---------------------------------------------------------------------------
 # Shared test state
 # ---------------------------------------------------------------------------
@@ -491,7 +505,14 @@ def _submit_rating_with_comment(client, name: str, value: str, comment: str, ctx
 def _request_aggregate_rating(client, name: str, ctx: dict[str, Any], request) -> None:
     pid = _rating_id(name)
     avg, count = ctx.get("rating_aggregate", (None, 0))
-    with patch("farna.api.routes.library.get_rating_aggregate", new_callable=AsyncMock, return_value=(avg, count)):
+    with (
+        patch(
+            "farna.api.routes.library.get_primitive",
+            new_callable=AsyncMock,
+            return_value=_visible_primitive(),
+        ),
+        patch("farna.api.routes.library.get_rating_aggregate", new_callable=AsyncMock, return_value=(avg, count)),
+    ):
         ctx["response"] = client.get(f"/api/v1/libraries/{pid}/ratings/aggregate")
     request.node._resp = ctx["response"]
 
@@ -501,7 +522,14 @@ def _request_ratings_list(client, name: str, ctx: dict[str, Any], request) -> No
     pid = _rating_id(name)
     ratings = ctx.get("ratings", [])
     result = PageResult(items=ratings, total=len(ratings), page=1, page_size=20)
-    with patch("farna.api.routes.library.list_ratings_for_primitive", new_callable=AsyncMock, return_value=result):
+    with (
+        patch(
+            "farna.api.routes.library.get_primitive",
+            new_callable=AsyncMock,
+            return_value=_visible_primitive(),
+        ),
+        patch("farna.api.routes.library.list_ratings_for_primitive", new_callable=AsyncMock, return_value=result),
+    ):
         ctx["response"] = client.get(f"/api/v1/libraries/{pid}/ratings")
     request.node._resp = ctx["response"]
 
