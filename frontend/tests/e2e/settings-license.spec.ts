@@ -41,10 +41,11 @@ test.describe('Settings License', { tag: "@regression" }, () => {
 
     // Contrast (FAR-938 still holds outside the licence): /admin/housekeeping is
     // in the SYSTEM group with no extra role/tier/flag gate, so this org-admin
-    // session is redirected by the system-admin guard alone.
+    // session is refused by the system-admin guard. FAR-2664 lands that refusal
+    // on the locked page, which names the restriction.
     await page.goto('/admin/housekeeping')
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.locator('h1')).toContainText('Dashboard')
+    await expect(page).toHaveURL(/\/locked\?.*reason=system_admin/)
+    await expect(page.getByTestId('locked-route')).toBeVisible()
 
     // FAR-2104: the org admin now lands on the licence screen and sees the
     // org-scoped controls it may act on. The instance-wide controls are
