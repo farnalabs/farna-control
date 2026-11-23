@@ -81,6 +81,7 @@ _REQUIRE_TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 _PLAINTEXT_SSLMODES = frozenset({"disable"})
 
 _POSTGRES_PREFIX = "postgres://"
+_POSTGRESQL_PREFIX = "postgresql://"
 _POSTGRES_ASYNC_PREFIX = "postgresql+asyncpg://"
 
 
@@ -123,10 +124,10 @@ def normalise_libpq_url(url: str) -> str:
     deeper in the call stack.
     """
     if url.startswith(_LISTPQ_UNSUPPORTED_PREFIXES):
-        return "postgresql://" + url.split("://", 1)[1]
-    if url.startswith("postgres://"):
-        return "postgresql://" + url[len("postgres://") :]
-    if url.startswith("postgresql://"):
+        return _POSTGRESQL_PREFIX + url.split("://", 1)[1]
+    if url.startswith(_POSTGRES_PREFIX):
+        return _POSTGRESQL_PREFIX + url[len(_POSTGRES_PREFIX) :]
+    if url.startswith(_POSTGRESQL_PREFIX):
         return url
     scheme = urlsplit(url).scheme or "<no scheme>"
     raise ValueError(f"expected a PostgreSQL URL (postgresql:// or postgresql+asyncpg://), got scheme {scheme!r}")

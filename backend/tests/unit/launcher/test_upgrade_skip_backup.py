@@ -190,7 +190,7 @@ class TestTheDowngradeGuardRunsBeforeTheSnapshot:
         monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
         with pytest.raises(UpgradeError, match="DOWNGRADE"):
             _preflight(tmp_path, skip_backup=False)
-        assert dumps == []
+        assert not dumps
 
     def test_an_unknown_live_probe_dumps_before_the_guard_can_decide(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The one case the guard CANNOT decide before the dump: still dump."""
@@ -247,11 +247,11 @@ class TestThePendingCheckCannotBeBypassed:
     def test_an_at_head_target_bundle_takes_no_dump(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(upgrade_module, "_bundle_alembic_heads", lambda _bundle: {"head-live"})
         assert upgrade_module.pre_upgrade_dump(tmp_path, target_bundle=tmp_path) is None
-        assert self.dumps == []
+        assert not self.dumps
 
     def test_explicit_target_heads_decide(self, tmp_path: Path) -> None:
         assert upgrade_module.pre_upgrade_dump(tmp_path, target_heads=["head-live"]) is None
-        assert self.dumps == []
+        assert not self.dumps
 
     def test_a_pending_target_still_takes_the_dump(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(upgrade_module, "_bundle_alembic_heads", lambda _bundle: {"head-new"})
@@ -280,7 +280,7 @@ class TestThePendingCheckCannotBeBypassed:
         code = upgrade_module.main(["--data-dir", str(tmp_path), "--target-bundle", str(tmp_path)])
         captured = capsys.readouterr()
         assert code == 0
-        assert captured.out.strip() == "", "stdout is the snapshot path the installer captures"
+        assert not captured.out.strip(), "stdout is the snapshot path the installer captures"
         assert "no migration is pending" in captured.err.lower()
 
     def test_a_database_ahead_of_the_target_bundle_is_refused_before_the_dump(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -295,7 +295,7 @@ class TestThePendingCheckCannotBeBypassed:
         monkeypatch.setattr(upgrade_module, "check_no_downgrade", _REAL_CHECK_NO_DOWNGRADE)
         with pytest.raises(UpgradeError, match="DOWNGRADE"):
             upgrade_module.pre_upgrade_dump(tmp_path, target_bundle=tmp_path)
-        assert self.dumps == []
+        assert not self.dumps
 
     def test_an_unreadable_live_probe_still_dumps(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The guard cannot decide, so it must not refuse: dump, then let the boot decide."""

@@ -1179,7 +1179,7 @@ def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
-    with pytest.raises(upgrade_module.UpgradeError, match="no verified pre-upgrade snapshot"):
+    with pytest.raises(upgrade_module.UpgradeError, match="Refusing --skip-backup: no verified pre-upgrade snapshot"):
         upgrade_module.perform_upgrade(
             data_dir,
             install_root=install_root,

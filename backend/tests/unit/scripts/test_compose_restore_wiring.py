@@ -90,6 +90,16 @@ def test_the_verification_steps_run_the_documented_flags() -> None:
 @pytest.mark.parametrize(
     "forbidden",
     ["DATABASE_ADMIN_URL", "DATABASE_URL", "DATABASE_", "--db-url", "PGPASSWORD", "PGPASSFILE", "postgres://", "postgresql://"],
+    ids=[
+        "database-admin-url",
+        "database-url",
+        "database-prefix",
+        "db-url-flag",
+        "pgpassword",
+        "pgpassfile",
+        "postgres-scheme",
+        "postgresql-scheme",
+    ],
 )
 def test_the_helper_never_references_a_connection_url_or_credential(forbidden: str) -> None:
     """The one-off container inherits the URL from the service environment.

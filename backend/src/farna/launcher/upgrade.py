@@ -544,6 +544,25 @@ def _snapshot_created_at(directory: Path) -> str:
         return ""
 
 
+def _dump_matches_manifests(dump_path: Path, manifest: dict[str, Any], expected_checksum: str) -> bool:
+    """Does the dump on disk match the size and sha256 the manifests recorded?
+
+    The dump is re-hashed (streamed, in 1 MiB chunks), so a corruption that
+    preserved the size is still caught; an unreadable or truncated dump is a
+    mismatch, never a raised error.
+    """
+    try:
+        if dump_path.stat().st_size != manifest.get("dump_bytes"):
+            return False
+        verify_dump_complete(dump_path)
+        if _sha256_file(dump_path) != expected_checksum:
+            _log.warning("upgrade.snapshot_checksum_mismatch dir=%s", dump_path.parent)
+            return False
+    except (OSError, UpgradeError):
+        return False
+    return True
+
+
 def snapshot_is_intact(directory: Path) -> bool:
     """Is *directory* a usable snapshot — structurally AND by checksum?
 
@@ -583,16 +602,7 @@ def snapshot_is_intact(directory: Path) -> bool:
     dump_path = directory / dump_name
     if not dump_path.is_file():
         return False
-    try:
-        if dump_path.stat().st_size != manifest.get("dump_bytes"):
-            return False
-        verify_dump_complete(dump_path)
-        if _sha256_file(dump_path) != expected_checksum:
-            _log.warning("upgrade.snapshot_checksum_mismatch dir=%s", directory)
-            return False
-    except (OSError, UpgradeError):
-        return False
-    return True
+    return _dump_matches_manifests(dump_path, manifest, expected_checksum)
 
 
 def snapshot_in_progress(directory: Path) -> bool:
@@ -825,6 +835,24 @@ def _prune_snapshots_locked(
     return pruned
 
 
+def _harden_snapshot_permissions(snapshot_dir: Path, dump_path: Path) -> None:
+    """Restrict the snapshot directory and its files to the owner (POSIX only).
+
+    Deferred P3: Windows ACL hardening (chmod is a silent no-op there).
+    DIRECTORIES get the private dir mode — the e(xecute) bit is the DIRECTORY
+    search bit: at the file mode the snapshot dir is unsearchable and even the
+    dump (written moments earlier) can no longer be RESOLVED to read it.
+    """
+    if os.name != "posix":
+        return
+    try:
+        snapshot_dir.chmod(_DIR_PRIVATE_MODE)
+        for entry in (dump_path, snapshot_dir / SNAPSHOT_MANIFEST_NAME, snapshot_dir / _RESTORE_MANIFEST_NAME):
+            entry.chmod(_PRIVATE_MODE)
+    except OSError as exc:
+        _log.warning("upgrade.snapshot_mode_failed path=%s error=%s", snapshot_dir, exc)
+
+
 def take_upgrade_snapshot(
     db_url: str,
     output_dir: Path,
@@ -917,18 +945,7 @@ def take_upgrade_snapshot(
                 manifest.update(extra_manifest)
             (snapshot_dir / SNAPSHOT_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
             _write_restore_manifest(snapshot_dir, created_at=created_at, checksum=checksum, size=size, schema_heads=schema_heads)
-            if os.name == "posix":
-                # Deferred P3: Windows ACL hardening (chmod is a silent no-op
-                # there). DIRECTORIES get 0700 — the e(xecute) bit is the
-                # DIRECTORY search bit: at 0600 the snapshot dir is unsearchable
-                # and even the dump (written moments earlier) can no longer be
-                # RESOLVED to read it.
-                try:
-                    snapshot_dir.chmod(_DIR_PRIVATE_MODE)
-                    for entry in (dump_path, snapshot_dir / SNAPSHOT_MANIFEST_NAME, snapshot_dir / _RESTORE_MANIFEST_NAME):
-                        entry.chmod(_PRIVATE_MODE)
-                except OSError as exc:
-                    _log.warning("upgrade.snapshot_mode_failed path=%s error=%s", snapshot_dir, exc)
+            _harden_snapshot_permissions(snapshot_dir, dump_path)
         except BaseException:
             # A failed dump never leaves a half-written snapshot masquerading
             # as one, and the caller never sees a directory to trust. Retention
