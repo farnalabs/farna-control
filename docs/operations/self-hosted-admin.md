@@ -208,7 +208,7 @@ pg_restore -d "$DATABASE_URL" /tmp/pre-emergency-*.dump
 systemctl start modulo
 
 # Verify health
-curl -s https://modulo.example.com/healthz | python3 -m json.tool
+curl -s https://farna-control.example.com/healthz | python3 -m json.tool
 ```
 
 ### 4.3 Point-in-Time Recovery
@@ -291,7 +291,7 @@ The `RETURNING` clause prints the one-time `Bearer` token (`mk_<token>`). Use it
 directly in the `Authorization` header - there is no separate prefix/secret to
 concatenate, exactly like a normally minted key:
 ```bash
-curl -H "Authorization: Bearer mk_<token>" https://modulo.example.com/api/v1/admin/settings
+curl -H "Authorization: Bearer mk_<token>" https://farna-control.example.com/api/v1/admin/settings
 ```
 
 **Safeguards:**
@@ -355,7 +355,7 @@ pg_dump -Fc -f /tmp/pre-bypass-$(date +%Y%m%dT%H%M%S).dump "$DATABASE_URL"
 cat >> /var/log/modulo/admin-bypass.log <<< '{"timestamp": "...", ...}'
 
 # 4. Verify application still works
-curl -s https://modulo.example.com/healthz | python3 -m json.tool
+curl -s https://farna-control.example.com/healthz | python3 -m json.tool
 
 # 5. If the operation caused a regression, restore from backup
 pg_restore -d "$DATABASE_URL" /tmp/pre-bypass-*.dump

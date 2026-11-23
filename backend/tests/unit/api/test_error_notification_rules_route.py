@@ -76,11 +76,12 @@ class _MockFactory:
         pass
 
 
-def _build_client(*, flush_raises: bool, plan: PlanStub) -> Generator[TestClient, None, None]:
+def _build_client(*, flush_raises: bool, plan: PlanStub, role: str = "admin") -> Generator[TestClient, None, None]:
     """Build a TestClient with the error-route dependencies overridden.
 
     ``flush_raises`` controls whether the session flush simulates a unique
-    violation; ``plan`` selects the feature-gate plan context.
+    violation; ``plan`` selects the feature-gate plan context; ``role`` sets the
+    caller's org role (FAR-2683 authz tests).
     """
     session = _make_session(flush_raises=flush_raises)
 
@@ -95,13 +96,13 @@ def _build_client(*, flush_raises: bool, plan: PlanStub) -> Generator[TestClient
         username="testuser",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,
-        org_role="admin",
+        org_role=role,
     )
     app.dependency_overrides[get_current_tenant_user] = lambda: TenantPrincipal(
         username="testuser",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,
-        org_role="admin",
+        org_role=role,
     )
     app.dependency_overrides[get_plan_context] = lambda: plan
 
@@ -189,3 +190,68 @@ def test_update_webhook_url_private_ip_rejected(client: TestClient) -> None:
 
     assert resp.status_code == 422
     assert "webhook_url rejected" in resp.json()["detail"]
+
+
+# ── FAR-2683: the list read must carry the admin floor ─────────────────────
+#
+# ``GET /api/v1/errors/notification-rules`` returns each rule's ``webhook_url``
+# — admin-class delivery configuration. Every write to the resource already
+# requires ``error_notification.manage`` (admin); the read now reuses that same
+# floor so any org member (viewer/operator/runner) can no longer enumerate
+# where alerts are delivered.
+
+
+def _assert_admin_only_list_refused(tc: TestClient) -> None:
+    resp = tc.get("/api/v1/errors/notification-rules")
+    assert resp.status_code == 403, resp.text
+    detail = resp.json()["detail"]
+    assert "error_notification.manage" in detail
+    assert "admin" in detail
+
+
+def test_list_rules_viewer_forbidden() -> None:
+    for tc in _build_client(flush_raises=False, plan=all_features(), role="viewer"):
+        _assert_admin_only_list_refused(tc)
+
+
+def test_list_rules_runner_forbidden() -> None:
+    for tc in _build_client(flush_raises=False, plan=all_features(), role="runner"):
+        _assert_admin_only_list_refused(tc)
+
+
+def test_list_rules_operator_forbidden() -> None:
+    for tc in _build_client(flush_raises=False, plan=all_features(), role="operator"):
+        _assert_admin_only_list_refused(tc)
+
+
+def test_list_rules_admin_succeeds() -> None:
+    for tc in _build_client(flush_raises=False, plan=all_features(), role="admin"):
+        resp = tc.get("/api/v1/errors/notification-rules")
+        assert resp.status_code == 200, resp.text
+        assert not resp.json()["items"]
+
+
+def test_serialize_rule_returns_full_webhook_url_for_admin() -> None:
+    """The admin-only read deliberately returns the full webhook_url.
+
+    Admins already receive it in full from create/update (the same
+    ``_serialize_rule`` feeds those responses), so redacting it for the only
+    principals who can reach the list would add friction with no security
+    gain — and would break the admin edit round-trip. This pins that decision.
+    """
+    from farna.api.routes.error_notification_rules import _serialize_rule
+
+    rule = MagicMock()
+    rule.id = uuid.uuid4()
+    rule.name = "hooks"
+    rule.enabled = True
+    rule.condition_level = "error"
+    rule.condition_min_count = 1
+    rule.condition_window_seconds = 300
+    rule.action_type = "webhook"
+    rule.webhook_url = "https://hooks.example.com/services/T000/B000/secret"
+    rule.cooldown_seconds = 300
+    rule.created_at = None
+    rule.updated_at = None
+
+    assert _serialize_rule(rule)["webhook_url"] == "https://hooks.example.com/services/T000/B000/secret"

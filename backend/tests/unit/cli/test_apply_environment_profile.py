@@ -1,4 +1,4 @@
-"""FAR-1599: ``modulo apply`` and the per-pipeline environment-profile binding.
+"""FAR-1599: ``farna-control apply`` and the per-pipeline environment-profile binding.
 
 ``environment_profile_id`` follows the FAR-1182/FAR-1221 opt-in rule: managed
 ONLY when declared — an omitted key is neither hashed nor written (a UI/API-set
@@ -39,7 +39,7 @@ _OTHER_PROFILE_ID = "00000000-0000-0000-0000-0000000000e2"
 def _config(environment_profile_line: str | None) -> str:
     extra = f"\n      {environment_profile_line}" if environment_profile_line is not None else ""
     return f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample

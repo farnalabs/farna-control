@@ -1,7 +1,7 @@
 """Unit tests for the top-level ``modulo`` CLI group (FAR-671 slice 2).
 
 Locks the published-surface compatibility: bare ``farna-control backup`` /
-``farna-control restore`` / ``modulo apply`` keep working through the new group
+``farna-control restore`` / ``farna-control apply`` keep working through the new group
 (the backup commands are lifted onto it and an unrecognised first token
 falls back to ``backup``), plus the start/stop/status/version/env surface
 with mocked launcher internals and the credential redaction discipline.

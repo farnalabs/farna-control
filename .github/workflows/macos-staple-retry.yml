@@ -1087,7 +1087,7 @@ jobs:
               LATEST_ARGS=(--latest=false)
             fi
             gh release create "$RELEASE_TAG" \
-              --title "Modulo ${RC_TAG}" \
+              --title "Farna Control ${RC_TAG}" \
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
               --prerelease=false \

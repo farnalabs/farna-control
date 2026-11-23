@@ -52,27 +52,23 @@ _FLAGS: tuple[FeatureFlag, ...] = (
     FeatureFlag(
         name=_SETTABLE,
         description="Webhook notification delivery log",
-        tier="community",
         currently_active=True,
         org_admin_settable=True,
     ),
     FeatureFlag(
         name=_SETTABLE_DEFAULT_OFF,
         description="Dashboard trend charts",
-        tier="community",
         currently_active=False,
         org_admin_settable=True,
     ),
     FeatureFlag(
         name=_NOT_SETTABLE,
         description="SSO unrestricted provisioning",
-        tier="community",
         currently_active=False,
     ),
     FeatureFlag(
         name=_TEAM_TIER,
         description="Single sign-on",
-        tier="team",
         currently_active=False,
     ),
     FeatureFlag(
@@ -80,7 +76,6 @@ _FLAGS: tuple[FeatureFlag, ...] = (
         # dedicated-control exclusion is independent of the flag classification.
         name=_DEDICATED,
         description="Human-linked MCP HITL authority",
-        tier="community",
         currently_active=True,
         org_admin_settable=True,
     ),

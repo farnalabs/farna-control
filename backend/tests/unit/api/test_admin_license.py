@@ -1171,7 +1171,7 @@ class TestRemoveSystemLicense:
             probe.flushall()
 
     def test_team_gated_route_returns_402_after_removal(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Composed proof: removal flips a real Team-gated route to 402.
+        """Composed proof: removal flips a real entitlement-gated route to 402.
 
         The plan context is derived from the SAME in-memory licence the remove
         endpoint clears (``_plan_from_licence``), so this drives the whole
@@ -1206,7 +1206,8 @@ class TestRemoveSystemLicense:
 
             after = client.get("/api/v1/admin/audit/export")
             assert after.status_code == 402, after.text
-            assert "audit_viewer" in after.text
+            # FAR-2665: the route names the commercial capability it needs.
+            assert "audit_evidence" in after.text
         finally:
             app.dependency_overrides.clear()
 

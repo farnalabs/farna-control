@@ -61,8 +61,11 @@ status: covered
 
 # Determination (`/determination`)
 
-The read-only SDLC determination surface, reachable under the PIPELINES
-sidebar group behind the `determination.scan` permission (operator floor). It samples
+The read-only SDLC determination surface (`/determination`). It is
+release-gated out of the alpha: the route is `private_preview` in the product
+manifest until GA, so it appears under the PIPELINES sidebar group only when
+developer mode is enabled and is never shown in a demo session. It sits behind
+the `determination.scan` permission (operator floor). It samples
 the organisation's connected sources, infers lifecycle findings from what it
 observed, turns those findings into an editable pipeline proposal, and records
 a reviewer's decision on that proposal. Nothing on this route activates a

@@ -1,4 +1,4 @@
-"""YAML loader for ``modulo apply`` (FAR-681, slice 1).
+"""YAML loader for ``farna-control apply`` (FAR-681, slice 1).
 
 Accepts single- or multi-document YAML files. Every document must validate
 as an ApplyConfig; entities from all documents are merged into one config.

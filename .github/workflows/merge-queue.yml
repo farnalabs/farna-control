@@ -1236,7 +1236,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           # 120s, not the 300s default: this job has a 60-min timeout with only
           # ~8 min measured headroom (37.0-min baseline, validation 34.3 min)
           # and TWO of its three dispatches run BEFORE the batch validation.
@@ -1875,7 +1875,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           # 120s, not the 300s default: this job has a 60-min timeout with only
           # ~8 min measured headroom (37.0-min baseline, validation 34.3 min)
           # and TWO of its three dispatches run BEFORE the batch validation.
@@ -2382,7 +2382,7 @@ jobs:
 
           echo "failed_gh_merge=$(echo "$FAILED" | xargs)" >> "$GITHUB_OUTPUT"
 
-      - name: Self-report merged PRs to Modulo (fail-open, best-effort)
+      - name: Self-report merged PRs to Farna Control (fail-open, best-effort)
         if: success() && steps.merge.outputs.merged_count != '0' && steps.toctou.outputs.aborted != 'true'
         env:
           # Transitional dual-accept: the renamed secret is provisioned over time;
@@ -2403,12 +2403,12 @@ jobs:
           # list directly (one of its recognised self-report keys).
           #
           # stage_id: "merge" names the lifecycle-map stage this workflow completes.
-          # The merge stage is EXTERNAL (a GitHub Actions workflow, not a Modulo
+          # The merge stage is EXTERNAL (a GitHub Actions workflow, not a Farna Control
           # pipeline), so it has no pipeline_id for the advancement service to
           # resolve; the endpoint uses stage_id to advance the journey into it.
           #
           # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a
-          # Modulo outage can NEVER fail the merge queue. The payload is always
+          # Farna Control outage can NEVER fail the merge queue. The payload is always
           # recorded in the log; the POST only fires when FARNA_CONTROL_SELF_REPORT_URL is
           # configured. The endpoint is POST
           # /api/v1/lifecycle-maps/{lifecycle_map_id}/journeys/self-report
@@ -2426,7 +2426,7 @@ jobs:
             '{event: "workflow_self_report", source: "github_actions", workflow: "merge-queue", stage_id: "merge", work_item_refs: $refs}' 2>/dev/null) \
             || PAYLOAD='{"event":"workflow_self_report","source":"github_actions","workflow":"merge-queue","stage_id":"merge","work_item_refs":[]}'
 
-          echo "=== Modulo self-report payload (merged PRs) ==="
+          echo "=== Farna Control self-report payload (merged PRs) ==="
           echo "$PAYLOAD"
 
           if [ -z "$FARNA_CONTROL_SELF_REPORT_URL" ]; then
@@ -2444,7 +2444,7 @@ jobs:
             -d "$PAYLOAD") || HTTP_CODE="000"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "::warning::Modulo self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - merged PRs recorded in log only (fail-open)."
+            echo "::warning::Farna Control self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - merged PRs recorded in log only (fail-open)."
             exit 0
           fi
 
@@ -2453,10 +2453,10 @@ jobs:
           REJECTED=$(jq -r '.rejected // 0' "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 0)
           REF_COUNT=$(echo "$PAYLOAD" | jq '.work_item_refs | length' 2>/dev/null || echo 0)
           if [ "$UNMATCHED" -gt 0 ] || { [ "$ACCEPTED" -eq 0 ] && [ "$REF_COUNT" -gt 0 ]; }; then
-            echo "::warning::Modulo self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
+            echo "::warning::Farna Control self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
             exit 0
           fi
-          echo "Self-report delivered to Modulo (accepted=$ACCEPTED unmatched=$UNMATCHED)."
+          echo "Self-report delivered to Farna Control (accepted=$ACCEPTED unmatched=$UNMATCHED)."
 
       - name: Close Linear tickets for merged PRs
         if: success() && steps.merge.outputs.merged_count != '0' && steps.toctou.outputs.aborted != 'true'
@@ -3031,7 +3031,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           # 120s, not the 300s default: this job has a 60-min timeout with only
           # ~8 min measured headroom (37.0-min baseline, validation 34.3 min)
           # and TWO of its three dispatches run BEFORE the batch validation.

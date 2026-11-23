@@ -1,5 +1,5 @@
 # ============================================================================
-# Modulo Helm Chart — values.yaml
+# Farna Control Helm Chart — values.yaml
 # ============================================================================
 # Vendor-neutral defaults. Runs unmodified on EKS/AKS/GKE with sensible
 # resource limits and pod security policies.
@@ -53,7 +53,7 @@ limitRange:
     ephemeral-storage: 512Mi
 
 # -- Pod Security Admission -------------------------------------------------
-# Apply "restricted" enforcement at namespace level. All Modulo containers run
+# Apply "restricted" enforcement at namespace level. All Farna Control containers run
 # as non-root with drop-all capabilities, so this is safe.
 podSecurity:
   enforce: restricted
@@ -63,13 +63,13 @@ podSecurity:
 # -- Workspace egress NetworkPolicy (FAR-1690) ------------------------------
 # The Kubernetes (T3) runtime provider runs agent workspaces as pods and
 # deliberately does NOT enforce egress inside them — bounded egress is the
-# cluster CNI's job. This optional manifest is how Modulo AUTHORS that
+# cluster CNI's job. This optional manifest is how Farna Control AUTHORS that
 # posture: it renders one namespace-scoped NetworkPolicy selecting the
 # workspace pods (label `modulo.provider: kubernetes`) with a deny-by-default
 # egress policy plus an exact-target (CIDR + port) allowlist.
 #
 # Off by default. Requires a CNI that enforces NetworkPolicy (e.g. Calico,
-# Cilium) — kindnet does not. Modulo records this posture as `declared` (it
+# Cilium) — kindnet does not. Farna Control records this posture as `declared` (it
 # authors the policy; it never observes network traffic).
 #
 # Enforcement contract (FAR-2068): `enabled: true` also injects
@@ -356,7 +356,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: modulo.example.com
+    - host: farna-control.example.com
       paths:
         - path: /
           pathType: Prefix

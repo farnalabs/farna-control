@@ -17,7 +17,7 @@ exemptions: the seed only invokes the append; audit-chain semantics stay in
 core.
 
 FAR-1574: that append helper (:func:`append_user_grant_audit`) is public
-because ``modulo users add --admin`` escalates the membership the seeder just
+because ``farna-control users add --admin`` escalates the membership the seeder just
 created — a second privilege grant with its own honest ``actor_source``
 (``cli_admin_escalation``). The credential + initial membership stay covered
 by ``user_seeded``; the escalation records itself separately, never twice.
@@ -255,7 +255,7 @@ async def append_user_grant_audit(
 
     A seed entry creates a login credential and — for ``admin`` /
     ``admin@modulo.run`` — the ``admin`` role, with no HTTP principal in
-    scope; ``modulo users add --admin`` escalates a seeded membership to
+    scope; ``farna-control users add --admin`` escalates a seeded membership to
     ``admin`` the same way (FAR-1574). Either way the event carries the
     SYSTEM actor plus an honest ``actor_source`` (``boot_seed`` /
     ``cli_admin_escalation``), the same convention

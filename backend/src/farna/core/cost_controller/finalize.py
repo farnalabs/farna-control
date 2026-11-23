@@ -303,7 +303,7 @@ _UNION_SIZE_GUARDRAIL_BYTES = 8 * 1024 * 1024
 _LEGACY_E2B_RATE_DEFAULT = Decimal("0.13")
 
 # FAR-143 journey-fact writer labels — the finalize write path that drove the
-# journey hook (persisted per (run, writer) in ``modulo_journey_facts`` and
+# journey hook (persisted per (run, writer) in ``farna_journey_facts`` and
 # carried as the ``writer`` metric label).
 _WRITER_LIVE = "live"
 _WRITER_FALLBACK = "fallback"
@@ -2098,7 +2098,7 @@ async def _record_journey_fact(
     parse_failures: int,
     finalise_attempts: int,
 ) -> None:
-    """Persist the per-writer journey denominators (``modulo_journey_facts``).
+    """Persist the per-writer journey denominators (``farna_journey_facts``).
 
     FAIL-OPEN in its own savepoint: a fact-write failure must never fail the
     journey advance (outer savepoint) or the terminal write. The upsert is
@@ -2282,7 +2282,7 @@ async def _advance_journeys_on_terminal(
     refs are parsed from it. ``writer`` is the finalize write path that drove
     this hook (``live`` / ``fallback`` / ``early_return``) — it labels the
     per-writer parse-failure counters and the persisted
-    ``modulo_journey_facts`` denominator. The run row is refreshed first so the
+    ``farna_journey_facts`` denominator. The run row is refreshed first so the
     advance sees the just-written terminal ``status`` / ``completed_at`` even
     when the status write went through the raw fenced UPDATE (which bypasses
     the ORM identity map).

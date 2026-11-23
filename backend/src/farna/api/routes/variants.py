@@ -311,7 +311,7 @@ async def list_groups(
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
-            items, _total = await list_variant_groups(session, pipeline_id=pipeline_id, page=page, page_size=page_size)
+            items, _total = await list_variant_groups(session, org_id=principal.organisation_id, pipeline_id=pipeline_id, page=page, page_size=page_size)
     except IntegrityError:
         _log.exception(_CODE_VARIANTS_LIST_GROUPS)
         raise HTTPException(

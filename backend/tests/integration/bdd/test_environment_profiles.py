@@ -166,7 +166,7 @@ class TestCreateProfileRoundTrip:
         factory = async_sessionmaker(app_engine, expire_on_commit=False)
         async with factory() as session, session.begin():
             await set_rls_org(session, org_a)
-            result = await list_environment_profiles(session)
+            result = await list_environment_profiles(session, org_id=org_a)
         assert result.total >= 1
 
     async def test_update_profile(
@@ -247,7 +247,7 @@ class TestRLSIsolation:
         factory = async_sessionmaker(app_engine, expire_on_commit=False)
         async with factory() as session, session.begin():
             await set_rls_org(session, org_b)
-            result = await list_environment_profiles(session)
+            result = await list_environment_profiles(session, org_id=org_b)
         assert result.total == 0
 
     async def test_org_b_cannot_get_org_a_profile(

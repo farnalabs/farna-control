@@ -13,19 +13,19 @@ code:
   - deploy/supervisor/entrypoint.sh
   - deploy/nginx/all-in-one.conf
   - deploy/caddy/Caddyfile
-  - deploy/helm/modulo/Chart.yaml
-  - deploy/helm/modulo/values.yaml
-  - deploy/helm/modulo/templates/_helpers.tpl
-  - deploy/helm/modulo/templates/backend-deployment.yaml
-  - deploy/helm/modulo/templates/frontend-deployment.yaml
-  - deploy/helm/modulo/templates/saq-runner-deployment.yaml
-  - deploy/helm/modulo/templates/saq-system-deployment.yaml
-  - deploy/helm/modulo/templates/redis-deployment.yaml
-  - deploy/helm/modulo/templates/networkpolicy.yaml
-  - deploy/helm/modulo/templates/hpa.yaml
-  - deploy/helm/modulo/templates/resourcequota.yaml
-  - deploy/helm/modulo/templates/limitrange.yaml
-  - deploy/helm/modulo/templates/ingress.yaml
+  - deploy/helm/farna-control/Chart.yaml
+  - deploy/helm/farna-control/values.yaml
+  - deploy/helm/farna-control/templates/_helpers.tpl
+  - deploy/helm/farna-control/templates/backend-deployment.yaml
+  - deploy/helm/farna-control/templates/frontend-deployment.yaml
+  - deploy/helm/farna-control/templates/saq-runner-deployment.yaml
+  - deploy/helm/farna-control/templates/saq-system-deployment.yaml
+  - deploy/helm/farna-control/templates/redis-deployment.yaml
+  - deploy/helm/farna-control/templates/networkpolicy.yaml
+  - deploy/helm/farna-control/templates/hpa.yaml
+  - deploy/helm/farna-control/templates/resourcequota.yaml
+  - deploy/helm/farna-control/templates/limitrange.yaml
+  - deploy/helm/farna-control/templates/ingress.yaml
   - scripts/package_compose_release.py
   - scripts/render_validation_compose.py
   - scripts/smoke-compose.sh
@@ -218,8 +218,8 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       and readiness permanently failing. Every image tag defaults to the
       chart's own `appVersion` rather than `latest`, with every workload
       passing that app version into the image helper.
-      (`deploy/helm/modulo/Chart.yaml`, `deploy/helm/modulo/values.yaml`,
-      `deploy/helm/modulo/templates/_helpers.tpl`;
+      (`deploy/helm/farna-control/Chart.yaml`, `deploy/helm/farna-control/values.yaml`,
+      `deploy/helm/farna-control/templates/_helpers.tpl`;
       `test_helm_image_tag_defaults.py::test_default_image_tags_resolve_from_the_chart_not_a_literal`,
       `::test_image_helper_defaults_to_chart_app_version`,
       `::test_workload_templates_pass_app_version_into_the_image_helper`).
@@ -232,12 +232,12 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       optional HPA and Ingress, and an optional workspace egress
       NetworkPolicy that injects the declared-enforcement signal the
       Kubernetes runtime provider requires.
-      (`deploy/helm/modulo/templates/redis-deployment.yaml`,
-      `deploy/helm/modulo/templates/networkpolicy.yaml`,
-      `deploy/helm/modulo/templates/hpa.yaml`,
-      `deploy/helm/modulo/templates/resourcequota.yaml`,
-      `deploy/helm/modulo/templates/limitrange.yaml`,
-      `deploy/helm/modulo/templates/ingress.yaml`;
+      (`deploy/helm/farna-control/templates/redis-deployment.yaml`,
+      `deploy/helm/farna-control/templates/networkpolicy.yaml`,
+      `deploy/helm/farna-control/templates/hpa.yaml`,
+      `deploy/helm/farna-control/templates/resourcequota.yaml`,
+      `deploy/helm/farna-control/templates/limitrange.yaml`,
+      `deploy/helm/farna-control/templates/ingress.yaml`;
       `test_helm_redis_memory_bound.py::test_helm_redis_has_a_maxmemory_bound`,
       `::test_helm_embedded_redis_auth_runtime_wiring`,
       `::test_helm_redis_policy_only_evicts_ttl_bearing_keys`).

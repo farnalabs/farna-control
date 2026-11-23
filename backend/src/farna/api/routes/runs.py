@@ -3185,7 +3185,7 @@ async def list_run_attempts(
             run = await get_run(session, run_id, organisation_id=principal.organisation_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
-            attempts = await db_list_attempts(session, run_id)
+            attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_LIST_RUN_ATTEMPTS)
         raise HTTPException(
@@ -4860,7 +4860,12 @@ def _build_diff_lines(text_a: str, text_b: str) -> tuple[list[NodeOutputDiffLine
 )
 async def get_run_schema_enforcement(
     run_id: uuid.UUID,
-    current_user: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: this is a run child read, so it uses the same viewer-level
+    # ``run.status`` gate (any-credential) as the run detail, events and
+    # attempts endpoints — a credential that can read the run can read its
+    # enforcement detail. Deliberately not a new key: a fresh key resolving to a
+    # different role would silently widen or narrow the gate.
+    current_user: TenantPrincipal = require_permission_any_credential(_CODE_RUN_STATUS),
     session_factory: async_sessionmaker[AsyncSession] = Depends(_get_session_factory),
 ) -> dict[str, Any]:
     """D3: Operator-readable run-detail enforcement surface.
@@ -4965,7 +4970,11 @@ async def get_run_schema_enforcement(
     },
 )
 async def get_schema_enforcement_flip_guard(
-    current_user: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: an org-wide, read-only aggregate over run enforcement records —
+    # the same data class as ``/runs/stats`` and the run list, so it takes the
+    # viewer-level ``run.list`` floor (JWT) rather than a new key. The advisory
+    # never mutates the mode; changing the mode remains a separate admin action.
+    current_user: TenantPrincipal = require_permission(_CODE_RUN_LIST),
     session_factory: async_sessionmaker[AsyncSession] = Depends(_get_session_factory),
 ) -> dict[str, Any]:
     """D2: Read-only flip guard — advises whether lenient-to-strict is safe.

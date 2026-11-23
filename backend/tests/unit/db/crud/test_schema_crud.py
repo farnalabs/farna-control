@@ -101,7 +101,7 @@ class TestListSchemas:
 
         from farna.db.crud.schema import list_schemas
 
-        result = await list_schemas(mock_session, limit=2)
+        result = await list_schemas(mock_session, org_id=uuid.uuid4(), limit=2)
         assert isinstance(result, PageResult)
         assert result.total == 3
         assert len(result.items) == 2
@@ -112,7 +112,7 @@ class TestListSchemas:
         mock_session.execute = AsyncMock(side_effect=[_count_result(0), MagicMock(scalars=MagicMock(return_value=[]))])
         from farna.db.crud.schema import list_schemas
 
-        result = await list_schemas(mock_session, folder_id=_FOLDER_ID)
+        result = await list_schemas(mock_session, org_id=uuid.uuid4(), folder_id=_FOLDER_ID)
         assert result.total == 0
         assert not result.items
 
@@ -120,7 +120,7 @@ class TestListSchemas:
         mock_session.execute = AsyncMock(side_effect=ProgrammingError("42P01", None, Exception("boom")))
         from farna.db.crud.schema import list_schemas
 
-        result = await list_schemas(mock_session)
+        result = await list_schemas(mock_session, org_id=uuid.uuid4())
         assert isinstance(result, PageResult)
         assert result.total == 0
         assert not result.items
@@ -140,7 +140,7 @@ class TestListSchemas:
             paginator_cls.return_value.paginate = AsyncMock(return_value=paginate_result)
             from farna.db.crud.schema import list_schemas
 
-            result = await list_schemas(mock_session, cursor="abc", limit=5)
+            result = await list_schemas(mock_session, org_id=uuid.uuid4(), cursor="abc", limit=5)
         paginator_cls.return_value.paginate.assert_awaited_once()
         assert result.total == 7
         assert result.items == schemas
@@ -312,7 +312,7 @@ class TestSchemaVersions:
         mock_session.execute = AsyncMock(side_effect=[count_mock, listing])
         from farna.db.crud.schema import list_schema_versions
 
-        result = await list_schema_versions(mock_session, _SCHEMA_ID, page=2, page_size=10)
+        result = await list_schema_versions(mock_session, _SCHEMA_ID, org_id=_ORG_ID, page=2, page_size=10)
         assert result.total == 2
         assert result.items == versions
         assert result.page == 2
@@ -321,6 +321,6 @@ class TestSchemaVersions:
         mock_session.execute = AsyncMock(side_effect=ProgrammingError("42P01", None, Exception("boom")))
         from farna.db.crud.schema import list_schema_versions
 
-        result = await list_schema_versions(mock_session, _SCHEMA_ID)
+        result = await list_schema_versions(mock_session, _SCHEMA_ID, org_id=_ORG_ID)
         assert result.total == 0
         assert not result.items

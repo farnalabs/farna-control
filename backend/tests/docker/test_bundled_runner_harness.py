@@ -233,7 +233,7 @@ async def test_proxy_allow_deny_matrix() -> None:
         containers = json.loads(list_body)
         assert containers, "the engine must report at least one running container"
         target = next(
-            (c["Id"] for c in containers if c.get("Labels", {}).get("modulo.test") == "runner-ci-proxy"),
+            (c["Id"] for c in containers if c.get("Labels", {}).get("farna-control.test") == "runner-ci-proxy"),
             containers[0]["Id"],
         )
         refine_paths = (
@@ -268,7 +268,7 @@ async def _containers_by_label_op(label: str) -> list[dict[str, Any]]:
     """List local-engine containers by the rig label with their resolved
     harness-network IP (plain data — safe across the Proactor loop)."""
     async with aiodocker.Docker() as docker:
-        containers = await docker.containers.list(filters={"label": [f"modulo.test={label}"]})
+        containers = await docker.containers.list(filters={"label": [f"farna-control.test={label}"]})
         out: list[dict[str, Any]] = []
         for container in containers:
             info = await container.show()

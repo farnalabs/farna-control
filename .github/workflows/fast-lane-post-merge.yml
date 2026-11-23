@@ -15,13 +15,13 @@ name: "Fast Lane: Post-merge review"
 #   1. Detects fast-lane merge commits on main (the [auto-merge: test-infra]
 #      marker in the squash commit message).
 #   2. Dispatches the PR Reviewer webhook to control.farna.dev for analysis.
-#   3. The Modulo app (PR Reviewer pipeline) analyses the squash diff and
-#      can raise follow-up PRs and set the suspension via the Modulo admin API.
+#   3. The Farna Control app (PR Reviewer pipeline) analyses the squash diff and
+#      can raise follow-up PRs and set the suspension via the Farna Control admin API.
 #
 # What remains for full Deliverable 2:
-#   - The Modulo app must set FAST_LANE_SUSPENDED_UNTIL (repo variable) via
+#   - The Farna Control app must set FAST_LANE_SUSPENDED_UNTIL (repo variable) via
 #     the GitHub API when the PR Reviewer finds a critical/major issue.
-#   - The Modulo app must raise a follow-up PR through the normal lane.
+#   - The Farna Control app must raise a follow-up PR through the normal lane.
 #   - These are app-side changes, not workflow changes.
 
 on:
@@ -83,7 +83,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET }}
-          DISPATCH_LABEL: "Modulo PR Review"
+          DISPATCH_LABEL: "Farna Control PR Review"
           DISPATCH_ACCEPT_ANY_2XX: "1"
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         shell: bash
@@ -123,4 +123,4 @@ jobs:
           DISPATCH_BODY="${BODY}" bash scripts/dispatch_with_retry.sh
 
           echo "Post-merge review dispatched for PR #${PR_NUMBER}."
-          echo "::notice::The review runs asynchronously on control.farna.dev. If a critical/major finding is discovered, the Modulo app will raise a follow-up PR through the normal lane and set the fast-lane suspension."
+          echo "::notice::The review runs asynchronously on control.farna.dev. If a critical/major finding is discovered, the Farna Control app will raise a follow-up PR through the normal lane and set the fast-lane suspension."

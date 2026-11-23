@@ -10,25 +10,25 @@ Feature: Team Gate Enforcement
     Given I do not have a Team license
     When I GET /api/v1/admin/sso/providers
     Then the response status is 402
-    And the error detail mentions "sso"
+    And the error detail mentions "Identity"
 
   Scenario: Team RBAC blocked without Team license
     Given I do not have a Team license
     When I GET /api/v1/teams
     Then the response status is 402
-    And the error detail mentions "team_rbac"
+    And the error detail mentions "Identity"
 
   Scenario: Audit viewer blocked without Team license
     Given I do not have a Team license
     When I GET /api/v1/admin/audit/export
     Then the response status is 402
-    And the error detail mentions "audit_viewer"
+    And the error detail mentions "Audit and evidence"
 
   Scenario: Spend limits blocked without Team license
     Given I do not have a Team license
     When I GET /api/v1/admin/costs/limits
     Then the response status is 402
-    And the error detail mentions "admin_spend_limits"
+    And the error detail mentions "Cost governance"
 
   Scenario: All gates pass with valid Team license
     Given I have a valid Team license
@@ -50,7 +50,7 @@ Feature: Team Gate Enforcement
     Given I have an expired Team license
     When I GET /api/v1/admin/sso/providers
     Then the response status is 402
-    And the error detail mentions "sso"
+    And the error detail mentions "Identity"
     When I GET /api/v1/pipelines
     Then the response status is 200
 
@@ -58,7 +58,7 @@ Feature: Team Gate Enforcement
     Given I do not have a Team license
     When I GET /api/v1/admin/costs/limits
     Then the response status is 402
-    And the error detail mentions "admin_spend_limits"
+    And the error detail mentions "Cost governance"
     When I GET /api/v1/admin/costs
     Then the response status is 200
     And the response does not contain 402 error

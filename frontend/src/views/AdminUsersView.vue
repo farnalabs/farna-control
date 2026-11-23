@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="user_management" required-tier="community" show-disabled>
+  <FeatureGate feature-name="user_management" show-disabled>
   <div class="page-wide">
     <PageHeader :title="$t('views.AdminUsersView.users_title')" :subtitle="$t('views.AdminUsersView.manage_user_accounts_and_permissions')">
       <template #right>

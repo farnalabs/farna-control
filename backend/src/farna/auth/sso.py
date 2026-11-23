@@ -1330,7 +1330,7 @@ async def _saml_config_from_env(settings: Settings) -> tuple[str, str, str | Non
     locks every administrator out of the instance — and therefore out of the
     licence screen — which is precisely the state the product promises can
     never happen. Earning the Team tier is enforced where it belongs:
-    ``require_feature("sso")`` gates the admin configuration surface, and the
+    ``require_entitlement("identity")`` gates the admin configuration surface, and the
     post-auth plan gates licensed runtime features.
     """
     try:
@@ -1374,7 +1374,7 @@ async def _resolve_saml_config(
     # must still be able to complete SAML login on a lapsed licence; otherwise
     # the lapse locks every administrator out of the licence screen with no way
     # back in. The Team entitlement is enforced at the admin configuration
-    # surface (``require_feature("sso")``) and post-auth, not here.
+    # surface (``require_entitlement("identity")``) and post-auth, not here.
     if not settings.saml_enabled:
         raise ValueError("SAML is not enabled")
 

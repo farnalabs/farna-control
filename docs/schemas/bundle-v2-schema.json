@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://farna.dev/control/schemas/bundle-v2.json",
-  "title": "Modulo Workflow Bundle v2",
-  "description": "JSON Schema for validating Modulo v2 YAML workflow bundles",
+  "title": "Farna Control Workflow Bundle v2",
+  "description": "JSON Schema for validating Farna Control v2 YAML workflow bundles",
   "type": "object",
   "required": ["modulo_workflow"],
   "properties": {

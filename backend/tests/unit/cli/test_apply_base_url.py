@@ -1,4 +1,4 @@
-"""``modulo apply`` support for the model-backend custom endpoint (FAR-2105).
+"""``farna-control apply`` support for the model-backend custom endpoint (FAR-2105).
 
 FAR-2046 moved the operator-supplied endpoint into the credential-adjacent
 ``base_url`` field (plus the ``allow_insecure_http`` opt-in) and made it
@@ -34,7 +34,7 @@ from farna.cli.apply.loader import ApplyLoadError, parse_apply_documents
 from farna.cli.apply.models import ModelBackendEntity
 
 _CONFIG = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: local
@@ -46,7 +46,7 @@ entities:
 """
 
 _CONFIG_OMITTED = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: local
@@ -57,7 +57,7 @@ entities:
 """
 
 _CONFIG_CREDENTIAL_REF = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: local
@@ -413,7 +413,7 @@ class TestPlanTimeValidation:
 
     def test_allow_insecure_http_requires_a_base_url(self) -> None:
         config_text = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: local
@@ -428,7 +428,7 @@ entities:
 
     def test_allow_insecure_http_cannot_accompany_an_explicit_null(self) -> None:
         config_text = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: local

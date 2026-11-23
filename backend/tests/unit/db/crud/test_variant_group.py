@@ -1631,7 +1631,7 @@ class TestListVariantGroups:
         scalars_mock.__iter__.return_value = iter([])
         items_result.scalars.return_value = scalars_mock
         session.execute = AsyncMock(side_effect=[count_result, items_result])
-        items, total = await list_variant_groups(session, page=1, page_size=20)
+        items, total = await list_variant_groups(session, org_id=uuid.uuid4(), page=1, page_size=20)
         assert items == []
         assert total == 0
 
@@ -1645,7 +1645,7 @@ class TestListVariantGroups:
         scalars_mock.__iter__.return_value = iter([mock_group])
         items_result.scalars.return_value = scalars_mock
         session.execute = AsyncMock(side_effect=[count_result, items_result])
-        items, total = await list_variant_groups(session, pipeline_id=uuid.uuid4(), page=1, page_size=10)
+        items, total = await list_variant_groups(session, org_id=uuid.uuid4(), pipeline_id=uuid.uuid4(), page=1, page_size=10)
         assert len(items) == 1
         assert total == 1
 
@@ -1654,7 +1654,7 @@ class TestListVariantGroups:
 
         session = configure_mock_session(AsyncMock(), allow_empty_execute=True)
         session.execute = AsyncMock(side_effect=ProgrammingError("table missing", {}, None))
-        items, total = await list_variant_groups(session)
+        items, total = await list_variant_groups(session, org_id=uuid.uuid4())
         assert items == []
         assert total == 0
 

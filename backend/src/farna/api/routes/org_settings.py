@@ -37,6 +37,11 @@ class OrgGuardrailsKillSwitchResponse(BaseModel):
     enabled_at: str | None
 
 
+# FAR-2682: deliberate JWT-only route. A member-visible UI preference (the org
+# currency) with no automation consumer and no secret content; the
+# machine-facing cost/billing configuration is an admin surface. Do not widen
+# this in a credential sweep (recorded as a comment: a handler docstring would
+# become the public OpenAPI description).
 @router.get("/settings")
 @handle_db_errors("org.get_settings")
 async def get_org_settings(

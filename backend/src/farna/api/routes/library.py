@@ -6,7 +6,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, Self, cast
+from typing import Any, Literal, Self, TypeGuard, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -14,9 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from farna.api.constants import MSG_FEATURE_NOT_AVAILABLE, MSG_RESOURCE_ALREADY_EXISTS
+from farna.api.constants import MSG_FEATURE_NOT_AVAILABLE, MSG_PRIMITIVE_NOT_FOUND, MSG_RESOURCE_ALREADY_EXISTS
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
-from farna.api.dependencies import get_db_session, require_in_dev_operator, require_permission
+from farna.api.dependencies import (
+    get_db_session,
+    require_in_dev_operator,
+    require_permission,
+    require_permission_any_credential,
+)
 from farna.api.middleware.sensitive_mask import mask_pipeline_graph_node, resolve_and_reject_mask_sentinels
 from farna.api.models.team_visibility import TeamVisibilityMixin
 from farna.api.routes.lifecycle_maps import LifecycleMapResponse
@@ -28,6 +33,9 @@ from farna.auth.team_rbac import ORG_ROLE_HIERARCHY
 from farna.core.audit_coverage import audited
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
+from farna.core.library_service import (
+    MODULO_ORG_ID as _BUILTIN_ORG_ID,
+)
 from farna.core.library_service import (
     BuiltinPrimitiveReadOnlyError,
     _bump_version,
@@ -136,6 +144,7 @@ _CODE_LIBRARY_SEARCH = "library.search"
 _GRANT_LIBRARY_SEARCH_IN_DEV = "library.search.in_dev"
 _VISIBILITY_PATTERN = "^(org|team)$"
 _CODE_LIBRARY_WRITE = "library.write"
+_BUILTIN_SOURCE = "modulo"
 
 _MSG_LIBRARY_FEATURE_TEMPORARILY_UNAVAILABLE = "The library feature is temporarily unavailable due to a database issue. Please retry."
 _CODE_LIBRARY_MANAGE = "library.manage"
@@ -171,6 +180,52 @@ def _can_access_lifecycle_map_primitives(principal: TenantPrincipal, *, dev_mode
     return grants_permit(principal.key_grants, _GRANT_LIBRARY_SEARCH_IN_DEV)
 
 
+def _primitive_visible_to(
+    primitive: LibraryPrimitive | None,
+    principal: TenantPrincipal,
+) -> TypeGuard[LibraryPrimitive]:
+    """Return whether *primitive* is readable by the caller (FAR-2682).
+
+    Two kinds of primitive are visible: a row owned by the caller's own
+    organisation, and an in-code built-in primitive, which lives in the fixed
+    sentinel organisation and is "visible to every organisation" by design
+    (ADR 032 §4). The resolver (:func:`get_primitive`) already applies both, so
+    this is defence-in-depth: on a deployment whose connection role bypasses RLS
+    (BYPASSRLS / break-glass) an org-scoped lookup can surface a foreign row, and
+    a by-id read must 404 it rather than serialise it. Same terms as the
+    FAR-2681 composite-template guard.
+
+    A ``TypeGuard`` so a true result also narrows the ORM row for the caller.
+    """
+    if primitive is None:
+        return False
+    owner = primitive.organisation_id
+    return owner in (principal.organisation_id, _BUILTIN_ORG_ID)
+
+
+async def _require_readable_primitive(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    primitive_id: uuid.UUID,
+) -> LibraryPrimitive:
+    """Resolve *primitive_id* for a READ, or 404 (FAR-2682).
+
+    A read that is refused must be indistinguishable from a read of a missing
+    id: absent, foreign-org and lifecycle-map-hidden primitives all answer 404
+    with the same message, so the route never reveals that a primitive exists
+    in another tenant.
+    """
+    primitive = await get_primitive(session, principal.organisation_id, primitive_id)
+    if not _primitive_visible_to(primitive, principal):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PRIMITIVE_NOT_FOUND)
+    _reject_lifecycle_map_primitive_access(
+        principal,
+        primitive,
+        dev_mode=getattr(get_settings(), "dev_mode", True),
+    )
+    return primitive
+
+
 def _reject_lifecycle_map_primitive_access(
     principal: TenantPrincipal,
     primitive: LibraryPrimitive | None,
@@ -181,7 +236,7 @@ def _reject_lifecycle_map_primitive_access(
     if primitive is not None and primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE and not _can_access_lifecycle_map_primitives(principal, dev_mode=dev_mode):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Primitive not found",
+            detail=MSG_PRIMITIVE_NOT_FOUND,
         )
 
 
@@ -210,7 +265,7 @@ async def _require_lifecycle_map_primitive_access(
             dev_mode=getattr(get_settings(), "dev_mode", True),
         )
     ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Primitive not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PRIMITIVE_NOT_FOUND)
 
 
 def _filter_lifecycle_map_types(
@@ -310,8 +365,8 @@ def _require_organisation_id(principal: TenantPrincipal) -> uuid.UUID:
 
 def _trust_tier_for(source: str, verified: bool | None) -> str | None:
     """Compute the trust tier label from a primitive's provenance."""
-    if source == "modulo":
-        return "modulo"
+    if source == _BUILTIN_SOURCE:
+        return _BUILTIN_SOURCE
     if source == "registry" and verified is True:
         return "green"
     if source == "registry":
@@ -749,8 +804,13 @@ async def _load_draft_collection(
     ``library_collection`` primitive, and 400 when it is not in the ``draft``
     state (only draft collections can be mutated or published). Centralised so
     the update/publish endpoints share a single validation path.
+
+    FAR-2696: the resolver is org-clamped with ``explicit_org_filter``. Both
+    callers WRITE to the row they load (update its pins, or publish it), so on
+    a ``BYPASSRLS`` connection an id-only read would let a caller mutate
+    another organisation's draft. The clamp makes a foreign id a 404.
     """
-    prim = await get_primitive(session, org_id, primitive_id)
+    prim = await get_primitive(session, org_id, primitive_id, explicit_org_filter=org_id)
     if prim is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -911,22 +971,34 @@ async def ping() -> dict[str, bool]:
     return {"pong": True}
 
 
+# FAR-2682: any-credential read. The data a permitted ``mk_`` key can already
+# reach through another route includes this one: a ``composite`` primitive's
+# ``content_json`` is a masked sub-pipeline graph, and the composite-template
+# by-id read (``GET /api/v1/composite-templates/{id}``) accepts the same key on
+# the same viewer-level read (FAR-2681). The permission assertion is unchanged
+# (``library.search`` -> viewer; kill-switch and grant-set legs still apply).
+# ``_primitive_visible_to`` is a defence-in-depth guard for a deployment running
+# without RLS. Recorded as a comment: a handler docstring would become the
+# public OpenAPI description.
 @router.get("/{primitive_id}")
 @handle_db_errors("library.get_library_primitive_endpoint")
 async def get_library_primitive_endpoint(
     primitive_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(_CODE_LIBRARY_SEARCH),
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> LibraryPrimitiveResponse:
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
             primitive = await get_primitive(session, principal.organisation_id, primitive_id)
             if primitive is not None and (
-                primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE
-                and not _can_access_lifecycle_map_primitives(
-                    principal,
-                    dev_mode=getattr(get_settings(), "dev_mode", True),
+                not _primitive_visible_to(primitive, principal)
+                or (
+                    primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE
+                    and not _can_access_lifecycle_map_primitives(
+                        principal,
+                        dev_mode=getattr(get_settings(), "dev_mode", True),
+                    )
                 )
             ):
                 primitive = None
@@ -1784,6 +1856,11 @@ async def confirm_import_endpoint(
 # ---------------------------------------------------------------------------
 
 
+# FAR-2682: any-credential read on the same viewer-level ``library.search`` floor
+# as the primitive read (the primitive response already carries
+# ``average_rating`` / ``review_count`` for the same id). The guard makes an
+# unknown or foreign id a 404 (previously a 200 with an empty page), so a
+# ratings read can never confirm that a primitive exists in another tenant.
 @router.get("/{primitive_id}/ratings")
 @handle_db_errors("library.list_ratings_endpoint")
 async def list_ratings_endpoint(
@@ -1791,13 +1868,19 @@ async def list_ratings_endpoint(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> RatingListResponse:
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
-            await _require_lifecycle_map_primitive_access(session, principal, primitive_id)
-            result = await list_ratings_for_primitive(session, primitive_id, page=page, page_size=page_size)
+            await _require_readable_primitive(session, principal, primitive_id)
+            result = await list_ratings_for_primitive(
+                session,
+                primitive_id,
+                org_id=principal.organisation_id,
+                page=page,
+                page_size=page_size,
+            )
     except IntegrityError:
         _log.exception("library.list_ratings_endpoint")
         raise _conflict_error() from None
@@ -1813,17 +1896,20 @@ async def list_ratings_endpoint(
     )
 
 
+# FAR-2682: same any-credential pair and viewer-level floor as the ratings list;
+# the lifecycle-map and cross-tenant hide is shared through
+# ``_require_readable_primitive``.
 @router.get("/{primitive_id}/ratings/aggregate")
 @handle_db_errors("library.get_rating_aggregate_endpoint")
 async def get_rating_aggregate_endpoint(
     primitive_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_LIBRARY_SEARCH),
 ) -> RatingAggregateResponse:
     try:
         async with session.begin():
             await _set_rls_context(session, principal)
-            await _require_lifecycle_map_primitive_access(session, principal, primitive_id)
+            await _require_readable_primitive(session, principal, primitive_id)
             avg, count = await get_rating_aggregate(session, primitive_id)
     except IntegrityError:
         _log.exception("library.get_rating_aggregate_endpoint")

@@ -121,7 +121,7 @@ async def _setup_agents(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_agents(session, page=page, page_size=page_size)
+    return lambda page, page_size: list_agents(session, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_composite_templates(session: AsyncSession) -> PageCall:
@@ -163,7 +163,7 @@ async def _setup_environment_profiles(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_environment_profiles(session, page=page, page_size=page_size)
+    return lambda page, page_size: list_environment_profiles(session, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_external_agents(session: AsyncSession) -> PageCall:
@@ -254,7 +254,7 @@ async def _setup_ratings(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_ratings_for_primitive(session, primitive_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_ratings_for_primitive(session, primitive_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_abuse_reports(session: AsyncSession) -> PageCall:
@@ -298,7 +298,7 @@ async def _setup_templates(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_templates(session, page=page, page_size=page_size)
+    return lambda page, page_size: list_templates(session, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_team_members(session: AsyncSession) -> PageCall:
@@ -312,7 +312,7 @@ async def _setup_team_members(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_team_members(session, team_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_team_members(session, team_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_teams(session: AsyncSession) -> PageCall:
@@ -350,7 +350,7 @@ async def _setup_schema_versions(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_schema_versions(session, schema_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_schema_versions(session, schema_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_runs(session: AsyncSession) -> PageCall:

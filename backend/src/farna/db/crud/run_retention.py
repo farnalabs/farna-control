@@ -33,7 +33,7 @@ must scope itself manually when it targets a single org. The checkpoint
 ``thread_id`` encodes ``{org_id}:{run_id}`` (see ``crud.run.create_run``), so it
 is globally unique and cross-org deletes never leak.
 
-DELIBERATE NON-DELETION — ``run_daily_facts`` and ``modulo_journey_facts``:
+DELIBERATE NON-DELETION — ``run_daily_facts`` and ``farna_journey_facts``:
 both carry a ``run_id`` that is deliberately NOT a foreign key and must SURVIVE
 the run purge (ADR 020; the model comments literally say a future "fix" into an
 FK breaks retention). Purging a run therefore leaves those fact rows in place.

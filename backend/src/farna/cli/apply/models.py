@@ -1,4 +1,4 @@
-"""Pydantic config models for ``modulo apply`` (FAR-681, slices 1+2).
+"""Pydantic config models for ``farna-control apply`` (FAR-681, slices 1+2).
 
 Mirrors the API-layer Create/Update shapes for the entity set covered by
 slice 1 (schemas + versions, model_backends) and slice 2 (pipelines with
@@ -18,7 +18,7 @@ from farna.connectors.base import connector_binding_operation
 from farna.core.stdout_retention import StdoutRetentionValidatorMixin
 from farna.core.system_map_validation import validate_system_map_graph_references
 
-API_VERSION_PREFIX = "modulo.dev/v"
+API_VERSION_PREFIX = "farna.dev/v"
 API_VERSION_SUPPORTED_MAJOR = 1
 
 # The (pipeline, name) composite key separator: '/' is forbidden in pipeline
@@ -62,7 +62,7 @@ SECRET_REF_PATTERN = re.compile(r"secretref://\S+\Z")
 
 
 def parse_api_version_major(raw: str) -> int:
-    """Return the declared major version of an ``modulo.dev/v<major>`` string.
+    """Return the declared major version of an ``farna.dev/v<major>`` string.
 
     Raises ApplyConfigError on an unparseable value (the same rule
     ``check_api_version`` applies).
@@ -90,7 +90,7 @@ def check_api_version(raw: str) -> None:
     """
     declared_major = parse_api_version_major(raw)
     if declared_major != API_VERSION_SUPPORTED_MAJOR:
-        msg = f"api_version major mismatch: config declares modulo.dev/v{declared_major}, this client supports modulo.dev/v{API_VERSION_SUPPORTED_MAJOR}"
+        msg = f"api_version major mismatch: config declares farna.dev/v{declared_major}, this client supports farna.dev/v{API_VERSION_SUPPORTED_MAJOR}"
         raise ApplyConfigError(msg)
 
 
@@ -1805,7 +1805,7 @@ class ApplyConfig(BaseModel):
         """Combine entities from another document (for multi-doc YAML).
 
         Raises ApplyConfigError on an api_version MAJOR mismatch (minors are
-        compared leniently — "modulo.dev/v1" and "modulo.dev/v1.3" merge) or
+        compared leniently — "farna.dev/v1" and "farna.dev/v1.3" merge) or
         duplicate entity names of the same kind.
         """
         self_major = parse_api_version_major(self.api_version)
