@@ -239,7 +239,7 @@ class TestResourceLibraryDetailLifecycleMapGate:
         _ctx_auth_type.set(None)
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
-    @patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=False))
+    @patch("farna.api.mcp_server.get_settings", return_value=MagicMock(dev_mode=False))
     @patch("farna.api.mcp_server.get_primitive_by_slug")
     async def test_lifecycle_map_detail_hidden_from_ordinary_caller(
         self,
@@ -253,7 +253,7 @@ class TestResourceLibraryDetailLifecycleMapGate:
         mock_get_primitive_by_slug.assert_not_called()
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
-    @patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=True))
+    @patch("farna.api.mcp_server.get_settings", return_value=MagicMock(dev_mode=True))
     @patch("farna.api.mcp_server.get_primitive_by_slug")
     @patch("farna.api.mcp_server._session")
     async def test_lifecycle_map_detail_visible_to_internal_operator(

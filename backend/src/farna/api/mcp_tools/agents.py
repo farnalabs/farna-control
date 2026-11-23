@@ -420,7 +420,7 @@ async def list_feature_flags() -> dict[str, Any]:
             # key source counts only after canonical verification. It answers
             # "is a valid key configured", where is_valid answers "did the
             # effective ladder resolve one".
-            has_key = verify_license_key(getattr(settings, "modulo_license_key", "") or "") is not None or get_license() is not None or verify_license_key(str(org_key)) is not None
+            has_key = verify_license_key(getattr(settings, "license_key", "") or "") is not None or get_license() is not None or verify_license_key(str(org_key)) is not None
             registry = await FeatureFlagRegistry.from_db(s, plan_ctx.tier(), has_license_key=has_key)
 
             # Best-effort overlay of the org's per-flag overrides (same
@@ -439,7 +439,7 @@ async def list_feature_flags() -> dict[str, Any]:
                 "has_license_key": registry.has_license_key,
                 "is_valid": license_valid,
             },
-            "dev_mode": settings.modulo_dev_mode,
+            "dev_mode": settings.dev_mode,
             "flags": [
                 {
                     "name": f.name,

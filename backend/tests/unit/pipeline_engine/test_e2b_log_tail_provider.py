@@ -14,7 +14,7 @@ dispatch (sandbox mock, no network) and proves:
    structurally by
    ``backend/tests/architecture/test_e2b_bound_form_guards.py``.
 
-R6 deleted the legacy urllib arm and the ``MODULO_E2B_VIA_PROVIDER`` flag,
+R6 deleted the legacy urllib arm and the ``FARNA_CONTROL_E2B_VIA_PROVIDER`` flag,
 so this file's original legacy half (callers still hit urllib, plus the
 settings-flag default test) retired with them.
 """

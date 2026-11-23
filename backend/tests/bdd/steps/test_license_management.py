@@ -98,8 +98,8 @@ def _setup_client(ctx: dict[str, Any]) -> None:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_valid_32,
         fernet_key=_valid_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="",
+        admin_password="testpass",
+        license_key="",
         # No real Redis for hermetic BDD steps: the license route caches status
         # under ``license:{org_id}`` (60s TTL) and reads it back before touching
         # the DB / in-memory store. In the full BDD suite Redis IS up, so a GET

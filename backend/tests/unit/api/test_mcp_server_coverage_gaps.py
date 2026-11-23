@@ -831,7 +831,7 @@ class TestOauthAuthorizeHandler:
         params = params if params is not None else self._VALID_PARAMS
         request = self._request(params)
         default_settings = MagicMock(
-            modulo_public_url="https://modulo.example.com",
+            public_url="https://modulo.example.com",
             cors_origins="https://modulo.example.com",
         )
         stack = [patch.object(ms, "get_settings", return_value=default_settings)]
@@ -853,7 +853,7 @@ class TestOauthAuthorizeHandler:
         assert response.status_code == 400
 
     async def test_settings_error_when_public_url_missing(self) -> None:
-        response = await self._call(patches={"farna.api.mcp_server.get_settings": {"return_value": MagicMock(modulo_public_url=None)}})
+        response = await self._call(patches={"farna.api.mcp_server.get_settings": {"return_value": MagicMock(public_url=None)}})
         assert response.status_code == 500
 
     async def test_unknown_client(self) -> None:
@@ -982,7 +982,7 @@ class TestOauthTokenAndRefreshHandlers:
                 new=AsyncMock(return_value=({"grant_type": "authorization_code"}, None)),
             ),
             patch("farna.api.mcp_server._extract_oauth_client_credentials", return_value=({"code": "c"}, None)),
-            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_public_url=None)),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(public_url=None)),
         ):
             response = await _oauth_token_impl(self._request())
         assert response.status_code == 500
@@ -994,7 +994,7 @@ class TestOauthTokenAndRefreshHandlers:
                 new=AsyncMock(return_value=({"grant_type": "authorization_code"}, None)),
             ),
             patch("farna.api.mcp_server._extract_oauth_client_credentials", return_value=({"code": "c"}, None)),
-            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_public_url="https://x")),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(public_url="https://x")),
             patch(
                 "farna.api.mcp_server._exchange_authorization_code",
                 new=AsyncMock(return_value=(None, MagicMock())),
@@ -1173,7 +1173,7 @@ class TestMcpAsgiApp:
         from fastapi.testclient import TestClient
 
         with TestClient(app) as client:
-            resp = client.get("/mcp", headers={"X-Modulo-Allowed-Tools": "list_runs, cancel_run"})
+            resp = client.get("/mcp", headers={"X-Farna-Control-Allowed-Tools": "list_runs, cancel_run"})
         assert resp.status_code == 401
         assert resp.json()["error"] == "unauthorized"
 
@@ -1338,7 +1338,7 @@ class TestSimpleToolErrorHandlers(_AuthContext):
         assert result["error"] == "server_error"
 
     async def test_infer_schema_error_envelopes(self) -> None:
-        settings = MagicMock(modulo_dev_mode=True)
+        settings = MagicMock(dev_mode=True)
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
             patch("farna.settings.get_settings", return_value=settings),
@@ -3532,7 +3532,7 @@ class TestRemainingAuthPathGaps(_AuthContext):
                 new=AsyncMock(return_value=({"grant_type": "authorization_code"}, None)),
             ),
             patch("farna.api.mcp_server._extract_oauth_client_credentials", return_value=({"code": "c"}, None)),
-            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_public_url="https://x")),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock(public_url="https://x")),
             patch("farna.api.mcp_server._exchange_authorization_code", new=AsyncMock(return_value=(None, None))),
             pytest.raises(RuntimeError),
         ):

@@ -10,7 +10,7 @@ Feature: Webhook Signing
     Given pipeline "my-pipeline" has a webhook configured
     And the pipeline has webhook secret "whsec_abc123"
     When a webhook notification is sent
-    Then the request includes header "X-Modulo-Signature"
+    Then the request includes header "X-Farna-Control-Signature"
     And the signature is a valid HMAC-SHA256 of the payload
 
   Scenario: Signature uses different secrets per endpoint
@@ -23,7 +23,7 @@ Feature: Webhook Signing
   Scenario: Timestamp is included in signature
     Given pipeline "my-pipeline" has a webhook configured
     When a webhook notification is sent
-    Then the request includes header "X-Modulo-Timestamp"
+    Then the request includes header "X-Farna-Control-Timestamp"
     And the timestamp is within 5 minutes of current time
 
   Scenario: Receiver can verify signature

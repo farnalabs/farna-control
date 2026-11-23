@@ -769,7 +769,7 @@ async def global_search(
                     params,
                     include_lifecycle_maps=_can_access_lifecycle_map_primitives(
                         current_user,
-                        dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                        dev_mode=getattr(get_settings(), "dev_mode", True),
                     ),
                 )
                 all_items.extend(items)
@@ -780,7 +780,7 @@ async def global_search(
                     params,
                     include_lifecycle_maps=_can_access_lifecycle_map_primitives(
                         current_user,
-                        dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                        dev_mode=getattr(get_settings(), "dev_mode", True),
                     ),
                 )
                 all_items.extend(items)
@@ -2031,7 +2031,7 @@ async def admin_invite_user(
 
     The response embeds the token plaintext exactly once — it is never
     persisted (only its SHA-256 hash is stored). ``invite_url`` is anchored to
-    ``settings.modulo_public_url`` (same origin decision as
+    ``settings.public_url`` (same origin decision as
     ``mcp_setup_handoff`` / SSO routes): the admin may copy the link from any
     machine/proxy and self-hosted deployments set this once globally; deriving
     from the request's Host header would mint proxy-dependent URLs.
@@ -4639,7 +4639,7 @@ async def admin_overdue_hitl_claims(
 # Telemetry opt-in / opt-out (FAR-1131)
 # ---------------------------------------------------------------------------
 # Guarded by system.config.manage — the same permission that protects the
-# generic runtime-config surface.  MODULO_TELEMETRY_ENABLED is a
+# generic runtime-config surface.  FARNA_CONTROL_TELEMETRY_ENABLED is a
 # deployment-wide, process-global setting; an org-scoped role must not
 # be able to flip it.
 

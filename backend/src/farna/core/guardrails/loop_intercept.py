@@ -282,7 +282,7 @@ class BridgeEscalation:
 
 
 def parse_bridge_escalation_marker(text: str) -> BridgeEscalation | None:
-    """Parse the last ``MODULO_BRIDGE_ESCALATED:`` marker in *text* (FAR-1694 S2).
+    """Parse the last ``FARNA_CONTROL_BRIDGE_ESCALATED:`` marker in *text* (FAR-1694 S2).
 
     The sandbox-side bridge client emits the marker on the agent command's
     stdout when an in-loop ``escalate`` verdict stops the loop. Returns the

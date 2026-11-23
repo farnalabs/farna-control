@@ -134,7 +134,7 @@ async def run_websocket(
     """Stream run events over WebSocket.
 
     Requires a short-lived ws-token from POST /api/v1/auth/ws-token
-    (default 60s TTL, configurable via modulo_ws_token_ttl_seconds).
+    (default 60s TTL, configurable via ws_token_ttl_seconds).
     Sends JSON objects conforming to RunEvent.to_json() schema.
     Closes with code 4001 on auth failure, 4004 on unknown run.
     """

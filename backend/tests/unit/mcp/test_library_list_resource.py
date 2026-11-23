@@ -207,7 +207,7 @@ class TestResourceLibrarySuccess:
         from farna.api.mcp_server import _ctx_key_grants, _ctx_role
 
         _ctx_role.set("operator")
-        mock_get_settings.return_value = MagicMock(modulo_dev_mode=True)
+        mock_get_settings.return_value = MagicMock(dev_mode=True)
         mock_cm = AsyncMock()
         mock_cm.__aenter__ = AsyncMock(return_value=AsyncMock())
         mock_cm.__aexit__ = AsyncMock(return_value=False)

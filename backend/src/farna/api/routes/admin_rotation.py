@@ -127,14 +127,14 @@ async def rotate_key(
     old_key = req.old_fernet_key or settings.fernet_key
 
     # Rotation runs cross-org on the farna_control_system (BYPASSRLS) role. If that
-    # role is not provisioned (MODULO_SYSTEM_DATABASE_URL empty) the system
+    # role is not provisioned (FARNA_CONTROL_SYSTEM_DATABASE_URL empty) the system
     # session factory silently falls back to the NOBYPASSRLS app role, which
     # makes the rotation a zero-row no-op. Refuse loudly rather than
     # re-introduce the exact silent failure this fix addresses.
-    if not settings.modulo_system_database_url:
+    if not settings.system_database_url:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=("Fernet key rotation is unavailable: the farna_control_system role is not provisioned (MODULO_SYSTEM_DATABASE_URL is unset)."),
+            detail=("Fernet key rotation is unavailable: the farna_control_system role is not provisioned (FARNA_CONTROL_SYSTEM_DATABASE_URL is unset)."),
         )
 
     # Cross-process atomic guard: Redis SET NX + TTL.  The asyncio.Lock
@@ -362,14 +362,14 @@ async def _run_rotation_background(
         # factory silently falls back to the NOBYPASSRLS app role and the rotation
         # becomes a zero-row no-op (the exact bug this fix prevents). Refuse loudly
         # instead of reporting a hollow "completed" with 0 rows.
-        if not settings.modulo_system_database_url:
+        if not settings.system_database_url:
             _log.error(
                 "rotation.system_role_unprovisioned",
-                extra={"reason": ("MODULO_SYSTEM_DATABASE_URL unset — refusing to rotate on the NOBYPASSRLS app role (would silently no-op on RLS-scoped tables)")},
+                extra={"reason": ("FARNA_CONTROL_SYSTEM_DATABASE_URL unset — refusing to rotate on the NOBYPASSRLS app role (would silently no-op on RLS-scoped tables)")},
             )
             _last_rotation_result = {
                 "status": "failed",
-                "error": ("farna_control_system role unprovisioned (MODULO_SYSTEM_DATABASE_URL unset); rotation refused to avoid a silent no-op."),
+                "error": ("farna_control_system role unprovisioned (FARNA_CONTROL_SYSTEM_DATABASE_URL unset); rotation refused to avoid a silent no-op."),
             }
             return
 

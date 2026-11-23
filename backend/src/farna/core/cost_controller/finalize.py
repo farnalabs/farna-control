@@ -2024,7 +2024,7 @@ def _merge_effective_refs(
     """Create-stamped refs first, then confirmed agent claims (dedup + unified cap).
 
     FAR-794 slice 2b: the combined list is capped at the unified
-    ``modulo_work_item_refs_cap`` setting (ONE constant for self-report
+    ``work_item_refs_cap`` setting (ONE constant for self-report
     normalisation, node-input injection and this merge). An agent claim
     (kind, ref) that duplicates a create-stamped entry is collapsed (first
     occurrence wins — the derived stamp predates the reported claim).

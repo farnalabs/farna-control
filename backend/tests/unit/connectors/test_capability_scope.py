@@ -1304,11 +1304,11 @@ async def test_run_environment_wires_fetch_scope_to_hub(tmp_path, monkeypatch):
     # Declare Redis as genuinely NOT configured so the hub stays on its
     # connector-local bucket (the new FAR-439 fail-closed path raises rather than
     # constructing a shared client). A bare MagicMock makes ``redis_url`` truthy
-    # and ``modulo_db.lower()`` a MagicMock, which would send the executor path
+    # and ``db.lower()`` a MagicMock, which would send the executor path
     # into ``Redis.from_url(MagicMock)`` and explode.
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(fernet_key=_KEY, redis_url="", modulo_db="sqlite"),
+        lambda: MagicMock(fernet_key=_KEY, redis_url="", db="sqlite"),
     )
 
     # --- Fake async session returning our rows ---
@@ -1406,7 +1406,7 @@ async def test_run_environment_mixed_graph_narrows_to_scoped_union(tmp_path, mon
     monkeypatch.setattr("farna.core.secrets_backend.create_secrets_backend", lambda *a, **k: sb)
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(fernet_key=_KEY, redis_url="", modulo_db="sqlite"),
+        lambda: MagicMock(fernet_key=_KEY, redis_url="", db="sqlite"),
     )
 
     class _NullCtx:
@@ -1505,7 +1505,7 @@ async def test_fully_unrestricted_run_fetches_all(tmp_path, monkeypatch):
     monkeypatch.setattr("farna.core.secrets_backend.create_secrets_backend", lambda *a, **k: sb)
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(fernet_key=_KEY, redis_url="", modulo_db="sqlite"),
+        lambda: MagicMock(fernet_key=_KEY, redis_url="", db="sqlite"),
     )
 
     class _NullCtx:
@@ -1603,7 +1603,7 @@ async def test_run_environment_agent_grants_confine_decryption(tmp_path, monkeyp
     monkeypatch.setattr("farna.core.secrets_backend.create_secrets_backend", lambda *a, **k: sb)
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(fernet_key=_KEY, redis_url="", modulo_db="sqlite"),
+        lambda: MagicMock(fernet_key=_KEY, redis_url="", db="sqlite"),
     )
 
     class _NullCtx:

@@ -72,7 +72,7 @@ _MOCK_MEMBERSHIPS = [_MOCK_MEMBERSHIP]
 
 class TestAuthEdgeCases:
     def test_missing_token_returns_501(self, scim_client: Callable[..., TestClient]) -> None:
-        client = scim_client(settings=lambda: make_settings(modulo_scim_token=""), principal=False)
+        client = scim_client(settings=lambda: make_settings(scim_token=""), principal=False)
         resp = client.get(
             "/scim/v2/ServiceProviderConfig",
             headers={"Authorization": "Bearer some-token"},
@@ -88,7 +88,7 @@ class TestAuthEdgeCases:
         assert resp.status_code == 401
 
     def test_invalid_default_org_uuid_returns_500(self, scim_client: Callable[..., TestClient]) -> None:
-        client = scim_client(settings=lambda: make_settings(modulo_scim_default_org_id="not-a-uuid"), principal=False)
+        client = scim_client(settings=lambda: make_settings(scim_default_org_id="not-a-uuid"), principal=False)
         resp = client.get("/scim/v2/Users", headers=AUTH_HEADERS)
         assert resp.status_code == 500
 
@@ -499,7 +499,7 @@ class TestServiceProviderConfig:
         # SCIM clients probe this document before discovery, so it must publish
         # the full capability set even when FARNA_CONTROL_PUBLIC_URL is unset (that is
         # only needed by the resource routes' entity locations).
-        client = scim_client(settings=lambda: make_settings(modulo_public_url=""))
+        client = scim_client(settings=lambda: make_settings(public_url=""))
         resp = client.get("/scim/v2/ServiceProviderConfig", headers=AUTH_HEADERS)
         assert resp.status_code == 200
         data = resp.json()
@@ -1101,7 +1101,7 @@ class TestPatchGroup:
 class TestLicenseGate:
     def test_no_license_returns_402(self, scim_client: Callable[..., TestClient]) -> None:
         client = scim_client(
-            settings=lambda: make_settings(modulo_license_key=""),
+            settings=lambda: make_settings(license_key=""),
             plan_context=CommunityTier,
         )
         resp = client.get("/scim/v2/Users", headers=AUTH_HEADERS)

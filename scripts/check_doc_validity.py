@@ -79,7 +79,7 @@ RETIRED_TOKENS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(r"\bMODULO_DEMO_MODE\b"),
-        "retired flag 'MODULO_DEMO_MODE' (the demo is configured with MODULO_DEMO_* flags)",
+        "retired flag 'FARNA_CONTROL_DEMO_MODE' (the demo is configured with FARNA_CONTROL_DEMO_* flags)",
     ),
     (
         re.compile(r"(?<![\w.-])staging\.modulo\.app\b"),

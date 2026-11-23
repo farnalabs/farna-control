@@ -79,7 +79,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       seams network-free and DB-free (`provider_matrix.feature`):
       `build_hub` registers `local` unconditionally and gates `e2b` /
       the docker family on their documented env signals (an unrelated
-      `MODULO_RUNNER_*` var never registers Docker – FAR-996); the hub resolves
+      `FARNA_CONTROL_RUNNER_*` var never registers Docker – FAR-996); the hub resolves
       deterministically (hint wins, docker-family aliases share one provider,
       known-but-unregistered types raise `ProviderNotConfiguredError` naming the
       remediation env var, unknown types raise `UnknownProviderTypeError` naming
@@ -406,7 +406,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
   network-free and DB-free (real `LocalRuntimeProvider` / `DockerRuntimeProvider`
   / `E2BRuntimeProvider(api_key=...)` constructors, which open no connections):
   the env-gated registration matrix (local always; e2b / docker family gated on
-  their documented signals; unrelated `MODULO_RUNNER_*` never registers Docker,
+  their documented signals; unrelated `FARNA_CONTROL_RUNNER_*` never registers Docker,
   FAR-996), the deterministic resolve matrix (hint-wins, docker-family aliases →
   one provider, known-but-unregistered → `ProviderNotConfiguredError` naming the
   remediation env var, unknown → `UnknownProviderTypeError` naming the valid

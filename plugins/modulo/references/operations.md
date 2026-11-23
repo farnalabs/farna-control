@@ -25,7 +25,7 @@ The native launcher also exposes backup/restore workflows documented in the publ
 
 ## Declarative configuration
 
-`farna-control apply -f <config.yaml>` is the documented declarative configuration CLI. `--plan`/`--dry-run` and `--diff` are read-only planning/drift modes; a real apply writes schemas, model backends, pipelines, and triggers. It uses `MODULO_URL` and `MODULO_API_KEY` supplied through the machine environment, not inline secret values. Verify the target before applying.
+`farna-control apply -f <config.yaml>` is the documented declarative configuration CLI. `--plan`/`--dry-run` and `--diff` are read-only planning/drift modes; a real apply writes schemas, model backends, pipelines, and triggers. It uses `FARNA_CONTROL_URL` and `FARNA_CONTROL_API_KEY` supplied through the machine environment, not inline secret values. Verify the target before applying.
 
 ## Remote MCP
 

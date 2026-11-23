@@ -51,7 +51,7 @@ def test_hash_token_is_sha256_hexdigest() -> None:
 async def test_create_handoff_stores_hash_not_raw_token() -> None:
     session = _make_session()
     settings = MagicMock()
-    settings.modulo_public_url = "https://app.example.com/"
+    settings.public_url = "https://app.example.com/"
     with patch("farna.core.mcp_setup_handoff.get_settings", return_value=settings):
         result = await create_handoff(session, org_id=_ORG_ID, resource_type="model-backend", resource_id=_RESOURCE_ID, created_by=_CREATED_BY)
 
@@ -69,7 +69,7 @@ async def test_create_handoff_stores_hash_not_raw_token() -> None:
 async def test_create_handoff_builds_setup_url() -> None:
     session = _make_session()
     settings = MagicMock()
-    settings.modulo_public_url = "https://app.example.com"
+    settings.public_url = "https://app.example.com"
     with patch("farna.core.mcp_setup_handoff.get_settings", return_value=settings):
         result = await create_handoff(session, org_id=_ORG_ID, resource_type="model-backend", resource_id=_RESOURCE_ID, created_by=_CREATED_BY)
 
@@ -85,7 +85,7 @@ async def test_create_handoff_builds_setup_url() -> None:
 async def test_create_handoff_strips_trailing_slash_from_public_url() -> None:
     session = _make_session()
     settings = MagicMock()
-    settings.modulo_public_url = "https://app.example.com/"
+    settings.public_url = "https://app.example.com/"
     with patch("farna.core.mcp_setup_handoff.get_settings", return_value=settings):
         result = await create_handoff(session, org_id=_ORG_ID, resource_type="model-backend", resource_id=_RESOURCE_ID, created_by=_CREATED_BY)
 
@@ -96,7 +96,7 @@ async def test_create_handoff_strips_trailing_slash_from_public_url() -> None:
 async def test_create_handoff_ttl_metadata() -> None:
     session = _make_session()
     settings = MagicMock()
-    settings.modulo_public_url = "https://app.example.com"
+    settings.public_url = "https://app.example.com"
     with patch("farna.core.mcp_setup_handoff.get_settings", return_value=settings):
         result = await create_handoff(session, org_id=_ORG_ID, resource_type="model-backend", resource_id=_RESOURCE_ID, created_by=_CREATED_BY)
 

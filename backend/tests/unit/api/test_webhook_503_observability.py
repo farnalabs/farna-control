@@ -65,7 +65,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -272,7 +272,7 @@ def test_receive_webhook_bootstrap_guard_logs_structured_reason(failing_session_
         resp = failing_session_client.post(
             f"/api/v1/triggers/{uuid.uuid4()}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 503
@@ -291,7 +291,7 @@ def test_receive_webhook_db_transient_logs_structured_reason(failing_session_cli
         resp = failing_session_client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 503
@@ -311,7 +311,7 @@ def test_replay_webhook_db_transient_logs_structured_reason(failing_session_clie
         resp = failing_session_client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook/replay/{_EVENT_ID}",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 503
@@ -347,7 +347,7 @@ def test_receive_webhook_snapshot_lock_unavailable_logs_structured_reason(workin
         resp = working_session_client.post(
             f"/api/v1/triggers/{_TRIGGER_ID}/webhook",
             json={"event": "test"},
-            headers={"X-Modulo-Timestamp": "1700000000"},
+            headers={"X-Farna-Control-Timestamp": "1700000000"},
         )
 
     assert resp.status_code == 503

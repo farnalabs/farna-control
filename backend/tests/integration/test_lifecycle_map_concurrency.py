@@ -174,16 +174,16 @@ async def integration_client(db_url: str, db_engine: AsyncEngine) -> AsyncGenera
         database_url=db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
         # FAR-2200 retired Lifecycle Maps from user-facing Alpha surfaces: the
         # retained internal routes are gated behind developer mode
         # (``_require_internal_lifecycle_map_access``). These concurrency
         # semantics still hold on the retained surface, so the test enables
         # the gate explicitly rather than being silently 403'd by it.
-        modulo_dev_mode=True,
+        dev_mode=True,
     )
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:

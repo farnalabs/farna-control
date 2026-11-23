@@ -92,7 +92,7 @@ Alpha manifest.
 
 Everything else under `BUNDLE_DIR` is copied into the install directory.
 Required defines: `VERSION_NUM`, `BUNDLE_ARCH` (only `amd64` is accepted) and
-`BUNDLE_DIR`; `MODULO_URL` is optional.
+`BUNDLE_DIR`; `FARNA_CONTROL_URL` is optional.
 
 ## Compiling
 

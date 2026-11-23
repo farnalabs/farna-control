@@ -377,7 +377,7 @@ trust-anchor caveat) are documented in
 
 - 2026-10-13: **FAR-1720** - unified the public `/api/v1/license` surface
   with the real license resolution. `viewmodel.license_info` previously
-  reported `tier = "team"` iff `settings.modulo_license_key` was non-empty,
+  reported `tier = "team"` iff `settings.license_key` was non-empty,
   hardcoded `features: ["notifications"]`, and always answered
   `is_valid: True` - it trusted the env-var key on mere presence and never
   consulted `get_license()`, so it could disagree with every other license

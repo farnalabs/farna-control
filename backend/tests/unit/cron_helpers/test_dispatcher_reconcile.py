@@ -260,7 +260,7 @@ def _settings(**overrides: object) -> MagicMock:
         "saq_redis_pool_size": 5,
         "saq_run_claim_cap": 20,
         "hitl_review_cancel_grace_seconds": 3600,
-        "modulo_telemetry_enabled": False,
+        "telemetry_enabled": False,
         # FAR-746 knobs as REAL ints — the product code uses
         # _int_setting's coded default for anything that is not literally
         # an int (MagicMock attributes would otherwise coerce oddly), and

@@ -1332,7 +1332,7 @@ def test_stream_terminal_reason_agent_failure():
     """agent_failure with no stall → agent.failed when elevation enabled."""
     state = _StreamState(agent_failure_reason="agent error")
     with patch("farna.settings.get_settings") as mock_settings:
-        mock_settings.return_value.modulo_agent_failure_elevation_enabled = True
+        mock_settings.return_value.agent_failure_elevation_enabled = True
         result = _stream_terminal_reason(state, MagicMock(), uuid.uuid4())
     assert result is not None
     assert result[0] == "failed"

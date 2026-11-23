@@ -6,7 +6,7 @@ registry and the hosted-library manifest already use. No new crypto: the pack
 adds a canonical payload and a published key, not a signing algorithm.
 
 Key policy (mirrors :mod:`farna.core.license_signing`): the signing key is
-resolved from ``MODULO_EVIDENCE_SIGNING_KEY`` (a PEM-encoded Ed25519 private
+resolved from ``FARNA_CONTROL_EVIDENCE_SIGNING_KEY`` (a PEM-encoded Ed25519 private
 key). It is never hardcoded, and signing FAILS CLOSED when no key is
 configured — an instance that has not opted in cannot emit signed evidence.
 The public verification key is derived from the private key and published both
@@ -48,11 +48,11 @@ def resolve_signing_key_pem(private_key_pem: str | None = None) -> str:
     """
     if private_key_pem:
         return private_key_pem
-    configured = get_settings().modulo_evidence_signing_key
+    configured = get_settings().evidence_signing_key
     if configured:
         return configured
     raise EvidenceSigningError(
-        "No evidence signing key configured — set MODULO_EVIDENCE_SIGNING_KEY (a PEM-encoded Ed25519 private key) to emit signed evidence packs.",
+        "No evidence signing key configured — set FARNA_CONTROL_EVIDENCE_SIGNING_KEY (a PEM-encoded Ed25519 private key) to emit signed evidence packs.",
     )
 
 

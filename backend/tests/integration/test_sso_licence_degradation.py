@@ -73,12 +73,12 @@ def _settings(*, env_licence: str = "", multi_org: bool = False) -> Settings:
         database_url="postgresql+asyncpg://localhost/modulo_unused",
         secret_key=_VALID_32,
         fernet_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        modulo_license_key=env_licence,
-        modulo_multi_org_enabled=multi_org,
-        modulo_auth_rate_limit_enabled=False,
-        modulo_csrf_enabled=False,
+        license_key=env_licence,
+        multi_org_enabled=multi_org,
+        auth_rate_limit_enabled=False,
+        csrf_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
 
 

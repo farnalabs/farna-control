@@ -310,7 +310,7 @@ def test_create_refresh_token_honours_configured_ttl() -> None:
 
 def test_default_refresh_ttl_matches_settings_default() -> None:
     """FAR-1170 drift guard: the jwt module fallback must equal the
-    Settings.modulo_refresh_token_ttl_hours production default (single source
+    Settings.refresh_token_ttl_hours production default (single source
     of truth), so the two cannot silently diverge."""
     from farna.settings import Settings
 
@@ -332,7 +332,7 @@ def test_default_refresh_ttl_matches_settings_default() -> None:
     )
     payload = pyjwt.decode(token, _KEY, algorithms=[_ALGORITHM])
     lifetime_seconds = float(payload["exp"]) - float(payload["iat"])
-    assert abs(lifetime_seconds - settings.modulo_refresh_token_ttl_hours * 3600) <= 1
+    assert abs(lifetime_seconds - settings.refresh_token_ttl_hours * 3600) <= 1
 
 
 def test_decode_refresh_token_claims_roundtrip() -> None:

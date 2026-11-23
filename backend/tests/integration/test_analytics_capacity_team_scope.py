@@ -240,10 +240,10 @@ async def test_run_capacity_query_report_never_names_a_foreign_pipeline(db_engin
         database_url=db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
     try:
         report = await run_capacity_query(

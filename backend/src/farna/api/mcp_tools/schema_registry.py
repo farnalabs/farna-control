@@ -309,7 +309,7 @@ async def list_environment_profiles(
 @mcp.tool(
     description="AI-assisted schema inference. Takes a sample JSON payload and returns an inferred "
     "JSON Schema definition. Precondition: this preview feature requires developer "
-    "mode (toggle Developer Mode in Admin > Feature Flags, or MODULO_DEV_MODE=true) "
+    "mode (toggle Developer Mode in Admin > Feature Flags, or FARNA_CONTROL_DEV_MODE=true) "
     "and at least one configured model backend; the call fails otherwise.",
 )
 @_RETRY_DB
@@ -327,9 +327,9 @@ async def infer_schema(
         from farna.settings import get_settings
 
         settings = get_settings()
-        if not settings.modulo_dev_mode:
+        if not settings.dev_mode:
             return _tool_error(
-                "Schema inference requires developer mode. Set MODULO_DEV_MODE=true or toggle Developer Mode in Admin > Feature Flags.",
+                "Schema inference requires developer mode. Set FARNA_CONTROL_DEV_MODE=true or toggle Developer Mode in Admin > Feature Flags.",
                 code="feature_required",
             )
         from farna.core.schema_registry import SchemaInferenceError, SchemaInferenceService

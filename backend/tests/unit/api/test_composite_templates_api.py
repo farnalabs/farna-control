@@ -11,7 +11,11 @@ from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
 from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
-from farna.auth.dependencies import get_current_tenant_user, get_current_user
+from farna.auth.dependencies import (
+    get_current_tenant_user,
+    get_current_tenant_user_or_api_key,
+    get_current_user,
+)
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
@@ -28,7 +32,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -86,6 +90,14 @@ def client() -> Generator[TestClient, None, None]:
         account_id=_USER_ID,
         org_role="admin",
     )
+    # FAR-2681: the composite READ routes accept a JWT or an ``mk_`` org API key
+    # via the any-credential dependency; this fixture drives the JWT flavour.
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(
+        username="testuser",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="admin",
+    )
     mock_plan = MagicMock()
     mock_plan.feature_enabled.return_value = True
     app.dependency_overrides[get_plan_context] = lambda: mock_plan
@@ -120,6 +132,13 @@ def viewer_client() -> Generator[TestClient, None, None]:
         org_role="viewer",
     )
     app.dependency_overrides[get_current_tenant_user] = lambda: TenantPrincipal(
+        username="viewer",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role="viewer",
+    )
+    # FAR-2681: the read routes resolve through the any-credential dependency.
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(
         username="viewer",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,

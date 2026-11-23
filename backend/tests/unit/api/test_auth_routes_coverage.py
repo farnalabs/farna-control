@@ -74,8 +74,8 @@ def _make_settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_admin_password": "testpass",
-        "modulo_auth_rate_limit_enabled": False,
+        "admin_password": "testpass",
+        "auth_rate_limit_enabled": False,
         "redis_url": "",
     }
     kwargs.update(overrides)
@@ -223,10 +223,10 @@ def test_login_happy_path_mints_tokens_and_cookies(client: tuple[TestClient, Asy
 # ---------------------------------------------------------------------------
 
 _DEMO_SETTINGS = {
-    "modulo_demo_enabled": True,
-    "modulo_demo_user": "demo@example.com",
-    "modulo_demo_password": "pw",
-    "modulo_demo_token_minutes": 30,
+    "demo_enabled": True,
+    "demo_user": "demo@example.com",
+    "demo_password": "pw",
+    "demo_token_minutes": 30,
 }
 
 

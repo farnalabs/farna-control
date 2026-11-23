@@ -309,7 +309,7 @@ jobs:
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.13
+          version: 11.29.0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
@@ -1778,8 +1778,8 @@ jobs:
           if [[ "$dmg_staple_ticket_unavailable" -eq 1 ]]; then
             INSTALL_ENV=(
               env
-              MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1
-              MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"
+              FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1
+              FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"
             )
           fi
 
@@ -1788,7 +1788,7 @@ jobs:
           # shellcheck disable=SC2016
           run_assertion "install_sh" \
             ${INSTALL_ENV[@]+"${INSTALL_ENV[@]}"} \
-            bash -c 'MODULO_INSTALL_ROOT="$1" MODULO_DATA_DIR="$2" scripts/macos/install.sh "$3"' \
+            bash -c 'FARNA_CONTROL_INSTALL_ROOT="$1" FARNA_CONTROL_DATA_DIR="$2" scripts/macos/install.sh "$3"' \
             bash "$INSTALL_ROOT" "$DATA" "$DMG_WITH_SPACES" || exit 1
           # END install_sh_assertion
 

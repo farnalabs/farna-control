@@ -214,7 +214,7 @@ def require_in_dev_operator(
     ``kill_switch_eligible=False`` so an org that disables authz enforcement
     still cannot expose pre-release items to viewers/runners.
     """
-    if require_dev_mode and not getattr(settings or get_settings(), "modulo_dev_mode", True):
+    if require_dev_mode and not getattr(settings or get_settings(), "dev_mode", True):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This internal feature requires developer mode",
@@ -1080,7 +1080,7 @@ _SYSTEM_DB_COMMAND_TIMEOUT_SECONDS = 10
 def system_engine_is_fallback() -> bool:
     """Whether the system engine is the NOBYPASSRLS app-engine fallback.
 
-    True when ``MODULO_SYSTEM_DATABASE_URL`` is unset. In that state the
+    True when ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` is unset. In that state the
     system session cannot actually bypass RLS, so bootstrap reads that must
     be instance-global (pre-auth trigger/org resolution, cross-org admin ops)
     match zero rows and fail closed. Callers on external ingress paths must
@@ -1103,7 +1103,7 @@ def get_or_create_system_engine() -> AsyncEngine:
     Used for cross-org reads that must bypass per-org RLS — e.g. pre-auth SSO
     provider resolution (provider config is instance-global, not tenant data)
     and the FAR-523 trigger-delivery bootstrap. Mirrors
-    ``saq_worker._get_system_async_engine``: when ``MODULO_SYSTEM_DATABASE_URL``
+    ``saq_worker._get_system_async_engine``: when ``FARNA_CONTROL_SYSTEM_DATABASE_URL``
     is set, builds a dedicated engine connected as the ``farna_control_system`` role
     (LOGIN, BYPASSRLS); otherwise falls back to the regular engine with a
     warning AND records the fallback via :func:`system_engine_is_fallback` —
@@ -1116,7 +1116,7 @@ def get_or_create_system_engine() -> AsyncEngine:
         with _SYSTEM_ENGINE_LOCK:
             if _SYSTEM_ASYNC_ENGINE is None:
                 settings = get_settings()
-                if settings.modulo_system_database_url:
+                if settings.system_database_url:
                     from sqlalchemy.engine import make_url
                     from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -1125,7 +1125,7 @@ def get_or_create_system_engine() -> AsyncEngine:
                     # WITHOUT the asyncpg connect knobs — its driver has no
                     # ssl/statement_cache_size params and
                     # split_postgres_sslmode rejects non-Postgres schemes.
-                    system_url = settings.modulo_system_database_url
+                    system_url = settings.system_database_url
                     system_connect_args: dict[str, Any] = {
                         "timeout": 10,
                         "command_timeout": _SYSTEM_DB_COMMAND_TIMEOUT_SECONDS,
@@ -1152,7 +1152,7 @@ def get_or_create_system_engine() -> AsyncEngine:
                     _SYSTEM_ENGINE_IS_FALLBACK = True
                     logger.warning(
                         "api.system_engine_fallback",
-                        extra={"reason": ("MODULO_SYSTEM_DATABASE_URL not set — pre-auth SSO provider resolution falls back to a scoped app read (single-org)")},
+                        extra={"reason": ("FARNA_CONTROL_SYSTEM_DATABASE_URL not set — pre-auth SSO provider resolution falls back to a scoped app read (single-org)")},
                     )
                     _SYSTEM_ASYNC_ENGINE = get_or_create_engine(settings)
     return _SYSTEM_ASYNC_ENGINE

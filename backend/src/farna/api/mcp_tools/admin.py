@@ -849,7 +849,7 @@ SENSITIVE_CONFIG_KEYS: set[str] = {
     "redis_url",
     "api_key",
     "api_keys",
-    "modulo_license_key",
+    "license_key",
     "modulo_secret_key",
     "modulo_fernet_key",
 }

@@ -207,7 +207,7 @@ async def _require_lifecycle_map_primitive_access(
         and primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE
         and not _can_access_lifecycle_map_primitives(
             principal,
-            dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+            dev_mode=getattr(get_settings(), "dev_mode", True),
         )
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Primitive not found")
@@ -795,7 +795,7 @@ async def list_library_primitives_endpoint(
 ) -> LibraryPrimitiveListResponse:
     if include_in_dev:
         require_in_dev_operator(principal, _GRANT_LIBRARY_SEARCH_IN_DEV)
-    dev_mode = getattr(get_settings(), "modulo_dev_mode", True)
+    dev_mode = getattr(get_settings(), "dev_mode", True)
     requested_types = _split_primitive_types(primitive_types)
     if primitive_types and requested_types is None:
         requested_types = []
@@ -926,7 +926,7 @@ async def get_library_primitive_endpoint(
                 primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE
                 and not _can_access_lifecycle_map_primitives(
                     principal,
-                    dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                    dev_mode=getattr(get_settings(), "dev_mode", True),
                 )
             ):
                 primitive = None
@@ -1050,7 +1050,7 @@ async def update_library_primitive_endpoint(
                 _reject_lifecycle_map_primitive_access(
                     principal,
                     existing,
-                    dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                    dev_mode=getattr(get_settings(), "dev_mode", True),
                 )
 
             if "content_json" in updates and existing is not None:
@@ -1109,7 +1109,7 @@ async def delete_library_primitive_endpoint(
                 _reject_lifecycle_map_primitive_access(
                     principal,
                     existing,
-                    dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                    dev_mode=getattr(get_settings(), "dev_mode", True),
                 )
 
             prim = await soft_delete_library_primitive(session, primitive_id)
@@ -1149,7 +1149,7 @@ async def restore_library_primitive_endpoint(
                 _reject_lifecycle_map_primitive_access(
                     principal,
                     existing,
-                    dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                    dev_mode=getattr(get_settings(), "dev_mode", True),
                 )
             prim = await restore_library_primitive(session, primitive_id)
     except ProgrammingError:
@@ -1192,7 +1192,7 @@ async def copy_to_adapt_endpoint(
                 _reject_lifecycle_map_primitive_access(
                     principal,
                     existing,
-                    dev_mode=getattr(get_settings(), "modulo_dev_mode", True),
+                    dev_mode=getattr(get_settings(), "dev_mode", True),
                 )
 
         result = await copy_to_adapt(

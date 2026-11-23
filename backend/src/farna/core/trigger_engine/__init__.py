@@ -2,7 +2,7 @@
 
 Webhook processing pipeline:
   1. Load trigger config from DB (with FOR UPDATE lock)
-  2. X-Modulo-Timestamp replay window check (±300s)
+  2. X-Farna-Control-Timestamp replay window check (±300s)
   3. HMAC-SHA256 validation over timestamp.body (if hmac_secret configured)
   4. Event filtering — accepted_events presence check + optional event_filters
      value check (dotted payload path → allowed values); a non-matching payload
@@ -134,7 +134,7 @@ class HmacValidationError(PermissionError):
 
 
 class TimestampExpiredError(PermissionError):
-    def __init__(self, detail: str = "X-Modulo-Timestamp is outside the ±300s replay window") -> None:
+    def __init__(self, detail: str = "X-Farna-Control-Timestamp is outside the ±300s replay window") -> None:
         super().__init__(detail)
 
 
@@ -269,7 +269,7 @@ _CI_FAILURE_COALESCE_WINDOW_SECONDS = 3600  # 1 hour
 # every matching delivery (a ``DataError``-class crash, not an IntegrityError),
 # and would mute same-head re-failures for far too long.
 _CI_FAILURE_COALESCE_WINDOW_MAX_SECONDS = 7 * 24 * 60 * 60  # 7 days
-_REPLAY_WINDOW_SECONDS = 300  # ±300s for X-Modulo-Timestamp
+_REPLAY_WINDOW_SECONDS = 300  # ±300s for X-Farna-Control-Timestamp
 # HMAC signature scheme prefix shared by the Modulo and GitHub header formats.
 _SIGNATURE_PREFIX = "sha256="
 
@@ -300,20 +300,20 @@ def _is_unique_violation(exc: IntegrityError) -> bool:
 
 
 def verify_timestamp(modulo_timestamp: str | None) -> int:
-    """Validate and return the Unix timestamp from the X-Modulo-Timestamp header.
+    """Validate and return the Unix timestamp from the X-Farna-Control-Timestamp header.
 
     Raises TimestampExpiredError if the header is missing, malformed, or outside
     the ±300s replay window, with a distinct message per failure mode.
     """
     if modulo_timestamp is None:
-        raise TimestampExpiredError("X-Modulo-Timestamp header is missing")
+        raise TimestampExpiredError("X-Farna-Control-Timestamp header is missing")
     try:
         ts = int(modulo_timestamp)
     except (ValueError, TypeError):
-        raise TimestampExpiredError(f"X-Modulo-Timestamp is not a valid integer: {modulo_timestamp!r}") from None
+        raise TimestampExpiredError(f"X-Farna-Control-Timestamp is not a valid integer: {modulo_timestamp!r}") from None
     now = time.time()
     if abs(now - ts) > _REPLAY_WINDOW_SECONDS:
-        raise TimestampExpiredError("X-Modulo-Timestamp is outside the ±300s replay window")
+        raise TimestampExpiredError("X-Farna-Control-Timestamp is outside the ±300s replay window")
     return ts
 
 
@@ -570,7 +570,7 @@ class TriggerEngine:
         modulo_timestamp: str | None,
         payload_hash: str,
     ) -> int:
-        """X-Modulo-Timestamp replay window check (logs the failed event first)."""
+        """X-Farna-Control-Timestamp replay window check (logs the failed event first)."""
         try:
             return verify_timestamp(modulo_timestamp)
         except TimestampExpiredError as exc:
@@ -881,7 +881,7 @@ class TriggerEngine:
         if github_signature_verified:
             ts = int(time.time())
         else:
-            # X-Modulo-Timestamp replay window check
+            # X-Farna-Control-Timestamp replay window check
             ts = await self._verify_webhook_timestamp(
                 session,
                 trigger=delivery.trigger,

@@ -346,7 +346,7 @@ class _AllFeatures:
 @pytest_asyncio.fixture
 async def multi_org_client(db_url: str, app_engine: AsyncEngine, system_session: AsyncSession) -> AsyncClient:
     """ASGI client like conftest's ``integration_client`` but with:
-    - ``modulo_multi_org_enabled=True`` (org-login routes otherwise 404 per ADR 005),
+    - ``multi_org_enabled=True`` (org-login routes otherwise 404 per ADR 005),
     - a REAL system session override (exercises the farna_control_system leg),
     - an anonymous plan-context override (pre-auth feature gate)."""
     from farna.api.dependencies import _get_engine, get_anonymous_plan_context, get_db_session, get_system_db_session
@@ -357,12 +357,12 @@ async def multi_org_client(db_url: str, app_engine: AsyncEngine, system_session:
         database_url=db_url,
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
-        modulo_multi_org_enabled=True,
-        modulo_public_url="https://staging.example.com",
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
+        multi_org_enabled=True,
+        public_url="https://staging.example.com",
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:

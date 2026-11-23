@@ -83,9 +83,9 @@ JOB_CASES = [
 ]
 
 
-def patch_settings(modulo_db: str = "postgres"):
+def patch_settings(db: str = "postgres"):
     """Patch ``saq_worker.get_settings`` to report the given database dialect."""
-    return patch.object(sw, "get_settings", return_value=MagicMock(modulo_db=modulo_db))
+    return patch.object(sw, "get_settings", return_value=MagicMock(db=db))
 
 
 def make_session(ids: list[uuid.UUID] | None = None) -> AsyncMock:

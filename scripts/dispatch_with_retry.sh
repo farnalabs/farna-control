@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Shared webhook-dispatch retry policy for the Modulo app's webhook endpoints
+# Shared webhook-dispatch retry policy for the Farna Control app's webhook endpoints
 # (Branch Fixer, PR Reviewer). Every workflow step that POSTs to
-# MODULO_*_WEBHOOK_URL calls this script instead of inlining its own retry
+# FARNA_CONTROL_*_WEBHOOK_URL calls this script instead of inlining its own retry
 # loop, so the policy has exactly ONE definition (ci.yml inlined the same
 # policy per PR #2120's fix while its tests pin that copy's two in-workflow
 # sites byte-identically; this script is the migration target — when PR
@@ -66,8 +66,8 @@
 # Environment:
 #   DISPATCH_URL            (required) webhook endpoint.
 #   DISPATCH_BODY           (required) JSON payload string.
-#   DISPATCH_SECRET         (required) HMAC secret for X-Modulo-Webhook-Secret.
-#   DISPATCH_LABEL          log prefix, e.g. "Modulo Branch Fixer".
+#   DISPATCH_SECRET         (required) HMAC secret for X-Farna-Control-Webhook-Secret.
+#   DISPATCH_LABEL          log prefix for the dispatch messages.
 #   DISPATCH_ACCEPT_ANY_2XX "1" accepts any 2xx (default: 202-only).
 #   DISPATCH_DUP_400_IS_OK  "1" treats 400 "Duplicate webhook payload" as a
 #                           handled coalesced no-op (default).
@@ -187,7 +187,7 @@ LAST_DETAIL="unknown"
 while [[ "$ATTEMPTS" -lt "$DISPATCH_MAX_ATTEMPTS" ]]; do
   ATTEMPTS=$((ATTEMPTS + 1))
   # TIMESTAMP and HMAC are recomputed on every attempt: the server enforces a
-  # +/-300s replay window on X-Modulo-Timestamp, so a signature computed once
+  # +/-300s replay window on X-Farna-Control-Timestamp, so a signature computed once
   # outside the loop would fall outside the window after a long backoff.
   TIMESTAMP=$(date +%s)
   HMAC=$(printf '%s' "${TIMESTAMP}.${DISPATCH_BODY}" | openssl dgst -sha256 -hmac "${DISPATCH_SECRET}" | sed 's/^.* //')
@@ -196,10 +196,16 @@ while [[ "$ATTEMPTS" -lt "$DISPATCH_MAX_ATTEMPTS" ]]; do
   # keys off HTTP_CODE, but the echoed body must stay honest).
   : > "${HEADER_FILE}"
   : > "${BODY_FILE}"
+  # Dual-emit during the rebrand rollout: the receiver deployed before this
+  # rename reads the pre-rebrand header names, so send both spellings until a
+  # renamed receiver is deployed everywhere. Remove the pre-rebrand pair once
+  # the rollout completes.
   HTTP_CODE=$(curl -s --connect-timeout 10 --max-time 30 \
     -D "${HEADER_FILE}" -o "${BODY_FILE}" -w '%{http_code}' \
     -X POST "${DISPATCH_URL}" \
     -H "Content-Type: application/json" \
+    -H "X-Farna-Control-Timestamp: ${TIMESTAMP}" \
+    -H "X-Farna-Control-Webhook-Secret: sha256=${HMAC}" \
     -H "X-Modulo-Timestamp: ${TIMESTAMP}" \
     -H "X-Modulo-Webhook-Secret: sha256=${HMAC}" \
     -d "${DISPATCH_BODY}") || HTTP_CODE="000"

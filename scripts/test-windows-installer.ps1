@@ -136,7 +136,7 @@ function Invoke-Iscc {
         "/DVERSION_NUM=$Version",
         "/DBUNDLE_ARCH=$Arch",
         "/DBUNDLE_DIR=$BundleDir",
-        "/DMODULO_URL=http://127.0.0.1:8000",
+        "/DFARNA_CONTROL_URL=http://127.0.0.1:8000",
         $issPath
     )
 

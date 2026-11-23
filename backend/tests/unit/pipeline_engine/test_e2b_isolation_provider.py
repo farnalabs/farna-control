@@ -5,7 +5,7 @@ dispatch (sandbox mock, no network) and proves:
 
 1. The call routes through ``provider.apply_isolation`` with the resolved
    policy, and the legacy engine-side ``apply_sandbox_policy`` is never
-   invoked (R6 deleted the legacy branch and the ``MODULO_E2B_VIA_PROVIDER``
+   invoked (R6 deleted the legacy branch and the ``FARNA_CONTROL_E2B_VIA_PROVIDER``
    flag, so the provider routing is unconditional rather than flag-gated).
 2. The ``_should_apply_sandbox_policy`` predicate is unchanged: a node with
    no policy still never invokes the provider at all.

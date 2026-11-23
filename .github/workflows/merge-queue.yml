@@ -345,7 +345,7 @@ jobs:
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.13
+          version: 11.29.0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -1453,7 +1453,7 @@ jobs:
           # budget and honouring Retry-After; every other status is terminal.
           # The 400 "Duplicate webhook payload" handled no-op (FAR-1097) and
           # the per-attempt timestamp+HMAC signing (the server enforces a
-          # +/-300s replay window on X-Modulo-Timestamp) are the script's
+          # +/-300s replay window on X-Farna-Control-Timestamp) are the script's
           # defaults, mirroring the inline ladder this replaced. The script
           # exits 1 when the dispatch is never delivered, and it writes
           # machine-readable results (last HTTP / class / detail / attempt
@@ -2385,8 +2385,12 @@ jobs:
       - name: Self-report merged PRs to Modulo (fail-open, best-effort)
         if: success() && steps.merge.outputs.merged_count != '0' && steps.toctou.outputs.aborted != 'true'
         env:
-          MODULO_SELF_REPORT_URL: ${{ secrets.MODULO_SELF_REPORT_URL }}
-          MODULO_SELF_REPORT_TOKEN: ${{ secrets.MODULO_SELF_REPORT_TOKEN }}
+          # Transitional dual-accept: the renamed secret is provisioned over time;
+          # fall back to the pre-rebrand secret name until then so the
+          # self-report POST never silently skips (fail-open). Drop the
+          # fallback once the new secret is provisioned everywhere.
+          FARNA_CONTROL_SELF_REPORT_URL: ${{ secrets.FARNA_CONTROL_SELF_REPORT_URL || secrets.MODULO_SELF_REPORT_URL }}
+          FARNA_CONTROL_SELF_REPORT_TOKEN: ${{ secrets.FARNA_CONTROL_SELF_REPORT_TOKEN }}
         shell: bash
         run: |
           # FAR-145 follow-up (workflow self-report): the merge queue DISCOVERS the
@@ -2405,7 +2409,7 @@ jobs:
           #
           # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a
           # Modulo outage can NEVER fail the merge queue. The payload is always
-          # recorded in the log; the POST only fires when MODULO_SELF_REPORT_URL is
+          # recorded in the log; the POST only fires when FARNA_CONTROL_SELF_REPORT_URL is
           # configured. The endpoint is POST
           # /api/v1/lifecycle-maps/{lifecycle_map_id}/journeys/self-report
           # (FAR-143); the URL secret points at the dogfood map's endpoint.
@@ -2425,8 +2429,8 @@ jobs:
           echo "=== Modulo self-report payload (merged PRs) ==="
           echo "$PAYLOAD"
 
-          if [ -z "$MODULO_SELF_REPORT_URL" ]; then
-            echo "::notice::MODULO_SELF_REPORT_URL not configured - merged PRs recorded in log only, POST skipped (fail-open)."
+          if [ -z "$FARNA_CONTROL_SELF_REPORT_URL" ]; then
+            echo "::notice::FARNA_CONTROL_SELF_REPORT_URL not configured - merged PRs recorded in log only, POST skipped (fail-open)."
             exit 0
           fi
 
@@ -2434,9 +2438,9 @@ jobs:
           # NOT read as success — that masking is the exact FAR-666 failure mode.
           # Keep -sS (stderr stays visible: connection/TLS errors reach the log);
           # drop -f so we can branch on the real HTTP status code.
-          HTTP_CODE=$(curl -sS -o "${RUNNER_TEMP}/self-report-body.json" -w '%{http_code}' --max-time 15 -X POST "$MODULO_SELF_REPORT_URL" \
+          HTTP_CODE=$(curl -sS -o "${RUNNER_TEMP}/self-report-body.json" -w '%{http_code}' --max-time 15 -X POST "$FARNA_CONTROL_SELF_REPORT_URL" \
             -H "$LINEAR_CONTENT_TYPE" \
-            -H "Authorization: Bearer $MODULO_SELF_REPORT_TOKEN" \
+            -H "Authorization: Bearer $FARNA_CONTROL_SELF_REPORT_TOKEN" \
             -d "$PAYLOAD") || HTTP_CODE="000"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then

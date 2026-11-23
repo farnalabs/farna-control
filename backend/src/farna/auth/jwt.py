@@ -23,8 +23,8 @@ _ALGORITHM: str = "HS256"
 _ACCESS_TOKEN_MINUTES: int = 15
 #: FAR-1170: fallback refresh-token lifetime (hours) used only when a mint
 #: site does NOT pass ``ttl_hours``. The single source of truth for the
-#: production default is ``Settings.modulo_refresh_token_ttl_hours`` (24,
-#: env ``MODULO_REFRESH_TOKEN_TTL_HOURS``) — every production call site
+#: production default is ``Settings.refresh_token_ttl_hours`` (24,
+#: env ``FARNA_CONTROL_REFRESH_TOKEN_TTL_HOURS``) — every production call site
 #: passes it explicitly. This constant exists so the pure JWT helpers stay
 #: import-free of ``farna.settings`` (no settings/DB dependency at mint
 #: time, keeps unit tests light); a drift-guard test asserts the two stay
@@ -180,7 +180,7 @@ def create_refresh_token(
     family+sequence for rotation detection.
 
     ``ttl_hours`` mirrors :func:`create_access_token`'s ``ttl_minutes``:
-    production call sites pass ``settings.modulo_refresh_token_ttl_hours``
+    production call sites pass ``settings.refresh_token_ttl_hours``
     (FAR-1170); ``None`` falls back to the module constant so the pure helper
     keeps a sane default without importing Settings.
 

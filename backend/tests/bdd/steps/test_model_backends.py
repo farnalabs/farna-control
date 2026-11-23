@@ -486,7 +486,7 @@ def _drive_model_backend_crud(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key=Fernet.generate_key().decode(),
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
     async def override_session() -> AsyncMock:
@@ -1000,7 +1000,7 @@ def _submit_model_backend_save(ctx: dict, *, method: str, body: dict) -> None:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key=Fernet.generate_key().decode(),
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
     async def override_session() -> AsyncMock:

@@ -5,17 +5,17 @@
 // (HTTP client, safe-logging helper, auth header builder, env setup), which
 // tripped SonarCloud's copy-paste duplication gate. It now lives here once.
 
-let BASE_URL = process.env.MODULO_URL || "http://localhost:8000";
+let BASE_URL = process.env.FARNA_CONTROL_URL || "http://localhost:8000";
 let baseUrlEnd = BASE_URL.length;
 while (baseUrlEnd > 0 && BASE_URL[baseUrlEnd - 1] === "/") {
   baseUrlEnd -= 1;
 }
 BASE_URL = BASE_URL.slice(0, baseUrlEnd);
-const EMAIL = process.env.MODULO_EMAIL;
-const PASSWORD = process.env.MODULO_PASSWORD;
+const EMAIL = process.env.FARNA_CONTROL_EMAIL;
+const PASSWORD = process.env.FARNA_CONTROL_PASSWORD;
 
 if (!EMAIL || !PASSWORD) {
-  console.error("MODULO_EMAIL and MODULO_PASSWORD must be set");
+  console.error("FARNA_CONTROL_EMAIL and FARNA_CONTROL_PASSWORD must be set");
   process.exit(1);
 }
 

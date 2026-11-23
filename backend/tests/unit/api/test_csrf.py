@@ -18,8 +18,8 @@ def _make_settings(**kwargs: Any) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "testpass",
-        "modulo_csrf_enabled": True,
+        "admin_password": "testpass",
+        "csrf_enabled": True,
     }
     overrides.update(kwargs)
     return Settings(**overrides)
@@ -249,14 +249,14 @@ class TestExemptPaths:
 
 class TestDisabled:
     def test_disabled_skips_all_checks(self):
-        settings = _make_settings(modulo_csrf_enabled=False)
+        settings = _make_settings(csrf_enabled=False)
         app = _make_app(settings=settings)
         with TestClient(app) as client:
             resp = client.post("/unsafe")
         assert resp.status_code == 200
 
     def test_disabled_without_auth(self):
-        settings = _make_settings(modulo_csrf_enabled=False)
+        settings = _make_settings(csrf_enabled=False)
         app = _make_app(settings=settings)
         with TestClient(app) as client:
             resp = client.post("/unsafe")
@@ -265,7 +265,7 @@ class TestDisabled:
 
 class TestCustomExemptPaths:
     def test_custom_exempt_path_added(self):
-        settings = _make_settings(modulo_csrf_exempt_paths="/custom-exempt")
+        settings = _make_settings(csrf_exempt_paths="/custom-exempt")
         app = _make_app(settings=settings)
 
         @app.post("/custom-exempt")

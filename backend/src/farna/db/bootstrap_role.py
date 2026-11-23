@@ -14,7 +14,7 @@ URL-configured boot reconciles.
 Deliverable (A) of the break-glass admin recovery plan adds:
   * ``farna_control_breakglass`` (LOGIN, BYPASSRLS) — the dedicated operator role used
     by the break-glass CLI (dedicated credential from
-    MODULO_BREAK_GLASS_DATABASE_URL; a placeholder password is used when the URL
+    FARNA_CONTROL_BREAK_GLASS_DATABASE_URL; a placeholder password is used when the URL
     is not configured yet, replaced on a later boot once (B) ships the URL).
   * ``farna_control_migrate`` (NOSUPERUSER, NOLOGIN, BYPASSRLS) — owner of the four
     transferred tables (accounts, org_memberships, token_families,

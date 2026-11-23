@@ -28,8 +28,8 @@ def _make_settings(*, has_license: bool = False) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="license-key" if has_license else "",
+        admin_password="testpass",
+        license_key="license-key" if has_license else "",
     )
 
 

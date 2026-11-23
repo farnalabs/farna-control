@@ -44,7 +44,7 @@ class _ProvisionedSystemSettings:
     connects.
     """
 
-    modulo_system_database_url = "postgresql+asyncpg://localhost/modulo-system-bdd-test"
+    system_database_url = "postgresql+asyncpg://localhost/modulo-system-bdd-test"
     # FAR-1524: get_or_create_system_engine passes this to create_async_engine
     # as pool_recycle; the stub must expose it just like the real Settings.
     db_pool_recycle_seconds = 1500
@@ -183,8 +183,8 @@ def _post_webhook(client, request, payload, *, error=None, trigger_missing=False
         patch("farna.api.routes.webhooks.verify_hmac", return_value=True),
     ):
         headers = {
-            "X-Modulo-Timestamp": "1700000000",
-            "X-Modulo-Webhook-Secret": request.node._webhook_secret or "secret",
+            "X-Farna-Control-Timestamp": "1700000000",
+            "X-Farna-Control-Webhook-Secret": request.node._webhook_secret or "secret",
         }
         if trigger_missing:
             # The bootstrap trigger read runs on the SYSTEM session (FAR-523):

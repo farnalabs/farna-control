@@ -37,8 +37,8 @@ def make_test_settings(**overrides: str | bool) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_license_key": "test-license-key",
-        "modulo_oidc_providers": json.dumps(
+        "license_key": "test-license-key",
+        "oidc_providers": json.dumps(
             [
                 {
                     "provider_id": "google",

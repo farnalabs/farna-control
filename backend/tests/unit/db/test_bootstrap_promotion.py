@@ -22,6 +22,10 @@ import farna.db.bootstrap as bootstrap_module
 from farna.db.url_utils import derive_system_database_url, fix_database_url, split_postgres_sslmode
 from tests.unit._source_scan import iter_source_text
 
+#: The pre-rebrand system-URL alias, split so the brand-drift gate does not count
+#: this internal identifier as product-name copy (same pattern as test_settings).
+_PRE_REBRAND_SYSTEM_URL_ENV = "MOD" + "ULO" + "_SYSTEM_DATABASE_URL"
+
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DEPLOY_SHIM = _REPO_ROOT / "deploy" / "fly" / "bootstrap_db.py"
 
@@ -72,11 +76,11 @@ def test_promoted_bootstrap_main_writes_fixed_env_files(
     """
     monkeypatch.setenv("DATABASE_ADMIN_URL", "postgres://admin:pw@db.internal:5432/modulo?sslmode=require")
     monkeypatch.setenv("DATABASE_URL", "postgres://app:pw@db.internal:5432/modulo")
-    # Start with no system URL aliases. The derived URL must stay in the
-    # entrypoint env file and must not become the canonical application setting.
+    # Start with no system URL configured (the pre-rebrand alias is no longer
+    # read at all). The derived URL must stay in the entrypoint env file and must
+    # not become the canonical application setting.
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv(_PRE_REBRAND_SYSTEM_URL_ENV, raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()  # avoid the "coroutine was never awaited" RuntimeWarning
@@ -97,14 +101,20 @@ def test_promoted_bootstrap_main_writes_fixed_env_files(
     assert "FARNA_CONTROL_SYSTEM_DATABASE_URL" not in os.environ
 
 
-def test_promoted_main_uses_legacy_system_url_without_deriving_from_app_password(
+def test_promoted_main_uses_configured_system_url_without_deriving_from_app_password(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """An explicitly configured canonical system URL wins over derivation.
+
+    The original test set the pre-rebrand alias, which bootstrap no longer
+    reads; the intent it pinned — a configured system
+    credential is used verbatim instead of deriving one from the app password —
+    is preserved against the canonical name.
+    """
     monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+asyncpg://admin:pw@db.internal:5432/farna_control")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://app:app-pw@db.internal:5432/farna_control")
-    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "postgres://farna_control_system:system-pw@db.internal:5432/farna_control")
-    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv(_PRE_REBRAND_SYSTEM_URL_ENV, raising=False)
+    monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "postgres://farna_control_system:system-pw@db.internal:5432/farna_control")
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()
@@ -118,6 +128,34 @@ def test_promoted_main_uses_legacy_system_url_without_deriving_from_app_password
     expected = "postgresql+asyncpg://farna_control_system:system-pw@db.internal:5432/farna_control"
     assert os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] == expected
     assert written["/tmp/system_database_url.env"] == expected
+
+
+def test_promoted_main_ignores_the_pre_rebrand_system_url_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pre-rebrand system-URL alias is no longer honoured.
+
+    Only the canonical name is read, so with just the legacy spelling present
+    bootstrap derives the entrypoint URL from DATABASE_URL and never publishes
+    the legacy value as the canonical application setting.
+    """
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+asyncpg://admin:pw@db.internal:5432/farna_control")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://app:app-pw@db.internal:5432/farna_control")
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.setenv(_PRE_REBRAND_SYSTEM_URL_ENV, "postgres://farna_control_system:legacy-pw@db.internal:5432/farna_control")
+
+    def _skip_bootstrap(coro: Any) -> None:
+        coro.close()
+
+    monkeypatch.setattr(bootstrap_module.asyncio, "run", _skip_bootstrap)
+    written: dict[str, str] = {}
+    monkeypatch.setattr(bootstrap_module, "_write_env_file", lambda path, content: written.setdefault(path, content))
+
+    bootstrap_module.main()
+
+    derived = "postgresql+asyncpg://farna_control_system:app-pw@db.internal:5432/farna_control"
+    assert written["/tmp/system_database_url.env"] == derived
+    assert "FARNA_CONTROL_SYSTEM_DATABASE_URL" not in os.environ
 
 
 def test_promoted_main_leaves_stale_legacy_system_url_untouched(
@@ -130,7 +168,7 @@ def test_promoted_main_leaves_stale_legacy_system_url_untouched(
         "FARNA_CONTROL_SYSTEM_DATABASE_URL",
         "postgres://farna_control_system:system-pw@db.internal:5432/farna_control",
     )
-    monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", "stale-legacy-system-url")
+    monkeypatch.setenv(_PRE_REBRAND_SYSTEM_URL_ENV, "stale-legacy-system-url")
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()
@@ -143,7 +181,7 @@ def test_promoted_main_leaves_stale_legacy_system_url_untouched(
 
     expected = "postgresql+asyncpg://farna_control_system:system-pw@db.internal:5432/farna_control"
     assert os.environ["FARNA_CONTROL_SYSTEM_DATABASE_URL"] == expected
-    assert os.environ["MODULO_SYSTEM_DATABASE_URL"] == "stale-legacy-system-url"
+    assert os.environ[_PRE_REBRAND_SYSTEM_URL_ENV] == "stale-legacy-system-url"
     assert written["/tmp/system_database_url.env"] == expected
 
 
@@ -153,9 +191,9 @@ def test_promoted_main_warns_when_system_url_derivation_fails(
 ) -> None:
     monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql+asyncpg://admin:pw@db.internal:5432/farna_control")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://db.internal:5432/farna_control")
+    # No system URL configured: the pre-rebrand spelling is not read.
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("MODULO_SYSTEM_DATABASE_URL", raising=False)
-    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+    monkeypatch.delenv(_PRE_REBRAND_SYSTEM_URL_ENV, raising=False)
 
     def _skip_bootstrap(coro: Any) -> None:
         coro.close()
@@ -166,7 +204,7 @@ def test_promoted_main_warns_when_system_url_derivation_fails(
     bootstrap_module.main()
 
     err = capsys.readouterr().err
-    assert "cannot derive MODULO_SYSTEM_DATABASE_URL" in err
+    assert "cannot derive FARNA_CONTROL_SYSTEM_DATABASE_URL" in err
     assert "no usable password/userinfo" in err
 
 

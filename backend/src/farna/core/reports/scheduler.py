@@ -121,7 +121,7 @@ def _get_engine() -> AsyncEngine:
             if _ENGINE is None:
                 settings = get_settings()
                 # FAR-1440: guard on the URL's ACTUAL driver scheme, not the
-                # independent ``modulo_db`` knob, and translate the preserved
+                # independent ``db`` knob, and translate the preserved
                 # ``sslmode`` into asyncpg's ``ssl`` connect arg — the raw URL
                 # raises TypeError at first connect once Settings stops
                 # stripping sslmode.
@@ -678,7 +678,7 @@ _REPORT_MAX_RETRIES = 3
 _REPORT_BACKOFF_BASE = 2.0
 _REPORT_MAX_BACKOFF = 30.0
 
-_SIGNATURE_HEADER = "X-Modulo-Signature"
+_SIGNATURE_HEADER = "X-Farna-Control-Signature"
 
 
 def _webhook_url_error(url: object) -> str | None:
@@ -950,7 +950,7 @@ async def _deliver_to_urls(
     with exponential backoff. Non-transient 4xx errors are not retried.
 
     When ``signing_secret`` is provided, the body is serialized once, signed
-    with HMAC-SHA256, and sent byte-for-byte with an ``X-Modulo-Signature``
+    with HMAC-SHA256, and sent byte-for-byte with an ``X-Farna-Control-Signature``
     header so the recipient can verify authenticity. ``request_timeout``
     overrides the per-request timeout (default ``_REPORT_HTTP_TIMEOUT``).
 

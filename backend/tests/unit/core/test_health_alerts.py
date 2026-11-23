@@ -38,7 +38,7 @@ def _make_settings(**overrides: Any) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "test",
+        "admin_password": "test",
         "redis_url": "redis://localhost:6379/0",
         "smtp_host": "smtp.example.com",
         "alert_email_to": "ops@example.com, sre@example.com",
@@ -813,7 +813,7 @@ def test_stall_attribution_names_the_blocking_callback_when_enabled(caplog: pyte
     attribution — a second warning from the helper would be duplicate noise
     for the same event.
     """
-    settings = _make_settings(modulo_slow_callback_warn_ms=100)
+    settings = _make_settings(slow_callback_warn_ms=100)
     assert ha.install_event_loop_stall_attribution(settings) is True
     try:
         with caplog.at_level(logging.WARNING):
@@ -841,7 +841,7 @@ def test_stall_attribution_is_a_noop_when_the_knob_is_off(caplog: pytest.LogCapt
     """Knob OFF (the default): install starts nothing, the report helper
     returns None and logs NOTHING — the zero-cost contract."""
     ha.uninstall_event_loop_stall_attribution()
-    settings = _make_settings()  # modulo_slow_callback_warn_ms defaults to 0
+    settings = _make_settings()  # slow_callback_warn_ms defaults to 0
 
     with caplog.at_level(logging.WARNING, logger=ha.__name__):
         installed = ha.install_event_loop_stall_attribution(settings)
@@ -917,7 +917,7 @@ def _idle_loop_probe(
     stop-the-world, a VM pause), never by a Python callback — so attribution
     must answer ``None``.
     """
-    loop_box["installed"] = ha.install_event_loop_stall_attribution(_make_settings(modulo_slow_callback_warn_ms=100))
+    loop_box["installed"] = ha.install_event_loop_stall_attribution(_make_settings(slow_callback_warn_ms=100))
     loop = asyncio.new_event_loop()
     loop_box["loop"] = loop
     try:
@@ -1066,7 +1066,7 @@ async def test_install_arms_the_running_loop_slow_callback_threshold() -> None:
     await asyncio.sleep(0)
     loop = asyncio.get_running_loop()
     assert loop.get_debug() is False
-    settings = _make_settings(modulo_slow_callback_warn_ms=250)
+    settings = _make_settings(slow_callback_warn_ms=250)
     try:
         assert ha.install_event_loop_stall_attribution(settings) is True
         assert loop.get_debug() is True

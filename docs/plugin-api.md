@@ -107,7 +107,14 @@ def has_model_backend(self, provider: str) -> bool
 def connector_types(self) -> frozenset[str]
 @property
 def backend_providers(self) -> frozenset[str]
+@property
+def entry_point_errors(self) -> dict[str, str]
 ```
+
+`entry_point_errors` returns a copy of the cached load-failure details keyed by
+plugin ID. `health_check` consults the same map, so a plugin whose entry point
+failed to load at discovery reports that stored reason instead of falling back
+to the package-metadata check.
 
 #### Health checks
 
@@ -387,10 +394,21 @@ uv pip install -r requirements.txt
 
 **Docker deployments:**
 
+Build on the published all-in-one image
+(`ghcr.io/farnalabs/farna-control:<version>`, the image the compose stack
+pulls) and install the plugin into that image's own virtualenv. The image puts
+`/app/.venv` first on `PATH` and runs the app from it, so a plain `pip install`
+into the system interpreter installs a package the app never imports.
+
+The image ends with `USER www-data`, but `/app/.venv` is owned by root, so switch
+back to root for the install and restore the runtime user afterwards:
+
 ```dockerfile
 # In your Dockerfile
-FROM modulo:latest
-RUN pip install modulo-connector-slack==0.1.0
+FROM ghcr.io/farnalabs/farna-control:<version>
+USER root
+RUN uv pip install --python /app/.venv/bin/python modulo-connector-slack==0.1.0
+USER www-data
 ```
 
 ### Environment variables

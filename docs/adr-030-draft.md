@@ -1,11 +1,13 @@
 # ADR 030 -- User-scoped MCP keys: per-user key issuance; MCP calls operate under the key owner's identity
 
-> **CONDUCTOR NOTE:** This file is a TRANSPLANT DRAFT. ADRs are maintained
-> alongside this project's private development tooling (migrated out of modulo in
-> FAR-434, where they are numbered by sequence -- this lands as
-> `030-user-scoped-mcp-keys.md`, cross-referencing ADR 014/047/018). When
-> transplanting, also apply the one-line reciprocal edit to ADR 047 named in the
-> amendment below.
+> **Historical draft, superseded.** ADRs are maintained alongside this
+> project's private development tooling, numbered by sequence. This ADR was
+> transplanted out of this repository (FAR-434) and now lives as
+> `adr/030-user-scoped-mcp-keys.md` in that private tooling, alongside the
+> reciprocal amendment it names to the centralized-authorization ADR (ADR 047,
+> later folded into ADR 018). The transplanted copy is authoritative and is the
+> one to update; this file is retained only as the pre-transplant draft and is
+> not maintained.
 
 **Status:** Accepted (Phase 1 mechanism shipped; FAR-620)
 **Date:** 2026-09-06
@@ -210,7 +212,7 @@ keys re-read as 'org', silent widening on rollback is PINNED as accepted
 - **Parallel "user API keys" table**: rejected, a second credential model
   duplicates validation, RLS, mint/quota/audit plumbing; the scope axis
   composes with the existing role + team + run binding axes instead.
-- **Greedy org-key user-delegation header (`X-Modulo-Act-As`)**: rejected,
+- **Greedy org-key user-delegation header (`X-Farna-Control-Act-As`)**: rejected,
   gives exactly the configuration-forge capability the design principle
   forbids, guarded only by a convention.
 - **Per-key user binding on every key** (stamping account on every mint):

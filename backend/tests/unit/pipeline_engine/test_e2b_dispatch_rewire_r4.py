@@ -3,7 +3,7 @@
 One proof per row of the design doc's binding risk table
 (``docs/design/e2b-provider-conformance-rewire.md`` §5), all without a live
 E2B sandbox. R6 deleted the legacy direct path and the
-``MODULO_E2B_VIA_PROVIDER`` flag, so every dispatch proof below runs the
+``FARNA_CONTROL_E2B_VIA_PROVIDER`` flag, so every dispatch proof below runs the
 provider path unconditionally:
 
 1. **Full ``_sandbox_agent_impl`` run** with a fake provider: the ABC call
@@ -652,7 +652,7 @@ async def test_cost_estimate_stamps_through_the_sanctioned_helper(monkeypatch: p
     clock. The dispatch must call the sanctioned helper exactly once with the
     SAME output and stamp its result unchanged.
 
-    (FAR-1050 R6 retired ``MODULO_E2B_VIA_PROVIDER``; the legacy half of the
+    (FAR-1050 R6 retired ``FARNA_CONTROL_E2B_VIA_PROVIDER``; the legacy half of the
     former on/off comparison is the legacy direct path R6 deleted.)
     """
     real = nr._compute_sandbox_cost
@@ -751,7 +751,7 @@ def _resolved_input() -> Any:
 
 def _patch_workspace_inputs(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """Resolve managed inputs host-side without touching the network."""
-    monkeypatch.setattr(get_settings(), "modulo_workspace_inputs_enabled", True)
+    monkeypatch.setattr(get_settings(), "workspace_inputs_enabled", True)
     monkeypatch.setattr(
         wio,
         "resolve_managed_inputs_host_side",
@@ -814,7 +814,7 @@ def _repo_src(rel: str) -> str:
 
 def test_s2_s3_s4_kill_sites_never_read_the_flag() -> None:
     """Footprint review (design §5): none of the sanctioned sites may branch
-    on ``MODULO_E2B_VIA_PROVIDER`` — they stay direct by ADR 040 decision."""
+    on ``FARNA_CONTROL_E2B_VIA_PROVIDER`` — they stay direct by ADR 040 decision."""
     for rel in _S2_S3_S4_SOURCES:
         source = _repo_src(rel)
         assert "FARNA_CONTROL_E2B_VIA_PROVIDER" not in source, rel
@@ -1465,6 +1465,30 @@ async def test_route_hub_aclose_cancellation_propagates(monkeypatch: pytest.Monk
         await make_sandbox_agent_fn(_base_node_def(), session_factory=_route_session_factory())(_run_state())
 
 
+async def test_route_hub_aclose_cancellation_after_provider_close_keeps_the_first(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
+    """A hub aclose cancellation that follows an earlier provider-close
+    cancellation keeps the FIRST cancellation (the ``_gh_settle_cancelled is
+    None`` guard's false arm) and does not skip the marker clear."""
+    _install_log_tail(monkeypatch)
+    provider = _FileCapableDispatchProvider(ref="sbx-route-cancel-after", exit_code=0)
+    provider.files["/home/user/output.json"] = _COMPLETED_OUTPUT.encode()
+    close_cancellation = asyncio.CancelledError("provider close first")
+    provider.close = AsyncMock(side_effect=close_cancellation)  # type: ignore[method-assign]
+    hub = MagicMock()
+    hub.aclose = AsyncMock(side_effect=asyncio.CancelledError("hub aclose second"))
+    route = _Route(provider_type="kubernetes", profile=_RouteProfile(), provider=provider, hub=hub)
+    monkeypatch.setattr(
+        "farna.core.bundled_runner.runner_dispatch.resolve_sandbox_dispatch_route",
+        AsyncMock(return_value=route),
+    )
+
+    with pytest.raises(asyncio.CancelledError) as excinfo:
+        await make_sandbox_agent_fn(_base_node_def(), session_factory=_route_session_factory())(_run_state())
+
+    assert excinfo.value is close_cancellation
+    hub.aclose.assert_awaited_once()
+
+
 async def test_dispatch_drops_empty_attribution_values(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
     """An absent org id is dropped from the spec metadata (never stamped ``""``)."""
     _install_log_tail(monkeypatch)
@@ -1485,7 +1509,7 @@ async def test_dispatch_drops_empty_attribution_values(monkeypatch: pytest.Monke
 
 
 async def test_provider_bridge_escalation_surfaces_a_summary_only_failure_detail(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
-    """A stopped loop (dedicated exit code + ``MODULO_BRIDGE_ESCALATED`` marker)
+    """A stopped loop (dedicated exit code + ``FARNA_CONTROL_BRIDGE_ESCALATED`` marker)
     is surfaced as a summary-only failure detail, and the node still FAILS
     (fail-closed) — no behaviour change until S3 wires the suspension.
 

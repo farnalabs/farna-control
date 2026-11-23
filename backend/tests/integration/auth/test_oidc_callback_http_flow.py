@@ -363,14 +363,14 @@ def _build_settings(frontend_url: str) -> Any:
         database_url="postgresql+asyncpg://localhost/modulo_unused",
         secret_key=_SECRET_KEY,
         fernet_key=_FERNET_KEY,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
         # FAR-837 surface under test: split-origin deployment, with the FIRST
         # CORS origin deliberately the WRONG origin for the redirect.
-        modulo_public_url=_PUBLIC_BASE,
-        modulo_frontend_url=frontend_url,
+        public_url=_PUBLIC_BASE,
+        frontend_url=frontend_url,
         cors_origins=_CORS_WITH_WRONG_FIRST,
     )
 

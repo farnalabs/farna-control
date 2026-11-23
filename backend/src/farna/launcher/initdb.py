@@ -26,7 +26,7 @@ Rules enforced here, all locked by tests:
   no endpoint to bind); the postmaster builder pins --pgdata=/-h/-p and is
   consumed by the slice-2 serving step.
 
-Deterministic test seam: setting ``MODULO_TEST_PAUSE_AT`` to a registered
+Deterministic test seam: setting ``FARNA_CONTROL_TEST_PAUSE_AT`` to a registered
 gate name makes :func:`bootstrap_pgdata` print ``PAUSED:<gate>`` to stdout
 and block reading stdin. Tests SIGKILL or resume the process from that exact
 point — no timing-based kills. A value that is not a registered gate name
@@ -53,7 +53,7 @@ BOOTSTRAP_USERNAME = OWNER_ROLE
 INITDB_LOCALE = "C.UTF-8"
 PG_VERSION_FILE = "PG_VERSION"
 
-# Registered pause gates (consumed via the MODULO_TEST_PAUSE_AT env var).
+# Registered pause gates (consumed via the FARNA_CONTROL_TEST_PAUSE_AT env var).
 GATE_INITDB_PRE_RENAME = "initdb_pre_rename"
 
 _TMP_DIR_PREFIX = ".initdb-tmp-"
@@ -61,7 +61,7 @@ _PWFILE_PREFIX = ".initdb-pwfile-"
 
 _PAUSE_ENV_VAR = "FARNA_CONTROL_TEST_PAUSE_AT"
 
-# Registered pause gates: MODULO_TEST_PAUSE_AT is a test-only seam; any other
+# Registered pause gates: FARNA_CONTROL_TEST_PAUSE_AT is a test-only seam; any other
 # value is a stale leak from a developer shell and must fail the boot loudly.
 _REGISTERED_GATES = frozenset({GATE_INITDB_PRE_RENAME})
 
@@ -108,7 +108,7 @@ def _run_command(argv: list[str]) -> None:
 def _pause_at(gate: str) -> None:
     """Deterministic mid-bootstrap pause for tests (never active in production).
 
-    Active only when ``MODULO_TEST_PAUSE_AT`` equals *gate*. Prints a
+    Active only when ``FARNA_CONTROL_TEST_PAUSE_AT`` equals *gate*. Prints a
     ``PAUSED:<gate>`` marker line and then blocks on stdin — the parent test
     blocks on readline (no timing), then either writes a line to resume or
     SIGKILLs the process at exactly this point.
@@ -219,7 +219,7 @@ def _sweep_stale_tmp_dirs(parent: Path) -> None:
 
 
 def _validate_pause_env() -> None:
-    """Fail fast when ``MODULO_TEST_PAUSE_AT`` names an unregistered gate.
+    """Fail fast when ``FARNA_CONTROL_TEST_PAUSE_AT`` names an unregistered gate.
 
     The variable is a test-only seam; a stale value inherited from a
     developer shell would silently block a production bootstrap mid-run.

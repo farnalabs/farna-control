@@ -90,7 +90,7 @@ class TestResolvePlanContext:
     async def test_falls_back_to_community(self) -> None:
         session = AsyncMock()
         settings = MagicMock()
-        settings.modulo_license_key = ""
+        settings.license_key = ""
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=[]),
             patch("farna.db.crud.tier_catalog.list_feature_flags", return_value=[]),
@@ -102,7 +102,7 @@ class TestResolvePlanContext:
     async def test_env_var_license_key(self) -> None:
         session = AsyncMock()
         settings = MagicMock()
-        settings.modulo_license_key = "env-key"
+        settings.license_key = "env-key"
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=[]),
             patch("farna.db.crud.tier_catalog.list_feature_flags", return_value=[]),
@@ -127,7 +127,7 @@ class TestResolvePlanContext:
         # is installed on must be that same tenant for the org rung to win.
         org.id = "test-org"
         settings = MagicMock()
-        settings.modulo_license_key = ""
+        settings.license_key = ""
 
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=[]),
@@ -154,7 +154,7 @@ class TestResolvePlanContext:
         org.plan_id = None
         org.id = "org-a"
         settings = MagicMock()
-        settings.modulo_license_key = ""
+        settings.license_key = ""
 
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=[]),
@@ -180,7 +180,7 @@ class TestResolvePlanContext:
         org.settings_json = {}
         org.plan_id = "team"
         settings = MagicMock()
-        settings.modulo_license_key = ""
+        settings.license_key = ""
 
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=[]),
@@ -200,7 +200,7 @@ class TestResolvePlanContext:
         org.settings_json = {}
         org.plan_id = "team"
         settings = MagicMock()
-        settings.modulo_license_key = "env-key"
+        settings.license_key = "env-key"
 
         with (
             patch("farna.db.crud.tier_catalog.list_tiers", return_value=[]),

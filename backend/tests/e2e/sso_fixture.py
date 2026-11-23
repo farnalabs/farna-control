@@ -218,6 +218,6 @@ if __name__ == "__main__":
     os.environ.setdefault("E2E_IDP_BASE_URL", base_url)
     _install_fixture()
     settings = get_settings()
-    settings.modulo_frontend_url = args.frontend_url
-    settings.modulo_public_url = base_url
+    settings.frontend_url = args.frontend_url
+    settings.public_url = base_url
     uvicorn.run(app, host="127.0.0.1", port=args.port, lifespan="off", log_level="warning")

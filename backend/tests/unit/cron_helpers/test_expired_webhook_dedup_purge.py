@@ -233,7 +233,7 @@ class TestExpiredWebhookDedupPurgeCron:
         factory, _ = _make_factory_with_session()
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=factory) as mock_system,
             patch.object(sw, "_make_session_factory") as mock_plain,
             patch(
@@ -253,7 +253,7 @@ class TestExpiredWebhookDedupPurgeCron:
         factory, _ = _make_factory_with_session()
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=factory),
             patch(
                 "farna.core.cleanup_jobs.webhook_dedup_cleanup.purge_expired_dedup_hashes",
@@ -271,7 +271,7 @@ class TestExpiredWebhookDedupPurgeCron:
         factory, _ = _make_factory_with_session()
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=factory),
             patch(
                 "farna.core.cleanup_jobs.webhook_dedup_cleanup.purge_expired_dedup_hashes",
@@ -290,7 +290,7 @@ class TestExpiredWebhookDedupPurgeCron:
         factory, _ = _make_factory_with_session()
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db=non_pg_db)),
+            patch.object(sw, "get_settings", return_value=MagicMock(db=non_pg_db)),
             patch.object(sw, "_make_session_factory", return_value=factory) as mock_plain,
             patch.object(sw, "_make_system_session_factory") as mock_system,
             patch(
@@ -349,7 +349,7 @@ class TestExpiredWebhookDedupPurgeEndToEnd:
         )
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=autobegin_false_factory),
         ):
             result = await sw.expired_webhook_dedup_purge({})
@@ -367,7 +367,7 @@ class TestExpiredWebhookDedupPurgeEndToEnd:
         )
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=autobegin_false_factory),
         ):
             result = await sw.expired_webhook_dedup_purge({})
@@ -392,7 +392,7 @@ class TestExpiredWebhookDedupPurgeEndToEnd:
             before = await _scan_expired_webhook_dedups(session, _ORG_A)
 
         with (
-            patch.object(sw, "get_settings", return_value=MagicMock(modulo_db="postgres")),
+            patch.object(sw, "get_settings", return_value=MagicMock(db="postgres")),
             patch.object(sw, "_make_system_session_factory", return_value=autobegin_false_factory),
         ):
             await sw.expired_webhook_dedup_purge({})

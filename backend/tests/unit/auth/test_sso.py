@@ -131,9 +131,9 @@ def _override(**kwargs: str | bool) -> Settings:
         # The mock session returns no organisations; multi-org is the honest
         # representation of "no tenant to bind" now that the single-org
         # invariant fails closed on an unidentifiable tenant (FAR-2060).
-        "modulo_multi_org_enabled": True,
-        "modulo_license_key": _VALID_LICENSE_KEY,
-        "modulo_oidc_providers": json.dumps(
+        "multi_org_enabled": True,
+        "license_key": _VALID_LICENSE_KEY,
+        "oidc_providers": json.dumps(
             [
                 {
                     "provider_id": "google",
@@ -193,8 +193,8 @@ def _override_settings(**kwargs: str | bool) -> None:
     FeatureFlagRegistry._overrides.clear()
     _app.dependency_overrides[get_settings] = lambda: _override(**kwargs)
     settings = _override(**kwargs)
-    _app.dependency_overrides[get_plan_context] = lambda: DbPlanContext(FeatureFlagRegistry(current_tier="team" if settings.modulo_license_key else "community"))
-    _app.dependency_overrides[get_anonymous_plan_context] = lambda: DbPlanContext(FeatureFlagRegistry(current_tier="team" if settings.modulo_license_key else "community"))
+    _app.dependency_overrides[get_plan_context] = lambda: DbPlanContext(FeatureFlagRegistry(current_tier="team" if settings.license_key else "community"))
+    _app.dependency_overrides[get_anonymous_plan_context] = lambda: DbPlanContext(FeatureFlagRegistry(current_tier="team" if settings.license_key else "community"))
 
 
 def _mock_session(scalar: object = None) -> AsyncMock:
@@ -339,20 +339,20 @@ class TestOidcProviderParsing:
         assert providers[1]["provider_id"] == "github"
 
     def test_empty_when_no_providers(self) -> None:
-        settings = _override(modulo_oidc_providers="[]")
+        settings = _override(oidc_providers="[]")
         assert not parse_oidc_providers(settings)
 
     def test_empty_when_invalid_json(self) -> None:
-        settings = _override(modulo_oidc_providers="not-json")
+        settings = _override(oidc_providers="not-json")
         assert not parse_oidc_providers(settings)
 
     def test_skips_non_object_entry(self) -> None:
-        settings = _override(modulo_oidc_providers=json.dumps(["invalid-provider"]))
+        settings = _override(oidc_providers=json.dumps(["invalid-provider"]))
         assert not parse_oidc_providers(settings)
 
     def test_skips_missing_fields(self) -> None:
         settings = _override(
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {"provider_id": "ok", "client_id": "c", "client_secret": "s", "discovery_url": "u"},
                     {"provider_id": "bad"},
@@ -416,9 +416,9 @@ class TestSsoProvidersEndpoint:
 
     def test_saml_enabled_with_license(self, client: TestClient) -> None:
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_url="https://idp.example.com/metadata",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            saml_idp_metadata_url="https://idp.example.com/metadata",
         )
         with (
             patch("farna.core.license.get_license", return_value=self._TEAM_SSO_LICENSE),
@@ -442,7 +442,7 @@ class TestSsoProvidersEndpoint:
         set, so ``saml`` is still False here. Licence state no longer affects
         it (FAR-2059).
         """
-        _override_settings(modulo_license_key="", modulo_saml_enabled=True)
+        _override_settings(license_key="", saml_enabled=True)
         with (
             patch("farna.core.license.get_license", return_value=None),
             patch.dict("farna.core.feature_flags.FeatureFlagRegistry._overrides", {}, clear=True),
@@ -482,9 +482,9 @@ class TestSamlEnvLicenceIndependence:
 
     def _env_settings(self, license_key: str) -> Settings:
         return _override(
-            modulo_license_key=license_key,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
+            license_key=license_key,
+            saml_enabled=True,
+            saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
         )
 
     # ── is_saml_available ───────────────────────────────────────────────
@@ -547,7 +547,7 @@ class TestSamlEnvLicenceIndependence:
             idp_metadata, entity_id, _key, _cert, db = await _resolve_saml_config(None, session, settings)
         assert idp_metadata == self.SAMPLE_IDP_METADATA
         assert db is None
-        assert entity_id == settings.modulo_saml_entity_id
+        assert entity_id == settings.saml_entity_id
 
     async def test_env_saml_config_builds_without_licence(self) -> None:
         """An absent env key is equally not a reason to refuse to build config."""
@@ -570,7 +570,7 @@ class TestSamlEnvLicenceIndependence:
             idp_metadata, entity_id, _key, _cert, db = await _resolve_saml_config(None, session, settings)
         assert idp_metadata == self.SAMPLE_IDP_METADATA
         assert db is None
-        assert entity_id == settings.modulo_saml_entity_id
+        assert entity_id == settings.saml_entity_id
 
     async def test_env_saml_login_route_redirects_with_lapsed_licence(self) -> None:
         """End-to-end: a past-grace key still completes the pre-auth login leg.
@@ -624,9 +624,9 @@ class TestSamlMetadataParsing:
         from farna.auth.sso import saml_get_auth_url
 
         settings = _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
         )
 
         session = _mock_session()
@@ -1028,7 +1028,7 @@ class TestOidcGetAuthorizeUrl:
         from farna.auth.sso import oidc_get_authorize_url
 
         settings = _override(
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "google",
@@ -1055,7 +1055,7 @@ class TestOidcGetAuthorizeUrl:
         from farna.auth.sso import oidc_get_authorize_url
 
         settings = _override(
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "google",
@@ -1212,7 +1212,7 @@ class TestSamlGetAuthUrl:
     async def test_raises_when_saml_disabled(self) -> None:
         from farna.auth.sso import saml_get_auth_url
 
-        settings = _override(modulo_saml_enabled=False)
+        settings = _override(saml_enabled=False)
         session = _mock_session()
         with patch("farna.auth.sso.get_enabled_saml_provider", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = None
@@ -1228,7 +1228,7 @@ class TestSamlGetAuthUrl:
         """
         from farna.auth.sso import saml_get_auth_url
 
-        settings = _override(modulo_license_key="", modulo_saml_enabled=True)
+        settings = _override(license_key="", saml_enabled=True)
         session = _mock_session()
         with patch("farna.auth.sso.get_enabled_saml_provider", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = None
@@ -1239,8 +1239,8 @@ class TestSamlGetAuthUrl:
         from farna.auth.sso import saml_get_auth_url
 
         settings = _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         session = _mock_session()
         with (
@@ -1290,7 +1290,7 @@ class TestSamlProcessResponse:
     async def test_raises_when_saml_disabled(self) -> None:
         from farna.auth.sso import saml_process_response
 
-        settings = _override(modulo_saml_enabled=False)
+        settings = _override(saml_enabled=False)
         session = _mock_session()
         with pytest.raises(ValueError, match="SAML is not enabled"):
             await saml_process_response("response", settings, session, session)
@@ -1303,7 +1303,7 @@ class TestSamlProcessResponse:
         """
         from farna.auth.sso import saml_process_response
 
-        settings = _override(modulo_license_key="", modulo_saml_enabled=True)
+        settings = _override(license_key="", saml_enabled=True)
         session = _mock_session()
         with pytest.raises(ValueError, match="metadata not configured"):
             await saml_process_response("response", settings, session, session)
@@ -1312,9 +1312,9 @@ class TestSamlProcessResponse:
         from farna.auth.sso import saml_process_response
 
         settings = _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
         )
         session = _mock_session()
 
@@ -1329,9 +1329,9 @@ class TestSamlProcessResponse:
         from farna.auth.sso import saml_process_response
 
         settings = _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
         )
         session = _mock_session()
 
@@ -1413,10 +1413,10 @@ class TestSamlProcessResponse:
         from farna.auth.sso import saml_process_response
 
         settings = _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
-            modulo_public_url="https://app.example.com",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
+            public_url="https://app.example.com",
         )
         session = _mock_session()
 
@@ -1433,7 +1433,7 @@ class TestSamlProcessResponse:
 
     async def test_saml_process_response_accepts_real_public_acs_destination(self) -> None:
         """FAR-1011: a real-IdP-shaped response whose Destination equals the
-        ACS URL derived from ``modulo_public_url`` must now authenticate.
+        ACS URL derived from ``public_url`` must now authenticate.
 
         Reproduced as REJECTED before the fix (strict-mode current_url was
         hardcoded ``http://localhost``, so python3-saml's Destination check
@@ -1446,15 +1446,15 @@ class TestSamlProcessResponse:
         from farna.auth.sso import saml_process_response
 
         settings = _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
-            modulo_public_url="https://app.example.com",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            saml_idp_metadata_xml=self.SAMPLE_IDP_METADATA,
+            public_url="https://app.example.com",
         )
         session = _mock_session()
 
         acs = "https://app.example.com/api/v1/auth/saml/acs"
-        entity_id = "farna-control"  # settings.modulo_saml_entity_id default
+        entity_id = "farna-control"  # settings.saml_entity_id default
         xml = _build_xsd_compliant_saml_response(
             destination=acs,
             recipient=acs,
@@ -1484,7 +1484,7 @@ class TestSamlFetchIdpMetadata:
     async def test_uses_inline_xml(self) -> None:
         from farna.auth.sso import _saml_fetch_idp_metadata
 
-        settings = _override(modulo_saml_idp_metadata_xml="<md>inline</md>")
+        settings = _override(saml_idp_metadata_xml="<md>inline</md>")
         result = await _saml_fetch_idp_metadata(settings)
         assert result == "<md>inline</md>"
 
@@ -1492,7 +1492,7 @@ class TestSamlFetchIdpMetadata:
         from farna.auth.sso import _saml_fetch_idp_metadata
 
         settings = _override(
-            modulo_saml_idp_metadata_url="https://idp.example.com/metadata",
+            saml_idp_metadata_url="https://idp.example.com/metadata",
         )
         with patch("farna.auth.sso.pinned_async_client") as mock_client_cls:
             mock_client = MagicMock()
@@ -1519,8 +1519,8 @@ class TestSamlFetchIdpMetadata:
         from farna.auth.sso import _saml_fetch_idp_metadata
 
         settings = _override(
-            modulo_saml_idp_metadata_url="",
-            modulo_saml_idp_metadata_xml="",
+            saml_idp_metadata_url="",
+            saml_idp_metadata_xml="",
         )
         with pytest.raises(ValueError, match="metadata not configured"):
             await _saml_fetch_idp_metadata(settings)
@@ -1581,8 +1581,8 @@ class TestSamlParseIdpMetadata:
 class TestSamlRoutesExtended:
     def test_saml_login_with_license_and_metadata(self, client: TestClient) -> None:
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as m:
             m.return_value = ("https://idp.example.com/sso?SAMLRequest=abc", "_req123")
@@ -1592,8 +1592,8 @@ class TestSamlRoutesExtended:
 
     def test_saml_acs_with_license_and_valid_response(self, client: TestClient) -> None:
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
 
         with (
@@ -1616,8 +1616,8 @@ class TestSamlRoutesExtended:
     def test_saml_acs_malformed_response(self, client: TestClient) -> None:
         """FAR-1791: a browser-facing ACS failure redirects (303) to /login."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
 
         with patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as m:
@@ -1635,11 +1635,11 @@ class TestSamlRoutesExtended:
 
     def test_saml_metadata_served_for_db_provider_when_env_flag_off(self, client: TestClient) -> None:
         """FAR-464 CHANGES_REQUESTED #2: a DB-configured SAML provider is self-sufficient,
-        so /saml/metadata must serve even when modulo_saml_enabled is False — matching
+        so /saml/metadata must serve even when saml_enabled is False — matching
         saml_login/saml_acs which resolve the DB provider without the env flag."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=False,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=False,
         )
 
         db_provider = SimpleNamespace(entity_id="urn:db-saml")
@@ -1655,8 +1655,8 @@ class TestSamlRoutesExtended:
         so the SP-metadata document stays well-formed (issue #282..#281: XML
         injection through the org-configurable entity_id)."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=False,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=False,
         )
 
         db_provider = SimpleNamespace(entity_id='urn:x<y>&z>" onload="')
@@ -1682,8 +1682,8 @@ class TestSamlRoutesExtended:
     def test_saml_metadata_rejected_when_no_db_provider_and_env_flag_off(self, client: TestClient) -> None:
         """Preserves the pure-env-var contract: no DB provider AND flag off -> 400."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=False,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=False,
         )
 
         with patch("farna.api.routes.sso._get_enabled_saml_global", new_callable=AsyncMock) as m:
@@ -1698,9 +1698,9 @@ class TestSamlRoutesExtended:
         attribute, no injected elements, and the output must stay well-formed.
         """
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_public_url="https://app.example.com",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            public_url="https://app.example.com",
         )
 
         injected = 'evil"><md:EntitiesDescriptor>&"\''
@@ -1729,9 +1729,9 @@ class TestSamlRoutesExtended:
         """FAR-915 defence-in-depth: the Location attribute interpolates the
         public URL too and must be escaped alongside entity_id."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_public_url='https://app.example.com" onload="x',
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            public_url='https://app.example.com" onload="x',
         )
 
         with patch("farna.api.routes.sso._get_enabled_saml_global", new_callable=AsyncMock) as m:
@@ -1944,7 +1944,7 @@ class TestSamlGetAuthUrlDb:
     async def test_uses_db_saml_provider(self) -> None:
         from farna.auth.sso import saml_get_auth_url
 
-        settings = _override(modulo_saml_enabled=False, modulo_license_key="")
+        settings = _override(saml_enabled=False, license_key="")
         provider = SimpleNamespace(
             metadata_xml=self.SAMPLE_IDP_METADATA,
             metadata_url=None,
@@ -2867,8 +2867,8 @@ class TestPerProviderSamlRoutes:
         """POST /saml/{slug}/acs resolves provider by slug and processes response."""
         provider = _make_saml_provider(provider_id="okta-saml")
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
@@ -2899,8 +2899,8 @@ class TestPerProviderSamlRoutes:
         the uniform 404 (same code for every non-resolving slug — ADR 036).
         """
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = None
@@ -2916,8 +2916,8 @@ class TestPerProviderSamlRoutes:
         """A disabled provider maps to the SAME code — no enumeration signal."""
         provider = _make_saml_provider(provider_id="okta-saml", enabled=False)
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = provider
@@ -2934,8 +2934,8 @@ class TestPerProviderSamlRoutes:
         provider = _make_saml_provider(provider_id="google-oidc")
         provider.provider_type = "oidc"
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = provider
@@ -2954,9 +2954,9 @@ class TestPerProviderSamlRoutes:
             entity_id="https://idp.okta.com/sp/abc123",
         )
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_public_url="https://app.example.com",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            public_url="https://app.example.com",
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = provider
@@ -2970,9 +2970,9 @@ class TestPerProviderSamlRoutes:
         """GET /saml/{slug}/metadata uses default Entity ID when provider has none."""
         provider = _make_saml_provider(provider_id="okta-saml", entity_id=None)
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_public_url="https://app.example.com",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            public_url="https://app.example.com",
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = provider
@@ -2986,8 +2986,8 @@ class TestPerProviderSamlRoutes:
     def test_per_provider_metadata_unknown_slug_returns_404(self, client: TestClient) -> None:
         """GET /saml/{slug}/metadata returns uniform 404 for unknown slug."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = None
@@ -2999,8 +2999,8 @@ class TestPerProviderSamlRoutes:
         """GET /saml/{slug}/login resolves provider and redirects to IdP."""
         provider = _make_saml_provider(provider_id="okta-saml")
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
@@ -3025,8 +3025,8 @@ class TestPerProviderSamlRoutes:
         ADR-036 anti-enumeration shape; the redirect is exactly as opaque.
         """
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = None
@@ -3039,8 +3039,8 @@ class TestPerProviderSamlRoutes:
     def test_no_preauth_route_401s_without_credentials(self, client: TestClient) -> None:
         """Pre-auth SAML per-provider routes must never 401 for missing Authorization."""
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
         )
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = None
@@ -3070,9 +3070,9 @@ class TestPerProviderSamlRoutes:
             entity_id="https://idp-b.example.com/sp",
         )
         _override_settings(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_public_url="https://app.example.com",
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            public_url="https://app.example.com",
         )
 
         def _lookup_by_slug(slug: str) -> MagicMock | None:
@@ -3176,9 +3176,9 @@ class TestPerProviderAudienceEndToEnd:
 
     def _settings(self) -> Settings:
         return _override(
-            modulo_license_key=_VALID_LICENSE_KEY,
-            modulo_saml_enabled=True,
-            modulo_public_url=self.PUBLIC_URL,
+            license_key=_VALID_LICENSE_KEY,
+            saml_enabled=True,
+            public_url=self.PUBLIC_URL,
         )
 
     def _acs(self, slug: str) -> str:
@@ -3284,7 +3284,7 @@ class TestResolveSamlConfigPerProvider:
         from farna.auth.sso import _resolve_saml_config
 
         provider = _make_saml_db_provider()
-        settings = _override(modulo_public_url="https://app.example.com")
+        settings = _override(public_url="https://app.example.com")
         system_session = _mock_session(scalar=provider)
         app_session = _mock_session()
 
@@ -3301,7 +3301,7 @@ class TestResolveSamlConfigPerProvider:
         from farna.auth.sso import _resolve_saml_config
 
         provider = _make_saml_db_provider()
-        settings = _override(modulo_public_url="https://app.example.com")
+        settings = _override(public_url="https://app.example.com")
         app_session = _mock_session(scalar=provider)
 
         with (
@@ -3319,7 +3319,7 @@ class TestResolveSamlConfigPerProvider:
         from farna.auth.sso import _resolve_saml_config
 
         provider = _make_saml_db_provider(entity_id=None)
-        settings = _override(modulo_public_url="https://app.example.com")
+        settings = _override(public_url="https://app.example.com")
         system_session = _mock_session(scalar=provider)
 
         with patch("farna.auth.sso._set_default_rls_org", new_callable=AsyncMock):
@@ -3363,7 +3363,7 @@ class TestPerProviderSamlRouteErrorPaths:
     # of rendering a raw JSON HTTPException page.
 
     def test_acs_missing_response_redirects_auth_failed(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = self._provider()
             resp = client.post("/api/v1/auth/saml/acs/okta-saml", data={"SAMLResponse": ""}, follow_redirects=False)
@@ -3381,7 +3381,7 @@ class TestPerProviderSamlRouteErrorPaths:
         cannot be parsed carries no ``SAMLResponse`` — the same case as the
         missing-response test above, so it maps to the same ``auth_failed`` 303.
         """
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.return_value = self._provider()
             resp = client.post(
@@ -3400,7 +3400,7 @@ class TestPerProviderSamlRouteErrorPaths:
         arm (a ValueError subclass) living BEFORE ``except ValueError``.
         """
         org_id = uuid.uuid4()
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         slug_session = _mock_session(scalar="acme")
 
         async def override_db() -> AsyncGenerator[AsyncMock, None]:
@@ -3426,7 +3426,7 @@ class TestPerProviderSamlRouteErrorPaths:
 
     def test_acs_denied_without_org_uses_base_login(self, client: TestClient) -> None:
         """A denial with no resolvable org falls back to the base /login target."""
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process,
@@ -3439,7 +3439,7 @@ class TestPerProviderSamlRouteErrorPaths:
         assert resp.headers["location"].endswith("/login?sso_error=not_invited")
 
     def test_acs_value_error_redirects_auth_failed(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process,
@@ -3453,7 +3453,7 @@ class TestPerProviderSamlRouteErrorPaths:
     def test_acs_programming_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import ProgrammingError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process,
@@ -3467,7 +3467,7 @@ class TestPerProviderSamlRouteErrorPaths:
     def test_acs_sqlalchemy_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import SQLAlchemyError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process,
@@ -3481,7 +3481,7 @@ class TestPerProviderSamlRouteErrorPaths:
     def test_acs_http_exception_passthrough(self, client: TestClient) -> None:
         from fastapi import HTTPException
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process,
@@ -3492,7 +3492,7 @@ class TestPerProviderSamlRouteErrorPaths:
         assert resp.status_code == 418
 
     def test_acs_unexpected_error_redirects_provider_unavailable(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process,
@@ -3513,7 +3513,7 @@ class TestPerProviderSamlRouteErrorPaths:
         """
         from sqlalchemy.exc import ProgrammingError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso._read_system_saml_provider_by_slug", new_callable=AsyncMock) as mock_read:
             mock_read.side_effect = ProgrammingError("select 1", {}, Exception("missing table"))
             resp = self._post_acs(client)
@@ -3524,7 +3524,7 @@ class TestPerProviderSamlRouteErrorPaths:
         """FAR-1791: a generic DB error during provider RESOLUTION 303s, not 503 JSON."""
         from sqlalchemy.exc import SQLAlchemyError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso._read_system_saml_provider_by_slug", new_callable=AsyncMock) as mock_read:
             mock_read.side_effect = SQLAlchemyError("db down")
             resp = self._post_acs(client)
@@ -3539,7 +3539,7 @@ class TestPerProviderSamlRouteErrorPaths:
         error to ``provider_unavailable``); before the fix a non-HTTP, non-DB
         fault escaped as the ``handle_db_errors`` JSON 500.
         """
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso._read_system_saml_provider_by_slug", new_callable=AsyncMock) as mock_read:
             mock_read.side_effect = RuntimeError("boom")
             resp = self._post_acs(client)
@@ -3548,7 +3548,7 @@ class TestPerProviderSamlRouteErrorPaths:
 
     def test_login_value_error_redirects_auth_failed(self, client: TestClient) -> None:
         """FAR-1794: a config/provisioning failure redirects, never echoes text."""
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth,
@@ -3567,7 +3567,7 @@ class TestPerProviderSamlRouteErrorPaths:
     def test_login_programming_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import ProgrammingError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth,
@@ -3581,7 +3581,7 @@ class TestPerProviderSamlRouteErrorPaths:
     def test_login_sqlalchemy_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import SQLAlchemyError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth,
@@ -3595,7 +3595,7 @@ class TestPerProviderSamlRouteErrorPaths:
     def test_login_http_exception_passthrough(self, client: TestClient) -> None:
         from fastapi import HTTPException
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth,
@@ -3606,7 +3606,7 @@ class TestPerProviderSamlRouteErrorPaths:
         assert resp.status_code == 418
 
     def test_login_unexpected_error_redirects_provider_unavailable(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
             patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth,
@@ -3618,7 +3618,7 @@ class TestPerProviderSamlRouteErrorPaths:
         assert resp.headers["location"].endswith("/login?sso_error=provider_unavailable")
 
     def test_metadata_unexpected_error_returns_500(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup:
             mock_lookup.side_effect = RuntimeError("boom")
             resp = client.get("/api/v1/auth/saml/okta-saml/metadata", follow_redirects=False)
@@ -3638,7 +3638,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
     """FAR-1794: OIDC + both SAML initiation routes redirect on failure."""
 
     def test_oidc_login_config_failure_redirects_auth_failed(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY)
+        _override_settings(license_key=_VALID_LICENSE_KEY)
         with patch("farna.api.routes.sso.oidc_get_authorize_url", new_callable=AsyncMock) as mock_authorize:
             mock_authorize.side_effect = ValueError("OIDC provider 'ghost' not configured")
             resp = client.get("/api/v1/auth/oidc/ghost/login", follow_redirects=False)
@@ -3652,7 +3652,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
 
     def test_oidc_login_unknown_and_misconfigured_are_indistinguishable(self, client: TestClient) -> None:
         """ADR-036: unknown slug and an existing-but-broken provider are alike."""
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY)
+        _override_settings(license_key=_VALID_LICENSE_KEY)
         locations: list[str] = []
         for message in (
             "OIDC provider 'ghost' not configured",
@@ -3668,7 +3668,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
     def test_oidc_login_programming_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import ProgrammingError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY)
+        _override_settings(license_key=_VALID_LICENSE_KEY)
         with patch("farna.api.routes.sso.oidc_get_authorize_url", new_callable=AsyncMock) as mock_authorize:
             mock_authorize.side_effect = ProgrammingError("select 1", {}, Exception("missing table"))
             resp = client.get("/api/v1/auth/oidc/google/login", follow_redirects=False)
@@ -3678,7 +3678,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
     def test_oidc_login_sqlalchemy_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import SQLAlchemyError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY)
+        _override_settings(license_key=_VALID_LICENSE_KEY)
         with patch("farna.api.routes.sso.oidc_get_authorize_url", new_callable=AsyncMock) as mock_authorize:
             mock_authorize.side_effect = SQLAlchemyError("db down")
             resp = client.get("/api/v1/auth/oidc/google/login", follow_redirects=False)
@@ -3686,7 +3686,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
         assert resp.headers["location"].endswith("/login?sso_error=provider_unavailable")
 
     def test_oidc_login_unexpected_error_redirects_provider_unavailable(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY)
+        _override_settings(license_key=_VALID_LICENSE_KEY)
         with patch("farna.api.routes.sso.oidc_get_authorize_url", new_callable=AsyncMock) as mock_authorize:
             mock_authorize.side_effect = RuntimeError("boom")
             resp = client.get("/api/v1/auth/oidc/google/login", follow_redirects=False)
@@ -3694,7 +3694,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
         assert resp.headers["location"].endswith("/login?sso_error=provider_unavailable")
 
     def test_legacy_saml_login_value_error_redirects_auth_failed(self, client: TestClient) -> None:
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth:
             mock_auth.side_effect = ValueError("SAML is not configured")
             resp = client.get("/api/v1/auth/saml/login", follow_redirects=False)
@@ -3706,7 +3706,7 @@ class TestLoginInitiationRoutesRedirectNotJson:
     def test_legacy_saml_login_db_error_redirects_provider_unavailable(self, client: TestClient) -> None:
         from sqlalchemy.exc import SQLAlchemyError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         with patch("farna.api.routes.sso.saml_get_auth_url", new_callable=AsyncMock) as mock_auth:
             mock_auth.side_effect = SQLAlchemyError("db down")
             resp = client.get("/api/v1/auth/saml/login", follow_redirects=False)
@@ -3796,8 +3796,8 @@ class TestSamlRelayStateRouteIntegration:
     def test_login_emits_relay_state_signed_for_provider(self, client: TestClient) -> None:
         """GET /saml/{slug}/login passes a signed relay_state to saml_get_auth_url."""
         provider = _make_saml_provider(provider_id="okta-saml")
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
-        settings = _override(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
+        settings = _override(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
 
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
@@ -3820,8 +3820,8 @@ class TestSamlRelayStateRouteIntegration:
     def test_acs_accepts_valid_signed_relay_state(self, client: TestClient) -> None:
         """POST /saml/{slug}/acs accepts a valid signed RelayState for the right provider."""
         provider = _make_saml_provider(provider_id="okta-saml")
-        settings = _override(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        settings = _override(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
 
         relay_state = sign_saml_relay_state("okta-saml", settings.secret_key)
 
@@ -3849,7 +3849,7 @@ class TestSamlRelayStateRouteIntegration:
     def test_acs_rejects_tampered_relay_state(self, client: TestClient) -> None:
         """POST /saml/{slug}/acs rejects a tampered RelayState (FAR-1791: 303)."""
         provider = _make_saml_provider(provider_id="okta-saml")
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
 
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
@@ -3871,8 +3871,8 @@ class TestSamlRelayStateRouteIntegration:
     def test_acs_rejects_relay_state_signed_for_different_provider(self, client: TestClient) -> None:
         """POST /saml/{slug}/acs rejects a RelayState signed for a DIFFERENT provider."""
         provider = _make_saml_provider(provider_id="okta-saml")
-        settings = _override(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        settings = _override(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
 
         # Sign for a different provider
         relay_state = sign_saml_relay_state("different-provider", settings.secret_key)
@@ -3900,7 +3900,7 @@ class TestSamlRelayStateRouteIntegration:
         This is the critical regression guard: absence-tolerance is deliberate.
         """
         provider = _make_saml_provider(provider_id="okta-saml")
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
 
         with (
             patch("farna.api.routes.sso.get_provider_by_provider_id", new_callable=AsyncMock) as mock_lookup,
@@ -3924,7 +3924,7 @@ class TestSamlRelayStateRouteIntegration:
 
     def test_legacy_singleton_path_unchanged_no_relay_state(self, client: TestClient) -> None:
         """Legacy /saml/acs does NOT verify RelayState — preserves backward compatibility."""
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
 
         with (
             patch("farna.api.routes.sso._get_enabled_saml_global", new_callable=AsyncMock),
@@ -3960,7 +3960,7 @@ class TestSamlRelayStateRouteIntegration:
         """FAR-1516: when the SYSTEM session is free, the legacy ACS route reads
         the enabled provider once and rebinds the audit org to its organisation."""
         provider = _make_saml_provider(provider_id="okta-saml")
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         system_session = self._free_system_session()
 
         async def override_system() -> AsyncGenerator[AsyncMock, None]:
@@ -3991,7 +3991,7 @@ class TestSamlRelayStateRouteIntegration:
 
     def test_legacy_acs_keeps_sentinel_org_when_no_provider_resolves(self, client: TestClient) -> None:
         """FAR-1516: an env-only (or absent) provider leaves the sentinel org in place."""
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         system_session = self._free_system_session()
 
         async def override_system() -> AsyncGenerator[AsyncMock, None]:
@@ -4029,7 +4029,7 @@ class TestSamlRelayStateRouteIntegration:
         """
         from sqlalchemy.exc import ProgrammingError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         system_session = self._free_system_session()
 
         async def override_system() -> AsyncGenerator[AsyncMock, None]:
@@ -4054,7 +4054,7 @@ class TestSamlRelayStateRouteIntegration:
         """FAR-1791: a generic DB error resolving the legacy provider 303s, not 503 JSON."""
         from sqlalchemy.exc import SQLAlchemyError
 
-        _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+        _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
         system_session = self._free_system_session()
 
         async def override_system() -> AsyncGenerator[AsyncMock, None]:
@@ -4118,7 +4118,7 @@ def _override_db_session(session: AsyncMock) -> None:
 def test_legacy_acs_denied_redirects_to_org_login(client: TestClient) -> None:
     """A legacy-ACS join denial 303s to the denied org's login page."""
     org_id = uuid.uuid4()
-    _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+    _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
     _override_db_session(_mock_session(scalar="acme"))
     try:
         with patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process:
@@ -4137,7 +4137,7 @@ def test_legacy_acs_denied_redirects_to_org_login(client: TestClient) -> None:
 
 def test_legacy_acs_denied_without_org_uses_base_login(client: TestClient) -> None:
     """A legacy-ACS denial with no resolvable org falls back to base /login."""
-    _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+    _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
     with patch("farna.api.routes.sso.saml_process_response", new_callable=AsyncMock) as mock_process:
         mock_process.side_effect = SsoProvisioningDeniedError("denied")
         resp = client.post(
@@ -4156,7 +4156,7 @@ def test_legacy_acs_malformed_form_body_redirects_auth_failed(client: TestClient
     Same parse-fault class as the per-provider route: the body cannot carry a
     ``SAMLResponse``, so the browser gets the login-page code, not a JSON 500.
     """
-    _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+    _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
     resp = client.post(
         "/api/v1/auth/saml/acs",
         content=b"not a multipart body",
@@ -4183,7 +4183,7 @@ def _audit_append_kwargs(mock: AsyncMock) -> dict[str, Any]:
 
 def test_saml_acs_failed_post_audits_outcome_error(client: TestClient) -> None:
     """A failed ACS POST is audited outcome=error (pre-Fix-1 it was 'success')."""
-    _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+    _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
     append = AsyncMock()
     with patch("farna.core.audit_coverage.append_audit_event", new=append):
         resp = client.post("/api/v1/auth/saml/acs", data={}, follow_redirects=False)
@@ -4200,7 +4200,7 @@ def test_saml_acs_failed_post_audits_outcome_error(client: TestClient) -> None:
 
 def test_saml_acs_successful_post_audits_outcome_success(client: TestClient) -> None:
     """The success path still audits outcome=success (the Fix-1 counterpart)."""
-    _override_settings(modulo_license_key=_VALID_LICENSE_KEY, modulo_saml_enabled=True)
+    _override_settings(license_key=_VALID_LICENSE_KEY, saml_enabled=True)
     append = AsyncMock()
     with (
         patch("farna.core.audit_coverage.append_audit_event", new=append),

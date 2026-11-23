@@ -236,7 +236,7 @@ def caller_without_grant(client: Any) -> None:
 
 @given("developer mode is disabled for the instance")
 def developer_mode_disabled(client: Any) -> None:
-    app.dependency_overrides[get_settings] = lambda: make_settings().model_copy(update={"modulo_dev_mode": False})
+    app.dependency_overrides[get_settings] = lambda: make_settings().model_copy(update={"dev_mode": False})
 
 
 @given("the system maps feature is disabled on the plan")

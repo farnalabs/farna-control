@@ -53,9 +53,9 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_FERNET_KEY,
-        modulo_admin_password="testpass",
-        modulo_license_key="test-license-key",
-        modulo_oidc_providers=json.dumps(
+        admin_password="testpass",
+        license_key="test-license-key",
+        oidc_providers=json.dumps(
             [
                 {
                     "provider_id": "google",
@@ -665,7 +665,7 @@ class TestEnvVarSeeding:
         from farna.api.main import _seed_sso_providers
 
         settings = _make_settings()
-        settings.modulo_oidc_providers = "[]"
+        settings.oidc_providers = "[]"
 
         with (
             patch("farna.api.dependencies.get_or_create_engine") as mock_engine,

@@ -71,9 +71,9 @@ def _settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="",
-        modulo_multi_org_enabled=True,
+        admin_password="testpass",
+        license_key="",
+        multi_org_enabled=True,
         # Empty URL makes the licence-status cache reads/writes fail fast and
         # be swallowed, so each test exercises the DB/resolution path.
         redis_url="",
@@ -172,7 +172,7 @@ async def test_authentication_entry_point_is_never_gated_by_licence_state(days_f
     at that point, so denying it is exactly how a lapse becomes a lockout.
     """
     clear_license()
-    settings = _settings().model_copy(update={"modulo_license_key": _licence(days_from_now=days_from_now)})
+    settings = _settings().model_copy(update={"license_key": _licence(days_from_now=days_from_now)})
     ctx = await resolve_anonymous_plan_context(settings, _make_mock_session())
 
     gate = require_feature_anonymous("sso", allow_degraded_authentication=True)
@@ -182,7 +182,7 @@ async def test_authentication_entry_point_is_never_gated_by_licence_state(days_f
 async def test_past_grace_plan_has_no_team_capability() -> None:
     """The other half: a lapsed key grants no Team capability post-auth."""
     clear_license()
-    settings = _settings().model_copy(update={"modulo_license_key": _licence(days_from_now=-(LICENCE_GRACE_DAYS + 1))})
+    settings = _settings().model_copy(update={"license_key": _licence(days_from_now=-(LICENCE_GRACE_DAYS + 1))})
     ctx = await resolve_anonymous_plan_context(settings, _make_mock_session())
 
     assert ctx.has_license_key() is False

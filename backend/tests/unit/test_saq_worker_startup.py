@@ -40,7 +40,7 @@ def _settings(**overrides: object) -> MagicMock:
         "saq_worker_concurrency": 5,
         "redis_url": "redis://localhost:6379/0",
         "database_url": "postgresql+asyncpg://localhost/test",
-        "modulo_db": "postgres",
+        "db": "postgres",
         "saq_worker_db_pool_size": 2,
         "saq_auth_password": "pw",
         "saq_auth_username": "admin",
@@ -48,8 +48,8 @@ def _settings(**overrides: object) -> MagicMock:
         # FAR-2093: the startup hook applies the licence anchor, so the
         # settings the tests drive it with must carry the licence fields.
         "debug": False,
-        "modulo_license_key": "",
-        "modulo_license_public_key": "",
+        "license_key": "",
+        "license_public_key": "",
     }
     base.update(overrides)
     return MagicMock(**base)
@@ -144,7 +144,7 @@ class TestStartupHookAppliesLicenseAnchor:
 
     async def test_applies_the_configured_public_key(self) -> None:
         kp = generate_keypair()
-        settings = _settings(modulo_license_public_key=kp["public_key"])
+        settings = _settings(license_public_key=kp["public_key"])
 
         await self._run_hook(settings)
 
@@ -157,8 +157,8 @@ class TestStartupHookAppliesLicenseAnchor:
         kp = generate_keypair()
         licence_key = encode_license_key(_team_payload(), kp["private_key"])
         settings = _settings(
-            modulo_license_public_key=kp["public_key"],
-            modulo_license_key=licence_key,
+            license_public_key=kp["public_key"],
+            license_key=licence_key,
         )
 
         # Before the hook the worker process only carries the built-in
@@ -176,14 +176,14 @@ class TestStartupHookAppliesLicenseAnchor:
         # The hook returns early when Redis is absent; the anchor is process
         # state and must be applied regardless of the event-bus steps.
         kp = generate_keypair()
-        settings = _settings(redis_url="", modulo_license_public_key=kp["public_key"])
+        settings = _settings(redis_url="", license_public_key=kp["public_key"])
 
         await self._run_hook(settings)
 
         assert using_builtin_dev_anchor() is False
 
     async def test_licence_without_anchor_fails_closed(self) -> None:
-        settings = _settings(modulo_license_key="a.b")
+        settings = _settings(license_key="a.b")
 
         with (
             patch.object(sw, "get_settings", return_value=settings),
@@ -192,7 +192,7 @@ class TestStartupHookAppliesLicenseAnchor:
             await sw._startup_event_bus_hook({})
 
     async def test_debug_worker_with_licence_and_no_anchor_boots(self) -> None:
-        settings = _settings(debug=True, modulo_license_key="a.b")
+        settings = _settings(debug=True, license_key="a.b")
 
         await self._run_hook(settings)
 

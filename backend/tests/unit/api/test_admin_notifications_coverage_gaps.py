@@ -54,7 +54,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key=_FERNET_KEY,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -491,7 +491,7 @@ def test_test_webhook_signs_payload_with_secret(api: tuple[TestClient, AsyncMock
     assert resp.status_code == 200
     sent_headers = http_client.post.call_args.kwargs["headers"]
     expected_sig = hmac.new(b"raw-secret", http_client.post.call_args.kwargs["content"], hashlib.sha256).hexdigest()
-    assert sent_headers["X-Modulo-Signature"] == f"sha256={expected_sig}"
+    assert sent_headers["X-Farna-Control-Signature"] == f"sha256={expected_sig}"
 
 
 def test_test_webhook_sign_failure_still_posts(api: tuple[TestClient, AsyncMock], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -504,7 +504,7 @@ def test_test_webhook_sign_failure_still_posts(api: tuple[TestClient, AsyncMock]
     resp = client.post(f"/api/v1/admin/notifications/{_WEBHOOK_ID}/test")
     assert resp.status_code == 200
     sent_headers = http_client.post.call_args.kwargs["headers"]
-    assert "X-Modulo-Signature" not in sent_headers
+    assert "X-Farna-Control-Signature" not in sent_headers
 
 
 def test_test_webhook_not_found_404(api: tuple[TestClient, AsyncMock]) -> None:
@@ -768,7 +768,7 @@ def test_retry_delivery_signs_replayed_payload(api: tuple[TestClient, AsyncMock]
     sent_content = http_client.post.call_args.kwargs["content"]
     sent_headers = http_client.post.call_args.kwargs["headers"]
     expected_sig = hmac.new(b"raw-secret", sent_content, hashlib.sha256).hexdigest()
-    assert sent_headers["X-Modulo-Signature"] == f"sha256={expected_sig}"
+    assert sent_headers["X-Farna-Control-Signature"] == f"sha256={expected_sig}"
     assert sent_content == original_body
 
 

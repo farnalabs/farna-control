@@ -77,7 +77,7 @@ def test_scrub_removes_every_listed_variable() -> None:
 def test_scrub_covers_the_adr_list_exactly() -> None:
     # ADR 031 Decision 2 names, verbatim (the LD_ prefix family makes the
     # individually listed LD_* names redundant, but they stay as
-    # self-documentation; MODULO_TEST_PAUSE_AT is the initdb test seam).
+    # self-documentation; FARNA_CONTROL_TEST_PAUSE_AT is the initdb test seam).
     expected_exact = {
         "REDISCLI_AUTH",
         "PYTHONPATH",

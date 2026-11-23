@@ -295,7 +295,7 @@ async def test_finalize_cost_budget_exceeded_overrides_terminal_write() -> None:
         # Carry the real unified refs cap: bare MagicMock coerces to 1 and the
         # terminal finalise path caches it in the process-wide work_item_refs_cap
         # lru_cache, dropping every later co-located test's refs.
-        patch("farna.settings.get_settings", return_value=MagicMock(modulo_work_item_refs_cap=100)),
+        patch("farna.settings.get_settings", return_value=MagicMock(work_item_refs_cap=100)),
         patch("farna.core.cost_controller.finalize.update_run_status", new=AsyncMock()) as mock_urs,
     ):
 

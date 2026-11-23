@@ -563,7 +563,7 @@ def _ctx_role_val() -> str | None:
 
 def _mcp_internal_lifecycle_map_access() -> bool:
     """Return whether the MCP caller has the retained internal lifecycle-map grant."""
-    if not getattr(get_settings(), "modulo_dev_mode", True):
+    if not getattr(get_settings(), "dev_mode", True):
         return False
     role = _ctx_role_val()
     return ORG_ROLE_HIERARCHY.get(role or "", -1) >= ORG_ROLE_HIERARCHY["operator"] and grants_permit(_ctx_key_grants.get(None), "library.search.in_dev")
@@ -2126,7 +2126,7 @@ class McpAuthMiddleware(BaseHTTPMiddleware):
         # agent forwarded it) into the request-scoped ContextVar consumed by
         # check_tool_scope. Absent/empty header = UNRESTRICTED, preserving the
         # pre-scope behaviour for all non-node tool calls.
-        raw_allowed = request.headers.get("X-Modulo-Allowed-Tools")
+        raw_allowed = request.headers.get("X-Farna-Control-Allowed-Tools")
         if raw_allowed:
             set_request_allowed_tools([t.strip() for t in raw_allowed.split(",") if t.strip()])
         else:
@@ -3018,7 +3018,7 @@ def _oauth_authorize_settings_error(settings: Any) -> JSONResponse | None:
     """Return an error response when the public URL is unconfigured."""
     if not public_url_is_configured(settings):
         return JSONResponse(
-            {"error": "server_error", "detail": "MODULO_PUBLIC_URL must be configured"},
+            {"error": "server_error", "detail": "FARNA_CONTROL_PUBLIC_URL must be configured"},
             status_code=500,
         )
     return None
@@ -3343,7 +3343,7 @@ async def _oauth_token_impl(request: Request) -> JSONResponse:
     settings = get_settings()
     if not public_url_is_configured(settings):
         return JSONResponse(
-            {"error": "server_error", "detail": "MODULO_PUBLIC_URL must be configured"},
+            {"error": "server_error", "detail": "FARNA_CONTROL_PUBLIC_URL must be configured"},
             status_code=500,
         )
 

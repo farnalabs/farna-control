@@ -223,7 +223,7 @@ class TestResolvePlanContext:
 
     async def test_org_license_key_takes_priority(self, mock_from_db) -> None:
         org = SimpleNamespace(settings_json={"license_key": "org-key"}, plan_id="team")
-        settings = SimpleNamespace(modulo_license_key="env-key")
+        settings = SimpleNamespace(license_key="env-key")
         with (
             patch("farna.core.license.parse_and_verify", return_value=self._valid(features=["sso"])),
             patch("farna.core.license.get_license", return_value=_license(features=["inmem"])),
@@ -240,7 +240,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.parse_and_verify", return_value=self._invalid()),
             patch("farna.core.license.get_license", return_value=_license(features=["inmem"])),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key=""), MagicMock(), org)
+            await resolve_plan_context(SimpleNamespace(license_key=""), MagicMock(), org)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "team"
         assert mock_from_db.await_args.kwargs["license_features"] == {"inmem"}
@@ -252,7 +252,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.parse_and_verify", side_effect=ValueError("bad key")),
             patch("farna.core.license.get_license", return_value=None),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key=""), MagicMock(), org)
+            await resolve_plan_context(SimpleNamespace(license_key=""), MagicMock(), org)
         assert any("Failed to parse org-level license key" in r.getMessage() for r in caplog.records)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "community"
@@ -264,12 +264,12 @@ class TestResolvePlanContext:
             patch("farna.core.license.get_license", return_value=None),
             pytest.raises(asyncio.CancelledError),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key=""), MagicMock(), org)
+            await resolve_plan_context(SimpleNamespace(license_key=""), MagicMock(), org)
         mock_from_db.assert_not_awaited()
 
     async def test_in_memory_license_wins_over_env(self, mock_from_db) -> None:
         with patch("farna.core.license.get_license", return_value=_license(features=["inmem"])):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key="env-key"), MagicMock(), None)
+            await resolve_plan_context(SimpleNamespace(license_key="env-key"), MagicMock(), None)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "team"
         assert mock_from_db.await_args.kwargs["license_features"] == {"inmem"}
@@ -279,7 +279,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.get_license", return_value=None),
             patch("farna.core.license.parse_and_verify", return_value=self._valid(features=["env"])),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key="env-key"), MagicMock(), None)
+            await resolve_plan_context(SimpleNamespace(license_key="env-key"), MagicMock(), None)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "team"
         assert mock_from_db.await_args.kwargs["license_features"] == {"env"}
@@ -290,7 +290,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.get_license", return_value=None),
             patch("farna.core.license.parse_and_verify", side_effect=RuntimeError("boom")),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key="env-key"), MagicMock(), None)
+            await resolve_plan_context(SimpleNamespace(license_key="env-key"), MagicMock(), None)
         assert any("Failed to parse env-var license key" in r.getMessage() for r in caplog.records)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "community"
@@ -301,7 +301,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.parse_and_verify", side_effect=asyncio.CancelledError()),
             pytest.raises(asyncio.CancelledError),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key="env-key"), MagicMock(), None)
+            await resolve_plan_context(SimpleNamespace(license_key="env-key"), MagicMock(), None)
         mock_from_db.assert_not_awaited()
 
     async def test_org_community_plan_uses_community_db_context(self, mock_from_db) -> None:
@@ -310,7 +310,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.get_license", return_value=None),
             patch("farna.core.license.parse_and_verify", return_value=self._invalid()),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key=""), MagicMock(), org)
+            await resolve_plan_context(SimpleNamespace(license_key=""), MagicMock(), org)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "community"
         assert mock_from_db.await_args.kwargs.get("has_license_key", False) is False
@@ -322,7 +322,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.get_license", return_value=None),
             patch("farna.core.license.parse_and_verify", return_value=self._invalid()),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key=""), MagicMock(), org)
+            await resolve_plan_context(SimpleNamespace(license_key=""), MagicMock(), org)
         assert any("plan.team_without_license_falling_back_to_community" in r.getMessage() for r in caplog.records)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "community"
@@ -332,7 +332,7 @@ class TestResolvePlanContext:
             patch("farna.core.license.get_license", return_value=None),
             patch("farna.core.license.parse_and_verify", return_value=self._invalid()),
         ):
-            await resolve_plan_context(SimpleNamespace(modulo_license_key=""), MagicMock(), None)
+            await resolve_plan_context(SimpleNamespace(license_key=""), MagicMock(), None)
         mock_from_db.assert_awaited_once()
         assert mock_from_db.await_args.args[1] == "community"
 

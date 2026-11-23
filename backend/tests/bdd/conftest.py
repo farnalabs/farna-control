@@ -147,13 +147,13 @@ def make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="test-license-key",
-        modulo_csrf_enabled=False,
+        admin_password="testpass",
+        license_key="test-license-key",
+        csrf_enabled=False,
         # ADR 005: org management + org-slug flows under test require the
         # multi-org capability; the single-org default is covered by
         # tests/unit/api/test_single_org_invariant.py.
-        modulo_multi_org_enabled=True,
+        multi_org_enabled=True,
     )
 
 

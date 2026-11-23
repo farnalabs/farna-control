@@ -32,9 +32,9 @@ def _settings_kwargs() -> dict[str, object]:
         "secret_key": _VALID_32,
         "fernet_key": _FERNET_KEY,
         "fernet_key_old": "",
-        "modulo_admin_password": "testpass",
+        "admin_password": "testpass",
         "redis_url": "redis://localhost:6379/0",
-        "modulo_public_url": "http://localhost:8000",
+        "public_url": "http://localhost:8000",
         "watchdog_enabled": False,
     }
 
