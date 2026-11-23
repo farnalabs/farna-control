@@ -38,6 +38,10 @@ from farna.db.models.run import Run
 
 _MUST_STAY_LOADED = ("input_payload",)
 
+# FAR-2689: ``list_runs`` requires the org (the caller cannot fall back to an
+# RLS-only read), so the statement-capture tests name one explicitly.
+ORG_ID = uuid.UUID("00000000-0000-0000-0000-0000000000c1")
+
 # Both pagination modes must defer: the offset/limit page path and the keyset
 # cursor path (the cursor branch rebuilds the statement through
 # CursorPaginator, so the deferral options must survive it too).
@@ -85,7 +89,7 @@ def _items_statement(captured: list[Any]) -> Any:
 async def test_list_runs_select_omits_heavy_payload_column(pagination_kwargs: dict[str, Any], column: str) -> None:
     session, captured = _make_capturing_session()
 
-    page = await db_list_runs(session, page=1, page_size=20, **pagination_kwargs)
+    page = await db_list_runs(session, organisation_id=ORG_ID, page=1, page_size=20, **pagination_kwargs)
 
     assert page.total == 0
     assert captured, "list_runs must execute its queries through the session"
@@ -97,7 +101,7 @@ async def test_list_runs_select_omits_heavy_payload_column(pagination_kwargs: di
 async def test_list_runs_select_keeps_contract_columns(pagination_kwargs: dict[str, Any]) -> None:
     session, captured = _make_capturing_session()
 
-    await db_list_runs(session, page=1, page_size=20, **pagination_kwargs)
+    await db_list_runs(session, organisation_id=ORG_ID, page=1, page_size=20, **pagination_kwargs)
 
     items_sql = _compile(_items_statement(captured)).lower()
     for column in _MUST_STAY_LOADED:

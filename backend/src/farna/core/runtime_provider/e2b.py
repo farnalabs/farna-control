@@ -27,6 +27,7 @@ from farna.core.runtime_provider import (
     WorkspaceSpec,
 )
 from farna.core.runtime_provider.log_tail import combine_log_entries
+from farna.core.workspace_labels import CREATED_AT, MACHINE_ID, RUN_ID, preferred, stamp
 
 if TYPE_CHECKING:
     from e2b.sandbox.commands.command_handle import CommandExitException
@@ -80,17 +81,24 @@ _EGRESS_RESTRICTIVE_POLICIES: frozenset[str] = frozenset({"deny_all", "selected"
 
 # FAR-1275: identity-scoped enumeration. Reserved workspace-metadata keys
 # stamped onto EVERY sandbox this provider creates — the E2B counterpart of
-# Docker's ``_DEPLOYMENT_IDENTITY_LABEL`` / ``modulo.created_at`` container
-# labels and Kubernetes' ``modulo.machine.id`` annotation. The identity key
-# scopes :meth:`E2BRuntimeProvider.list_workspaces_by_identity` (two
-# deployments sharing one E2B account never enumerate each other's
-# sandboxes); the creation marker drives the orphan sweep's grace window and
-# 24h max-lifetime backstop; the run-id key is what the sweep
-# cross-references against ACTIVE runs.
+# Docker's deployment-identity / creation-marker container labels and
+# Kubernetes' machine-id annotation. The identity key scopes
+# :meth:`E2BRuntimeProvider.list_workspaces_by_identity` (two deployments
+# sharing one E2B account never enumerate each other's sandboxes); the
+# creation marker drives the orphan sweep's grace window and 24h
+# max-lifetime backstop; the run-id key is what the sweep cross-references
+# against ACTIVE runs.
 _DEPLOYMENT_IDENTITY_ENV = "FARNA_CONTROL_RUNNER_MACHINE_ID"
-_DEPLOYMENT_IDENTITY_METADATA_KEY = "modulo.machine.id"
-_CREATED_AT_METADATA_KEY = "modulo.created_at"
-_RUN_ID_METADATA_KEY = "modulo.run.id"
+_DEPLOYMENT_IDENTITY_METADATA_KEY = MACHINE_ID
+_CREATED_AT_METADATA_KEY = CREATED_AT
+_RUN_ID_METADATA_KEY = RUN_ID
+# FAR-2693: the pre-rename keys. Stamped alongside the current ones and read
+# as a fallback, so sandboxes created before the dual-write release stay
+# enumerable and reclaimable; remove once no live sandbox can predate it (see
+# farna.core.workspace_labels for the removal condition).
+_LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY = "modulo.machine.id"
+_LEGACY_SANDBOX_CREATED_AT_METADATA_KEY = "modulo.created_at"
+_LEGACY_RUN_ID_METADATA_KEY = "modulo.run.id"
 # Every E2B SDK call sits under an asyncio.wait_for (house rule): one bound
 # per page fetch, plus a page cap so a pagination loop the control plane
 # never terminates cannot run the sweep forever.
@@ -197,11 +205,18 @@ def _workspace_list_entry(info: Any, wanted: str, now: float) -> WorkspaceListEn
     crash — the sweep then never treats it as a destroy candidate.
     """
     metadata = dict(getattr(info, "metadata", None) or {})
-    if metadata.get(_DEPLOYMENT_IDENTITY_METADATA_KEY) != wanted:
+    # FAR-2693 dual-read: the current identity key wins; a sandbox stamped
+    # before the rename carries only the legacy key and must still match.
+    identity = preferred(
+        metadata,
+        _DEPLOYMENT_IDENTITY_METADATA_KEY,
+        _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY,
+    )
+    if identity != wanted:
         _log.warning(
             "list_workspaces_by_identity: skipping sandbox %s — deployment identity %r != %r",
             getattr(info, "sandbox_id", "<unknown>"),
-            metadata.get(_DEPLOYMENT_IDENTITY_METADATA_KEY),
+            identity,
             wanted,
         )
         return None
@@ -210,12 +225,12 @@ def _workspace_list_entry(info: Any, wanted: str, now: float) -> WorkspaceListEn
         _log.warning("list_workspaces_by_identity: skipping a sandbox with no sandbox_id")
         return None
     try:
-        created = float(metadata.get(_CREATED_AT_METADATA_KEY, "0") or 0)
+        created = float(preferred(metadata, _CREATED_AT_METADATA_KEY, _LEGACY_SANDBOX_CREATED_AT_METADATA_KEY, "0") or 0)
     except (TypeError, ValueError):
         created = 0.0
     return WorkspaceListEntry(
         provider_ref=ref,
-        run_id=str(metadata.get(_RUN_ID_METADATA_KEY, "") or ""),
+        run_id=preferred(metadata, _RUN_ID_METADATA_KEY, _LEGACY_RUN_ID_METADATA_KEY),
         created_age_s=max(0.0, now - created) if created else 0.0,
     )
 
@@ -282,12 +297,13 @@ class E2BRuntimeProvider(RuntimeProvider):
         The spec's provider-neutral ``workspace_metadata`` maps to the E2B
         sandbox ``metadata`` (the SDK's tag-like carrier). On top of it the
         provider stamps its two RESERVED identity keys —
-        ``modulo.machine.id`` (deployment identity) and ``modulo.created_at``
-        — AFTER the operator metadata and always authoritative (the
-        FAR-1493 ordering mirror of Docker's ``_build_workspace_labels`` /
-        Kubernetes' ``_build_metadata``), because the identity-scoped
-        enumeration (:meth:`list_workspaces_by_identity`, FAR-1275) and the
-        orphan sweep's grace/max-lifetime ages key on exactly those two; an
+        ``farna-control.machine.id`` (deployment identity) and
+        ``farna-control.created_at`` — AFTER the operator metadata and always
+        authoritative (the FAR-1493 ordering mirror of Docker's
+        ``_build_workspace_labels`` / Kubernetes' ``_build_metadata``),
+        because the identity-scoped enumeration
+        (:meth:`list_workspaces_by_identity`, FAR-1275) and the orphan
+        sweep's grace/max-lifetime ages key on exactly those two; an
         operator-supplied value must never hide a sandbox from this
         deployment's sweep or backdate it out of the grace window. The
         selected-mode egress allowlist rides in that carrier under the
@@ -387,15 +403,21 @@ class E2BRuntimeProvider(RuntimeProvider):
         # Reserved identity keys — assigned AFTER the operator metadata and
         # always authoritative (FAR-1493 ordering, mirrored from Docker's
         # ``_build_workspace_labels`` / Kubernetes' ``_build_metadata``): an
-        # operator-supplied ``modulo.machine.id`` would hide this sandbox
+        # operator-supplied machine-id value would hide this sandbox
         # from the identity-scoped enumeration (FAR-1275), and a backdated
-        # or future ``modulo.created_at`` would defeat the sweep's 5-minute
+        # or future creation marker would defeat the sweep's 5-minute
         # grace window and 24-hour max-lifetime backstop. Non-reserved keys
         # flow through unchanged. Stamped on EVERY create — not only when
         # the spec carries metadata — so the enumeration filter always has
-        # something to match.
-        workspace_metadata[_DEPLOYMENT_IDENTITY_METADATA_KEY] = self._deployment_identity()
-        workspace_metadata[_CREATED_AT_METADATA_KEY] = str(int(time.time()))
+        # something to match. FAR-2693 dual-write: the legacy key carries
+        # the same value.
+        stamp(
+            workspace_metadata,
+            _DEPLOYMENT_IDENTITY_METADATA_KEY,
+            _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY,
+            self._deployment_identity(),
+        )
+        stamp(workspace_metadata, _CREATED_AT_METADATA_KEY, _LEGACY_SANDBOX_CREATED_AT_METADATA_KEY, str(int(time.time())))
         create_kwargs["metadata"] = workspace_metadata
 
         try:
@@ -708,50 +730,29 @@ class E2BRuntimeProvider(RuntimeProvider):
     # Identity-scoped enumeration primitive (FAR-1275)
     # ------------------------------------------------------------------
 
-    async def list_workspaces_by_identity(self, identity: str) -> list[WorkspaceListEntry]:
-        """List this deployment's running sandboxes (FAR-1275 ABC primitive).
+    async def _collect_identity_key(
+        self,
+        identity_key: str,
+        wanted: str,
+        now: float,
+        entries: list[WorkspaceListEntry],
+        seen: set[str],
+        pages: int,
+    ) -> int:
+        """Enumerate one identity-key query into *entries*; return pages used.
 
-        Uses the SDK's sandbox listing (``AsyncSandbox.list``) narrowed by a
-        server-side metadata query on ``modulo.machine.id``, then RE-CHECKS
-        the identity client-side on every entry: the server-side query
-        narrows the listing, but only the exact client-side match can
-        guarantee a foreign deployment's sandbox is never handed to the
-        sweep's destroy path (two Modulo deployments can share one E2B
-        account).
-
-        Per the ABC contract: an empty/whitespace identity returns no
-        entries without touching the API (fail closed — an unfiltered
-        listing could only ever surface unattributed, foreign or
-        pre-stamp sandboxes); listing failures PROPAGATE (the caller
-        surfaces them as a reported sweep failure, never a silent empty
-        list); each page fetch is bounded by ``_LIST_PAGE_TIMEOUT`` and the
-        pagination loop by ``_LIST_MAX_PAGES`` (both logged, never
-        swallowed).
-
-        ``run_id`` and the creation age are read from the same reserved
-        metadata keys :meth:`create_workspace` stamps, so an entry created
-        before FAR-1275 (no identity key) never matches — it stays
-        unreclaimable exactly as before, never wrongly reclaimable.
+        Shares the caller's page budget so the documented pagination bound
+        holds across BOTH identity-key queries, and de-duplicates by
+        ``provider_ref`` so a sandbox returned by both the current and legacy
+        queries is listed once.
         """
         from e2b import AsyncSandbox, SandboxQuery
 
-        wanted = identity.strip()
-        if not wanted:
-            # Fail closed: every sandbox this provider stamps carries a
-            # non-empty identity, so an empty filter can only match
-            # sandboxes we did NOT stamp (foreign or pre-stamp) — enumerate
-            # nothing rather than those.
-            _log.warning("list_workspaces_by_identity: empty deployment identity — returning no workspaces")
-            return []
-
         paginator = AsyncSandbox.list(
-            query=SandboxQuery(metadata={_DEPLOYMENT_IDENTITY_METADATA_KEY: wanted}),
+            query=SandboxQuery(metadata={identity_key: wanted}),
             api_key=self._api_key,
             request_timeout=_LIST_PAGE_TIMEOUT,
         )
-        now = time.time()
-        entries: list[WorkspaceListEntry] = []
-        pages = 0
         while paginator.has_next:
             pages += 1
             if pages > _LIST_MAX_PAGES:
@@ -763,8 +764,59 @@ class E2BRuntimeProvider(RuntimeProvider):
             page = await asyncio.wait_for(paginator.next_items(), timeout=_LIST_PAGE_TIMEOUT)
             for info in page:
                 entry = _workspace_list_entry(info, wanted, now)
-                if entry is not None:
+                if entry is not None and entry.provider_ref not in seen:
+                    seen.add(entry.provider_ref)
                     entries.append(entry)
+        return pages
+
+    async def list_workspaces_by_identity(self, identity: str) -> list[WorkspaceListEntry]:
+        """List this deployment's running sandboxes (FAR-1275 ABC primitive).
+
+        Uses the SDK's sandbox listing (``AsyncSandbox.list``) narrowed by a
+        server-side metadata query on the deployment-identity key, then
+        RE-CHECKS the identity client-side on every entry: the server-side
+        query narrows the listing, but only the exact client-side match can
+        guarantee a foreign deployment's sandbox is never handed to the
+        sweep's destroy path (two deployments can share one E2B
+        account). FAR-2693: the metadata query is issued for BOTH the current
+        and the legacy identity key and the results are merged, so a sandbox
+        stamped before the rename is still enumerated and reclaimed; a
+        current-key-only query would strand every pre-rename sandbox.
+
+        Per the ABC contract: an empty/whitespace identity returns no
+        entries without touching the API (fail closed — an unfiltered
+        listing could only ever surface unattributed, foreign or
+        pre-stamp sandboxes); listing failures PROPAGATE (the caller
+        surfaces them as a reported sweep failure, never a silent empty
+        list); each page fetch is bounded by ``_LIST_PAGE_TIMEOUT`` and the
+        pagination loop by ``_LIST_MAX_PAGES`` (both logged, never
+        swallowed).
+
+        ``run_id`` and the creation age are read from the same reserved
+        metadata keys :meth:`create_workspace` stamps (current key first,
+        legacy fallback), so an entry created before FAR-1275 (no identity
+        key) never matches — it stays unreclaimable exactly as before, never
+        wrongly reclaimable.
+        """
+        wanted = identity.strip()
+        if not wanted:
+            # Fail closed: every sandbox this provider stamps carries a
+            # non-empty identity, so an empty filter can only match
+            # sandboxes we did NOT stamp (foreign or pre-stamp) — enumerate
+            # nothing rather than those.
+            _log.warning("list_workspaces_by_identity: empty deployment identity — returning no workspaces")
+            return []
+
+        now = time.time()
+        entries: list[WorkspaceListEntry] = []
+        seen: set[str] = set()
+        # ONE page budget across both identity-key queries, so the documented
+        # pagination bound holds for the whole enumeration.
+        pages = 0
+        for identity_key in (_DEPLOYMENT_IDENTITY_METADATA_KEY, _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY):
+            pages = await self._collect_identity_key(identity_key, wanted, now, entries, seen, pages)
+            if pages > _LIST_MAX_PAGES:
+                break
         return entries
 
     @staticmethod

@@ -48,10 +48,24 @@ async def list_team_members(
     session: AsyncSession,
     team_id: uuid.UUID,
     *,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
 ) -> PageResult[TeamMembership]:
-    count_q = select(func.count()).select_from(TeamMembership).where(TeamMembership.team_id == team_id)
+    """Members of one team, oldest first.
+
+    FAR-2689: the team id alone is not an org boundary. The ORG (not the team)
+    is the tenant boundary here — ``team_memberships.organisation_id`` is NOT
+    NULL, is part of what identifies a membership, and every writer stamps the
+    caller's org alongside a team loaded under that same org's RLS context. The
+    team filter is unchanged; the org predicate is an ADDITIONAL ``AND`` on top
+    of it, so it cannot narrow the result to something stricter than one team
+    (a team belongs to exactly one org) — it only closes the
+    ``BYPASSRLS``/misconfigured-RLS hole. ``org_id`` is REQUIRED so a future
+    caller cannot fall back to the parent-id-only shape.
+    """
+    conditions = [TeamMembership.team_id == team_id, TeamMembership.organisation_id == org_id]
+    count_q = select(func.count()).select_from(TeamMembership).where(*conditions)
     try:
         total_result = await session.execute(count_q)
         total = total_result.scalar() or 0
@@ -60,7 +74,7 @@ async def list_team_members(
 
     offset = (page - 1) * page_size
     try:
-        query = select(TeamMembership).where(TeamMembership.team_id == team_id).order_by(TeamMembership.created_at).offset(offset).limit(page_size)
+        query = select(TeamMembership).where(*conditions).order_by(TeamMembership.created_at).offset(offset).limit(page_size)
         result = await session.execute(query)
         items = list(result.scalars().all())
     except ProgrammingError:

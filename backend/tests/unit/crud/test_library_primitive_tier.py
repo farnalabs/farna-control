@@ -67,20 +67,16 @@ async def test_excluded_tiers_preview() -> None:
         assert "tier NOT IN ('preview')" in sql
 
 
-async def test_org_id_none_omits_org_condition() -> None:
-    """org_id=None must drop the org scoping condition but keep the tier filter."""
+async def test_org_id_is_required() -> None:
+    """FAR-2692: the org argument is required — omitting it must fail loudly.
+
+    The argument was optional, which let a caller silently fall back to an
+    RLS-only read. Requiredness is now part of the contract.
+    """
     session = mock_session()
-    session.execute = mock_execute(model=LibraryPrimitive, count=1)
 
-    result = await list_library_primitives(session, org_id=None)
-
-    assert result.total == 1
-    # Structural negative: the org column must vanish entirely from both
-    # where clauses; the remaining guards are value-bearing positives.
-    for stmt in executed_statements(session):
-        assert "organisation_id" not in where_column_names(stmt)
-        assert "deleted_at IS NULL" in compile_sql(stmt)
-        assert "tier NOT IN ('in_dev')" in compile_sql(stmt)
+    with pytest.raises(TypeError):
+        await list_library_primitives(session)  # type: ignore[call-arg]
 
 
 async def test_excluded_tiers_with_search_and_type() -> None:

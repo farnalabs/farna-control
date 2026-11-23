@@ -136,8 +136,11 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
 - [x] Alerting + notification rules: a critical error fires an alert, a cooldown
       prevents alert storms, a condition window counts only recent events (with a
       lifetime-count fallback at window 0), and notification rules are
-      configurable up to 10 per org on the Team tier (3 on Community, where
-      webhook rules are also refused 402) (`error_notifications.feature`,
+      configurable up to 10 per org on every plan — there is no
+      licence-differentiated cap. `error_tracking` is a Community behaviour flag
+      (FAR-2665), so it governs availability only: switching it off returns 402
+      and never lowers the cap, and webhook rules are available on every plan
+      (FAR-2698) (`error_notifications.feature`,
       `api/routes/error_notification_rules.py`,
       `core/error_tracking/alerting.py`). Notification-rule configuration is
       admin-class on every operation, including the list read: the rule set and

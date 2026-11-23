@@ -33,7 +33,7 @@
            which requires `!summary`. -->
       <ErrorAlert v-if="error" class="mb-4" :message="error" :on-retry="retryDashboard" />
       <DashboardSystemOverview
-        v-if="systemMapsStore.accessLoaded && systemMapsStore.systemMapsEnabled"
+        v-if="systemOverviewVisible"
         :window-days="selectedWindow ?? 7"
         class="mb-4"
       />
@@ -297,6 +297,21 @@ const planStore = usePlanStore()
 const systemMapsStore = useSystemMapsStore()
 const dashboardStore = useDashboardStore()
 
+/**
+ * FAR-2638: System Maps ships at Beta, so its dashboard entry point obeys the
+ * SAME release gate the sidebar and the router read from the manifest
+ * (`systemMapsStore.systemMapsReleased` → `private_preview` needs developer
+ * mode, never a demo session). `systemMapsEnabled` alone is not enough: it
+ * derives from the viewer-floor `system_maps.read` permission, so on its own
+ * it kept the card on an alpha dashboard while the route bounced back here.
+ */
+const systemOverviewVisible = computed(
+  () =>
+    systemMapsStore.accessLoaded &&
+    systemMapsStore.systemMapsEnabled &&
+    systemMapsStore.systemMapsReleased,
+)
+
 const loading = computed(() => dashboardStore.loading)
 const error = computed(() => dashboardStore.error)
 const summary = computed(() => dashboardStore.summary)
@@ -343,6 +358,14 @@ const costsDestination = computed(() => {
   if (!refusal) return '/admin/costs'
   const params = new URLSearchParams({ from: costsNavItem.to, reason: refusal })
   if (costsNavItem.requiredEntitlement) params.set('entitlement', costsNavItem.requiredEntitlement)
+  // FAR-2688: carry the roles that would grant access so the locked page can
+  // name them instead of falling back to the generic "ask for the role that
+  // includes it". The naming copy is FAR-2687 (open PR at the time of writing);
+  // carrying the parameter here is additive — until it lands the locked page
+  // simply ignores it, and a below-tier/tier lock is unchanged.
+  if (refusal === 'role' && costsNavItem.requiredRoles?.length) {
+    params.set('role', costsNavItem.requiredRoles.join(','))
+  }
   return `/locked?${params.toString()}`
 })
 

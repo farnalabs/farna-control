@@ -93,7 +93,7 @@ async def test_replace_agent_bindings_round_trip(rls_session, test_org, test_use
     )
     assert len(created) == 1
     assert created[0].target_env_var == "OPENCODE_API_KEY"
-    assert (await list_bindings_for_agent(rls_session, agent.id))[0].id == created[0].id
+    assert (await list_bindings_for_agent(rls_session, agent.id, org_id=test_org))[0].id == created[0].id
 
     # Replace wholesale with a different var: the old row is gone.
     replaced = await replace_agent_bindings(
@@ -102,7 +102,7 @@ async def test_replace_agent_bindings_round_trip(rls_session, test_org, test_use
         agent_id=agent.id,
         bindings_specs=[_binding_spec(mb.id, test_user, target="STRIPE_KEY")],
     )
-    assert [b.target_env_var for b in await list_bindings_for_agent(rls_session, agent.id)] == ["STRIPE_KEY"]
+    assert [b.target_env_var for b in await list_bindings_for_agent(rls_session, agent.id, org_id=test_org)] == ["STRIPE_KEY"]
     # The replace deleted the superseded binding row (same-agent lookup misses).
     gone_rows = await rls_session.execute(select(AgentRunnerBinding).where(AgentRunnerBinding.id == created[0].id))
     assert gone_rows.scalar_one_or_none() is None
@@ -193,7 +193,7 @@ async def test_rls_org_isolation(db_engine: AsyncEngine, app_engine: AsyncEngine
     async with factory() as session, session.begin():
         await set_rls_org(session, test_org)
         await set_rls_execution_context(session)
-        rows = await list_bindings_for_agent(session, foreign_agent)
+        rows = await list_bindings_for_agent(session, foreign_agent, org_id=test_org)
         assert not rows
 
 
@@ -566,7 +566,7 @@ async def test_concurrent_replace_serialises_no_union(db_engine: AsyncEngine, ap
             agent_id=agent_id,
             bindings_specs=[_binding_spec(backend_id, resolution_org[1], target="FAULT_VAR")],
         )
-        rows = await list_bindings_for_agent(final, agent_id)
+        rows = await list_bindings_for_agent(final, agent_id, org_id=resolution_org[0])
 
     assert [b.target_env_var for b in rows] == ["FAULT_VAR"]
     assert rows[0].id == created[0].id
