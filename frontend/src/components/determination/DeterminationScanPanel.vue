@@ -1,11 +1,16 @@
 <template>
-  <section class="card p-4 space-y-4" data-testid="determination-scan">
-    <header class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.scan_title') }}</h2>
-      <span v-if="scan" class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
-        {{ scan.summary }}
-      </span>
-    </header>
+  <BaseCard padding="md" class="space-y-4" data-testid="determination-scan">
+    <CardHeader
+      heading-level="h2"
+      header-class="mb-0!"
+      :title="$t('views.DeterminationView.scan_title')"
+    >
+      <template #actions>
+        <span v-if="scan" class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
+          {{ scan.summary }}
+        </span>
+      </template>
+    </CardHeader>
 
     <div
       v-if="loading"
@@ -99,10 +104,12 @@
         </ul>
       </section>
     </template>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
+import BaseCard from '../ui/BaseCard.vue'
+import CardHeader from '../ui/CardHeader.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import { confidenceBadgeClass } from './confidencePresentation'
