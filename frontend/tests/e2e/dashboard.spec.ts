@@ -14,6 +14,11 @@ async function mockUnpublishedSystemMaps(page: Page): Promise<void> {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
+        // System Maps is a `private_preview` surface, so FAR-2638's release gate
+        // keeps the dashboard card hidden unless developer mode is on. Declare
+        // it here so the card renders on the real staging target too, matching
+        // the other private_preview e2e specs.
+        dev_mode: true,
         license: { tier: 'community' },
         flags: [
           { name: 'system_maps', currently_active: true },
