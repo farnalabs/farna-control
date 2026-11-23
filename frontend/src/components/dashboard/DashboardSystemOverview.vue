@@ -105,21 +105,70 @@ const discoverError = ref<string | null>(null)
 const canDiscover = computed(() => store.accessLoaded && !store.error && store.hasAccess)
 
 /**
+ * The current collapse-preference key.
+ *
+ * It is versioned because the first release of this card wrote a preference
+ * with `useStorage('dashboard-system-overview-collapsed', false)`; see
+ * `consumeLegacyCollapsePreference` for why that legacy value cannot be
+ * trusted.
+ */
+const COLLAPSE_STORAGE_KEY = 'dashboard-system-overview-collapsed:v2'
+const LEGACY_COLLAPSE_STORAGE_KEY = 'dashboard-system-overview-collapsed'
+
+/**
+ * Read the legacy preference once, then delete it so it can never re-apply.
+ *
+ * The old code stored the choice with a `false` default and VueUse's default
+ * `writeDefaults: true`, so the literal string `"false"` was written into
+ * localStorage for every user who ever rendered this card. That makes a stored
+ * `"false"` indistinguishable from an explicit expand: it is almost always the
+ * auto-written default, not a choice. Only a stored `"true"` is a real explicit
+ * collapse, so only that is adopted; `"false"`, an unknown value or an absent
+ * key is treated as UNSET and the new collapsed default applies. A user who had
+ * deliberately expanded the panel before may therefore see it collapsed once
+ * after this change, and can expand it again.
+ *
+ * Storage can be unavailable (private mode, blocked cookies); both the read and
+ * the removal are guarded, and a failure simply means "no legacy preference".
+ */
+function consumeLegacyCollapsePreference(): boolean | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(LEGACY_COLLAPSE_STORAGE_KEY)
+    if (raw === null) return null
+    window.localStorage.removeItem(LEGACY_COLLAPSE_STORAGE_KEY)
+    return raw === 'true' ? true : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * The user's own collapse choice, or `null` when they have never made one.
  *
  * The storage default is deliberately `null` rather than `false`: a `false`
- * default is written into localStorage on first use, which erases the
- * difference between "no stored preference" and "the user chose expanded".
- * VueUse's built-in serializers do not handle a nullable boolean (a `null`
- * default infers the "any" serializer, which reads the string "false" back as
- * a truthy value), so the boolean contract is declared explicitly.
+ * default that is written into localStorage on first use erases the difference
+ * between "no stored preference" and "the user chose expanded". `writeDefaults:
+ * false` makes that no-write contract structural rather than incidental, and
+ * the boolean contract is declared explicitly because VueUse's built-in
+ * serializers do not handle a nullable boolean (a `null` default infers the
+ * "any" serializer, which reads the string "false" back as a truthy value).
  */
-const storedCollapsed = useStorage<boolean | null>('dashboard-system-overview-collapsed', null, undefined, {
+const legacyCollapsed = consumeLegacyCollapsePreference()
+const storedCollapsed = useStorage<boolean | null>(COLLAPSE_STORAGE_KEY, null, undefined, {
   serializer: {
     read: (raw: string): boolean | null => (raw === 'true' ? true : raw === 'false' ? false : null),
     write: (value: boolean | null): string => String(value),
   },
+  writeDefaults: false,
 })
+
+// Migrate an explicit legacy collapse into the v2 key so removing the legacy
+// key above cannot lose it on the next load. A v2 value already present wins:
+// only an absent v2 preference (`null`) adopts the legacy `true`.
+if (storedCollapsed.value === null && legacyCollapsed === true) {
+  storedCollapsed.value = true
+}
 
 /**
  * The last settled emptiness, held across a refetch.
@@ -143,10 +192,13 @@ watch(
  * Collapsed unless the user has said otherwise while nothing has been
  * published yet.
  *
- * Loading, error and entitlement states all keep the expanded default, and a
- * published map keeps it expanded. Writing from the toggle persists an explicit
- * choice, which always wins from then on — there is deliberately no watcher
- * that would re-collapse the panel after the user expands it.
+ * An initial loading, error or entitlement answer keeps the expanded default,
+ * and a published map keeps it expanded. Once it has settled empty the panel
+ * stays collapsed across a refetch, because `settledEmpty` is latched on each
+ * settled response rather than read live from a request that just started.
+ * Writing from the toggle persists an explicit choice, which always wins from
+ * then on — there is deliberately no watcher that would re-collapse the panel
+ * after the user expands it.
  */
 const collapsed = computed<boolean>({
   get: () => storedCollapsed.value ?? settledEmpty.value,

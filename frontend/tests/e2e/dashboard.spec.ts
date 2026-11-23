@@ -1,4 +1,42 @@
+import type { Page } from '@playwright/test'
 import { test, expect, loginAsAdmin } from './setup/fixtures'
+
+/**
+ * Serve an organisation with System Maps authoring access but no published map:
+ * the state FAR-2695 is about. The card only renders when the caller has System
+ * Maps access, which the local mock target grants nothing of by default, so the
+ * entitlement is declared explicitly and the map list is empty. Register the
+ * routes after `loginAsAdmin` so they win over the target's catch-all mock.
+ */
+async function mockUnpublishedSystemMaps(page: Page): Promise<void> {
+  await page.route('**/api/v1/plan*', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        license: { tier: 'community' },
+        flags: [
+          { name: 'system_maps', currently_active: true },
+          { name: 'analytics_page', currently_active: true },
+        ],
+      }),
+    })
+  })
+  await page.route('**/api/v1/auth/permissions*', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ permissions: ['system_maps_access'] }),
+    })
+  })
+  await page.route('**/api/v1/system-maps*', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 }),
+    })
+  })
+}
 
 test.describe('Dashboard', () => {
   test('redirects to login when unauthenticated', { tag: '@smoke' }, async ({ page }) => {
@@ -79,39 +117,13 @@ test.describe('Dashboard', () => {
   test('system overview defaults collapsed when no map has been published', { tag: '@regression' }, async ({ page, env }) => {
     await loginAsAdmin(page, env)
     // FAR-2695: with nothing published, the panel must not push the dashboard's
-    // real stat cards down with an empty state. The card only renders when the
-    // caller has System Maps access, which the local mock target grants nothing
-    // of by default, so declare the entitlement explicitly and serve an empty
-    // map list (the "nothing published yet" signal).
-    await page.route('**/api/v1/plan*', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          license: { tier: 'community' },
-          flags: [
-            { name: 'system_maps', currently_active: true },
-            { name: 'analytics_page', currently_active: true },
-          ],
-        }),
-      })
+    // real stat cards down with an empty state.
+    await mockUnpublishedSystemMaps(page)
+    // No stored collapse preference at either key: this is a fresh visitor.
+    await page.evaluate(() => {
+      localStorage.removeItem('dashboard-system-overview-collapsed')
+      localStorage.removeItem('dashboard-system-overview-collapsed:v2')
     })
-    await page.route('**/api/v1/auth/permissions*', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ permissions: ['system_maps_access'] }),
-      })
-    })
-    await page.route('**/api/v1/system-maps*', (route) => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 }),
-      })
-    })
-    // No stored collapse preference: this is a fresh visitor.
-    await page.evaluate(() => localStorage.removeItem('dashboard-system-overview-collapsed'))
     await page.reload()
 
     const card = page.locator('[data-testid="dashboard-system-overview"]')
@@ -123,6 +135,30 @@ test.describe('Dashboard', () => {
     )
     // Discovery is exactly what an unpublished org needs, so it stays visible.
     await expect(page.locator('[data-testid="dashboard-system-discover"]')).toBeVisible()
+  })
+
+  test('system overview collapses for an existing user carrying the legacy auto-written preference', { tag: '@regression' }, async ({ page, env }) => {
+    await loginAsAdmin(page, env)
+    // The state that actually failed: the previous release auto-wrote the
+    // literal "false" for every user who ever rendered the card, so this is what
+    // an existing user's localStorage holds. It must be treated as unset rather
+    // than as an explicit expand, and migrated away.
+    await mockUnpublishedSystemMaps(page)
+    await page.evaluate(() => {
+      localStorage.setItem('dashboard-system-overview-collapsed', 'false')
+      localStorage.removeItem('dashboard-system-overview-collapsed:v2')
+    })
+    await page.reload()
+
+    const toggle = page.locator('[data-testid="system-map-overview-toggle"]')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('[data-testid="system-map-overview-content"]')).toContainText(
+      'System overview is collapsed',
+    )
+    // The legacy key is consumed so it cannot re-apply on the next load.
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('dashboard-system-overview-collapsed')))
+      .toBeNull()
   })
 
   test('system overview card is absent when System Maps is not enabled', { tag: '@regression' }, async ({ page, env }) => {

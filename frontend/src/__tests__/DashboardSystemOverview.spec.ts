@@ -97,9 +97,10 @@ describe('DashboardSystemOverview', () => {
     mockGet.mockReset()
     mockPush.mockReset()
     // The collapse preference is the only persisted state this component owns;
-    // clear it so each case starts from "no stored preference" unless it sets
-    // one deliberately.
+    // clear both its current and legacy keys so each case starts from "no
+    // stored preference" unless it sets one deliberately.
     localStorage.removeItem('dashboard-system-overview-collapsed')
+    localStorage.removeItem('dashboard-system-overview-collapsed:v2')
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
@@ -404,7 +405,7 @@ describe('DashboardSystemOverview', () => {
     // The panel now defaults collapsed when nothing is published (FAR-2695), so
     // this case explicitly pins a stored expanded preference to keep asserting
     // the empty state's own rendering contract.
-    localStorage.setItem('dashboard-system-overview-collapsed', 'false')
+    localStorage.setItem('dashboard-system-overview-collapsed:v2', 'false')
     const { wrapper, store } = mountOverview()
     store.overviewLoading = false
     store.overviewError = null
@@ -417,6 +418,61 @@ describe('DashboardSystemOverview', () => {
     expect(empty.classes()).toContain('card')
     expect(wrapper.find('[data-testid="system-map-overview-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="system-map-overview-metrics"]').exists()).toBe(false)
+  })
+
+  it('treats a legacy stored "false" as unset and applies the collapsed default', async () => {
+    // The old code wrote `"false"` into localStorage for every user who ever
+    // rendered the card (VueUse's writeDefaults), so it cannot be read as an
+    // explicit expand. The real-world existing-user state must still collapse.
+    localStorage.setItem('dashboard-system-overview-collapsed', 'false')
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.get('[data-testid="system-map-overview-content"]').text()).toContain(
+      'System overview is collapsed',
+    )
+    // The legacy key is consumed so it can never re-apply.
+    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBeNull()
+  })
+
+  it('migrates a legacy explicit collapse into the current preference key', async () => {
+    localStorage.setItem('dashboard-system-overview-collapsed', 'true')
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="system-map-overview-toggle"]').attributes('aria-expanded')).toBe('false')
+    // A legacy "true" is a real choice, so it is adopted rather than dropped,
+    // and the legacy key is cleaned up.
+    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBeNull()
+    expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBe('true')
+  })
+
+  it('lets an explicit v2 expand win over the collapsed default', async () => {
+    localStorage.setItem('dashboard-system-overview-collapsed:v2', 'false')
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="system-map-overview-toggle"]').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[data-testid="system-map-overview-empty"]').text()).toContain('No published system map')
+  })
+
+  it('does not write a collapse preference on first render', async () => {
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    // `writeDefaults: false`: rendering the default must not invent a preference.
+    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBeNull()
+    expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBeNull()
   })
 
   it('defaults collapsed once a settled overview reports no published map', async () => {
@@ -432,6 +488,7 @@ describe('DashboardSystemOverview', () => {
     expect(wrapper.find('[data-testid="system-map-overview-empty"]').exists()).toBe(false)
     // No stored preference is invented by rendering the default.
     expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBeNull()
+    expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBeNull()
   })
 
   it('keeps the panel expanded while the overview is still loading', async () => {
@@ -505,7 +562,7 @@ describe('DashboardSystemOverview', () => {
     await firstToggle.trigger('click')
 
     expect(firstToggle.attributes('aria-expanded')).toBe('true')
-    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBe('false')
+    expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBe('false')
     // A later settled-empty response must not override the explicit choice.
     first.store.overviewLoading = true
     await first.wrapper.vm.$nextTick()
@@ -526,7 +583,6 @@ describe('DashboardSystemOverview', () => {
   })
 
   it('persists the collapse state and exposes the button state', async () => {
-    localStorage.removeItem('dashboard-system-overview-collapsed')
     const { wrapper } = mountOverview()
     const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
     expect(toggle.attributes('aria-expanded')).toBe('true')
@@ -534,7 +590,7 @@ describe('DashboardSystemOverview', () => {
     await toggle.trigger('click')
 
     expect(toggle.attributes('aria-expanded')).toBe('false')
-    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBe('true')
+    expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBe('true')
   })
 
   it('renders through the shared SectionCard without a live region', () => {

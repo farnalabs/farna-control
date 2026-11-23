@@ -500,6 +500,11 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   async function publish(mapId: string, revisionId: string): Promise<void> {
     const response = await api.POST('/api/v1/system-maps/{map_id}/revisions/{rev_id}/publish', { params: { path: { map_id: mapId, rev_id: revisionId } } })
     if (response.error) throw new Error(tr('systemMaps.errors.publish_revision'))
+    // The org now has a published map, so any "nothing published" answer held
+    // from an earlier dashboard load is stale. Clear it before `loadMap` so
+    // returning to the dashboard does not render the collapsed-empty default
+    // until its own fetch settles.
+    overviewEmpty.value = false
     await loadMap(mapId)
   }
 
