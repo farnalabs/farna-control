@@ -2145,15 +2145,21 @@ jobs:
           retention-days: 3
 
       - name: Verify deployment
+        # FAR-2656: verify the app this job actually deployed. The deploy
+        # target moved to staging-farna-control, but the custom domain
+        # (staging-control.farna.dev) stays on the old app until the follow-up
+        # domain move, so resolving through the domain here would read the old
+        # app in that window. The app's own <app>.fly.dev host always serves
+        # the machine this job just rolled out.
         uses: ./.github/actions/verify-deployment
         with:
-          url: https://staging-control.farna.dev
+          url: https://staging-farna-control.fly.dev
 
       - name: Check deployed SHA
         shell: pwsh
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
-          $info = curl -s -m 10 "https://staging-control.farna.dev/api/v1/deployment" 2>$null
+          $info = curl -s -m 10 "https://staging-farna-control.fly.dev/api/v1/deployment" 2>$null
           if (-not $info) { Write-Host "No deployment info"; exit 1 }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
@@ -2161,7 +2167,7 @@ jobs:
             Write-Host "SHA MISMATCH: deployed=$deployedSha expected=$expectedSha"
             exit 1
           }
-          Write-Host "staging-control.farna.dev SHA match: $deployedSha"
+          Write-Host "staging-farna-control.fly.dev SHA match: $deployedSha"
 
       - name: Ensure worker machine exists (staging)
         shell: bash
@@ -2316,17 +2322,17 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            if curl -fsS -m 10 https://staging-control.farna.dev/healthz/ready >/dev/null 2>&1; then
-              echo "staging-control.farna.dev /healthz/ready OK (attempt ${attempt})"
+            if curl -fsS -m 10 https://staging-farna-control.fly.dev/healthz/ready >/dev/null 2>&1; then
+              echo "staging-farna-control.fly.dev /healthz/ready OK (attempt ${attempt})"
               exit 0
             fi
             echo "healthz not ready yet (attempt ${attempt}/${ATTEMPTS}) - retrying in ${INTERVAL_SEC}s"
             sleep "$INTERVAL_SEC"
           done
-          echo "::error::staging-control.farna.dev did not become healthy after deploy - rolling back to previous release"
+          echo "::error::staging-farna-control.fly.dev did not become healthy after deploy - rolling back to previous release"
           fly releases rollback staging-farna-control
           sleep 30
-          if curl -fsS -m 10 https://staging-control.farna.dev/healthz/ready >/dev/null 2>&1; then
+          if curl -fsS -m 10 https://staging-farna-control.fly.dev/healthz/ready >/dev/null 2>&1; then
             echo "Rollback restored service."
             exit 0
           fi
@@ -2450,10 +2456,10 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          Write-Host "Waiting for staging-control.farna.dev ..."
+          Write-Host "Waiting for staging-farna-control.fly.dev ..."
           for ($i=0; $i -lt 60; $i++) {
             try {
-              $r = curl -s -f "https://staging-control.farna.dev/healthz/ready" 2>$null
+              $r = curl -s -f "https://staging-farna-control.fly.dev/healthz/ready" 2>$null
               if ($LASTEXITCODE -eq 0) { Write-Host "Staging ready after ${i}s"; exit 0 }
             } catch {}
             Start-Sleep -Seconds 5
@@ -2472,6 +2478,10 @@ jobs:
         timeout-minutes: 90
         env:
           E2E_TARGET: staging
+          # FAR-2656: exercise the app deploy-staging just rolled out, not the
+          # old app still behind staging-control.farna.dev until the domain
+          # move. `E2E_BASE_URL` overrides the staging base URL in getBaseUrl().
+          E2E_BASE_URL: https://staging-farna-control.fly.dev
           E2E_NO_WEBSERVER: "true"
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
