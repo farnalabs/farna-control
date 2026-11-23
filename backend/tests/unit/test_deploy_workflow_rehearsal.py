@@ -1975,7 +1975,6 @@ esac
         f"""#!/usr/bin/env bash
 printf 'git %s\\n' \"$*\" >> {shlex.quote(str(cleanup_log))}
 if [ \"$1 $2 $3 $4\" = 'ls-remote --exit-code origin refs/heads/release-publication-hold' ]; then exit 0; fi
-if [ \"$1 $2 $3 $4\" = 'push origin --delete refs/heads/release-publication-hold' ]; then exit 0; fi
 exit 0
 """,
     )
@@ -2110,7 +2109,13 @@ def _hold_step_script(name: str) -> str:
     return script
 
 
-def _run_hold_lookup_script(tmp_path: Path, script: str, *, lookup_rc: int) -> subprocess.CompletedProcess[str]:
+def _run_hold_lookup_script(
+    tmp_path: Path,
+    script: str,
+    *,
+    lookup_rc: int,
+    token: str | None = "test-release-marker-token",
+) -> subprocess.CompletedProcess[str]:
     bin_dir = tmp_path / "hold-bin"
     bin_dir.mkdir()
     log = tmp_path / "hold-commands.log"
@@ -2133,8 +2138,11 @@ exit 0
         "VERSION": "1.2.3",
         "GH_TOKEN": "test",
         "GITHUB_REPOSITORY": "example/repo",
-        "RELEASE_MARKER_TOKEN": "test-release-marker-token",
     }
+    if token is None:
+        env.pop("RELEASE_MARKER_TOKEN", None)
+    else:
+        env["RELEASE_MARKER_TOKEN"] = token
     return _run_bash(script, cwd=tmp_path, env=env)
 
 
@@ -2148,6 +2156,26 @@ def test_release_publication_hold_establishment_refuses_existing_hold(tmp_path: 
     assert result.returncode != 0
     assert "already exists" in result.stdout
     assert "git branch -f release-publication-hold" not in (tmp_path / "hold-commands.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("token", [None, ""])
+@pytest.mark.posix_only
+def test_release_publication_hold_establishment_fails_closed_without_the_marker_token(tmp_path: Path, token: str | None) -> None:
+    # The guard's entire safety property: with no admin credential the step must
+    # refuse before it pushes (or deletes) a ruleset-protected marker ref.
+    result = _run_hold_lookup_script(
+        tmp_path,
+        _hold_step_script("Establish release publication hold (cut only)"),
+        lookup_rc=2,
+        token=token,
+    )
+    assert result.returncode != 0
+    assert "RELEASE_MARKER_TOKEN" in result.stdout + result.stderr
+    log = tmp_path / "hold-commands.log"
+    commands = log.read_text(encoding="utf-8") if log.exists() else ""
+    assert "push" not in commands
+    assert "--delete" not in commands
+    assert "git branch -f release-publication-hold" not in commands
 
 
 def _hold_lookup_fragment(script: str) -> str:
@@ -2264,6 +2292,37 @@ def test_release_promote_fails_closed_without_the_release_pr_token(tmp_path: Pat
     assert "FARNA_CONTROL_RELEASE_PR_TOKEN" in result.stdout + result.stderr
 
 
+@pytest.mark.parametrize("token", [None, ""])
+@pytest.mark.posix_only
+def test_release_promote_fails_closed_without_the_release_marker_token(tmp_path: Path, token: str | None) -> None:
+    _result, _root, _rc_sha, _pr_sha, env = _promote_harness(tmp_path, scenario="valid")
+    guarded_env = dict(env)
+    if token is None:
+        guarded_env.pop("RELEASE_MARKER_TOKEN", None)
+    else:
+        guarded_env["RELEASE_MARKER_TOKEN"] = token
+    # The promote guard sits above every marker operation; reset the git log so
+    # the assertions observe only this credential-less attempt.
+    git_log = Path(env["HARNESS_DIR"], "commands.log")
+    git_log.write_text("", encoding="utf-8")
+    script = _promote_step()["run"]
+    result = subprocess.run(  # noqa: S603 - workflow text is repository-owned and test-controlled
+        [shutil.which("bash") or "bash", "--noprofile", "--norc", "-c", script],
+        cwd=env["ROOT"],
+        env=guarded_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "RELEASE_MARKER_TOKEN" in result.stdout + result.stderr
+    commands = git_log.read_text(encoding="utf-8")
+    assert "--delete refs/heads/release-freeze" not in commands
+    assert "release-publication-hold" not in commands
+    assert " release-freeze:refs/heads/release-freeze" not in commands
+
+
 def test_release_promote_uses_a_single_protected_pr_and_exact_merged_sha() -> None:
     script = _promote_step()["run"]
 
@@ -2344,6 +2403,7 @@ def _promote_harness(tmp_path: Path, *, scenario: str, ci_sha: str | None = None
         bin_dir / "git",
         f"""#!/usr/bin/env bash
 set -euo pipefail
+printf 'git %s\\n' "$*" >> "$HARNESS_DIR/commands.log"
 args=()
 for arg in "$@"; do
   if [ "$arg" = {shlex.quote(marker_remote)} ]; then
@@ -3002,6 +3062,7 @@ def _run_freeze_cleanup(
     rc_tags_rc: int = 0,
     rc_listing: str | None = None,
     delete_rc: int = 0,
+    token: str | None = "test-release-marker-token",
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir = tmp_path / "freeze-bin"
     bin_dir.mkdir()
@@ -3047,8 +3108,11 @@ exit 99
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "VERSION": _FREEZE_CLEANUP_VERSION,
         "GITHUB_REPOSITORY": "example/repo",
-        "RELEASE_MARKER_TOKEN": "test-release-marker-token",
     }
+    if token is None:
+        env.pop("RELEASE_MARKER_TOKEN", None)
+    else:
+        env["RELEASE_MARKER_TOKEN"] = token
     return _run_bash(_freeze_cleanup_script(), cwd=tmp_path, env=env), log
 
 
@@ -3132,6 +3196,17 @@ def test_freeze_cleanup_fails_loudly_when_the_delete_is_refused(tmp_path: Path) 
     deletes = _delete_invocations(log)
     assert len(deletes) == 1
     assert deletes[0].endswith("--delete refs/heads/release-freeze")
+
+
+@pytest.mark.parametrize("token", [None, ""])
+@pytest.mark.posix_only
+def test_freeze_cleanup_fails_closed_without_the_marker_token(tmp_path: Path, token: str | None) -> None:
+    # A freeze proven to belong to this version and unpublished must reach the
+    # credential guard (not an earlier preserve exit), then refuse the delete.
+    result, log = _run_freeze_cleanup(tmp_path, token=token)
+    assert result.returncode != 0
+    assert "RELEASE_MARKER_TOKEN" in result.stdout + result.stderr
+    assert not _delete_invocations(log)
 
 
 def test_freeze_cleanup_is_a_dedicated_finalizer_job_after_publication() -> None:
