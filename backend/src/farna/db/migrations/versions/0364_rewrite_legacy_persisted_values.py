@@ -20,6 +20,16 @@ Rewritten values
   is re-derived from it on every save (``normalize_content`` validates against
   ``STAGE_TYPES``), so a stored map that kept ``'modulo'`` would fail its next
   save. Its stage types are therefore rewritten in the same migration.
+* ``library_primitives.content_json`` for ``primitive_type='lifecycle_map'``
+  rows — imported lifecycle maps are also stored as library primitives whose
+  ``content_json`` carries the stage graph. Three shapes exist: a direct
+  ``stages[].type``; the export envelope's ``export.content_json.stages[].type``
+  and ``export.versions[].stages[].type``. Copy-to-adapt re-validates that
+  stored graph through ``normalize_content`` (``materialize_map_from_primitive``
+  → ``normalize_content`` → ``_normalise_stage``), so a pre-deploy import that
+  kept the retired stage type would 422 with no repair path. All three shapes
+  are rewritten, bounded by a containment predicate and order-preserving like
+  the ``lifecycle_maps`` rewrite.
 * the registry sentinel organisation seeded by 0353 — its display name was
   ``Modulo``. Renamed to ``Farna Control``. Its slug is deliberately NOT
   changed: no production code resolves the sentinel by slug, and every
@@ -49,7 +59,8 @@ Safety
   small operator-owned tables; adding a CHECK scans each once under a brief
   ``ACCESS EXCLUSIVE`` lock inside the deploy's migration window.
 * The ``lifecycle_maps`` update is bounded by a containment predicate, so it
-  touches only rows whose stages still carry the old value.
+  touches only rows whose stages still carry the old value. The same holds for
+  each ``library_primitives.content_json`` shape.
 * The whole migration runs in one transaction, so the widen/rewrite/narrow
   window is never visible to another session.
 
@@ -195,6 +206,103 @@ WHERE jsonb_typeof(content_json -> 'stages') = 'array'
 """
 
 # ---------------------------------------------------------------------------
+# library_primitives.content_json (primitive_type='lifecycle_map')
+#
+# Imported maps are persisted as library primitives with the stage graph nested
+# in ``content_json`` (``import_export.py``). ``materialize_map_from_primitive``
+# re-validates that graph through ``normalize_content``, so a retired stage type
+# must be rewritten here as well. Three shapes exist and each is rewritten in its
+# own bounded, order-preserving statement:
+#   * a direct ``stages[].type`` (the graph IS the content);
+#   * ``export.content_json.stages[].type`` (the envelope's canonical content);
+#   * ``export.versions[].stages[].type`` (each exported version's snapshot).
+# ``WITH ORDINALITY`` + ``ORDER BY`` keeps positional stage order, and the
+# containment predicate makes every statement a no-op on a re-run.
+# ---------------------------------------------------------------------------
+
+_REWRITE_PRIMITIVE_DIRECT_STAGES_SQL = """
+UPDATE public.library_primitives
+SET content_json = jsonb_set(
+        content_json,
+        '{stages}',
+        (
+            SELECT jsonb_agg(
+                       CASE
+                           WHEN stage ->> 'type' = CAST(:before AS text)
+                               THEN jsonb_set(stage, '{type}', to_jsonb(CAST(:after AS text)))
+                           ELSE stage
+                       END
+                       ORDER BY ord
+                   )
+            FROM jsonb_array_elements(content_json -> 'stages') WITH ORDINALITY AS staged(stage, ord)
+        )
+    )
+WHERE primitive_type = 'lifecycle_map'
+  AND jsonb_typeof(content_json -> 'stages') = 'array'
+  AND content_json -> 'stages' @> jsonb_build_array(jsonb_build_object('type', CAST(:before AS text)))
+"""
+
+_REWRITE_PRIMITIVE_EXPORT_CONTENT_STAGES_SQL = """
+UPDATE public.library_primitives
+SET content_json = jsonb_set(
+        content_json,
+        '{export,content_json,stages}',
+        (
+            SELECT jsonb_agg(
+                       CASE
+                           WHEN stage ->> 'type' = CAST(:before AS text)
+                               THEN jsonb_set(stage, '{type}', to_jsonb(CAST(:after AS text)))
+                           ELSE stage
+                       END
+                       ORDER BY ord
+                   )
+            FROM jsonb_array_elements(content_json -> 'export' -> 'content_json' -> 'stages') WITH ORDINALITY AS staged(stage, ord)
+        )
+    )
+WHERE primitive_type = 'lifecycle_map'
+  AND jsonb_typeof(content_json -> 'export' -> 'content_json' -> 'stages') = 'array'
+  AND content_json -> 'export' -> 'content_json' -> 'stages' @> jsonb_build_array(jsonb_build_object('type', CAST(:before AS text)))
+"""
+
+_REWRITE_PRIMITIVE_EXPORT_VERSION_STAGES_SQL = """
+UPDATE public.library_primitives
+SET content_json = jsonb_set(
+        content_json,
+        '{export,versions}',
+        (
+            SELECT jsonb_agg(
+                       CASE
+                           WHEN jsonb_typeof(version -> 'stages') = 'array'
+                               THEN jsonb_set(
+                                        version,
+                                        '{stages}',
+                                        (
+                                            SELECT jsonb_agg(
+                                                       CASE
+                                                           WHEN stage ->> 'type' = CAST(:before AS text)
+                                                               THEN jsonb_set(stage, '{type}', to_jsonb(CAST(:after AS text)))
+                                                           ELSE stage
+                                                       END
+                                                       ORDER BY stage_ord
+                                                   )
+                                            FROM jsonb_array_elements(version -> 'stages') WITH ORDINALITY AS staged(stage, stage_ord)
+                                        )
+                                    )
+                           ELSE version
+                       END
+                       ORDER BY version_ord
+                   )
+            FROM jsonb_array_elements(content_json -> 'export' -> 'versions') WITH ORDINALITY AS versioned(version, version_ord)
+        )
+    )
+WHERE primitive_type = 'lifecycle_map'
+  AND jsonb_typeof(content_json -> 'export' -> 'versions') = 'array'
+  AND content_json -> 'export' -> 'versions' @> jsonb_build_array(
+        jsonb_build_object('stages', jsonb_build_array(jsonb_build_object('type', CAST(:before AS text))))
+      )
+"""
+
+# ---------------------------------------------------------------------------
 # Sentinel organisation display name
 # ---------------------------------------------------------------------------
 
@@ -227,6 +335,17 @@ def _rewrite_source_rows(*, before: str, after: str) -> None:
 def _rewrite_stage_rows(*, before: str, after: str) -> None:
     op.execute(sa.text(_REWRITE_STAGE_SQL).bindparams(before=before, after=after))
     op.execute(sa.text(_REWRITE_STAGE_CONTENT_SQL).bindparams(before=before, after=after))
+    _rewrite_primitive_stage_contents(before=before, after=after)
+
+
+def _rewrite_primitive_stage_contents(*, before: str, after: str) -> None:
+    """Rewrite the legacy stage vocabulary nested in ``library_primitives.content_json``."""
+    for statement in (
+        _REWRITE_PRIMITIVE_DIRECT_STAGES_SQL,
+        _REWRITE_PRIMITIVE_EXPORT_CONTENT_STAGES_SQL,
+        _REWRITE_PRIMITIVE_EXPORT_VERSION_STAGES_SQL,
+    ):
+        op.execute(sa.text(statement).bindparams(before=before, after=after))
 
 
 def _rename_sentinel_org(*, before: str, after: str) -> None:

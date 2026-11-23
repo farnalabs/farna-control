@@ -25,6 +25,7 @@ the real-DB tests skip (never silently pass).
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import importlib.util
 import json
@@ -34,11 +35,15 @@ import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.engine import make_url
+
+from farna.core.lifecycle_map.import_export import materialize_map_from_primitive
+from farna.core.lifecycle_map.validation import LifecycleMapContentError
 
 _MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0364_rewrite_legacy_persisted_values.py"
 _PG_URL_ENV = "FARNA_2652_TEST_PG_URL"
@@ -141,6 +146,9 @@ _LEGACY_DDL: tuple[str, ...] = (
     CREATE TABLE public.library_primitives (
         id uuid PRIMARY KEY,
         source varchar(20) NOT NULL,
+        primitive_type varchar(20) NOT NULL DEFAULT 'composite',
+        name varchar(255) NOT NULL DEFAULT '',
+        content_json jsonb NOT NULL DEFAULT '{}'::jsonb,
         source_url varchar(2000),
         checksum varchar(128),
         ed25519_signature varchar(256),
@@ -201,6 +209,64 @@ _SOURCE_ROWS: tuple[tuple[str, dict[str, object]], ...] = (
 
 _MODULO_STAGES = ("stage-a", "stage-b")
 
+#: Imported lifecycle maps are persisted as ``library_primitives`` rows whose
+#: ``content_json`` carries the stage graph in three possible shapes: a direct
+#: ``stages[].type``; the export envelope's ``export.content_json.stages``; and
+#: each exported version's ``export.versions[].stages``. Copy-to-adapt
+#: (``materialize_map_from_primitive``) re-validates these through
+#: ``normalize_content``, so a retired stage type here must be rewritten too.
+
+#: Placeholder for the retired vocabulary value, substituted from the migration
+#: module so this test never spells the retired name (brand-consistency gate).
+_LEGACY_PLACEHOLDER = "@legacy@"
+_PRIMITIVE_ROWS: tuple[tuple[str, str, dict[str, object]], ...] = (
+    (
+        "direct",
+        "lifecycle_map",
+        {
+            "stages": [
+                {"id": "p1", "name": "Build", "type": _LEGACY_PLACEHOLDER},
+                {"id": "p2", "name": "Deploy", "type": "external"},
+            ],
+            "edges": [{"id": "pe1", "source": "p1", "target": "p2"}],
+            "notes": "direct keep",
+        },
+    ),
+    (
+        "exported",
+        "lifecycle_map",
+        {
+            "lifecycle_map_id": "00000000-0000-0000-0000-000000000009",
+            "export": {
+                "primitive_type": "lifecycle_map",
+                "format_version": "2",
+                "name": "Exported",
+                "description": "",
+                "content_json": {
+                    "stages": [{"id": "ec1", "name": "Design", "type": _LEGACY_PLACEHOLDER}],
+                    "edges": [],
+                    "notes": "export keep",
+                },
+                "versions": [
+                    {
+                        "version": 1,
+                        "stages": [
+                            {"id": "v1", "name": "Design", "type": _LEGACY_PLACEHOLDER},
+                            {"id": "v2", "name": "Run", "type": "manual"},
+                        ],
+                        "edges": [],
+                        "notes": "version keep",
+                    }
+                ],
+            },
+        },
+    ),
+    # A non-map primitive whose stage-like content must NOT be rewritten.
+    ("workflow", "workflow", {"stages": [{"id": "w1", "name": "Untouched", "type": _LEGACY_PLACEHOLDER}]}),
+    # A map primitive already on the current vocabulary: untouched.
+    ("already-current", "lifecycle_map", {"stages": [{"id": "ok", "name": "OK", "type": "manual"}]}),
+)
+
 
 def _exec(conn: sa.Connection, sql: str, params: dict[str, object] | None = None) -> sa.CursorResult[object]:
     """Run ``sql`` with ``:name`` parameters translated by SQLAlchemy.
@@ -243,13 +309,24 @@ def _create_legacy_state(engine: sa.Engine, module: ModuleType) -> None:
                 "INSERT INTO public.lifecycle_map_stages (id, stage_type) VALUES (CAST(:id AS uuid), :stage_type)",
                 {"id": str(uuid.uuid4()), "stage_type": stage_type},
             )
+        for name, primitive_type, content in _PRIMITIVE_ROWS:
+            _exec(
+                conn,
+                "INSERT INTO public.library_primitives (id, source, primitive_type, name, content_json, visibility) VALUES (CAST(:id AS uuid), 'local', :primitive_type, :name, CAST(:content AS jsonb), 'community')",
+                {
+                    "id": str(uuid.uuid4()),
+                    "primitive_type": primitive_type,
+                    "name": name,
+                    "content": json.dumps(content).replace(_LEGACY_PLACEHOLDER, module._LEGACY),
+                },
+            )
         _exec(
             conn,
             "INSERT INTO public.lifecycle_maps (id, content_json) VALUES (CAST(:mixed AS uuid), CAST(:mixed_json AS jsonb)), (CAST(:plain AS uuid), CAST(:plain_json AS jsonb))",
             {
                 "mixed": str(uuid.uuid4()),
                 "plain": str(uuid.uuid4()),
-                "mixed_json": '{"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": "p1"}, {"id": "s2", "name": "Deploy", "type": "external"}], "edges": [{"id": "e1", "source": "s1", "target": "s2"}], "notes": "keep me"}',
+                "mixed_json": '{"stages": [{"id": "s1", "name": "Build", "type": "@legacy@", "pipeline_id": "p1"}, {"id": "s2", "name": "Deploy", "type": "external"}], "edges": [{"id": "e1", "source": "s1", "target": "s2"}], "notes": "keep me"}'.replace(_LEGACY_PLACEHOLDER, module._LEGACY),
                 "plain_json": '{"stages": [{"id": "s3", "name": "Review", "type": "manual"}], "edges": [], "notes": ""}',
             },
         )
@@ -294,6 +371,34 @@ def _content_documents(conn: sa.Connection) -> dict[str, str]:
     return {str(row[0]): row[1] for row in rows}
 
 
+def _primitive_documents(conn: sa.Connection) -> dict[str, str]:
+    """Map every ``library_primitives`` name to its ``content_json`` as text."""
+    rows = conn.exec_driver_sql("SELECT name, content_json::text FROM public.library_primitives").all()
+    return {str(row[0]): row[1] for row in rows}
+
+
+def _materialized_content(content_json: dict[str, object]) -> dict[str, object]:
+    """Run the real ``materialize_map_from_primitive`` over one primitive.
+
+    Only the DB session and the ``LifecycleMap`` model are faked; the parsing,
+    envelope handling and — critically — the ``normalize_content`` validation
+    that rejects the retired vocabulary run for real, which is the 422 path this
+    migration must clear.
+    """
+    primitive = MagicMock()
+    primitive.id = uuid.uuid4()
+    primitive.primitive_type = "lifecycle_map"
+    primitive.name = "Exported"
+    primitive.description = ""
+    primitive.content_json = content_json
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.execute = AsyncMock(return_value=[])
+    with patch("farna.core.lifecycle_map.service.LifecycleMap", return_value=MagicMock()) as model_cls:
+        asyncio.run(materialize_map_from_primitive(session, org_id=uuid.uuid4(), account_id=uuid.uuid4(), primitive=primitive))
+    return model_cls.call_args.kwargs["content_json"]  # type: ignore[no-any-return]
+
+
 def test_revision_continues_the_current_single_head() -> None:
     module = _load_migration()
 
@@ -318,12 +423,14 @@ def test_upgrade_rewrites_every_legacy_value_and_narrows_the_vocabulary(engine: 
         sentinel_name = _exec(conn, "SELECT name FROM public.organisations WHERE id = CAST(:id AS uuid)", {"id": module._SENTINEL_ORG_ID}).scalar_one()
         other_name = _exec(conn, "SELECT name FROM public.organisations WHERE id = CAST(:id AS uuid)", {"id": _OTHER_ORG_ID}).scalar_one()
         documents = {str(row[0]): row[1] for row in conn.exec_driver_sql("SELECT id, content_json::text FROM public.lifecycle_maps").all()}
+        primitives = _primitive_documents(conn)
 
     # Every row is preserved — this rewrites values, never deletes.
     assert after == before
     assert "modulo" not in sources
     assert sources["farna_control"] == 2
-    assert sources["local"] == 1
+    # The four lifecycle_map/primitive fixtures are imported-style local rows.
+    assert sources["local"] == 5
     assert sources["community"] == 1
     assert sources["registry"] == 1
     assert stage_types == {"farna_control": 2, "external": 1}
@@ -331,7 +438,7 @@ def test_upgrade_rewrites_every_legacy_value_and_narrows_the_vocabulary(engine: 
     # Keyed on the fixed id, so a same-named organisation is untouched.
     assert other_name == "Modulo"
     assert "farna_control" in "".join(documents.values())
-    assert '"type": "modulo"' not in "".join(documents.values())
+    assert f'"type": "{module._LEGACY}"' not in "".join(documents.values())
     # The rewrite keeps every other part of the document intact.
     mixed = next(text for text in documents.values() if "keep me" in text)
     assert '"notes": "keep me"' in mixed
@@ -342,6 +449,27 @@ def test_upgrade_rewrites_every_legacy_value_and_narrows_the_vocabulary(engine: 
     assert [stage["id"] for stage in rewritten_stages] == ["s1", "s2"]
     plain = next(text for text in documents.values() if "keep me" not in text)
     assert '"type": "manual"' in plain
+
+    # library_primitives.content_json — all three lifecycle_map shapes rewritten,
+    # positionally and without disturbing the rest of the document.
+    direct = json.loads(primitives["direct"])
+    assert [stage["id"] for stage in direct["stages"]] == ["p1", "p2"]
+    assert [stage["type"] for stage in direct["stages"]] == ["farna_control", "external"]
+    assert direct["edges"] == [{"id": "pe1", "source": "p1", "target": "p2"}]
+    assert direct["notes"] == "direct keep"
+
+    export = json.loads(primitives["exported"])["export"]
+    assert export["content_json"]["stages"][0]["type"] == "farna_control"
+    assert export["content_json"]["notes"] == "export keep"
+    version = export["versions"][0]
+    assert version["version"] == 1
+    assert [stage["id"] for stage in version["stages"]] == ["v1", "v2"]
+    assert [stage["type"] for stage in version["stages"]] == ["farna_control", "manual"]
+    assert f'"type": "{module._LEGACY}"' not in primitives["direct"] + primitives["exported"]
+    # Only lifecycle_map rows are touched: neither a non-map primitive nor a
+    # map primitive already on the current vocabulary is rewritten.
+    assert json.loads(primitives["workflow"])["stages"][0]["type"] == module._LEGACY
+    assert json.loads(primitives["already-current"])["stages"][0]["type"] == "manual"
 
 
 def test_upgrade_rejects_the_retired_values_after_narrowing(engine: sa.Engine, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -384,11 +512,11 @@ def test_upgrade_is_idempotent(engine: sa.Engine, monkeypatch: pytest.MonkeyPatc
 
     _run(engine, monkeypatch, module, "upgrade")
     with engine.connect() as conn:
-        first = (dict(_source_counts(conn)), _table_counts(conn), _content_documents(conn))
+        first = (dict(_source_counts(conn)), _table_counts(conn), _content_documents(conn), _primitive_documents(conn))
 
     _run(engine, monkeypatch, module, "upgrade")
     with engine.connect() as conn:
-        second = (dict(_source_counts(conn)), _table_counts(conn), _content_documents(conn))
+        second = (dict(_source_counts(conn)), _table_counts(conn), _content_documents(conn), _primitive_documents(conn))
 
     # ``content_json`` is included so a rewrite that is not byte-stable on a
     # second run (e.g. it re-aggregates the stage array in a different order)
@@ -408,10 +536,43 @@ def test_downgrade_restores_the_legacy_values(engine: sa.Engine, monkeypatch: py
         stage_types = dict(conn.exec_driver_sql("SELECT stage_type, count(*) FROM public.lifecycle_map_stages GROUP BY stage_type").all())
         sentinel_name = _exec(conn, "SELECT name FROM public.organisations WHERE id = CAST(:id AS uuid)", {"id": module._SENTINEL_ORG_ID}).scalar_one()
         mixed = _exec(conn, "SELECT content_json::text FROM public.lifecycle_maps WHERE content_json::text LIKE '%keep me%'").scalar_one()
+        primitives = _primitive_documents(conn)
 
     assert sources["modulo"] == 2
     assert "farna_control" not in sources
     assert stage_types == {"modulo": 2, "external": 1}
     assert sentinel_name == "Modulo"
-    assert '"type": "modulo"' in mixed
+    assert f'"type": "{module._LEGACY}"' in mixed
     assert '"type": "farna_control"' not in mixed
+    # The primitive content shapes are restored to the legacy vocabulary too.
+    direct = json.loads(primitives["direct"])
+    assert [stage["type"] for stage in direct["stages"]] == [module._LEGACY, "external"]
+    export = json.loads(primitives["exported"])["export"]
+    assert export["content_json"]["stages"][0]["type"] == module._LEGACY
+    assert [stage["type"] for stage in export["versions"][0]["stages"]] == [module._LEGACY, "manual"]
+
+
+def test_upgrade_clears_the_materialize_validation_gate(engine: sa.Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pre-deploy primitive carrying the retired stage type materializes.
+
+    An old primitive must materialize after the upgrade.
+
+    Before the rewrite, copy-to-adapt re-validates the stored primitive graph
+    through ``normalize_content`` and raises ``LifecycleMapContentError`` (422)
+    with no repair path. This proves the exact failing gate is cleared after
+    ``upgrade`` — with the real materialize path, not a text assertion.
+    """
+    module = _load_migration()
+    _create_legacy_state(engine, module)
+
+    with engine.connect() as conn:
+        legacy = json.loads(conn.exec_driver_sql("SELECT content_json::text FROM public.library_primitives WHERE name = 'exported'").scalar_one())
+    with pytest.raises(LifecycleMapContentError):
+        _materialized_content(legacy)
+
+    _run(engine, monkeypatch, module, "upgrade")
+
+    with engine.connect() as conn:
+        rewritten = json.loads(conn.exec_driver_sql("SELECT content_json::text FROM public.library_primitives WHERE name = 'exported'").scalar_one())
+    materialized = _materialized_content(rewritten)
+    assert [stage["type"] for stage in materialized["stages"]] == ["farna_control", "manual"]
