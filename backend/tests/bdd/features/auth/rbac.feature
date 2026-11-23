@@ -136,11 +136,11 @@ Feature: Role-Based Access Control
 
   # ── Feature gating ─────────────────────────────────────────────
 
-  Scenario: Team RBAC is gated behind feature flag
+  Scenario: Team RBAC is gated behind the Identity entitlement
     Given I do not have a Team license
     When I GET /api/v1/teams
     Then the response status is 402
-    And the error detail mentions "team_rbac"
+    And the error detail mentions "Identity"
 
   # ── Team deletion with resources ───────────────────────────────
 

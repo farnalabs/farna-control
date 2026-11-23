@@ -38,6 +38,23 @@ import { useRoute } from 'vue-router'
 import { usePlanStore } from '../../stores/planStore'
 import PageTabs from '../../components/PageTabs.vue'
 
+/**
+ * FAR-2665: a tab locks when its manifest route names a `required_entitlement`
+ * the plan payload does not grant. Seed the payload's grant set (the store reads
+ * both the granted set and the capability label from it).
+ */
+function seedEntitlements(granted: string[]) {
+  const store = usePlanStore()
+  store.$patch({
+    entitlements: [
+      { key: 'identity', name: 'Identity', description: '', granted: granted.includes('identity'), flags: ['sso', 'scim', 'team_rbac'] },
+      { key: 'audit_evidence', name: 'Audit and evidence', description: '', granted: granted.includes('audit_evidence'), flags: ['audit_viewer', 'admin_run_retention'] },
+      { key: 'cost_governance', name: 'Cost governance', description: '', granted: granted.includes('cost_governance'), flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+    ],
+  })
+  return store
+}
+
 function mountPageTabs(tabs: any[]) {
   return mount(PageTabs as any, {
     props: { tabs },
@@ -367,15 +384,15 @@ describe('PageTabs', () => {
   // links to the license page. The locked state comes from the manifest's
   // route metadata + the plan store, so no view wiring is involved.
 
-  describe('tier-locked tabs (FAR-47)', () => {
+  describe('commercially locked tabs (FAR-47/FAR-2665)', () => {
     const costTabs = [
       { label: 'Overview', to: '/admin/costs' },
       { label: 'Spend Limits', to: '/admin/costs/limits' },
       { label: 'Browse', to: '/schemas' },
     ]
 
-    it('locks team-tier tabs on the community plan with padlock + plan tooltip, keeping the bar shape', () => {
-      const store = usePlanStore()
+    it('locks commercially gated tabs without the entitlement with padlock + capability tooltip, keeping the bar shape', () => {
+      const store = seedEntitlements([])
       store.$patch({ currentTier: 'community', loaded: true })
       const wrapper = createWrapper(costTabs, '/admin/costs')
 
@@ -387,7 +404,7 @@ describe('PageTabs', () => {
       const locked = links[1]
       expect(locked.classes()).toContain('locked')
       expect(locked.attributes('href')).toBe('/settings/license')
-      expect(locked.attributes('title')).toBe('Available on the Team plan')
+      expect(locked.attributes('title')).toBe('Available on the Cost governance plan')
       expect(locked.find('[data-testid="lock-icon"]').exists()).toBe(true)
       expect(links[0].classes()).toContain('locked')
       expect(links[0].attributes('href')).toBe('/settings/license')
@@ -398,8 +415,8 @@ describe('PageTabs', () => {
       expect(links[2].find('[data-testid="lock-icon"]').exists()).toBe(false)
     })
 
-    it('gives a locked tab an accessible name that carries the label and the plan', () => {
-      const store = usePlanStore()
+    it('gives a locked tab an accessible name that carries the label and the capability', () => {
+      const store = seedEntitlements([])
       store.$patch({ currentTier: 'community', loaded: true })
       const wrapper = createWrapper(costTabs, '/admin/costs')
 
@@ -407,7 +424,7 @@ describe('PageTabs', () => {
       expect(lockedTabs).toHaveLength(2)
       const spendLimits = lockedTabs[1]
       expect(spendLimits.attributes('data-testid')).toBe('page-tab-locked')
-      expect(spendLimits.attributes('aria-label')).toBe('Spend Limits (Available on the Team plan)')
+      expect(spendLimits.attributes('aria-label')).toBe('Spend Limits (Available on the Cost governance plan)')
       // Focusable trigger with tab semantics preserved.
       expect(spendLimits.attributes('role')).toBe('tab')
       expect(spendLimits.attributes('aria-selected')).toBe('false')
@@ -426,8 +443,8 @@ describe('PageTabs', () => {
       expect(locked.find('.page-tab-badge').classes()).toContain('badge-warning')
     })
 
-    it('does not lock team-tier tabs when the org is on the team plan', () => {
-      const store = usePlanStore()
+    it('does not lock commercially gated tabs when the plan grants the entitlement', () => {
+      const store = seedEntitlements(['cost_governance'])
       store.$patch({ currentTier: 'team', loaded: true })
       const wrapper = createWrapper(costTabs, '/admin/costs')
 
@@ -443,8 +460,8 @@ describe('PageTabs', () => {
       expect(links[1].attributes('aria-label')).toBeUndefined()
     })
 
-    it('never locks a community-tier or ungated tab, even on the community plan', () => {
-      const store = usePlanStore()
+    it('never locks a tab with no entitlement, even on the community plan', () => {
+      const store = seedEntitlements([])
       store.$patch({ currentTier: 'community', loaded: true })
       const wrapper = createWrapper(
         [
@@ -465,12 +482,11 @@ describe('PageTabs', () => {
       ])
     })
 
-    it('does not lock a team-tier tab while the plan is still resolving (no locked-flash)', () => {
-      // Before the plan sources resolve, the active tier defaults to
-      // `community`, so isAtMinimumTier cannot yet tell an entitled user from
-      // an under-tier one. Rendering a lock here would flash at a
-      // tier-entitled user; the tab must stay unlocked until the plan is known.
-      const store = usePlanStore()
+    it('does not lock a commercially gated tab while the plan is still resolving (no locked-flash)', () => {
+      // Before the plan payload resolves the entitlement set is empty, so the
+      // grant is unknown. Rendering a lock here would flash at an entitled
+      // user; the tab must stay unlocked until the plan is known.
+      const store = seedEntitlements([])
       store.$patch({ currentTier: 'community', loaded: false })
       const wrapper = createWrapper(
         [{ label: 'Spend Limits', to: '/admin/costs/limits' }],
@@ -483,10 +499,10 @@ describe('PageTabs', () => {
       expect(link.attributes('href')).toBe('/admin/costs/limits')
     })
 
-    it('locks a team-tier tab once the plan resolves as community', () => {
-      // The complement of the case above: the same under-tier user, once the
+    it('locks a commercially gated tab once the plan resolves without the entitlement', () => {
+      // The complement of the case above: the same unentitled user, once the
       // plan has resolved, does get the lock treatment.
-      const store = usePlanStore()
+      const store = seedEntitlements([])
       store.$patch({ currentTier: 'community', loaded: true })
       const wrapper = createWrapper(
         [{ label: 'Spend Limits', to: '/admin/costs/limits' }],

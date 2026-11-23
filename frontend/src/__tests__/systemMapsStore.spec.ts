@@ -24,7 +24,7 @@ vi.mock('../composables/useCurrentUser', () => ({
   useCurrentUser: () => ({ isOperator: mockIsOperator, isSystemAdmin: mockIsSystemAdmin }),
 }))
 
-import { useSystemMapsStore } from '../stores/systemMaps'
+import { isReleaseGatedVisibility, useSystemMapsStore } from '../stores/systemMaps'
 
 function jwtFor(sub: string, claims: Record<string, unknown> = {}): string {
   const payload = btoa(JSON.stringify({ sub, ...claims }))
@@ -860,5 +860,23 @@ describe('useSystemMapsStore feature entitlement (402)', () => {
     expect(store.unavailable).toBe(true)
     expect(store.error).toBeNull()
     expect(store.activeRevision).toBeNull()
+  })
+})
+
+describe('isReleaseGatedVisibility (FAR-2638)', () => {
+  it('fails closed when the manifest route entry is missing', () => {
+    expect(isReleaseGatedVisibility(undefined)).toBe(true)
+    expect(isReleaseGatedVisibility(null)).toBe(true)
+  })
+
+  it('gates private_preview and in_dev routes', () => {
+    expect(isReleaseGatedVisibility({ visibility: 'private_preview' })).toBe(true)
+    expect(isReleaseGatedVisibility({ visibility: 'in_dev' })).toBe(true)
+  })
+
+  it('does not gate a public route or one with no visibility', () => {
+    expect(isReleaseGatedVisibility({ visibility: 'public' })).toBe(false)
+    expect(isReleaseGatedVisibility({})).toBe(false)
+    expect(isReleaseGatedVisibility({ visibility: null })).toBe(false)
   })
 })

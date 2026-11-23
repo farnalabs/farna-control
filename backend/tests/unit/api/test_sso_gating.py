@@ -154,8 +154,9 @@ class TestAdminSsoGating:
         body = resp.json()
         assert body["status"] == 402
         assert body["type"] == "urn:problem:modulo:feature_required"
-        assert body["instance"] == "sso"
-        assert body["detail"] == ("sso is not available on your plan — it requires a Team licence installed at system or organisation scope")
+        # FAR-2665: the route names the commercial capability it needs.
+        assert body["instance"] == "identity"
+        assert body["detail"] == ("Identity is not available on your plan — it requires a Team licence installed at system or organisation scope")
 
     def test_list_providers_succeeds_when_enabled(self, client_with_sso: TestClient) -> None:
         mock_provider = MagicMock()

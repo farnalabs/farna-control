@@ -19,7 +19,6 @@ SAMPLE_MANIFEST = {
             "sidebar_group": "core",
             "sidebar_order": 1,
             "type": "page",
-            "required_tier": "community",
             "required_roles": None,
             "required_permissions": None,
             "deprecated": False,
@@ -129,63 +128,71 @@ class TestManifestLoad:
 
         manifest = load_manifest()
         for path, route in manifest["routes"].items():
-            assert "required_tier" in route, f"Route {path} missing required_tier"
+            # FAR-2665 replaced the commercial `required_tier` with
+            # `required_entitlement`; a route now declares ROLES and PERMISSIONS
+            # and only names an entitlement when the capability is commercial.
             assert "required_roles" in route, f"Route {path} missing required_roles"
+            assert "required_permissions" in route, f"Route {path} missing required_permissions"
 
-    def test_community_routes_have_null_roles(self):
-        """Community-tier routes default to null required_roles.
+    def test_free_routes_have_null_roles(self):
+        """Routes with no commercial entitlement default to null required_roles.
 
-        Exception (FAR-462): a community route MAY declare an EXPLICIT role
-        list when the nav item must be role-gated independently of tier — the
-        frontend router enforces required_roles as a separate gate from
-        required_tier (see frontend/src/router/index.ts route guard and
+        FAR-2665: the free tier is the ABSENCE of a ``required_entitlement``,
+        not a ``required_tier`` string — tier is now a projection of the
+        entitlement grant. The FAR-462 exception is unchanged: a free route MAY
+        declare an EXPLICIT role list when the nav item must be role-gated
+        independently of the capability — the frontend router enforces
+        required_roles as a separate gate from the entitlement (see
+        frontend/src/router/index.ts route guard and
         frontend/src/config/navigation.ts canSeeItem), so the explicit list
-        preserves admin-only navigation while the tier stays community.
-        Any explicit list is constrained to exactly ["admin"], or to the
+        preserves admin-only navigation while the route stays free. Any
+        explicit list is constrained to exactly ["admin"], or to the
         operator+admin dev-gated set when the route is hidden behind a
         dev-only visibility gate paired with its own grant — `in_dev` +
         `library.search.in_dev` (FAR-2200 internal lifecycle-map surfaces) or
         `private_preview` + `system_maps_access` (FAR-2288 System Maps
-        authoring surfaces) — by test_community_routes_roles_are_admin_only.
+        authoring surfaces) — by test_free_routes_roles_are_admin_only.
         """
         _reset_manifest()
         from farna.core.manifest import load_manifest
 
         manifest = load_manifest()
         for path, route in manifest["routes"].items():
-            if route["required_tier"] == "community":
+            if route.get("required_entitlement") is None:
                 roles = route["required_roles"]
                 assert roles is None or isinstance(roles, list), f"Route {path} should have null roles or an explicit role list"
 
-    def test_community_routes_roles_are_admin_only(self):
-        """A community-tier route declaring explicit roles stays admin-gated.
+    def test_free_routes_roles_are_admin_only(self):
+        """A free route declaring explicit roles stays admin-gated.
 
-        Pins the FAR-462 escape hatch (/admin/users is community-tier but
-        admin-role-gated for nav) so it cannot widen silently to other roles.
+        Pins the FAR-462 escape hatch (/admin/users is free but admin-role-gated
+        for nav) so it cannot widen silently to other roles.
 
-        A widened community route is permitted only by an explicit policy
+        A widened free route is permitted only by an explicit policy
         exception:
 
         - ``in_dev`` + ``library.search.in_dev`` - the retained internal
-          lifecycle-map surfaces (FAR-2200); and
+          lifecycle-map surfaces (FAR-2200);
         - ``private_preview`` + ``system_maps_access`` - the System Maps
           authoring surfaces (FAR-2288), which deliberately use their own grant
           separate from the lifecycle-map one; or
-        - the published System Maps reads (``/system-maps`` and
-          ``/system-maps/:id`` only), which are ``public`` in manifest
-          vocabulary but still require an authenticated viewer and the dedicated
-          ``system_maps.read`` permission (FAR-2363). Drafts are 404 for any
-          caller without the internal gate, and the backend's published-only
-          filter is pinned by ``tests/unit/api/test_system_maps_routes.py``
-          (``list_maps_by_org``/``list_revisions_history`` receive
-          ``published_only=True``) plus
+        - ``private_preview`` + ``system_maps.read`` - the System Maps read
+          surfaces (``/system-maps`` and ``/system-maps/:id`` only), which stay
+          authenticated viewer routes behind the dedicated ``system_maps.read``
+          permission. FAR-2363 originally made these published reads ``public``
+          in manifest vocabulary; **FAR-2638 reverses that**: System Maps now
+          ships at Beta and is no longer a published surface, so both the list
+          and the detail route are hidden from customers and the read-only demo
+          as ``private_preview``. The viewer role and the permission gate are
+          unchanged, and the reversal is deliberate here - not a regression.
+          Drafts still 404 for any caller without the internal gate; the
+          backend's published-only filter remains pinned by
+          ``tests/unit/api/test_system_maps_routes.py`` and
           ``tests/integration/test_system_maps_published_read.py``.
 
         Every widened route must therefore carry a matching permission gate;
-        public visibility is allowed only for the explicit published-read
-        exception, never as an anonymous route. The published System Maps
-        reads are the only such entries; mutations remain operator-only behind
-        the separate ``system_maps_access`` grant.
+        no widened free route may be ``public`` any more. Mutations remain
+        operator-only behind the separate ``system_maps_access`` grant.
         """
         _reset_manifest()
         from farna.core.manifest import load_manifest
@@ -194,46 +201,68 @@ class TestManifestLoad:
             "in_dev": "library.search.in_dev",
             "private_preview": "system_maps_access",
         }
-        # Deliberately viewer-readable PUBLIC community routes (FAR-2363):
-        # published System Maps reads for every authenticated principal, gated
-        # by the dedicated system_maps.read permission. The exception is narrow:
-        # only these two paths, and only with exactly [system_maps.read].
-        viewer_visible_public_routes = {
+        # Deliberately viewer-readable FREE routes (FAR-2363): the System Maps
+        # read surfaces for every authenticated principal, gated by the
+        # dedicated system_maps.read permission. FAR-2638 moved System Maps to
+        # Beta, so these are `private_preview` now - hidden from customers and
+        # the read-only demo - while the viewer role and the permission gate
+        # stay required, so the surface can never become effectively public
+        # without a permission gate. The set must be fully present (non-vacuity
+        # checked below), not silently skipped.
+        viewer_readable_system_map_routes = {
             "/system-maps": "system_maps.read",
             "/system-maps/:id": "system_maps.read",
         }
+        # FAR-2356: the error dashboard is a FREE admin surface that also admits
+        # the demo org's read-only viewer. It was team-tier before FAR-2665, so
+        # this test never saw it; the exception (pinned exactly by
+        # test_admin_routes_require_admin_role) must be honoured here too now
+        # that the route carries no entitlement.
+        viewer_visible_admin_routes = {"/admin/errors", "/admin/errors/:id"}
         manifest = load_manifest()
+        seen_system_map_routes: set[str] = set()
         for path, route in manifest["routes"].items():
-            if route["required_tier"] != "community" or route["required_roles"] is None:
+            if route.get("required_entitlement") is not None or route["required_roles"] is None:
                 continue
             if route["required_roles"] == ["admin"]:
                 continue
-            if path in viewer_visible_public_routes:
-                read_permission = viewer_visible_public_routes[path]
-                assert route.get("visibility") == "public", f"Viewer-readable community route {path} must be public"
-                assert "viewer" in route["required_roles"], f"Viewer-readable community route {path} must include the viewer role"
-                assert route.get("required_permissions") == [read_permission], f"Viewer-readable community route {path} must require only {read_permission}"
+            if path in viewer_visible_admin_routes:
+                assert route["required_roles"] == ["admin", "viewer"], f"Viewer-readable admin route {path} must require exactly ['admin', 'viewer']"
+                continue
+            if path in viewer_readable_system_map_routes:
+                read_permission = viewer_readable_system_map_routes[path]
+                seen_system_map_routes.add(path)
+                assert route.get("visibility") == "private_preview", f"Viewer-readable free route {path} must be private_preview (FAR-2638 hides System Maps until Beta)"
+                assert "viewer" in route["required_roles"], f"Viewer-readable free route {path} must include the viewer role"
+                assert route.get("required_permissions") == [read_permission], f"Viewer-readable free route {path} must require only {read_permission}"
                 continue
             visibility = route.get("visibility")
-            assert visibility in dev_gate_permissions, f"Community route {path} may only widen roles to ['operator', 'admin'] behind a dev-only visibility gate (in_dev or private_preview)"
+            assert visibility in dev_gate_permissions, f"Free route {path} may only widen roles to ['operator', 'admin'] behind a dev-only visibility gate (in_dev or private_preview)"
             gate_permission = dev_gate_permissions[visibility]
-            assert gate_permission in (route.get("required_permissions") or []), f"Community route {path} widened roles without the {gate_permission} permission gate"
-            assert route["required_roles"] == ["operator", "admin"], f"Community route {path} with explicit roles must require exactly ['admin'] or the dev-gated ['operator', 'admin'] set"
+            assert gate_permission in (route.get("required_permissions") or []), f"Free route {path} widened roles without the {gate_permission} permission gate"
+            assert route["required_roles"] == ["operator", "admin"], f"Free route {path} with explicit roles must require exactly ['admin'] or the dev-gated ['operator', 'admin'] set"
+        assert seen_system_map_routes == set(viewer_readable_system_map_routes), f"Both System Maps read routes must exist as viewer-readable private_preview routes; expected {sorted(viewer_readable_system_map_routes)}, saw {sorted(seen_system_map_routes)}"
 
     def test_admin_routes_require_admin_role(self):
-        """Team-tier /admin routes require the admin org-role, except system_admin_only routes.
+        """Admin /admin routes require the admin org-role, except system_admin_only routes.
 
         A `system_admin_only: true` route is an INSTANCE-level gate; its
         org-ROLE requirement does not apply (FAR-1795). `/admin/product-analytics`
-        uses `<<: *team` (which injects `required_roles: [admin]`) and then
+        uses `<<: *admin` (which injects `required_roles: [admin]`) and then
         overrides it to null, so the explicit key must win and the route is
         gated by `system_admin_only` alone. The frontend
         `manifestGating.spec.ts` pins the same contract.
 
+        FAR-2665: a /admin surface is admin-gated either because it carries a
+        commercial ``required_entitlement`` or because its manifest entry
+        declares an explicit role list; both must stay ``["admin"]``. A free
+        /admin route that declares no org role (for example ``/admin/evidence``)
+        is gated elsewhere (a dedicated permission) and is out of scope here.
+
         Exception (FAR-2356): the error dashboard is deliberately reachable by
         the demo org's read-only `viewer` principal as well as an `admin`, so
         these routes carry `required_roles: [admin, viewer]`. The exception is
-        an explicit allowlist: any other team-tier /admin route widening past
+        an explicit allowlist: any other /admin route widening past
         `["admin"]` still fails here.
         """
         _reset_manifest()
@@ -242,7 +271,9 @@ class TestManifestLoad:
         viewer_visible_admin_routes = {"/admin/errors", "/admin/errors/:id"}
         manifest = load_manifest()
         for path, route in manifest["routes"].items():
-            if not (path.startswith("/admin/") and route["required_tier"] == "team"):
+            if not path.startswith("/admin/"):
+                continue
+            if route.get("required_entitlement") is None and route.get("required_roles") is None:
                 continue
             if route.get("system_admin_only") is True:
                 assert route["required_roles"] is None, f"system_admin_only route {path} must not carry an org-role gate"
@@ -397,7 +428,7 @@ sidebar_groups:
 
         yaml_text = """
 x-community: &community
-  required_tier: community
+  required_entitlement: identity
   required_roles: null
 routes:
   /ok:
@@ -411,4 +442,4 @@ routes:
             with patch.dict(os.environ, {"MANIFEST_PATH": str(p)}):
                 manifest = load_manifest()
         assert manifest["routes"]["/ok"]["required_roles"] == ["admin"]
-        assert manifest["routes"]["/ok"]["required_tier"] == "community"
+        assert manifest["routes"]["/ok"]["required_entitlement"] == "identity"

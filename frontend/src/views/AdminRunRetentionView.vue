@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="admin_run_retention" required-tier="team" show-disabled>
+  <FeatureGate feature-name="admin_run_retention" show-disabled>
     <div class="page-wide">
       <PageHeader
         :title="$t('views.AdminRunRetentionView.run_retention')"

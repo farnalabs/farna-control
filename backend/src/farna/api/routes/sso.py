@@ -352,7 +352,7 @@ def _env_saml_available(settings: Settings) -> bool:
     option on a lapsed licence strands an SSO-only instance: the login page
     would offer no way for an administrator to sign in and reach the licence
     screen. Entitlement is enforced post-auth (the plan resolves to Community)
-    and on the admin configuration surface by ``require_feature("sso")``.
+    and on the admin configuration surface by ``require_entitlement("identity")``.
     """
     return bool(settings.saml_enabled and (bool(settings.saml_idp_metadata_url) or bool(settings.saml_idp_metadata_xml)))
 

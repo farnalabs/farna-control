@@ -1,19 +1,22 @@
 # Delivery System Maps Specification
 
-**Status:** Beta preview (authoring available in Alpha behind a default-OFF, per-organisation flag)
+**Status:** Beta — release-gated behind developer mode until Beta ships (FAR-2638)
 **Target Milestone:** Beta
 **Category:** Product & Technical Architecture Specification
 **Related:** `docs/architecture.md`, `docs/core-principles.md`
 
-> **Alpha availability (FAR-2595).** System Maps authoring is enabled as a
-> clearly-labelled Beta-preview surface in Alpha. It is a normal
-> default-OFF community-tier feature flag (`system_maps`), settable per
-> organisation by an org admin, gated by the operator/admin role and the
-> `system_maps_access` grant. It is no longer developer-mode-only. The
-> published read model remains viewer-readable (`system_maps_read` +
-> `system_maps.read`). The Beta milestone below describes the remaining
-> scope (for example improvement-loop sidecars and recommendation surfaces),
-> not a dev-mode gate on the authoring surface.
+> **Alpha availability (FAR-2638).** System Maps ships at Beta and is
+> release-gated behind developer mode until then: both `/system-maps` and
+> `/system-maps/:id` are `private_preview` routes in the product manifest, so
+> the surface is visible only when developer mode is enabled and is never
+> exposed to ordinary Alpha users. Within that dev-mode gate the existing
+> authority still applies — authoring, discovery and publish require the
+> org-aware default-OFF `system_maps` flag, the operator/admin role and the
+> `system_maps_access` grant, and published reads stay viewer-readable
+> (`system_maps_read` + `system_maps.read`). The Beta milestone below describes
+> the remaining scope (for example improvement-loop sidecars and recommendation
+> surfaces) that must land before the routes are promoted out of
+> `private_preview`.
 
 ---
 

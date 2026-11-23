@@ -6,18 +6,17 @@
        :tabs="costPageTabs"
     />
 
-    <FeatureGate feature-name="admin_cost_controls" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_cost_controls" show-disabled class="space-y-6">
       <LoadingSpinner v-if="loading" />
       <template v-else>
         <DataCard
           :title="$t('views.AdminCostControlsView.budget_overview')"
           :description="$t('views.AdminCostControlsView.current_billing_period_spend_vs_budget')"
-          padding="none"
         >
           <template #default>
             <LoadingSpinner v-if="costsLoading" />
             <div v-else-if="costsError" class="text-sm text-destructive">{{ costsError }}</div>
-             <div v-else class="space-y-4 p-6">
+             <div v-else class="space-y-4">
                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                  <MetricCard
                    :label="$t('views.AdminCostBreakdownView.total_spend')"
@@ -60,7 +59,6 @@
            :title="$t('views.AdminCostControlsView.team_budgets')"
            :description="$t('views.AdminCostControlsView.set_per_team_budget_caps')"
 
-           padding="none"
            heading-level="h2"
          >
            <template #default>

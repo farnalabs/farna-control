@@ -2,15 +2,15 @@
   <div class="page-narrow" data-testid="locked-route">
     <PageHeader :title="heading" :subtitle="subtitle" data-testid="locked-route-header" />
 
-    <!-- A paid capability: an upgrade fixes it, so reuse the entitlement gate
-         (the same lock Org Settings / My Profile / schema history show) rather
-         than inventing a second lock pattern. The gate renders the "Team
-         Feature" lock and its View Plans call to action. -->
+    <!-- A commercial capability: an upgrade fixes it, so reuse the
+         entitlement gate (the same lock Org Settings / My Profile / schema
+         history show) rather than inventing a second lock pattern. FAR-2665:
+         the gate is driven by the entitlement the router named, read from the
+         plan payload's registry. -->
     <FeatureGate
-      v-if="isTierLock"
+      v-if="isEntitlementLock"
       class="mt-6"
-      :feature-name="FEATURE_NAME"
-      :required-tier="requiredTier || undefined"
+      :required-entitlement="requiredEntitlement || undefined"
     >
       <!-- Reached when the licence now covers the capability (an upgrade
            landed and this page was reloaded, which refetches the plan). -->
@@ -64,34 +64,30 @@ import { usePlanStore } from '../stores/planStore'
  * The router guard (`lockedRouteFor`) and a view that knowingly links to a
  * capability the caller cannot reach both target this page with a query:
  *
- *   from        the page the caller was trying to open
- *   capability  the manifest breadcrumb for it (display fallback)
- *   tier        the licence it needs (tier locks only)
- *   role        the role key(s) that would open it, comma-separated (FAR-2687,
- *               role locks only)
- *   reason      'tier' (default) | 'role' | 'system_admin'
+ *   from         the page the caller was trying to open
+ *   capability   the manifest breadcrumb for it (display fallback)
+ *   entitlement  the capability it needs (commercial locks only)
+ *   role         the role key(s) that would open it, comma-separated (FAR-2687,
+ *                role locks only)
+ *   reason       'entitlement' (default) | 'role' | 'system_admin'
  *
- * Naming the capability is the point: "Costs requires the Team licence"
- * tells the caller they hit a paid capability, where the old silent bounce to
- * the Dashboard read as a broken application. A role refusal names the role
- * for the same reason (FAR-2687): "Your role cannot open Users" alone does not
- * tell them what to ask for.
+ * Naming the capability is the point: "Costs requires the Cost governance
+ * capability" tells the caller they hit a commercial gate, where the old
+ * silent bounce to the Dashboard read as a broken application. A role refusal
+ * names the role for the same reason (FAR-2687): "Your role cannot open Users"
+ * alone does not tell them what to ask for.
  */
 const route = useRoute()
 const { t } = useI18n()
 const planStore = usePlanStore()
 
-// FeatureGate requires a flag name; there is no per-capability flag here, so
-// the gate is driven entirely by `required-tier`.
-const FEATURE_NAME = 'locked_route'
-
-const reason = computed<'tier' | 'role' | 'system_admin'>(() => {
+const reason = computed<'entitlement' | 'role' | 'system_admin'>(() => {
   const raw = route.query.reason
   if (raw === 'role' || raw === 'system_admin') return raw
-  return 'tier'
+  return 'entitlement'
 })
 
-const isTierLock = computed(() => reason.value === 'tier')
+const isEntitlementLock = computed(() => reason.value === 'entitlement')
 
 // A role refusal is fixable by the organisation; an instance-admin restriction
 // is not, so the body must name the right person (FAR-2664 review).
@@ -147,16 +143,16 @@ const fromPath = computed(() => {
   return SAFE_IN_APP_PATH.test(value) ? value : ''
 })
 
-const requiredTier = computed(() => {
-  const raw = route.query.tier
+const requiredEntitlement = computed(() => {
+  const raw = route.query.entitlement
   return typeof raw === 'string' ? raw : ''
 })
 
-const tierLabel = computed(() =>
-  requiredTier.value ? planStore.getTierLabel(requiredTier.value) : '',
+const entitlementLabel = computed(() =>
+  requiredEntitlement.value
+    ? planStore.getEntitlementLabel(requiredEntitlement.value)
+    : '',
 )
-
-const currentTierLabel = computed(() => planStore.getTierLabel(planStore.currentTier))
 
 /**
  * The capability in the caller's terms: the translated sidebar label for the
@@ -183,19 +179,19 @@ const heading = computed(() => {
   if (reason.value === 'system_admin') {
     return t('views.LockedRoute.system_admin_heading', { capability: capabilityLabel.value })
   }
-  if (!tierLabel.value) {
-    return t('views.LockedRoute.tier_heading_unknown', { capability: capabilityLabel.value })
+  if (!entitlementLabel.value) {
+    return t('views.LockedRoute.entitlement_heading_unknown', { capability: capabilityLabel.value })
   }
-  return t('views.LockedRoute.tier_heading', {
+  return t('views.LockedRoute.entitlement_heading', {
     capability: capabilityLabel.value,
-    tier: tierLabel.value,
+    entitlement: entitlementLabel.value,
   })
 })
 
 const subtitle = computed(() => {
   if (reason.value === 'role') return t('views.LockedRoute.role_subtitle')
   if (reason.value === 'system_admin') return t('views.LockedRoute.system_admin_subtitle')
-  if (!tierLabel.value) return t('views.LockedRoute.tier_subtitle_unknown')
-  return t('views.LockedRoute.tier_subtitle', { currentTier: currentTierLabel.value })
+  if (!entitlementLabel.value) return t('views.LockedRoute.entitlement_subtitle_unknown')
+  return t('views.LockedRoute.entitlement_subtitle', { entitlement: entitlementLabel.value })
 })
 </script>

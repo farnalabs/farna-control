@@ -152,7 +152,7 @@ backend/src/farna/core/guardrails/compensation.py	1
 backend/src/farna/core/guardrails/coverage.py	14
 backend/src/farna/core/guardrails/loop_intercept.py	11
 backend/src/farna/core/guardrails/sandbox_bridge.py	17
-backend/src/farna/core/library_service/__init__.py	36
+backend/src/farna/core/library_service/__init__.py	38
 backend/src/farna/core/library_service/_seed_data.py	62
 backend/src/farna/core/library_service/install.py	14
 backend/src/farna/core/license_signing.py	1
@@ -210,6 +210,7 @@ backend/src/farna/core/workflow_import_export/__init__.py	3
 backend/src/farna/db/bootstrap_role.py	1
 backend/src/farna/db/bundled_runner_template.py	4
 backend/src/farna/db/capacity.py	1
+backend/src/farna/db/crud/library_primitive.py	1
 backend/src/farna/db/crud/notifications.py	1
 backend/src/farna/db/crud/org_deletion.py	2
 backend/src/farna/db/crud/organisation.py	3
@@ -477,7 +478,7 @@ backend/tests/unit/core/cost_controller/test_cost_finalize.py	12
 backend/tests/unit/core/cost_controller/test_cost_metrics.py	17
 backend/tests/unit/core/eval/test_override_provenance_findings.py	1
 backend/tests/unit/core/evidence/test_retention.py	1
-backend/tests/unit/core/library_service/test_contribute.py	3
+backend/tests/unit/core/library_service/test_contribute.py	4
 backend/tests/unit/core/library_service/test_install_coverage.py	6
 backend/tests/unit/core/library_service/test_install_field_spec.py	2
 backend/tests/unit/core/library_service/test_registry_lookup_and_listing.py	22
@@ -521,6 +522,7 @@ backend/tests/unit/core/test_stripe_fulfilment.py	2
 backend/tests/unit/core/watchdog/test_worker_liveness.py	1
 backend/tests/unit/cron_helpers/test_cron_helpers.py	4
 backend/tests/unit/crud/test_run_retention_crud.py	1
+backend/tests/unit/db/crud/test_library_org_clamp.py	11
 backend/tests/unit/db/crud/test_offset_has_more_sweep.py	9
 backend/tests/unit/db/crud/test_organisation.py	3
 backend/tests/unit/db/crud/test_run_coverage_extra.py	2

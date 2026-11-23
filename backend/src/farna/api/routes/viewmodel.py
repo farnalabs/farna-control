@@ -22,6 +22,7 @@ from farna.api.db_error_handling import handle_db_errors, raise_session_contract
 from farna.api.dependencies import get_db_session
 from farna.auth.dependencies import get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
+from farna.core.entitlements import all_entitlements, plan_entitlements
 from farna.core.feature_flags import (
     PlanContext,
     effective_feature_flags,
@@ -176,6 +177,24 @@ class PlanFlagInfo(BaseModel):
     depends_on: list[str] | None = None
 
 
+class PlanEntitlementInfo(BaseModel):
+    """One commercial entitlement in the ``/api/v1/plan`` payload (FAR-2665).
+
+    ``granted`` is the licence answer; ``flags`` is the behaviour flags the
+    entitlement covers. The client derives BOTH directions from this list — the
+    granted set that gates a route, and the flag -> entitlement mapping that
+    tells a commercial lock from an organisation-disabled flag — so the SPA
+    never needs a second source (a manifest tier or a hardcoded map) that can
+    drift from the backend.
+    """
+
+    key: str
+    name: str
+    description: str
+    granted: bool
+    flags: list[str]
+
+
 class PlanBootstrapResponse(BaseModel):
     """Caller-scoped effective plan + feature bootstrap (FAR-1806).
 
@@ -183,11 +202,17 @@ class PlanBootstrapResponse(BaseModel):
     permission), with the org ``feature_overrides`` overlay applied and the
     FULL known flag set present — inactive flags carry
     ``currently_active: false`` rather than being omitted.
+
+    FAR-2665 adds ``entitlements``: the commercial capability set (Identity /
+    Audit and evidence / Cost governance) with what the licence grants, so a
+    commercial gate is answered from the plan payload rather than from a
+    per-view tier prop.
     """
 
     license: PlanLicenseInfo
     dev_mode: bool
     flags: list[PlanFlagInfo]
+    entitlements: list[PlanEntitlementInfo] = Field(default_factory=list)
 
 
 class ViewModelCurrent(BaseModel):
@@ -456,9 +481,20 @@ async def plan_bootstrap(
 
     flags = effective_feature_flags(plan_ctx, _org_feature_overrides(org))
     expires_at, license_org_id = _resolve_license_expiry(settings, org)
+    granted = plan_entitlements(plan_ctx)
     return PlanBootstrapResponse(
         license=PlanLicenseInfo(tier=plan_ctx.tier(), expires_at=expires_at, org_id=license_org_id),
         dev_mode=bool(settings.dev_mode),
+        entitlements=[
+            PlanEntitlementInfo(
+                key=entitlement.key,
+                name=entitlement.name,
+                description=entitlement.description,
+                granted=entitlement.key in granted,
+                flags=list(entitlement.flags),
+            )
+            for entitlement in all_entitlements()
+        ],
         flags=[
             PlanFlagInfo(
                 name=flag.name,

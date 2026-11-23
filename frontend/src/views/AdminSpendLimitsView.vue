@@ -6,7 +6,7 @@
        :tabs="costPageTabs"
     />
 
-    <FeatureGate feature-name="admin_spend_limits" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_spend_limits" show-disabled class="space-y-6">
       <!-- STATE-3 (ux-conformance): teams/form layout is known before data
            arrives, so the loading placeholder is a determinate pulse skeleton
            instead of an indeterminate spinner. -->
@@ -42,7 +42,7 @@
            </template>
          </DataCard>
 
-        <FeatureGate feature-name="admin_cost_controls" required-tier="team" show-disabled>
+        <FeatureGate feature-name="admin_cost_controls" show-disabled>
            <DataCard
              heading-level="h2"
              :title="$t('views.AdminSpendLimitsView.hard_spend_ceilings')"

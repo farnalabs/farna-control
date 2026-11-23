@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="webhook_trigger" required-tier="community" show-disabled>
+  <FeatureGate feature-name="webhook_trigger" show-disabled>
 
     <div data-theme="agent" class="page-wide">
     <PageHeader :title="$t('views.SettingsTriggersView.title')" :subtitle="$t('views.SettingsTriggersView.subtitle')">

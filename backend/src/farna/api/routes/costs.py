@@ -23,7 +23,7 @@ from farna.api.db_error_handling import (
     raise_lock_timeout_conflict_if,
     raise_session_contract_error,
 )
-from farna.api.dependencies import get_db_session, require_feature, require_permission
+from farna.api.dependencies import get_db_session, require_entitlement, require_permission
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
@@ -347,8 +347,7 @@ async def get_costs(
 @router.get("/limits")
 @handle_db_errors("costs.get_spend_limits")
 async def get_spend_limits(
-    _: object = require_feature("admin_spend_limits"),
-    __: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> SpendLimitResponse:
@@ -404,8 +403,7 @@ async def get_spend_limits(
 @handle_db_errors("costs.set_org_spend_limit")
 async def set_org_spend_limit(
     req: SetSpendLimitRequest,
-    _: object = require_feature("admin_spend_limits"),
-    __: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict[str, Any]:
@@ -456,8 +454,7 @@ async def set_org_spend_limit(
 async def set_team_spend_limit(
     team_id: uuid.UUID,
     req: SetSpendLimitRequest,
-    _: object = require_feature("admin_spend_limits"),
-    __: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> dict[str, Any]:
@@ -546,7 +543,7 @@ class UpdateCostControlsRequest(BaseModel):
 @router.get("/controls")
 @handle_db_errors("costs.get_cost_controls")
 async def get_cost_controls(
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> CostControlsResponse:
@@ -635,7 +632,7 @@ def _cost_controls_response(
 @handle_db_errors("costs.update_cost_controls")
 async def update_cost_controls(
     req: UpdateCostControlsRequest,
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> CostControlsResponse:
@@ -743,7 +740,7 @@ class SetSpendCeilingRequest(BaseModel):
 @router.get("/ceiling")
 @handle_db_errors("costs.get_spend_ceiling")
 async def get_spend_ceiling(
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> SpendCeilingResponse:
@@ -796,7 +793,7 @@ async def get_spend_ceiling(
 @handle_db_errors("costs.set_spend_ceiling")
 async def set_spend_ceiling(
     req: SetSpendCeilingRequest,
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> SpendCeilingResponse:
@@ -955,7 +952,7 @@ async def export_costs(
     period: str = Query("this_month", pattern=r"^(this_month|last_month|7d|30d|90d)$"),
     group_by: str = Query("team", pattern=r"^(team|pipeline|model)$"),
     format: str = Query("csv", pattern=r"^(csv)$"),
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> Response:
@@ -1062,7 +1059,7 @@ def _report_response(report: ScheduledReport) -> ReportResponse:
 @handle_db_errors("costs.create_report")
 async def create_report(
     req: CreateReportRequest,
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> ReportResponse:
@@ -1110,7 +1107,7 @@ async def create_report(
 @router.get("/reports")
 @handle_db_errors("costs.list_reports")
 async def list_reports(
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[ReportResponse]:
@@ -1162,7 +1159,7 @@ async def list_reports(
 @handle_db_errors("costs.delete_report")
 async def delete_report(
     report_id: uuid.UUID,
-    _: object = require_feature("admin_cost_controls"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> None:
@@ -1275,7 +1272,7 @@ def _merge_anomalies(anomalies: list[dict[str, Any]], stored: Any) -> list[dict[
 @router.get("/anomalies")
 @handle_db_errors("costs.get_anomalies")
 async def get_anomalies(
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[AnomalyResponse]:
@@ -1365,7 +1362,7 @@ async def get_anomalies(
 @handle_db_errors("costs.dismiss_anomaly_endpoint")
 async def dismiss_anomaly_endpoint(
     anomaly_id: uuid.UUID,
-    _: object = require_feature("admin_cost_breakdown"),
+    _: object = require_entitlement("cost_governance"),
     current_user: TenantPrincipal = require_permission(_CODE_COST_MANAGE),
     session: AsyncSession = Depends(get_db_session),
 ) -> None:
