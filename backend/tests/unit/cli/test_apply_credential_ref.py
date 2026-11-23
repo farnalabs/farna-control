@@ -1,4 +1,4 @@
-"""Tests for ``credential_ref`` org-vault references in ``modulo apply`` (FAR-1216).
+"""Tests for ``credential_ref`` org-vault references in ``farna-control apply`` (FAR-1216).
 
 Covers the declarative field (model validation + wire normalisation to
 ``secretref://<key>``), plan-time vault-key validation (missing / unverifiable
@@ -28,7 +28,7 @@ from farna.cli.apply.loader import parse_apply_documents
 from farna.cli.apply.models import ModelBackendEntity
 
 _CREDENTIAL_REF_CONFIG = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   model_backends:
     - name: openai
@@ -364,7 +364,7 @@ class TestPlanTimeValidation:
         """A literal / env-ref / secretref api_key config makes no MCP call."""
         _mock_backends([])
         mcp = respx.post("https://api.test/mcp/").respond(json=_mcp_envelope([]))
-        config_text = "api_version: modulo.dev/v1\nentities:\n  model_backends:\n    - name: openai\n      display_name: OpenAI\n      provider: openai\n      model_id: gpt-x\n      api_key: secretref://vault/openai-key\n"
+        config_text = "api_version: farna.dev/v1\nentities:\n  model_backends:\n    - name: openai\n      display_name: OpenAI\n      provider: openai\n      model_id: gpt-x\n      api_key: secretref://vault/openai-key\n"
         config = parse_apply_documents(config_text)
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)

@@ -1,9 +1,9 @@
-# Modulo health watchdog - Gatus configuration.
+# Farna Control health watchdog - Gatus configuration.
 #
 # Consumed by the `watchdog` service in docker-compose.yml AND in
 # deploy/compose/docker-compose.prod.yml (mounted at /config/config.yaml; also
 # baked into the image so a bare `docker run` of the derived image monitors
-# Modulo rather than upstream's demo endpoints).
+# Farna Control rather than upstream's demo endpoints).
 #
 # Environment substitution: Gatus expands `${VAR}` BEFORE the file is parsed as
 # YAML, so the six variables below are the same ones the app uses for HITL
@@ -38,10 +38,10 @@ alerting:
     to: "${ALERT_EMAIL_TO}"
 
 endpoints:
-  - name: Modulo backend readiness
+  - name: Farna Control backend readiness
     # Deployment-specific target: the root compose runs split services and
     # probes backend:8000 directly; the production compose runs the all-in-one
-    # image, where the app is service `modulo` behind nginx on port 80 - its
+    # image, where the app is service `farna-control` behind nginx on port 80 - its
     # uvicorn listens on 127.0.0.1:8000, loopback-bound inside the container
     # and unreachable from other containers on the compose network.
     url: ${WATCHDOG_PROBE_URL}
@@ -61,7 +61,7 @@ endpoints:
       - "[BODY].status == ok"
     alerts:
       - type: email
-        description: "Modulo is unhealthy (${WATCHDOG_PROBE_URL})"
+        description: "Farna Control is unhealthy (${WATCHDOG_PROBE_URL})"
         failure-threshold: 3
         success-threshold: 2
         send-on-resolved: true

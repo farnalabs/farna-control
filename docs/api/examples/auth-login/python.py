@@ -1,5 +1,5 @@
 """
-Modulo API Example: Authentication (Login)
+Farna Control API Example: Authentication (Login)
 
 Demonstrates:
   - Login with email/password via POST /api/v1/auth/login

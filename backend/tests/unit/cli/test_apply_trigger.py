@@ -23,7 +23,7 @@ from tests.unit.cli.test_apply_executor import _mock_current
 LIST_PARAMS = {"page": "1", "page_size": str(PAGE_SIZE)}
 
 CRON_TRIGGER_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   triggers:
     - pipeline: nightly-report
@@ -33,7 +33,7 @@ entities:
 """
 
 _CONFIG_WITH_SECRET = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   triggers:
     - pipeline: nightly-report
@@ -45,7 +45,7 @@ entities:
 """
 
 _CONFIG_WITH_ENV_REF = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   triggers:
     - pipeline: nightly-report
@@ -57,7 +57,7 @@ entities:
 """
 
 _UPSTREAM_BLOCKED_PIPELINE_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: nightly-report
@@ -187,7 +187,7 @@ class TestPlanDecisions:
         _apply_trigger_routes([], [])
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: nightly-report
@@ -221,7 +221,7 @@ entities:
     def test_forward_reference_rejected_at_load(self) -> None:
         """A trigger referencing a pipeline declared in a LATER document is a
         load error (merge_entities), not a plan block."""
-        text = "api_version: modulo.dev/v1\nentities:\n  triggers:\n    - pipeline: nightly-report\n      name: nightly\n      trigger_type: cron\n---\napi_version: modulo.dev/v1\nentities:\n  pipelines:\n    - name: nightly-report\n"
+        text = "api_version: farna.dev/v1\nentities:\n  triggers:\n    - pipeline: nightly-report\n      name: nightly\n      trigger_type: cron\n---\napi_version: farna.dev/v1\nentities:\n  pipelines:\n    - name: nightly-report\n"
         with pytest.raises(ApplyLoadError):
             parse_apply_documents(text)
 
@@ -232,7 +232,7 @@ entities:
         _apply_trigger_routes([], [])
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   triggers:
     - pipeline: nightly-report
@@ -427,7 +427,7 @@ class TestExecution:
         routes["pipelines_post"] = respx.post("https://api.test/api/v1/pipelines").mock(side_effect=httpx.Response(500, json={"detail": "pipeline boom"}))
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: nightly-report
@@ -452,7 +452,7 @@ entities:
 
 class TestFailureIsolation:
     def _two_trigger_config_text(self) -> str:
-        return 'api_version: modulo.dev/v1\nentities:\n  triggers:\n    - pipeline: nightly-report\n      name: first\n      trigger_type: cron\n      cron_expression: "0 3 * * *"\n    - pipeline: nightly-report\n      name: second\n      trigger_type: cron\n      cron_expression: "0 4 * * *"\n'
+        return 'api_version: farna.dev/v1\nentities:\n  triggers:\n    - pipeline: nightly-report\n      name: first\n      trigger_type: cron\n      cron_expression: "0 3 * * *"\n    - pipeline: nightly-report\n      name: second\n      trigger_type: cron\n      cron_expression: "0 4 * * *"\n'
 
     @respx.mock
     def test_create_400_isolates_entity(self) -> None:
@@ -550,7 +550,7 @@ class TestFailureIsolation:
         routes["trigger_post"].mock(return_value=httpx.Response(422, json={"detail": "ongoing triggers require daily_spend_limit"}))
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   triggers:
     - pipeline: nightly-report

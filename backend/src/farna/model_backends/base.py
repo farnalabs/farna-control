@@ -76,7 +76,7 @@ class HealthResult:
 
     ``detail`` carries the provider error text for the caller's own log or
     status column. The remaining fields are transport facts the diagnostics
-    surface (``modulo doctor``) needs WITHOUT re-deriving the endpoint or
+    surface (``farna-control doctor``) needs WITHOUT re-deriving the endpoint or
     re-reading the response body — in particular ``server_time`` and
     ``proxy_via`` let the doctor report clock drift and an intercepting proxy
     from the health check's own response.

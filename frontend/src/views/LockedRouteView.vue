@@ -33,7 +33,7 @@
          can and offer the way back rather than a plan upgrade. -->
     <div v-else class="card mt-6 p-6" data-testid="locked-route-closed">
       <p class="text-sm text-muted-foreground">
-        {{ $t(refusalBodyKey) }}
+        {{ refusalBody }}
       </p>
     </div>
 
@@ -67,11 +67,15 @@ import { usePlanStore } from '../stores/planStore'
  *   from         the page the caller was trying to open
  *   capability   the manifest breadcrumb for it (display fallback)
  *   entitlement  the capability it needs (commercial locks only)
+ *   role         the role key(s) that would open it, comma-separated (FAR-2687,
+ *                role locks only)
  *   reason       'entitlement' (default) | 'role' | 'system_admin'
  *
  * Naming the capability is the point: "Costs requires the Cost governance
  * capability" tells the caller they hit a commercial gate, where the old
- * silent bounce to the Dashboard read as a broken application.
+ * silent bounce to the Dashboard read as a broken application. A role refusal
+ * names the role for the same reason (FAR-2687): "Your role cannot open Users"
+ * alone does not tell them what to ask for.
  */
 const route = useRoute()
 const { t } = useI18n()
@@ -87,11 +91,42 @@ const isEntitlementLock = computed(() => reason.value === 'entitlement')
 
 // A role refusal is fixable by the organisation; an instance-admin restriction
 // is not, so the body must name the right person (FAR-2664 review).
-const refusalBodyKey = computed(() =>
-  reason.value === 'system_admin'
-    ? 'views.LockedRoute.system_admin_body'
-    : 'views.LockedRoute.role_body',
-)
+//
+// FAR-2687: a role refusal also names WHICH role would open the page, because
+// "ask for the role that includes it" leaves the caller to guess. The role keys
+// arrive comma-separated from the guard; an unknown key is shown verbatim
+// rather than dropped, so a new manifest role still reads sensibly.
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  admin: 'views.LockedRoute.role_admin',
+  operator: 'views.LockedRoute.role_operator',
+  runner: 'views.LockedRoute.role_runner',
+  viewer: 'views.LockedRoute.role_viewer',
+}
+
+const requiredRoleLabels = computed(() => {
+  const raw = route.query.role
+  const value = typeof raw === 'string' ? raw : ''
+  const keys = value
+    .split(',')
+    .map((role) => role.trim())
+    .filter(Boolean)
+  return keys.map((role) => {
+    const labelKey = ROLE_LABEL_KEYS[role]
+    return labelKey ? t(labelKey) : role
+  })
+})
+
+const refusalBody = computed(() => {
+  if (reason.value === 'system_admin') return t('views.LockedRoute.system_admin_body')
+  const roles = requiredRoleLabels.value
+  if (reason.value === 'role' && roles.length === 1) {
+    return t('views.LockedRoute.role_body_required', { roles: roles[0] })
+  }
+  if (reason.value === 'role' && roles.length > 1) {
+    return t('views.LockedRoute.role_body_required_any', { roles: roles.join(', ') })
+  }
+  return t('views.LockedRoute.role_body')
+})
 
 /**
  * Only an in-app absolute path is a safe navigation target. `//host` is a

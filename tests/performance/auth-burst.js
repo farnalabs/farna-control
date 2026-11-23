@@ -32,11 +32,11 @@ export const options = {
 };
 
 const testUsers = [
-  { email: 'admin@modulo.test', password: 'test-password-123' },
-  { email: 'user-one@modulo.test', password: 'test-password-123' },
-  { email: 'user-two@modulo.test', password: 'test-password-123' },
-  { email: 'viewer@modulo.test', password: 'test-password-123' },
-  { email: 'editor@modulo.test', password: 'test-password-123' },
+  { email: 'admin@farna-control.test', password: 'test-password-123' },
+  { email: 'user-one@farna-control.test', password: 'test-password-123' },
+  { email: 'user-two@farna-control.test', password: 'test-password-123' },
+  { email: 'viewer@farna-control.test', password: 'test-password-123' },
+  { email: 'editor@farna-control.test', password: 'test-password-123' },
 ];
 
 export default function authBurst() {

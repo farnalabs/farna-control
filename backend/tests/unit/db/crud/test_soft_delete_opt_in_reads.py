@@ -53,7 +53,7 @@ async def test_list_environment_profiles_include_deleted() -> None:
     session = AsyncMock()
     session.execute = AsyncMock(side_effect=[_result(scalar=2), _result(scalars=[])])
 
-    result = await list_environment_profiles(session, include_deleted=True)
+    result = await list_environment_profiles(session, org_id=uuid.uuid4(), include_deleted=True)
 
     assert result.total == 2
     assert not result.items
@@ -65,7 +65,7 @@ async def test_list_environment_profiles_include_deleted_cursor() -> None:
     with patch("farna.db.crud.environment_profile.CursorPaginator") as paginator_cls:
         paginator_cls.return_value.paginate = AsyncMock(return_value=page)
 
-        result = await list_environment_profiles(session, cursor="abc", include_deleted=True)
+        result = await list_environment_profiles(session, org_id=uuid.uuid4(), cursor="abc", include_deleted=True)
 
     assert result.total == 0
     paginator_cls.return_value.paginate.assert_awaited_once()

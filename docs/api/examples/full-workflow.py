@@ -1,5 +1,5 @@
 """
-Modulo API Example: Complete Workflow
+Farna Control API Example: Complete Workflow
 
 Demonstrates a full end-to-end workflow:
   1. Login with email/password

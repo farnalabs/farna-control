@@ -19,7 +19,7 @@ the gate-row lifecycle:
 
 The YAML is loaded through the REAL CLI loader/model and the graph is built by
 the REAL CLI normaliser (``resolve_graph``), then written through the exact
-``PATCH /api/v1/pipelines/{id}`` ``graph_json`` path ``modulo apply`` uses. (The
+``PATCH /api/v1/pipelines/{id}`` ``graph_json`` path ``farna-control apply`` uses. (The
 CLI's HTTP transport is a synchronous httpx client and cannot attach to the
 in-process ASGI app, so the route is driven by the ASGI client with the CLI's
 own normalised payload.)
@@ -147,7 +147,7 @@ def _config_yaml(
         gate = f'\n            policy_gate:\n              action: {gate_action}\n              eval_id: "{eval_id}"'
     return (
         "\n"
-        "api_version: modulo.dev/v1\n"
+        "api_version: farna.dev/v1\n"
         "entities:\n"
         "  pipelines:\n"
         f"    - name: {pipeline_name}\n"

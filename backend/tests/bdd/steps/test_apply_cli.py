@@ -1,4 +1,4 @@
-"""BDD step definitions: ``modulo apply`` declarative configuration CLI (feat-apply).
+"""BDD step definitions: ``farna-control apply`` declarative configuration CLI (feat-apply).
 
 Drives the REAL ``farna.cli.apply`` seams network-free and DB-free:
 
@@ -102,11 +102,11 @@ def _config_text(state: dict[str, Any]) -> str:
 
 
 def _schema_doc(name: str, description: str = "Alpha schema") -> str:
-    return _DOC_SEP + "api_version: modulo.dev/v1\n" + "entities:\n" + "  schemas:\n" + f"    - name: {name}\n" + f"      description: {description}\n"
+    return _DOC_SEP + "api_version: farna.dev/v1\n" + "entities:\n" + "  schemas:\n" + f"    - name: {name}\n" + f"      description: {description}\n"
 
 
 def _backend_doc(name: str, *, api_key: str) -> str:
-    return _DOC_SEP + "api_version: modulo.dev/v1\n" + "entities:\n" + "  model_backends:\n" + f"    - name: {name}\n" + f"      display_name: {name}\n" + "      provider: openai\n" + "      model_id: gpt-x\n" + f"      api_key: {api_key}\n"
+    return _DOC_SEP + "api_version: farna.dev/v1\n" + "entities:\n" + "  model_backends:\n" + f"    - name: {name}\n" + f"      display_name: {name}\n" + "      provider: openai\n" + "      model_id: gpt-x\n" + f"      api_key: {api_key}\n"
 
 
 def _desired_view(entity: SchemaEntity | ModelBackendEntity) -> dict[str, Any]:
@@ -137,7 +137,7 @@ def _apply_env(state: dict[str, Any]) -> Any:
 # ---------------------------------------------------------------------------
 
 
-@given("a modulo apply test context")
+@given("a farna-control apply test context")
 def step_apply_context(request) -> None:
     _state(request).clear()
 
@@ -154,7 +154,7 @@ def step_config_declares_schema(request, name: str) -> None:
 
 @given(parsers.parse('an apply config declaring the schema "{name}" twice'))
 def step_config_schema_twice(request, name: str) -> None:
-    text = _DOC_SEP + "api_version: modulo.dev/v1\n" + "entities:\n" + "  schemas:\n" + f"    - name: {name}\n" + f"    - name: {name}\n"
+    text = _DOC_SEP + "api_version: farna.dev/v1\n" + "entities:\n" + "  schemas:\n" + f"    - name: {name}\n" + f"    - name: {name}\n"
     _state(request)["docs"] = [text]
 
 
@@ -175,13 +175,13 @@ def step_second_doc_backend(request, name: str) -> None:
 
 @given(parsers.parse('an apply config whose first document declares only a trigger for pipeline "{pipeline}"'))
 def step_first_doc_trigger(request, pipeline: str) -> None:
-    text = _DOC_SEP + "api_version: modulo.dev/v1\n" + "entities:\n" + "  triggers:\n" + f"    - pipeline: {pipeline}\n" + "      name: nightly\n" + "      trigger_type: cron\n" + "      cron_expression: '0 3 * * *'\n"
+    text = _DOC_SEP + "api_version: farna.dev/v1\n" + "entities:\n" + "  triggers:\n" + f"    - pipeline: {pipeline}\n" + "      name: nightly\n" + "      trigger_type: cron\n" + "      cron_expression: '0 3 * * *'\n"
     _state(request)["docs"] = [text]
 
 
 @given(parsers.parse('a second apply document declaring pipeline "{pipeline}"'))
 def step_second_doc_pipeline(request, pipeline: str) -> None:
-    text = _DOC_SEP + "api_version: modulo.dev/v1\n" + "entities:\n" + "  pipelines:\n" + f"    - name: {pipeline}\n"
+    text = _DOC_SEP + "api_version: farna.dev/v1\n" + "entities:\n" + "  pipelines:\n" + f"    - name: {pipeline}\n"
     _state(request)["docs"].append(text)
 
 

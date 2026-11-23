@@ -137,7 +137,7 @@ async def test_rating_and_abuse_report_crud_uses_real_org_rows(
     )
     assert rating.primitive_id == primitive.id
     assert await get_rating_aggregate(rls_session, primitive.id) == (5, 1)
-    ratings = await list_ratings_for_primitive(rls_session, primitive.id, page_size=1)
+    ratings = await list_ratings_for_primitive(rls_session, primitive.id, org_id=test_org, page_size=1)
     assert ratings.items == [rating]
     assert ratings.has_more is False
 

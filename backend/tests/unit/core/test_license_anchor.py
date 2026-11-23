@@ -154,7 +154,7 @@ class TestStartupAnchorPolicy:
             "debug": False,
             "license_key": "",
             "license_public_key": "",
-            "public_url": "https://modulo.test",
+            "public_url": "https://farna-control.test",
             "db": "postgres",
             "redis_url": "redis://localhost:6379/0",
             "otel_service_name": "modulo-test",

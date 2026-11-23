@@ -6,10 +6,10 @@
   workspace pod — the pod's network is owned by the cluster CNI, and the
   K8s runtime provider deliberately refuses an in-pod deny-all/allowlist
   request (naming NetworkPolicy as the remediation). This template is that
-  remediation: Modulo AUTHORS the policy as a Helm-rendered manifest and the
-  customer's CNI enforces it. The egress posture Modulo records for this is
+  remediation: Farna Control AUTHORS the policy as a Helm-rendered manifest and the
+  customer's CNI enforces it. The egress posture Farna Control records for this is
   `declared` (see `EgressPosture` in
-  backend/src/farna/core/pipeline_engine/egress.py) — Modulo declares the
+  backend/src/farna/core/pipeline_engine/egress.py) — Farna Control declares the
   policy; it never observes the substrate's traffic.
 
   Scope:
@@ -27,7 +27,7 @@
   `declared` posture guarantees:
     - some CNIs silently DROP fragmented traffic under NetworkPolicy — that is
       a CNI limitation, not a policy authorable here;
-    - enforcement belongs to the CNI, not Modulo: enabling this asserts a
+    - enforcement belongs to the CNI, not Farna Control: enabling this asserts a
       deny-by-default egress posture for workspace pods, so confirm your CNI
       enforces NetworkPolicy.
 

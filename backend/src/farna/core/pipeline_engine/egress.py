@@ -61,7 +61,7 @@ class EgressPosture(StrEnum):
     - ``DECLARED`` — Modulo authors the posture as a manifest that a
       customer-owned substrate is expected to enforce, and Modulo does
       **not** itself observe the enforcement (the Kubernetes NetworkPolicy
-      rendered from ``deploy/helm/modulo`` by the T3 chart). This is the
+      rendered from ``deploy/helm/farna-control`` by the T3 chart). This is the
       substrate-authoring posture of the FAR-1047 decision.
     - ``METADATA_ONLY`` — the posture is recorded in metadata/telemetry but
       no substrate enforces it.

@@ -1,5 +1,5 @@
 """Real-dependency-stack API-key (``mk_``) auth tests for the endpoints the
-``modulo apply`` CLI uses (FAR-681 slice 1).
+``farna-control apply`` CLI uses (FAR-681 slice 1).
 
 Unlike the per-route fixtures in test_schemas_endpoint.py /
 test_model_backends_endpoint.py (which override ``get_current_user``), these

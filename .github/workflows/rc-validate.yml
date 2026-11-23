@@ -109,7 +109,7 @@ jobs:
           with open("docker-compose.prod.yml", encoding="utf-8") as handle:
               compose = yaml.safe_load(handle)
 
-          pinned = compose["services"]["modulo"]["image"]
+          pinned = compose["services"]["farna-control"]["image"]
           expected = f"ghcr.io/farnalabs/farna-control:{tag}"
           print(f"Bundled image reference: {pinned}")
           if pinned != expected:
@@ -394,7 +394,14 @@ jobs:
           compose_path = os.environ["COMPOSE_FILE"]
           with open(compose_path, encoding="utf-8") as handle:
               compose = yaml.safe_load(handle)
-          image = compose.get("services", {}).get("modulo", {}).get("image")
+          # FAR-2651 renamed the prod compose app service to farna-control. A
+          # predecessor bundle cut before the rename still carries the legacy
+          # service name; from the second post-rename release onward it carries
+          # `farna-control`. Accept either, preferring the current post-rename
+          # service (mirroring the dual compose-asset-name accept).
+          services = compose.get("services", {}) or {}
+          service = services.get("farna-control") or services.get("modulo") or {}
+          image = service.get("image")
           prefix = "ghcr.io/farnalabs/farna-control:"
           if not isinstance(image, str) or not image.startswith(prefix):
               sys.exit(f"predecessor compose has invalid modulo image reference: {image!r}")

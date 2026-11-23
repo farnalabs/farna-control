@@ -299,7 +299,12 @@ async def _record_test_result(
 @router.get("", dependencies=[require_feature("error_forwarders")])
 async def list_forwarders(
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: forwarder configuration is an admin surface — every write
+    # (configure/test/delete/restore) already requires
+    # ``error_forwarder.manage`` (admin). The list previously sat behind only
+    # the plan-feature gate, so any org member could enumerate it. Reuse the
+    # same admin floor for the read so the read cannot drift below the writes.
+    principal: TenantPrincipal = require_permission(_CODE_ERROR_FORWARDER_MANAGE),
 ) -> ForwarderListResponse:
     org_id = principal.organisation_id
     if org_id is None:

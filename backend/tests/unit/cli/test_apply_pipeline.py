@@ -24,7 +24,7 @@ from farna.cli.apply.loader import parse_apply_documents
 from tests.unit.cli.test_apply_executor import _backend_item, _mock_current, _schema_item
 
 CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -41,7 +41,7 @@ entities:
 """
 
 GRAPHLESS_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -52,7 +52,7 @@ entities:
 STDOUT_RETENTION_DECLARED = {"mode": "tail", "max_bytes": 1000}
 
 STDOUT_RETENTION_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -62,7 +62,7 @@ entities:
 """
 
 _GRAPH_SECRET_CONFIG_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -295,7 +295,7 @@ class TestPlanDecisions:
         routes["graph_get_broken"] = respx.get("https://api.test/api/v1/pipelines/00000000-0000-0000-0000-0000000000aa/graph").respond(status_code=500, json={"detail": "corrupt graph"})
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: plain
@@ -378,7 +378,7 @@ entities:
         _mock_current_with_pipelines([])
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: buggy
@@ -607,7 +607,7 @@ class TestExecution:
         routes["pipeline_patch"].mock(return_value=httpx.Response(500, json={"detail": "graph boom"}))
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -673,7 +673,7 @@ entities:
         )
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -729,7 +729,7 @@ entities:
         routes = _mock_current_with_pipelines([existing])
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -760,7 +760,7 @@ entities:
         routes = _mock_current_with_pipelines([existing])
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -903,7 +903,7 @@ class TestStdoutRetentionConfigPayloads:
 
 
 HITL_REVIEW_WINDOW_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -1031,7 +1031,7 @@ class TestHitlReviewWindowPayloads:
 
 
 QUEUE_TIMEOUT_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -1049,7 +1049,7 @@ class TestQueueTimeoutPayloads:
     model and rebuild the stored row from its ``model_dump(exclude_unset=True)``
     output. That proves the server model carries the value rather than silently
     dropping it — the drift-free re-plan below fails if the REST field is ever
-    removed again. Without the CLI threading, ``modulo apply`` could not set a
+    removed again. Without the CLI threading, ``farna-control apply`` could not set a
     bounded capacity-queue timeout at all.
     """
 
@@ -1161,7 +1161,7 @@ class TestQueueTimeoutPayloads:
 
 
 RUNTIME_LIMITS_TEXT = """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -1337,7 +1337,7 @@ class TestRuntimeLimitPayloads:
         with pytest.raises(ApplyLoadError, match="not a boolean"):
             parse_apply_documents(
                 """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -1431,7 +1431,7 @@ class TestFailureIsolation:
     """Failure-injection: one pipeline failing must not abort the others."""
 
     def _two_pipeline_config_text(self) -> str:
-        return "api_version: modulo.dev/v1\nentities:\n  pipelines:\n    - name: first\n      description: First\n    - name: second\n      description: Second\n"
+        return "api_version: farna.dev/v1\nentities:\n  pipelines:\n    - name: first\n      description: First\n    - name: second\n      description: Second\n"
 
     @respx.mock
     def test_post_400_isolates_entity(self) -> None:
@@ -1503,7 +1503,7 @@ class TestFailureIsolation:
             return httpx.Response(200, json=second)
 
         routes["pipeline_patch"].mock(side_effect=_patch_by_id)
-        config = parse_apply_documents("api_version: modulo.dev/v1\nentities:\n  pipelines:\n    - name: first\n      description: Updated first\n    - name: second\n      description: Updated second\n")
+        config = parse_apply_documents("api_version: farna.dev/v1\nentities:\n  pipelines:\n    - name: first\n      description: Updated first\n    - name: second\n      description: Updated second\n")
         with httpx.Client() as client:
             executor = ApplyExecutor("https://api.test", "key", client=client)
             report = executor.run(config, dry_run=False)
@@ -1589,7 +1589,7 @@ class TestMixedKindsPhaseOrder:
         respx.post("https://api.test/api/v1/schemas").mock(return_value=httpx.Response(201, json=_schema_item("alpha", None)))
         config = parse_apply_documents(
             """
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   schemas:
     - name: alpha

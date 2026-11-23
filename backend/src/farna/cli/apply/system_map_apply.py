@@ -1,4 +1,4 @@
-"""System Maps entity resolution + execution for ``modulo apply`` (FAR-2288).
+"""System Maps entity resolution + execution for ``farna-control apply`` (FAR-2288).
 
 System Maps identity is by name (unique per org). The map's revision content
 is managed declaratively when declared, but only on CREATE: the API list

@@ -56,7 +56,7 @@ PIPELINE_ID = "00000000-0000-0000-0000-0000000000aa"
 _LIST_PARAMS = {"page": "1", "page_size": str(PAGE_SIZE)}
 
 _GATE_BLOCK = f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -75,7 +75,7 @@ entities:
 """
 
 _REMOVAL_BLOCK = f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -263,7 +263,7 @@ class TestModelValidation:
         with pytest.raises(ApplyLoadError):
             parse_apply_documents(
                 f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -307,7 +307,7 @@ class TestPlanDrift:
         The desired side carries the declared gate; the current side (as if the
         server silently dropped it on write) does not. The plan MUST report
         ``updated`` forever — never a false ``unchanged`` — so the defect is
-        visible on the next ``modulo apply --diff``.
+        visible on the next ``farna-control apply --diff``.
         """
         first = _plan(_gate("block"), None)
         second = _plan(_gate("block"), None)

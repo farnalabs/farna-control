@@ -401,7 +401,7 @@ async def list_agents_endpoint(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            result = await list_agents(session, page=page, page_size=page_size)
+            result = await list_agents(session, org_id=principal.organisation_id, page=page, page_size=page_size)
     except ProgrammingError:
         _log.exception("agents.list_agents_endpoint")
         raise HTTPException(

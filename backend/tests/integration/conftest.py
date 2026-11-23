@@ -640,7 +640,7 @@ _leaked_asyncpg_connections: list[tuple[str, str]] = []
 # ``pytest_runtest_makereport``. Nodeid-keyed because the teardown hook and the
 # report hook are separate calls.
 _leaks_by_nodeid: dict[str, list[str]] = {}
-_leak_logger = logging.getLogger("modulo.tests.integration.connection_leaks")
+_leak_logger = logging.getLogger("farna_control.tests.integration.connection_leaks")
 
 
 def _strict_connection_leaks() -> bool:

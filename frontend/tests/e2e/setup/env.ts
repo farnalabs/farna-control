@@ -159,7 +159,7 @@ const LOCAL_E2E_PORT_MAX = 9999
 //   9090  Prometheus                docker-compose.local.yml
 //
 // Deliberately NOT reserved: Grafana (3000, docker-compose.local.yml) and the
-// prod compose `modulo` publish (`${PORT:-80}`, docker-compose.prod.yml) are
+// prod compose `farna-control` publish (`${PORT:-80}`, docker-compose.prod.yml) are
 // outside [LOCAL_E2E_PORT_MIN, LOCAL_E2E_PORT_MAX]; the runner-ci socket-proxy
 // / dind publish an EPHEMERAL host port (`127.0.0.1::2375`), not a fixed one.
 // Keep this set smaller than the range width; deriveLocalE2ePort throws loudly
