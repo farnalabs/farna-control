@@ -10,10 +10,11 @@
     </p>
 
     <div class="mt-6 space-y-4" data-testid="governance-levels">
-      <article
+      <BaseCard
         v-for="level in levels"
         :key="level.id"
-        class="card p-6"
+        as="article"
+        padding="lg"
         :data-testid="`governance-level-${level.id}`"
       >
         <header>
@@ -122,7 +123,7 @@
             </div>
           </div>
         </FeatureGate>
-      </article>
+      </BaseCard>
     </div>
   </div>
 </template>
@@ -134,6 +135,7 @@ import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import Badge from 'primevue/badge'
 
 const { t } = useI18n()

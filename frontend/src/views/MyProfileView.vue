@@ -49,8 +49,7 @@
     </div>
 
     <FeatureGate feature-name="team_rbac" show-disabled>
-      <div class="card p-6">
-        <h2 class="text-base font-semibold mb-4">{{ $t('views.MyProfileView.my_teams') }}</h2>
+      <DataCard padding="lg" :title="$t('views.MyProfileView.my_teams')">
         <div v-if="myTeamsLoading" data-testid="my-profile-my-teams-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -79,12 +78,15 @@
             <span class="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary-text">{{ teamRoleLabel(team.role) }}</span>
           </div>
         </div>
-      </div>
+      </DataCard>
     </FeatureGate>
 
-    <div class="card p-6" data-testid="my-profile-hitl-email-section">
-      <h2 class="text-base font-semibold mb-1">{{ $t('views.MyProfileView.hitl_email_alerts') }}</h2>
-      <p class="text-sm text-muted-foreground mb-4">{{ $t('views.MyProfileView.hitl_email_alerts_description') }}</p>
+    <DataCard
+      padding="lg"
+      data-testid="my-profile-hitl-email-section"
+      :title="$t('views.MyProfileView.hitl_email_alerts')"
+      :description="$t('views.MyProfileView.hitl_email_alerts_description')"
+    >
 
       <div v-if="hitlPrefsLoading" data-testid="my-profile-hitl-email-loading">
         <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
@@ -163,12 +165,11 @@
           {{ hitlSaving ? $t('common.saving') : $t('common.save') }}
         </Button>
       </div>
-    </div>
+    </DataCard>
 
-    <div class="card p-6">
-      <h2 class="text-base font-semibold mb-4">{{ $t('views.MyProfileView.change_password') }}</h2>
+    <DataCard padding="lg" :title="$t('views.MyProfileView.change_password')">
       <ChangePasswordForm />
-    </div>
+    </DataCard>
   </div>
 </template>
 
@@ -180,6 +181,7 @@ import AppSelect from '../components/shared/AppSelect.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import ChangePasswordForm from '../components/shared/ChangePasswordForm.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import Button from 'primevue/button'

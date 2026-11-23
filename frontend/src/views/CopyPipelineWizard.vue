@@ -30,10 +30,11 @@
       <ErrorAlert v-else-if="error" :message="error" :on-retry="retry" class="mb-6" />
 
       <template v-else-if="step === 1">
-        <div class="card p-6">
-          <h2 class="text-lg font-medium text-foreground mb-1">{{ $t('views.CopyPipelineWizard.select_source_pipeline') }}</h2>
-          <p class="text-sm text-muted-foreground mb-4">{{ $t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt') }}</p>
-
+        <DataCard
+          padding="lg"
+          :title="$t('views.CopyPipelineWizard.select_source_pipeline')"
+          :description="$t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt')"
+        >
           <FilterBar class="mb-4"
             :search="{ placeholder: $t('views.CopyPipelineWizard.search_pipelines_by_name') }"
             :search-value="searchQuery"
@@ -92,7 +93,7 @@
               </p>
             </button>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex justify-end mt-6">
           <Button :disabled="!selectedPipeline" class="px-6 py-2.5" @click="step = 2" data-testid="copy-wizard-next-step1">
@@ -102,9 +103,11 @@
       </template>
 
       <template v-else-if="step === 2">
-        <div class="card p-6 mb-6">
-          <h2 class="text-lg font-medium text-foreground mb-4">{{ $t('views.CopyPipelineWizard.copy_configuration') }}</h2>
-
+        <DataCard
+          padding="lg"
+          class="mb-6"
+          :title="$t('views.CopyPipelineWizard.copy_configuration')"
+        >
           <div class="space-y-4">
             <div>
               <label for="copypipelinewizard-field-6" class="block text-sm font-medium text-foreground mb-1">{{ $t('views.CopyPipelineWizard.new_pipeline_name') }}</label>
@@ -185,7 +188,7 @@
               </label>
             </div>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex items-center justify-between">
           <button
@@ -203,9 +206,11 @@
       </template>
 
       <template v-else-if="step === 3">
-        <div class="card p-6 mb-6">
-          <h2 class="text-lg font-medium text-foreground mb-4">{{ $t('views.CopyPipelineWizard.review_copy') }}</h2>
-
+        <DataCard
+          padding="lg"
+          class="mb-6"
+          :title="$t('views.CopyPipelineWizard.review_copy')"
+        >
           <div class="space-y-4">
             <div class="bg-muted rounded-lg p-4">
               <h3 class="text-sm font-medium text-foreground mb-2">{{ $t('views.CopyPipelineWizard.source_pipeline') }}</h3>
@@ -257,7 +262,7 @@
               </p>
             </div>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex items-center justify-between">
           <button
@@ -356,6 +361,7 @@ import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
 import BackLink from '../components/BackLink.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
 import type { OwnershipValue } from '../components/OwnershipPicker.vue'

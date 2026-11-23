@@ -335,9 +335,13 @@
         </a>
       </div>
 
-      <div v-if="run?.status === 'complete' && lastNodeOutput" class="card p-5 mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-base font-semibold text-foreground">{{ $t('views.RunDetailView.final_output') }}</h2>
+      <DataCard
+        v-if="run?.status === 'complete' && lastNodeOutput"
+        padding="lg"
+        class="mb-6"
+        :title="$t('views.RunDetailView.final_output')"
+      >
+        <template #headerActions>
           <button
             type="button"
             class="px-3 py-1.5 text-xs font-medium rounded-lg border border-input bg-background hover:bg-accent transition-colors"
@@ -346,9 +350,9 @@
           >
             {{ outputCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
           </button>
-        </div>
+        </template>
         <JsonViewer :data="lastNodeOutput" :show-toolbar="false" :max-height="'30rem'" />
-      </div>
+      </DataCard>
 
       <!-- Capacity-blocked pending run (queued on sandbox concurrency limit) -->
       <div v-if="run.status === 'pending' && (run.error_code === 'capacity.org' || run.error_code === 'capacity.pipeline')" data-testid="run-detail-waiting-for-capacity" class="rounded-lg border border-warning/50 bg-warning/10 p-4 mb-4">
@@ -1044,6 +1048,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import RunErrorTag from '../components/shared/RunErrorTag.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import KnownFixesPanel from '../components/shared/KnownFixesPanel.vue'
 import AnalyzeRunButton from '../components/runs/AnalyzeRunButton.vue'

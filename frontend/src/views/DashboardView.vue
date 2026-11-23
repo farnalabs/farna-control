@@ -71,10 +71,14 @@
       <!-- Eval pass rate + Token spend -->
       <div class="grid gap-4 sm:grid-cols-2">
         <!-- Eval pass rate card -->
-        <router-link to="/eval-editor" class="card card-hover p-4 block" data-testid="dashboard-eval-rate">
-          <p class="text-sm font-medium text-muted-foreground mb-2">{{ $t('views.DashboardView.eval_pass_rate') }}</p>
-           <div v-if="hasEvalData">
-             <p class="text-2xl font-semibold tabular-nums">{{ evalRateDisplay }}</p>
+        <StatCard
+          to="/eval-editor"
+          data-testid="dashboard-eval-rate"
+          :label="$t('views.DashboardView.eval_pass_rate')"
+          :value="hasEvalData ? evalRateDisplay : undefined"
+        >
+          <template #content>
+           <div v-if="hasEvalData" class="mt-1">
              <div class="flex items-center gap-2 mt-1">
                <span v-if="evalPeriodDelta?.delta_pct != null" :class="evalDeltaClass" class="inline-flex items-center text-sm font-medium">
                  <span aria-hidden="true">{{ evalDeltaArrow }}</span>{{ evalDeltaPctText }}
@@ -95,14 +99,19 @@
              <span class="font-semibold">{{ $t('common.na') }}</span>
              <span>{{ $t('views.DashboardView.no_eval_data_yet') }}</span>
            </div>
-        </router-link>
+          </template>
+        </StatCard>
         <!-- Token spend card -->
-        <router-link :to="costsDestination" class="card card-hover p-4 block" data-testid="dashboard-token-spend">
-          <p class="text-sm font-medium text-muted-foreground mb-2">{{ spendLabel }}</p>
+        <StatCard
+          :to="costsDestination"
+          data-testid="dashboard-token-spend"
+          :label="spendLabel"
+          :value="hasSpendData ? formatMoney(totalSpend, currencyCode, 2) : undefined"
+        >
+          <template #content>
           <template v-if="hasSpendData">
-            <div class="flex items-baseline gap-2">
-              <p class="text-2xl font-semibold tabular-nums">{{ formatMoney(totalSpend, currencyCode, 2) }}</p>
-              <span v-if="spendDeltaPct != null" :class="spendDeltaClass" class="text-xs font-medium">
+            <div v-if="spendDeltaPct != null" class="mt-1">
+              <span :class="spendDeltaClass" class="text-xs font-medium">
                 <span aria-hidden="true">{{ spendDeltaArrow }}</span>{{ spendDeltaPctText }}
               </span>
             </div>
@@ -112,14 +121,17 @@
           <div v-else class="flex flex-col items-center justify-center gap-1 py-6 text-sm text-muted-foreground" aria-live="polite" data-testid="dashboard-token-spend-empty">
             <span>{{ $t('views.DashboardView.no_token_spend_data_yet') }}</span>
           </div>
-        </router-link>
+          </template>
+        </StatCard>
       </div>
       <!-- Team breakdown (Team only) -->
-      <div v-if="isTeam && summary.teams && summary.teams.length > 0" class="card p-4">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">{{ $t('views.DashboardView.team_breakdown') }}</h2>
+      <DataCard
+        v-if="isTeam && summary.teams && summary.teams.length > 0"
+        :title="$t('views.DashboardView.team_breakdown')"
+      >
+        <template #headerActions>
           <span class="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">{{ $t('views.DashboardView.team') }}</span>
-        </div>
+        </template>
         <!-- FAR-2539: clip at the card edge and scroll inside it on phones. -->
         <!-- A11Y-3: the scroll region is a keyboard-reachable focus stop. The
              sr-only instructions and focus ring mirror the DataTable and
@@ -189,12 +201,13 @@
           </tbody>
         </table>
         </div>
-      </div>
+      </DataCard>
       <!-- Trend chart section -->
-      <div v-if="planStore.featureEnabled('dashboard_charts')" class="card p-4" data-testid="dashboard-run-activity">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">{{ $t('views.DashboardView.run_activity') }}</h2>
-        </div>
+      <DataCard
+        v-if="planStore.featureEnabled('dashboard_charts')"
+        data-testid="dashboard-run-activity"
+        :title="$t('views.DashboardView.run_activity')"
+      >
         <div v-if="trendData.length > 1" class="space-y-4">
           <div>
             <p class="text-xs font-medium text-muted-foreground mb-1">{{ $t('views.DashboardView.run_count') }}</p>
@@ -220,7 +233,7 @@
         <div v-else class="mt-2 flex h-12 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground" aria-live="polite">
           {{ $t('views.DashboardView.no_data_trends') }}
         </div>
-      </div>
+      </DataCard>
       <!-- Recent runs list -->
       <div class="card p-4" data-testid="dashboard-recent-runs">
         <h2 class="text-base font-semibold mb-4">{{ $t('views.DashboardView.recent_runs') }}</h2>
@@ -271,6 +284,7 @@ import { useDashboardStore } from '../stores/dashboard'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
 import StatCard from '../components/StatCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { DataTable, type Column } from '../components/ui/data-table'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'
 import { RUN_STATUS } from '../constants/filters'

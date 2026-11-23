@@ -1,5 +1,10 @@
 <template>
-  <section class="card p-4" data-testid="capacity-queue-panel" aria-labelledby="capacity-queue-heading">
+  <BaseCard
+    as="section"
+    padding="md"
+    data-testid="capacity-queue-panel"
+    aria-labelledby="capacity-queue-heading"
+  >
     <div class="mb-3 flex items-start justify-between gap-3">
       <div>
         <h2 id="capacity-queue-heading" class="text-base font-semibold">
@@ -194,11 +199,12 @@
         {{ $t('views.AnalyticsView.capacity_generated_at', { at: formatInterval(capacity.generated_at) }) }}
       </p>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
+import BaseCard from "../ui/BaseCard.vue";
 import { useI18n } from "vue-i18n";
 import {
   formatCapacityDuration,

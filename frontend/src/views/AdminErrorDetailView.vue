@@ -63,33 +63,32 @@
         {{ $t('views.AdminErrorDetailView.instance_scope_readonly') }}
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div class="card p-4">
-          <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.level') }}</span>
-          <p class="mt-0.5">
-            <span :class="levelBadgeClass(group.level_peak)">{{ group.level_peak }}</span>
-          </p>
-        </div>
-        <div class="card p-4">
-          <span class="text-xs font-medium text-muted-foreground capitalize">{{ $t('views.AdminErrorDetailView.status') }}</span>
-          <p class="mt-0.5">
-            <span :class="statusBadgeClass(group.status)" class="capitalize">{{ group.status }}</span>
-          </p>
-        </div>
-        <div class="card p-4">
-          <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.occurrences') }}</span>
-          <p class="mt-0.5 text-lg font-semibold">{{ group.count }}</p>
-        </div>
+        <StatCard :label="$t('views.AdminErrorDetailView.level')" color="muted">
+          <template #content>
+            <p class="mt-0.5">
+              <span :class="levelBadgeClass(group.level_peak)">{{ group.level_peak }}</span>
+            </p>
+          </template>
+        </StatCard>
+        <StatCard :label="$t('views.AdminErrorDetailView.status')" color="muted">
+          <template #content>
+            <p class="mt-0.5">
+              <span :class="statusBadgeClass(group.status)" class="capitalize">{{ group.status }}</span>
+            </p>
+          </template>
+        </StatCard>
+        <StatCard :label="$t('views.AdminErrorDetailView.occurrences')" :value="group.count" />
       </div>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div class="card p-4">
+        <DataCard>
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.first_seen') }}</span>
           <p class="mt-0.5 text-sm">{{ formatErrorDate(group.first_seen) }}</p>
-        </div>
-        <div class="card p-4">
+        </DataCard>
+        <DataCard>
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.last_seen') }}</span>
           <p class="mt-0.5 text-sm">{{ formatErrorDate(group.last_seen) }}</p>
-        </div>
+        </DataCard>
       </div>
 
       <!-- FAR-2374: every error-record write is gated on `errors.manage`
@@ -99,8 +98,7 @@
            shared v-tooltip affordance. The tooltip sits on the wrapping span
            because a disabled control swallows hover events, so a tooltip bound
            directly to it would never open. -->
-      <div v-if="!isInstanceScope" class="card p-4">
-        <h2 class="mb-3 text-base font-semibold">{{ $t('views.AdminErrorDetailView.actions') }}</h2>
+      <DataCard v-if="!isInstanceScope" :title="$t('views.AdminErrorDetailView.actions')">
         <p
           v-if="!canManageErrors"
           id="admin-error-status-admin-help"
@@ -183,10 +181,9 @@
             </p>
           </div>
         </div>
-      </div>
+      </DataCard>
 
-      <div v-if="sampleEvent" class="card p-4">
-        <h2 class="mb-2 text-base font-semibold">{{ $t('views.AdminErrorDetailView.message') }}</h2>
+      <DataCard v-if="sampleEvent" :title="$t('views.AdminErrorDetailView.message')">
         <p class="mb-2 text-xs text-muted-foreground">
           {{ $t('views.AdminErrorDetailView.fingerprint') }}: <span class="font-mono">{{ shortId(group.fingerprint) }}</span>
         </p>
@@ -246,10 +243,9 @@
             <p class="mt-0.5 font-mono text-xs">{{ shortId(sampleEvent.id) }}</p>
           </div>
         </div>
-      </div>
+      </DataCard>
 
-      <div class="card p-4">
-        <h2 class="mb-3 text-base font-semibold">{{ $t('views.AdminErrorDetailView.raw_events', { count: eventsTotal }) }}</h2>
+      <DataCard :title="$t('views.AdminErrorDetailView.raw_events', { count: eventsTotal })">
         <div v-if="eventsLoading" class="py-2" data-testid="admin-error-detail-events-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -308,7 +304,7 @@
             </div>
           </div>
         </template>
-      </div>
+      </DataCard>
     </template>
   </div>
   </FeatureGate>
@@ -317,6 +313,8 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import DataCard from '../components/ui/DataCard.vue'
+import StatCard from '../components/StatCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import { ref, computed, watch } from 'vue'

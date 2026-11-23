@@ -88,30 +88,30 @@
 
       <h2 id="evidence-index-pack-heading" class="sr-only">{{ $t('views.ComplianceEvidenceIndex.pack_heading') }}</h2>
       <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-labelledby="evidence-index-pack-heading">
-        <div class="card p-4" data-testid="compliance-evidence-index-pack-version">
+        <BaseCard padding="md" data-testid="compliance-evidence-index-pack-version">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.pack_version') }}</dt>
           <dd class="mt-1 font-mono text-sm">{{ indexData.pack_version }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-pack-hash">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-pack-hash">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.pack_hash') }}</dt>
           <dd class="mt-1 break-all font-mono text-xs">{{ indexData.pack_content_hash }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-product-version">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-product-version">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.product_version') }}</dt>
           <dd class="mt-1 font-mono text-sm">{{ indexData.product_version }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-frameworks">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-frameworks">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.frameworks') }}</dt>
           <dd class="mt-1 text-sm">{{ indexData.framework_ids.join(', ') }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-pack-published-at">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-pack-published-at">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.pack_published_at') }}</dt>
           <dd class="mt-1 text-sm">{{ formatTimestamp(indexData.pack_published_at) }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-generated-at">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-generated-at">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.generated_at') }}</dt>
           <dd class="mt-1 text-sm">{{ formatTimestamp(indexData.generated_at) }}</dd>
-        </div>
+        </BaseCard>
       </dl>
 
       <section class="space-y-3" aria-labelledby="evidence-index-coverage-heading" data-testid="compliance-evidence-index-coverage">
@@ -240,6 +240,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'

@@ -43,17 +43,14 @@
 
     <template v-else>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-8">
-        <div
+        <StatCard
           v-for="item in summary"
           :key="item.metric_name"
-          class="card p-4"
+          :label="metricLabel(item.metric_name)"
+          :value="formatMetricValue(item.metric_name, item.avg_value)"
+          :color="metricStatColor(item)"
         >
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-            {{ metricLabel(item.metric_name) }}
-          </p>
-          <p class="text-2xl font-semibold tabular-nums" :class="metricColor(item)">
-            {{ formatMetricValue(item.metric_name, item.avg_value) }}
-          </p>
+          <template #content>
           <div class="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
             <span>min {{ formatMetricValue(item.metric_name, item.min_value) }}</span>
             <span>max {{ formatMetricValue(item.metric_name, item.max_value) }}</span>
@@ -72,12 +69,16 @@
             </span>
           </div>
           <p class="text-xs text-muted-foreground mt-1">{{ item.count }} measurements</p>
-        </div>
+          </template>
+        </StatCard>
       </div>
 
       <div class="space-y-6">
-        <div v-for="ts in timeSeriesData" :key="ts.metric_name" class="card p-4">
-          <h3 class="text-sm font-semibold mb-4">{{ metricLabel(ts.metric_name) }} over time</h3>
+        <DataCard
+          v-for="ts in timeSeriesData"
+          :key="ts.metric_name"
+          :title="`${metricLabel(ts.metric_name)} over time`"
+        >
           <div v-if="ts.points.length === 0" class="text-sm text-muted-foreground py-8 text-center">
             No data for this period.
           </div>
@@ -102,7 +103,7 @@
               <span>{{ ts.points[ts.points.length - 1].date }}</span>
             </div>
           </div>
-        </div>
+        </DataCard>
       </div>
     </template>
   </div>
@@ -115,6 +116,8 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import StatCard from '../components/StatCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { useApi } from '../composables/useApi'
 
 const { get } = useApi()
@@ -186,12 +189,12 @@ function formatMetricValue(name: string, value: number): string {
   return Math.round(value) + 'ms'
 }
 
-function metricColor(item: SummaryItem): string {
+function metricStatColor(item: SummaryItem): 'success' | 'warning' | 'destructive' | undefined {
   const thresholds = METRIC_THRESHOLDS[item.metric_name]
-  if (!thresholds) return ''
-  if (item.avg_value <= thresholds.good) return 'text-success-text'
-  if (item.avg_value <= thresholds.poor) return 'text-warning-text'
-  return 'text-destructive'
+  if (!thresholds) return undefined
+  if (item.avg_value <= thresholds.good) return 'success'
+  if (item.avg_value <= thresholds.poor) return 'warning'
+  return 'destructive'
 }
 
 function barColor(value: number, metricName: string): string {
