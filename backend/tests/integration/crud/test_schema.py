@@ -231,6 +231,6 @@ async def test_list_schema_versions(rls_session: AsyncSession, test_org: uuid.UU
             definition_json={"type": "object"},
             account_id=test_user,
         )
-    result = await list_schema_versions(rls_session, s.id, page=1, page_size=10)
+    result = await list_schema_versions(rls_session, s.id, org_id=test_org, page=1, page_size=10)
     assert result.total == 3
     assert len(result.items) == 3

@@ -621,7 +621,7 @@ class TestListContributionVersions:
 
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=existing),
+            patch("farna.core.library_service.get_primitive", new_callable=AsyncMock, return_value=existing) as resolver,
             patch(
                 "farna.core.library_service.list_primitives_by_version_group",
                 new_callable=AsyncMock,
@@ -631,6 +631,9 @@ class TestListContributionVersions:
             result = await list_contribution_versions(session, org_id, prim_id)
 
         assert len(result) == 2
+        # FAR-2696: the seed is resolved through the org-clamped resolver, so a
+        # foreign-org id cannot be read on a BYPASSRLS connection.
+        assert resolver.await_args.kwargs["explicit_org_filter"] == org_id
 
     async def test_list_versions_not_found_raises(self):
         session = _mock_session()
@@ -638,10 +641,23 @@ class TestListContributionVersions:
 
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=None),
+            patch("farna.core.library_service.get_primitive", new_callable=AsyncMock, return_value=None),
             pytest.raises(ContributionNotFoundError),
         ):
             await list_contribution_versions(session, org_id, uuid.uuid4())
+
+    async def test_list_versions_builtin_is_not_a_contribution(self):
+        """A built-in served from memory is not a contribution version seed."""
+        session = _mock_session()
+        org_id = uuid.uuid4()
+        builtin = _MODULO_PRIMITIVES[0]
+
+        with (
+            patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
+            patch("farna.core.library_service.get_primitive", new_callable=AsyncMock, return_value=builtin),
+            pytest.raises(ContributionNotFoundError),
+        ):
+            await list_contribution_versions(session, org_id, builtin.id)
 
     async def test_list_versions_no_group_id_returns_single(self):
         session = _mock_session()
@@ -651,7 +667,7 @@ class TestListContributionVersions:
 
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=existing),
+            patch("farna.core.library_service.get_primitive", new_callable=AsyncMock, return_value=existing),
             patch("farna.core.library_service.list_primitives_by_version_group", new_callable=AsyncMock, return_value=[]),
         ):
             result = await list_contribution_versions(session, org_id, prim_id)
@@ -669,7 +685,7 @@ class TestListContributionVersions:
 
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),
-            patch("farna.core.library_service.get_library_primitive", new_callable=AsyncMock, return_value=existing),
+            patch("farna.core.library_service.get_primitive", new_callable=AsyncMock, return_value=existing),
             patch(
                 "farna.core.library_service.list_primitives_by_version_group",
                 new_callable=AsyncMock,

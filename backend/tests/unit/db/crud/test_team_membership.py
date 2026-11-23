@@ -127,7 +127,7 @@ class TestListTeamMembers:
 
         from farna.db.crud.team_membership import list_team_members
 
-        result = await list_team_members(mock_session, team_id=_TEAM_ID, page=1, page_size=20)
+        result = await list_team_members(mock_session, team_id=_TEAM_ID, org_id=_ORG_ID, page=1, page_size=20)
         assert isinstance(result, PageResult)
         assert len(result.items) == 2
         assert result.total == 5

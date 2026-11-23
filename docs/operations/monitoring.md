@@ -1,7 +1,8 @@
 # Monitoring Configuration
 
 Farna Control ships a built-in error tracking system (Community tier) and supports
-optional third-party monitoring backends (Team tier – require a license key).
+optional third-party monitoring backends, also Community tier and with no license
+key required.
 This page covers configuration for all monitoring options.
 
 ## Backends
@@ -11,9 +12,9 @@ Four monitor backends are shipped with the app. At least one is always active.
 | Backend | Tier | SDK | Default | Purpose |
 |---|---|---|---|---|
 | `builtin` | Community | None | Always | DB-backed error storage, dashboard, alerting |
-| `sentry` | Team | `@sentry/vue` | Optional | Sentry error tracking + session replays |
-| `datadog-rum` | Team | `@datadog/browser-rum` | Optional | Datadog RUM + Logs |
-| `grafana-faro` | Team | `@grafana/faro-web-sdk` | Optional | Grafana Faro / OpenTelemetry |
+| `sentry` | Community | `@sentry/vue` | Optional | Sentry error tracking + session replays |
+| `datadog-rum` | Community | `@datadog/browser-rum` | Optional | Datadog RUM + Logs |
+| `grafana-faro` | Community | `@grafana/faro-web-sdk` | Optional | Grafana Faro / OpenTelemetry |
 
 ## Configuration
 

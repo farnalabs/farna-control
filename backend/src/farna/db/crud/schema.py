@@ -248,13 +248,26 @@ async def list_schema_versions(
     session: AsyncSession,
     schema_id: uuid.UUID,
     *,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
 ) -> PageResult[SchemaVersion]:
+    """Version history of one schema, newest first.
+
+    FAR-2689: the schema id alone is not an org boundary — carry an explicit
+    ``organisation_id`` predicate on BOTH the COUNT and the item query so
+    ``total`` and the page agree and a ``BYPASSRLS``/misconfigured-RLS session
+    cannot read another org's versions for a schema id it guessed.
+    ``organisation_id`` is NOT NULL on ``schema_versions``, it is part of the
+    table's ``UNIQUE (schema_id, version_number, organisation_id)`` identity,
+    and every writer stamps the caller's org, so the clamp hides nothing it
+    should show. ``org_id`` is REQUIRED so a future caller cannot fall back to
+    the parent-id-only shape.
+    """
     offset = (page - 1) * page_size
     try:
-        total = (await session.execute(select(func.count()).select_from(SchemaVersion).where(SchemaVersion.schema_id == schema_id))).scalar_one()
-        items = list((await session.execute(select(SchemaVersion).where(SchemaVersion.schema_id == schema_id).order_by(SchemaVersion.version_number.desc()).offset(offset).limit(page_size))).scalars())
+        total = (await session.execute(select(func.count()).select_from(SchemaVersion).where(SchemaVersion.schema_id == schema_id, SchemaVersion.organisation_id == org_id))).scalar_one()
+        items = list((await session.execute(select(SchemaVersion).where(SchemaVersion.schema_id == schema_id, SchemaVersion.organisation_id == org_id).order_by(SchemaVersion.version_number.desc()).offset(offset).limit(page_size))).scalars())
     except ProgrammingError:
         return PageResult(items=[], total=0, page=page, page_size=page_size)
     has_more = (offset + len(items)) < total

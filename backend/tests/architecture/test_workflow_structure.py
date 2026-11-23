@@ -44,7 +44,7 @@ invariants of the PR-reviewer / Branch-Fixer / merge-queue triangle:
   (FAR-2001).
 - **Every product job reaches every notifier** — each notifier's ``needs:`` list
   must name every product job (every job except the notifiers themselves), so a
-  failing job is never invisible to the Branch Fixer / self-report guard
+  failing job is never invisible to the Branch Fixer guard
   (FAR-2308). The few genuine per-notifier exceptions are an explicit,
   verified allowlist.
 
@@ -1895,7 +1895,7 @@ def test_interpolated_run_scripts_stay_under_the_expression_length_cap() -> None
 #: Jobs that NOTIFY about a run's outcome rather than produce a product check.
 #: They are deliberately excluded from each other's ``needs``: a notifier cannot
 #: list itself, and ``notify-main-failure`` never runs on a PR.
-NOTIFIER_JOBS = frozenset({"notify-pr-failure", "notify-main-failure", "self-report-ci"})
+NOTIFIER_JOBS = frozenset({"notify-pr-failure", "notify-main-failure"})
 
 #: The ``if:`` fragment that makes a job PR-only.
 PR_ONLY_CONDITION = "github.event_name == 'pull_request'"
@@ -1910,7 +1910,6 @@ NOTIFIER_NEEDS_EXEMPTIONS: dict[str, dict[str, str]] = {
     "notify-main-failure": {
         "sonar-new-issues-gate": ("PR-only (`if: github.event_name == 'pull_request'`) - it never runs, so it cannot fail, on the push/workflow_dispatch events this notifier handles"),
     },
-    "self-report-ci": {},
 }
 
 
@@ -1918,10 +1917,9 @@ def test_every_product_job_is_in_every_notifier_needs_list() -> None:
     """Each notifier's ``needs:`` must name every product job (FAR-2308).
 
     A notifier's guard reads ``needs.*.result``, so a job omitted from ``needs``
-    is invisible: its failure never reaches the Branch Fixer (``notify-*``) and
-    never suppresses the "ci" self-report. The set is DERIVED from ``jobs:``
-    rather than hand-maintained, so adding a job (e.g. ``uv-lock-check``) fails
-    here until all three lists are updated.
+    is invisible: its failure never reaches the Branch Fixer (``notify-*``). The
+    set is DERIVED from ``jobs:`` rather than hand-maintained, so adding a job
+    (e.g. ``uv-lock-check``) fails here until both lists are updated.
     """
     workflow = _load_yaml(CI_YML)
     jobs = workflow.get("jobs") or {}

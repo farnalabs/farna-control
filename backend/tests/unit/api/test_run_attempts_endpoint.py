@@ -251,6 +251,27 @@ def test_missing_run_returns_404_and_never_lists_attempts(client: TestClient) ->
     list_mock.assert_not_awaited()
 
 
+def test_list_attempts_is_called_with_the_callers_org(client: TestClient) -> None:
+    """FAR-2689: the per-run attempt read is org-clamped at the query too.
+
+    The run load is already org-scoped, but the attempts query must carry the
+    caller's org as well (parent-id-only reads rest their tenancy on RLS).
+    """
+    list_mock = AsyncMock(return_value=[])
+
+    with (
+        patch("farna.api.routes.runs.get_run", new=AsyncMock(return_value=_make_run())),
+        patch("farna.api.routes.runs.db_list_attempts", new=list_mock),
+    ):
+        resp = client.get(f"/api/v1/runs/{_RUN_ID}/attempts")
+
+    assert resp.status_code == 200
+    call_args = list_mock.await_args
+    assert call_args is not None
+    assert call_args.args[1] == _RUN_ID
+    assert call_args.kwargs["org_id"] == _ORG_ID
+
+
 def test_foreign_org_run_is_looked_up_with_caller_org_and_returns_404(client: TestClient) -> None:
     """A run outside the caller's org is excluded by the org-scoped load → 404.
 

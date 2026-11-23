@@ -1,6 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import manifest from '@/manifest.yaml'
 import { api, getAccessToken } from '../lib/api/client'
+// FAR-2638: imported from the module that OWNS the demo-session flag rather
+// than via the api-client re-export. `isDemoSession` is the same function
+// either way, but the client module is stubbed wholesale by component specs
+// (partial mocks with no such export), and a store that read it through the
+// client would throw wherever the gate is evaluated.
+import { isDemoSession } from '../lib/api/auth'
 import type { components } from '../lib/api/schema'
 import { isFeatureRequiredProblem } from '../lib/api/formatError'
 import { withTimeout as withRequestDeadline } from '../lib/requestTimeout'
@@ -64,6 +71,46 @@ function thrownMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
+/**
+ * Whether a manifest route's `visibility` value is release-gated out of the
+ * alpha. `private_preview` and `in_dev` need developer mode; a missing route
+ * entry fails closed (with no manifest route there is no nav row either, so
+ * there is no surface the card could legitimately open), while a present entry
+ * with no `visibility` is public — exactly how the sidebar treats it.
+ *
+ * Exported so its branches can be exercised directly: the production value is
+ * read once from static manifest data, so the alternative arms are otherwise
+ * unreachable at import time.
+ */
+export function isReleaseGatedVisibility(
+  route: { visibility?: string | null } | null | undefined,
+): boolean {
+  return (
+    route == null ||
+    route.visibility === 'private_preview' ||
+    route.visibility === 'in_dev'
+  )
+}
+
+/**
+ * System Maps ships at Beta, so its routes carry `visibility: private_preview`
+ * until they are promoted. Read once: `visibility` is static manifest data,
+ * not runtime state.
+ *
+ * FAR-2638: the sidebar and the router both read this field (the sidebar
+ * through `toNavItem` → `isNavItemVisible`, the router through
+ * `hydrateManifestMeta`). The store is not a component and cannot build the
+ * sidebar's visibility context, so it reads the SAME manifest route entry and
+ * applies its own narrower gate: `private_preview` and `in_dev` both need
+ * developer mode, and the store also refuses a demo session for either (the
+ * sidebar refuses a demo session only for `private_preview`).
+ */
+const systemMapsReleaseGated = isReleaseGatedVisibility(
+  (manifest as {
+    routes?: Record<string, { visibility?: string | null } | null>
+  }).routes?.['/system-maps'],
+)
+
 // The store is not a component, so it cannot call useI18n(). Use the shared
 // i18n instance directly so error strings stay translatable and consistent.
 function tr(key: string): string { return i18n.global.t(key) }
@@ -117,6 +164,20 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   )
   const hasReadAccess = computed(
     () => systemMapsEnabled.value && planStore.userPermissions.includes('system_maps.read'),
+  )
+  /**
+   * FAR-2638: whether the manifest release gate permits System Maps surfaces
+   * for this caller. System Maps is `private_preview`, so today this matches
+   * what `isNavItemVisible` decides for it: developer mode on, and never a
+   * demo session. It is deliberately not the shared predicate: for an `in_dev`
+   * route the sidebar needs only developer mode and would show it to a demo
+   * session, whereas this store also hides it there. That difference cannot
+   * affect System Maps while its routes stay `private_preview`, and the
+   * stricter demo guard means a dashboard entry point never surfaces a preview
+   * in a demo session.
+   */
+  const systemMapsReleased = computed(
+    () => !systemMapsReleaseGated || (planStore.devMode && !isDemoSession()),
   )
 
   function reset(): void {
@@ -500,6 +561,11 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   async function publish(mapId: string, revisionId: string): Promise<void> {
     const response = await api.POST('/api/v1/system-maps/{map_id}/revisions/{rev_id}/publish', { params: { path: { map_id: mapId, rev_id: revisionId } } })
     if (response.error) throw new Error(tr('systemMaps.errors.publish_revision'))
+    // The org now has a published map, so any "nothing published" answer held
+    // from an earlier dashboard load is stale. Clear it before `loadMap` so
+    // returning to the dashboard does not render the collapsed-empty default
+    // until its own fetch settles.
+    overviewEmpty.value = false
     await loadMap(mapId)
   }
 
@@ -579,5 +645,5 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   // Kept for the dashboard's preview card; discovery is now a real operation.
   function fetchDiscovery(): void { loaded.value = true }
 
-  return { loaded, loading, error, unavailable, maps, total, page, pageSize, activeMap, activeRevision, graph, revisions, discovery, attributionBindings, overview, overviewLoading, overviewError, overviewUnavailable, overviewEmpty, accessLoaded, systemMapsEnabled, hasAccess, hasReadAccess, reset, fetchAccess, fetchOverview, fetchDefaultOverview, fetchMaps, createMap, deleteMap, loadMap, loadRevision, loadRevisionHistory, loadCurrentRevision, loadRevisionByTime, loadAttributionBindings, createAttributionBinding, deleteAttributionBinding, saveDraft, publish, archive, restoreRevisionAsNew, diffRevision, discover, clearActive, fetchDiscovery }
+  return { loaded, loading, error, unavailable, maps, total, page, pageSize, activeMap, activeRevision, graph, revisions, discovery, attributionBindings, overview, overviewLoading, overviewError, overviewUnavailable, overviewEmpty, accessLoaded, systemMapsEnabled, systemMapsReleased, hasAccess, hasReadAccess, reset, fetchAccess, fetchOverview, fetchDefaultOverview, fetchMaps, createMap, deleteMap, loadMap, loadRevision, loadRevisionHistory, loadCurrentRevision, loadRevisionByTime, loadAttributionBindings, createAttributionBinding, deleteAttributionBinding, saveDraft, publish, archive, restoreRevisionAsNew, diffRevision, discover, clearActive, fetchDiscovery }
 })

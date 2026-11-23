@@ -172,25 +172,27 @@ class TestManifestLoad:
         exception:
 
         - ``in_dev`` + ``library.search.in_dev`` - the retained internal
-          lifecycle-map surfaces (FAR-2200); and
+          lifecycle-map surfaces (FAR-2200);
         - ``private_preview`` + ``system_maps_access`` - the System Maps
           authoring surfaces (FAR-2288), which deliberately use their own grant
           separate from the lifecycle-map one; or
-        - the published System Maps reads (``/system-maps`` and
-          ``/system-maps/:id`` only), which are ``public`` in manifest
-          vocabulary but still require an authenticated viewer and the dedicated
-          ``system_maps.read`` permission (FAR-2363). Drafts are 404 for any
-          caller without the internal gate, and the backend's published-only
-          filter is pinned by ``tests/unit/api/test_system_maps_routes.py``
-          (``list_maps_by_org``/``list_revisions_history`` receive
-          ``published_only=True``) plus
+        - ``private_preview`` + ``system_maps.read`` - the System Maps read
+          surfaces (``/system-maps`` and ``/system-maps/:id`` only), which stay
+          authenticated viewer routes behind the dedicated ``system_maps.read``
+          permission. FAR-2363 originally made these published reads ``public``
+          in manifest vocabulary; **FAR-2638 reverses that**: System Maps now
+          ships at Beta and is no longer a published surface, so both the list
+          and the detail route are hidden from customers and the read-only demo
+          as ``private_preview``. The viewer role and the permission gate are
+          unchanged, and the reversal is deliberate here - not a regression.
+          Drafts still 404 for any caller without the internal gate; the
+          backend's published-only filter remains pinned by
+          ``tests/unit/api/test_system_maps_routes.py`` and
           ``tests/integration/test_system_maps_published_read.py``.
 
         Every widened route must therefore carry a matching permission gate;
-        public visibility is allowed only for the explicit published-read
-        exception, never as an anonymous route. The published System Maps
-        reads are the only such entries; mutations remain operator-only behind
-        the separate ``system_maps_access`` grant.
+        no widened free route may be ``public`` any more. Mutations remain
+        operator-only behind the separate ``system_maps_access`` grant.
         """
         _reset_manifest()
         from farna.core.manifest import load_manifest
@@ -199,11 +201,15 @@ class TestManifestLoad:
             "in_dev": "library.search.in_dev",
             "private_preview": "system_maps_access",
         }
-        # Deliberately viewer-readable PUBLIC free routes (FAR-2363):
-        # published System Maps reads for every authenticated principal, gated
-        # by the dedicated system_maps.read permission. The exception is narrow:
-        # only these two paths, and only with exactly [system_maps.read].
-        viewer_visible_public_routes = {
+        # Deliberately viewer-readable FREE routes (FAR-2363): the System Maps
+        # read surfaces for every authenticated principal, gated by the
+        # dedicated system_maps.read permission. FAR-2638 moved System Maps to
+        # Beta, so these are `private_preview` now - hidden from customers and
+        # the read-only demo - while the viewer role and the permission gate
+        # stay required, so the surface can never become effectively public
+        # without a permission gate. The set must be fully present (non-vacuity
+        # checked below), not silently skipped.
+        viewer_readable_system_map_routes = {
             "/system-maps": "system_maps.read",
             "/system-maps/:id": "system_maps.read",
         }
@@ -214,6 +220,7 @@ class TestManifestLoad:
         # that the route carries no entitlement.
         viewer_visible_admin_routes = {"/admin/errors", "/admin/errors/:id"}
         manifest = load_manifest()
+        seen_system_map_routes: set[str] = set()
         for path, route in manifest["routes"].items():
             if route.get("required_entitlement") is not None or route["required_roles"] is None:
                 continue
@@ -222,9 +229,10 @@ class TestManifestLoad:
             if path in viewer_visible_admin_routes:
                 assert route["required_roles"] == ["admin", "viewer"], f"Viewer-readable admin route {path} must require exactly ['admin', 'viewer']"
                 continue
-            if path in viewer_visible_public_routes:
-                read_permission = viewer_visible_public_routes[path]
-                assert route.get("visibility") == "public", f"Viewer-readable free route {path} must be public"
+            if path in viewer_readable_system_map_routes:
+                read_permission = viewer_readable_system_map_routes[path]
+                seen_system_map_routes.add(path)
+                assert route.get("visibility") == "private_preview", f"Viewer-readable free route {path} must be private_preview (FAR-2638 hides System Maps until Beta)"
                 assert "viewer" in route["required_roles"], f"Viewer-readable free route {path} must include the viewer role"
                 assert route.get("required_permissions") == [read_permission], f"Viewer-readable free route {path} must require only {read_permission}"
                 continue
@@ -233,6 +241,7 @@ class TestManifestLoad:
             gate_permission = dev_gate_permissions[visibility]
             assert gate_permission in (route.get("required_permissions") or []), f"Free route {path} widened roles without the {gate_permission} permission gate"
             assert route["required_roles"] == ["operator", "admin"], f"Free route {path} with explicit roles must require exactly ['admin'] or the dev-gated ['operator', 'admin'] set"
+        assert seen_system_map_routes == set(viewer_readable_system_map_routes), f"Both System Maps read routes must exist as viewer-readable private_preview routes; expected {sorted(viewer_readable_system_map_routes)}, saw {sorted(seen_system_map_routes)}"
 
     def test_admin_routes_require_admin_role(self):
         """Admin /admin routes require the admin org-role, except system_admin_only routes.

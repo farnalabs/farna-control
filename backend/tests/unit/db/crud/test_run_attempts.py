@@ -99,9 +99,15 @@ async def _close(
         return await close_attempt(session, run_id, terminal_reason=terminal_reason, **kwargs)
 
 
+# FAR-2689: ``list_attempts`` requires the caller's org (an attempt's org is
+# derived from its run, never chosen by the caller), so the fixture maps each
+# seeded run to the org its row carries.
+_ORG_BY_RUN = {_RUN: _ORG, _OTHER_RUN: _OTHER_ORG}
+
+
 async def _attempts(maker: async_sessionmaker[AsyncSession], run_id: uuid.UUID = _RUN) -> list[RunAttempt]:
     async with maker() as session:
-        return list(await list_attempts(session, run_id))
+        return list(await list_attempts(session, run_id, org_id=_ORG_BY_RUN[run_id]))
 
 
 class TestAttemptIndexContract:
@@ -144,7 +150,7 @@ class TestStartAttempt:
         # _OTHER_RUN belongs to _OTHER_ORG; the row must carry _OTHER_ORG.
         await _start(maker, _OTHER_RUN)
         async with maker() as session:
-            [attempt] = list(await list_attempts(session, _OTHER_RUN))
+            [attempt] = list(await list_attempts(session, _OTHER_RUN, org_id=_OTHER_ORG))
         assert attempt.organisation_id == _OTHER_ORG
 
     async def test_uses_the_supplied_started_at(self, maker: async_sessionmaker[AsyncSession]) -> None:

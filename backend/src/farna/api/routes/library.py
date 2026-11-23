@@ -804,8 +804,13 @@ async def _load_draft_collection(
     ``library_collection`` primitive, and 400 when it is not in the ``draft``
     state (only draft collections can be mutated or published). Centralised so
     the update/publish endpoints share a single validation path.
+
+    FAR-2696: the resolver is org-clamped with ``explicit_org_filter``. Both
+    callers WRITE to the row they load (update its pins, or publish it), so on
+    a ``BYPASSRLS`` connection an id-only read would let a caller mutate
+    another organisation's draft. The clamp makes a foreign id a 404.
     """
-    prim = await get_primitive(session, org_id, primitive_id)
+    prim = await get_primitive(session, org_id, primitive_id, explicit_org_filter=org_id)
     if prim is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

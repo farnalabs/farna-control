@@ -312,7 +312,7 @@ async def _setup_team_members(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_team_members(session, team_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_team_members(session, team_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_teams(session: AsyncSession) -> PageCall:
@@ -350,7 +350,7 @@ async def _setup_schema_versions(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_schema_versions(session, schema_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_schema_versions(session, schema_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_runs(session: AsyncSession) -> PageCall:
