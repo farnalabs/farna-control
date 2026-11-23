@@ -1,11 +1,11 @@
-"""The 0361 migration lowers ONLY the five operational catalog rows (FAR-2665).
+"""The 0363 migration lowers ONLY the five operational catalog rows (FAR-2665).
 
 FAR-2665 moved ``runtime_config``, ``rate_limits``, ``plugin_management``,
 ``error_tracking`` and ``error_forwarders`` to Community in the code registry.
 The boot seed now reconciles ``tier_id`` from code on every boot, but an install
 that upgrades before its next boot must still receive the change (and the admin
 Feature Flags surface must stop advertising a free capability as paid).
-Migration 0361 rewrites those rows once.
+Migration 0363 rewrites those rows once.
 
 These tests pin the exact predicates the migration executes, and EXECUTE its own
 captured statement against an in-memory SQLite database (the ``env.py`` target).
@@ -24,7 +24,7 @@ from types import ModuleType
 import pytest
 from alembic import op
 
-_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0361_lower_operational_flag_tiers.py"
+_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0363_lower_operational_flag_tiers.py"
 
 _SQLITE_DDL = """
 CREATE TABLE feature_flag_catalog (
@@ -45,7 +45,7 @@ _OTHER_COMMUNITY = "observability"
 
 
 def _load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0361_lower_operational_flag_tiers", _MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_0363_lower_operational_flag_tiers", _MIGRATION_PATH)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -88,8 +88,8 @@ def _seed(connection: sqlite3.Connection, tiers: dict[str, str]) -> None:
 def test_revision_continues_the_current_single_head() -> None:
     module = _load_migration()
 
-    assert module.revision == "0361_lower_operational_flag_tiers"
-    assert module.down_revision == "0360_free_schema_history_retire_pipeline_delete"
+    assert module.revision == "0363_lower_operational_flag_tiers"
+    assert module.down_revision == "0362_rename_legacy_db_objects"
 
 
 def test_upgrade_statement_is_scoped_to_the_five_flags_and_the_team_tier(monkeypatch: pytest.MonkeyPatch) -> None:

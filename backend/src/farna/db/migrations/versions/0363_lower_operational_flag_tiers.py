@@ -35,15 +35,15 @@ Idempotency and safety:
 Downgrade: the exact reverse UPDATE, guarded on ``tier_id = 'community'`` so it
 is idempotent in the same way.
 
-Revision ID: 0361_lower_operational_flag_tiers
-Revises: 0360_free_schema_history_retire_pipeline_delete
+Revision ID: 0363_lower_operational_flag_tiers
+Revises: 0362_rename_legacy_db_objects
 Create Date: 2026-11-22
 """
 
 from alembic import op
 
-revision: str = "0361_lower_operational_flag_tiers"
-down_revision: str | None = "0360_free_schema_history_retire_pipeline_delete"
+revision: str = "0363_lower_operational_flag_tiers"
+down_revision: str | None = "0362_rename_legacy_db_objects"
 branch_labels = None
 depends_on = None
 

@@ -154,7 +154,7 @@ class TestPlanEntitlementsHelper:
             def entitlements(self) -> list[object]:
                 return ["identity", object()]
 
-        assert plan_entitlements(_Ctx()) == frozenset()
+        assert not plan_entitlements(_Ctx())
 
     def test_a_context_with_no_resolvers_grants_nothing(self) -> None:
         """A minimal pre-protocol double (no tier/feature_enabled) grants nothing."""
@@ -162,4 +162,4 @@ class TestPlanEntitlementsHelper:
         class _Ctx:
             pass
 
-        assert plan_entitlements(_Ctx()) == frozenset()
+        assert not plan_entitlements(_Ctx())
