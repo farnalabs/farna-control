@@ -1,7 +1,7 @@
 """Structural gate: ``runtime-config.js`` is never served from a stale cache.
 
 The file is regenerated at container start and publishes a global whose name was
-rebranded (``__MODULO_CONFIG__`` -> ``__FARNA_CONFIG__``). The static-asset rule
+rebranded (the pre-rebrand global -> ``__FARNA_CONFIG__``). The static-asset rule
 serves ``.js`` as ``public, immutable`` for a year from an unchanged URL, so a
 returning client would keep the OLD script (which sets the OLD global) and the
 new SPA would silently lose auto-login and monitor config. Two halves close
