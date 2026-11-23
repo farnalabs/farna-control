@@ -45,14 +45,16 @@
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadDetail" />
     <template v-else-if="group">
-      <div
+      <BaseCard
         v-if="isInstanceScope"
-        class="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
+        variant="muted"
+        padding="sm"
+        class="border border-border text-sm text-muted-foreground"
         aria-live="polite"
         data-testid="admin-error-detail-instance-readonly"
       >
         {{ $t('views.AdminErrorDetailView.instance_scope_readonly') }}
-      </div>
+      </BaseCard>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <StatCard :label="$t('views.AdminErrorDetailView.level')" color="muted">
           <template #content>
@@ -89,7 +91,11 @@
            shared v-tooltip affordance. The tooltip sits on the wrapping span
            because a disabled control swallows hover events, so a tooltip bound
            directly to it would never open. -->
-      <DataCard v-if="!isInstanceScope" :title="$t('views.AdminErrorDetailView.actions')" heading-level="h2">
+      <DataCard
+        v-if="!isInstanceScope"
+        heading-level="h2"
+        :title="$t('views.AdminErrorDetailView.actions')"
+      >
         <p
           v-if="!canManageErrors"
           id="admin-error-status-admin-help"
@@ -174,7 +180,11 @@
         </div>
       </DataCard>
 
-      <DataCard v-if="sampleEvent" :title="$t('views.AdminErrorDetailView.message')" heading-level="h2">
+      <DataCard
+        v-if="sampleEvent"
+        heading-level="h2"
+        :title="$t('views.AdminErrorDetailView.message')"
+      >
         <p class="mb-2 text-xs text-muted-foreground">
           {{ $t('views.AdminErrorDetailView.fingerprint') }}: <span class="font-mono">{{ shortId(group.fingerprint) }}</span>
         </p>
@@ -236,7 +246,10 @@
         </div>
       </DataCard>
 
-      <DataCard :title="$t('views.AdminErrorDetailView.raw_events', { count: eventsTotal })" heading-level="h2">
+      <DataCard
+        heading-level="h2"
+        :title="$t('views.AdminErrorDetailView.raw_events', { count: eventsTotal })"
+      >
         <div v-if="eventsLoading" class="py-2" data-testid="admin-error-detail-events-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -309,6 +322,7 @@ import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

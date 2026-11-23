@@ -83,7 +83,7 @@ describe('AgentOutputDiffView', () => {
     await flushPromises()
     await nextTick()
 
-    const controls = wrapper.find('.rounded-lg.border.bg-card.p-6 > .flex')
+    const controls = wrapper.find('.card-base.p-6 > .flex')
     expect(controls.classes()).toEqual(expect.arrayContaining(['flex-col', 'sm:flex-row']))
 
     const selects = wrapper.findAllComponents({ name: 'Select' })

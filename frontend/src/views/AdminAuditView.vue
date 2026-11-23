@@ -341,10 +341,11 @@
       class="space-y-4"
       data-testid="admin-audit-system-section"
     >
-      <div>
-        <h2 class="text-base font-semibold">{{ $t('views.AdminAuditView.tab_system_events') }}</h2>
-        <p class="text-sm text-muted-foreground">{{ $t('views.AdminAuditView.system_subtitle') }}</p>
-      </div>
+      <CardHeader
+        heading-level="h2"
+        :title="$t('views.AdminAuditView.tab_system_events')"
+        :description="$t('views.AdminAuditView.system_subtitle')"
+      />
 
       <BaseCard padding="md">
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -546,6 +547,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'

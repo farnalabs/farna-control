@@ -30,9 +30,9 @@
     <template v-else>
       <DataCard
         v-if="editorMode === 'add'"
+        heading-level="h2"
         padding="lg"
         :title="$t('views.AdminNodeCategoriesView.new_node_category')"
-        heading-level="h2"
       >
         <NodeCategoryEditor
           :category="null"
@@ -95,9 +95,9 @@
 
       <DataCard
         v-if="editCategoryId"
+        heading-level="h2"
         padding="lg"
         :title="$t('views.AdminNodeCategoriesView.edit_node_category')"
-        heading-level="h2"
       >
         <NodeCategoryEditor
           :category="editingCategory"

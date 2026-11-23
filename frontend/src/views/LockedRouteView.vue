@@ -14,7 +14,11 @@
     >
       <!-- Reached when the licence now covers the capability (an upgrade
            landed and this page was reloaded, which refetches the plan). -->
-      <BaseCard padding="lg" class="text-center" data-testid="locked-route-available">
+      <BaseCard
+        padding="lg"
+        class="text-center"
+        data-testid="locked-route-available"
+      >
         <p class="text-sm text-muted-foreground">
           {{ $t('views.LockedRoute.available_body', { capability: capabilityLabel }) }}
         </p>

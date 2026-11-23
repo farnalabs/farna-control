@@ -17,12 +17,15 @@
         padding="lg"
         :data-testid="`governance-level-${level.id}`"
       >
-        <header>
-          <h2 class="text-base font-semibold">
-            <span class="mr-2 text-muted-foreground" aria-hidden="true">{{ level.order }}.</span>{{ $t(level.titleKey) }}
-          </h2>
-          <p class="mt-1 text-sm text-muted-foreground">{{ $t(level.primitiveKey) }}</p>
-        </header>
+        <CardHeader
+          heading-level="h2"
+          :title="$t(level.titleKey)"
+          :description="$t(level.primitiveKey)"
+        >
+          <template #leading>
+            <span class="text-muted-foreground" aria-hidden="true">{{ level.order }}.</span>
+          </template>
+        </CardHeader>
 
         <p
           v-if="level.noteKey"
@@ -136,6 +139,7 @@ import { formatApiError } from '../lib/api/formatError'
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import Badge from 'primevue/badge'
 
 const { t } = useI18n()
