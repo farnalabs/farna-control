@@ -582,6 +582,7 @@ backend/tests/unit/db/crud/test_offset_has_more_sweep.py	9
 backend/tests/unit/db/crud/test_organisation.py	3
 backend/tests/unit/db/crud/test_run_coverage_extra.py	2
 backend/tests/unit/db/test_apply_bundled_runner_template.py	3
+backend/tests/unit/db/test_baseline_migration_coverage.py	1
 backend/tests/unit/db/test_bootstrap_promotion.py	23
 backend/tests/unit/db/test_bootstrap_role.py	50
 backend/tests/unit/db/test_capacity.py	2
