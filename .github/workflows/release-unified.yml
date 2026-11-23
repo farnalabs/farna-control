@@ -847,14 +847,16 @@ jobs:
           # FAR-2690: release-freeze / release-publication-hold are
           # ruleset-protected (delete + force allowed only for the repo admin
           # role), so these marker operations authenticate as an admin with
-          # RELEASE_MARKER_TOKEN. Ordinary pushes stay on github.token.
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
           if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
             echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this one command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -1290,14 +1292,16 @@ jobs:
           # FAR-2690: release-freeze / release-publication-hold are
           # ruleset-protected (delete + force allowed only for the repo admin
           # role), so these marker operations authenticate as an admin with
-          # RELEASE_MARKER_TOKEN. Ordinary pushes stay on github.token.
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
           if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
             echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this one command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -1338,14 +1342,16 @@ jobs:
           # FAR-2690: release-freeze / release-publication-hold are
           # ruleset-protected (delete + force allowed only for the repo admin
           # role), so these marker operations authenticate as an admin with
-          # RELEASE_MARKER_TOKEN. Ordinary pushes stay on github.token.
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
           if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
             echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this one command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -1397,14 +1403,16 @@ jobs:
           # FAR-2690: release-freeze / release-publication-hold are
           # ruleset-protected (delete + force allowed only for the repo admin
           # role), so these marker operations authenticate as an admin with
-          # RELEASE_MARKER_TOKEN. Ordinary pushes stay on github.token.
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
           if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
             echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this one command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -1442,6 +1450,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # A freeze move needs the admin credential. Check it before creating
+          # an RC tag: a recut that dies after tagging would strand a tag with
+          # no freeze to match it, and the tag push cannot be undone here.
+          if [ "${{ inputs.freeze }}" = "true" ] && [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
+            echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to move the ruleset-protected release-freeze ref."
+            exit 1
+          fi
           BASE="v${VERSION}"
 
           # A recut must represent the fix currently on main, never re-use the
@@ -1469,14 +1484,13 @@ jobs:
           if [ "${{ inputs.freeze }}" = "true" ]; then
             # FAR-2690: release-freeze is ruleset-protected (delete + force
             # allowed only for the repo admin role), so this marker push
-            # authenticates as an admin with RELEASE_MARKER_TOKEN.
-            if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
-              echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to move the ruleset-protected release-freeze ref."
-              exit 1
-            fi
+            # authenticates as an admin with RELEASE_MARKER_TOKEN (already
+            # verified above, before the RC tag was created).
             echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-            MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            # checkout persists github.token as an http extraheader that git
+            # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+            # points it at a local bare repo; a GHES install or a fork points it at its own host.
+            MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+            # checkout persists the workflow token as an http extraheader that git
             # sends INSTEAD of the URL credential; clear it for this command.
             marker_git() {
               GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -1513,14 +1527,16 @@ jobs:
           # FAR-2690: release-freeze / release-publication-hold are
           # ruleset-protected (delete + force allowed only for the repo admin
           # role), so these marker operations authenticate as an admin with
-          # RELEASE_MARKER_TOKEN. Ordinary pushes stay on github.token.
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
           if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
             echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this one command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -2181,14 +2197,16 @@ jobs:
           # FAR-2690: release-freeze / release-publication-hold are
           # ruleset-protected (delete + force allowed only for the repo admin
           # role), so these marker operations authenticate as an admin with
-          # RELEASE_MARKER_TOKEN. Ordinary pushes stay on github.token.
+          # RELEASE_MARKER_TOKEN. Ordinary pushes keep the checkout credential.
           if [ -z "${RELEASE_MARKER_TOKEN:-}" ]; then
             echo "::error::RELEASE_MARKER_TOKEN is missing or empty; refusing to push or delete the ruleset-protected release marker refs (release-freeze / release-publication-hold)."
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this one command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -2250,8 +2268,10 @@ jobs:
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
@@ -3908,8 +3928,10 @@ jobs:
             exit 1
           fi
           echo "::add-mask::${RELEASE_MARKER_TOKEN}"
-          MARKER_REMOTE="https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          # checkout persists github.token as an http extraheader that git sends
+          # RELEASE_MARKER_REMOTE overrides the push target: the rehearsal harness
+          # points it at a local bare repo; a GHES install or a fork points it at its own host.
+          MARKER_REMOTE="${RELEASE_MARKER_REMOTE:-https://x-access-token:${RELEASE_MARKER_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
+          # checkout persists the workflow token as an http extraheader that git sends
           # INSTEAD of the URL credential; clear it for this command.
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
