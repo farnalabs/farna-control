@@ -373,10 +373,21 @@ describe('AdminCostControlsView', () => {
   })
 
   it('shows locked state when feature is disabled', async () => {
+    // FAR-2665: the lock copy is decided by the plan payload's ENTITLEMENT
+    // registry, not a per-view `required-tier` prop. `admin_cost_controls` maps
+    // to the cost_governance capability, so a switched-off flag still gets the
+    // commercial wording with the upgrade path rather than behaviour-off copy.
     mockGet.mockImplementation((path: string) => {
-      if (path === '/api/v1/admin/feature-flags') {
+      if (path === '/api/v1/plan') {
         return Promise.resolve({
-          data: { license: { tier: 'community', has_license_key: false, is_valid: true }, flags: [{ name: 'admin_cost_controls', description: 'Cost Controls', tier: 'team', currently_active: false, depends_on: null }], would_activate: [] },
+          data: {
+            license: { tier: 'community', expires_at: null, org_id: null },
+            dev_mode: false,
+            flags: [{ name: 'admin_cost_controls', currently_active: false }],
+            entitlements: [
+              { key: 'cost_governance', name: 'Cost governance', description: '', granted: false, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+            ],
+          },
           error: undefined,
         })
       }

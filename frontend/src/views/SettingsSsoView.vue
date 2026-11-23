@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="sso" required-tier="team" show-disabled>
+  <FeatureGate feature-name="sso" show-disabled>
 
     <div class="page-wide">
       <PageHeader :title="$t('views.SettingsSsoView.title')" :subtitle="$t('views.SettingsSsoView.description')">

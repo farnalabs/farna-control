@@ -2,7 +2,7 @@
   <div data-theme="agent" class="page-wide">
     <PageHeader :title="$t('views.SettingsErrorForwardersView.error_forwarders')" :subtitle="$t('views.SettingsErrorForwardersView.configure_external_error_tracking_and_alerting_integrations')" />
 
-    <FeatureGate feature-name="error_forwarders" required-tier="team" show-disabled>
+    <FeatureGate feature-name="error_forwarders" show-disabled>
 
       <div v-if="loading" class="space-y-6">
         <div

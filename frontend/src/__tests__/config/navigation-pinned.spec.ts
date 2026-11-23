@@ -118,7 +118,8 @@ describe('getPinnedNavItem (FAR-2605)', () => {
     userPermissions: [] as string[],
     devMode: false,
     tierInfoLoaded: true,
-    isAtMinimumTier: () => true,
+    planLoaded: true,
+    isEntitlementGranted: () => true,
     isDemoSession: false,
     isFeatureEnabled: () => true,
   }

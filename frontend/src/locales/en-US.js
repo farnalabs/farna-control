@@ -58,10 +58,10 @@ export default {
   "views": {
     "LockedRoute": {
       "this_page": "This page",
-      "tier_heading": "{capability} requires the {tier} licence",
-      "tier_heading_unknown": "{capability} needs a higher plan tier",
-      "tier_subtitle": "Your organisation is on the {currentTier} plan. An organisation administrator can upgrade the licence to unlock it.",
-      "tier_subtitle_unknown": "Your current plan does not include this capability. An organisation administrator can upgrade the licence to unlock it.",
+      "entitlement_heading": "{capability} requires the {entitlement} capability",
+      "entitlement_heading_unknown": "{capability} needs a higher plan tier",
+      "entitlement_subtitle": "Your organisation's licence does not include the {entitlement} capability. An organisation administrator can upgrade the licence to unlock it.",
+      "entitlement_subtitle_unknown": "Your current plan does not include this capability. An organisation administrator can upgrade the licence to unlock it.",
       "role_heading": "Your role cannot open {capability}",
       "role_subtitle": "Ask an organisation administrator to give you the role that includes it.",
       "system_admin_heading": "{capability} is restricted to instance administrators",

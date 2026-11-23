@@ -1,17 +1,20 @@
 schema_version: 1
 
+# FAR-2665: a route declares ROLES/PERMISSIONS plus, when the capability is
+# commercial, a `required_entitlement` that names an entry in
+# backend/src/farna/core/entitlements.py. There is deliberately no tier key: a
+# tier is a projection of the entitlement grant, and the guard reads the grant
+# from the /api/v1/plan payload.
 x-community: &community
-    required_tier: community
     required_roles:
     required_permissions:
 
-x-team: &team
-    required_tier: team
+# Admin-only, free. (Renamed from `team`: "team" described a tier, not a role.)
+x-admin: &admin
     required_roles: [admin]
     required_permissions:
 
-x-team-viewer: &team_viewer
-    required_tier: team
+x-admin-viewer: &admin_viewer
     required_roles: [admin, viewer]
     required_permissions:
 
@@ -411,8 +414,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 60
         type: form_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         visibility: private_preview
         deprecated: false
 
@@ -436,7 +438,8 @@ routes:
         sidebar_group: administration
         sidebar_order: 50
         type: list_page
-        <<: *team
+        <<: *admin
+        required_entitlement: identity
         deprecated: false
 
     /settings/sso:
@@ -447,7 +450,8 @@ routes:
         sidebar_group: administration
         sidebar_order: 60
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: identity
         deprecated: false
 
     /settings/license:
@@ -515,7 +519,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
+        <<: *admin
     /settings/rate-limits:
         name: settings-rate-limits
         breadcrumb: Rate Limits
@@ -527,7 +531,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
+        <<: *admin
     /settings/hitl-review:
         name: settings-hitl-review
         breadcrumb: HITL Review
@@ -563,7 +567,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
+        <<: *admin
     /settings/notifications:
         name: settings-notifications
         breadcrumb: Notification Preferences
@@ -595,8 +599,7 @@ routes:
         type: form_page
         deprecated: false
 
-        <<: *team
-        required_tier: community
+        <<: *admin
     /settings/monitoring:
         name: settings-monitoring
         breadcrumb: Browser Monitoring
@@ -636,15 +639,16 @@ routes:
         type: form_page
         # FAR-1269: the org HITL review window (GET/PUT
         # /api/v1/admin/org/hitl-review-window) is not plan-gated, so this page
-        # must be reachable on EVERY tier. Community tier + an explicit
-        # ["admin"] role list is the FAR-462 pattern (same as /admin/users):
-        # the router enforces required_roles and required_tier as separate
-        # gates, so navigation stays admin-only while the tier stays
-        # community. Every team-only section on the page remains behind the
-        # in-page team_rbac FeatureGate (dimmed + upgrade overlay on
-        # Community); three org-scoped, community-tier cards render OUTSIDE
-        # it so a community admin can use them: the HITL review window, the
-        # human-linked MCP HITL authority, and the organisation feature flags.
+        # must be reachable on EVERY plan. The FAR-462 pattern (same as
+        # /admin/users) is an explicit ["admin"] role list and NO
+        # required_entitlement: the router enforces roles and the entitlement
+        # grant as separate gates, so navigation stays admin-only while the page
+        # carries no commercial requirement. Every Team section on the page
+        # remains behind the in-page team_rbac FeatureGate (dimmed + upgrade
+        # overlay without the Identity entitlement); three org-scoped cards
+        # render OUTSIDE it so an unentitled admin can use them: the HITL review
+        # window, the human-linked MCP HITL authority, and the organisation
+        # feature flags.
         <<: *community
         required_roles: [admin]
         deprecated: false
@@ -657,7 +661,8 @@ routes:
         sidebar_group: runs
         sidebar_order: 60
         type: list_page
-        <<: *team
+        <<: *admin
+        required_entitlement: audit_evidence
         deprecated: false
 
     /admin/costs:
@@ -668,7 +673,8 @@ routes:
         sidebar_group: runs
         sidebar_order: 70
         type: page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
         exact: true
 
@@ -680,7 +686,8 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
 
     /admin/costs/controls:
@@ -691,7 +698,8 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
 
     /admin/costs/components:
@@ -702,7 +710,8 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
+        <<: *admin
+        required_entitlement: cost_governance
         deprecated: false
 
     /admin/connectors:
@@ -713,8 +722,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 10
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/model-backends:
@@ -725,8 +733,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 20
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/node-categories:
@@ -744,8 +751,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 80
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         visibility: private_preview
         deprecated: false
 
@@ -760,8 +766,7 @@ routes:
         visibility: private_preview
         deprecated: false
 
-        <<: *team
-        required_tier: community
+        <<: *admin
     /admin/housekeeping:
         name: admin-housekeeping
         breadcrumb: Housekeeping
@@ -781,8 +786,7 @@ routes:
         sidebar_group: pipelines
         sidebar_order: 40
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/run-retention:
@@ -795,7 +799,8 @@ routes:
         type: page
         deprecated: false
 
-        <<: *team
+        <<: *admin
+        required_entitlement: audit_evidence
     /admin/runners/concurrency:
         name: admin-runners-concurrency
         breadcrumb: Runner Concurrency
@@ -804,8 +809,7 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/evidence-redaction:
@@ -858,7 +862,7 @@ routes:
         sidebar_group: runs
         sidebar_order: 50
         type: list_page
-        <<: *team_viewer
+        <<: *admin_viewer
         deprecated: false
 
     /admin/errors/:id:
@@ -872,7 +876,7 @@ routes:
         pattern: /admin/errors/:id
         dynamic_params:
           - id
-        <<: *team_viewer
+        <<: *admin_viewer
         deprecated: false
 
     /admin/notification-delivery:
@@ -884,8 +888,7 @@ routes:
         sidebar_order: 110
         feature_flag: webhook_notification_log
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/trigger-events:
@@ -896,8 +899,7 @@ routes:
         sidebar_group: pipelines
         sidebar_order: 60
         type: list_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/product-analytics:
@@ -909,13 +911,12 @@ routes:
         sidebar_order:
         system_admin_only: true
         type: page
-        <<: *team
+        <<: *admin
         # A system_admin_only route is an INSTANCE-level gate; the org-ROLE
         # requirement *team carries does not apply (FAR-1795), so it is
         # overridden to none. The TIER is community: the ratified Team bundle
         # does not name product analytics, and this is an instance-level admin
         # surface, so a system admin on a community install must reach it.
-        required_tier: community
         required_roles:
         deprecated: false
 
@@ -951,7 +952,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 50
         type: list_page
-        <<: *team
+        <<: *admin
         visibility: private_preview
         deprecated: false
 
@@ -1058,8 +1059,7 @@ routes:
         sidebar_group: configuration
         sidebar_order: 30
         type: page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
         exact: true
 
@@ -1071,8 +1071,7 @@ routes:
         sidebar_group:
         sidebar_order:
         type: form_page
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/runners/profiles/:id/edit:
@@ -1086,8 +1085,7 @@ routes:
         pattern: /admin/runners/profiles/:id/edit
         dynamic_params:
           - id
-        <<: *team
-        required_tier: community
+        <<: *admin
         deprecated: false
 
     /admin/my-profile:
@@ -8494,7 +8492,7 @@ features:
             - "[x] Org admins manage the low-sensitivity community feature flags for their own organisation through GET/PUT/DELETE /api/v1/admin/org/feature-flags[/{flag_name}] (org.feature_flags.manage, admin, non-delegable) and the Organisation feature flags card on /admin/org; the set is fail-closed (FeatureFlag.org_admin_settable defaults False, team-tier flags and mcp_human_linked_hitl_authority are refused, and the DB catalog preserves the code-level classification), writes persist to the org feature_overrides map, invalidate the flag cache and emit the existing feature_flag_override_set / feature_flag_override_cleared audit events, and every other flag remains system-administrator-only (backend/src/farna/api/routes/admin_org_feature_flags.py, backend/src/farna/core/feature_flags.py, frontend/src/views/AdminOrgSettingsView.vue)"
             - "[x] Org-level feature-flag override governance is auditable end to end: every set/clear/toggle of an org feature_overrides entry (PUT /api/v1/admin/feature-flags/{flag}, PUT/DELETE /{flag}/org-override) appends a tamper-evident audit event to the org chain (feature_flag_override_set / feature_flag_override_cleared, resource_type org, payload {flag_name, enabled}) — fail-open, so a broken audit append never rolls back the already-committed override (backend/src/farna/api/routes/admin_feature_flags.py, backend/tests/unit/api/test_admin_feature_flags.py)"
             - "[x] The org-settings UI ships at /admin/org: product-analytics (product-analytics-toggle) toggles render, the product-analytics error strip dismisses via shared ErrorAlert, and the page intentionally exposes no self-service organisation-delete affordance (FAR-2225: active-org deletion is refused 403 by every self-service route) — surface documented in the manifest elements inventory; backend admin-org endpoints drive it (docs/product-map/admin/org.md)"
-            - "[x] The /admin/org page is reachable on every plan tier (FAR-1269): the route is community-tier with an explicit [admin] role list (required_roles and required_tier are enforced as separate guards), the team-only sections (org info, data export, product analytics) stay behind the team_rbac FeatureGate disabled overlay, and three org-scoped community-tier cards render outside the gate so a community admin can use them on any tier: the HITL review window, the human-linked MCP HITL authority, and the organisation feature flags"
+            - "[x] The /admin/org page is reachable on every plan (FAR-1269): the route carries an explicit [admin] role list and no required_entitlement (roles and the entitlement grant are enforced as separate guards), the Team-only sections (org info, data export, product analytics) stay behind the team_rbac FeatureGate disabled overlay, and three org-scoped cards render outside the gate so an unentitled admin can use them on any plan: the HITL review window, the human-linked MCP HITL authority, and the organisation feature flags"
             - "[x] The org-management flows ship on the real REST surfaces: self-service org profile read/rename + API-key regeneration are admin-gated unit coverage (api/routes/admin.py, tests/unit/api/test_admin.py — slug immutability and operator/viewer 403 pinned); member invites are BDD-executed (system_admin_users.feature); API-key create/revoke + non-admin 403 are BDD-executed (auth/api_keys.feature); viewer denial is BDD-executed at the org-context boundary (viewmodel_current.feature)"
     feat-pipelines:
         description: Visual pipeline editor, composite editor, and node categories

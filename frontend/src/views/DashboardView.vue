@@ -333,7 +333,7 @@ const costsDestination = computed(() => {
   })
   if (!refusal) return '/admin/costs'
   const params = new URLSearchParams({ from: costsNavItem.to, reason: refusal })
-  if (costsNavItem.requiredTier) params.set('tier', costsNavItem.requiredTier)
+  if (costsNavItem.requiredEntitlement) params.set('entitlement', costsNavItem.requiredEntitlement)
   return `/locked?${params.toString()}`
 })
 

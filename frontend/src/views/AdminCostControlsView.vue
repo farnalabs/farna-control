@@ -6,7 +6,7 @@
        :tabs="costPageTabs"
     />
 
-    <FeatureGate feature-name="admin_cost_controls" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_cost_controls" show-disabled class="space-y-6">
       <LoadingSpinner v-if="loading" />
       <template v-else>
         <DataCard

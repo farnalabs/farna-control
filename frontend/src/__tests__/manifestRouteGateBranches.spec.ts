@@ -36,7 +36,7 @@ vi.mock('@/manifest.yaml', () => ({
       '/library': {
         breadcrumb: 'Library',
         type: 'list_page',
-        required_tier: 'team',
+        required_entitlement: 'identity',
         required_roles: null,
         required_permissions: null,
         feature_flag: null,
@@ -45,7 +45,7 @@ vi.mock('@/manifest.yaml', () => ({
         name: 'library',
         breadcrumb: 'Decoy',
         type: 'list_page',
-        required_tier: null,
+        required_entitlement: null,
         required_roles: null,
         required_permissions: null,
         feature_flag: null,
@@ -54,12 +54,12 @@ vi.mock('@/manifest.yaml', () => ({
         name: 'ungated',
         breadcrumb: 'Ungated',
         type: 'list_page',
-        required_tier: null,
+        required_entitlement: null,
         required_roles: null,
         required_permissions: null,
         feature_flag: null,
       },
-      // Permissions-only gate (no tier / role / admin): the shape the
+      // Permissions-only gate (no entitlement / role / admin): the shape the
       // FAR-1950 reviewer flagged. Hydration copies `required_permissions`
       // onto meta, so the fail-closed backstop must treat the route as
       // hydrated and NOT redirect a permission-holding user to the dashboard.
@@ -67,7 +67,7 @@ vi.mock('@/manifest.yaml', () => ({
         name: 'perms-only',
         breadcrumb: 'Perms Only',
         type: 'list_page',
-        required_tier: null,
+        required_entitlement: null,
         required_roles: null,
         required_permissions: ['run:read'],
         feature_flag: null,
@@ -87,8 +87,8 @@ beforeEach(() => {
 
 describe('FAR-1950: entryCarriesGate signals (every OR operand)', () => {
   it('is true for each declared gate signal in isolation', () => {
-    expect(entryCarriesGate({ required_tier: 'team' } as never)).toBe(true)
-    expect(entryCarriesGate({ required_tier: null, required_roles: ['admin'] } as never)).toBe(true)
+    expect(entryCarriesGate({ required_entitlement: 'identity' } as never)).toBe(true)
+    expect(entryCarriesGate({ required_entitlement: null, required_roles: ['admin'] } as never)).toBe(true)
     expect(
       entryCarriesGate({ required_roles: null, required_permissions: ['run:read'] } as never),
     ).toBe(true)
@@ -142,7 +142,7 @@ describe('FAR-1950: resolveManifestEntry matched-record path fallback', () => {
       meta: {} as Record<string, unknown>,
     }
     hydrateManifestMeta(route as never)
-    expect(route.meta.requiredTier).toBe('team')
+    expect(route.meta.requiredEntitlement).toBe('identity')
   })
 
   it('returns without hydrating when no matched record is in the manifest', () => {

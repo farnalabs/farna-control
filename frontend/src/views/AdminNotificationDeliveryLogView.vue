@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="webhook_notification_log" required-tier="community" show-disabled>
+  <FeatureGate feature-name="webhook_notification_log" show-disabled>
     <div class="page-wide">
     <PageHeader :title="$t('views.AdminNotificationDeliveryLogView.webhook_deliveries')" :subtitle="$t('views.AdminNotificationDeliveryLogView.webhook_deliveries_subtitle')" data-testid="admin-notification-log-title">
       <p data-testid="admin-notification-log-boundary" class="text-sm text-muted-foreground">
@@ -495,11 +495,11 @@ const hasActiveFilters = computed(
 
 /**
  * The CTA mirrors FeatureGate's own predicate for `/settings/teams`
- * (`feature-name="team_rbac" required-tier="team"`), so the warning never
+ * (`feature-name="team_rbac"`), so the warning never
  * links into a disabled gate.
  */
 const canConfigureEndpoints = computed(
-  () => planStore.featureEnabled('team_rbac') || planStore.isAtMinimumTier('team')
+  () => planStore.featureEnabled('team_rbac')
 )
 
 /**
