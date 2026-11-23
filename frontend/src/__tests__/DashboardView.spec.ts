@@ -207,7 +207,7 @@ describe('DashboardView', () => {
       if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
       if (url === '/api/v1/dashboard/trends') return Promise.resolve({ data: null, error: undefined })
       if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
-      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps_access', 'system.config.manage'] }, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps.read', 'system_maps_access', 'system.config.manage'] }, error: undefined })
       return Promise.resolve({ data: null, error: undefined })
     })
 
@@ -218,13 +218,35 @@ describe('DashboardView', () => {
     expect(mockGet).not.toHaveBeenCalledWith('/api/v1/admin/feature-flags')
   })
 
+  it('hides System Overview from a non-developer account even with the read permission (FAR-2638)', async () => {
+    // System Maps is release-gated (`private_preview`) until Beta, so the
+    // dashboard entry point must be hidden exactly as the route is. The
+    // viewer-floor `system_maps.read` permission still resolves
+    // `systemMapsEnabled` true here, which is the whole point: pre-fix this
+    // assertion failed because the card keyed off the permission alone and
+    // rendered on an alpha dashboard whose Discover action bounced straight
+    // back to the dashboard.
+    vi.mocked(getAccessToken).mockReturnValue(jwtForUser('operator'))
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
+      if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: false, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps.read', 'system_maps_access'] }, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="dashboard-system-overview"]').exists()).toBe(false)
+  })
+
   it('falls back to a 7-day System Overview window when All time is selected', async () => {
     localStorage.setItem('modulo.dashboard.trendWindow', 'all')
     vi.mocked(getAccessToken).mockReturnValue(jwtForUser('operator'))
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
       if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
-      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps_access', 'system.config.manage'] }, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps.read', 'system_maps_access'] }, error: undefined })
       return Promise.resolve({ data: null, error: undefined })
     })
 
