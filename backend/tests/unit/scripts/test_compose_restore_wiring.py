@@ -13,8 +13,9 @@ pin what makes the recovery work:
   reaches a host command line;
 * both entrypoints print the helper path the shipped bundle actually contains
   (``./compose-restore.sh``, not ``scripts/compose-restore.sh``);
-* the installer and the Fly boot cannot bypass the shared migration-pending
-  check.
+* the installer and the compose/supervisor boots cannot bypass the shared
+  migration-pending check, and the Fly boot does not pretend to take a snapshot
+  it can never take (its release stage migrates before machines boot).
 """
 
 from __future__ import annotations
@@ -130,13 +131,22 @@ class TestTheInstallerCannotBypassThePendingCheck:
         assert "No migration is pending against the new bundle" in text
 
 
-class TestTheFlyEntrypointTakesTheSnapshotThroughTheSameHelper:
-    """MAJOR 8: no upgrade path may silently skip the recovery point."""
+class TestTheFlyBootCannotTakeTheSnapshot:
+    """FAR-2667: Fly is the EXPLICITLY unsupported path, not a dead opt-in.
 
-    def test_the_fly_boot_uses_the_shared_helper(self) -> None:
+    ``deploy/fly/release.sh`` is the single migrator and runs before any
+    machine boots, so by the time ``deploy/fly/entrypoint.sh`` runs there is no
+    pending migration and a snapshot step there could never fire. The boot used
+    to carry a ``FARNA_CONTROL_SNAPSHOT_DIR`` opt-in that the docs described as
+    working; it could not, so it is gone and the docs say Fly is unsupported.
+    """
+
+    def test_the_fly_boot_carries_no_snapshot_step_or_opt_in(self) -> None:
         text = (_REPO_ROOT / "deploy" / "fly" / "entrypoint.sh").read_text(encoding="utf-8")
-        assert "python3 -m farna.launcher.upgrade" in text
-        # Gated on the operator-provided snapshot directory: Fly has no
-        # snapshot volume by default, and the docs say so.
-        assert "FARNA_CONTROL_SNAPSHOT_DIR" in text
-        assert "cannot dump as the owner role" in text
+        assert "farna.launcher.upgrade" not in text
+        assert "FARNA_CONTROL_SNAPSHOT_DIR" not in text
+
+    def test_the_release_stage_is_the_migrator_that_makes_the_boot_too_late(self) -> None:
+        text = (_REPO_ROOT / "deploy" / "fly" / "release.sh").read_text(encoding="utf-8")
+        assert "alembic upgrade heads" in text
+        assert "farna.db.alignment" in text

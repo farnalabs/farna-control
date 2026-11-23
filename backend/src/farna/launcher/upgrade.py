@@ -37,7 +37,7 @@ import re
 import shutil
 import signal
 import stat
-import subprocess  # nosec B404 — the only exec is a fully argv-pinned pg_dump invocation below (never shell=True)
+import subprocess  # nosec B404 — every exec is a fully argv-pinned call (never shell=True)
 import sys
 import tarfile
 import tempfile
@@ -93,7 +93,6 @@ _POSTGRES_HOST = "127.0.0.1"
 # literals that could drift.
 _SECRETS_FILENAME = "secrets.json"
 _STATE_FILENAME = "state.json"
-_DUMP_TIMEOUT_SECONDS = 1800
 _PRIVATE_MODE = 0o600
 _DIR_PRIVATE_MODE = 0o700
 _WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:")
@@ -329,6 +328,12 @@ def pre_upgrade_dump(
     "undecidable", which takes the snapshot: an unproven "nothing to do" must
     never cost the recovery point.
 
+    The FAR-2659 database-ahead refusal runs HERE, before the dump, whenever a
+    *target_bundle* names the code being upgraded to: ``install.sh`` calls this
+    helper directly, so a check that lived only in the ``farna-control upgrade``
+    flow would let an install against a database migrated by a NEWER release
+    dump (and retention-prune) before refusing at the new binary's boot.
+
     Produces ``<data-dir>/pre-upgrade-dump-[<release>-]<timestamp>/`` beside
     the cluster (never inside ``pgdata/``), containing the pg_dump SQL file,
     a versioned snapshot manifest and the restore-compatible
@@ -343,6 +348,16 @@ def pre_upgrade_dump(
     scrub_os_environment()
 
     url_with_password, state = _owner_database_url(data_dir)
+
+    # FAR-2659 BEFORE the dump on EVERY native caller, not just the
+    # `farna-control upgrade` flow: `scripts/install.sh` drives this helper
+    # directly (`--data-dir --target-bundle`), so a database a NEWER release
+    # already migrated would otherwise be dumped (and retention-pruned) here and
+    # only refused later, at the new binary's boot. Decidable only when the live
+    # probe reads usable revisions AND the target tree is known; otherwise the
+    # snapshot is still the safer first move and the guard decides afterwards.
+    if target_bundle is not None:
+        _refuse_a_live_downgrade(_database_revisions(url_with_password), target_bundle)
 
     if _pending_for_target(url_with_password, target_heads=target_heads, target_bundle=target_bundle) is False:
         _log.info("upgrade.pre_upgrade_dump_skipped (no migration pending) data_dir=%s", data_dir)
@@ -1093,40 +1108,6 @@ def _write_restore_manifest(snapshot_dir: Path, *, created_at: str, checksum: st
     fd = os.open(str(snapshot_dir / _RESTORE_MANIFEST_NAME), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _PRIVATE_MODE)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(restore_manifest, f, indent=2, sort_keys=True)
-
-
-def _run_dump(argv: list[str], dump_path: Path, *, child_env: dict[str, str] | None = None) -> None:
-    """Run one fully-pinned argv pg_dump with output captured to *dump_path*.
-
-    NOT used by the pre-upgrade snapshot any more (it goes through the shared
-    :func:`farna.db.plain_dump.dump_plain_sql` pipeline so the two producers
-    cannot drift); kept as the launcher-side runner for callers that have
-    already resolved their own argv.
-
-    Never shell=True, never operator-controlled input: the dump URL is
-    composed from the launcher-owned secrets file the same first boot
-    generated, with the password OUT OF ARGV (world-readable /proc cmdline)
-    and inside the child-scoped env dict instead. The dump file is CREATED
-    0600 so a mid-dump SIGKILL never leaves it readable at umask mode. A
-    non-zero exit / timeout becomes :class:`UpgradeError`.
-    TODO(P3): Windows seam (the bundled runtime is Linux-first).
-    """
-    fd = os.open(str(dump_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _PRIVATE_MODE)
-    try:
-        with os.fdopen(fd, "wb") as out:
-            completed = subprocess.run(  # nosec B603 —— pinned argv, trusted synthesized input  # noqa: S603
-                argv,
-                stdout=out,
-                stderr=subprocess.PIPE,
-                check=False,
-                timeout=_DUMP_TIMEOUT_SECONDS,
-                env=child_env if child_env is not None else dict(os.environ),
-            )
-    except subprocess.TimeoutExpired as exc:
-        raise UpgradeError(f"pg_dump timed out after {_DUMP_TIMEOUT_SECONDS}s") from exc
-    if completed.returncode != 0:
-        stderr_text = completed.stderr.decode(errors="replace").strip()
-        raise UpgradeError(stderr_text or f"pg_dump exited with code {completed.returncode}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2273,6 +2254,13 @@ def _run_upgrade_preflight(
     from the LIVE DATABASE (never from the old bundle's script heads — a
     database already migrated ahead is only detectable by asking it).
 
+    ORDER (FAR-2667 acceptance criterion 8): PG-major gate -> live downgrade
+    refusal -> snapshot -> disk preflight. A database a NEWER release already
+    migrated is refused BEFORE the dump, so a doomed upgrade never writes a
+    recovery point or lets retention prune the ones already on disk. The
+    downgrade check re-runs after the snapshot, which is when it can decide
+    from the snapshot's recorded heads if the live probe read "unknown".
+
     A snapshot is taken only when a migration is actually pending (the
     database's revisions differ from the TARGET bundle's heads). A database
     already at the target head cannot be changed by this boot, so no snapshot
@@ -2281,6 +2269,12 @@ def _run_upgrade_preflight(
     """
     _check_pg_major(release_manifest.components, data_dir)
     db_heads = live_database_revisions(data_dir)
+    # FAR-2659 BEFORE any snapshot work (acceptance criterion 8): an install
+    # against a database a NEWER release already migrated must be refused
+    # before the dump writes a recovery point and retention prunes the ones
+    # already there. The post-snapshot check below still runs - it is the
+    # decisive one when the live probe could not read the revision.
+    _refuse_a_live_downgrade(db_heads, bundle_dir)
     if skip_backup:
         existing = _require_existing_snapshot(data_dir, current_heads=db_heads)
         snapshot_dir: Path | None = existing
@@ -2297,11 +2291,15 @@ def _run_upgrade_preflight(
             # EMPTY list (never None): that reads as "undecidable" inside the
             # helper and takes the snapshot, where None would fall back to this
             # runtime's own heads and silently skip the recovery point.
+            # `target_bundle` is passed TOO: the heads answer "is a migration
+            # pending", the bundle's full revision tree is what the FAR-2659
+            # guard compares the live database against.
             snapshot = pre_upgrade_dump(
                 data_dir,
                 bin_dir=_prior_pg_bin(reserve_target),
                 release=version,
                 target_heads=sorted(target_heads),
+                target_bundle=bundle_dir,
             )
             snapshot_dir = snapshot.directory if snapshot is not None else None
             if snapshot is None:
@@ -2309,6 +2307,20 @@ def _run_upgrade_preflight(
     check_no_downgrade(db_heads, snapshot_dir, bundle_dir)
     _quantified_disk_preflight(tarball, data_dir)
     return snapshot_dir
+
+
+def _refuse_a_live_downgrade(db_heads: list[str], bundle_dir: Path) -> None:
+    """The FAR-2659 refusal on the LIVE probe, BEFORE any snapshot is written.
+
+    Only decidable when the probe returned usable revisions. An unknown or
+    empty probe is not a licence to refuse here: the decisive check re-runs
+    after the snapshot (whose recorded heads are the documented fallback), and
+    refusing blind at this point would turn one transient probe failure into a
+    hard upgrade failure that never took a recovery point.
+    """
+    if not db_heads or "unknown" in db_heads:
+        return
+    check_no_downgrade(db_heads, None, bundle_dir)
 
 
 def _pending_against(db_heads: list[str], target_heads: set[str]) -> bool | None:

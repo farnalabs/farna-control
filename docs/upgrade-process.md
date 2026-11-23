@@ -333,16 +333,19 @@ a disposable host by hand and record the evidence.
 
 ### Fly.io
 
-The Fly boot entrypoint (`deploy/fly/entrypoint.sh`) calls the same
-`farna.launcher.upgrade` helper between the release-alignment guard and the
-migration path, but **a Fly machine has no persistent snapshot volume by
-default**, so the step is gated: set `FARNA_CONTROL_SNAPSHOT_DIR` to a mounted
-volume (and `DATABASE_ADMIN_URL`, which the dump requires) to enable it. With
-both set, a snapshot is taken only when a migration is pending and a failure
-aborts the boot before anything is migrated. Without them, **Fly takes no
-pre-upgrade snapshot** — it is the documented exception to "every upgrade path
-keeps a recovery point", and a schema-changing Fly deploy needs an out-of-band
-`farna-control backup` (or `pg_dump`) first.
+**Fly takes no pre-upgrade snapshot, and there is no switch to enable one.**
+The Fly `[release]` command (`deploy/fly/release.sh`) is the single migrator: it
+runs once per deploy, before any machine boots, and applies the migrations
+there. By the time a machine's boot entrypoint (`deploy/fly/entrypoint.sh`)
+runs, the schema is already migrated, so a "migration pending" probe at boot is
+always false and a snapshot step at boot could never fire. Fly is therefore the
+documented exception to "every upgrade path keeps a recovery point", and a
+schema-changing Fly deploy needs an out-of-band `farna-control backup` (or
+`pg_dump`) taken before you deploy.
+
+The release-alignment guard (`python3 -m farna.db.alignment`) still runs in
+both `release.sh` and the boot entrypoint, so a database from a newer release
+is refused legibly on Fly too.
 
 ### Self-Hosted (Bare Metal / VM)
 

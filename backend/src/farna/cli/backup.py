@@ -753,10 +753,22 @@ def _stop_launcher_writers(data_dir: Path) -> bool:
 
 
 def _start_command(opts: _RestoreOptions) -> str:
-    """The exact command that starts the restored release (never run here)."""
+    """The exact command that starts the restored release (never run here).
+
+    The compose form is written for the layout the operator is actually in: the
+    SHIPPED bundle (``scripts/package_compose_release.py``), where
+    ``docker-compose.prod.yml`` is a top-level file beside ``compose-restore.sh``
+    - not the repo's ``deploy/compose/`` path, which does not exist in a bundle.
+
+    ``TAG`` is mandatory: the bundle's compose file pins
+    ``image: ghcr.io/farnalabs/farna-control:${TAG:?}``, so re-running without it
+    (or with the version that just failed) re-deploys that release. The
+    placeholder matches ``scripts/compose-restore.sh``'s ``print_start_command``
+    so both recovery paths tell the operator the same thing.
+    """
     if opts.data_dir is not None:
         return f"farna-control start --data-dir {opts.data_dir}"
-    return "docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo"
+    return "TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo"
 
 
 def _print_start_guidance(opts: _RestoreOptions, *, stopped: bool, failed: bool = False) -> None:

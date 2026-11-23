@@ -65,7 +65,17 @@ def _boot_strap_matrix(tmp_path: Any, monkeypatch: Any, *, recorded_heads: list[
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _b: {"3ab2c1d"})
     counter = {"n": 0}
 
-    def dump(data_dir: Any, *, bin_dir: Any = None, output_dir: Any = None, release: Any = None) -> Any:
+    def dump(
+        data_dir: Any,
+        *,
+        bin_dir: Any = None,
+        output_dir: Any = None,
+        release: Any = None,
+        target_heads: Any = None,
+        target_bundle: Any = None,
+    ) -> Any:
+        # The production seam also receives target_heads / target_bundle; this
+        # fake always snapshots, so it accepts and ignores them.
         counter["n"] += 1
         import json as json_module
 

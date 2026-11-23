@@ -189,35 +189,15 @@ echo "=== Running DB migrations ==="
 # instead of leaving it in alembic's "Can't locate revision" retry loop.
 python3 -m farna.db.alignment
 
-# FAR-2667: the pre-upgrade database snapshot, through the SAME helper the
-# compose entrypoint and the native launcher use (`farna.launcher.upgrade`).
-# Fly has no snapshot volume by default, so the step engages ONLY when the
-# operator points FARNA_CONTROL_SNAPSHOT_DIR at a mounted volume; without it
-# Fly takes no snapshot and the docs say so. When it IS set:
-#   - the dump runs only when a migration is actually pending (the helper
-#     decides, so an at-head roll-out costs nothing and cannot rotate the
-#     recovery point away);
-#   - it runs BEFORE the migration path below, and a failure aborts the boot
-#     (`set -e`), so nothing is migrated without a verified recovery point;
-#   - DATABASE_ADMIN_URL is mandatory: a dump through the application role is
-#     NOBYPASSRLS, so it would be trailer-complete but row-PARTIAL.
-if [[ -n "${FARNA_CONTROL_SNAPSHOT_DIR:-}" ]]; then
-    if [[ -z "${DATABASE_ADMIN_URL:-}" ]]; then
-        echo "FATAL: FARNA_CONTROL_SNAPSHOT_DIR is set but DATABASE_ADMIN_URL is not, so the pre-upgrade snapshot cannot dump as the owner role (a dump through the NOBYPASSRLS application role would be silently incomplete). No migration has been applied." >&2
-        exit 1
-    fi
-    echo "=== Pre-upgrade database snapshot (FAR-2667) ==="
-    if [[ -n "${FARNA_CONTROL_VERSION:-}" ]]; then
-        SNAPSHOT_PATH="$(python3 -m farna.launcher.upgrade --db-url "$DATABASE_ADMIN_URL" --output-dir "$FARNA_CONTROL_SNAPSHOT_DIR" --release "$FARNA_CONTROL_VERSION" --skip-if-pristine)"
-    else
-        SNAPSHOT_PATH="$(python3 -m farna.launcher.upgrade --db-url "$DATABASE_ADMIN_URL" --output-dir "$FARNA_CONTROL_SNAPSHOT_DIR" --skip-if-pristine)"
-    fi
-    if [[ -n "$SNAPSHOT_PATH" ]]; then
-        echo "Pre-upgrade snapshot verified: $SNAPSHOT_PATH"
-    else
-        echo "No pre-upgrade snapshot was needed (fresh database or no migration pending)."
-    fi
-fi
+# FAR-2667: this boot takes NO pre-upgrade snapshot, deliberately. The Fly
+# [release] command (deploy/fly/release.sh) is the single migrator and runs
+# BEFORE any machine boots, so by the time this entrypoint runs the schema is
+# already migrated and a "migration pending" probe here is always False - a
+# snapshot step in this file could never fire. Fly is therefore the documented
+# exception to "every upgrade path keeps a recovery point": take an
+# out-of-band backup (farna-control backup, or pg_dump) before a
+# schema-changing deploy. Do not re-add an opt-in here without moving the
+# snapshot into release.sh, where the migration actually happens.
 
 # The Fly [release] command (release.sh) now owns migrations (ONCE per deploy BEFORE machines
 # roll out). This boot path is a FAST-PATH SKIP + FALLBACK: when the DB is already at head,

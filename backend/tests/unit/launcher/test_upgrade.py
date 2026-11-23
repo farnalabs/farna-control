@@ -670,7 +670,7 @@ def test_perform_upgrade_downgrade_refuses(tmp_path, monkeypatch, patched_trust_
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir, recorded_heads=["head-the-target-never-shipped"])(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -767,7 +767,7 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -827,7 +827,7 @@ def test_upgrade_marker_written_before_boot(tmp_path, monkeypatch, patched_trust
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -1128,7 +1128,7 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
     monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _data_dir: ["3ab2c1d"])
 
-    def _dump_must_not_run(_data_dir, *, bin_dir=None):
+    def _dump_must_not_run(_data_dir, **_kwargs):
         raise AssertionError("skip_backup must NEVER call pre_upgrade_dump")
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump_must_not_run)
@@ -1156,7 +1156,14 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
 
 def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch, patched_trust_store):
     """Finding 6: a skip-backup run whose live probe AND the snapshot read
-    "unknown" REFUSES - never a silent 'unknown == known' pass-through."""
+    "unknown" REFUSES - never a silent 'unknown == known' pass-through.
+
+    The refusal now comes from the STRICTER recovery-point guard: with the live
+    heads unreadable and a snapshot that records none, ``--skip-backup`` has no
+    snapshot of the CURRENT schema and is refused before the downgrade check
+    runs at all. The blind downgrade refusal itself is pinned directly by
+    ``test_check_no_downgrade_never_passes_unknown_through``.
+    """
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
@@ -1172,7 +1179,7 @@ def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
-    with pytest.raises(upgrade_module.UpgradeError, match="cannot verify the database"):
+    with pytest.raises(upgrade_module.UpgradeError, match="no verified pre-upgrade snapshot"):
         upgrade_module.perform_upgrade(
             data_dir,
             install_root=install_root,
@@ -1218,7 +1225,7 @@ def test_reupgrade_of_the_same_version_keeps_the_prior_bytes_for_restore(tmp_pat
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -2252,20 +2259,6 @@ class TestAlembicHeads:
             assert result == ["unknown"]
 
 
-class TestRunDumpTimeout:
-    def test_timeout_raises_upgrade_error(self, tmp_path):
-        dump_path = tmp_path / "dump.sql"
-
-        def _timeout_run(*args, **kwargs):
-            raise upgrade_module.subprocess.TimeoutExpired(cmd="pg_dump", timeout=1800)
-
-        with (
-            patch("farna.launcher.upgrade.subprocess.run", side_effect=_timeout_run),
-            pytest.raises(UpgradeError, match="timed out"),
-        ):
-            upgrade_module._run_dump(["pg_dump"], dump_path)
-
-
 class TestMainErrorPath:
     def test_returns_1_on_error(self, tmp_path, capsys):
         with pytest.raises(UpgradeError):
@@ -2990,7 +2983,7 @@ class TestPerformUpgradeHappyPath:
         staging.mkdir()
         release_fixture = _upgrade_release_fixture(staging)
 
-        def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+        def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
             return _upgrade_dump_seam(data_dir)(data_dir)
 
         monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)

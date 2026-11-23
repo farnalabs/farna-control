@@ -164,7 +164,7 @@ command:
 |------|------------------------|----------------|
 | Container (compose) | the image entrypoint, immediately before `alembic upgrade heads` and only when a migration is pending | `/backups/pre-upgrade-dump-<TAG>-<ts>/` in the `snapshot_data` volume |
 | Native bundle | `farna-control upgrade` / the installer, before the binary swap and only when a migration is pending against the new bundle | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
-| Fly.io | the boot entrypoint, only when `FARNA_CONTROL_SNAPSHOT_DIR` points at a mounted volume (no snapshot volume by default) | `$FARNA_CONTROL_SNAPSHOT_DIR/pre-upgrade-dump-<TAG>-<ts>/` |
+| Fly.io | nobody — the `[release]` command migrates before any machine boots, so the boot cannot see a pending migration; take an out-of-band backup before a schema-changing deploy | n/a |
 
 Every path calls the same helper and shares the same guarantees:
 

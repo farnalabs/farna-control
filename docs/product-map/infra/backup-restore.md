@@ -267,15 +267,15 @@ operator-facing contract lives in `docs/operations/backup.md`.
       bundle's script heads) so an already-migrated-ahead database is still
       detected (`launcher/upgrade.py::_require_existing_snapshot`,
       `live_database_revisions`; `test_upgrade_skip_backup.py`).
-- [x] Every upgrade path that can take the snapshot does, through the same
-      helper: the compose entrypoint and the Fly boot both call
+- [x] Every upgrade path that CAN take the snapshot does, through the same
+      helper: the compose entrypoint and the supervisor entrypoint call
       `farna.launcher.upgrade` between the alignment guard and the migrations.
-      Fly has no snapshot volume by default, so its step is gated on the
-      operator setting `FARNA_CONTROL_SNAPSHOT_DIR` at a mounted volume — the
-      documented exception, not an implied guarantee
-      (`deploy/fly/entrypoint.sh`,
+      Fly cannot — its `[release]` command is the single migrator and runs
+      before any machine boots, so the boot-time pending probe is always false.
+      Fly is the documented exception, with no opt-in that cannot fire
+      (`backend/entrypoint.sh`, `deploy/supervisor/entrypoint.sh`,
       `test_alignment_entrypoints.py::test_entrypoint_orders_guard_snapshot_migrate`,
-      `test_compose_restore_wiring.py::TestTheFlyEntrypointTakesTheSnapshotThroughTheSameHelper`).
+      `test_compose_restore_wiring.py::TestTheFlyBootCannotTakeTheSnapshot`).
 - [x] The compose release bundle ships `compose-restore.sh` — the one documented
       recovery command for that path — which stops the application, restores
       through a one-off container, and prints the exact start command without
@@ -293,10 +293,11 @@ operator-facing contract lives in `docs/operations/backup.md`.
   snapshot container) is out of scope here.
 
 ## Known Gaps
-- **Fly.io takes no pre-upgrade snapshot unless the operator opts in.** The Fly
-  boot calls the same helper, but a Fly machine has no persistent snapshot
-  volume by default; set `FARNA_CONTROL_SNAPSHOT_DIR` to a mounted volume to
-  enable it. Until then Fly is the documented exception to "every upgrade path
+- **Fly.io takes no pre-upgrade snapshot, and there is no opt-in.** The Fly
+  `[release]` command (`deploy/fly/release.sh`) migrates before any machine
+  boots, so the boot entrypoint's pending probe is always false and a snapshot
+  there could never fire. The unsupported opt-in was removed rather than left
+  documented-but-dead. Fly is the documented exception to "every upgrade path
   keeps a recovery point", and a Fly operator must take an out-of-band backup
   before a schema-changing deploy.
 - The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) does not yet
@@ -322,6 +323,17 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## QA History
 
+- 2026-11-23 (FAR-2667 fourth review round): the POSIX-only upgrade tests were
+  faking `pre_upgrade_dump` without the `target_heads` the production flow now
+  passes, so the full-flow, poisoned-artifact, matrix and disk-preflight tests
+  raised `TypeError` on Linux CI while the Windows run (which skips them) stayed
+  green. Also: the container restore's printed start command named a path that
+  does not exist in the shipped bundle and carried no `TAG`; the compose
+  quickstart mis-stated the retention rule; the Fly boot carried a
+  `FARNA_CONTROL_SNAPSHOT_DIR` opt-in that could never fire (the release stage
+  migrates first) — removed, and Fly is documented as unsupported; the native
+  pre-flight now runs the FAR-2659 downgrade refusal BEFORE the dump; and the
+  dead `_run_dump` producer was deleted.
 - 2026-11-22 (FAR-2667 third review round): fixed the nine findings from the
   independent verification pass. The documented compose recovery command did
   not work at all: `docker compose run` never overrode the image ENTRYPOINT, so
@@ -337,16 +349,17 @@ operator-facing contract lives in `docs/operations/backup.md`.
   prints its start command on the failure path; `--skip-backup` requires a
   snapshot of the CURRENT schema; retention is bounded at two snapshots plus
   the recovery point; the pending check moved inside the shared helper with
-  `--target-bundle` so the installer cannot bypass it; the Fly boot takes the
-  snapshot through the same helper when configured; and the docs no longer
+  `--target-bundle` so the installer cannot bypass it; and the docs no longer
   claim the RC matrix rehearses the restore (FAR-2674 owns that).
 - 2026-11-22 (FAR-2667 review round): fixed the findings from the five-lens
   review. The compose snapshot could not run at all (libpq rejects the
   `postgresql+asyncpg://` scheme the compose file exports; the `/backups` bind
   directory was root-owned while the image runs as `www-data`), the
   snapshot-on-every-boot plus two-snapshot retention could delete the only real
-  recovery point (now: only when a migration is pending, and an older-head
-  snapshot is never pruned), the FAR-2659 alignment guard was dropped from both
+  recovery point (now: only when a migration is pending; retention keeps the two
+  newest verified snapshots plus the newest one at the database's current
+  schema, and prunes an older-schema snapshot only once it is neither), the
+  FAR-2659 alignment guard was dropped from both
   entrypoints (restored, guard -> snapshot -> migrate), and restore reported
   success when `database.sql` was absent (now fails closed). Also hardened:
   the shared dump pipeline's completeness rule (final non-empty line, streamed

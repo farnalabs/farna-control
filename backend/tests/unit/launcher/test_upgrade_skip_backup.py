@@ -23,6 +23,10 @@ import pytest
 from farna.launcher import upgrade as upgrade_module
 from farna.launcher.upgrade import UpgradeError, _require_existing_snapshot, restore_guidance
 
+#: The production downgrade guard, captured before the module autouse fixture
+#: stubs it out for the other tests in this file.
+_REAL_CHECK_NO_DOWNGRADE = upgrade_module.check_no_downgrade
+
 
 def _release_manifest() -> Any:
     return SimpleNamespace(components={"postgres": "16"}, release="bundle-v9.9.9")
@@ -159,6 +163,46 @@ class TestNoSnapshotWhenTheTargetHeadIsApplied:
         assert _preflight(tmp_path, skip_backup=False) == snapshot_dir
 
 
+class TestTheDowngradeGuardRunsBeforeTheSnapshot:
+    """FAR-2667 acceptance criterion 8 on the NATIVE pre-flight path.
+
+    The container entrypoint has an ordering test
+    (``test_alignment_entrypoints.py``); this is the same guarantee for
+    ``scripts/install.sh`` / ``farna-control upgrade``, which drive
+    :func:`_run_upgrade_preflight`. A database a NEWER release already migrated
+    must be refused BEFORE the dump, or the doomed upgrade writes a recovery
+    point and retention prunes the ones already on disk.
+    """
+
+    def test_a_database_ahead_of_the_target_is_refused_without_dumping(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        dumps: list[Path] = []
+        monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _d: ["head-from-a-newer-release"])
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_heads", lambda _b: {"head-target"})
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _b: {"head-target"})
+        # The module autouse fixture stubs check_no_downgrade; put the REAL
+        # guard back so the refusal is the production one.
+        monkeypatch.setattr(upgrade_module, "check_no_downgrade", _REAL_CHECK_NO_DOWNGRADE)
+
+        def _dump(*_args: Any, **_kwargs: Any) -> Any:
+            dumps.append(tmp_path)
+            raise AssertionError("a database ahead of the target must be refused BEFORE the dump")
+
+        monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
+        with pytest.raises(UpgradeError, match="DOWNGRADE"):
+            _preflight(tmp_path, skip_backup=False)
+        assert dumps == []
+
+    def test_an_unknown_live_probe_dumps_before_the_guard_can_decide(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The one case the guard CANNOT decide before the dump: still dump."""
+        snapshot = _write_snapshot(tmp_path, "recovery", schema_versions=["head-target"])
+        monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _d: ["unknown"])
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_heads", lambda _b: {"head-target"})
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _b: {"head-target"})
+        monkeypatch.setattr(upgrade_module, "check_no_downgrade", _REAL_CHECK_NO_DOWNGRADE)
+        monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", lambda *_a, **_k: SimpleNamespace(directory=snapshot))
+        assert _preflight(tmp_path, skip_backup=False) == snapshot
+
+
 class TestRestoreGuidanceWording:
     def test_without_a_snapshot_it_does_not_claim_a_data_restore(self, tmp_path: Path) -> None:
         guidance = restore_guidance(snapshot=None, previous_version="1.2.3", install_root=tmp_path, data_dir=tmp_path / "data")
@@ -238,3 +282,25 @@ class TestThePendingCheckCannotBeBypassed:
         assert code == 0
         assert captured.out.strip() == "", "stdout is the snapshot path the installer captures"
         assert "no migration is pending" in captured.err.lower()
+
+    def test_a_database_ahead_of_the_target_bundle_is_refused_before_the_dump(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The INSTALLER's exact shape: ``main()`` -> this helper directly.
+
+        ``scripts/install.sh`` runs ``python -m farna.launcher.upgrade --data-dir
+        --target-bundle``, so the FAR-2659 refusal has to happen INSIDE the
+        helper: nothing in that path calls ``_run_upgrade_preflight``.
+        """
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"head-target"})
+        # The module autouse fixture stubs the guard; put the REAL one back.
+        monkeypatch.setattr(upgrade_module, "check_no_downgrade", _REAL_CHECK_NO_DOWNGRADE)
+        with pytest.raises(UpgradeError, match="DOWNGRADE"):
+            upgrade_module.pre_upgrade_dump(tmp_path, target_bundle=tmp_path)
+        assert self.dumps == []
+
+    def test_an_unreadable_live_probe_still_dumps(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The guard cannot decide, so it must not refuse: dump, then let the boot decide."""
+        monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["unknown"])
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_heads", lambda _bundle: {"head-new"})
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"head-new"})
+        assert upgrade_module.pre_upgrade_dump(tmp_path, target_bundle=tmp_path) is not None
+        assert self.dumps == [tmp_path]

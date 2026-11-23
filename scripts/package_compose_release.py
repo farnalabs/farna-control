@@ -164,9 +164,11 @@ Once that returns 200, open [http://localhost](http://localhost).
 `docker compose up -d` with a new `TAG` runs the migrations. BEFORE they run,
 and only when a migration is pending, the container takes a verified `pg_dump`
 snapshot of the database into the `snapshot_data` volume (mounted at
-`/backups`) and prints its path. The two most recent snapshots at the current
-schema are kept; a snapshot from an older schema — the recovery point the
-current data depends on — is never pruned.
+`/backups`) and prints its path. Retention keeps the two newest verified
+snapshots, the snapshot the upgrade just wrote, and the newest snapshot that
+records the database's current schema revision (the recovery point). A snapshot
+from an older schema is pruned once it is neither of the two newest nor that
+current-schema recovery point.
 
 If the new release fails after migrating, restore the snapshot and start the
 previous release:

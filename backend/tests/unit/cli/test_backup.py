@@ -2413,7 +2413,10 @@ class TestRestoreStartGuidance:
 
         _print_start_guidance(self._options(data_dir=None), stopped=False)
         out = capsys.readouterr().out
-        assert "docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo" in out
+        # The SHIPPED bundle layout: docker-compose.prod.yml at the top level,
+        # and TAG is mandatory in it (the image tag is ${TAG:?}) so a start
+        # without it re-deploys the release that just failed.
+        assert "TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo" in out
         assert "No automatic restart was performed" in out
 
     def test_stop_writers_is_a_no_op_without_a_live_holder(self, tmp_path: Path) -> None:

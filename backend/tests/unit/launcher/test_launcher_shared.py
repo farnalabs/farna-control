@@ -226,7 +226,19 @@ def _upgrade_dump_seam(data_dir: Path, *, recorded_heads: list[str] | None = Non
     heads = recorded_heads or ["3ab2c1d"]
     payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
 
-    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None):
+    def _dump(
+        data_dir,
+        *,
+        bin_dir=None,
+        output_dir=None,
+        release=None,
+        target_heads=None,
+        target_bundle=None,
+    ):
+        # target_heads / target_bundle are part of the production seam
+        # (pre_upgrade_dump decides "pending" against the TARGET release). This
+        # fake always returns a snapshot, so it accepts and ignores them; a
+        # fake that omits them TypeErrors the whole flow on POSIX-only tests.
         snapshot_dir = data_dir / "pre-upgrade-dump-fake-1"
         snapshot_dir.mkdir()
         (snapshot_dir / "database.sql").write_bytes(payload)
