@@ -5,7 +5,9 @@ metadata. They protect the properties that matter after the historical chain
 has been removed: tenant isolation, role posture, and final constraints.
 """
 
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 from sqlalchemy import CheckConstraint
 
@@ -31,11 +33,32 @@ _BASELINE_TABLE_NAMES: dict[str, str] = {
 }
 
 
+def _load_version_module(filename: str) -> ModuleType:
+    """Load one migration module so its name constants are the single source of truth."""
+    path = _VERSIONS / filename
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The rename migration is loaded so the guard test below can prove the mapping
+#: above tracks a real rename rather than a stray string.
+_RENAME_MIGRATION = _load_version_module("0362_rename_legacy_db_objects.py")
+
+
+def _org_scoped_tables() -> set[str]:
+    return {name for name, table in Base.metadata.tables.items() if "organisation_id" in table.c and name not in {"organisations", "invitations"}}
+
+
 def test_baseline_preserves_org_isolation_and_force_rls() -> None:
     """Every org-scoped ORM table is enabled, forced, and policy-protected."""
-    org_tables = {name for name, table in Base.metadata.tables.items() if "organisation_id" in table.c and name not in {"organisations", "invitations"}}
+    org_tables = _org_scoped_tables()
     force_tables = {line.split("public.", 1)[1].split(" FORCE", 1)[0] for line in _BASELINE_RLS.splitlines() if " FORCE ROW LEVEL SECURITY;" in line}
     for table in org_tables:
+        # The baseline names the pre-rename object; the rename happens later.
         baseline_name = _BASELINE_TABLE_NAMES.get(table, table)
         assert f"ALTER TABLE public.{baseline_name} ENABLE ROW LEVEL SECURITY;" in _BASELINE_RLS
     policy_tables = {line.split("public.", 1)[1].split(" ", 1)[0] for line in _BASELINE_RLS.splitlines() if "CREATE POLICY rls_org_isolation ON public." in line}
@@ -47,6 +70,25 @@ def test_baseline_preserves_org_isolation_and_force_rls() -> None:
     assert {"agents", "eval_datasets"} <= force_tables
     assert "pipelines" in _BASELINE_RLS
     assert "runs" in _BASELINE_RLS
+
+
+def test_rename_map_covers_exactly_the_post_baseline_renamed_tables() -> None:
+    """The baseline RLS gate may only lean on a rename that actually happens.
+
+    A post-rename ORM table is absent from the shipped baseline, so it is
+    asserted under its pre-rename name. That is only sound if the baseline
+    enables RLS on the pre-rename name AND the rename migration genuinely
+    renames that table. Anything else would be a table whose RLS the gate
+    silently stopped checking.
+    """
+    for new_name, old_name in _BASELINE_TABLE_NAMES.items():
+        assert new_name in _org_scoped_tables(), f"{new_name} is not an org-scoped ORM table"
+        assert f"ALTER TABLE public.{old_name} ENABLE ROW LEVEL SECURITY;" in _BASELINE_RLS
+        # Prove the map is needed: the baseline does not name the new table.
+        assert f"ALTER TABLE public.{new_name} ENABLE ROW LEVEL SECURITY;" not in _BASELINE_RLS
+        # Prove the map is bound to a real table rename in the migration.
+        assert old_name == _RENAME_MIGRATION._OLD_TABLE
+        assert new_name == _RENAME_MIGRATION._NEW_TABLE
 
 
 def test_baseline_preserves_database_role_posture() -> None:

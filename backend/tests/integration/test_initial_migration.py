@@ -16,6 +16,7 @@ from sqlalchemy import (
     Table,
     inspect,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -330,6 +331,32 @@ async def test_initial_migration_creates_domain_tables(db_engine: AsyncEngine) -
         "pipelines",
         "runs",
     } <= set(table_names)
+
+
+async def test_legacy_db_objects_are_renamed_and_keep_row_level_security(db_engine: AsyncEngine) -> None:
+    """Migration 0362 renames the last legacy-prefixed objects; RLS survives.
+
+    Proven on the FULLY migrated chain (this fixture applies every migration to
+    head), not on the migration's own text: the final schema must expose the new
+    table with row-level security still enabled and its tenant policy intact, and
+    no legacy-prefixed relation, constraint or schema may remain.
+    """
+    legacy_pattern = "modulo%"
+    async with db_engine.connect() as connection:
+        renamed = (await connection.execute(text("SELECT to_regclass('public.farna_journey_facts')"))).scalar()
+        assert renamed is not None
+
+        row_security = (await connection.execute(text("SELECT relrowsecurity FROM pg_class WHERE oid = 'public.farna_journey_facts'::regclass"))).scalar()
+        assert row_security is True, "row-level security must survive the table rename"
+
+        policy_count = (await connection.execute(text("SELECT count(*) FROM pg_policy WHERE polrelid = 'public.farna_journey_facts'::regclass AND polname = 'rls_org_isolation'"))).scalar()
+        assert policy_count == 1, "the tenant policy must survive the table rename"
+
+        stale: set[str] = set()
+        stale.update((await connection.execute(text("SELECT relname FROM pg_class WHERE relname LIKE :p"), {"p": legacy_pattern})).scalars().all())
+        stale.update((await connection.execute(text("SELECT conname FROM pg_constraint WHERE conname LIKE :p"), {"p": legacy_pattern})).scalars().all())
+        stale.update((await connection.execute(text("SELECT nspname FROM pg_namespace WHERE nspname LIKE :p"), {"p": legacy_pattern})).scalars().all())
+        assert not stale, f"legacy-prefixed database objects survived the 0362 rename: {sorted(stale)}"
 
 
 async def test_migrated_schema_matches_orm_metadata(db_engine: AsyncEngine) -> None:
