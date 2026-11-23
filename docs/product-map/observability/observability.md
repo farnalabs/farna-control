@@ -141,6 +141,13 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       `api/routes/error_notification_rules.py`,
       `core/error_tracking/alerting.py`)
 - _Error forwarders behavior detail removed for the MVP cut (see the pointer above)._
+- [x] The forwarder and notification-rule LIST reads are admin-gated, not just
+      their writes: `GET /api/v1/errors/forwarders` requires
+      `error_forwarder.manage` and `GET /api/v1/errors/notification-rules`
+      requires `error_notification.manage` (both admin, `require_permission`),
+      so a member who may not manage delivery cannot enumerate the forwarder
+      configuration, the rule set, or each rule's `webhook_url` (FAR-2683;
+      `test_error_forwarder_config.py`, `test_error_notification_rules_route.py`)
 - [x] OTLP observability export: `GET/PUT /api/v1/settings/observability`
       reads/updates the OTel endpoint + export interval (and the LangSmith key),
       serves stale cache on DB outage (degraded response, never hangs), masks

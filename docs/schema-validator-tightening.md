@@ -24,6 +24,8 @@ organization and reports whether flipping is safe:
 GET /api/v1/runs/schema-enforcement/flip-guard
 ```
 
+This endpoint requires the viewer-level `run.list` permission (JWT only).
+
 The response includes:
 
 - `safe_to_flip`: `true` when zero lenient-mode warnings exist.
@@ -43,6 +45,9 @@ attempts produced lenient-mode warnings:
 ```
 GET /api/v1/runs/{run_id}/schema-enforcement
 ```
+
+This endpoint requires the same viewer-level `run.status` permission as run
+detail, so JWT and `mk_` org API-key callers both work.
 
 Look for:
 

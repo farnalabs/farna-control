@@ -742,7 +742,7 @@ Minting is owned by provenance: `caller`/`derived` refs mint journey rows at run
 
 Completeness over precision: the unified cap (`work_item_refs_cap`, env `FARNA_CONTROL_WORK_ITEM_REFS_CAP`, default 100, clamped to [1, 100000]) bounds self-report normalization, the finalize merge, and node-input injection with one value; cap drops drain lowest-provenance first (agent → derived → caller, then array position) and are counted. Pipelines declaring `work_item_refs_required: true` in `run_context_defaults` refuse a delivery that supplied no refs: HTTP 422 with a `work_item_refs_required` error on the MCP and webhook paths, and a 422 whose detail is prose on the REST path (reject-and-retry for webhooks, not acked-as-accepted).
 
-Nodes opt in to reading the run's refs by declaring a `work_item_refs` input property in the node's `input_schema_json`: the create-time refs are injected read-only as a `{{ work_item_refs }}` template variable at node start (a read failure degrades to fewer refs, never a failed node). Journeys carry `provenance` + `first_seen_source` columns (migration 0220; `runs.work_item_refs` containment is served by the existing partial GIN index) and the refs pipeline emits OTel counters (`modulo_work_item_refs_by_source_total`, `..._unknown_source_total`, `..._shadow_strip_hits_total`, `..._malformed_total`, `..._cap_dropped_total`).
+Nodes opt in to reading the run's refs by declaring a `work_item_refs` input property in the node's `input_schema_json`: the create-time refs are injected read-only as a `{{ work_item_refs }}` template variable at node start (a read failure degrades to fewer refs, never a failed node). Journeys carry `provenance` + `first_seen_source` columns (baseline migration `0350_baseline_schema.py`; `runs.work_item_refs` containment is served by the existing partial GIN index) and the refs pipeline emits OTel counters (`modulo_work_item_refs_by_source_total`, `..._unknown_source_total`, `..._shadow_strip_hits_total`, `..._malformed_total`, `..._cap_dropped_total`).
 
 ### WebSocket event flow
 
@@ -854,7 +854,7 @@ flipped into a service row – or vice versa – by any writer). Org admins
 provision, read, list, rename and decommission them at
 `/api/v1/service-accounts`; an `admin` org-role grant on a service
 principal is rejected with 422 at the surface and structurally refused by a
-DB trigger (`trg_org_memberships_service_role_ceiling`, migration 0315) – the
+DB trigger (`trg_org_memberships_service_role_ceiling`, in the baseline migration `0351_baseline_rls.py`) – the
 role ceiling is `operator`, never admin. Service accounts hold team
 memberships through the normal team surface (team roles never include admin).
 Keys minted for a service principal are OWNED by it (`org_api_keys.account_id`
