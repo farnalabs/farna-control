@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="assistant" required-tier="community" show-disabled>
+  <FeatureGate feature-name="assistant" show-disabled>
   <div data-theme="agent" class="page-wide">
     <PageHeader :title="$t('views.AdminAssistantView.assistant_configuration')" :subtitle="$t('views.AdminAssistantView.configure_assistant_ai_assistant_behaviour_access_and_skills')" />
     <template v-if="loading">

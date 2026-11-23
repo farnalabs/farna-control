@@ -1,6 +1,6 @@
 <template>
   <div class="page-wide">
-    <FeatureGate feature-name="environment_profiles" required-tier="community" show-disabled>
+    <FeatureGate feature-name="environment_profiles" show-disabled>
       <PageHeader
         :title="$t('views.AdminRunnersView.runners')"
         :subtitle="$t('views.AdminRunnersView.subtitle')"

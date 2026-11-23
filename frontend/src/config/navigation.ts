@@ -8,7 +8,9 @@ export interface NavItem {
   exact?: boolean
   visibility?: 'public' | 'public_preview' | 'private_preview' | 'in_dev'
   requiredRoles?: string[] | null
-  requiredTier?: string | null
+  // FAR-2665: the commercial capability the item needs (an entry in the
+  // backend entitlement registry), read from the plan payload — never a tier.
+  requiredEntitlement?: string | null
   requiredPermissions?: string[] | null
   requiredFeatureFlag?: string | null
   // FAR-1796: route-entry (or inherited group) system-admin gate, mirroring the
@@ -112,7 +114,7 @@ interface ManifestRoute {
   type?: string
   exact?: boolean
   visibility?: 'public' | 'public_preview' | 'private_preview' | 'in_dev'
-  required_tier?: string | null
+  required_entitlement?: string | null
   required_roles?: string[] | null
   required_permissions?: string[] | null
   feature_flag?: string | null
@@ -359,7 +361,7 @@ function toNavItem(
     exact: route.exact ?? undefined,
     visibility: (route.visibility as 'public_preview' | 'private_preview' | 'in_dev') ?? undefined,
     requiredRoles: route.required_roles ?? null,
-    requiredTier: route.required_tier ?? null,
+    requiredEntitlement: route.required_entitlement ?? null,
     requiredPermissions: route.required_permissions ?? null,
     requiredFeatureFlag: route.feature_flag ?? null,
     systemAdminOnly,
@@ -453,10 +455,11 @@ export type NonTierRefusal = 'role' | 'system_admin'
 /**
  * The non-tier reason `item` is refused for `user`, or null when it is not.
  *
- * Tier gates are deliberately out of scope: a below-tier caller still follows
- * the link, and the router guard lands them on the locked page with the
- * upgrade path. Only a role / system-admin refusal is decided up front, so a
- * view can point the caller at the refusal that a purchase cannot fix.
+ * Commercial (entitlement) gates are deliberately out of scope: an unentitled
+ * caller still follows the link, and the router guard lands them on the locked
+ * page with the upgrade path. Only a role / system-admin refusal is decided up
+ * front, so a view can point the caller at the refusal that a purchase cannot
+ * fix.
  *
  * An unreadable token yields null — nothing can be known, so the guard stays
  * the authority. A READABLE token with an empty/absent `org_role` is a
@@ -472,12 +475,12 @@ export function nonTierRefusal(item: NavItem, user: RouteGateUser): NonTierRefus
 export function canSeeItem(
   item: NavItem,
   user: { role: string; permissions?: string[] },
-  plan: { isAtMinimumTier: (tier: string) => boolean },
+  plan: { isEntitlementGranted: (key: string) => boolean },
 ): boolean {
   if (item.requiredRoles != null) {
     if (item.requiredRoles.length === 0 || !item.requiredRoles.includes(user.role)) return false
   }
-  if (item.requiredTier && !plan.isAtMinimumTier(item.requiredTier)) return false
+  if (item.requiredEntitlement && !plan.isEntitlementGranted(item.requiredEntitlement)) return false
   if (item.requiredPermissions != null) {
     if (item.requiredPermissions.length === 0) return false
     const permissions = user.permissions
@@ -492,7 +495,11 @@ export interface NavVisibilityContext {
   userPermissions: string[]
   devMode: boolean
   tierInfoLoaded: boolean
-  isAtMinimumTier: (tier: string) => boolean
+  // FAR-2665: the plan payload has landed (a licence answer is known). An
+  // entitlement-gated item stays hidden until then, mirroring the old
+  // tier-gated behaviour, so the sidebar cannot flash a paid item.
+  planLoaded: boolean
+  isEntitlementGranted: (key: string) => boolean
   // FAR-535: computed ONCE per context construction by the caller (never read
   // from localStorage inside the per-item function) — private_preview surfaces
   // are hidden for demo sessions even when dev mode is enabled.
@@ -516,7 +523,7 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   if (item.visibility === 'private_preview' && ctx.isDemoSession) return false
   if (
     !item.requiredRoles
-    && !item.requiredTier
+    && !item.requiredEntitlement
     && !item.requiredPermissions
     && !item.requiredFeatureFlag
   )
@@ -526,11 +533,11 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   // enforces the same flag on the route itself.
   if (item.requiredFeatureFlag && !ctx.tierInfoLoaded) return false
   if (item.requiredFeatureFlag && !ctx.isFeatureEnabled(item.requiredFeatureFlag)) return false
-  if (item.requiredTier && !ctx.tierInfoLoaded) return false
+  if (item.requiredEntitlement && !ctx.planLoaded) return false
   return canSeeItem(
     item,
     { role: ctx.userRole || '', permissions: ctx.userPermissions },
-    { isAtMinimumTier: ctx.isAtMinimumTier },
+    { isEntitlementGranted: ctx.isEntitlementGranted },
   )
 }
 
