@@ -70,9 +70,10 @@
           v-for="m in pagedMaps"
           :key="m.id"
           variant="bordered"
-          padding="none"
+          padding="lg"
+          pressable
           data-testid="lifecycle-map-list-card"
-          card-class="card-hover w-full p-5 text-left cursor-pointer"
+          class="w-full text-left"
           @click="openMap(m)"
           @keydown.enter.self="openMap(m)"
           @keydown.space.self.prevent="openMap(m)"

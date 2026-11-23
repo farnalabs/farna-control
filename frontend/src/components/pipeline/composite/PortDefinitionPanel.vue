@@ -257,7 +257,7 @@ async function detectPlaceholders() {
       v-if="showAddForm"
       :title="editingIndex !== null ? 'Edit Port' : 'Add Port'"
       heading-level="h4"
-      title-class="text-sm font-medium"
+      size="sm"
       padding="md"
       elevation="sm"
     >

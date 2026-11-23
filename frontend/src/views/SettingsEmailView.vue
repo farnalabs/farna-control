@@ -9,7 +9,7 @@
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadSettings" />
 
       <div v-else class="space-y-6">
-        <DataCard variant="bordered" padding="lg" elevation="sm" card-class="max-w-3xl">
+        <DataCard variant="bordered" padding="lg" elevation="sm" class="max-w-3xl">
           <div class="space-y-4">
             <div>
               <label for="settingsemailview-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.smtp_host') }}</label>

@@ -39,7 +39,7 @@
           :description="primitive?.description ?? undefined"
           heading-level="h2"
           padding="lg"
-          card-class="mb-6"
+          class="mb-6"
         >
           <div class="flex items-center gap-2 mb-4">
             <span
@@ -64,7 +64,7 @@
           :description="$t('views.LibraryPipelineWizard.sub_pipeline_internal')"
           heading-level="h3"
           padding="lg"
-          card-class="mb-6"
+          class="mb-6"
         >
           <div class="h-72 rounded-lg border bg-card overflow-hidden">
             <VueFlow
@@ -92,7 +92,7 @@
           :title="$t('views.LibraryPipelineWizard.pipeline_configuration')"
           heading-level="h3"
           padding="lg"
-          card-class="mb-6"
+          class="mb-6"
         >
           <div class="space-y-4">
             <div>
@@ -124,7 +124,7 @@
           :description="$t('views.LibraryPipelineWizard.choose_who_this_pipeline_belongs_to_orgwide_pipelines_are_vi')"
           heading-level="h3"
           padding="lg"
-          card-class="mb-6"
+          class="mb-6"
         >
           <OwnershipPicker v-model="ownership" :label="$t('views.LibraryPipelineWizard.owner')" />
         </DataCard>
@@ -134,7 +134,7 @@
           :title="$t('views.LibraryPipelineWizard.template_agents', { count: templateAgents.length })"
           heading-level="h3"
           padding="lg"
-          card-class="mb-6"
+          class="mb-6"
         >
           <div class="space-y-3">
             <div

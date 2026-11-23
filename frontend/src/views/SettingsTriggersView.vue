@@ -24,7 +24,7 @@
       </p>
     </div>
 
-    <DataCard v-if="isOrgAdmin" variant="bordered" padding="md" card-class="mb-4">
+    <DataCard v-if="isOrgAdmin" variant="bordered" padding="md" class="mb-4">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
         <div class="sm:pr-4">
           <p class="text-sm font-medium">{{ $t('views.SettingsTriggersView.pause_all_triggers') }}</p>

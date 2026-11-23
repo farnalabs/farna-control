@@ -58,7 +58,6 @@
 
       <!-- API Key Management -->
       <DataCard
-        card-class="settings-mcp-api-keys-card"
         heading-level="h2"
         :title="$t('views.SettingsMcpView.api_keys')"
         :description="$t('views.SettingsMcpView.create_and_manage_api_keys_for_mcp_client_authentication')"

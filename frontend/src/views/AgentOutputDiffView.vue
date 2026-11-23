@@ -139,7 +139,7 @@
           </div>
         </details>
 
-        <DataCard padding="none" card-class="overflow-hidden">
+        <DataCard padding="none" class="overflow-hidden">
           <div class="border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
             {{ $t('views.AgentOutputDiffView.line_level_diff') }} <span class="ml-2 text-green-700 dark:text-green-400">{{ $t('views.AgentOutputDiffView.plus_added') }}</span> <span class="ml-1 text-red-700 dark:text-red-400">{{ $t('views.AgentOutputDiffView.minus_removed') }}</span>
           </div>
