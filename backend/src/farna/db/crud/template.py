@@ -25,9 +25,10 @@ async def list_templates(
     # FAR-2684: carry an explicit organisation predicate so the template list is
     # never scoped by row-level security alone. ``organisation_id`` is NOT NULL
     # on ``library_primitives`` and there are no null-org shared rows (the native
-    # built-ins live in the modulo sentinel org and are merged in memory by the
-    # library listing, not read here), so clamping to the caller's org hides
-    # nothing it should show and closes the BYPASSRLS / misconfigured-RLS hole.
+    # built-ins live in the library-registry sentinel organisation and are merged
+    # in memory by the library listing, not read here), so clamping to the
+    # caller's org hides nothing it should show and closes the BYPASSRLS /
+    # misconfigured-RLS hole.
     # ``org_id`` is REQUIRED (no ``None`` default) so a future caller cannot
     # silently fall back to the RLS-only shape.
     conditions = [
