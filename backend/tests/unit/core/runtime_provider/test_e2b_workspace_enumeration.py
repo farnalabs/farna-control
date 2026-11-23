@@ -138,6 +138,10 @@ async def test_create_workspace_stamps_the_reserved_identity_keys(
     metadata = fake_cls.create.call_args.kwargs["metadata"]
     assert metadata[_DEPLOYMENT_IDENTITY_METADATA_KEY] == _IDENTITY
     assert int(metadata[_CREATED_AT_METADATA_KEY]) > 0
+    # FAR-2693 dual-write: the legacy keys carry the same identity and
+    # creation values alongside the current ones.
+    assert metadata[_LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY] == _IDENTITY
+    assert int(metadata[_LEGACY_SANDBOX_CREATED_AT_METADATA_KEY]) > 0
     # The spec's own keys flow through unchanged alongside the stamps.
     assert metadata[_RUN_ID_METADATA_KEY] == "run-1"
     assert metadata["egress_allowlist"] == "[]"

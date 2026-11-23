@@ -368,6 +368,11 @@ class TestCreateWorkspace:
         assert body.metadata.annotations["modulo.provider"] == "kubernetes"
         assert body.metadata.labels["modulo.provider"] == "kubernetes"
         assert "modulo.run.id" in body.metadata.labels
+        # FAR-2693 dual-write: the current reserved keys are stamped too.
+        assert body.metadata.annotations[k8s_mod._PROVIDER_LABEL] == k8s_mod._PROVIDER_LABEL_VALUE
+        assert body.metadata.labels[k8s_mod._PROVIDER_LABEL] == k8s_mod._PROVIDER_LABEL_VALUE
+        assert body.metadata.annotations[k8s_mod._MACHINE_ANNOTATION] == provider._deployment_identity()
+        assert int(body.metadata.labels[k8s_mod._CREATED_AT_LABEL]) > 0
 
     async def test_metadata_cannot_restamp_a_reserved_identity_label(self) -> None:
         """Reserved identity keys are stamped AFTER the metadata loop (F2).
