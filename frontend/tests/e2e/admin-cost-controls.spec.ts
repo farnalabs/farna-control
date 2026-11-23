@@ -30,9 +30,20 @@ test.describe('Admin Spend Limits', { tag: "@regression" }, () => {
     }
     await page.goto('/admin/costs/limits', { timeout: 60000 })
     await expect(page.locator('h1')).toContainText('Spend Limits')
-    await expect(
-      page.getByTestId('admin-spend-limits-org-limit').or(page.getByTestId('feature-gate-disabled'))
-    ).toBeVisible({ timeout: 15000 })
+    const orgLimitInput = page.getByTestId('admin-spend-limits-org-limit')
+    if (env.name === 'local') {
+      // Prove the fixture above actually won over the `**/api/v1/**` catch-all
+      // that `loginAsAdmin` installs: the org-limit input must carry the
+      // fixture's `org_daily_spend_limit` (100). With the specific route dead,
+      // the catch-all answers `{items,total}` and the input renders EMPTY, so a
+      // bare visibility assertion would pass with the mock reorder reverted
+      // (FAR-2694 review).
+      await expect(orgLimitInput).toHaveValue('100', { timeout: 15000 })
+    } else {
+      await expect(
+        orgLimitInput.or(page.getByTestId('feature-gate-disabled'))
+      ).toBeVisible({ timeout: 15000 })
+    }
   })
 })
 
@@ -48,9 +59,17 @@ test.describe('Admin Cost Controls', { tag: "@regression" }, () => {
     }
     await page.goto('/admin/costs/controls', { timeout: 60000 })
     await expect(page.locator('h1')).toContainText('Cost Controls')
-    await expect(
-      page.getByTestId('cc-total-spend').or(page.getByTestId('feature-gate-disabled'))
-    ).toBeVisible({ timeout: 15000 })
+    if (env.name === 'local') {
+      // Prove the controls fixture won over the catch-all: the budget card
+      // must render the fixture's `budget` (1000 USD), not the catch-all
+      // default. A bare `cc-total-spend` visibility check passes either way
+      // because the card renders regardless of the payload (FAR-2694 review).
+      await expect(page.getByTestId('cc-budget')).toContainText('1,000', { timeout: 15000 })
+    } else {
+      await expect(
+        page.getByTestId('cc-total-spend').or(page.getByTestId('feature-gate-disabled'))
+      ).toBeVisible({ timeout: 15000 })
+    }
   })
 
   test('insets the titled card headers inside their cards (FAR-2694)', { tag: "@regression" }, async ({ page, env }) => {
