@@ -39,11 +39,12 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div
+        <DataCard
           v-for="row in filteredRows"
           :key="row.profile.id"
-          class="card p-5 flex flex-col gap-3"
-          :class="{ 'border-dashed': !row.available }"
+          padding="lg"
+          :unavailable="!row.available"
+          class="flex flex-col gap-3"
           :data-unavailable="!row.available || undefined"
         >
           <div class="flex items-start justify-between">
@@ -206,7 +207,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </DataCard>
       </div>
 
       <div v-if="deleteConfirmId" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
@@ -238,6 +239,7 @@ import Button from 'primevue/button'
 import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import EmptyState from '../../components/shared/EmptyState.vue'
+import DataCard from '../../components/ui/DataCard.vue'
 import { useEnvironmentProfilesStore, type EnvironmentProfileSummary } from '../../stores/environmentProfiles'
 import { getAuthHeaders, api } from '../../lib/api/client'
 import { formatApiError } from '../../lib/api/formatError'

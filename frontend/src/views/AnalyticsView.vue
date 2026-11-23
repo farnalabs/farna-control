@@ -104,14 +104,11 @@
             />
           </DataCard>
 
-          <details class="card p-4" data-testid="analytics-details">
-            <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
-              <span class="inline-flex items-center gap-2">
-                <span aria-hidden="true">▸</span>
-                {{ $t('views.AnalyticsView.show_details') }}
-              </span>
-              <span class="ml-2 text-xs font-normal text-muted-foreground">{{ $t('views.AnalyticsView.delta_hint') }}</span>
-            </summary>
+          <CollapsibleCard
+            data-testid="analytics-details"
+            :title="$t('views.AnalyticsView.show_details')"
+            :description="$t('views.AnalyticsView.delta_hint')"
+          >
             <div class="mt-4" data-testid="analytics-table">
               <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-base font-semibold">{{ $t('views.AnalyticsView.trend_table_title') }}</h2>
@@ -150,20 +147,15 @@
                 </table>
               </div>
             </div>
-          </details>
+          </CollapsibleCard>
 
-          <details class="card p-4" data-testid="analytics-capacity-details">
-            <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
-              <span class="inline-flex items-center gap-2">
-                <span aria-hidden="true">▸</span>
-                {{ $t('views.AnalyticsView.capacity_panel_title') }}
-              </span>
-              <span class="ml-2 text-xs font-normal text-muted-foreground">
-                {{ $t('views.AnalyticsView.capacity_panel_subtitle') }}
-              </span>
-            </summary>
+          <CollapsibleCard
+            data-testid="analytics-capacity-details"
+            :title="$t('views.AnalyticsView.capacity_panel_title')"
+            :description="$t('views.AnalyticsView.capacity_panel_subtitle')"
+          >
             <CapacityQueuePanel class="mt-4" />
-          </details>
+          </CollapsibleCard>
         </div>
       </template>
     </template>
@@ -181,6 +173,7 @@ import AnalyticsChart from "../components/analytics/AnalyticsChart.vue";
 import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";
 import CapacityQueuePanel from "../components/analytics/CapacityQueuePanel.vue";
 import DataCard from "../components/ui/DataCard.vue";
+import CollapsibleCard from "../components/ui/CollapsibleCard.vue";
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import { formatApiError } from "../lib/api/formatError";
 import { errorCodeLabel, executionOriginLabel } from "../utils/runUtils";

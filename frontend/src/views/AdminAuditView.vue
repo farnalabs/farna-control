@@ -84,7 +84,7 @@
       <span v-if="chainResult.error" class="ml-2">— {{ chainResult.error }}</span>
     </div>
 
-    <div class="card p-4">
+    <BaseCard padding="md">
       <FilterBar
         :filters="[
           { key: 'event_type', label: $t('views.AdminAuditView.event_type'), options: [
@@ -183,7 +183,7 @@
           {{ $t('views.AdminAuditView.events_count', { count: total }, total) }}
         </span>
       </div>
-    </div>
+    </BaseCard>
 
     <!-- STATE-2: an export failure is reported in place, above the table it
          does not belong to, so the event list stays visible and its Retry
@@ -346,7 +346,7 @@
         <p class="text-sm text-muted-foreground">{{ $t('views.AdminAuditView.system_subtitle') }}</p>
       </div>
 
-      <div class="card p-4">
+      <BaseCard padding="md">
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <label for="admin-audit-system-event-type" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.event_type') }}</label>
@@ -408,7 +408,7 @@
             <template v-else>{{ $t('views.AdminAuditView.system_records_count', { count: systemTotal }, systemTotal) }}</template>
           </output>
         </div>
-      </div>
+      </BaseCard>
 
       <TableSkeleton
         v-if="systemLoading"
@@ -543,6 +543,7 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'

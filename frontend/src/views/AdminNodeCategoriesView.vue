@@ -28,14 +28,17 @@
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadCategories" />
 
     <template v-else>
-      <div v-if="editorMode === 'add'" class="card p-6">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.AdminNodeCategoriesView.new_node_category') }}</h2>
+      <DataCard
+        v-if="editorMode === 'add'"
+        padding="lg"
+        :title="$t('views.AdminNodeCategoriesView.new_node_category')"
+      >
         <NodeCategoryEditor
           :category="null"
           @saved="onCategoryCreated"
           @cancelled="closeEditor"
         />
-      </div>
+      </DataCard>
 
       <EmptyState
         v-if="categories.length === 0 && editorMode === null"
@@ -89,14 +92,17 @@
         </table>
       </div>
 
-      <div v-if="editCategoryId" class="card p-6">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.AdminNodeCategoriesView.edit_node_category') }}</h2>
+      <DataCard
+        v-if="editCategoryId"
+        padding="lg"
+        :title="$t('views.AdminNodeCategoriesView.edit_node_category')"
+      >
         <NodeCategoryEditor
           :category="editingCategory"
           @saved="onCategoryUpdated"
           @cancelled="closeEditor"
         />
-      </div>
+      </DataCard>
 
       <div v-if="deleteConfirmCategoryId" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
         <p class="text-sm font-medium text-destructive-text">{{ $t('views.AdminNodeCategoriesView.delete_confirm', { name: deleteConfirmName }) }}</p>
@@ -123,6 +129,7 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'

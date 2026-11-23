@@ -227,8 +227,7 @@
         </div>
       </DataCard>
       <!-- Recent runs list -->
-      <div class="card p-4" data-testid="dashboard-recent-runs">
-        <h2 class="text-base font-semibold mb-4">{{ $t('views.DashboardView.recent_runs') }}</h2>
+      <TableCard data-testid="dashboard-recent-runs" :title="$t('views.DashboardView.recent_runs')">
         <DataTable
           :columns="recentRunColumns"
           :rows="summary.recent_runs"
@@ -260,7 +259,7 @@
             <span class="text-xs text-muted-foreground">{{ String(row.trigger_type ?? '') }}</span>
           </template>
         </DataTable>
-      </div>
+      </TableCard>
     </template>
   </div>
 </template>
@@ -277,6 +276,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
 import StatCard from '../components/StatCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import TableCard from '../components/ui/TableCard.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import { DataTable, type Column } from '../components/ui/data-table'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'

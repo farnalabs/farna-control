@@ -13,8 +13,12 @@
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadTeams" />
 
     <div v-if="!loading && !error">
-      <div v-if="showCreateForm" class="card max-w-3xl p-6">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.SettingsTeamsView.new_team') }}</h2>
+      <DataCard
+        v-if="showCreateForm"
+        padding="lg"
+        class="max-w-3xl"
+        :title="$t('views.SettingsTeamsView.new_team')"
+      >
         <div class="space-y-4">
           <div>
             <label for="settingsteamsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.name') }}</label>
@@ -47,7 +51,7 @@
         </div>
         <div v-if="createError" class="mt-3 text-sm text-destructive">{{ createError }}</div>
         <div v-if="createSuccess" class="mt-3 text-sm text-success-text">{{ createSuccess }}</div>
-      </div>
+      </DataCard>
 
       <EmptyState
         v-if="teams.length === 0"
@@ -56,7 +60,7 @@
       />
 
       <div class="space-y-3">
-        <div v-for="team in teams" :key="team.id" class="card">
+        <BaseCard v-for="team in teams" :key="team.id" pressable padding="none">
           <div class="flex items-start gap-3 p-4 max-sm:flex-wrap sm:items-center" :class="{ 'border-b': expandedTeamId === team.id }">
             <button
               type="button"
@@ -224,7 +228,7 @@
             <h3 class="mb-3 mt-6 text-sm font-semibold text-muted-foreground uppercase tracking-wider">{{ $t('views.SettingsTeamsView.webhook_notifications') }}</h3>
             <TeamNotificationEndpoints :team-id="team.id" />
           </section>
-        </div>
+        </BaseCard>
       </div>
     </div>
     </div>
@@ -243,6 +247,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import TeamNotificationEndpoints from '../components/TeamNotificationEndpoints.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { ChevronRight, Plus } from '@lucide/vue'

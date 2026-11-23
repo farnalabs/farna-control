@@ -14,7 +14,7 @@
     >
       <!-- Reached when the licence now covers the capability (an upgrade
            landed and this page was reloaded, which refetches the plan). -->
-      <div class="card p-6 text-center" data-testid="locked-route-available">
+      <BaseCard padding="lg" class="text-center" data-testid="locked-route-available">
         <p class="text-sm text-muted-foreground">
           {{ $t('views.LockedRoute.available_body', { capability: capabilityLabel }) }}
         </p>
@@ -26,16 +26,16 @@
         >
           {{ $t('views.LockedRoute.open_capability', { capability: capabilityLabel }) }}
         </router-link>
-      </div>
+      </BaseCard>
     </FeatureGate>
 
     <!-- A role / instance-admin refusal: no purchase can fix it, so say who
          can and offer the way back rather than a plan upgrade. -->
-    <div v-else class="card mt-6 p-6" data-testid="locked-route-closed">
+    <BaseCard v-else padding="lg" class="mt-6" data-testid="locked-route-closed">
       <p class="text-sm text-muted-foreground">
         {{ refusalBody }}
       </p>
-    </div>
+    </BaseCard>
 
     <!-- The way back belongs on every branch: a tier lock offers the upgrade
          CTA but still leaves the caller somewhere to go. -->
@@ -55,6 +55,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import { getNavGroups } from '../config/navigation'
 import { usePlanStore } from '../stores/planStore'
 

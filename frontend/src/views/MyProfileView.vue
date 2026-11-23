@@ -23,7 +23,7 @@
       </div>
     </div>
 
-    <div v-else class="card p-6 space-y-6">
+    <BaseCard v-else padding="lg" class="space-y-6">
       <div class="flex items-center gap-4 pb-4 border-b border-border">
         <div class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground" aria-hidden="true">
           {{ userInitial }}
@@ -38,7 +38,7 @@
       <div class="text-sm text-muted-foreground">
         {{ $t('views.MyProfileView.member_since', { date: formatMemberSince(profile.created_at) }) }}
       </div>
-    </div>
+    </BaseCard>
 
     <FeatureGate feature-name="team_rbac" show-disabled>
       <DataCard padding="lg" :title="$t('views.MyProfileView.my_teams')">
@@ -174,6 +174,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import ChangePasswordForm from '../components/shared/ChangePasswordForm.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'

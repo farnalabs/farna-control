@@ -279,7 +279,7 @@
       </template>
 
       <template v-else-if="step === 4">
-        <div class="card p-6">
+        <BaseCard padding="lg">
           <div v-if="progressStep === 'preparing'" class="text-center py-8">
             <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
             <p class="text-sm text-muted-foreground">{{ $t('views.CopyPipelineWizard.preparing_copy') }}</p>
@@ -343,7 +343,7 @@
               </button>
             </div>
           </div>
-        </div>
+        </BaseCard>
       </template>
     </section>
   </div>
@@ -361,6 +361,7 @@ import { useDataFetch } from '../composables/useDataFetch'
 import BackLink from '../components/BackLink.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
