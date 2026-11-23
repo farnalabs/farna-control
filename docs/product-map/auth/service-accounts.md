@@ -13,6 +13,7 @@ code:
 unit-tests:
   - backend/tests/unit/api/test_service_accounts_endpoint.py
   - backend/tests/unit/api/test_service_principal_exclusion.py
+  - backend/tests/unit/auth/test_login_endpoint.py
   - backend/tests/unit/core/test_principals.py
   - backend/tests/unit/db/crud/test_account.py
   - backend/tests/unit/db/test_account_model.py
@@ -123,21 +124,29 @@ in-product admin page, so it is tracked here rather than in the manifest
       `::test_grants_flag_read_failure_is_503`).
 - [x] The 365-day service TTL is enforced at both key choke points: an explicit
       expiry beyond 365 days is 422 on mint AND on `PUT /api/v1/api-keys/{id}`
-      extension (never a silent clamp), exactly 365 days is accepted, a naive
-      timestamp is treated as UTC and a past timestamp is 422
-      (`auth/api_key.py`;
+      extension (never a silent clamp) and exactly 365 days is accepted, both
+      owned by the `auth/api_key.py` TTL ceiling; the service-account mint
+      parses the expiry in `service_accounts.py::_parse_future_expires_at`,
+      which treats a naive timestamp as UTC and rejects a past timestamp with
+      422 (`auth/api_key.py`, `api/routes/service_accounts.py`;
       `test_service_accounts_endpoint.py::test_ttl_ceiling_maps_to_422`,
       `::test_naive_expires_at_is_accepted_as_utc`,
       `::test_past_expires_at_is_422`,
       `test_service_accounts_lifecycle.py::test_provision_mint_decommission_end_to_end`).
-- [x] Human-path exclusion is explicit where a lookup is by primary key: the
-      login path, `/me` and SCIM call `is_service_account` and answer 404, so a
-      service principal can never authenticate, read a human profile or appear
-      as a SCIM user. The NULL identity columns are the structural first line;
-      the shared predicate is the second (`api/routes/auth.py`,
-      `api/routes/me.py`, `api/routes/scim.py`;
+- [x] A service principal can never authenticate through the human login path:
+      the email-based login lookup refuses it with 401 byte-identically to a
+      wrong password, so the denial never reveals that the row exists, and the
+      stealth demo-login answers its plain 404 (`api/routes/auth.py`;
+      `test_login_endpoint.py::test_login_rejects_service_principal`).
+- [x] Human-only read surfaces that load an account by primary key call
+      `is_service_account` and answer 404: `/me` and SCIM return not-found
+      exactly as they would for an unknown id, so a service principal can never
+      read a human profile or appear as a SCIM user. The NULL identity columns
+      are the structural first line; the shared predicate is the second
+      (`api/routes/me.py`, `api/routes/scim.py`;
       `test_service_principal_exclusion.py::TestMeHumanGuard::test_service_account_is_404`,
       `::TestScimHumanGuard::test_service_user_is_404`,
+      `test_login_endpoint.py::test_me_returns_404_for_a_service_principal`,
       `test_account_model.py::test_account_service_identity_check_forbids_human_shaped_columns`).
 - [x] A service account holds ordinary team memberships through the existing
       team surface, and the team role CHECK still excludes `admin`. Decommission
