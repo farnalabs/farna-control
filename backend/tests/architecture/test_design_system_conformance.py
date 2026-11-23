@@ -5,8 +5,13 @@ shells, card headers and raw PrimeVue dialogs instead of composing the shared
 primitives in ``frontend/src/components/ui`` and ``frontend/src/components/shared``.
 Prose alone did not stop the drift. This gate gives it the same structural
 enforcement ``appselect-guard.spec.ts`` gives native ``<select>``: a scan over
-``frontend/src/**/*.vue`` runs in the architecture suite (the only suite that
-sees the whole frontend tree cheaply at PR time) and fails CI on a new offender.
+``frontend/src/**/*.vue`` that fails CI on a new offender. It runs here in the
+architecture suite on backend-heavy PRs, every push to main and
+``workflow_dispatch``, and it is mirrored by
+``frontend/src/__tests__/design-system-guard.spec.ts``, which runs in the
+frontend unit suite on every frontend-touching PR - so a frontend-only PR that
+introduces drift is caught at PR time, not only after merge. Keep the two scans
+and their counts in step: they read the same baseline.
 
 Two rules
 ---------
@@ -32,6 +37,8 @@ The three ratchet patterns (one-line example each)
   Matches an ``<h2>``/``<h3>`` whose class carries ``font-semibold`` together
   with ``text-base`` or ``text-lg``.
 * ``raw_dialog`` - a raw PrimeVue dialog import: ``import Dialog from 'primevue/dialog'``.
+  Any import form of the module (default, named, namespace, aliased or bare)
+  matches.
 
 Anti-false-positive discipline: these patterns are deliberately objective, not
 semantic. A legitimate design-call that happens to match (canvas nodes, diff
@@ -89,7 +96,7 @@ _PADDING_TOKEN = re.compile(r"p-(?:\d+(?:\.\d+)?|px|\[[^\]]+\])")
 _TITLE_ATTR = re.compile(r"(?<![-\w])title\s*=")
 _PADDING_NONE_LITERAL = 'padding="none"'
 _PADDING_NONE = re.compile(r"""(?<![-\w])padding\s*=\s*(?:"none"|'none'|"'none'"|'"none"')""")
-_RAW_DIALOG_IMPORT = re.compile(r"""^\s*import\s+Dialog\s+from\s+["']primevue/dialog["']""", re.MULTILINE)
+_RAW_DIALOG_IMPORT = re.compile(r"""^\s*import\s+(?:[^\n]*?\bfrom\s+)?["']primevue/dialog["']""", re.MULTILINE)
 
 
 def _scanned_files() -> list[Path]:
@@ -199,17 +206,40 @@ def _failure(title: str, details: list[str]) -> str:
     return "\n".join([title, *details])
 
 
+def _titled_cards_with_padding_none(text: str) -> list[str]:
+    """DataCard/SectionCard opening tags that combine a title with padding="none"."""
+    matches: list[str] = []
+    for tag in _opening_tags(_HTML_COMMENT.sub("", text), ("DataCard", "SectionCard")):
+        if _TITLE_ATTR.search(tag) is None:
+            continue
+        if _PADDING_NONE.search(tag) is None:
+            continue
+        matches.append(" ".join(tag.split()))
+    return matches
+
+
+def test_titled_card_padding_detector_fires_on_inline_samples() -> None:
+    """Positive control: the absolute rule must flag a titled padding="none" card."""
+    assert _titled_cards_with_padding_none('<DataCard title="x" padding="none" />')
+    assert _titled_cards_with_padding_none("""<SectionCard title='x' :padding="'none'" />""")
+    assert not _titled_cards_with_padding_none('<!-- <DataCard title="x" padding="none" /> -->')
+    assert not _titled_cards_with_padding_none('<DataCard padding="none" />')
+    assert not _titled_cards_with_padding_none('<DataCard title="x" padding="sm" />')
+
+
+def test_raw_dialog_import_detector_matches_every_import_form() -> None:
+    """Positive control: every raw module import form is counted, nothing else is."""
+    assert _count_patterns("import Dialog from 'primevue/dialog'")["raw_dialog"] == 1
+    assert _count_patterns("import * as Dialog from 'primevue/dialog'")["raw_dialog"] == 1
+    assert _count_patterns("import { Dialog } from 'primevue/dialog'")["raw_dialog"] == 1
+    assert _count_patterns("import X from 'primevue/button'")["raw_dialog"] == 0
+
+
 def test_no_titled_card_overrides_its_padding_to_none() -> None:
     """A DataCard/SectionCard with a title must not also set padding="none"."""
     offenders: list[str] = []
     for path in _scanned_files():
-        text = _HTML_COMMENT.sub("", path.read_text(encoding="utf-8"))
-        for tag in _opening_tags(text, ("DataCard", "SectionCard")):
-            if _TITLE_ATTR.search(tag) is None:
-                continue
-            if _PADDING_NONE.search(tag) is None:
-                continue
-            one_line = " ".join(tag.split())
+        for one_line in _titled_cards_with_padding_none(path.read_text(encoding="utf-8")):
             offenders.append(f"  {path.relative_to(REPO_ROOT).as_posix()}: {one_line}")
     title = f"A DataCard/SectionCard combines a title with {_PADDING_NONE_LITERAL}. The card renders its own header, so the override leaves that header flush against the card edge (the FAR-2694 defect). Drop the padding override, or use the primitive's own padding scale instead:"
     assert not offenders, _failure(title, offenders)
