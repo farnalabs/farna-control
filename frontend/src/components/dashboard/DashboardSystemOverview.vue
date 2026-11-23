@@ -103,7 +103,55 @@ const store = useSystemMapsStore()
 const discovering = ref(false)
 const discoverError = ref<string | null>(null)
 const canDiscover = computed(() => store.accessLoaded && !store.error && store.hasAccess)
-const collapsed = useStorage('dashboard-system-overview-collapsed', false)
+
+/**
+ * The user's own collapse choice, or `null` when they have never made one.
+ *
+ * The storage default is deliberately `null` rather than `false`: a `false`
+ * default is written into localStorage on first use, which erases the
+ * difference between "no stored preference" and "the user chose expanded".
+ * VueUse's built-in serializers do not handle a nullable boolean (a `null`
+ * default infers the "any" serializer, which reads the string "false" back as
+ * a truthy value), so the boolean contract is declared explicitly.
+ */
+const storedCollapsed = useStorage<boolean | null>('dashboard-system-overview-collapsed', null, undefined, {
+  serializer: {
+    read: (raw: string): boolean | null => (raw === 'true' ? true : raw === 'false' ? false : null),
+    write: (value: boolean | null): string => String(value),
+  },
+})
+
+/**
+ * The last settled emptiness, held across a refetch.
+ *
+ * `beginOverviewRequest()` clears `store.overviewEmpty` as a request starts, so
+ * reading it directly would pop the panel open for the duration of every
+ * window refetch once it had settled with nothing published. Latch the answer
+ * only on a settled response, so the panel changes state because a fetch
+ * finished — never because one started.
+ */
+const settledEmpty = ref(false)
+watch(
+  () => [store.overviewLoading, store.overviewEmpty] as const,
+  ([loading, empty]) => {
+    if (!loading) settledEmpty.value = empty
+  },
+  { immediate: true },
+)
+
+/**
+ * Collapsed unless the user has said otherwise while nothing has been
+ * published yet.
+ *
+ * Loading, error and entitlement states all keep the expanded default, and a
+ * published map keeps it expanded. Writing from the toggle persists an explicit
+ * choice, which always wins from then on — there is deliberately no watcher
+ * that would re-collapse the panel after the user expands it.
+ */
+const collapsed = computed<boolean>({
+  get: () => storedCollapsed.value ?? settledEmpty.value,
+  set: (value: boolean) => { storedCollapsed.value = value },
+})
 const observedNodes = computed(() => store.overview?.nodes.filter((node) =>
   node.health !== 'unknown' || node.queue_depth != null || node.throughput_per_min != null || node.failure_rate != null || node.telemetry_coverage != null,
 ) ?? [])

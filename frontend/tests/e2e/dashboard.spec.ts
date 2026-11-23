@@ -75,4 +75,73 @@ test.describe('Dashboard', () => {
     await expect(runActivity).toContainText('Avg approval time')
     await expect(runActivity).toContainText('Rejection rate')
   })
+
+  test('system overview defaults collapsed when no map has been published', { tag: '@regression' }, async ({ page, env }) => {
+    await loginAsAdmin(page, env)
+    // FAR-2695: with nothing published, the panel must not push the dashboard's
+    // real stat cards down with an empty state. The card only renders when the
+    // caller has System Maps access, which the local mock target grants nothing
+    // of by default, so declare the entitlement explicitly and serve an empty
+    // map list (the "nothing published yet" signal).
+    await page.route('**/api/v1/plan*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          license: { tier: 'community' },
+          flags: [
+            { name: 'system_maps', currently_active: true },
+            { name: 'analytics_page', currently_active: true },
+          ],
+        }),
+      })
+    })
+    await page.route('**/api/v1/auth/permissions*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ permissions: ['system_maps_access'] }),
+      })
+    })
+    await page.route('**/api/v1/system-maps*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 }),
+      })
+    })
+    // No stored collapse preference: this is a fresh visitor.
+    await page.evaluate(() => localStorage.removeItem('dashboard-system-overview-collapsed'))
+    await page.reload()
+
+    const card = page.locator('[data-testid="dashboard-system-overview"]')
+    await expect(card).toBeVisible()
+    const toggle = page.locator('[data-testid="system-map-overview-toggle"]')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.locator('[data-testid="system-map-overview-content"]')).toContainText(
+      'System overview is collapsed',
+    )
+    // Discovery is exactly what an unpublished org needs, so it stays visible.
+    await expect(page.locator('[data-testid="dashboard-system-discover"]')).toBeVisible()
+  })
+
+  test('system overview card is absent when System Maps is not enabled', { tag: '@regression' }, async ({ page, env }) => {
+    await loginAsAdmin(page, env)
+    // No `system_maps` flag and no permission: the dashboard must not render the
+    // System Overview card at all.
+    await page.route('**/api/v1/plan*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ license: { tier: 'community' }, flags: [] }),
+      })
+    })
+    await page.route('**/api/v1/auth/permissions*', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ permissions: [] }) })
+    })
+    await page.reload()
+
+    await expect(page.locator('[data-testid="dashboard-title"]')).toBeVisible()
+    await expect(page.locator('[data-testid="dashboard-system-overview"]')).toHaveCount(0)
+  })
 })

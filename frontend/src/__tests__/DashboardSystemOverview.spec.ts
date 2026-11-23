@@ -96,6 +96,10 @@ describe('DashboardSystemOverview', () => {
     vi.restoreAllMocks()
     mockGet.mockReset()
     mockPush.mockReset()
+    // The collapse preference is the only persisted state this component owns;
+    // clear it so each case starts from "no stored preference" unless it sets
+    // one deliberately.
+    localStorage.removeItem('dashboard-system-overview-collapsed')
     mockPlanStore.userPermissions = ['system_maps_access', 'system.config.manage']
     mockIsOperator.value = true
     mockIsSystemAdmin.value = false
@@ -396,7 +400,11 @@ describe('DashboardSystemOverview', () => {
     expect(mockGet).toHaveBeenCalledTimes(3)
   })
 
-  it('renders a distinct empty state, not an error', async () => {
+  it('renders a distinct empty state, not an error, when the user prefers the panel expanded', async () => {
+    // The panel now defaults collapsed when nothing is published (FAR-2695), so
+    // this case explicitly pins a stored expanded preference to keep asserting
+    // the empty state's own rendering contract.
+    localStorage.setItem('dashboard-system-overview-collapsed', 'false')
     const { wrapper, store } = mountOverview()
     store.overviewLoading = false
     store.overviewError = null
@@ -409,6 +417,112 @@ describe('DashboardSystemOverview', () => {
     expect(empty.classes()).toContain('card')
     expect(wrapper.find('[data-testid="system-map-overview-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="system-map-overview-metrics"]').exists()).toBe(false)
+  })
+
+  it('defaults collapsed once a settled overview reports no published map', async () => {
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    const content = wrapper.get('[data-testid="system-map-overview-content"]')
+    expect(content.text()).toContain('System overview is collapsed')
+    expect(wrapper.find('[data-testid="system-map-overview-empty"]').exists()).toBe(false)
+    // No stored preference is invented by rendering the default.
+    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBeNull()
+  })
+
+  it('keeps the panel expanded while the overview is still loading', async () => {
+    const { wrapper, store } = mountOverview()
+    // A request in flight clears the settled-empty signal; the panel must not
+    // collapse before the answer is known.
+    store.overviewLoading = true
+    store.overviewEmpty = false
+    await wrapper.vm.$nextTick()
+
+    const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[data-testid="system-map-overview-loading"]').text()).toContain('Loading')
+  })
+
+  it('stays collapsed across a refetch once the overview has settled empty', async () => {
+    const { wrapper, store } = mountOverview()
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+    const toggle = wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+
+    // A window change starts a new request and clears `overviewEmpty`; the panel
+    // must not pop open while it is loading only to collapse again.
+    store.overviewLoading = true
+    store.overviewEmpty = false
+    await wrapper.vm.$nextTick()
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+  })
+
+  it('keeps the panel expanded when a map is published', async () => {
+    const { wrapper, store } = mountOverview()
+    store.overview = overview as never
+    store.overviewLoading = false
+    store.overviewEmpty = false
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="system-map-overview-toggle"]').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('[data-testid="system-map-overview-metrics"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="system-map-overview-empty"]').exists()).toBe(false)
+  })
+
+  it('keeps discovery visible while the panel is collapsed', async () => {
+    const { wrapper, store } = mountOverview()
+    store.accessLoaded = true
+    store.systemMapsEnabled = true
+    store.overviewLoading = false
+    store.overviewEmpty = true
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="system-map-overview-toggle"]').attributes('aria-expanded')).toBe('false')
+    // The empty state is exactly when discovery matters, so it must not be
+    // hidden behind the collapse.
+    expect(wrapper.get('[data-testid="dashboard-system-discover"]').text()).toContain('Discover My System')
+  })
+
+  it('persists an explicit expand and never re-collapses while still empty', async () => {
+    const first = mountOverview()
+    first.store.overviewLoading = false
+    first.store.overviewEmpty = true
+    await first.wrapper.vm.$nextTick()
+    const firstToggle = first.wrapper.get('[data-testid="system-map-overview-toggle"]')
+    expect(firstToggle.attributes('aria-expanded')).toBe('false')
+
+    await firstToggle.trigger('click')
+
+    expect(firstToggle.attributes('aria-expanded')).toBe('true')
+    expect(localStorage.getItem('dashboard-system-overview-collapsed')).toBe('false')
+    // A later settled-empty response must not override the explicit choice.
+    first.store.overviewLoading = true
+    await first.wrapper.vm.$nextTick()
+    first.store.overviewLoading = false
+    first.store.overviewEmpty = true
+    await first.wrapper.vm.$nextTick()
+    expect(firstToggle.attributes('aria-expanded')).toBe('true')
+    first.wrapper.unmount()
+
+    // A fresh mount (a later page load) reads the stored choice back.
+    const second = mountOverview()
+    second.store.overviewLoading = false
+    second.store.overviewEmpty = true
+    await second.wrapper.vm.$nextTick()
+
+    expect(second.wrapper.get('[data-testid="system-map-overview-toggle"]').attributes('aria-expanded')).toBe('true')
+    expect(second.wrapper.get('[data-testid="system-map-overview-empty"]').text()).toContain('No published system map')
   })
 
   it('persists the collapse state and exposes the button state', async () => {
