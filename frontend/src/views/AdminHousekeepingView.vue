@@ -90,7 +90,7 @@
           </div>
         </DataCard>
 
-        <DataCard
+        <BaseCard
           v-for="cat in categories"
           :key="cat.category"
           class="mb-4"
@@ -99,28 +99,32 @@
           elevation="sm"
           data-testid="hk-category"
         >
-          <div class="flex items-center gap-3 border-b px-4 py-3">
-            <input
-              type="checkbox"
-              :aria-label="cat.label"
-              :checked="categorySelected(cat.category)"
-              :indeterminate.prop="categoryPartial(cat.category)"
-              :disabled="isFailed(cat)"
-              data-testid="hk-category-checkbox"
-              @change="toggleCategory(cat.category)"
-            />
-            <div class="flex-1">
-              <h3 class="font-semibold">{{ cat.label }}</h3>
-              <p class="text-xs text-muted-foreground">{{ cat.description }}</p>
-            </div>
-            <span
-              v-if="isFailed(cat)"
-              class="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive-text"
-            >
-              {{ $t('views.AdminHousekeepingView.scan_failed_badge') }}
-            </span>
-            <span v-else class="text-sm text-muted-foreground">{{ $t('views.AdminHousekeepingView.item_count', cat.count) }}</span>
-          </div>
+          <CardHeader
+            :title="cat.label"
+            :description="cat.description"
+            header-class="items-center border-b px-4 py-3 mb-0!"
+          >
+            <template #leading>
+              <input
+                type="checkbox"
+                :aria-label="cat.label"
+                :checked="categorySelected(cat.category)"
+                :indeterminate.prop="categoryPartial(cat.category)"
+                :disabled="isFailed(cat)"
+                data-testid="hk-category-checkbox"
+                @change="toggleCategory(cat.category)"
+              />
+            </template>
+            <template #actions>
+              <span
+                v-if="isFailed(cat)"
+                class="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive-text"
+              >
+                {{ $t('views.AdminHousekeepingView.scan_failed_badge') }}
+              </span>
+              <span v-else class="text-sm text-muted-foreground">{{ $t('views.AdminHousekeepingView.item_count', cat.count) }}</span>
+            </template>
+          </CardHeader>
 
           <!--
             FAR-1977: a scanner that RAISED returns status="failed" with an empty
@@ -171,10 +175,10 @@
               {{ cat.category }}
             </span>
           </div>
-        </DataCard>
+        </BaseCard>
       </div>
 
-      <DataCard
+      <BaseCard
         id="checkpoint-retention"
         class="mb-4"
         variant="bordered"
@@ -182,20 +186,20 @@
         elevation="sm"
         data-testid="hk-checkpoint-retention"
       >
-        <div class="flex items-center gap-3 border-b px-4 py-3">
-          <div class="flex-1">
-            <h3 class="font-semibold">{{ $t('views.AdminHousekeepingView.checkpoint_retention') }}</h3>
-            <p class="text-xs text-muted-foreground">
-              {{ $t('views.AdminHousekeepingView.checkpoint_retention_description') }}
-            </p>
-          </div>
-          <span v-if="checkpointCategoryFailed" class="text-sm font-medium text-destructive-text">
-            {{ $t('views.AdminHousekeepingView.scan_failed_badge') }}
-          </span>
-          <span v-else class="text-sm text-muted-foreground">
-            {{ $t('views.AdminHousekeepingView.checkpoint_reclaimable', { count: checkpointCandidateCount }) }}
-          </span>
-        </div>
+        <CardHeader
+          :title="$t('views.AdminHousekeepingView.checkpoint_retention')"
+          :description="$t('views.AdminHousekeepingView.checkpoint_retention_description')"
+          header-class="items-center border-b px-4 py-3 mb-0!"
+        >
+          <template #actions>
+            <span v-if="checkpointCategoryFailed" class="text-sm font-medium text-destructive-text">
+              {{ $t('views.AdminHousekeepingView.scan_failed_badge') }}
+            </span>
+            <span v-else class="text-sm text-muted-foreground">
+              {{ $t('views.AdminHousekeepingView.checkpoint_reclaimable', { count: checkpointCandidateCount }) }}
+            </span>
+          </template>
+        </CardHeader>
         <div class="flex flex-wrap items-center gap-3 px-4 py-3">
           <label class="flex items-center gap-2 text-sm">
             {{ $t('views.AdminHousekeepingView.checkpoint_purge_older_than') }}
@@ -228,7 +232,7 @@
           </span>
           <span v-if="ckptError" class="text-sm text-destructive" data-testid="hk-ckpt-error">{{ ckptError }}</span>
         </div>
-      </DataCard>
+      </BaseCard>
 
       <FormDialog
         v-model:open="showConfirm"
@@ -265,6 +269,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import { formatBytes } from '../lib/formatBytes'
 
 // FAR-1977: derive the wire types from the generated OpenAPI schema rather

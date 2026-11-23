@@ -37,59 +37,61 @@
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
       <div class="space-y-4" aria-busy="true">
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div v-for="n in 3" :key="'summary-' + n" class="card p-4">
+          <BaseCard v-for="n in 3" :key="'summary-' + n" padding="md">
             <div class="h-3 w-20 animate-pulse rounded bg-muted" />
             <div class="mt-2 h-5 w-16 animate-pulse rounded bg-muted" />
-          </div>
+          </BaseCard>
         </div>
-        <div class="card p-4">
+        <BaseCard padding="md">
           <SkeletonBlock height-class="h-5 w-32" />
           <SkeletonBlock class="mt-3" height-class="h-9 w-64" />
-        </div>
-        <div class="card p-4">
+        </BaseCard>
+        <BaseCard padding="md">
           <SkeletonBlock height-class="h-5 w-48" />
           <SkeletonBlock class="mt-2" height-class="h-16 w-full" />
-        </div>
+        </BaseCard>
       </div>
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadDetail" />
     <template v-else-if="group">
-      <div
+      <BaseCard
         v-if="isInstanceScope"
-        class="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
+        variant="muted"
+        padding="sm"
+        class="border border-border text-sm text-muted-foreground"
         aria-live="polite"
         data-testid="admin-error-detail-instance-readonly"
       >
         {{ $t('views.AdminErrorDetailView.instance_scope_readonly') }}
-      </div>
+      </BaseCard>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div class="card p-4">
+        <BaseCard padding="md">
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.level') }}</span>
           <p class="mt-0.5">
             <span :class="levelBadgeClass(group.level_peak)">{{ group.level_peak }}</span>
           </p>
-        </div>
-        <div class="card p-4">
+        </BaseCard>
+        <BaseCard padding="md">
           <span class="text-xs font-medium text-muted-foreground capitalize">{{ $t('views.AdminErrorDetailView.status') }}</span>
           <p class="mt-0.5">
             <span :class="statusBadgeClass(group.status)" class="capitalize">{{ group.status }}</span>
           </p>
-        </div>
-        <div class="card p-4">
-          <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.occurrences') }}</span>
-          <p class="mt-0.5 text-lg font-semibold">{{ group.count }}</p>
-        </div>
+        </BaseCard>
+        <MetricCard
+          :label="$t('views.AdminErrorDetailView.occurrences')"
+          :value="group.count"
+        />
       </div>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div class="card p-4">
+        <BaseCard padding="md">
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.first_seen') }}</span>
           <p class="mt-0.5 text-sm">{{ formatErrorDate(group.first_seen) }}</p>
-        </div>
-        <div class="card p-4">
+        </BaseCard>
+        <BaseCard padding="md">
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.last_seen') }}</span>
           <p class="mt-0.5 text-sm">{{ formatErrorDate(group.last_seen) }}</p>
-        </div>
+        </BaseCard>
       </div>
 
       <!-- FAR-2374: every error-record write is gated on `errors.manage`
@@ -99,8 +101,11 @@
            shared v-tooltip affordance. The tooltip sits on the wrapping span
            because a disabled control swallows hover events, so a tooltip bound
            directly to it would never open. -->
-      <div v-if="!isInstanceScope" class="card p-4">
-        <h2 class="mb-3 text-base font-semibold">{{ $t('views.AdminErrorDetailView.actions') }}</h2>
+      <DataCard
+        v-if="!isInstanceScope"
+        heading-level="h2"
+        :title="$t('views.AdminErrorDetailView.actions')"
+      >
         <p
           v-if="!canManageErrors"
           id="admin-error-status-admin-help"
@@ -183,10 +188,13 @@
             </p>
           </div>
         </div>
-      </div>
+      </DataCard>
 
-      <div v-if="sampleEvent" class="card p-4">
-        <h2 class="mb-2 text-base font-semibold">{{ $t('views.AdminErrorDetailView.message') }}</h2>
+      <DataCard
+        v-if="sampleEvent"
+        heading-level="h2"
+        :title="$t('views.AdminErrorDetailView.message')"
+      >
         <p class="mb-2 text-xs text-muted-foreground">
           {{ $t('views.AdminErrorDetailView.fingerprint') }}: <span class="font-mono">{{ shortId(group.fingerprint) }}</span>
         </p>
@@ -246,10 +254,12 @@
             <p class="mt-0.5 font-mono text-xs">{{ shortId(sampleEvent.id) }}</p>
           </div>
         </div>
-      </div>
+      </DataCard>
 
-      <div class="card p-4">
-        <h2 class="mb-3 text-base font-semibold">{{ $t('views.AdminErrorDetailView.raw_events', { count: eventsTotal }) }}</h2>
+      <DataCard
+        heading-level="h2"
+        :title="$t('views.AdminErrorDetailView.raw_events', { count: eventsTotal })"
+      >
         <div v-if="eventsLoading" class="py-2" data-testid="admin-error-detail-events-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -308,7 +318,7 @@
             </div>
           </div>
         </template>
-      </div>
+      </DataCard>
     </template>
   </div>
   </FeatureGate>
@@ -319,6 +329,9 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
+import MetricCard from '../components/ui/MetricCard.vue'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
