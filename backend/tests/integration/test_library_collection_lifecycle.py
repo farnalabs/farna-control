@@ -827,7 +827,7 @@ async def test_grant_registry_collection_agents(
 
 
 # ---------------------------------------------------------------------------
-# Test 5: Install a SHIPPED modulo collection (ADR 032 - prove the fix)
+# Test 5: Install a SHIPPED built-in collection (ADR 032 - prove the fix)
 # ---------------------------------------------------------------------------
 
 
@@ -841,7 +841,7 @@ async def test_install_shipped_github_pr_reviewer_collection(
     """Install the shipped in-code github-pr-reviewer collection (ADR 032 §4).
 
     Nothing is pre-seeded in this org's RLS slice for the collection or its
-    pins — they come from the library_service resolver (in-code modulo
+    pins — they come from the library_service resolver (in-code built-in
     registry). Asserts the full round trip: schema + agents (standalone +
     template) + pipeline materialised, provenance stamped, the installed
     agent's output schema round-trips to the installed schema entity, and

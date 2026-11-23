@@ -132,7 +132,9 @@ describe('CapacityQueuePanel', () => {
     expect(mockGet).toHaveBeenCalled()
     const [url] = mockGet.mock.calls[0]
     expect(url).toBe('/api/v1/analytics/capacity')
-    expect(wrapper.find('[data-testid="capacity-pending-total"]').text()).toBe('3')
+    // The metric tiles are MetricCards: the test id marks the card, so the
+    // assertion covers the tile's label and its value together.
+    expect(wrapper.find('[data-testid="capacity-pending-total"]').text()).toContain('3')
     expect(wrapper.find('[data-testid="capacity-verdict"]').text()).toContain('Draining')
     expect(wrapper.find('[data-testid="capacity-cause-pipeline"]').text()).toBe('1')
     expect(wrapper.find('[data-testid="capacity-cause-sandbox"]').text()).toBe('1')
@@ -217,9 +219,9 @@ describe('CapacityQueuePanel', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="capacity-verdict"]').text()).toContain('Stable')
-    expect(wrapper.find('[data-testid="capacity-oldest-pending"]').text()).toBe('—')
-    expect(wrapper.find('[data-testid="capacity-drain-ratio"]').text()).toBe('—')
-    expect(wrapper.find('[data-testid="capacity-org-cap-use"]').text()).toBe('—')
+    expect(wrapper.find('[data-testid="capacity-oldest-pending"]').text()).toContain('—')
+    expect(wrapper.find('[data-testid="capacity-drain-ratio"]').text()).toContain('—')
+    expect(wrapper.find('[data-testid="capacity-org-cap-use"]').text()).toContain('—')
     expect(wrapper.find('[data-testid="capacity-limits"]').text()).toContain('None')
     expect(wrapper.find('[data-testid="capacity-binding"]').text()).toContain('None')
     // No pipeline_name -> the short id (first 8 chars) is shown.

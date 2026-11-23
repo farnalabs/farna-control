@@ -1,6 +1,6 @@
 """FAR-697 — copy_library_primitive FK regression against a real database.
 
-Built-in modulo/community primitives live only in the in-memory seed cache:
+Built-in primitives live only in the in-memory seed cache:
 they have no ``library_primitives`` row. The copy used to set
 ``forked_from`` to the source id anyway, and the FK on ``library_primitives.id``
 rejected the insert — the MCP ``copy_library_primitive`` tool returned a

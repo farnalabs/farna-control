@@ -10,18 +10,22 @@
     </p>
 
     <div class="mt-6 space-y-4" data-testid="governance-levels">
-      <article
+      <BaseCard
         v-for="level in levels"
         :key="level.id"
-        class="card p-6"
+        padding="lg"
+        role="article"
         :data-testid="`governance-level-${level.id}`"
       >
-        <header>
-          <h2 class="text-base font-semibold">
-            <span class="mr-2 text-muted-foreground" aria-hidden="true">{{ level.order }}.</span>{{ $t(level.titleKey) }}
-          </h2>
-          <p class="mt-1 text-sm text-muted-foreground">{{ $t(level.primitiveKey) }}</p>
-        </header>
+        <CardHeader
+          heading-level="h2"
+          :title="$t(level.titleKey)"
+          :description="$t(level.primitiveKey)"
+        >
+          <template #leading>
+            <span class="text-muted-foreground" aria-hidden="true">{{ level.order }}.</span>
+          </template>
+        </CardHeader>
 
         <p
           v-if="level.noteKey"
@@ -122,7 +126,7 @@
             </div>
           </div>
         </FeatureGate>
-      </article>
+      </BaseCard>
     </div>
   </div>
 </template>
@@ -134,6 +138,8 @@ import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import Badge from 'primevue/badge'
 
 const { t } = useI18n()

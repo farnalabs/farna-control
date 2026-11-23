@@ -20,7 +20,7 @@ _log = logging.getLogger(__name__)
 
 BASE_URL: str = os.environ.get(
     "FARNA_CONTROL_BASE_URL",
-    "https://staging-modulo.fly.dev",
+    "https://staging-farna-control.fly.dev",
 )
 _HTTP_TIMEOUT: float = 30.0
 _ADMIN_ORGS_PATH: str = "/api/v1/admin/orgs"

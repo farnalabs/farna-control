@@ -49,6 +49,7 @@
           <template #default>
             <EmptyState
               v-if="items.length === 0"
+              variant="bare"
               :title="$t('views.AdminCostBreakdownView.no_team_cost_data_available')"
               data-testid="cost-team-empty"
             />
@@ -116,6 +117,7 @@
             />
             <EmptyState
               v-else-if="anomalies.length === 0"
+              variant="bare"
               :title="$t('views.AdminCostBreakdownView.no_anomalies_detected')"
               data-testid="cost-anomalies-empty"
             />

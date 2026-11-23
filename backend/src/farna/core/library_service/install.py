@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 _PIN_TYPE_ORDER: tuple[str, ...] = ("schema", "agent", "workflow", "pipeline_template")
 
 # Sources whose primitives are visible to EVERY organisation via the
-# library_service resolver (ADR 032 §4): modulo built-ins come from the
+# library_service resolver (ADR 032 §4): built-in primitives come from the
 # in-code registry, which lives outside the installing org's RLS slice.
 # Only built-ins qualify: nothing sourced from outside the org may be
 # resolvable as a visible-everywhere primitive.
@@ -136,7 +136,7 @@ def _definition_from_field_spec(spec: Any) -> dict[str, Any]:
 def _definition_from_fields(fields: list[dict[str, Any]]) -> dict[str, Any]:
     """Convert a library-primitive ``fields`` list into a JSON Schema definition.
 
-    Builtin modulo schema primitives carry a simplified
+    Builtin schema primitives carry a simplified
     ``content_json={"fields": [...]}`` shape; ``materialize_import`` requires a
     ``definition_json`` JSON Schema (it refuses to materialise a schema
     without one), so collection install translates eagerly.
@@ -188,7 +188,7 @@ async def _resolve_collection(
 
     The org-scoped DB row wins (unchanged behaviour for genuinely local
     collections). Otherwise fall back to the library_service resolver, which
-    sees the in-code modulo registry — primitives every org may install
+    sees the in-code built-in registry — primitives every org may install
     (ADR 032 §4). A resolver fallback is only accepted when the row itself is
     org-owned or comes from a visible-everywhere source; cross-org local rows
     stay invisible.
@@ -213,7 +213,7 @@ async def _resolve_pin(
     """Resolve a single manifest pin to its backing primitive.
 
     Routes through the library_service resolver (ADR 032 §4): the org-scoped
-    DB first, then the visible-everywhere modulo registry. Raises
+    DB first, then the visible-everywhere built-in registry. Raises
     ``PinResolutionError`` when the pin references an unknown, invisible, or
     version-mismatched primitive.
     """
@@ -232,7 +232,7 @@ async def _resolve_pin(
 def _transient_primitives(prims: list[LibraryPrimitive]) -> list[LibraryPrimitive]:
     """Return the registry objects with NO backing DB row yet (transient).
 
-    Builtin modulo primitives are module-level ``LibraryPrimitive``
+    Builtin primitives are module-level ``LibraryPrimitive``
     instances outside any session; ``sa_inspect(...).transient`` identifies
     exactly those (DB-loaded rows are persistent/detached with a row on disk).
     """
@@ -304,7 +304,7 @@ async def _persist_collection_row(
     persist its row first. ONLY the collection row is persisted — pin content is
     read in-memory by ``_build_bundle_from_pins`` and is never written to disk,
     so the DB can never drift from the registry for pins (ADR 032 §4: the
-    in-code registry is the single source of truth for modulo primitives).
+    in-code registry is the single source of truth for built-in primitives).
 
     The upsert is idempotent on the unique tuple ``(organisation_id, source,
     slug, version)`` (``uq_library_primitive_version``, WHERE deleted_at IS
@@ -916,7 +916,7 @@ async def install_collection(
     ``materialize_import`` errors (which rollback all-or-nothing).
     """
     # 1. Load the collection primitive — org-scoped DB first, then the
-    # library_service resolver so shipped modulo collections (in-code
+    # library_service resolver so shipped built-in collections (in-code
     # registry, no DB row in the installing org's RLS slice) are installable
     # per ADR 032 §4.
     collection = await _resolve_collection(session, org_id, collection_id)
@@ -929,7 +929,7 @@ async def install_collection(
 
     # 2. Resolve manifest pins
     # Local org collections carry the pins on the ``manifest_pins`` column;
-    # built-in modulo collections carry them in ``content_json``.
+    # built-in collections carry them in ``content_json``.
     # The legacy ``content_json["pins"]`` key (written by an earlier version of
     # the API routes) is accepted as a last resort so already-persisted rows
     # keep resolving; the ``manifest_pins`` COLUMN stays the first source.
@@ -947,7 +947,7 @@ async def install_collection(
         raise CollectionInstallError("Collection has no manifest pins to install")
 
     # 2b. Persist ONLY the collection row when it comes from the in-code
-    # registry (built-in modulo items). ``collection_install.collection_id``
+    # registry (built-in items). ``collection_install.collection_id``
     # references ``library_primitives``, so that one row must exist on disk;
     # pin rows are NEVER persisted — pin content is consumed in-memory by
     # ``_build_bundle_from_pins`` and the registry stays the single source of

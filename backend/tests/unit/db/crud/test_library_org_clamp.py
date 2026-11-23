@@ -13,7 +13,7 @@ predicate the helper itself builds. Without the predicate the behavioural
 assertion fails, and the statement-level assertion fails with it.
 
 Built-in visibility is pinned in both directions. Native built-ins
-(``source='modulo'``) reach a customer from the in-memory registry merge in
+(native source) reach a customer from the in-memory registry merge in
 ``core.library_service.list_primitives`` — they are NOT DB rows in the caller's
 slice — so a plain ``organisation_id =`` clamp cannot hide them. The RLS policy
 on ``library_primitives`` already restricts rows to
@@ -117,7 +117,7 @@ def _primitive(
         tags=[],
         content_json={},
         # ``ck_library_primitives_source_fields`` requires every registry-style
-        # field to be NULL for local and modulo sources.
+        # field to be NULL for local and native sources.
         source_url=None,
         forked_from=None,
         checksum=None,

@@ -313,7 +313,7 @@ class TestLibraryPrimitiveReadAcceptsOrgApiKey:
         assert resp.json()["name"] == "Devil's Advocate"
 
     def test_org_api_key_reads_a_builtin_primitive(self) -> None:
-        """A built-in lives in the modulo sentinel org and is globally visible."""
+        """A built-in lives in the built-in sentinel org and is globally visible."""
         builtin = _make_primitive(organisation_id=BUILTIN_ORG_ID)
         with (
             patch("farna.api.routes.library.get_primitive", new_callable=AsyncMock, return_value=builtin),

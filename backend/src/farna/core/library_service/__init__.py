@@ -376,7 +376,7 @@ async def copy_to_adapt(
                 target_team_id,
                 created_by,
                 # ``forked_from`` has an FK on library_primitives — in-memory
-                # builtin sources (in-memory registry) have no row, so the
+                # builtin sources (built-in registry) have no row, so the
                 # copy must not reference them or the insert fails with an FK
                 # violation (internal_error 500 on copy_library_primitive).
                 forked_from=refreshed.id if in_db else None,
@@ -794,7 +794,7 @@ async def notify_importers_of_update(
 # ---------------------------------------------------------------------------
 
 
-def _filter_builtin(
+def _filter_builtins(
     *,
     primitive_type: str | None = None,
     primitive_types: list[str] | None = None,
@@ -803,16 +803,16 @@ def _filter_builtin(
     """Filter the built-in registry primitives."""
     if primitive_types:
         allowed = set(primitive_types)
-        builtin = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type in allowed]
+        builtin_items = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type in allowed]
     elif primitive_type is not None:
-        builtin = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == primitive_type]
+        builtin_items = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == primitive_type]
     else:
-        builtin = list(_BUILTIN_PRIMITIVES)
+        builtin_items = list(_BUILTIN_PRIMITIVES)
     if search:
         term = search.strip().lower()
         if term:
-            builtin = [p for p in builtin if term in (p.name or "").lower() or term in (p.description or "").lower()]
-    return builtin
+            builtin_items = [p for p in builtin_items if term in (p.name or "").lower() or term in (p.description or "").lower()]
+    return builtin_items
 
 
 async def _load_org_page(
@@ -913,19 +913,19 @@ async def list_primitives(
     # ``conditions``), so ``org_page.total`` is already the exact filtered
     # universe count and is passed through unchanged.
     org_items = list(org_page.items)
-    builtin: list[LibraryPrimitive] = []
+    builtin_items: list[LibraryPrimitive] = []
     if source is None or source == "modulo":
-        builtin = _filter_builtin(
+        builtin_items = _filter_builtins(
             primitive_type=primitive_type,
             primitive_types=primitive_types,
             search=search,
         )
     if excluded_tiers:
         org_items = [p for p in org_items if p.tier not in excluded_tiers]
-        builtin = [p for p in builtin if p.tier not in excluded_tiers]
+        builtin_items = [p for p in builtin_items if p.tier not in excluded_tiers]
 
-    all_items: list[LibraryPrimitive] = org_items + builtin
-    total = org_page.total + len(builtin)
+    all_items: list[LibraryPrimitive] = org_items + builtin_items
+    total = org_page.total + len(builtin_items)
     # ``has_more`` is derived here rather than forwarded from ``org_page`` so
     # the envelope can never contradict its own items.
     has_more = (page - 1) * page_size + len(all_items) < total
@@ -934,8 +934,8 @@ async def list_primitives(
         total=total,
         page=page,
         page_size=page_size,
-        # ``next_cursor`` continues the org slice only. The in-memory built-ins
-        # are bounded and are re-merged in full on every page; they
+        # ``next_cursor`` continues the org slice only. The in-memory built-in
+        # primitives are bounded and are re-merged in full on every page; they
         # share no ordering key with the org rows, so the asymmetry is
         # deliberate. ``has_more`` is the authoritative "another page" signal.
         next_cursor=org_page.next_cursor,
