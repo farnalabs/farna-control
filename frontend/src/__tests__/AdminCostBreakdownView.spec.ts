@@ -110,7 +110,7 @@ describe('AdminCostBreakdownView', () => {
     const page = wrapper.get('.page-wide')
     expect(page.find('.page-wide > header.page-header').exists()).toBe(true)
     expect(page.find('.page-wide > .page-tabs-wrapper').exists()).toBe(true)
-    const gate = page.get('.page-wide > [data-testid="feature-gate"]')
+    const gate = page.get('.page-wide > [data-testid^="feature-gate-"]')
     expect(gate.classes()).toContain('space-y-6')
     expect(gate.find('.space-y-6').exists()).toBe(false)
 

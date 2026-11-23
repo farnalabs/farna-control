@@ -39,24 +39,24 @@
       />
       <!-- Row 1: Summary stat cards -->
       <div :class="['grid gap-4 sm:grid-cols-2 lg:grid-cols-4 transition-opacity duration-200', periodRefreshing ? 'opacity-60' : 'opacity-100']">
-        <StatCard data-testid="dashboard-stats-card" :label="$t('views.DashboardView.pipelines')" :value="cardValue(summary.period?.metrics?.active_pipelines?.current, summary.active_pipelines)" color="primary" to="/pipelines" :delta="periodMetrics?.active_pipelines ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :neutral-trend="true">
+        <StatCard data-testid="dashboard-stats-card-pipelines" :label="$t('views.DashboardView.pipelines')" :value="cardValue(summary.period?.metrics?.active_pipelines?.current, summary.active_pipelines)" color="primary" to="/pipelines" :delta="periodMetrics?.active_pipelines ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :neutral-trend="true">
           <template #icon><GitBranch class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard data-testid="dashboard-stats-card" :label="$t('views.DashboardView.total_runs')" :value="cardValue(summary.period?.metrics?.total_runs?.current, summary.total_runs)" color="primary" to="/runs" :delta="periodMetrics?.total_runs ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
+        <StatCard data-testid="dashboard-stats-card-total-runs" :label="$t('views.DashboardView.total_runs')" :value="cardValue(summary.period?.metrics?.total_runs?.current, summary.total_runs)" color="primary" to="/runs" :delta="periodMetrics?.total_runs ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
           <template #icon><BarChart2 class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard data-testid="dashboard-stats-card" :label="$t('views.DashboardView.running')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.running?.current, summary.run_counts_by_status?.running ?? 0)" color="success" :to="`/runs?status=${RUN_STATUS.RUNNING}`" :delta="periodMetrics?.run_counts_by_status?.running ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
+        <StatCard data-testid="dashboard-stats-card-running" :label="$t('views.DashboardView.running')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.running?.current, summary.run_counts_by_status?.running ?? 0)" color="success" :to="`/runs?status=${RUN_STATUS.RUNNING}`" :delta="periodMetrics?.run_counts_by_status?.running ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
           <template #icon><Activity class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard data-testid="dashboard-stats-card" :label="$t('views.DashboardView.awaiting_human')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.awaiting_human?.current, summary.run_counts_by_status?.awaiting_human ?? 0)" color="warning" :to="`/runs?status=${RUN_STATUS.AWAITING_HUMAN}`" :delta="periodMetrics?.run_counts_by_status?.awaiting_human ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
+        <StatCard data-testid="dashboard-stats-card-awaiting-human" :label="$t('views.DashboardView.awaiting_human')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.awaiting_human?.current, summary.run_counts_by_status?.awaiting_human ?? 0)" color="warning" :to="`/runs?status=${RUN_STATUS.AWAITING_HUMAN}`" :delta="periodMetrics?.run_counts_by_status?.awaiting_human ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
           <template #icon><Clock class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
       </div>
       <div class="grid gap-4 sm:grid-cols-2">
-        <StatCard data-testid="dashboard-stats-card" :label="$t('views.DashboardView.failed')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.failed?.current, summary.run_counts_by_status?.failed ?? 0)" color="destructive" :to="`/runs?status=${RUN_STATUS.FAILED}`" :delta="periodMetrics?.run_counts_by_status?.failed ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
+        <StatCard data-testid="dashboard-stats-card-failed" :label="$t('views.DashboardView.failed')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.failed?.current, summary.run_counts_by_status?.failed ?? 0)" color="destructive" :to="`/runs?status=${RUN_STATUS.FAILED}`" :delta="periodMetrics?.run_counts_by_status?.failed ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
           <template #icon><XCircle class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard data-testid="dashboard-stats-card" :label="$t('views.DashboardView.idle')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.idle?.current, summary.run_counts_by_status?.idle ?? 0)" color="muted" to="/pipelines" :delta="periodMetrics?.run_counts_by_status?.idle ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
+        <StatCard data-testid="dashboard-stats-card-idle" :label="$t('views.DashboardView.idle')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.idle?.current, summary.run_counts_by_status?.idle ?? 0)" color="muted" to="/pipelines" :delta="periodMetrics?.run_counts_by_status?.idle ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
           <template #icon><PauseCircle class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
       </div>

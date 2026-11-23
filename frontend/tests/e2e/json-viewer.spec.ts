@@ -191,10 +191,10 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     })
 
     await page.goto('/runs/run-json-viewer')
-    await expect(page.getByTestId('json-viewer-copy')).toBeVisible()
+    await expect(page.locator('[data-testid^="json-viewer-copy-"]')).toBeVisible()
 
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-    await page.getByTestId('json-viewer-copy').click()
+    await page.locator('[data-testid^="json-viewer-copy-"]').click()
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())
     expect(clipboard).toContain('hello world')
   })
@@ -673,11 +673,11 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     })
 
     await page.goto('/runs/run-json-viewer')
-    await expect(page.getByTestId('json-viewer-copy')).toBeVisible()
+    await expect(page.locator('[data-testid^="json-viewer-copy-"]')).toBeVisible()
     await expect(page.getByTestId('json-viewer-string-truncated').first()).toBeVisible()
 
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-    await page.getByTestId('json-viewer-copy').click()
+    await page.locator('[data-testid^="json-viewer-copy-"]').click()
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())
     expect(clipboard).toContain(longText)
   })

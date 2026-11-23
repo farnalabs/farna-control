@@ -65,7 +65,7 @@
           :title="$t('views.MyProfileView.not_a_member_of_any_team')"
         />
         <div v-else class="space-y-2">
-          <div v-for="team in myTeams" :key="team.team_id" class="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2" data-testid="my-profile-my-team">
+          <div v-for="team in myTeams" :key="team.team_id" class="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2" :data-testid="`my-profile-my-team-${team.team_id}`">
             <span class="font-medium">{{ team.team_name }}</span>
             <span class="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary-text">{{ teamRoleLabel(team.role) }}</span>
           </div>

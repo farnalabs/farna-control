@@ -64,7 +64,7 @@ describe('MyProfileView', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain('My Teams')
-    const teamRows = wrapper.findAll('[data-testid="my-profile-my-team"]')
+    const teamRows = wrapper.findAll('[data-testid^="my-profile-my-team-"]')
     expect(teamRows.length).toBe(2)
     expect(teamRows[0].text()).toContain('Engineering')
     expect(teamRows[0].text()).toContain('Operator')

@@ -258,10 +258,10 @@ function tokenDefinedInStyleCss(styleCss: string, token: string): boolean {
 describe('JsonViewer override contract', () => {
   it('mounts with a testid wrapper and toolbar buttons', () => {
     const wrapper = mountSimple()
-    expect(wrapper.find('[data-testid="json-viewer"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="json-viewer-copy"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="json-viewer-expand-all"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="json-viewer-collapse-all"]').exists()).toBe(true)
+    expect(wrapper.find('.json-viewer').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="json-viewer-copy-"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="json-viewer-expand-all-"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="json-viewer-collapse-all-"]').exists()).toBe(true)
   })
 
   it('renders every dep class the override CSS depends on', () => {
@@ -451,7 +451,7 @@ describe('JsonViewer override contract', () => {
     const writeText = stubClipboard()
     const wrapper = mountLong()
 
-    await wrapper.get('[data-testid="json-viewer-copy"]').trigger('click')
+    await wrapper.get('[data-testid^="json-viewer-copy-"]').trigger('click')
 
     expect(writeText).toHaveBeenCalledTimes(1)
     const payload = writeText.mock.calls[0][0] as string

@@ -369,7 +369,7 @@ describe('DashboardView', () => {
       'py-6', 'text-sm', 'text-muted-foreground',
     ]))
     expect(empty.find('span.font-semibold').exists()).toBe(false)
-    expect(card.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(card.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
   })
 
   it('does not show team breakdown for non-enterprise plans', async () => {
@@ -667,7 +667,7 @@ describe('DashboardView', () => {
     // The chart itself renders a compact, deliberately sized empty state
     // instead of an empty sparkline stretched across the card.
     expect(evalCard.text()).toContain('No data')
-    expect(evalCard.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(evalCard.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     expect(evalCard.find('polyline').exists()).toBe(false)
     const emptyChart = evalCard.get('[aria-live="polite"]')
     expect(emptyChart.classes()).toContain('h-12')
@@ -717,7 +717,7 @@ describe('DashboardView', () => {
 
     const evalCard = wrapper.get('[data-testid="dashboard-eval-rate"]')
     expect(evalCard.text()).toContain('100%')
-    expect(evalCard.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(evalCard.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     expect(evalCard.get('[aria-live="polite"]').classes()).toContain('h-12')
     wrapper.unmount()
   })
@@ -729,7 +729,7 @@ describe('DashboardView', () => {
 
     const runActivity = wrapper.get('[data-testid="dashboard-run-activity"]')
     expect(runActivity.text()).toContain('No data yet')
-    expect(runActivity.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(runActivity.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'ErrorAlert' }).exists()).toBe(false)
 
     const emptyState = runActivity.get('[aria-live="polite"]')
@@ -802,7 +802,7 @@ describe('DashboardView', () => {
     // because the summary refetch swaps the whole tree through the skeleton.
     const allTimeEvalCard = wrapper.get('[data-testid="dashboard-eval-rate"]')
     expect(allTimeEvalCard.text()).toContain('82.5%')
-    expect(allTimeEvalCard.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(allTimeEvalCard.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     const spendSparkline = wrapper
       .get('[data-testid="dashboard-token-spend"]')
       .getComponent({ name: 'SparklineChart' })
@@ -1204,7 +1204,7 @@ describe('DashboardView', () => {
     // sparkline that has nothing to plot.
     const card = wrapper.get('[data-testid="dashboard-token-spend"]')
     expect(card.find('[data-testid="dashboard-token-spend-empty"]').exists()).toBe(true)
-    expect(card.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(card.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
   })
 
   it('Pipelines card renders neutral trend colour (muted) even when delta is positive', async () => {

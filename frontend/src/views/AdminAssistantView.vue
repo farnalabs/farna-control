@@ -374,7 +374,7 @@
                     class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors disabled:opacity-50"
                     :class="skill.active ? 'bg-success/10 text-success-text' : 'bg-muted text-muted-foreground'"
                     :disabled="skillToggling[skill.id]"
-                    data-testid="assistant-skill-toggle"
+                    :data-testid="`assistant-skill-toggle-${skill.id}`"
                     :aria-pressed="skill.active"
                     @click="toggleSkillActive(skill)"
                   >
@@ -391,7 +391,7 @@
                       class="rounded p-1 text-muted-foreground hover:bg-accent"
                       :aria-label="$t('views.AdminAssistantView.edit_skill')"
                       :title="$t('views.AdminAssistantView.edit_skill')"
-                      data-testid="assistant-skill-edit"
+                      :data-testid="`assistant-skill-edit-${skill.id}`"
                       @click="skillDialogRef?.openEdit(skill)"
                     >
                       <Pencil class="h-4 w-4" />
@@ -400,7 +400,7 @@
                       class="rounded p-1 text-destructive hover:bg-destructive/10"
                       :aria-label="$t('views.AdminAssistantView.delete_skill')"
                       :title="$t('components.assistant.AssistantSkillDialog.delete_skill')"
-                      data-testid="assistant-skill-delete"
+                      :data-testid="`assistant-skill-delete-${skill.id}`"
                       @click="skillDialogRef?.openDelete(skill)"
                     >
                       <Trash2 class="h-4 w-4" />

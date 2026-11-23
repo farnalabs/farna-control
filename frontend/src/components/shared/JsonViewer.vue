@@ -1,9 +1,9 @@
 <template>
-  <div class="json-viewer" data-testid="json-viewer">
+  <div class="json-viewer" :data-testid="`json-viewer-${viewerUid}`">
     <div v-if="showToolbar" class="mb-2 flex items-center gap-2">
       <button
         type="button"
-        data-testid="json-viewer-copy"
+        :data-testid="`json-viewer-copy-${viewerUid}`"
         class="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         :aria-label="t('components.JsonViewer.copy')"
         @click="copyValue"
@@ -12,7 +12,7 @@
       </button>
       <button
         type="button"
-        data-testid="json-viewer-expand-all"
+        :data-testid="`json-viewer-expand-all-${viewerUid}`"
         class="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         :aria-label="t('components.JsonViewer.expand_all')"
         @click="deepRef = 999"
@@ -21,7 +21,7 @@
       </button>
       <button
         type="button"
-        data-testid="json-viewer-collapse-all"
+        :data-testid="`json-viewer-collapse-all-${viewerUid}`"
         class="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         :aria-label="t('components.JsonViewer.collapse_all')"
         @click="deepRef = 1"
@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VueJsonPretty from 'vue-json-pretty'
 import 'vue-json-pretty/lib/styles.css'
@@ -119,6 +119,9 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+// FAR-2714: a page can render more than one viewer (e.g. /admin/system/config,
+// a run-output diff), so the root and its toolbar need per-instance ids.
+const viewerUid = useId()
 const copied = ref(false)
 const deepRef = ref(props.deep)
 

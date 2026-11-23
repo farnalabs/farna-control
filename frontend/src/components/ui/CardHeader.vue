@@ -25,14 +25,14 @@
         </p>
       </div>
     </div>
-    <div v-if="$slots.actions" data-testid="card-header-actions" class="actions-nowrap flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
+    <div v-if="$slots.actions" :data-testid="`card-header-actions-${headerUid}`" class="actions-nowrap flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
       <slot name="actions" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, useSlots } from 'vue'
+import { computed, useId, useSlots } from 'vue'
 
 const props = withDefaults(defineProps<{
   title?: string
@@ -48,6 +48,9 @@ const props = withDefaults(defineProps<{
 })
 
 const slots = useSlots()
+// FAR-2714: a page can render more than one CardHeader with actions, so the
+// actions wrapper needs a per-instance id for Playwright strict-mode getByTestId.
+const headerUid = useId()
 const hasHeaderContent = computed(() =>
   !!props.title || !!props.description || !!slots.actions || !!slots.leading
 )

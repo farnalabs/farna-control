@@ -313,7 +313,7 @@ describe('AdminAssistantView — save flows', () => {
     expect(skills.text()).toContain('deploy')
     expect(skills.text()).toContain('Active')
 
-    const toggle = wrapper.find('[data-testid="assistant-skill-toggle"]')
+    const toggle = wrapper.find('[data-testid^="assistant-skill-toggle-"]')
     await toggle.trigger('click')
     await flushPromises()
 
@@ -328,7 +328,7 @@ describe('AdminAssistantView — save flows', () => {
     const wrapper = await mountAssistant({ skills: [skill()] })
     vi.mocked(api.PUT).mockResolvedValue({ data: null, error: { detail: 'skill_locked' } } as any)
 
-    await wrapper.find('[data-testid="assistant-skill-toggle"]').trigger('click')
+    await wrapper.find('[data-testid^="assistant-skill-toggle-"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Failed to toggle skill')

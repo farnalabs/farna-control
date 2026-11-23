@@ -15,7 +15,7 @@
           <div
             class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors"
             :class="step === i + 1 ? 'bg-primary text-primary-foreground' : step > i + 1 ? 'bg-success/20 text-success-text' : 'bg-muted text-muted-foreground'"
-            data-testid="copy-wizard-step-indicator"
+            :data-testid="`copy-wizard-step-indicator-${i}`"
           >
             <Check v-if="step > i + 1" :size="14" aria-hidden="true" />
             <span v-else>{{ i + 1 }}</span>
@@ -50,7 +50,7 @@
               class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors"
               :class="visibilityFilter === f.value ? 'bg-primary text-primary-foreground border-primary' : 'border-input text-muted-foreground hover:bg-accent'"
               @click="visibilityFilter = f.value"
-              data-testid="copy-wizard-visibility-filter"
+              :data-testid="`copy-wizard-visibility-filter-${f.value}`"
             >
               {{ f.label }}
             </button>
