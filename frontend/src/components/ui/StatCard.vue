@@ -3,7 +3,7 @@
     :is="to ? 'router-link' : 'div'"
     :to="to"
     class="block"
-    :data-testid="dataTestId ?? 'dashboard-stats-card'"
+    :data-testid="dataTestId"
   >
     <BaseCard
       variant="bordered"

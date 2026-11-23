@@ -34,6 +34,7 @@
           padding="lg"
           :title="$t('views.CopyPipelineWizard.select_source_pipeline')"
           :description="$t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt')"
+          heading-level="h2"
         >
           <FilterBar class="mb-4"
             :search="{ placeholder: $t('views.CopyPipelineWizard.search_pipelines_by_name') }"
@@ -106,6 +107,7 @@
           padding="lg"
           class="mb-6"
           :title="$t('views.CopyPipelineWizard.copy_configuration')"
+          heading-level="h2"
         >
           <div class="space-y-4">
             <div>
@@ -209,6 +211,7 @@
           padding="lg"
           class="mb-6"
           :title="$t('views.CopyPipelineWizard.review_copy')"
+          heading-level="h2"
         >
           <div class="space-y-4">
             <div class="bg-muted rounded-lg p-4">

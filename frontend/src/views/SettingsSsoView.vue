@@ -20,6 +20,7 @@
           padding="lg"
           class="max-w-3xl"
           :title="$t('views.SettingsSsoView.new_sso_provider')"
+          heading-level="h2"
         >
           <SsoProviderForm
             :data="formData"

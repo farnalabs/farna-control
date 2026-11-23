@@ -41,7 +41,7 @@
     </BaseCard>
 
     <FeatureGate feature-name="team_rbac" show-disabled>
-      <DataCard padding="lg" :title="$t('views.MyProfileView.my_teams')">
+      <DataCard padding="lg" :title="$t('views.MyProfileView.my_teams')" heading-level="h2">
         <div v-if="myTeamsLoading" data-testid="my-profile-my-teams-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -78,6 +78,7 @@
       data-testid="my-profile-hitl-email-section"
       :title="$t('views.MyProfileView.hitl_email_alerts')"
       :description="$t('views.MyProfileView.hitl_email_alerts_description')"
+      heading-level="h2"
     >
 
       <div v-if="hitlPrefsLoading" data-testid="my-profile-hitl-email-loading">
@@ -159,7 +160,7 @@
       </div>
     </DataCard>
 
-    <DataCard padding="lg" :title="$t('views.MyProfileView.change_password')">
+    <DataCard padding="lg" :title="$t('views.MyProfileView.change_password')" heading-level="h2">
       <ChangePasswordForm />
     </DataCard>
   </div>

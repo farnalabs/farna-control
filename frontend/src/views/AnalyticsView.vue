@@ -56,7 +56,7 @@
         />
 
         <div v-else class="space-y-4">
-          <DataCard data-testid="analytics-overview-chart" :title="chartTitle">
+          <DataCard data-testid="analytics-overview-chart" :title="chartTitle" heading-level="h2">
             <template #headerActions>
               <button
                 type="button"

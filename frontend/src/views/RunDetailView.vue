@@ -340,6 +340,7 @@
         padding="lg"
         class="mb-6"
         :title="$t('views.RunDetailView.final_output')"
+        heading-level="h2"
       >
         <template #headerActions>
           <button

@@ -32,6 +32,7 @@
         v-if="editorMode === 'add'"
         padding="lg"
         :title="$t('views.AdminNodeCategoriesView.new_node_category')"
+        heading-level="h2"
       >
         <NodeCategoryEditor
           :category="null"
@@ -96,6 +97,7 @@
         v-if="editCategoryId"
         padding="lg"
         :title="$t('views.AdminNodeCategoriesView.edit_node_category')"
+        heading-level="h2"
       >
         <NodeCategoryEditor
           :category="editingCategory"

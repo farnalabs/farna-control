@@ -284,6 +284,28 @@ describe('CardHeader and DataCard', () => {
     expect(wrapper.find('h2').text()).toBe('Settings')
     expect(wrapper.find('h3').exists()).toBe(false)
   })
+
+  it('derives header, content and footer test ids from the card test id', () => {
+    const full = mount(DataCard, {
+      props: { title: 'Details', dataTestId: 'derived' },
+      slots: { default: '<p>Body</p>', footer: '<p>Footer</p>' },
+    })
+    const contentOnly = mount(DataCard, {
+      props: { dataTestId: 'derived' },
+      slots: { default: '<p>Body</p>' },
+    })
+    const empty = mount(DataCard, { props: { dataTestId: 'derived' } })
+
+    expect(full.find('[data-testid="derived-header"]').exists()).toBe(true)
+    expect(full.find('[data-testid="derived-content"]').exists()).toBe(true)
+    expect(full.find('[data-testid="derived-footer"]').exists()).toBe(true)
+    expect(contentOnly.find('[data-testid="derived-header"]').exists()).toBe(false)
+    expect(contentOnly.find('[data-testid="derived-content"]').exists()).toBe(true)
+    expect(contentOnly.find('[data-testid="derived-footer"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="derived-header"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="derived-content"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="derived-footer"]').exists()).toBe(false)
+  })
 })
 
 describe('CardContent, CardTable and CardSkeleton', () => {
@@ -460,12 +482,13 @@ describe('MetricCard', () => {
  })
 
 describe('StatCard', () => {
-  it('binds a custom test id and preserves the default', () => {
+  it('binds a custom test id and emits none by default', () => {
     const custom = mount(StatCard, { props: { label: 'Runs', value: 12, dataTestId: 'custom-stat' } })
     const fallback = mount(StatCard, { props: { label: 'Runs', value: 12 } })
 
     expect(custom.find('[data-testid="custom-stat"]').exists()).toBe(true)
-    expect(fallback.find('[data-testid="dashboard-stats-card"]').exists()).toBe(true)
+    expect(fallback.find('[data-testid="dashboard-stats-card"]').exists()).toBe(false)
+    expect(fallback.attributes('data-testid')).toBeUndefined()
   })
 
   it.each([

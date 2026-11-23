@@ -89,7 +89,7 @@
            shared v-tooltip affordance. The tooltip sits on the wrapping span
            because a disabled control swallows hover events, so a tooltip bound
            directly to it would never open. -->
-      <DataCard v-if="!isInstanceScope" :title="$t('views.AdminErrorDetailView.actions')">
+      <DataCard v-if="!isInstanceScope" :title="$t('views.AdminErrorDetailView.actions')" heading-level="h2">
         <p
           v-if="!canManageErrors"
           id="admin-error-status-admin-help"
@@ -174,7 +174,7 @@
         </div>
       </DataCard>
 
-      <DataCard v-if="sampleEvent" :title="$t('views.AdminErrorDetailView.message')">
+      <DataCard v-if="sampleEvent" :title="$t('views.AdminErrorDetailView.message')" heading-level="h2">
         <p class="mb-2 text-xs text-muted-foreground">
           {{ $t('views.AdminErrorDetailView.fingerprint') }}: <span class="font-mono">{{ shortId(group.fingerprint) }}</span>
         </p>
@@ -236,7 +236,7 @@
         </div>
       </DataCard>
 
-      <DataCard :title="$t('views.AdminErrorDetailView.raw_events', { count: eventsTotal })">
+      <DataCard :title="$t('views.AdminErrorDetailView.raw_events', { count: eventsTotal })" heading-level="h2">
         <div v-if="eventsLoading" class="py-2" data-testid="admin-error-detail-events-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->

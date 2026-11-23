@@ -4,6 +4,7 @@
     data-testid="determination-rerun"
     :title="$t('views.DeterminationView.rerun_title')"
     :description="$t('views.DeterminationView.rerun_hint')"
+    heading-level="h2"
   >
     <div class="space-y-5">
     <p

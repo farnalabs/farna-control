@@ -3,6 +3,7 @@
     as="section"
     data-testid="determination-review"
     :title="$t('views.DeterminationView.review_title')"
+    heading-level="h2"
   >
     <div class="space-y-5">
     <section

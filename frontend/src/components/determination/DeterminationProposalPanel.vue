@@ -3,6 +3,7 @@
     as="section"
     data-testid="determination-proposal"
     :title="$t('views.DeterminationView.proposal_title')"
+    heading-level="h2"
   >
     <template v-if="proposal" #headerActions>
       <span class="text-xs text-muted-foreground">

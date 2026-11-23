@@ -18,6 +18,7 @@
         padding="lg"
         class="max-w-3xl"
         :title="$t('views.SettingsTeamsView.new_team')"
+        heading-level="h2"
       >
         <div class="space-y-4">
           <div>
@@ -60,7 +61,7 @@
       />
 
       <div class="space-y-3">
-        <BaseCard v-for="team in teams" :key="team.id" pressable padding="none">
+        <BaseCard v-for="team in teams" :key="team.id" padding="none">
           <div class="flex items-start gap-3 p-4 max-sm:flex-wrap sm:items-center" :class="{ 'border-b': expandedTeamId === team.id }">
             <button
               type="button"

@@ -4,6 +4,7 @@
     data-testid="determination-comparison"
     :title="$t('views.DeterminationView.comparison_title')"
     :description="$t('views.DeterminationView.comparison_hint')"
+    heading-level="h2"
   >
     <div class="space-y-5">
     <p

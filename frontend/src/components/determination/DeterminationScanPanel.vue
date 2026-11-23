@@ -3,6 +3,7 @@
     as="section"
     data-testid="determination-scan"
     :title="$t('views.DeterminationView.scan_title')"
+    heading-level="h2"
   >
     <template v-if="scan" #headerActions>
       <span class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
