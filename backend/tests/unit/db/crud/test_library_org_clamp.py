@@ -295,17 +295,17 @@ async def test_list_contribution_versions_passes_the_callers_org() -> None:
     org_id = uuid.uuid4()
     group_id = uuid.uuid4()
     prim = _primitive(_ORG_A, "Contribution", primitive_type="test_fixture", version_group_id=group_id)
+    resolver = AsyncMock(return_value=prim)
     version_lister = AsyncMock(return_value=[prim])
-    seed_resolver = AsyncMock(return_value=prim)
 
     with (
         patch(f"{_SERVICE}.set_rls_org", new=AsyncMock()),
-        patch(f"{_SERVICE}.get_primitive", new=seed_resolver),
+        patch(f"{_SERVICE}.get_primitive", new=resolver),
         patch(f"{_SERVICE}.list_primitives_by_version_group", new=version_lister),
     ):
         await list_contribution_versions(_service_session(), org_id, prim.id)
 
-    assert seed_resolver.await_args.kwargs["explicit_org_filter"] == org_id
+    assert resolver.await_args.kwargs["explicit_org_filter"] == org_id
     assert version_lister.await_args.kwargs["org_id"] == org_id
     assert version_lister.await_args.args[1] == group_id
 
