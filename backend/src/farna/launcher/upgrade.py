@@ -1862,8 +1862,21 @@ def check_no_downgrade(
     answer instead - and if BOTH read unknown (or nothing at all), the
     check REFUSES blind, never guesses. The refusal carries the restore
     guidance wording.
+
+    An UNREADABLE target tree is a different case: with no target revisions
+    nothing can be compared, and every live revision would trivially look
+    "ahead", so refusing would abort a legitimate install with a misleading
+    DOWNGRADE. That is undecidable, not a downgrade: log it and proceed -
+    the same reading :func:`_pending_for_target` already applies to a bundle
+    whose heads cannot be read (it takes the snapshot rather than deciding).
     """
     target_heads = _bundle_alembic_revisions(bundle_dir)
+    if not target_heads:
+        _log.warning(
+            "upgrade.downgrade_check_undecidable bundle=%s reason=target_migrations_unreadable (proceeding without the downgrade refusal; the boot's own alignment guard is the backstop)",
+            bundle_dir,
+        )
+        return
     db_heads = list(current_heads)
     if snapshot_dir is not None and (not db_heads or "unknown" in db_heads):
         db_heads = _snapshot_schema_versions(snapshot_dir)
@@ -2329,11 +2342,14 @@ def _run_upgrade_preflight(
 def _refuse_a_live_downgrade(db_heads: list[str], bundle_dir: Path) -> None:
     """The FAR-2659 refusal on the LIVE probe, BEFORE any snapshot is written.
 
-    Only decidable when the probe returned usable revisions. An unknown or
-    empty probe is not a licence to refuse here: the decisive check re-runs
-    after the snapshot (whose recorded heads are the documented fallback), and
-    refusing blind at this point would turn one transient probe failure into a
-    hard upgrade failure that never took a recovery point.
+    Only decidable when the probe returned usable revisions AND the target
+    tree's revisions can be read; the readability half is enforced inside
+    :func:`check_no_downgrade` (an unreadable bundle is undecidable, never a
+    refusal). An unknown or empty probe is not a licence to refuse here either:
+    the decisive check re-runs after the snapshot (whose recorded heads are the
+    documented fallback), and refusing blind at this point would turn one
+    transient probe failure into a hard upgrade failure that never took a
+    recovery point.
     """
     if not db_heads or "unknown" in db_heads:
         return

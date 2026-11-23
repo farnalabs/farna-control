@@ -5,6 +5,7 @@ Tests packaging of the self-hosted production compose stack into a release asset
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 import sys
@@ -192,6 +193,7 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
             "quickstart.md",
             "init-env.sh",
             "compose-restore.sh",
+            "compose-rollback.sh",
             "SHA256SUMS",
         }
     actual_files = {p.name for p in extracted_dir.iterdir()}
@@ -200,14 +202,14 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
     # Verify SHA256SUMS integrity over the files
     sums_file = extracted_dir / "SHA256SUMS"
     sums_lines = sums_file.read_text(encoding="utf-8").strip().splitlines()
-    assert len(sums_lines) == 6
+    assert len(sums_lines) == 7
 
     sums_dict: dict[str, str] = {}
     for line in sums_lines:
         digest, filename = line.split()
         sums_dict[filename] = digest
 
-    for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md", "init-env.sh", "compose-restore.sh"):
+    for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md", "init-env.sh", "compose-restore.sh", "compose-rollback.sh"):
         assert name in sums_dict
         file_bytes = (extracted_dir / name).read_bytes()
         actual_digest = hashlib.sha256(file_bytes).hexdigest()
@@ -382,6 +384,7 @@ def test_bundled_init_env_ships_executable(tmp_path: Path):
 
     assert members["init-env.sh"].mode & 0o111, "init-env.sh must be executable in the tarball"
     assert members["compose-restore.sh"].mode & 0o111, "compose-restore.sh must be executable in the tarball"
+    assert members["compose-rollback.sh"].mode & 0o111, "compose-rollback.sh must be executable in the tarball"
     for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md"):
         assert not members[name].mode & 0o111, f"{name} should not be executable"
 
@@ -438,3 +441,89 @@ def test_bundled_compose_is_standalone_and_dropped_the_source_build():
     # Every image is either a pinned upstream major or the immutable Modulo tag.
     assert compose["services"]["modulo"]["image"].startswith("ghcr.io/farnalabs/farna-control:")
     assert not compose["services"]["modulo"]["image"].endswith(":latest")
+
+
+# ---------------------------------------------------------------------------
+# The printed rollback instruction must actually roll back (FAR-2667)
+#
+# `TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d
+# modulo` cannot work on the SHIPPED bundle: transform_compose_content rewrites
+# the image line to a LITERAL release tag, so no ${TAG} survives to substitute
+# (`scripts/render_validation_compose.py` exists for the same reason). The
+# instruction the CLI and compose-restore.sh print is
+# `./compose-rollback.sh <previous-version>`, so these tests run the REAL
+# packaging transform and assert the mechanism that command relies on - a
+# shipped helper whose override moves the packaged image - against the
+# transformed artifact.
+# ---------------------------------------------------------------------------
+
+_ROLLBACK_IMAGE_PREFIX = "ghcr.io/farnalabs/farna-control:"
+
+
+def _rollback_override(script: str, previous: str) -> dict:
+    """The image override the packaged rollback helper writes, as YAML.
+
+    Read from the helper itself rather than a copy of its text: the heredoc IS
+    the mechanism under test, so a helper that stopped overriding
+    `services.<app>.image` fails this test instead of leaving a stale mirror
+    passing.
+    """
+    marker = 'cat > "$override" <<EOF\n'
+    try:
+        start = script.index(marker) + len(marker)
+        end = script.index("\nEOF\n", start)
+    except ValueError as exc:
+        raise AssertionError('compose-rollback.sh must write its compose override as a `cat > "$override" <<EOF` heredoc') from exc
+    block = script[start:end].replace("${app_service}", "modulo").replace("${tag}", previous)
+    parsed = yaml.safe_load(block)
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def test_the_packaged_rollback_helper_moves_the_pinned_image() -> None:
+    """Merging the shipped helper's override over the transformed file wins.
+
+    This is the assertion the old printed command could not pass: the packaged
+    image is a literal tag, so nothing but an explicit image override starts a
+    different release.
+    """
+    files = _bundled_files()
+    packaged = yaml.safe_load(files["docker-compose.prod.yml"])
+    this_release = packaged["services"]["modulo"]["image"]
+    assert "${" not in this_release, "the packaged image must be a literal, immutable tag"
+
+    previous = "v0.3.0"
+    override = _rollback_override(files["compose-rollback.sh"], previous)
+    merged = copy.deepcopy(packaged)
+    # Compose merges single-value keys (image) from a later -f file, which is
+    # the mechanism the helper relies on.
+    merged["services"]["modulo"].update(override["services"]["modulo"])
+
+    assert merged["services"]["modulo"]["image"] == f"{_ROLLBACK_IMAGE_PREFIX}{previous}"
+    assert merged["services"]["modulo"]["image"] != this_release
+
+
+def test_the_printed_start_command_names_the_shipped_rollback_helper() -> None:
+    """The instruction the CLI prints must point at a file the bundle ships.
+
+    Ties the printed string to the artifact: if the CLI starts naming a
+    different helper, this fails instead of shipping an instruction the bundle
+    does not contain.
+    """
+    from farna.cli.backup import _RestoreOptions, _start_command
+
+    opts = _RestoreOptions(
+        backup_dir=Path("archive"),
+        db_url=None,
+        app_db_url=None,
+        yes=True,
+        previous_fernet_key=None,
+        dry_run=False,
+        data_dir=None,
+        replace_cluster=False,
+        no_safety_dump=False,
+    )
+    command = _start_command(opts)
+    helper = command.split()[0]
+    assert helper == "./compose-rollback.sh"
+    assert helper.removeprefix("./") in _bundled_files()

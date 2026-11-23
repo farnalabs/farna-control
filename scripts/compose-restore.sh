@@ -114,8 +114,16 @@ if [ ! -f "$compose_file" ]; then
 fi
 
 print_start_command() {
+  # compose-rollback.sh, NEVER `TAG=<previous> docker compose up -d`: the
+  # packaged compose hard-pins a literal image tag (so the file can carry a
+  # checksum), and TAG only sets FARNA_CONTROL_VERSION - so re-running compose
+  # would restart the release that just failed. The helper merges a one-line
+  # image override for that invocation only. `dirname "$0"` resolves both
+  # layouts: `./compose-rollback.sh` in the bundle, `scripts/compose-rollback.sh`
+  # in the repo.
+  rollback_helper="$(dirname "$0")/compose-rollback.sh"
   printf '\nStart the previous release with:\n'
-  printf '  TAG=<previous-version> docker compose -f %s up -d %s\n' "$compose_file" "$app_service"
+  printf '  %s <previous-version>   (e.g. %s v0.3.0)\n' "$rollback_helper" "$rollback_helper"
   printf 'No automatic restart was performed.\n'
 }
 

@@ -15,7 +15,11 @@ pin what makes the recovery work:
   (``./compose-restore.sh``, not ``scripts/compose-restore.sh``);
 * the installer and the compose/supervisor boots cannot bypass the shared
   migration-pending check, and the Fly boot does not pretend to take a snapshot
-  it can never take (its release stage migrates before machines boot).
+  it never takes (its normal migration is the release stage, and its boot-time
+  ``alembic upgrade heads`` fallback is a recorded, snapshot-less known gap).
+* the printed way back from a failed compose upgrade names a helper the bundle
+  actually ships, because the packaged compose pins a literal image tag and
+  ``TAG=<previous>`` cannot move it.
 """
 
 from __future__ import annotations
@@ -117,6 +121,23 @@ def test_entrypoints_print_the_shipped_helper_path(relative_path: str) -> None:
     assert "scripts/compose-restore.sh" not in text, f"{relative_path} must not print a path the shipped bundle does not contain"
 
 
+def test_the_printed_start_command_names_the_shipped_rollback_helper() -> None:
+    """FAR-2667: the printed way back must actually start the previous release.
+
+    The packaged compose pins a LITERAL release tag (so the file can carry a
+    checksum), which means ``TAG=<previous-version> docker compose ... up -d``
+    only sets ``FARNA_CONTROL_VERSION`` and restarts the release that just
+    failed. The helper must print ``compose-rollback.sh``, which the packager
+    ships beside it and which merges a one-line image override.
+    """
+    executable = _executable()
+    # The helper is resolved beside THIS script, so it names the file the bundle
+    # actually contains in both layouts (./ and scripts/).
+    assert 'rollback_helper="$(dirname "$0")/compose-rollback.sh"' in executable
+    assert "<previous-version>" in executable
+    assert "TAG=<previous-version>" not in executable
+
+
 def test_supervisor_snapshot_is_gated_on_the_snapshot_dir() -> None:
     """A non-compose all-in-one boot without a snapshot dir must not require
     DATABASE_ADMIN_URL on every (pristine / already-at-head) boot."""
@@ -144,11 +165,14 @@ class TestTheInstallerCannotBypassThePendingCheck:
 class TestTheFlyBootCannotTakeTheSnapshot:
     """FAR-2667: Fly is the EXPLICITLY unsupported path, not a dead opt-in.
 
-    ``deploy/fly/release.sh`` is the single migrator and runs before any
-    machine boots, so by the time ``deploy/fly/entrypoint.sh`` runs there is no
-    pending migration and a snapshot step there could never fire. The boot used
-    to carry a ``FARNA_CONTROL_SNAPSHOT_DIR`` opt-in that the docs described as
-    working; it could not, so it is gone and the docs say Fly is unsupported.
+    ``deploy/fly/release.sh`` is the NORMAL migrator and runs before any machine
+    boots, so in the normal path the boot entrypoint finds the schema at head.
+    That is NOT the same as "this file never migrates": the entrypoint keeps an
+    ``alembic upgrade heads`` fallback (also entered on any probe error), and
+    that migration path takes no snapshot - the known gap recorded in
+    ``docs/product-map/infra/backup-restore.md``. A
+    ``FARNA_CONTROL_SNAPSHOT_DIR`` opt-in that the docs described as working
+    could not fire on the normal path, so it is gone.
     """
 
     def test_the_fly_boot_carries_no_snapshot_step_or_opt_in(self) -> None:
@@ -160,3 +184,15 @@ class TestTheFlyBootCannotTakeTheSnapshot:
         text = (_REPO_ROOT / "deploy" / "fly" / "release.sh").read_text(encoding="utf-8")
         assert "alembic upgrade heads" in text
         assert "farna.db.alignment" in text
+
+    def test_the_unguarded_boot_fallback_still_exists(self) -> None:
+        """The docs' Known Gap is only true while this fallback exists.
+
+        If the fallback is ever removed - or given a snapshot - update this pin
+        AND the Known Gaps entry in docs/product-map/infra/backup-restore.md
+        together; the docs must not claim the boot path is unreachable while it
+        is reachable, nor keep the gap once it is closed.
+        """
+        text = (_REPO_ROOT / "deploy" / "fly" / "entrypoint.sh").read_text(encoding="utf-8")
+        assert "alembic upgrade heads" in text
+        assert "for attempt in $(seq 1 10)" in text

@@ -2408,15 +2408,18 @@ class TestRestoreStartGuidance:
         assert "still stopped" in out
         assert "No automatic restart was performed" in out
 
-    def test_container_start_command_is_the_compose_up(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_container_start_command_is_the_rollback_helper(self, capsys: pytest.CaptureFixture[str]) -> None:
         from farna.cli.backup import _print_start_guidance
 
         _print_start_guidance(self._options(data_dir=None), stopped=False)
         out = capsys.readouterr().out
-        # The SHIPPED bundle layout: docker-compose.prod.yml at the top level,
-        # and TAG is mandatory in it (the image tag is ${TAG:?}) so a start
-        # without it re-deploys the release that just failed.
-        assert "TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo" in out
+        # The SHIPPED bundle layout (docker-compose.prod.yml at the top level).
+        # `TAG=<previous> docker compose ... up -d` does NOT roll back there: the
+        # packager rewrites the image line to a LITERAL release tag, so TAG only
+        # sets FARNA_CONTROL_VERSION and the command restarted the release that
+        # just failed. compose-rollback.sh merges a one-line image override.
+        assert "./compose-rollback.sh <previous-version>" in out
+        assert "TAG=<previous-version> docker compose" not in out
         assert "No automatic restart was performed" in out
 
     def test_stop_writers_is_a_no_op_without_a_live_holder(self, tmp_path: Path) -> None:

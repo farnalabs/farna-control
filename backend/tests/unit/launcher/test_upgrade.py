@@ -674,6 +674,13 @@ def test_perform_upgrade_downgrade_refuses(tmp_path, monkeypatch, patched_trust_
         return _upgrade_dump_seam(data_dir, recorded_heads=["head-the-target-never-shipped"])(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
+    # The target bundle's migrations tree must be READABLE for this refusal to be
+    # a downgrade decision: the fixture bundle ships an EMPTY migrations dir, and
+    # an unreadable target set makes the check UNDECIDABLE (proceed), not a
+    # refusal. Pin the target's revisions so the refusal comes from the recorded
+    # head being absent from a real target set - the behaviour this test claims
+    # to pin - rather than from "an empty target set marks everything ahead".
+    monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"head-the-target-ships"})
     with pytest.raises(upgrade_module.UpgradeError, match="DOWNGRADE"):
         upgrade_module.perform_upgrade(
             data_dir,
@@ -1581,6 +1588,29 @@ class TestCheckNoDowngradeExtended:
         snapshot_dir.mkdir()
         (snapshot_dir / "backup-info.json").write_text(json.dumps({"schema_versions": ["abc123"]}), encoding="utf-8")
         assert upgrade_module.check_no_downgrade([], snapshot_dir, bundle_dir) is None
+
+    def test_an_unreadable_target_tree_is_undecidable_not_a_downgrade(self, tmp_path, caplog):
+        """MAJOR: no target revisions must not fabricate a DOWNGRADE refusal.
+
+        With an empty target set every live revision compares as "ahead", so the
+        pre-fix code refused a LEGITIMATE install with the DOWNGRADE message and
+        never reached the snapshot. `_pending_for_target` already treats the same
+        unreadable bundle as undecidable and takes the snapshot; the guard must
+        agree - undecidable means proceed, logged.
+
+        The bundle here has no migrations tree at all, which is also the shape
+        when `walk_revisions` throws on a migration the old runtime cannot parse
+        (`_bundle_alembic_revisions` returns an empty set for both).
+        """
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        with caplog.at_level(logging.WARNING, logger="farna.launcher.upgrade"):
+            assert upgrade_module.check_no_downgrade(["abc123"], None, bundle_dir) is None
+            # The pre-snapshot refusal shares the decision, so it must agree.
+            assert upgrade_module._refuse_a_live_downgrade(["abc123"], bundle_dir) is None
+
+        undecidable = [record.getMessage() for record in caplog.records if "downgrade_check_undecidable" in record.getMessage()]
+        assert undecidable
 
 
 class TestSnapshotSchemaVersions:

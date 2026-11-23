@@ -6,6 +6,9 @@ Bundles:
 - docker-compose.yml (identical copy for direct `docker compose up -d`)
 - .env.example (working evaluation environment configuration)
 - quickstart.md (getting started instructions)
+- init-env.sh (generates the required secrets)
+- compose-restore.sh (verified snapshot restore; leaves the stack stopped)
+- compose-rollback.sh (starts the previous release, overriding the pinned image)
 - SHA256SUMS (checksums over the packaged files)
 
 Produces:
@@ -28,6 +31,7 @@ _GIT_SHA_PATTERN = re.compile(r"^[\da-fA-F]{7,40}$", re.ASCII)
 _SEMVER_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(-[a-zA-Z\d.]+)?$", re.ASCII)
 _COMPOSE_FILENAME = "docker-compose.prod.yml"
 _COMPOSE_RESTORE_FILENAME = "compose-restore.sh"
+_COMPOSE_ROLLBACK_FILENAME = "compose-rollback.sh"
 
 
 def validate_release_tag(tag: str) -> str:
@@ -171,13 +175,19 @@ records the database's current schema revision (the recovery point). A snapshot
 from an older schema is pruned once it is neither of the two newest nor that
 current-schema recovery point.
 
-If the new release fails after migrating, restore the snapshot and start the
-previous release:
+If the new release fails after migrating, restore the snapshot and then start
+the previous release:
 
 ```bash
 ./compose-restore.sh --confirm /backups/<snapshot-printed-by-the-upgrade>
-TAG=<previous-version> docker compose up -d modulo
+./compose-rollback.sh <previous-version>
 ```
+
+This bundle's `docker-compose.prod.yml` pins the image to *this* release, so
+`TAG=<previous-version> docker compose up -d` does **not** move it (`TAG` only
+labels the snapshot directory name). `compose-rollback.sh` starts the previous
+release through a one-off compose override, leaving the pinned file and its
+checksum untouched.
 
 `compose-restore.sh` requires the explicit `--confirm` argument. It then
 verifies the snapshot's manifest and checksums in a one-off container, refuses
@@ -355,6 +365,13 @@ def build_compose_release(
     if not restore_helper.is_file():
         raise FileNotFoundError(f"Compose restore helper not found: {restore_helper}")
 
+    # FAR-2667: and the way BACK to the previous image ships too. The packaged
+    # compose pins a literal image tag, so `TAG=` cannot move it; the helper is
+    # the only instruction that actually starts the previous release.
+    rollback_helper = repo_root / "scripts" / _COMPOSE_ROLLBACK_FILENAME
+    if not rollback_helper.is_file():
+        raise FileNotFoundError(f"Compose rollback helper not found: {rollback_helper}")
+
     # Prepare file bytes map for tarball
     files_to_pack: dict[str, bytes] = {
         _COMPOSE_FILENAME: compose_transformed.encode("utf-8"),
@@ -363,10 +380,11 @@ def build_compose_release(
         "quickstart.md": quickstart_content.encode("utf-8"),
         "init-env.sh": _INIT_ENV_SH.encode("utf-8"),
         _COMPOSE_RESTORE_FILENAME: restore_helper.read_bytes(),
+        _COMPOSE_ROLLBACK_FILENAME: rollback_helper.read_bytes(),
     }
-    # These two are meant to be executed by the operator, so they ship 0755;
+    # These are meant to be executed by the operator, so they ship 0755;
     # everything else is read-only data.
-    executable = frozenset({"init-env.sh", _COMPOSE_RESTORE_FILENAME})
+    executable = frozenset({"init-env.sh", _COMPOSE_RESTORE_FILENAME, _COMPOSE_ROLLBACK_FILENAME})
 
     # Compute SHA256SUMS over the files
     sums_lines: list[str] = []

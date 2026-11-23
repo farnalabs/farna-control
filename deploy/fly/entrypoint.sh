@@ -190,14 +190,18 @@ echo "=== Running DB migrations ==="
 python3 -m farna.db.alignment
 
 # FAR-2667: this boot takes NO pre-upgrade snapshot, deliberately. The Fly
-# [release] command (deploy/fly/release.sh) is the single migrator and runs
-# BEFORE any machine boots, so by the time this entrypoint runs the schema is
-# already migrated and a "migration pending" probe here is always False - a
-# snapshot step in this file could never fire. Fly is therefore the documented
-# exception to "every upgrade path keeps a recovery point": take an
-# out-of-band backup (farna-control backup, or pg_dump) before a
-# schema-changing deploy. Do not re-add an opt-in here without moving the
-# snapshot into release.sh, where the migration actually happens.
+# [release] command (deploy/fly/release.sh) is the NORMAL migrator and runs
+# BEFORE any machine boots, so in the normal path this entrypoint finds the
+# schema at head and skips the migration work below. That is NOT the same as
+# "this file never migrates": the fallback loop below runs
+# `alembic upgrade heads` when the at-head probe says the database is behind -
+# and, because that probe is fail-safe, on ANY probe error - and that migration
+# path is NOT snapshot-protected. It stays a KNOWN GAP (see
+# docs/product-map/infra/backup-restore.md), so Fly is the documented exception
+# to "every upgrade path keeps a recovery point": take an out-of-band backup
+# (farna-control backup, or pg_dump) before a schema-changing deploy. Do not
+# re-add an opt-in here without moving the snapshot into release.sh, where the
+# normal migration happens.
 
 # The Fly [release] command (release.sh) now owns migrations (ONCE per deploy BEFORE machines
 # roll out). This boot path is a FAST-PATH SKIP + FALLBACK: when the DB is already at head,
@@ -537,7 +541,7 @@ PY
 
     echo "=== Starting uvicorn ==="
     uvicorn farna.api.main:app \
-        --host 0.0.0.0 --port ${PORT:-8000} \
+        --host 0.0.0.0 --port "${PORT:-8000}" \
         --proxy-headers \
         --timeout-keep-alive 30 \
         --timeout-graceful-shutdown 30 \

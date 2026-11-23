@@ -11,6 +11,7 @@ code:
   - scripts/backup.py
   - scripts/restore.py
   - scripts/compose-restore.sh
+  - scripts/compose-rollback.sh
   - scripts/backup-prune.py
   - scripts/verify_backup_restore.py
   - .github/workflows/backup-restore-nightly.yml
@@ -267,13 +268,16 @@ operator-facing contract lives in `docs/operations/backup.md`.
       bundle's script heads) so an already-migrated-ahead database is still
       detected (`launcher/upgrade.py::_require_existing_snapshot`,
       `live_database_revisions`; `test_upgrade_skip_backup.py`).
-- [x] Every upgrade path that CAN take the snapshot does, through the same
-      helper: the compose entrypoint and the supervisor entrypoint call
-      `farna.launcher.upgrade` between the alignment guard and the migrations.
-      Fly cannot — its `[release]` command is the single migrator and runs
-      before any machine boots, so the boot-time pending probe is always false.
-      Fly is the documented exception, with no opt-in that cannot fire
-      (`backend/entrypoint.sh`, `deploy/supervisor/entrypoint.sh`,
+- [x] Every upgrade path whose NORMAL migration runs where a snapshot can be
+      taken does, through the same helper: the compose entrypoint and the
+      supervisor entrypoint call `farna.launcher.upgrade` between the alignment
+      guard and the migrations. Fly cannot — its normal migration is the
+      `[release]` stage, which runs before any machine boots and takes no
+      snapshot. Its boot entrypoint still carries an `alembic upgrade heads`
+      fallback (also entered on any probe error), and THAT migration path is
+      unguarded, so it is recorded as a known gap below rather than described
+      as impossible (`backend/entrypoint.sh`,
+      `deploy/supervisor/entrypoint.sh`,
       `test_alignment_entrypoints.py::test_entrypoint_orders_guard_snapshot_migrate`,
       `test_compose_restore_wiring.py::TestTheFlyBootCannotTakeTheSnapshot`).
 - [x] The compose release bundle ships `compose-restore.sh` — the one documented
@@ -294,12 +298,18 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## Known Gaps
 - **Fly.io takes no pre-upgrade snapshot, and there is no opt-in.** The Fly
-  `[release]` command (`deploy/fly/release.sh`) migrates before any machine
-  boots, so the boot entrypoint's pending probe is always false and a snapshot
-  there could never fire. The unsupported opt-in was removed rather than left
-  documented-but-dead. Fly is the documented exception to "every upgrade path
-  keeps a recovery point", and a Fly operator must take an out-of-band backup
-  before a schema-changing deploy.
+  `[release]` command (`deploy/fly/release.sh`) is the NORMAL migrator and runs
+  before any machine boots, so in the normal path the boot entrypoint finds the
+  schema at head. A boot-time migration path still exists and is NOT
+  snapshot-protected: `deploy/fly/entrypoint.sh` keeps a 10-attempt
+  `alembic upgrade heads` fallback that runs when its at-head probe reports the
+  database behind — and, because that probe is fail-safe, on any probe error. A
+  schema change applied there has no recovery point. Fly is therefore the
+  documented exception to "every upgrade path keeps a recovery point", and a Fly
+  operator must take an out-of-band backup before a schema-changing deploy.
+  Closing the gap means moving the snapshot into the release stage, where the
+  normal migration happens. The unsupported `FARNA_CONTROL_SNAPSHOT_DIR` opt-in
+  was removed rather than left documented-but-dead.
 - The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) does not yet
   rehearse the snapshot-restore leg (restore the pre-upgrade snapshot, then
   start the previous image); its rollback leg currently only re-points the
@@ -323,6 +333,19 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## QA History
 
+- 2026-11-23 (FAR-2667 fifth review round): the printed compose rollback command
+  did not roll back — the packaged bundle rewrites the image line to a literal
+  release tag, so `TAG=<previous-version> docker compose up -d` only set
+  `FARNA_CONTROL_VERSION` and restarted the failed release. The instruction is
+  now `compose-rollback.sh <previous-version>`, which ships in the bundle and
+  merges a one-line image override (pinned by a test that runs the real
+  packaging transform). Also: `check_no_downgrade` treated an unreadable target
+  migrations tree as "every live revision is ahead" and refused a legitimate
+  install with a misleading DOWNGRADE; it is now undecidable-and-proceeds, in
+  line with `_pending_for_target`. And the Fly docs overstated the fix: the
+  release stage is the normal migrator, but the boot entrypoint's 10-attempt
+  `alembic upgrade heads` fallback still exists and is not snapshot-protected,
+  so that stays a known gap.
 - 2026-11-23 (FAR-2667 fourth review round): the POSIX-only upgrade tests were
   faking `pre_upgrade_dump` without the `target_heads` the production flow now
   passes, so the full-flow, poisoned-artifact, matrix and disk-preflight tests

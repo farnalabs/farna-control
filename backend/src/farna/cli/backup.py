@@ -758,18 +758,23 @@ def _start_command(opts: _RestoreOptions) -> str:
 
     The compose form is written for the layout the operator is actually in: the
     SHIPPED bundle (``scripts/package_compose_release.py``), where
-    ``docker-compose.prod.yml`` is a top-level file beside ``compose-restore.sh``
-    - not the repo's ``deploy/compose/`` path, which does not exist in a bundle.
+    ``docker-compose.prod.yml`` is a top-level file and ``compose-rollback.sh``
+    sits beside it - not the repo's ``deploy/compose/`` path, which does not
+    exist in a bundle.
 
-    ``TAG`` is mandatory: the bundle's compose file pins
-    ``image: ghcr.io/farnalabs/farna-control:${TAG:?}``, so re-running without it
-    (or with the version that just failed) re-deploys that release. The
-    placeholder matches ``scripts/compose-restore.sh``'s ``print_start_command``
-    so both recovery paths tell the operator the same thing.
+    ``TAG=`` is NOT the mechanism: the bundle's compose file hard-pins
+    ``image: ghcr.io/farnalabs/farna-control:<release>`` (a literal tag, so the
+    file can carry a checksum), and ``TAG`` only sets ``FARNA_CONTROL_VERSION``.
+    Printing ``TAG=<previous> docker compose -f ... up -d`` would therefore
+    restart the release that just failed. ``compose-rollback.sh`` merges a
+    one-line image override instead, which is what actually starts the previous
+    release. The helper name matches ``scripts/compose-restore.sh``'s
+    ``print_start_command`` so both recovery paths tell the operator the same
+    thing.
     """
     if opts.data_dir is not None:
         return f"farna-control start --data-dir {opts.data_dir}"
-    return "TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo"
+    return "./compose-rollback.sh <previous-version>"
 
 
 def _print_start_guidance(opts: _RestoreOptions, *, stopped: bool, failed: bool = False) -> None:

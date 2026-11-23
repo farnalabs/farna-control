@@ -315,8 +315,14 @@ destroys:
    stack:
 
 ```bash
-TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d modulo
+./compose-rollback.sh <previous-version>
 ```
+
+The bundle's `docker-compose.prod.yml` pins the image to a literal release tag
+(so the file can carry a `SHA256SUMS` entry), which is why `TAG=<previous>`
+`docker compose up -d` does not start anything different — `TAG` only sets
+`FARNA_CONTROL_VERSION`. `compose-rollback.sh` merges a one-line image override
+for that one invocation and leaves the pinned file, and its checksum, untouched.
 
 Start the previous release only after reading the restore output. Rolling the
 database backwards (`alembic downgrade`) is not supported; the snapshot is the
@@ -334,14 +340,23 @@ a disposable host by hand and record the evidence.
 ### Fly.io
 
 **Fly takes no pre-upgrade snapshot, and there is no switch to enable one.**
-The Fly `[release]` command (`deploy/fly/release.sh`) is the single migrator: it
+The Fly `[release]` command (`deploy/fly/release.sh`) is the normal migrator: it
 runs once per deploy, before any machine boots, and applies the migrations
-there. By the time a machine's boot entrypoint (`deploy/fly/entrypoint.sh`)
-runs, the schema is already migrated, so a "migration pending" probe at boot is
-always false and a snapshot step at boot could never fire. Fly is therefore the
-documented exception to "every upgrade path keeps a recovery point", and a
-schema-changing Fly deploy needs an out-of-band `farna-control backup` (or
-`pg_dump`) taken before you deploy.
+there. In the normal path the boot entrypoint (`deploy/fly/entrypoint.sh`)
+therefore finds the schema already at head and skips its migration work.
+
+A boot-time migration path still exists, though, and it takes no snapshot. The
+entrypoint keeps a 10-attempt `alembic upgrade heads` fallback that runs
+whenever its at-head probe reports the database behind — and, because that
+probe is fail-safe, on ANY probe error. When that fallback applies a schema
+change it does so unguarded, so Fly is still the documented exception to "every
+upgrade path keeps a recovery point": a schema-changing Fly deploy needs an
+out-of-band `farna-control backup` (or `pg_dump`) taken before you deploy. That
+remains a known gap (see
+[`docs/product-map/infra/backup-restore.md`](./product-map/infra/backup-restore.md)).
+Closing it means moving the snapshot into the release stage, where the normal
+migration runs; it is a separate change, not something the boot entrypoint can
+fix without migrating outside the release stage.
 
 The release-alignment guard (`python3 -m farna.db.alignment`) still runs in
 both `release.sh` and the boot entrypoint, so a database from a newer release
