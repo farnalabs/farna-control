@@ -261,18 +261,22 @@ async def _run_owned_by_another_team(
     mutation, exactly as the MCP run tools do via
     ``_team_scoped_key_mismatch``. The run's stamped ``owner_team_id`` is the
     source of truth; a pre-stamp row (NULL) falls back to the pipeline's current
-    owner so a NULL stamp can never widen the boundary. Org-level runs (no owner
-    team) remain visible to every team-scoped key, matching the list filter
-    (``team_scope_clause``). JWT principals and org-wide keys carry
-    ``team_id=None`` and are unaffected.
+    owner, resolved TEAM-BLIND (``run_effective_owner_team_id``) so another
+    team's ``visibility='team'`` pipeline — hidden from a caller-facing read by
+    ``rls_team_isolation`` — cannot resolve to None and fail open. A pipeline
+    that is absent (or soft-deleted) even team-blind is a denial, never an
+    org-level run. Org-level runs (no owner team) remain visible to every
+    team-scoped key, matching the list filter (``team_scope_clause``). JWT
+    principals and org-wide keys carry ``team_id=None`` and are unaffected.
     """
     if getattr(principal, "team_id", None) is None:
         return False
-    owner_team_id = run.owner_team_id
-    if owner_team_id is None:
-        from farna.db.crud.team_scope import pipeline_owner_team_id
+    from farna.db.crud.team_scope import run_effective_owner_team_id
 
-        owner_team_id = await pipeline_owner_team_id(session, run.pipeline_id)
+    resolved = await run_effective_owner_team_id(session, run)
+    if not resolved.pipeline_present:
+        return True
+    owner_team_id = resolved.owner_team_id
     return owner_team_id is not None and owner_team_id != principal.team_id
 
 

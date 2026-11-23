@@ -25,6 +25,7 @@ from fastapi import HTTPException
 from farna.api.routes import runs as runs_module
 from farna.api.routes.runs import RunNotFoundError
 from farna.auth.jwt import TenantPrincipal
+from farna.db.crud.team_scope import BlindPipelineScope
 from tests.unit.api.mock_session import configure_mock_session
 
 _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -124,8 +125,9 @@ async def test_team_scoped_key_reads_its_own_teams_run() -> None:
 async def test_team_scoped_key_reads_an_org_level_run() -> None:
     """Org-level runs (no owner team) stay visible to every team-scoped key."""
     run = _make_run(owner_team_id=None)
+    scope = BlindPipelineScope(owner_team_id=None, visibility="org")
 
-    with patch("farna.db.crud.team_scope.pipeline_owner_team_id", AsyncMock(return_value=None)):
+    with patch("farna.db.crud.team_scope.pipeline_team_scope_team_blind", AsyncMock(return_value=scope)):
         loaded, _ = await _load(run, _team_scoped_key_principal())
 
     assert loaded is run
@@ -133,16 +135,38 @@ async def test_team_scoped_key_reads_an_org_level_run() -> None:
 
 @pytest.mark.asyncio
 async def test_pre_stamp_run_falls_back_to_the_pipeline_owner_team() -> None:
-    """A NULL run owner is resolved from the pipeline, never treated as org-level."""
+    """A NULL run owner is resolved from the pipeline, never treated as org-level.
+
+    The pipeline is resolved TEAM-BLIND so a team-private pipeline hidden from
+    the caller-facing read still yields its owner (FAR-1513 fail-open).
+    """
     run = _make_run(owner_team_id=None)
+    scope = BlindPipelineScope(owner_team_id=_TEAM_B, visibility="team")
 
     with (
-        patch("farna.db.crud.team_scope.pipeline_owner_team_id", AsyncMock(return_value=_TEAM_B)) as owner,
+        patch("farna.db.crud.team_scope.pipeline_team_scope_team_blind", AsyncMock(return_value=scope)) as resolver,
         pytest.raises(RunNotFoundError),
     ):
         await _load(run, _team_scoped_key_principal())
 
-    owner.assert_awaited_once()
+    resolver.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pre_stamp_run_with_an_invisible_pipeline_is_not_found() -> None:
+    """A NULL run owner whose pipeline is absent/hidden is a denial, not org-level.
+
+    ``pipeline_team_scope_team_blind`` returning None means the pipeline could
+    not be resolved even team-blind (absent or soft-deleted), so the effective
+    owner is unknown and the boundary must fail CLOSED.
+    """
+    run = _make_run(owner_team_id=None)
+
+    with (
+        patch("farna.db.crud.team_scope.pipeline_team_scope_team_blind", AsyncMock(return_value=None)),
+        pytest.raises(RunNotFoundError),
+    ):
+        await _load(run, _team_scoped_key_principal())
 
 
 @pytest.mark.asyncio
