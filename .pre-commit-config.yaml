@@ -93,7 +93,7 @@
       - id: check-yaml
         # Exclude only the Helm templates (Go-templated, not plain YAML).
         # values*.yaml and Chart.yaml are valid plain YAML and must be checked.
-        exclude: ^deploy/helm/modulo/templates/
+        exclude: ^deploy/helm/farna-control/templates/
       - id: check-toml
       - id: check-json
       - id: end-of-file-fixer

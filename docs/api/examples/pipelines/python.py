@@ -1,5 +1,5 @@
 """
-Modulo API Example: Pipeline CRUD
+Farna Control API Example: Pipeline CRUD
 
 Demonstrates:
   - List pipelines with pagination

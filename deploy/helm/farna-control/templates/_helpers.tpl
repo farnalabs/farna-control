@@ -111,8 +111,8 @@ Format a Postgres connection URL for one role. Usage:
 {{/*
 Construct DATABASE_URL from Postgres config.
 When postgres.host is set, builds the URL from individual fields (shared
-password resolution + URL formatting via modulo.postgresPassword /
-modulo.postgresUrl). Otherwise falls back to backend.env.DATABASE_URL.
+password resolution + URL formatting via farna-control.postgresPassword /
+farna-control.postgresUrl). Otherwise falls back to backend.env.DATABASE_URL.
 */}}
 {{- define "farna-control.databaseUrl" -}}
 {{- if .Values.postgres.host }}
@@ -158,7 +158,7 @@ the password parsed from this URL, so it shares postgres.password just like
 farna_control_app does. The chart's saq-runner/saq-system commands bypass
 entrypoint.sh, so the URL cannot be derived at runtime — it must be wired
 here. Falls back to backend.env.FARNA_CONTROL_SYSTEM_DATABASE_URL when
-postgres.host is unset (mirrors modulo.databaseUrl).
+postgres.host is unset (mirrors farna-control.databaseUrl).
 */}}
 {{- define "farna-control.systemDatabaseUrl" -}}
 {{- if .Values.postgres.host }}

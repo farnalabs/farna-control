@@ -82,7 +82,7 @@ _TABLES: list[Table] = cast(
     # RunNodeOutput: the terminal-write dual-write chokepoint (FAR-583) touches
     # run_node_outputs on every finalize — the in-memory SQLite schema must
     # carry the table or the dual-write leg fails with "no such table".
-    # JourneyFact: _record_journey_fact upserts into modulo_journey_facts.
+    # JourneyFact: _record_journey_fact upserts into farna_journey_facts.
     [
         Journey.__table__,
         LifecycleMapStage.__table__,

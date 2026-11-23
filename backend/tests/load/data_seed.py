@@ -13,7 +13,7 @@ Prerequisites:
 Usage:
   python -m tests.load.data_seed
   python -m tests.load.data_seed --base-url http://localhost:8000/api/v1
-  python -m tests.load.data_seed --admin-email admin@modulo.test --admin-password test-password-123
+  python -m tests.load.data_seed --admin-email admin@farna-control.test --admin-password test-password-123
 """
 
 from __future__ import annotations

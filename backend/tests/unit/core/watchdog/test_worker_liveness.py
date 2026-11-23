@@ -345,7 +345,7 @@ class TestWorkerLivenessWatchdog:
             patch.object(wl, "_post_generic_webhook", generic),
             patch.object(wl, "_post_teams_webhook", teams),
             patch.object(wl, "_send_email_alert", email),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             state = await wl._evaluate_once(settings, fake, wl._LivenessState(all_dead_since=time.time() - 200))
 
@@ -381,7 +381,7 @@ class TestWorkerLivenessWatchdog:
         send = AsyncMock()
         with (
             patch.object(wl, "_send_alerts", send),
-            caplog.at_level(logging.INFO, logger="modulo.watchdog"),
+            caplog.at_level(logging.INFO, logger="farna_control.watchdog"),
         ):
             state: wl._LivenessState | None = None
             for _ in range(3):  # rapid healthy ticks — all must stay silent
@@ -414,7 +414,7 @@ class TestWorkerLivenessWatchdog:
         send = AsyncMock()
         with (
             patch.object(wl, "_send_alerts", send),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             for _ in range(5):  # rapid unhealthy ticks inside one window
                 await wl._evaluate_once(settings, fake, wl._LivenessState(all_dead_since=dead_since))
@@ -450,7 +450,7 @@ class TestWorkerLivenessWatchdog:
         send = AsyncMock()
         with (
             patch.object(wl, "_send_alerts", send),
-            caplog.at_level(logging.INFO, logger="modulo.watchdog"),
+            caplog.at_level(logging.INFO, logger="farna_control.watchdog"),
         ):
             await wl._evaluate_once(excluded, fake, wl._LivenessState())
         send.assert_not_awaited()  # the all-clear is NOT delivered while excluded
@@ -629,7 +629,7 @@ class TestWorkerLivenessWatchdog:
         post = AsyncMock()
         with (
             patch.object(wl, "_send_alerts", post),
-            caplog.at_level(logging.INFO, logger="modulo.watchdog"),
+            caplog.at_level(logging.INFO, logger="farna_control.watchdog"),
         ):
             state = await wl._evaluate_once(settings, fake, wl._LivenessState(all_dead_since=time.time() - 200))
 
@@ -1085,13 +1085,13 @@ class TestEdgeTriggeredAlertRecovery:
 class TestWebhookErrorPaths:
     async def test_generic_webhook_no_url_logs_and_returns(self, caplog: pytest.LogCaptureFixture) -> None:
         settings = _make_settings()  # no webhook URL
-        with caplog.at_level(logging.WARNING, logger="modulo.watchdog"):
+        with caplog.at_level(logging.WARNING, logger="farna_control.watchdog"):
             await wl._post_generic_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
         assert "watchdog.webhook_no_url" in caplog.text
 
     async def test_teams_webhook_no_url_logs_and_returns(self, caplog: pytest.LogCaptureFixture) -> None:
         settings = _make_settings()  # no Teams webhook URL
-        with caplog.at_level(logging.WARNING, logger="modulo.watchdog"):
+        with caplog.at_level(logging.WARNING, logger="farna_control.watchdog"):
             await wl._post_teams_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
         assert "watchdog.teams_webhook_no_url" in caplog.text
 
@@ -1100,7 +1100,7 @@ class TestWebhookErrorPaths:
         with (
             patch.object(wl, "pinned_async_client", AsyncMock(side_effect=ValueError("blocked private address"))) as pin,
             patch.object(wl.httpx, "AsyncClient", side_effect=AssertionError("raw client must not be used")),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._post_generic_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
 
@@ -1132,7 +1132,7 @@ class TestWebhookErrorPaths:
 
         with (
             patch.object(wl, "pinned_async_client", AsyncMock(return_value=client)),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._post_generic_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
 
@@ -1167,7 +1167,7 @@ class TestWebhookErrorPaths:
 
         with (
             patch.object(wl, "pinned_async_client", AsyncMock(return_value=client)),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._post_teams_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
 
@@ -1182,7 +1182,7 @@ class TestWebhookErrorPaths:
 
         with (
             patch.object(wl, "pinned_async_client", AsyncMock(return_value=client)),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._post_teams_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
 
@@ -1196,7 +1196,7 @@ class TestWebhookErrorPaths:
 
         with (
             patch.object(wl, "pinned_async_client", AsyncMock(return_value=client)),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._post_generic_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
 
@@ -1210,7 +1210,7 @@ class TestWebhookErrorPaths:
 
         with (
             patch.object(wl, "pinned_async_client", AsyncMock(return_value=client)),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._post_teams_webhook(settings, wl._alert_text(settings, ["no live SAQ worker"]))
 
@@ -1226,7 +1226,7 @@ class TestEmailErrorPaths:
         with (
             patch.object(wl, "send_email", send),
             patch.object(wl.asyncio, "to_thread", to_thread),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._send_email_alert(settings, ["no live SAQ worker"])
 
@@ -1241,7 +1241,7 @@ class TestEmailErrorPaths:
         with (
             patch.object(wl, "send_email", send),
             patch.object(wl.asyncio, "to_thread", to_thread),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._send_email_alert(settings, ["no live SAQ worker"])
 
@@ -1252,7 +1252,7 @@ class TestEmailErrorPaths:
         send = MagicMock()
         with (
             patch.object(wl, "send_email", send),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._send_email_alert(settings, ["no live SAQ worker"])
         send.assert_not_called()
@@ -1331,7 +1331,7 @@ class TestAdditionalFailOpenPaths:
         settings = _make_settings(ALERT_WEBHOOK_URL="https://hooks.slack.com/webhook")
         with (
             patch.object(wl, "_post_generic_webhook", AsyncMock(side_effect=RuntimeError("boom"))),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._send_alerts(settings, ["no live SAQ worker"])
         assert "watchdog.channel_generic_failed" in caplog.text
@@ -1340,7 +1340,7 @@ class TestAdditionalFailOpenPaths:
         settings = _make_settings(ALERT_TEAMS_WEBHOOK_URL="https://outlook.office.com/webhook/t")
         with (
             patch.object(wl, "_post_teams_webhook", AsyncMock(side_effect=RuntimeError("boom"))),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._send_alerts(settings, ["no live SAQ worker"])
         assert "watchdog.channel_teams_failed" in caplog.text
@@ -1349,7 +1349,7 @@ class TestAdditionalFailOpenPaths:
         settings = _make_settings(ALERT_EMAIL_TO="ops@example.com", smtp_host="smtp.example.com")
         with (
             patch.object(wl, "_send_email_alert", AsyncMock(side_effect=RuntimeError("boom"))),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._send_alerts(settings, ["no live SAQ worker"])
         assert "watchdog.channel_email_failed" in caplog.text
@@ -1364,7 +1364,7 @@ class TestAdditionalFailOpenPaths:
         with (
             patch.object(fake, "zrangebyscore", side_effect=RuntimeError("redis down")),
             patch.object(wl, "_send_alerts", post),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             state = await wl._evaluate_once(settings, fake, wl._LivenessState())
 
@@ -1417,7 +1417,7 @@ class TestAdditionalFailOpenPaths:
             patch.object(wl.aioredis.Redis, "from_url", return_value=fake),
             patch.object(wl.asyncio, "sleep", side_effect=_stop),
             patch.object(wl, "_evaluate_once", AsyncMock(side_effect=RuntimeError("boom"))),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
             pytest.raises(asyncio.CancelledError),
         ):
             await wl.run_worker_liveness_watchdog(settings)
@@ -1470,7 +1470,7 @@ class TestAdditionalFailOpenPaths:
         with (
             patch.object(wl.aioredis.Redis, "from_url", side_effect=ConnectionError("redis down")),
             patch.object(wl.asyncio, "sleep", side_effect=_stop),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
             pytest.raises(asyncio.CancelledError),
         ):
             await wl.run_worker_liveness_watchdog(settings)
@@ -1666,7 +1666,7 @@ class TestStdoutStamp:
         with (
             patch.object(wl, "_send_alerts", send),
             patch("builtins.print", new=_failing_stamp_print("[watchdog]")),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._evaluate_once(settings, fake, wl._LivenessState(all_dead_since=dead_since))
 
@@ -1682,7 +1682,7 @@ class TestStdoutStamp:
         with (
             patch.object(wl, "_send_alerts", send),
             patch("builtins.print", new=_failing_stamp_print("[watchdog]")),
-            caplog.at_level(logging.WARNING, logger="modulo.watchdog"),
+            caplog.at_level(logging.WARNING, logger="farna_control.watchdog"),
         ):
             await wl._evaluate_once(settings, fake, wl._LivenessState(all_dead_since=dead_since))
 

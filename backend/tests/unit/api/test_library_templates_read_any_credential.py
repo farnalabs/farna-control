@@ -37,7 +37,10 @@ from tests.unit.api.mock_session import configure_mock_session, configure_rls_pr
 
 _FERNET_KEY = Fernet.generate_key().decode()
 _VALID_32 = "a" * 32
-_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+# Deliberately distinct from ``MODULO_ORG_ID`` (the built-in sentinel org,
+# ``...0001``): the caller org must differ from the sentinel so the
+# ``_BUILTIN_ORG_ID`` arm of ``_primitive_visible_to`` is genuinely exercised.
+_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 _OTHER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-00000000dead")
 _USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 _PRIMITIVE_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")

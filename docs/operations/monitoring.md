@@ -31,7 +31,7 @@ ENV VITE_MONITOR_BACKEND=${VITE_MONITOR_BACKEND}
 
 Set to `builtin` to exclude all third-party SDKs from the bundle:
 ```bash
-docker build --build-arg VITE_MONITOR_BACKEND=builtin -t modulo .
+docker build --build-arg VITE_MONITOR_BACKEND=builtin -t farna-control .
 ```
 
 ### Runtime (`FARNA_CONTROL_MONITOR_CONFIG`)

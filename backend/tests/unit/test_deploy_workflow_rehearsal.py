@@ -1189,7 +1189,7 @@ def _cut_harness(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
             'version = 1\nrevision = 5\n\n[[package]]\nname = "farnalabs-modulo"\nversion = "0.1.0"\nsource = { editable = "." }\n',
         ),
         ("frontend/package.json", '{"version": "0.1.0"}\n'),
-        ("deploy/helm/modulo/Chart.yaml", 'version: 0.1.0\nappVersion: "0.1.0"\n'),
+        ("deploy/helm/farna-control/Chart.yaml", 'version: 0.1.0\nappVersion: "0.1.0"\n'),
     ):
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -1203,7 +1203,7 @@ def _cut_harness(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         "backend/pyproject.toml",
         "backend/uv.lock",
         "frontend/package.json",
-        "deploy/helm/modulo/Chart.yaml",
+        "deploy/helm/farna-control/Chart.yaml",
     ):
         target = repo / relative
         target.write_text(target.read_text(encoding="utf-8").replace("0.1.0", "0.2.0"), encoding="utf-8")
@@ -1245,7 +1245,7 @@ if [ \"$1\" = \"scripts/bump-version.py\" ]; then
   printf '\\n# bump stub\\n' >> backend/pyproject.toml
   printf '\\n# bump stub\\n' >> backend/uv.lock
   printf '\\n# bump stub\\n' >> frontend/package.json
-  printf '\\n# bump stub\\n' >> deploy/helm/modulo/Chart.yaml
+  printf '\\n# bump stub\\n' >> deploy/helm/farna-control/Chart.yaml
   exit 0
 fi
 printf 'unexpected python command: %s\\n' \"$*\" >&2
@@ -2701,7 +2701,7 @@ def test_release_promote_successfully_publishes_exact_tag_target_and_lifts_freez
     promote_sha = _git(root, "rev-parse", "refs/remotes/origin/merge-result")
     commands = (Path(env["HARNESS_DIR"]) / "release-metadata").read_text(encoding="utf-8")
     assert "tag=v1.2.3" in commands
-    assert "title=Modulo v1.2.3" in commands
+    assert "title=Farna Control v1.2.3" in commands
     assert f"target={promote_sha}" in commands
     assert "## [1.2.3]" in (root.parent / "release-notes").read_text(encoding="utf-8")
     assert "Release change" in (root.parent / "release-notes").read_text(encoding="utf-8")

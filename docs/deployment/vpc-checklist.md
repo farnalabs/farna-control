@@ -11,7 +11,7 @@
 ## 1. Telemetry & Observability
 
 - [ ] **`FARNA_CONTROL_TELEMETRY_ENABLED` is not set** (defaults to `false`)
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep FARNA_CONTROL_TELEMETRY_ENABLED`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control env | grep FARNA_CONTROL_TELEMETRY_ENABLED`
   - expected: no output or `FARNA_CONTROL_TELEMETRY_ENABLED=false`
   - **the env var alone is not sufficient.** A deployment-wide, process-global
     runtime override can flip it on without a restart: `GET /api/v1/admin/telemetry`
@@ -24,7 +24,7 @@
     environment rather than relying on the override (see
     `docs/operations/network-egress.md` §Cross-process note)
 - [ ] **`OTEL_EXPORTER_OTLP_ENDPOINT` is not set**
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo env | grep OTEL_EXPORTER_OTLP`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control env | grep OTEL_EXPORTER_OTLP`
   - expected: no output
 - [ ] **No OTel config saved in database** (if DB was migrated from non-VPC env)
   - verify: the organization row's `otel_config_json` carries no exporter endpoint – `SELECT otel_config_json FROM organisations;`
@@ -88,13 +88,13 @@
 ## 8. Runtime verification
 
 - [ ] **Deployed container can reach database and Redis**
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo nc -zv postgres 5432`
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo nc -zv redis 6379`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control nc -zv postgres 5432`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control nc -zv redis 6379`
 - [ ] **Deployed container can NOT reach the public internet**
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo curl -s --connect-timeout 5 https://google.com`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control curl -s --connect-timeout 5 https://google.com`
   - expected: connection timeout or refused
 - [ ] **Deployed container can NOT resolve public DNS names**
-  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec modulo nslookup google.com`
+  - verify: `docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control nslookup google.com`
   - expected: failure or NXDOMAIN (depending on DNS policy)
 
 ## 9. Documentation

@@ -289,7 +289,7 @@ docker compose exec postgres pg_dump -U modulo --clean --if-exists \
 docker compose down
 
 # install native, then restore the SQL into the fresh data dir
-bash modulo-install.sh
+bash farna-control-install.sh
 farna-control start --detach
 farna-control restore <backup-dir> --data-dir <fresh-data-dir> --yes
 ```

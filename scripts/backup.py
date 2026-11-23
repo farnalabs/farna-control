@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backup Modulo Postgres schema+data, secrets, and config into an encrypted archive."""
+"""Backup Farna Control Postgres schema+data, secrets, and config into an encrypted archive."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class BackupManifest(NamedTuple):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Modulo backup tool")
+    parser = argparse.ArgumentParser(description="Farna Control backup tool")
     parser.add_argument("--output", "-o", default=None, help="Output archive path")
     parser.add_argument(
         "--passphrase",

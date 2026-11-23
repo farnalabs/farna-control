@@ -7,7 +7,7 @@ staging, or any setup where you want Caddy handling HTTPS directly).
 
 ```bash
 # 1. Set environment variables (or edit Caddyfile placeholders)
-export DOMAIN=modulo.example.com
+export DOMAIN=farna-control.example.com
 export ADMIN_EMAIL=ops@example.com
 export BACKEND_HOST=localhost:8000
 export FRONTEND_HOST=localhost:5173
@@ -51,7 +51,7 @@ caddy:
     - caddy_data:/data
     - caddy_config:/config
   environment:
-    DOMAIN:        "modulo.example.com"
+    DOMAIN:        "farna-control.example.com"
     ADMIN_EMAIL:   "ops@example.com"
     BACKEND_HOST:  "backend:8000"
     FRONTEND_HOST: "frontend:5173"
@@ -103,16 +103,16 @@ Output path configurable via `LOG_FILE` env var (default:
 
 ```bash
 # Check TLS
-curl -sI https://modulo.example.com/healthz | grep -i strict-transport
+curl -sI https://farna-control.example.com/healthz | grep -i strict-transport
 
 # Check proxying works
-curl -s https://modulo.example.com/api/v1/me | head
+curl -s https://farna-control.example.com/api/v1/me | head
 
 # Check WebSocket upgrade (via run event stream)
 python -c "
 import asyncio, websockets
 async def test():
-    async with websockets.connect('wss://modulo.example.com/api/v1/runs/00000000-0000-0000-0000-000000000000/ws?token=test') as ws:
+    async with websockets.connect('wss://farna-control.example.com/api/v1/runs/00000000-0000-0000-0000-000000000000/ws?token=test') as ws:
         print(await ws.recv())
 asyncio.run(test())
 "

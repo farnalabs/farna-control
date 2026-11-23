@@ -1,7 +1,7 @@
-# Modulo — Caddy v2 Reverse Proxy Configuration
+# Farna Control — Caddy v2 Reverse Proxy Configuration
 # =============================================================================
 # Replace placeholders before use:
-#   {DOMAIN}         — your public domain (e.g. modulo.example.com)
+#   {DOMAIN}         — your public domain (e.g. farna-control.example.com)
 #   {ADMIN_EMAIL}    — Let's Encrypt registration contact
 #   {BACKEND_HOST}   — backend upstream (e.g. localhost:8000 or backend:8000)
 #   {FRONTEND_HOST}  — frontend upstream (e.g. localhost:5173 or frontend:5173)
@@ -10,7 +10,7 @@
 # See README.md for complete usage guide.
 # =============================================================================
 
-{$DOMAIN:modulo.example.com} {
+{$DOMAIN:farna-control.example.com} {
     # -------------------------------------------------------------------------
     # TLS / Automatic HTTPS via Let's Encrypt
     # -------------------------------------------------------------------------

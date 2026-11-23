@@ -1812,7 +1812,7 @@ def test_api_agent_node_rejects_a_dispatch_connector_binding():
     dispatch binding would be declared-but-unread: nothing fires, yet the run is
     stamped ``dispatched`` and retries are disabled for a graph that dispatches
     nothing. Rejected here so a stored graph can never disagree with the
-    engine's routing (REST, MCP and ``modulo apply`` all model-validate through
+    engine's routing (REST, MCP and ``farna-control apply`` all model-validate through
     this class; the classifier additionally reads such a binding as ``query``)."""
     from farna.api.routes.pipelines import PipelineGraphNode
 

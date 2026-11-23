@@ -176,7 +176,7 @@ def is_sensitive_env_key(key: str) -> bool:
 # (``oidc_providers`` is a JSON array with client_secret values,
 # ``users`` an "email:password" list, the alert webhook URLs carry the
 # token in the URL PATH rather than userinfo). Single definition (FAR-2305):
-# ``modulo env``, the doctor report and the support bundle all import this set
+# ``farna-control env``, the doctor report and the support bundle all import this set
 # instead of keeping their own copy.
 WHOLESALE_REDACT_FIELDS: frozenset[str] = frozenset(
     {
@@ -191,8 +191,8 @@ WHOLESALE_REDACT_FIELDS: frozenset[str] = frozenset(
 def is_sensitive_field_name(name: str) -> bool:
     """Canonical sensitive-FIELD classification (single source of truth).
 
-    The one classifier every redaction surface uses: ``modulo env``'s Settings
-    dump, ``modulo doctor --report``'s KEY=value scrub and the support
+    The one classifier every redaction surface uses: ``farna-control env``'s Settings
+    dump, ``farna-control doctor --report``'s KEY=value scrub and the support
     bundle's structural layer. A field is sensitive when it is in the
     wholesale set, or when the shared env-key classifier matches it.
 

@@ -1160,7 +1160,7 @@ def test_run_state_actions_happy_and_missing(client: tuple[TestClient, AsyncMock
     assert resp.status_code == 200, resp.text
     body = resp.json()
     # The response model must carry the run-state triple (the UI badges it and
-    # modulo apply's drift hash reads run_enabled from this same payload).
+    # farna-control apply's drift hash reads run_enabled from this same payload).
     assert body["run_enabled"] is (action != "pause")
     assert "run_disabled_reason" in body
     assert "run_disabled_at" in body

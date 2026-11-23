@@ -19135,7 +19135,7 @@ export interface components {
          * PipelineGraphPolicyGate
          * @description Node-attached policy-gate configuration (FAR-1109).
          *
-         *     Declared on a :class:`PipelineGraphNode` so a declarative ``modulo apply``
+         *     Declared on a :class:`PipelineGraphNode` so a declarative ``farna-control apply``
          *     config can carry the gate as part of the graph write. ``action`` is the
          *     gate's configured action (the ``policy_gates.action`` CHECK vocabulary);
          *     ``eval_id`` references the eval bound to this node (the CLI never

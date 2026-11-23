@@ -59,7 +59,7 @@ async def test_connector_cursor_without_exclusions_and_empty_marker_updates() ->
 async def test_template_list_supports_blank_search_and_programming_error() -> None:
     session = AsyncMock(spec=AsyncSession)
     session.execute.side_effect = [ProgrammingError("count", {}, RuntimeError("missing"))]
-    page = await list_templates(session, category=None, search="   ")
+    page = await list_templates(session, org_id=uuid.uuid4(), category=None, search="   ")
     assert not page.items
     assert page.total == 0
 
@@ -109,7 +109,7 @@ async def test_rating_none_account_and_empty_or_broken_queries() -> None:
     session.execute.side_effect = [ProgrammingError("count", {}, RuntimeError("missing"))]
     assert await get_rating_aggregate(session, primitive_id) == (None, 0)
     session.execute.side_effect = [ProgrammingError("count", {}, RuntimeError("missing"))]
-    assert not (await list_ratings_for_primitive(session, primitive_id)).items
+    assert not (await list_ratings_for_primitive(session, primitive_id, org_id=uuid.uuid4())).items
     session.execute.side_effect = [ProgrammingError("count", {}, RuntimeError("missing"))]
     assert not (await list_abuse_reports(session, uuid.uuid4())).items
 

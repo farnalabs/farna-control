@@ -197,7 +197,7 @@ def _settings(port: int) -> SimpleNamespace:
         smtp_timeout=2,
         smtp_username="",
         smtp_password="",
-        email_from="ops@modulo.test",
+        email_from="ops@farna-control.test",
     )
 
 
@@ -205,7 +205,7 @@ class TestCapNotificationsRealDelivery:
     def test_message_is_delivered_over_starttls(self, smtp_server: _SmtpServer) -> None:
         sent = send_email(
             _settings(smtp_server.port),
-            ["analyst@modulo.test"],
+            ["analyst@farna-control.test"],
             "Scheduled report ready",
             "<html><body>Your starship report is ready.</body></html>",
             body_text="Your starship report is ready.",
@@ -214,7 +214,7 @@ class TestCapNotificationsRealDelivery:
         assert sent is True
         assert len(smtp_server.delivered) == 1
         _mail_from, rcpt_to, body = smtp_server.delivered[0]
-        assert "rcpt to:<analyst@modulo.test>" in rcpt_to.lower()
+        assert "rcpt to:<analyst@farna-control.test>" in rcpt_to.lower()
         assert "Subject: Scheduled report ready" in body.decode()
         assert "Your starship report is ready." in body.decode()
 
@@ -224,7 +224,7 @@ class TestCapNotificationsRealDelivery:
         try:
             sent = send_email(
                 _settings(server.port),
-                ["analyst@modulo.test"],
+                ["analyst@farna-control.test"],
                 "Retry works",
                 "<p>delivered on second attempt</p>",
             )
@@ -245,7 +245,7 @@ class TestCapNotificationsRealDelivery:
         with pytest.raises(EmailSendingError):
             send_email(
                 _settings(port),
-                ["analyst@modulo.test"],
+                ["analyst@farna-control.test"],
                 "Will not land",
                 "<p>refused connection</p>",
             )
@@ -262,7 +262,7 @@ class TestCapNotificationsRealDelivery:
             with pytest.raises(expected):
                 send_email(
                     _settings(server.port),
-                    ["ghost@modulo.test"],
+                    ["ghost@farna-control.test"],
                     "Bounced",
                     "<p>refused recipient</p>",
                 )

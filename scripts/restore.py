@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restore Modulo from an encrypted backup archive."""
+"""Restore Farna Control from an encrypted backup archive."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Modulo restore tool")
+    parser = argparse.ArgumentParser(description="Farna Control restore tool")
     parser.add_argument("--input", "-i", required=True, help="Encrypted backup archive path")
     parser.add_argument(
         "--passphrase",

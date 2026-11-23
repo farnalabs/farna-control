@@ -1,6 +1,6 @@
-"""``modulo apply`` orchestration + CLI registration (FAR-681, slices 1-3).
+"""``farna-control apply`` orchestration + CLI registration (FAR-681, slices 1-3).
 
-Declarative configuration: ``modulo apply -f config.yaml`` plans name-based
+Declarative configuration: ``farna-control apply -f config.yaml`` plans name-based
 upserts against the live org and executes them idempotently. Slices 1+2
 cover schemas (+versions), model_backends, pipelines (agent name-refs in
 graphs) and triggers ((pipeline, name) identity); slice 3 adds --diff.

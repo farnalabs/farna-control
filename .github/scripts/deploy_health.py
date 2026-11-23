@@ -868,7 +868,7 @@ def build_email(
     """The (subject, body) an operator receives. Named figures, no lookup."""
     if action == "recovery":
         detail = verdict.summary or f"production is current at {verdict.prod_sha}"
-        subject = f"[Modulo] DEPLOY HEALTH RECOVERED: {detail}"
+        subject = f"[Farna Control] DEPLOY HEALTH RECOVERED: {detail}"
         headline = "Deploy health has RECOVERED."
         action_line = verdict.recovery_detail or (
             "Production now serves the latest evaluated build and the deploy workflow is not in a "
@@ -881,7 +881,7 @@ def build_email(
         if verdict.stale and verdict.age_hours is not None:
             bits.append(f"prod {verdict.age_hours}h stale")
         detail = ", ".join(bits) if bits else (verdict.summary or "condition met")
-        subject = f"[Modulo] DEPLOY HEALTH UNHEALTHY: {detail}"
+        subject = f"[Farna Control] DEPLOY HEALTH UNHEALTHY: {detail}"
         headline = "Deploy health is UNHEALTHY."
         action_line = (
             f"Investigate the deploy pipeline: {deploy_url}\n"

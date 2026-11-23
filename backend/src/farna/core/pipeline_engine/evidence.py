@@ -438,16 +438,17 @@ async def _e2b_run_command(sandbox_id: str, command: str) -> CommandResult:
     """
     from e2b import AsyncSandbox
 
+    # ``connect()`` returns a cheap wrapper over a shared, loop-independent
+    # pooled transport, so there is no per-sandbox connection to release and no
+    # ``close()`` on the handle (the SDK removed it; ``kill()`` would destroy
+    # the live run's sandbox, which is the opposite of what a read probe wants).
     sandbox = await asyncio.wait_for(AsyncSandbox.connect(sandbox_id), timeout=_SANDBOX_IO_TIMEOUT_SECONDS)
-    try:
-        result = await asyncio.wait_for(sandbox.commands.run(command), timeout=_SANDBOX_IO_TIMEOUT_SECONDS)
-        return CommandResult(
-            exit_code=int(getattr(result, "exit_code", 1) or 1),
-            stdout=str(getattr(result, "stdout", "") or ""),
-            stderr=str(getattr(result, "stderr", "") or ""),
-        )
-    finally:
-        await sandbox.close()
+    result = await asyncio.wait_for(sandbox.commands.run(command), timeout=_SANDBOX_IO_TIMEOUT_SECONDS)
+    return CommandResult(
+        exit_code=int(getattr(result, "exit_code", 1) or 1),
+        stdout=str(getattr(result, "stdout", "") or ""),
+        stderr=str(getattr(result, "stderr", "") or ""),
+    )
 
 
 async def _e2b_list_files(sandbox_id: str) -> list[FileInfo]:
@@ -456,26 +457,24 @@ async def _e2b_list_files(sandbox_id: str) -> list[FileInfo]:
     """
     from e2b import AsyncSandbox
 
+    # See ``_e2b_run_command``: the connected handle needs no explicit close.
     sandbox = await asyncio.wait_for(AsyncSandbox.connect(sandbox_id), timeout=_SANDBOX_IO_TIMEOUT_SECONDS)
-    try:
-        entries = await asyncio.wait_for(
-            sandbox.files.list("/home/user"),
-            timeout=_SANDBOX_IO_TIMEOUT_SECONDS,
-        )
-        files: list[FileInfo] = []
-        for entry in entries:
-            name = str(getattr(entry, "name", "") or "")
-            if name:
-                files.append(
-                    FileInfo(
-                        name=name,
-                        size=int(getattr(entry, "size", 0) or 0),
-                        is_dir=bool(getattr(entry, "isdir", False)),
-                    )
+    entries = await asyncio.wait_for(
+        sandbox.files.list("/home/user"),
+        timeout=_SANDBOX_IO_TIMEOUT_SECONDS,
+    )
+    files: list[FileInfo] = []
+    for entry in entries:
+        name = str(getattr(entry, "name", "") or "")
+        if name:
+            files.append(
+                FileInfo(
+                    name=name,
+                    size=int(getattr(entry, "size", 0) or 0),
+                    is_dir=bool(getattr(entry, "isdir", False)),
                 )
-        return files
-    finally:
-        await sandbox.close()
+            )
+    return files
 
 
 def build_default_evidence_provider(

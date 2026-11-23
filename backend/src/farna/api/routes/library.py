@@ -217,15 +217,12 @@ async def _require_readable_primitive(
     """
     primitive = await get_primitive(session, principal.organisation_id, primitive_id)
     if not _primitive_visible_to(primitive, principal):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Primitive {primitive_id} not found",
-        )
-    if primitive.primitive_type == LIFECYCLE_MAP_PRIMITIVE_TYPE and not _can_access_lifecycle_map_primitives(
-        principal,
-        dev_mode=getattr(get_settings(), "dev_mode", True),
-    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_PRIMITIVE_NOT_FOUND)
+    _reject_lifecycle_map_primitive_access(
+        principal,
+        primitive,
+        dev_mode=getattr(get_settings(), "dev_mode", True),
+    )
     return primitive
 
 
@@ -1872,7 +1869,13 @@ async def list_ratings_endpoint(
         async with session.begin():
             await _set_rls_context(session, principal)
             await _require_readable_primitive(session, principal, primitive_id)
-            result = await list_ratings_for_primitive(session, primitive_id, page=page, page_size=page_size)
+            result = await list_ratings_for_primitive(
+                session,
+                primitive_id,
+                org_id=principal.organisation_id,
+                page=page,
+                page_size=page_size,
+            )
     except IntegrityError:
         _log.exception("library.list_ratings_endpoint")
         raise _conflict_error() from None

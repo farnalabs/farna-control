@@ -76,8 +76,8 @@ def test_transform_compose_content_hardpins_tag_and_removes_watchdog():
       POSTGRES_PASSWORD: ${FARNA_CONTROL_DB_PASSWORD:?required}
   redis:
     image: redis:8-alpine
-  modulo:
-    image: ghcr.io/farnalabs/farna-control:${TAG:?TAG is required - set the Modulo version you intend to run}
+  farna-control:
+    image: ghcr.io/farnalabs/farna-control:${TAG:?TAG is required - set the Farna Control version you intend to run}
     ports:
       - "${PORT:-80}:80"
   watchdog:
@@ -93,8 +93,8 @@ volumes:
 
     assert "services" in data
     services = data["services"]
-    assert set(services.keys()) == {"postgres", "redis", "modulo"}
-    assert services["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0"
+    assert set(services.keys()) == {"postgres", "redis", "farna-control"}
+    assert services["farna-control"]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0"
     assert "watchdog" not in services
     assert "postgres_data" in data["volumes"]
     assert "redis_data" in data["volumes"]
@@ -112,7 +112,7 @@ def test_transform_compose_content_removes_watchdog_with_blank_line_in_block():
     image: postgres:16-alpine
   redis:
     image: redis:8-alpine
-  modulo:
+  farna-control:
     image: ghcr.io/farnalabs/farna-control:${TAG:?required}
     ports:
       - "${PORT:-80}:80"
@@ -130,7 +130,7 @@ volumes:
 
     services = data["services"]
     assert "watchdog" not in services
-    assert services["modulo"]["ports"] == ["${PORT:-80}:80"]
+    assert services["farna-control"]["ports"] == ["${PORT:-80}:80"]
     assert "127.0.0.1:8083:8080" not in transformed
 
 
@@ -147,7 +147,7 @@ def test_validate_release_tag_rejects_unicode_digits(tmp_path: Path):
 
 def test_transform_compose_content_rejects_missing_image():
     invalid_content = """services:
-  modulo:
+  farna-control:
     ports: ["80:80"]
 volumes:
   postgres_data:
@@ -214,19 +214,19 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
 
     # Verify compose file has hard-pinned tag and no watchdog
     compose_data = yaml.safe_load((extracted_dir / "docker-compose.prod.yml").read_text(encoding="utf-8"))
-    assert compose_data["services"]["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0-rc1"
+    assert compose_data["services"]["farna-control"]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0-rc1"
     assert "watchdog" not in compose_data["services"]
 
     # Verify docker-compose.yml is identical copy
     assert (extracted_dir / "docker-compose.yml").read_text(encoding="utf-8") == (extracted_dir / "docker-compose.prod.yml").read_text(encoding="utf-8")
 
 
-def _pinned_modulo_image(tarball_path: Path) -> str:
+def _pinned_farna_control_image(tarball_path: Path) -> str:
     with tarfile.open(tarball_path, "r:gz") as tar:
         handle = tar.extractfile("docker-compose.prod.yml")
         assert handle is not None
         compose = yaml.safe_load(handle.read().decode("utf-8"))
-    image: str = compose["services"]["modulo"]["image"]
+    image: str = compose["services"]["farna-control"]["image"]
     return image
 
 
@@ -237,8 +237,8 @@ def test_build_compose_release_distinguishes_rc_and_ga_image_pins(tmp_path: Path
     a promote that reused the cut bundle would ship an RC-pinned compose file
     under the GA release name.
     """
-    rc_image = _pinned_modulo_image(build_compose_release(version="0.5.1", tag="v0.5.1-rc2", output_dir=tmp_path / "rc"))
-    ga_image = _pinned_modulo_image(build_compose_release(version="0.5.1", tag="v0.5.1", output_dir=tmp_path / "ga"))
+    rc_image = _pinned_farna_control_image(build_compose_release(version="0.5.1", tag="v0.5.1-rc2", output_dir=tmp_path / "rc"))
+    ga_image = _pinned_farna_control_image(build_compose_release(version="0.5.1", tag="v0.5.1", output_dir=tmp_path / "ga"))
 
     assert rc_image == "ghcr.io/farnalabs/farna-control:v0.5.1-rc2"
     assert ga_image == "ghcr.io/farnalabs/farna-control:v0.5.1"
@@ -256,7 +256,7 @@ def test_build_compose_release_derives_tag_from_version(tmp_path: Path):
         f = tar.extractfile("docker-compose.prod.yml")
         assert f is not None
         data = yaml.safe_load(f.read().decode("utf-8"))
-        assert data["services"]["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v0.5.1"
+        assert data["services"]["farna-control"]["image"] == "ghcr.io/farnalabs/farna-control:v0.5.1"
 
 
 def test_build_compose_release_rejects_invalid_version(tmp_path: Path):
@@ -433,6 +433,6 @@ def test_bundled_compose_is_standalone_and_dropped_the_source_build():
         assert "build" not in service, f"bundled service '{name}' still builds from a local context"
     assert "watchdog" not in files
 
-    # Every image is either a pinned upstream major or the immutable Modulo tag.
-    assert compose["services"]["modulo"]["image"].startswith("ghcr.io/farnalabs/farna-control:")
-    assert not compose["services"]["modulo"]["image"].endswith(":latest")
+    # Every image is either a pinned upstream major or the immutable Farna Control tag.
+    assert compose["services"]["farna-control"]["image"].startswith("ghcr.io/farnalabs/farna-control:")
+    assert not compose["services"]["farna-control"]["image"].endswith(":latest")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Release preflight discovery gate for Modulo unified release workflow (FAR-2344).
+"""Release preflight discovery gate for Farna Control unified release workflow (FAR-2344).
 
 Evaluates all release preconditions independently in a single pass without failing
 early, so that every check is exercised and a comprehensive failure matrix is
@@ -920,9 +920,9 @@ class ReleasePreflightChecker:
     # -------------------------------------------------------------------------
     def check_helm_chart(self) -> PreflightCheckResult:
         name = "Helm chart artefact validation"
-        chart_dir = self.repo_root / "deploy" / "helm" / "modulo"
+        chart_dir = self.repo_root / "deploy" / "helm" / "farna-control"
         if not chart_dir.is_dir():
-            return PreflightCheckResult(name, False, "deploy/helm/modulo chart directory is missing")
+            return PreflightCheckResult(name, False, "deploy/helm/farna-control chart directory is missing")
 
         required_files = ("Chart.yaml", "values.yaml")
         missing = [filename for filename in required_files if not (chart_dir / filename).is_file()]
@@ -947,7 +947,7 @@ class ReleasePreflightChecker:
         rc, stdout, stderr = self.run_cmd([helm_bin, "lint", str(chart_dir)], cwd=self.repo_root, timeout=180)
         if rc != 0:
             reason = (stderr or stdout).strip() or f"exit code {rc}"
-            return PreflightCheckResult(name, False, f"helm lint failed for deploy/helm/modulo: {reason}")
+            return PreflightCheckResult(name, False, f"helm lint failed for deploy/helm/farna-control: {reason}")
         return PreflightCheckResult(name, True, "Helm chart files are present and helm lint passed")
 
     # -------------------------------------------------------------------------

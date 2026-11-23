@@ -11,7 +11,7 @@ Usage:
 
 Environment variables:
   BASE_URL         - API root (default: http://localhost:8000/api/v1)
-  ADMIN_EMAIL      - login email (default: admin@modulo.test)
+  ADMIN_EMAIL      - login email (default: admin@farna-control.test)
   ADMIN_PASSWORD   - login password (default: test-password-123)
 """
 

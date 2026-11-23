@@ -88,7 +88,7 @@ from farna.core.email_service import EmailSendingError, send_email
 from farna.core.ssrf import pinned_async_client
 from farna.settings import Settings, get_settings, resolve_instance_identity
 
-_log = logging.getLogger("modulo.watchdog")
+_log = logging.getLogger("farna_control.watchdog")
 
 # Redis keys owned by this watchdog. The alert-state key stores the active
 # incident (JSON: conditions + started_at) so the watchdog is edge-triggered:

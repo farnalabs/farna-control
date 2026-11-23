@@ -1,5 +1,5 @@
 {
-    "name": "modulo-frontend",
+    "name": "farna-control-frontend",
     "version": "0.3.329",
     "private": true,
     "scripts": {
@@ -100,5 +100,5 @@
         "vitest": "^4.0.0",
         "vue-tsc": "^3.3.7"
     },
-    "packageManager": "pnpm@11.28.13"
+    "packageManager": "pnpm@11.29.0"
 }

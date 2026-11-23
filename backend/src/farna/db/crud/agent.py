@@ -122,11 +122,18 @@ async def get_agent(session: AsyncSession, agent_id: uuid.UUID) -> Agent | None:
 async def list_agents(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
     cursor: str | None = None,
 ) -> PageResult[Agent]:
-    base = select(Agent)
+    # FAR-2686: carry an explicit organisation predicate so the agent list is
+    # never scoped by row-level security alone. ``organisation_id`` is NOT NULL
+    # on ``agents`` and every row belongs to exactly one org (there is no
+    # shared/sentinel-org agent), so the clamp hides nothing it should show and
+    # closes the BYPASSRLS / misconfigured-RLS hole. ``org_id`` is REQUIRED so a
+    # future caller cannot fall back to the RLS-only shape.
+    base = select(Agent).where(Agent.organisation_id == org_id)
     if cursor is not None:
         paginator = CursorPaginator()
         cp = await paginator.paginate(
@@ -147,10 +154,10 @@ async def list_agents(
         )
     offset = (page - 1) * page_size
     try:
-        total = (await session.execute(select(func.count()).select_from(Agent))).scalar_one()
+        total = (await session.execute(select(func.count()).select_from(Agent).where(Agent.organisation_id == org_id))).scalar_one()
     except ProgrammingError:
         return PageResult(items=[], total=0, page=page, page_size=page_size)
-    items = list((await session.execute(select(Agent).order_by(Agent.created_at.desc()).offset(offset).limit(page_size))).scalars())
+    items = list((await session.execute(select(Agent).where(Agent.organisation_id == org_id).order_by(Agent.created_at.desc()).offset(offset).limit(page_size))).scalars())
     has_more = (offset + len(items)) < total
     return PageResult(items=items, total=total, page=page, page_size=page_size, has_more=has_more)
 

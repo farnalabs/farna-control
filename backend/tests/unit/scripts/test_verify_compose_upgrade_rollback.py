@@ -50,7 +50,7 @@ def _child_log_read(stream: str, path: str, *, body: str, returncode: int = 0, s
         path=path,
         result=module.CommandResult(
             f"failed-upgrade-backend-log-{stream}-attempt-1",
-            ("docker", "compose", "-p", "proof-123", "exec", "-T", "modulo", "cat", path),
+            ("docker", "compose", "-p", "proof-123", "exec", "-T", "farna-control", "cat", path),
             returncode,
             body,
             stderr,
@@ -61,7 +61,7 @@ def _child_log_read(stream: str, path: str, *, body: str, returncode: int = 0, s
 def _child_log_evidence(*, stdout_body: str = "", stderr_body: str = "", stderr_returncode: int = 0) -> Any:
     stdout_path = module._BACKEND_CHILD_LOGS[0][1]
     stderr_path = module._BACKEND_CHILD_LOGS[1][1]
-    failing_stderr = "" if stderr_returncode == 0 else 'service "modulo" is not running'
+    failing_stderr = "" if stderr_returncode == 0 else 'service "farna-control" is not running'
     return module.ChildLogEvidence(
         reads=(
             _child_log_read("stdout", stdout_path, body=stdout_body),
@@ -90,7 +90,7 @@ def _container_log(body: str = CONTAINER_LOG_BODY) -> Any:
             "logs",
             "--no-color",
             "--tail=200",
-            "modulo",
+            "farna-control",
         ),
         0,
         body,
@@ -105,7 +105,7 @@ def test_validate_tag_rejects_moving_tags() -> None:
         validate_tag("  ", name="tag")
 
 
-@pytest.mark.parametrize("value", ["proof-123", "modulo-upgrade-4321", "A1_b2"])
+@pytest.mark.parametrize("value", ["proof-123", "farna-control-upgrade-4321", "A1_b2"])
 def test_safe_project_name_accepts_bounded_values(value: str) -> None:
     assert safe_project_name(value) == value
 
@@ -159,7 +159,7 @@ def test_matrix_records_every_required_transition(tmp_path: Path) -> None:
         if argv[0] == "docker" and "config" in argv:
             return SimpleNamespace(
                 returncode=0,
-                stdout="image: ghcr.io/farnalabs/modulo:v1.1.0\nSECRET_KEY: intentionally-invalid-secret",
+                stdout="image: ghcr.io/farnalabs/farna-control:v1.1.0\nSECRET_KEY: intentionally-invalid-secret",
                 stderr="",
             )
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -270,7 +270,7 @@ def test_failed_upgrade_failure_names_both_log_sources(tmp_path: Path) -> None:
     assert "readable but it did not contain the startup failure" in message
     assert "backend.out.log" in message
     assert "backend.err.log" in message
-    assert "logs --no-color --tail=200 modulo" in message
+    assert "logs --no-color --tail=200 farna-control" in message
     assert "Starting supervisord..." in message
 
 
@@ -353,13 +353,13 @@ def test_credential_redaction_keeps_operator_tags_and_port(tmp_path: Path) -> No
             "compose-config",
             ("docker", "compose", "config", "http://127.0.0.1:18080/healthz/ready"),
             0,
-            ("image: ghcr.io/farnalabs/modulo:v1.1.0\nSECRET_KEY: super-secret-value\nPOSTGRES_PASSWORD: db-password\n"),
+            ("image: ghcr.io/farnalabs/farna-control:v1.1.0\nSECRET_KEY: super-secret-value\nPOSTGRES_PASSWORD: db-password\n"),
             "",
         ),
         outcome="success",
     )
     rendered = "\n".join(path.read_text(encoding="utf-8") for path in evidence.directory.iterdir())
-    assert "ghcr.io/farnalabs/modulo:v1.1.0" in rendered
+    assert "ghcr.io/farnalabs/farna-control:v1.1.0" in rendered
     assert "127.0.0.1:18080" in rendered
     assert "super-secret-value" not in rendered
     assert "db-password" not in rendered
@@ -449,7 +449,7 @@ def test_matrix_rejects_a_healthy_failed_upgrade(tmp_path: Path) -> None:
         if argv[0] == "docker" and "config" in argv:
             return SimpleNamespace(
                 returncode=0,
-                stdout="image: ghcr.io/farnalabs/modulo:v1.1.0\nSECRET_KEY: intentionally-invalid-secret",
+                stdout="image: ghcr.io/farnalabs/farna-control:v1.1.0\nSECRET_KEY: intentionally-invalid-secret",
                 stderr="",
             )
         return SimpleNamespace(returncode=0, stdout="", stderr="")

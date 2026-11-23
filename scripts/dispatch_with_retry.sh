@@ -67,7 +67,7 @@
 #   DISPATCH_URL            (required) webhook endpoint.
 #   DISPATCH_BODY           (required) JSON payload string.
 #   DISPATCH_SECRET         (required) HMAC secret for X-Farna-Control-Webhook-Secret.
-#   DISPATCH_LABEL          log prefix for the dispatch messages.
+#   DISPATCH_LABEL          log prefix, e.g. "Farna Control Branch Fixer".
 #   DISPATCH_ACCEPT_ANY_2XX "1" accepts any 2xx (default: 202-only).
 #   DISPATCH_DUP_400_IS_OK  "1" treats 400 "Duplicate webhook payload" as a
 #                           handled coalesced no-op (default).

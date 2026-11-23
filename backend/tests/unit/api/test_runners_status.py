@@ -433,7 +433,7 @@ class TestRunnersStatusConcurrency:
         silently capping at page 1."""
         call_count = {"n": 0}
 
-        def _paged(_session: Any, page: int = 1, page_size: int = 100) -> Any:
+        def _paged(_session: Any, org_id: Any = None, page: int = 1, page_size: int = 100) -> Any:
             call_count["n"] += 1
             items = [_profile_row() for _ in range(150 if page == 1 else 0)]
             return PageResult(items=items, total=150, page=page, page_size=page_size)
