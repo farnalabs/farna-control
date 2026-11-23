@@ -128,8 +128,11 @@
     </div>
 
     <!-- Pending Invitations (FAR-461) -->
-    <SectionCard
+    <DataCard
       class="mt-8"
+      variant="bordered"
+      padding="md"
+      heading-level="h2"
       :title="$t('views.AdminUsersView.pending_invitations')"
       data-testid="admin-invitations-section"
     >
@@ -187,7 +190,7 @@
           </tbody>
         </table>
       </div>
-    </SectionCard>
+    </DataCard>
 
     <div v-if="flashMessage" :class="['rounded-lg border px-4 py-3 text-sm', flashMessage.type === 'success' ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text']">
       {{ flashMessage.text }}
@@ -380,13 +383,13 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
 import { useApi } from '../composables/useApi'
 import { useDataFetch } from '../composables/useDataFetch'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Button from 'primevue/button'
 import EmptyState from '../components/shared/EmptyState.vue'

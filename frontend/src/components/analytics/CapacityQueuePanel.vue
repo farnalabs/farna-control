@@ -63,22 +63,22 @@
         <StatCard
           :label="$t('views.AnalyticsView.capacity_pending_now')"
           :value="capacity.pending.total"
-          data-test-id="capacity-pending-total"
+          data-testid="capacity-pending-total"
         />
         <StatCard
           :label="$t('views.AnalyticsView.capacity_oldest_pending')"
           :value="formatDuration(capacity.pending.oldest_pending_age_seconds)"
-          data-test-id="capacity-oldest-pending"
+          data-testid="capacity-oldest-pending"
         />
         <StatCard
           :label="$t('views.AnalyticsView.capacity_drain_ratio')"
           :value="drainRatioLabel"
-          data-test-id="capacity-drain-ratio"
+          data-testid="capacity-drain-ratio"
         />
         <StatCard
           :label="$t('views.AnalyticsView.capacity_org_cap_use')"
           :value="orgCapUseLabel"
-          data-test-id="capacity-org-cap-use"
+          data-testid="capacity-org-cap-use"
         />
       </div>
 
