@@ -447,4 +447,21 @@ __all__ = [
     "node_declared_success",
     "compute_work_intact",
     "build_default_evidence_provider",
+    # --- executor_parts step 4 (HITL / stream-phase / execute-resume mixins):
+    #     collaborators reached from the moved bodies through the _ref()
+    #     call-time bridge, which static analysis cannot see. Each one is a live
+    #     call site inside executor_parts/{hitl,streaming,run_execute}.py and is
+    #     also re-exported by executor.py for the mock.patch targets the bridge
+    #     exists to keep intercepting. ---
+    "evaluate_gate_coalescing",  # hitl.py gate coalescing decision
+    "resolve_review_window_for_gate",  # hitl.py review-window resolver
+    "set_audit_hook",  # run_execute.py per-run audit-hook seam
+    "should_notify_terminal_failure",  # streaming.py run_failed gate
+    "merge_recovered_token_usage",  # run_execute.py retry token merge
+    "set_conformance_ctx",  # run_execute.py conformance context
+    "struct_hash_with_eval_defs",  # run_execute.py graph-cache key
+    "fire_agent_signal",  # run_execute.py agent_signal dispatch
+    "_failure_build_sha",  # run_execute.py failure attribution
+    "_failure_column",  # run_execute.py failure attribution
+    "_enrich_failure_detail",  # run_execute.py failure attribution
 ]

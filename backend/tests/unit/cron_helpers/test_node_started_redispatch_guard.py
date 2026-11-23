@@ -523,8 +523,12 @@ class TestFencedResetIsIdempotencyGated:
         its own gate stops working.
         """
         from farna.core.pipeline_engine import executor, retry_policy, watchdog_retry
+        from farna.core.pipeline_engine.executor_parts import run_execute
 
-        exec_src = Path(executor.__file__).read_text(encoding="utf-8")
+        # The execute/resume group (including the in-execute transient requeue)
+        # moved into ``executor_parts/run_execute.py``, so the census scans both
+        # modules: same two call sites, same gates, same premise.
+        exec_src = Path(executor.__file__).read_text(encoding="utf-8") + Path(run_execute.__file__).read_text(encoding="utf-8")
         rp_src = Path(retry_policy.__file__).read_text(encoding="utf-8")
         wr_src = Path(watchdog_retry.__file__).read_text(encoding="utf-8")
 
@@ -621,9 +625,13 @@ class TestExecutorWriteSiteSharesPhaseConstant:
         predicates bind — and no bare ``"first_node_dispatched"`` literal
         remains in the executor module."""
         from farna.core.pipeline_engine import executor
+        from farna.core.pipeline_engine.executor_parts import streaming
 
         assert executor.PHASE_FIRST_NODE_DISPATCHED is PHASE_FIRST_NODE_DISPATCHED
-        source = Path(executor.__file__).read_text(encoding="utf-8")
+        # The write site lives in ``_publish_mapped_stream_event``, which the
+        # stream-phase split moved into ``executor_parts/streaming.py``; the
+        # scan covers that module too so the site stays covered.
+        source = Path(executor.__file__).read_text(encoding="utf-8") + Path(streaming.__file__).read_text(encoding="utf-8")
         assert 'enter_phase("first_node_dispatched")' not in source
         assert "enter_phase(PHASE_FIRST_NODE_DISPATCHED)" in source
 
