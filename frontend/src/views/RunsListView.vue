@@ -235,29 +235,18 @@
         <span class="text-sm text-muted-foreground">
           {{ $t('views.RunsListView.run_count', total) }}
         </span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            :disabled="!canGoPrev"
-            data-testid="runs-list-prev-page"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
-            @click="prevPage"
-          >
-            {{ $t('views.RunsListView.previous') }}
-          </button>
-          <span v-if="positionKnown" class="text-sm text-muted-foreground">
-            {{ $t('views.RunsListView.page_label', { page: pagePosition }) }}
-          </span>
-          <button
-            type="button"
-            :disabled="!canGoNext"
-            data-testid="runs-list-next-page"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
-            @click="nextPage"
-          >
-            {{ $t('views.RunsListView.next') }}
-          </button>
-        </div>
+        <Pagination
+          :has-prev="canGoPrev"
+          :has-next="canGoNext"
+          :page-label="positionKnown ? $t('views.RunsListView.page_label', { page: pagePosition }) : null"
+          :prev-label="$t('views.RunsListView.previous')"
+          :next-label="$t('views.RunsListView.next')"
+          prev-testid="runs-list-prev-page"
+          next-testid="runs-list-next-page"
+          status-testid="runs-list-page-label"
+          @prev="prevPage"
+          @next="nextPage"
+        />
       </div>
     </template>
   </div>
@@ -277,6 +266,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { DataTable, type Column } from '../components/ui/data-table'
 import EmptyState from '../components/shared/EmptyState.vue'
+import Pagination from '../components/shared/Pagination.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import RunPipelineVersionLink from '../components/runs/RunPipelineVersionLink.vue'
 import { runStatusBadgeClass, formatRunDate, heartbeatAgeSeconds, heartbeatDisplayText, isHeartbeatStale, triggerTypeLabel, runStatusDescription, runStatusShortLabel, isDispatchedRun, queuedCapacityReason } from '../utils/runUtils'

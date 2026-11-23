@@ -9,10 +9,8 @@
         <span class="text-foreground font-medium">{{ run.pipeline_name || (run.run_number != null ? '#' + run.run_number : shortId(run.run_id)) }}</span>
       </nav>
       <!-- Run Header -->
-      <header class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-3">
-            <PageHeader :title="$t('views.RunDetailView.run_detail')" :subtitle="$t('views.RunDetailView.subtitle')" />
+      <PageHeader :title="$t('views.RunDetailView.run_detail')" :subtitle="$t('views.RunDetailView.subtitle')">
+        <div class="flex flex-wrap items-center gap-3">
             <span :class="statusBadgeClass" :title="runStatusDescription(run.status, t, run.error_code)" :aria-label="runStatusDescription(run.status, t, run.error_code)" :data-testid="isSupersededRun(run.status, run.error_code) ? 'run-detail-status-superseded' : undefined"><span :class="isSupersededRun(run.status, run.error_code) ? '' : 'capitalize'">{{ runStatusShortLabel(run.status, run.error_code, $t, runStatusLabel(run.status)) }}</span></span>
             <!-- FAR-1141: run provenance — a dispatched run (part of its work
                  ran outside Modulo) must never read indistinguishably from one
@@ -24,7 +22,7 @@
               :title="$t('common.execution_origin.dispatched_hint')"
               class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
             >{{ $t('common.execution_origin.dispatched') }}</span>
-          </div>
+        </div>
           <p class="mt-1 text-sm text-muted-foreground">
             {{ $t('views.RunDetailView.pipeline_label') }} <RunPipelineVersionLink
               :pipeline-id="run.pipeline_id"
@@ -47,7 +45,7 @@
               {{ copied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
             </button>
           </p>
-        </div>
+        <template #right>
         <div class="text-right text-xs text-muted-foreground">
           <div v-if="run.total_cost_usd != null" class="text-base font-semibold tabular-nums text-foreground">
             {{ $t('views.RunDetailView.total_label') }} {{ formatMoney(Number(formattedCost), currencyCode, 6) }}
@@ -61,7 +59,8 @@
             {{ supportCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.support_reference') }}
           </button>
         </div>
-      </header>
+        </template>
+      </PageHeader>
 
       <!-- Run-level warnings summary strip: surfaces run-level issues at the
            top of the page so they are visible without scrolling to the
@@ -117,8 +116,8 @@
            include `claimed` too: otherwise the approve/reject controls unmount
            on the next poll while the gate is still undecided (and a transient
            approve failure can no longer be retried). -->
-      <section v-if="isHitlActionableStatus(run.status) && pendingReviews.length > 0" class="rounded-lg border bg-card p-6 mb-6">
-        <h2 class="text-base font-semibold tracking-tight mb-4">{{ $t('views.RunDetailView.hitl_review') }}</h2>
+      <BaseCard v-if="isHitlActionableStatus(run.status) && pendingReviews.length > 0" padding="lg" class="mb-6">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailView.hitl_review')" />
         <!-- Shared card (FAR-686): the component owns claim token, notes and
              approve/reject actions. The FAR-631 invariant is preserved by
              re-emitting decision messages to the hoisted hitlMessage below —
@@ -132,7 +131,7 @@
           @claimed="onHitlClaimed"
           @decided="onHitlDecided"
         />
-      </section>
+      </BaseCard>
 
       <!-- HITL action feedback. Hoisted outside the per-gate loop AND outside
            the section gate (FAR-631): approve/reject empties pendingReviews and
@@ -211,24 +210,25 @@
       </div>
 
       <!-- Run Input Payload — the parameters provided when the run was scheduled -->
-      <div v-if="runIO?.input_payload" data-testid="run-detail-input-payload" class="rounded-lg border border-border bg-card p-4 mb-4">
-        <div class="flex items-center justify-between mb-1">
-          <h3 class="text-sm font-semibold">{{ $t('views.RunDetailView.run_input') }}</h3>
-          <button
-            type="button"
-            class="text-xs text-primary-text hover:bg-primary/10 rounded px-2 py-1"
-            data-testid="run-detail-copy-input"
-            @click="copyInputPayload"
-          >
-            {{ inputPayloadCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-          </button>
-        </div>
+      <BaseCard v-if="runIO?.input_payload" padding="md" class="mb-4" data-testid="run-detail-input-payload">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailView.run_input')">
+          <template #actions>
+            <button
+              type="button"
+              class="text-xs text-primary-text hover:bg-primary/10 rounded px-2 py-1"
+              data-testid="run-detail-copy-input"
+              @click="copyInputPayload"
+            >
+              {{ inputPayloadCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
+            </button>
+          </template>
+        </CardHeader>
         <JsonViewer :data="runIO.input_payload" :show-toolbar="true" :max-height="'16rem'" />
-      </div>
+      </BaseCard>
 
       <!-- Work items -->
-      <section v-if="run.work_item_refs && run.work_item_refs.length > 0" data-testid="run-detail-work-items" :data-enrichment="prEnrichmentStatus" class="rounded-lg border border-border bg-card p-4 mb-4">
-        <h3 class="text-sm font-semibold mb-2">{{ $t('views.RunDetailView.work_items') }}</h3>
+      <BaseCard v-if="run.work_item_refs && run.work_item_refs.length > 0" padding="md" class="mb-4" data-testid="run-detail-work-items" :data-enrichment="prEnrichmentStatus">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailView.work_items')" />
         <div class="space-y-1.5">
           <div v-for="(item, idx) in run.work_item_refs" :key="`${item.kind}-${item.ref}-${idx}`" class="flex flex-wrap items-center gap-2 text-xs">
             <template v-if="isGithubWorkItem(item)">
@@ -252,11 +252,11 @@
             <span v-if="item.status" class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-muted-foreground capitalize">{{ item.status }}</span>
           </div>
         </div>
-      </section>
+      </BaseCard>
 
       <!-- Child runs -->
-      <section v-if="run.child_runs && run.child_runs.length > 0" data-testid="run-detail-child-runs" class="rounded-lg border border-border bg-card p-4 mb-4">
-        <h3 class="text-sm font-semibold mb-2">{{ $t('views.RunDetailView.child_runs') }}</h3>
+      <BaseCard v-if="run.child_runs && run.child_runs.length > 0" padding="md" class="mb-4" data-testid="run-detail-child-runs">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailView.child_runs')" />
         <div class="space-y-1.5">
           <div v-for="child in run.child_runs" :key="child.run_id" class="flex flex-wrap items-center gap-2 text-xs">
             <router-link
@@ -270,7 +270,7 @@
             <span v-if="child.pipeline_name" class="text-muted-foreground">{{ child.pipeline_name }}</span>
           </div>
         </div>
-      </section>
+      </BaseCard>
 
       <!-- Cancel button for non-terminal runs -->
       <div v-if="canCancel" class="my-4">
@@ -438,8 +438,8 @@
       <KnownFixesPanel :fixes="run.known_fixes" />
 
       <!-- Guardrail Summary -->
-      <section v-if="guardrailBuckets.length > 0" class="rounded-lg border bg-card p-6 mb-6" data-testid="run-detail-guardrail-summary">
-        <h2 class="mb-3 text-base font-semibold tracking-tight">{{ $t('views.RunDetailGuardrailSummary.guardrail_summary_title') }}</h2>
+      <BaseCard v-if="guardrailBuckets.length > 0" padding="lg" class="mb-6" data-testid="run-detail-guardrail-summary">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailGuardrailSummary.guardrail_summary_title')" />
         <div class="flex flex-wrap gap-3">
           <div
             v-for="bucket in guardrailBuckets"
@@ -453,11 +453,11 @@
             <span class="tabular-nums font-semibold">{{ bucket.value }}</span>
           </div>
         </div>
-      </section>
+      </BaseCard>
 
       <!-- FAR-2054: Guardrail Coverage by Seam -->
-      <section v-if="seamCoverage.length > 0" class="rounded-lg border bg-card p-6 mb-6" data-testid="run-detail-seam-coverage" aria-live="polite">
-        <h2 class="mb-3 text-base font-semibold tracking-tight">{{ $t('views.RunDetailGuardrailSummary.seam_coverage_title') }}</h2>
+      <BaseCard v-if="seamCoverage.length > 0" padding="lg" class="mb-6" data-testid="run-detail-seam-coverage" aria-live="polite">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailGuardrailSummary.seam_coverage_title')" />
         <div class="space-y-3">
           <div
             v-for="statement in seamCoverage"
@@ -479,7 +479,7 @@
             </div>
           </div>
         </div>
-      </section>
+      </BaseCard>
 
       <!-- Guardrail-blocked override (terminal eval_failed / eval_blocked) -->
       <div
@@ -506,12 +506,17 @@
            timeout is per attempt, so a retried timeout can consume it more
            than once. Static content — deliberately NOT a live region even
            though the elapsed rows tick while the run is in flight. -->
-      <section
+      <BaseCard
         v-if="worstCaseRows.length > 0"
+        padding="lg"
+        class="mb-6"
         data-testid="run-detail-worst-case"
-        class="mb-6 rounded-lg border bg-card p-6"
       >
-        <h2 class="text-base font-semibold tracking-tight">{{ $t('views.RunDetailView.worst_case_title') }}</h2>
+        <CardHeader
+          heading-level="h2"
+          header-class="mb-0!"
+          :title="$t('views.RunDetailView.worst_case_title')"
+        />
         <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.RunDetailView.worst_case_help') }}</p>
         <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.RunDetailView.worst_case_queue_note') }}</p>
         <div class="mt-3 space-y-2">
@@ -555,17 +560,18 @@
             </ul>
           </div>
         </div>
-      </section>
+      </BaseCard>
 
       <!-- FAR-2078: durable per-attempt history (self-contained child). -->
       <RunAttemptHistory :run-id="run.run_id" />
 
       <!-- Per-Node Execution Trace -->
-      <section class="space-y-4 rounded-lg border bg-card p-6">
-        <div class="flex items-baseline justify-between gap-4">
-          <h2 class="text-base font-semibold tracking-tight">{{ $t('views.RunDetailView.execution_trace') }}</h2>
-          <p class="text-xs text-muted-foreground">{{ $t('views.RunDetailView.per_node_model_cost_caveat') }}</p>
-        </div>
+      <BaseCard padding="lg">
+        <CardHeader heading-level="h2" :title="$t('views.RunDetailView.execution_trace')">
+          <template #actions>
+            <p class="text-xs text-muted-foreground">{{ $t('views.RunDetailView.per_node_model_cost_caveat') }}</p>
+          </template>
+        </CardHeader>
 
         <div v-if="nodeEntries.length === 0 && run.status !== 'failed'" class="py-4 text-center text-sm text-muted-foreground">
           {{ $t('views.RunDetailView.no_node_data') }}
@@ -853,14 +859,19 @@
           </tbody>
         </table>
         </div>
-      </section>
+      </BaseCard>
 
       <!-- Total Run Cost -->
-      <section v-if="run.total_cost_usd != null" id="run-detail-cost-section" class="rounded-lg border bg-card p-6">
-        <div class="flex items-center justify-between">
-          <h2 class="text-base font-semibold tracking-tight">{{ $t('views.RunDetailView.total_run_cost') }}</h2>
-          <span class="text-2xl font-semibold tabular-nums">{{ formatMoney(Number(formattedCost), currencyCode, 6) }}</span>
-        </div>
+      <BaseCard v-if="run.total_cost_usd != null" id="run-detail-cost-section" padding="lg">
+        <CardHeader
+          heading-level="h2"
+          header-class="mb-0!"
+          :title="$t('views.RunDetailView.total_run_cost')"
+        >
+          <template #actions>
+            <span class="text-2xl font-semibold tabular-nums">{{ formatMoney(Number(formattedCost), currencyCode, 6) }}</span>
+          </template>
+        </CardHeader>
         <p v-if="totalTokens != null || costBasisTokens != null" class="mt-1 text-xs text-muted-foreground">
           <template v-if="nodesReportedTokens && (totalTokens ?? 0) > 0">
             {{ $t('views.RunDetailView.total_tokens_node_reported', { count: (totalTokens ?? 0).toLocaleString() }) }}
@@ -964,7 +975,7 @@
             {{ $t('views.RunDetailView.cost_accounting_migrated') }}
           </p>
         </template>
-      </section>
+      </BaseCard>
 
       <!-- Prompt Reveal Dialog -->
       <Dialog v-if="selectedPrompt" :visible="!!selectedPrompt" :modal="true" :dismissable-mask="true" :style="{ width: '48rem' }" @update:visible="closePromptDialog">
@@ -1044,6 +1055,8 @@ import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import { useApi } from '../composables/useApi'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'

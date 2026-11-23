@@ -156,6 +156,29 @@ describe('NotificationsPage', () => {
     )
   })
 
+  it('disables Previous on the first page and returns to it from the second', async () => {
+    mockFetchNotifications.mockResolvedValue(pageResponse([makeNotification('n-1')], 30, 1))
+    const wrapper = mount(NotificationsPage)
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="notifications-prev-page"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="notifications-next-page"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    expect(mockFetchNotifications).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+    )
+
+    await wrapper.find('[data-testid="notifications-prev-page"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+    expect(mockFetchNotifications).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1 }),
+    )
+  })
+
   it('removes a notification after a successful review-later', async () => {
     mockFetchNotifications.mockResolvedValue(pageResponse([makeNotification('n-1')], 1, 1))
     mockReviewLater.mockResolvedValue(undefined)

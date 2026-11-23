@@ -1275,6 +1275,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-auth-jwt-auth](auth/jwt-auth.md) => PRD N/A
 - [feat-sso](auth/sso-provider-ui.md) => PRD 9.4
 - [feat-scim](auth/scim-provisioning.md) => PRD 9.4
+- [feat-service-accounts](auth/service-accounts.md) => PRD N/A
 - [feat-onboarding](auth/onboarding.md) => PRD N/A
 
 ### Build
