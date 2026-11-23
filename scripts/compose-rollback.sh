@@ -50,8 +50,6 @@ case "$tag" in
     ;;
 esac
 
-app_service="${FARNA_CONTROL_APP_SERVICE:-modulo}"
-
 compose_file="${COMPOSE_FILE:-}"
 if [ -z "$compose_file" ]; then
   if [ -f deploy/compose/docker-compose.prod.yml ]; then
@@ -65,6 +63,41 @@ fi
 if [ ! -f "$compose_file" ]; then
   printf 'compose file not found: %s\n' "$compose_file" >&2
   exit 2
+fi
+
+# Identify the service to start from the compose file this run is about to
+# use, never from a name written into this helper. The stack also runs the
+# database, Redis and (in the repo layout) the watchdog, so it is not "the only
+# service", and a default baked in here silently goes stale the moment the
+# stack is renamed. The application service is the one whose image is a Farna
+# Control release, so ask compose for the resolved configuration and match on
+# that. Exactly one match is required - anything else is refused, never
+# guessed. FARNA_CONTROL_APP_SERVICE still overrides the derived value for a
+# bundle an operator has customised.
+app_service="${FARNA_CONTROL_APP_SERVICE:-}"
+if [ -z "$app_service" ]; then
+  # shellcheck disable=SC2016  # the single-quoted program is awk, not shell: $0 is the record
+  app_service="$(
+    TAG="$tag" docker compose -f "$compose_file" config | awk '
+      /^services:[[:space:]]*$/ { in_services = 1; next }
+      in_services && /^[^[:space:]]/ { in_services = 0 }
+      in_services && /^  [A-Za-z0-9._-]+:[[:space:]]*$/ {
+        current = $0
+        sub(/^[[:space:]]+/, "", current)
+        sub(/:[[:space:]]*$/, "", current)
+        next
+      }
+      in_services && /^    image:[[:space:]]+ghcr\.io\/farnalabs\/farna-control:/ && current != "" {
+        print current
+        next
+      }
+    '
+  )"
+  matches="$(printf '%s\n' "$app_service" | awk 'NF { found++ } END { print found + 0 }')"
+  if [ "$matches" -ne 1 ]; then
+    printf 'cannot identify the Farna Control service in %s (%s image match(es)); set FARNA_CONTROL_APP_SERVICE\n' "$compose_file" "$matches" >&2
+    exit 2
+  fi
 fi
 
 override="$(mktemp "${TMPDIR:-/tmp}/farna-rollback.XXXXXX.yml")"

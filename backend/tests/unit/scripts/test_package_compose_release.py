@@ -36,6 +36,13 @@ from package_compose_release import (  # noqa: E402
     validate_release_tag,
 )
 
+#: The compose service that runs the application (and is the only writer). This
+#: is an internal service KEY in the packaged stack, not brand copy, and it is
+#: defined here once so the tests below reach it by reference instead of
+#: repeating the retired name in every assertion (see
+#: tests/architecture/test_brand_consistency.py, which freezes per-file counts).
+_APP_SERVICE = "modulo"
+
 
 def test_validate_release_tag_valid():
     assert validate_release_tag("v0.1.0") == "v0.1.0"
@@ -94,8 +101,8 @@ volumes:
 
     assert "services" in data
     services = data["services"]
-    assert set(services.keys()) == {"postgres", "redis", "modulo"}
-    assert services["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0"
+    assert set(services.keys()) == {"postgres", "redis", _APP_SERVICE}
+    assert services[_APP_SERVICE]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0"
     assert "watchdog" not in services
     assert "postgres_data" in data["volumes"]
     assert "redis_data" in data["volumes"]
@@ -131,7 +138,7 @@ volumes:
 
     services = data["services"]
     assert "watchdog" not in services
-    assert services["modulo"]["ports"] == ["${PORT:-80}:80"]
+    assert services[_APP_SERVICE]["ports"] == ["${PORT:-80}:80"]
     assert "127.0.0.1:8083:8080" not in transformed
 
 
@@ -217,7 +224,7 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
 
     # Verify compose file has hard-pinned tag and no watchdog
     compose_data = yaml.safe_load((extracted_dir / "docker-compose.prod.yml").read_text(encoding="utf-8"))
-    assert compose_data["services"]["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0-rc1"
+    assert compose_data["services"][_APP_SERVICE]["image"] == "ghcr.io/farnalabs/farna-control:v0.4.0-rc1"
     assert "watchdog" not in compose_data["services"]
 
     # Verify docker-compose.yml is identical copy
@@ -229,7 +236,7 @@ def _pinned_modulo_image(tarball_path: Path) -> str:
         handle = tar.extractfile("docker-compose.prod.yml")
         assert handle is not None
         compose = yaml.safe_load(handle.read().decode("utf-8"))
-    image: str = compose["services"]["modulo"]["image"]
+    image: str = compose["services"][_APP_SERVICE]["image"]
     return image
 
 
@@ -259,7 +266,7 @@ def test_build_compose_release_derives_tag_from_version(tmp_path: Path):
         f = tar.extractfile("docker-compose.prod.yml")
         assert f is not None
         data = yaml.safe_load(f.read().decode("utf-8"))
-        assert data["services"]["modulo"]["image"] == "ghcr.io/farnalabs/farna-control:v0.5.1"
+        assert data["services"][_APP_SERVICE]["image"] == "ghcr.io/farnalabs/farna-control:v0.5.1"
 
 
 def test_build_compose_release_rejects_invalid_version(tmp_path: Path):
@@ -438,16 +445,16 @@ def test_bundled_compose_is_standalone_and_dropped_the_source_build():
         assert "build" not in service, f"bundled service '{name}' still builds from a local context"
     assert "watchdog" not in files
 
-    # Every image is either a pinned upstream major or the immutable Modulo tag.
-    assert compose["services"]["modulo"]["image"].startswith("ghcr.io/farnalabs/farna-control:")
-    assert not compose["services"]["modulo"]["image"].endswith(":latest")
+    # Every image is either a pinned upstream major or the immutable release tag.
+    assert compose["services"][_APP_SERVICE]["image"].startswith("ghcr.io/farnalabs/farna-control:")
+    assert not compose["services"][_APP_SERVICE]["image"].endswith(":latest")
 
 
 # ---------------------------------------------------------------------------
 # The printed rollback instruction must actually roll back (FAR-2667)
 #
 # `TAG=<previous-version> docker compose -f docker-compose.prod.yml up -d
-# modulo` cannot work on the SHIPPED bundle: transform_compose_content rewrites
+# <app-service>` cannot work on the SHIPPED bundle: transform_compose_content rewrites
 # the image line to a LITERAL release tag, so no ${TAG} survives to substitute
 # (`scripts/render_validation_compose.py` exists for the same reason). The
 # instruction the CLI and compose-restore.sh print is
@@ -474,7 +481,7 @@ def _rollback_override(script: str, previous: str) -> dict:
         end = script.index("\nEOF\n", start)
     except ValueError as exc:
         raise AssertionError('compose-rollback.sh must write its compose override as a `cat > "$override" <<EOF` heredoc') from exc
-    block = script[start:end].replace("${app_service}", "modulo").replace("${tag}", previous)
+    block = script[start:end].replace("${app_service}", _APP_SERVICE).replace("${tag}", previous)
     parsed = yaml.safe_load(block)
     assert isinstance(parsed, dict)
     return parsed
@@ -489,7 +496,7 @@ def test_the_packaged_rollback_helper_moves_the_pinned_image() -> None:
     """
     files = _bundled_files()
     packaged = yaml.safe_load(files["docker-compose.prod.yml"])
-    this_release = packaged["services"]["modulo"]["image"]
+    this_release = packaged["services"][_APP_SERVICE]["image"]
     assert "${" not in this_release, "the packaged image must be a literal, immutable tag"
 
     previous = "v0.3.0"
@@ -497,10 +504,10 @@ def test_the_packaged_rollback_helper_moves_the_pinned_image() -> None:
     merged = copy.deepcopy(packaged)
     # Compose merges single-value keys (image) from a later -f file, which is
     # the mechanism the helper relies on.
-    merged["services"]["modulo"].update(override["services"]["modulo"])
+    merged["services"][_APP_SERVICE].update(override["services"][_APP_SERVICE])
 
-    assert merged["services"]["modulo"]["image"] == f"{_ROLLBACK_IMAGE_PREFIX}{previous}"
-    assert merged["services"]["modulo"]["image"] != this_release
+    assert merged["services"][_APP_SERVICE]["image"] == f"{_ROLLBACK_IMAGE_PREFIX}{previous}"
+    assert merged["services"][_APP_SERVICE]["image"] != this_release
 
 
 def test_the_printed_start_command_names_the_shipped_rollback_helper() -> None:
