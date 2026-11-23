@@ -316,6 +316,27 @@ describe('DashboardView', () => {
     expect(wrapper.text()).toContain('Idle')
   })
 
+  it('falls back to zero counts when the summary omits the per-status run breakdown', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') {
+        return Promise.resolve({
+          data: { ...mockSummaryData, run_counts_by_status: {} },
+          error: undefined,
+        })
+      }
+      if (url === '/api/v1/plan') return Promise.resolve({ data: mockPlanData, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: [] }, error: undefined })
+      if (url === '/api/v1/admin/feature-flags') return Promise.resolve({ data: { flags: [] }, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Running')
+    expect(wrapper.text()).toContain('Idle')
+    expect(wrapper.text()).toContain('142')
+  })
+
   it('renders eval pass rate card', async () => {
     const wrapper = mount(DashboardView)
     await flushPromises()

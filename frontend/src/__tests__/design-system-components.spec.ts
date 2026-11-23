@@ -24,6 +24,7 @@ import CardTable from '../components/ui/CardTable.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import SummaryCard from '../components/ui/SummaryCard.vue'
 import StatCard from '../components/ui/StatCard.vue'
+import TableCard from '../components/ui/TableCard.vue'
 
 describe('useDeltaFormatting', () => {
   it.each([
@@ -362,6 +363,38 @@ describe('CardContent, CardTable and CardSkeleton', () => {
   })
 })
 
+describe('TableCard', () => {
+  const tableSlot = { default: '<table><tbody><tr><td>row</td></tr></tbody></table>' }
+
+  it('renders a bare table untouched when neither heading nor table label is supplied', () => {
+    const wrapper = mount(TableCard, { slots: tableSlot })
+
+    expect(wrapper.find('.overflow-x-auto').exists()).toBe(false)
+    expect(wrapper.find('table').exists()).toBe(true)
+  })
+
+  it('opts into the CardTable region from a table label alone', () => {
+    const wrapper = mount(TableCard, { props: { tableLabel: 'Rows table' }, slots: tableSlot })
+
+    const scroll = wrapper.find('.overflow-x-auto')
+    expect(scroll.exists()).toBe(true)
+    expect(scroll.attributes('aria-label')).toBe('Rows table')
+  })
+
+  it('opts into the CardTable region from a heading alone', () => {
+    const wrapper = mount(TableCard, { props: { heading: 'Rows' }, slots: tableSlot })
+
+    expect(wrapper.text()).toContain('Rows')
+    expect(wrapper.find('.overflow-x-auto').exists()).toBe(true)
+  })
+
+  it('honours an explicit padding over the header-derived default', () => {
+    const wrapper = mount(TableCard, { props: { title: 'Rows', padding: 'lg' }, slots: tableSlot })
+
+    expect(wrapper.find('.card').classes()).toContain('p-6')
+  })
+})
+
 describe('StatCard metric tile', () => {
   it('renders delta values, direction, percentage, and custom test id', () => {
     const wrapper = mount(StatCard, {
@@ -529,6 +562,30 @@ describe('StatCard', () => {
 
     expect(incomplete.find('[data-testid="stat-no-baseline"]').exists()).toBe(false)
     expect(invalid.find('.text-xs').exists()).toBe(false)
+  })
+
+  it('falls back to the primary icon background when no colour is supplied', () => {
+    const wrapper = mount(StatCard, {
+      props: { label: 'Runs', value: 12 },
+      slots: { icon: '<circle cx="12" cy="12" r="4" />' },
+    })
+
+    expect(wrapper.find('svg').element.parentElement?.className).toContain('bg-primary/10')
+  })
+
+  it('omits the delta row when only an absolute delta is available without a baseline label', () => {
+    const wrapper = mount(StatCard, {
+      props: {
+        label: 'Runs',
+        value: 12,
+        progress: { value: 50, max: 100 },
+        delta: { current: 12, previous: 10 },
+      },
+    })
+
+    expect(wrapper.find('.text-xs').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stat-no-baseline"]').exists()).toBe(false)
+    expect(wrapper.find('[style]').attributes('style')).toContain('width: 50%')
   })
 
      it('renders percentage-only deltas and omits a delta when no valid values remain', () => {
