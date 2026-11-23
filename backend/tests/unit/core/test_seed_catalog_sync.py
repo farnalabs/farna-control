@@ -1,11 +1,13 @@
 """Seed catalog sync tests — catalog.FLAGS must mirror feature_flags._KNOWN_FLAGS.
 
-The startup seed (``_seed_tier_catalog``) inserts ``catalog.FLAGS`` into
-``feature_flag_catalog`` with ``ON CONFLICT (name) DO NOTHING``, and
-``FeatureFlagRegistry.load_from_db()`` replaces its flags with ONLY the
-DB-backed rows. Any flag present in ``_KNOWN_FLAGS`` but missing from
-``catalog.FLAGS`` silently vanishes from the registry, locking its feature
-behind the gate even on the right tier. These tests prevent that drift.
+The startup seed (``_seed_tier_catalog``) upserts ``catalog.FLAGS`` into
+``feature_flag_catalog`` and ``FeatureFlagRegistry.load_from_db()`` replaces its
+flags with ONLY the DB-backed rows. Any flag present in ``_KNOWN_FLAGS`` but
+missing from ``catalog.FLAGS`` silently vanishes from the registry, locking its
+feature behind the gate. (FAR-2665 changed the upsert from ``DO NOTHING`` to a
+reconciling ``DO UPDATE`` of description/tier/depends_on, so the code registry
+now wins on every boot; ``is_active`` remains the operator kill switch and is
+deliberately untouched.) These tests prevent that drift.
 """
 
 from farna.core.feature_flags import _KNOWN_FLAGS
@@ -55,9 +57,6 @@ class TestFar114SyncedFlags:
     def test_synced_flag_tiers(self) -> None:
         seeded = _seed_by_name()
         team_flags = {
-            "error_tracking",
-            "runtime_config",
-            "rate_limits",
             "scim",
         }
         community_flags = _SYNCED_FLAGS - team_flags

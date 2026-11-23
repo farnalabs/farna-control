@@ -32,7 +32,7 @@ import router, { hydrateManifestMeta, findUnhydratedGatedManifestPath } from '..
 interface ManifestRoute {
   name: string
   breadcrumb?: string
-  required_tier?: string | null
+  required_entitlement?: string | null
   required_roles?: string[] | null
   required_permissions?: string[] | null
   system_admin_only?: boolean
@@ -61,7 +61,7 @@ function routeDeclaresGate(entry: ManifestRoute | undefined): boolean {
   if (!entry) return false
   const groupId = entry.sidebar_group
   return Boolean(
-    entry.required_tier ||
+    entry.required_entitlement ||
       entry.required_roles?.length ||
       entry.required_permissions?.length ||
       entry.system_admin_only ||
@@ -108,7 +108,7 @@ describe('FAR-1950: manifest gates hydrate for routes resolved BY PATH', () => {
     expect(wrongName, wrongName.join('\n')).toEqual([])
   })
 
-  it('hydrates requiredRoles / requiredTier / requiresSystemAdmin for every gated manifest route', () => {
+  it('hydrates requiredRoles / requiredEntitlement / requiresSystemAdmin for every gated manifest route', () => {
     const failures: string[] = []
     let checked = 0
     for (const [path, entry] of entries) {
@@ -117,9 +117,9 @@ describe('FAR-1950: manifest gates hydrate for routes resolved BY PATH', () => {
       const { resolved, route } = hydrateRouteForPath(path)
       const label = `${path} (resolved name ${String(resolved.name)})`
 
-      if (route.meta.requiredTier !== entry.required_tier) {
+      if (route.meta.requiredEntitlement !== (entry.required_entitlement ?? undefined)) {
         failures.push(
-          `${label}: requiredTier expected ${String(entry.required_tier)}, got ${String(route.meta.requiredTier)}`,
+          `${label}: requiredEntitlement expected ${String(entry.required_entitlement ?? undefined)}, got ${String(route.meta.requiredEntitlement)}`,
         )
       }
       const expectedRoles = entry.required_roles ?? undefined
@@ -158,15 +158,18 @@ describe('FAR-1950 regression: a route resolving to an unnamed child still hydra
   // unnamed, empty-path default child, so `to.name` was `undefined`. The
   // manifest lookup must still reach the gated entry (via `to.matched`) — this
   // assertion fails if that fallback is removed, naming both routes.
-  it('hydrates requiredTier and the admin role with an undefined route name', () => {
+  it('hydrates the admin role and breadcrumb with an undefined route name', () => {
     const failures: string[] = []
     for (const path of RUNNER_GATED_PATHS) {
       const entry = MANIFEST.routes[path]
       const { route } = hydrateRouteForPath(path, { clearName: true })
 
-      if (route.meta.requiredTier !== entry.required_tier) {
+      // The runner routes carry an `*admin` role gate (no commercial
+      // entitlement), so the role + breadcrumb prove hydration reached the
+      // entry through `to.matched` when `to.name` was undefined.
+      if (route.meta.breadcrumb !== entry.breadcrumb) {
         failures.push(
-          `${path}: requiredTier not hydrated for a route with an undefined name (expected ${String(entry.required_tier)}, got ${String(route.meta.requiredTier)})`,
+          `${path}: breadcrumb not hydrated for a route with an undefined name (expected ${String(entry.breadcrumb)}, got ${String(route.meta.breadcrumb)})`,
         )
       }
       const roles = route.meta.requiredRoles

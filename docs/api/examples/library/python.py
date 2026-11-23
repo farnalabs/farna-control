@@ -1,5 +1,5 @@
 """
-Modulo API Example: Library Primitive Management
+Farna Control API Example: Library Primitive Management
 
 Demonstrates:
   - Browse library primitives (list with type/search filters)

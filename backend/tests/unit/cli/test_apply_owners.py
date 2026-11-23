@@ -1,4 +1,4 @@
-"""FAR-1161: ``modulo apply`` manages the pipeline accountability owners.
+"""FAR-1161: ``farna-control apply`` manages the pipeline accountability owners.
 
 Config pipelines reference owners by EMAIL; the executor resolves them to
 account ids via the org member directory (GET /admin/users, fetched lazily
@@ -38,7 +38,7 @@ def _config(*, business_line: str | None = None, reliability_line: str | None = 
     if reliability_line is not None:
         owner_lines += f"\n      {reliability_line}"
     return f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample

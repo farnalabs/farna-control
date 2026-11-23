@@ -38,10 +38,10 @@ from package_compose_release import (  # noqa: E402
 
 #: The compose service that runs the application (and is the only writer). This
 #: is an internal service KEY in the packaged stack, not brand copy, and it is
-#: defined here once so the tests below reach it by reference instead of
-#: repeating the retired name in every assertion (see
-#: tests/architecture/test_brand_consistency.py, which freezes per-file counts).
-_APP_SERVICE = "modulo"
+#: defined here once so the tests below reference it instead of repeating the
+#: name in every assertion (see tests/architecture/test_brand_consistency.py,
+#: which freezes a per-file occurrence count).
+_APP_SERVICE = "farna-control"
 
 
 def test_validate_release_tag_valid():
@@ -84,8 +84,8 @@ def test_transform_compose_content_hardpins_tag_and_removes_watchdog():
       POSTGRES_PASSWORD: ${FARNA_CONTROL_DB_PASSWORD:?required}
   redis:
     image: redis:8-alpine
-  modulo:
-    image: ghcr.io/farnalabs/farna-control:${TAG:?TAG is required - set the Modulo version you intend to run}
+  farna-control:
+    image: ghcr.io/farnalabs/farna-control:${TAG:?TAG is required - set the Farna Control version you intend to run}
     ports:
       - "${PORT:-80}:80"
   watchdog:
@@ -120,7 +120,7 @@ def test_transform_compose_content_removes_watchdog_with_blank_line_in_block():
     image: postgres:16-alpine
   redis:
     image: redis:8-alpine
-  modulo:
+  farna-control:
     image: ghcr.io/farnalabs/farna-control:${TAG:?required}
     ports:
       - "${PORT:-80}:80"
@@ -155,7 +155,7 @@ def test_validate_release_tag_rejects_unicode_digits(tmp_path: Path):
 
 def test_transform_compose_content_rejects_missing_image():
     invalid_content = """services:
-  modulo:
+  farna-control:
     ports: ["80:80"]
 volumes:
   postgres_data:
@@ -231,7 +231,7 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
     assert (extracted_dir / "docker-compose.yml").read_text(encoding="utf-8") == (extracted_dir / "docker-compose.prod.yml").read_text(encoding="utf-8")
 
 
-def _pinned_modulo_image(tarball_path: Path) -> str:
+def _pinned_farna_control_image(tarball_path: Path) -> str:
     with tarfile.open(tarball_path, "r:gz") as tar:
         handle = tar.extractfile("docker-compose.prod.yml")
         assert handle is not None
@@ -247,8 +247,8 @@ def test_build_compose_release_distinguishes_rc_and_ga_image_pins(tmp_path: Path
     a promote that reused the cut bundle would ship an RC-pinned compose file
     under the GA release name.
     """
-    rc_image = _pinned_modulo_image(build_compose_release(version="0.5.1", tag="v0.5.1-rc2", output_dir=tmp_path / "rc"))
-    ga_image = _pinned_modulo_image(build_compose_release(version="0.5.1", tag="v0.5.1", output_dir=tmp_path / "ga"))
+    rc_image = _pinned_farna_control_image(build_compose_release(version="0.5.1", tag="v0.5.1-rc2", output_dir=tmp_path / "rc"))
+    ga_image = _pinned_farna_control_image(build_compose_release(version="0.5.1", tag="v0.5.1", output_dir=tmp_path / "ga"))
 
     assert rc_image == "ghcr.io/farnalabs/farna-control:v0.5.1-rc2"
     assert ga_image == "ghcr.io/farnalabs/farna-control:v0.5.1"

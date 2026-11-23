@@ -226,7 +226,7 @@
       </template>
     </SectionCard>
 
-    <FeatureGate feature-name="team_rbac" required-tier="team" show-disabled>
+    <FeatureGate feature-name="team_rbac" show-disabled>
 
     <LoadingSpinner v-if="loading" />
     <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadData" />

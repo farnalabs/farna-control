@@ -52,13 +52,13 @@ def validate_release_tag(tag: str) -> str:
 def transform_compose_content(content: str, tag: str) -> str:
     """Transform docker-compose.prod.yml for a standalone evaluator release bundle.
 
-    1. Hard-pins `image: ghcr.io/farnalabs/farna-control:<TAG>` on the modulo service.
+    1. Hard-pins `image: ghcr.io/farnalabs/farna-control:<TAG>` on the farna-control service.
     2. Removes the repo-internal watchdog service (which requires local source build ../watchdog).
     3. Validates the resulting YAML structure.
     """
     valid_tag = validate_release_tag(tag)
 
-    # 1. Hard-pin image tag on the modulo service
+    # 1. Hard-pin image tag on the farna-control service
     image_pattern = re.compile(
         r"(^\s*image:\s*ghcr\.io/farnalabs/farna-control:)[^\r\n]+",
         re.MULTILINE,
@@ -92,13 +92,13 @@ def transform_compose_content(content: str, tag: str) -> str:
         raise ValueError("Transformed compose is missing 'postgres' service")
     if "redis" not in services:
         raise ValueError("Transformed compose is missing 'redis' service")
-    if "modulo" not in services:
-        raise ValueError("Transformed compose is missing 'modulo' service")
+    if "farna-control" not in services:
+        raise ValueError("Transformed compose is missing 'farna-control' service")
 
-    modulo_image = services["modulo"].get("image", "")
+    app_image = services["farna-control"].get("image", "")
     expected_image = f"ghcr.io/farnalabs/farna-control:{valid_tag}"
-    if modulo_image != expected_image:
-        raise ValueError(f"Expected modulo image '{expected_image}', got '{modulo_image}'")
+    if app_image != expected_image:
+        raise ValueError(f"Expected application image '{expected_image}', got '{app_image}'")
 
     if "watchdog" in services:
         raise ValueError("Watchdog service was not removed from standalone release compose")
@@ -112,9 +112,9 @@ def transform_compose_content(content: str, tag: str) -> str:
 
 def generate_quickstart_md(version: str, tag: str) -> str:
     """Generate quickstart instructions for the compose release bundle."""
-    return f"""# Modulo Self-Hosted Production Quickstart (v{version})
+    return f"""# Farna Control Self-Hosted Production Quickstart (v{version})
 
-This package contains everything required to run the Modulo all-in-one
+This package contains everything required to run the Farna Control all-in-one
 production stack on your own infrastructure with Docker Compose.
 
 **Image pinned:** `ghcr.io/farnalabs/farna-control:{tag}`
@@ -151,7 +151,7 @@ Once that returns 200, open [http://localhost](http://localhost).
 
 ## Shipped Services
 
-- **modulo** - all-in-one application: FastAPI backend, Vue 3 SPA served by
+- **farna-control** - all-in-one application: FastAPI backend, Vue 3 SPA served by
   nginx, and both SAQ workers (runs + the system worker that fires cron and
   polling triggers)
 - **postgres** - PostgreSQL 16, persisted in the `postgres_data` volume
@@ -159,7 +159,7 @@ Once that returns 200, open [http://localhost](http://localhost).
 
 ## Operations
 
-- Follow logs: `docker compose logs -f modulo`
+- Follow logs: `docker compose logs -f farna-control`
 - Show status: `docker compose ps`
 - Stop: `docker compose down`
 - Stop and delete all data: `docker compose down -v`
@@ -213,7 +213,7 @@ sha256sum --check SHA256SUMS
 #: derives all five REQUIRED values on the machine that runs it, so a published
 #: release asset never ships a shared signing key or database password.
 _INIT_ENV_SH = r"""#!/bin/sh
-# Generate .env for the Modulo production stack.
+# Generate .env for the Farna Control production stack.
 #
 # Fills the five REQUIRED values the compose refuses to start without:
 #   FARNA_CONTROL_DB_PASSWORD, SECRET_KEY, FERNET_KEY, SAQ_AUTH_USERNAME, SAQ_AUTH_PASSWORD
@@ -302,6 +302,13 @@ def _find_repo_root() -> Path:
     return Path.cwd()
 
 
+def _require_repo_file(path: Path, *, kind: str) -> Path:
+    """Return `path` if it is an existing file, else raise FileNotFoundError."""
+    if not path.is_file():
+        raise FileNotFoundError(f"{kind} not found: {path}")
+    return path
+
+
 def build_compose_release(
     *,
     version: str,
@@ -361,16 +368,18 @@ def build_compose_release(
     # FAR-2667: the documented recovery command ships WITH the artifact, so a
     # failed upgrade never depends on the operator reconstructing a
     # `docker compose run` invocation from documentation.
-    restore_helper = repo_root / "scripts" / _COMPOSE_RESTORE_FILENAME
-    if not restore_helper.is_file():
-        raise FileNotFoundError(f"Compose restore helper not found: {restore_helper}")
+    restore_helper = _require_repo_file(
+        repo_root / "scripts" / _COMPOSE_RESTORE_FILENAME,
+        kind="Compose restore helper",
+    )
 
     # FAR-2667: and the way BACK to the previous image ships too. The packaged
     # compose pins a literal image tag, so `TAG=` cannot move it; the helper is
     # the only instruction that actually starts the previous release.
-    rollback_helper = repo_root / "scripts" / _COMPOSE_ROLLBACK_FILENAME
-    if not rollback_helper.is_file():
-        raise FileNotFoundError(f"Compose rollback helper not found: {rollback_helper}")
+    rollback_helper = _require_repo_file(
+        repo_root / "scripts" / _COMPOSE_ROLLBACK_FILENAME,
+        kind="Compose rollback helper",
+    )
 
     # Prepare file bytes map for tarball
     files_to_pack: dict[str, bytes] = {
@@ -421,7 +430,7 @@ def build_compose_release(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Package Modulo docker-compose release bundle (FAR-2345)",
+        description="Package Farna Control docker-compose release bundle (FAR-2345)",
     )
     parser.add_argument(
         "--version",

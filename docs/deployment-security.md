@@ -39,9 +39,9 @@ ssl_prefer_server_ciphers on;
 Disable TLS 1.0, 1.1, and all null/export-grade ciphers. Verify with:
 
 ```bash
-sslscan modulo.example.com
+sslscan farna-control.example.com
 # or
-nmap --script ssl-enum-ciphers -p 443 modulo.example.com
+nmap --script ssl-enum-ciphers -p 443 farna-control.example.com
 ```
 
 ### 1.2 Firewall Rules
@@ -110,7 +110,7 @@ Farna Control refuses to start if `SECRET_KEY` is absent or shorter than 32 byte
 After rotating `FERNET_KEY`, trigger credential re-encryption via the admin API:
 
 ```bash
-curl -X POST https://modulo.example.com/api/v1/admin/rotation/rotate-key \
+curl -X POST https://farna-control.example.com/api/v1/admin/rotation/rotate-key \
   -H "Authorization: Bearer <admin-jwt>"
 ```
 
@@ -349,7 +349,7 @@ This prevents IP-based collisions behind NAT.
 # GET /healthz is not rate limited, so probing it here proves nothing.
 for i in $(seq 1 120); do
   curl -s -o /dev/null -w "%{http_code}\n" -X POST \
-    https://modulo.example.com/api/v1/triggers/<webhook-token> \
+    https://farna-control.example.com/api/v1/triggers/<webhook-token> \
     -H 'Content-Type: application/json' -d '{}'
 done
 # Expected: once the 60-second window has seen 100 requests, responses return 429
@@ -383,7 +383,7 @@ Farna Control uses the **double-submit cookie** pattern:
 From `docs/deployment.md` §CORS Configuration:
 
 ```env
-CORS_ORIGINS=https://app.modulo.example.com,https://admin.modulo.example.com
+CORS_ORIGINS=https://app.farna-control.example.com,https://admin.farna-control.example.com
 CORS_MAX_AGE=3600
 ```
 
@@ -412,7 +412,7 @@ every response. In debug mode the CSP `connect-src` also adds `ws: wss:`, and
 
 **Verify:**
 ```bash
-curl -si https://modulo.example.com/healthz | grep -iE "^(content-security-policy|strict-transport-security|x-frame-options|x-content-type-options|referrer-policy|permissions-policy):"
+curl -si https://farna-control.example.com/healthz | grep -iE "^(content-security-policy|strict-transport-security|x-frame-options|x-content-type-options|referrer-policy|permissions-policy):"
 ```
 
 ### 4.5 API Key Management
@@ -514,7 +514,7 @@ state is in Postgres/Redis). Enable a read-only root filesystem in the Docker
 Compose service definition:
 
 ```yaml
-modulo:
+farna-control:
   read_only: true
   tmpfs:
     - /tmp
@@ -530,7 +530,7 @@ In production, pin the Docker image to a specific digest instead of a moving
 tag. This prevents tag-mutation attacks on the registry:
 
 ```yaml
-modulo:
+farna-control:
   image: ghcr.io/farnalabs/farna-control@sha256:<digest>
 ```
 
@@ -649,14 +649,14 @@ Configure alerts for these events in your monitoring system:
 
 3. **Deploy the new image** (Docker Compose):
    ```bash
-   docker compose -f deploy/compose/docker-compose.prod.yml pull modulo
+   docker compose -f deploy/compose/docker-compose.prod.yml pull farna-control
    docker compose -f deploy/compose/docker-compose.prod.yml up -d
    ```
    For Fly.io deployments, `fly deploy` performs a rolling/bluegreen update.
 
 4. **Verify migration completed:**
    ```bash
-   docker compose -f deploy/compose/docker-compose.prod.yml logs modulo | grep -i alembic
+   docker compose -f deploy/compose/docker-compose.prod.yml logs farna-control | grep -i alembic
    # Expected: no migration errors; confirm the backend is serving traffic:
    curl http://localhost:8000/healthz
    ```
@@ -665,7 +665,7 @@ Configure alerts for these events in your monitoring system:
 
 ```bash
 # Docker Compose – pin the previous image version and restart
-docker compose -f deploy/compose/docker-compose.prod.yml stop modulo
+docker compose -f deploy/compose/docker-compose.prod.yml stop farna-control
 docker tag ghcr.io/farnalabs/farna-control:old ghcr.io/farnalabs/farna-control:<previous-version>
 TAG=<previous-version> docker compose -f deploy/compose/docker-compose.prod.yml up -d
 ```
@@ -678,13 +678,13 @@ previous code version expects an older schema and a downgrade migration exists:
 
 ```bash
 # Check current Alembic version
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo uv run alembic current
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control uv run alembic current
 
 # Check that the target migration has a downgrade() function
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo uv run alembic downgrade --sql -1  # preview SQL
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control uv run alembic downgrade --sql -1  # preview SQL
 
 # Downgrade (use with extreme caution – data loss possible)
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo uv run alembic downgrade -1
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control uv run alembic downgrade -1
 ```
 
 ⚠️ Not all migrations include a `downgrade()` function. If `alembic downgrade`

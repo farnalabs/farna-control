@@ -1,4 +1,4 @@
-# Modulo health watchdog image - the `watchdog` service in docker-compose.yml.
+# Farna Control health watchdog image - the `watchdog` service in docker-compose.yml.
 #
 # Why a derived image exists at all: upstream `twinproduction/gatus` is built
 # FROM scratch - no shell, no wget, no curl. Verified against v5.37.0 before
@@ -39,7 +39,7 @@ COPY --from=upstream /gatus /gatus
 
 # entrypoint.sh prints the one-line alerting on/off statement, then execs
 # /gatus so it becomes PID 1 and takes signals directly. config.yaml is baked
-# in so a bare `docker run` monitors Modulo rather than upstream's bundled demo
+# in so a bare `docker run` monitors Farna Control rather than upstream's bundled demo
 # endpoints; docker-compose.yml mounts the checked-in file over this path so
 # edits apply without a rebuild.
 COPY entrypoint.sh /entrypoint.sh
@@ -50,7 +50,7 @@ COPY config.yaml /config/config.yaml
 # WATCHDOG_PROBE_URL is the config's endpoint target (config.yaml references
 # it as ${WATCHDOG_PROBE_URL}). It is baked here rather than written literally
 # in config.yaml because the two compose files probe different services (root:
-# backend:8000; production: modulo:80) and Gatus has no ${VAR:-default}
+# backend:8000; production: farna-control:80) and Gatus has no ${VAR:-default}
 # syntax - an unset variable expands to an empty URL and the container panics
 # at startup (verified against v5.37.0). The default keeps a bare `docker run`
 # and the root compose working; the production compose overrides it.

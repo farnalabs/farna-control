@@ -481,10 +481,15 @@ describe('AdminUsersView', () => {
     expect(wrapper.text()).toContain('alice@example.com')
   })
 
-  it('stays unlocked via the community required-tier fallback when flags have not loaded', async () => {
+  it('stays gated until the plan resolves the user_management flag (FAR-2665)', async () => {
+    // FAR-2665 removed the `required-tier` fallback: a tier alone can no longer
+    // open a behaviour flag, because a tier is now a PROJECTION of the
+    // entitlement grant and the entitlement gate composes with the operator
+    // kill switch. An unresolved flag therefore fails CLOSED, exactly as the
+    // router keeps a commercial route locked until the plan payload lands.
     const wrapper = await mountViewWithPlan({ features: {}, currentTier: 'community' })
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Users')
   })

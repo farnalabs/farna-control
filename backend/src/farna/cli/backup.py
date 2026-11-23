@@ -2355,9 +2355,9 @@ def restore(
 
 
 # ---------------------------------------------------------------------------
-# modulo apply (FAR-681)
+# farna-control apply (FAR-681)
 # ---------------------------------------------------------------------------
-# Registered once at import time so the ``modulo apply`` subcommand is wired
+# Registered once at import time so the ``farna-control apply`` subcommand is wired
 # into the CLI group. Wrapped in an ``_init_once_*`` helper because the
 # module-side-effects architecture test forbids bare module-level calls.
 def _init_once_register_apply() -> None:

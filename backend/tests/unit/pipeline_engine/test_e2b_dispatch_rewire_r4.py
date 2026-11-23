@@ -897,14 +897,15 @@ async def test_s4_evidence_probes_run_through_the_sdk_handle() -> None:
             entry.name = "output.json"
             entry.size = 10
             entry.isdir = False
-            return [entry]
+            nameless = MagicMock()
+            nameless.name = ""
+            nameless.size = 0
+            nameless.isdir = False
+            return [entry, nameless]
 
     class _Sbx:
         commands = _Commands()
         files = _Files()
-
-        async def close(self) -> None:
-            return None
 
     handle = _Sbx()
 
@@ -1463,6 +1464,30 @@ async def test_route_hub_aclose_cancellation_propagates(monkeypatch: pytest.Monk
 
     with pytest.raises(asyncio.CancelledError):
         await make_sandbox_agent_fn(_base_node_def(), session_factory=_route_session_factory())(_run_state())
+
+
+async def test_route_hub_aclose_cancellation_after_provider_close_keeps_the_first(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:
+    """A hub aclose cancellation that follows an earlier provider-close
+    cancellation keeps the FIRST cancellation (the ``_gh_settle_cancelled is
+    None`` guard's false arm) and does not skip the marker clear."""
+    _install_log_tail(monkeypatch)
+    provider = _FileCapableDispatchProvider(ref="sbx-route-cancel-after", exit_code=0)
+    provider.files["/home/user/output.json"] = _COMPLETED_OUTPUT.encode()
+    close_cancellation = asyncio.CancelledError("provider close first")
+    provider.close = AsyncMock(side_effect=close_cancellation)  # type: ignore[method-assign]
+    hub = MagicMock()
+    hub.aclose = AsyncMock(side_effect=asyncio.CancelledError("hub aclose second"))
+    route = _Route(provider_type="kubernetes", profile=_RouteProfile(), provider=provider, hub=hub)
+    monkeypatch.setattr(
+        "farna.core.bundled_runner.runner_dispatch.resolve_sandbox_dispatch_route",
+        AsyncMock(return_value=route),
+    )
+
+    with pytest.raises(asyncio.CancelledError) as excinfo:
+        await make_sandbox_agent_fn(_base_node_def(), session_factory=_route_session_factory())(_run_state())
+
+    assert excinfo.value is close_cancellation
+    hub.aclose.assert_awaited_once()
 
 
 async def test_dispatch_drops_empty_attribution_values(monkeypatch: pytest.MonkeyPatch, fake_file_io) -> None:

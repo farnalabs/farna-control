@@ -1,5 +1,5 @@
 #!/bin/sh
-# Startup wrapper for the Modulo health watchdog (docker-compose.yml service
+# Startup wrapper for the Farna Control health watchdog (docker-compose.yml service
 # `watchdog`). Runs because the derived image ships busybox - the upstream
 # Gatus image is scratch-based and has no shell at all.
 #

@@ -530,9 +530,26 @@ class TestGoldenPins:
         assert TIER_RANK == {"community": 0, "team": 1}
 
     def test_core_flag_tier_contract_pinned(self) -> None:
+        """FAR-2665: entitlement-owned flags project as team; behaviour flags community.
+
+        ``runtime_config`` and ``rate_limits`` were Team before FAR-2665 and are
+        now Community operational capability, so they moved to the community
+        list — the pin follows the entitlement registry, not a memory of the
+        old shape.
+        """
         registry = FeatureFlagRegistry()
-        team_flags = {"sso", "team_rbac", "audit_viewer", "admin_spend_limits", "runtime_config", "rate_limits"}
-        community_flags = {"eval_system", "webhook_trigger", "dashboard_charts", "assistant"}
+        team_flags = {"sso", "team_rbac", "audit_viewer", "admin_spend_limits"}
+        community_flags = {
+            "eval_system",
+            "webhook_trigger",
+            "dashboard_charts",
+            "assistant",
+            "runtime_config",
+            "rate_limits",
+            "error_tracking",
+            "error_forwarders",
+            "plugin_management",
+        }
         for name in team_flags:
             flag = registry.get_flag(name)
             assert flag is not None

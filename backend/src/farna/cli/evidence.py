@@ -1,17 +1,17 @@
-"""``modulo evidence`` — offline verification of evidence packs (FAR-1697).
+"""``farna-control evidence`` — offline verification of evidence packs (FAR-1697).
 
 Two commands:
 
-* ``modulo evidence verify <pack.json> --public-key <key.pem>`` — verify a pack
+* ``farna-control evidence verify <pack.json> --public-key <key.pem>`` — verify a pack
   using ONLY the artefact and a pre-published Ed25519 public key: re-verifies
   the signature (authorship), re-derives every file digest, and re-verifies the
   embedded audit chain. Exits 0 when the pack is valid, 1 otherwise.
-* ``modulo evidence public-key`` — print the instance's verification key (the
+* ``farna-control evidence public-key`` — print the instance's verification key (the
   same key published by the admin verification-key endpoint and embedded in
   every exported pack).
 
 IMPORT HYGIENE: module scope is click + stdlib only; the core evidence module
-is imported lazily inside the commands, so ``modulo evidence verify`` never
+is imported lazily inside the commands, so ``farna-control evidence verify`` never
 needs a database, Redis or a Settings instance — it is genuinely offline.
 """
 

@@ -381,6 +381,16 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       failure degrades to unavailable), a monotonic request id discards a stale
       response when the run id changes mid-flight, and a truncation note appears
       when `total` exceeds the returned items (`RunAttemptHistory.spec.ts`)
+- [x] `GET /api/v1/runs/{run_id}/schema-enforcement` returns the run's per-node
+      schema enforcement records, gated on the same viewer-level `run.status`
+      permission as run detail and attempts
+      (`require_permission_any_credential`, so JWT and `mk_` org API-key callers
+      both work). The org-wide flip guard
+      (`GET /api/v1/runs/schema-enforcement/flip-guard`) takes the viewer-level
+      `run.list` floor with a JWT-only `require_permission`, so neither read can
+      sit below the run surface it derives from (FAR-2683;
+      `test_runs_schema_enforcement.py`). Response shape and the enforcement
+      data model are documented in `docs/operations/schema-enforcement.md`
 - _Output Diff (`/runs/diff`, `POST /runs/diff`, `core/line_diff.py`) deferred from the
   MVP nav (hidden via `visibility: private_preview`). Behavior detail removed for the
   MVP cut – restore from git history when re-enabling. See FAR-542._

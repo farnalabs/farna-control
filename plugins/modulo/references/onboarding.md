@@ -4,7 +4,7 @@ Use this checklist after choosing a deployment shape. Public user documentation 
 
 ## 1. Choose or install
 
-- Native Linux workstation: save the published installer to a file, inspect it, and run the documented `bash modulo-install.sh` flow. Do not pipe the installer directly into a shell; the installer verifies downloads before extraction.
+- Native Linux workstation: save the published installer to a file, inspect it, and run the documented `bash farna-control-install.sh` flow. Do not pipe the installer directly into a shell; the installer verifies downloads before extraction.
 - Docker Compose: follow the public deployment guide, create the required environment values through the documented path, and keep `.env` out of source control.
 - Kubernetes: use the public Helm/Kubernetes guide and the operator's cluster credentials outside chat.
 - Existing remote instance: use its operator-provided canonical HTTPS URL. For SSH or reverse-proxy access, verify the externally reachable URL rather than treating an internal address as canonical.

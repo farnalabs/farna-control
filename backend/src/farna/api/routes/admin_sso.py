@@ -26,7 +26,7 @@ from farna.api.dependencies import (
     deny_break_glass_mint,
     get_db_session,
     get_system_db_session,
-    require_feature,
+    require_entitlement,
     require_permission,
 )
 from farna.api.middleware.sensitive_mask import SensitiveValue
@@ -278,7 +278,7 @@ async def _resolve_sso_client_secret(
 @router.get("/providers")
 @handle_db_errors("admin.sso.get_providers")
 async def get_providers(
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[SsoProviderResponse]:
@@ -320,7 +320,7 @@ class PresetInfo(BaseModel):
 @router.get("/presets")
 @handle_db_errors("admin.sso.list_presets")
 async def list_presets_endpoint(  # NOSONAR S7503 - async decorator seam for FastAPI error handling
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
 ) -> list[PresetInfo]:
     """Return available SSO provider presets."""
@@ -341,7 +341,7 @@ async def list_presets_endpoint(  # NOSONAR S7503 - async decorator seam for Fas
 @handle_db_errors("admin.sso.create_provider_endpoint")
 async def create_provider_endpoint(
     req: SsoProviderCreate,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -502,7 +502,7 @@ async def _persist_provider_update(
 async def update_provider_endpoint(
     provider_id: uuid.UUID,
     req: SsoProviderUpdate,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -568,7 +568,7 @@ async def update_provider_endpoint(
 @handle_db_errors("admin.sso.delete_provider_endpoint")
 async def delete_provider_endpoint(
     provider_id: uuid.UUID,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
@@ -622,7 +622,7 @@ async def delete_provider_endpoint(
 @handle_db_errors("admin.sso.test_provider_connection")
 async def test_provider_connection(
     provider_id: uuid.UUID,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     _settings: Annotated[Settings, Depends(get_settings)],
@@ -853,7 +853,7 @@ async def _test_saml_connection(provider: Any) -> SsoProviderTestResult:
 @handle_db_errors("admin.sso.toggle_provider_endpoint")
 async def toggle_provider_endpoint(
     provider_id: uuid.UUID,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> SsoProviderResponse:
@@ -935,7 +935,7 @@ class GroupMappingsResponse(BaseModel):
 async def set_group_mappings_endpoint(
     provider_id: uuid.UUID,
     req: GroupMappingsRequest,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> GroupMappingsResponse:
@@ -988,7 +988,7 @@ async def set_group_mappings_endpoint(
 @handle_db_errors("admin.sso.get_group_mappings_endpoint")
 async def get_group_mappings_endpoint(
     provider_id: uuid.UUID,
-    _: Annotated[object, require_feature("sso")],
+    _: Annotated[object, require_entitlement("identity")],
     current_user: Annotated[TenantPrincipal, require_permission(_CODE_SSO_MANAGE)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> GroupMappingsResponse:

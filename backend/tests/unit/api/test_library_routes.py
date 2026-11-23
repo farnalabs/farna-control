@@ -23,8 +23,11 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 
 from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
-from farna.auth.dependencies import get_current_user
-from farna.auth.jwt import AuthenticatedPrincipal
+from farna.auth.dependencies import (
+    get_current_tenant_user_or_api_key,
+    get_current_user,
+)
+from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
 from farna.core.library_service import (
     BuiltinPrimitiveReadOnlyError,
 )
@@ -94,6 +97,16 @@ def _build_client(principal: AuthenticatedPrincipal) -> tuple[TestClient, AsyncM
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_current_user] = lambda: principal
+    # FAR-2682: the library READ routes resolve via the any-credential
+    # dependency; both credential stacks share this principal.
+    app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(
+        username=principal.username,
+        organisation_id=principal.organisation_id,
+        account_id=principal.account_id,
+        org_role=principal.org_role,
+        is_system_admin=principal.is_system_admin,
+        key_grants=principal.key_grants,
+    )
     mock_plan = MagicMock()
     mock_plan.feature_enabled.return_value = True
     app.dependency_overrides[get_plan_context] = lambda: mock_plan

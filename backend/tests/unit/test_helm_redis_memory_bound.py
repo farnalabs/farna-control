@@ -15,10 +15,10 @@ import subprocess
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_CHART = _REPO_ROOT / "deploy" / "helm" / "modulo"
+_CHART = _REPO_ROOT / "deploy" / "helm" / "farna-control"
 _TEMPLATE = _CHART / "templates" / "redis-deployment.yaml"
 _HELPERS = _CHART / "templates" / "_helpers.tpl"
-_README = _REPO_ROOT / "deploy" / "helm" / "modulo" / "README.md"
+_README = _REPO_ROOT / "deploy" / "helm" / "farna-control" / "README.md"
 
 
 def _template_text() -> str:

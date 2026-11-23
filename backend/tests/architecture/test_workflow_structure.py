@@ -198,10 +198,10 @@ def test_pr_review_dispatches_on_red_ci_too() -> None:
     never goes green would never be quality-reviewed, and the gate re-couples
     the reviewer to CI colour.
     """
-    job = _job_named(_load_yaml(PR_REVIEW_YML), "Trigger Modulo PR Review")
+    job = _job_named(_load_yaml(PR_REVIEW_YML), "Trigger Farna Control PR Review")
     condition = job.get("if")
-    assert isinstance(condition, str), "pr-review.yml: the 'Trigger Modulo PR Review' job has no scalar `if:` gate — reviewer dispatch is no longer conditioned on the product-CI conclusion"
-    assert condition.strip(), "pr-review.yml: the 'Trigger Modulo PR Review' job has a blank `if:` gate — the product-CI conclusion is no longer inspected"
+    assert isinstance(condition, str), "pr-review.yml: the 'Trigger Farna Control PR Review' job has no scalar `if:` gate — reviewer dispatch is no longer conditioned on the product-CI conclusion"
+    assert condition.strip(), "pr-review.yml: the 'Trigger Farna Control PR Review' job has a blank `if:` gate — the product-CI conclusion is no longer inspected"
     code = condition.replace('"', "'")
     violations: list[str] = []
     if "workflow_run" not in code:
@@ -362,7 +362,7 @@ def test_pr_review_manual_delivery_gate_is_not_bypassed_on_the_early_path() -> N
     that it is at the top level of the script (``if`` depth 0), not nested in one
     event branch.
     """
-    step = _step("Trigger Modulo PR Review", "Set PR details")
+    step = _step("Trigger Farna Control PR Review", "Set PR details")
     run = step.get("run") or ""
     lines = run.splitlines()
     arms = [index for index, line in enumerate(lines) if "*,manual-delivery,*" in line]
@@ -388,11 +388,11 @@ def test_pr_review_fork_gate_is_not_bypassed_on_the_early_path() -> None:
     gate's ``if:`` must therefore stay event-agnostic (``ready`` only), and the
     checkout that provides the versioned guard script must not be event-gated.
     """
-    step = _step("Trigger Modulo PR Review", "Same-repo author gate (FAR-264)")
+    step = _step("Trigger Farna Control PR Review", "Same-repo author gate (FAR-264)")
     condition = str(step.get("if") or "")
     assert "github.event_name" not in condition, "pr-review.yml: the same-repo author gate is restricted by event name — the early path would dispatch a review for a fork / external-author PR (FAR-264)"
     assert "same-repo-author-guard.py" in (step.get("run") or ""), "pr-review.yml: the same-repo author gate no longer calls the shared versioned guard script"
-    checkout = _step("Trigger Modulo PR Review", "Checkout repository (for the gate scripts)")
+    checkout = _step("Trigger Farna Control PR Review", "Checkout repository (for the gate scripts)")
     assert "github.event_name" not in str(checkout.get("if") or ""), "pr-review.yml: the gate-script checkout is event-gated — the dedup and fork gates cannot run on the early path without it"
 
 
@@ -408,7 +408,7 @@ def test_pr_review_early_path_is_deduplicated_per_head_sha() -> None:
     draft marked ready (or a second ``ready_for_review`` on an unchanged head)
     would review the same SHA twice.
     """
-    step = _step("Trigger Modulo PR Review", "Skip when head already reviewed (dedup)")
+    step = _step("Trigger Farna Control PR Review", "Skip when head already reviewed (dedup)")
     condition = str(step.get("if") or "")
     violations: list[str] = []
     if "workflow_dispatch" not in condition:
@@ -447,7 +447,7 @@ def test_merge_queue_ci_gate_references_only_product_ci() -> None:
     for ref in _workflow_refs(raw):
         if ref not in ALLOWED_MERGE_QUEUE_WORKFLOW_REFS:
             violations.append(f"  merge-queue.yml: --workflow {ref!r} is not in the allowed set {sorted(ALLOWED_MERGE_QUEUE_WORKFLOW_REFS)} — the merge gate may consult product CI only")
-    if "pr-review" in raw or "Review: Modulo Agent" in raw:
+    if "pr-review" in raw or "Review: Farna Control Agent" in raw:
         violations.append("  merge-queue.yml: references the PR-reviewer workflow — a review outage must not gate merges")
     assert not violations, "merge-queue.yml CI gate is no longer product-CI-only (FAR-1843):\n" + "\n".join(violations)
 
@@ -929,7 +929,7 @@ _PRE_FIX_STEP = (
     "  notify-pr-failure:\n"
     "    name: Trigger Branch Fixer\n"
     "    steps:\n"
-    "      - name: Trigger Modulo Branch Fixer\n"
+    "      - name: Trigger Farna Control Branch Fixer\n"
     "        shell: bash\n"
     "        env:\n"
     "          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}\n"
@@ -952,7 +952,7 @@ jobs:
   notify-pr-failure:
     name: Trigger Branch Fixer
     steps:
-      - name: Trigger Modulo Branch Fixer
+      - name: Trigger Farna Control Branch Fixer
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
@@ -1008,7 +1008,7 @@ def test_notification_guard_honours_gh_repo_env(tmp_path: Path) -> None:
 jobs:
   notify:
     env:
-      GH_REPO: farnalabs/modulo
+      GH_REPO: farnalabs/farna-control
     steps:
       - name: Comment
         run: gh pr comment "$PR_NUM" --body "done"
@@ -1026,7 +1026,7 @@ jobs:
     steps:
       - name: Comment
         continue-on-error: true
-        run: gh pr comment "$PR_NUM" --repo farnalabs/modulo --body "done"
+        run: gh pr comment "$PR_NUM" --repo farnalabs/farna-control --body "done"
 """
     violations = _notification_violations("wf.yml", _write_workflow(tmp_path, body))
     assert any(violation.kind == "continue-on-error" for violation in violations), "guard did not flag continue-on-error on a notification step:\n" + "\n".join(str(v) for v in violations)
@@ -1057,7 +1057,7 @@ jobs:
           gh pr list --state open
           gh run list --workflow "CI: Fast Validation"
           gh api "/repos/${REPO}/pulls/1" --jq '.head.sha' 2>/dev/null || echo ""
-          gh api "repos/farnalabs/modulo/branches" --paginate
+          gh api "repos/farnalabs/farna-control/branches" --paginate
 """
     violations = _notification_violations("wf.yml", _write_workflow(tmp_path, body))
     assert not violations, "non-notification gh calls must not be flagged:\n" + "\n".join(str(v) for v in violations)
@@ -1116,8 +1116,8 @@ def _branch_fixer_dispatch_runs(workflow: dict) -> dict[str, str]:
     for job_id in BRANCH_FIXER_NOTIFY_JOBS:
         job = jobs.get(job_id)
         assert isinstance(job, dict), f"ci.yml: job {job_id!r} is missing — the Branch Fixer dispatch moved"
-        dispatch = [step for step in (job.get("steps") or []) if isinstance(step, dict) and step.get("name") == "Trigger Modulo Branch Fixer"]
-        assert len(dispatch) == 1, f"ci.yml job {job_id!r}: expected exactly one 'Trigger Modulo Branch Fixer' step, found {len(dispatch)}"
+        dispatch = [step for step in (job.get("steps") or []) if isinstance(step, dict) and step.get("name") == "Trigger Farna Control Branch Fixer"]
+        assert len(dispatch) == 1, f"ci.yml job {job_id!r}: expected exactly one 'Trigger Farna Control Branch Fixer' step, found {len(dispatch)}"
         runs[job_id] = dispatch[0].get("run") or ""
     return runs
 
@@ -1967,7 +1967,7 @@ def test_every_product_job_is_in_every_notifier_needs_list() -> None:
 
 #: (workflow, job id, dispatch step name) of every MAIN-branch failure dispatch.
 MAIN_FAILURE_DISPATCH_SITES = (
-    (CI_YML, "notify-main-failure", "Trigger Modulo Branch Fixer"),
+    (CI_YML, "notify-main-failure", "Trigger Farna Control Branch Fixer"),
     (DEPLOY_YML, "notify-deploy-failure", "Dispatch Branch Fixer webhook"),
     (DEPLOY_YML, "notify-staging-e2e-failure", "Dispatch Branch Fixer webhook"),
     (DEPLOY_YML, "notify-prod-smoke-failure", "Dispatch Branch Fixer webhook"),
@@ -2011,7 +2011,7 @@ def test_main_failure_fingerprints_do_not_embed_the_commit_sha() -> None:
 
 def test_ci_main_failure_fingerprint_keys_on_the_failed_jobs() -> None:
     """ci.yml keys main failures on the failed `needs` jobs, failing closed to a constant."""
-    _job, step = _main_failure_dispatch(CI_YML, "notify-main-failure", "Trigger Modulo Branch Fixer")
+    _job, step = _main_failure_dispatch(CI_YML, "notify-main-failure", "Trigger Farna Control Branch Fixer")
     run = str(step.get("run") or "")
     env = step.get("env") or {}
     assert str(env.get("NEEDS_JSON") or "") == "${{ toJSON(needs) }}"

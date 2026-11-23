@@ -6,6 +6,19 @@ cleanup/retention behavior for schema files.
 
 ## Endpoints
 
+Both endpoints are read-only and org-scoped. Access control was tightened in
+FAR-2683 so neither read sits below the surface it exposes:
+
+| Endpoint | Required permission | Minimum role | Accepted credentials |
+|---|---|---|---|
+| `GET /api/v1/runs/{run_id}/schema-enforcement` | `run.status` | viewer | JWT or `mk_` org API key (`require_permission_any_credential`) |
+| `GET /api/v1/runs/schema-enforcement/flip-guard` | `run.list` | viewer | JWT (`require_permission`) |
+
+The run-detail surface uses the same viewer-level `run.status` gate as run
+detail, events and attempts, so any credential that can read the run can read
+its enforcement detail. The flip guard is an org-wide, read-only aggregate and
+takes the `run.list` floor. Neither endpoint changes the mode.
+
 ### Run-detail enforcement surface
 
 ```

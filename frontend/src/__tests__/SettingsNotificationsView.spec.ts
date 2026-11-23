@@ -508,7 +508,8 @@ describe('SettingsNotificationsView', () => {
       userPermissions: [],
       devMode: false,
       tierInfoLoaded: true,
-      isAtMinimumTier: () => true,
+      planLoaded: true,
+      isEntitlementGranted: () => true,
       isDemoSession: false,
       isFeatureEnabled: () => false,
     }

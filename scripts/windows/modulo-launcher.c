@@ -1,4 +1,4 @@
-/* Windows native launcher for the Modulo single-install bundle. */
+/* Windows native launcher for the Farna Control single-install bundle. */
 /* The launcher uses the checked-by-construction wide-string helpers below and
  * builds with /WX; MSVC's C4996 deprecation warning would otherwise fail it. */
 #define _CRT_SECURE_NO_WARNINGS

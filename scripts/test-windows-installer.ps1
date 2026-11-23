@@ -212,7 +212,7 @@ function Get-MarkedBlock {
 }
 
 try {
-    Write-Output "=== Modulo Windows Installer Contract Test (FAR-2315) ==="
+    Write-Output "=== Farna Control Windows Installer Contract Test (FAR-2315) ==="
     if ($isccPath) {
         Write-Output "Inno Setup ISCC: $isccPath"
     } else {
@@ -602,7 +602,7 @@ end.
         @{ Name = "Log directory LocalAppData"; Pattern = '\{localappdata\}.*LOG_DIR_NAME' }
         @{ Name = "Redaction marker"; Pattern = '\[redacted\]' }
         @{ Name = "Support block delimiter"; Pattern = '----- Farna Control install failed: support reference' }
-        @{ Name = "GitHub issues URL in support block"; Pattern = 'github.com/farnalabs/modulo/issues' }
+        @{ Name = "GitHub issues URL in support block"; Pattern = 'github.com/farnalabs/farna-control/issues' }
     )
 
     $missingPatterns = @()

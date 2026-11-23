@@ -41,8 +41,8 @@ This stack needs a valid `FERNET_KEY` in `.env` at the repo root; compose
 refuses to start without one. See `docs/deployment.md` §Observability Stack for
 the one-line generation command.
 
-`docker-compose.local.yml` mounts `configs/grafana/dashboards/` (provider `Modulo`,
-folder `Modulo`, `editable: false`) into Grafana and `configs/grafana/datasources/` as the
+`docker-compose.local.yml` mounts `configs/grafana/dashboards/` (provider `Farna Control`,
+folder `Farna Control`, `editable: false`) into Grafana and `configs/grafana/datasources/` as the
 default Prometheus datasource. The JSON files in `configs/grafana/dashboards/` are
 currently byte-identical copies of the ones in this directory, so Grafana's provisioned
 copy does not pick up an edit made only here: change the file in

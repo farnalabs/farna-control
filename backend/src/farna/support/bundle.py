@@ -1048,7 +1048,7 @@ def build_bundle(
 ) -> BundleResult:
     """Build the support bundle synchronously (CLI + ``doctor --report``).
 
-    *ref* lets a caller (``modulo support``) mint the per-run reference FIRST so
+    *ref* lets a caller (``farna-control support``) mint the per-run reference FIRST so
     the default output filename can carry it; omit it and one is generated.
     """
     return asyncio.run(build_bundle_async(out_path, sources=sources, ref=ref))
@@ -1418,8 +1418,8 @@ def _shrink_logs(members: Mapping[str, str]) -> dict[str, str]:
 
 def _write_atomically(out_path: Path, data: bytes) -> None:
     # ``out_path`` is the operator-chosen destination of a LOCAL command:
-    # ``modulo support --out PATH``, ``python -m farna.support.bundle --out
-    # PATH`` or ``modulo doctor --report PATH``. It is never supplied over HTTP
+    # ``farna-control support --out PATH``, ``python -m farna.support.bundle --out
+    # PATH`` or ``farna-control doctor --report PATH``. It is never supplied over HTTP
     # or by a model, and the process runs as the same operator that chose the
     # path, so writing there crosses no privilege boundary and the S8707 taint
     # flow from argparse argv is a false positive (same reasoning as the

@@ -882,7 +882,7 @@ jobs:
   tier1b-light:
     # Tier 1b connectors (FAR-934): container-hosted LIGHT set only.
     # Boots self-hostable connector servers + light local model servers via
-    # Testcontainers and drives the real Modulo connectors/backends against
+    # Testcontainers and drives the real Farna Control connectors/backends against
     # them. The heavy set (gitlab, vllm, tgi) is nightly-only — see
     # tier1b-nightly.yml (it must NOT be a schedule trigger here: a
     # schedule trigger fires this ENTIRE fast-validation suite, FAR-773).
@@ -979,7 +979,7 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         if: needs.changes.outputs.frontend == 'true'
         with:
-          version: 11.28.13
+          version: 11.29.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: needs.changes.outputs.frontend == 'true'
         with:
@@ -1222,7 +1222,7 @@ jobs:
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         if: needs.changes.outputs.frontend == 'true'
         with:
-          version: 11.28.13
+          version: 11.29.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: needs.changes.outputs.frontend == 'true'
         with:
@@ -1757,7 +1757,7 @@ jobs:
           enable-cache: true
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 11.28.13
+          version: 11.29.0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
@@ -2114,7 +2114,7 @@ jobs:
           # GitHub expressions inside a run block are interpolated before the
           # shell parses the script, so untrusted branch-name content could
           # break out into code execution. Via env: they are data, never code.
-          # (Same pattern as the "Trigger Modulo Branch Fixer" step below.)
+          # (Same pattern as the "Trigger Farna Control Branch Fixer" step below.)
 
           # Count how many times the branch fixer has already pushed fix commits
           # to this PR. Each successful fix produces exactly one commit with
@@ -2251,7 +2251,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Trigger Modulo Branch Fixer
+      - name: Trigger Farna Control Branch Fixer
         if: (contains(needs.*.result, 'failure') || cancelled()) && steps.superseded-check.outputs.superseded != 'true' && steps.retry-check.outputs.exhausted != 'true' && steps.queue-check.outputs.queue_in_flight != 'true' && !contains(github.event.pull_request.labels.*.name, 'manual-delivery')
         env:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
@@ -2261,7 +2261,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
         shell: bash
         run: |
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -2292,7 +2292,7 @@ jobs:
             --arg fingerprint "${FINGERPRINT}" \
             '{branchName: $branchName, prNumber: $prNumber, headSha: $headSha, runUrl: $runUrl, failureDescription: $failureDescription, fingerprint: $fingerprint}')
           echo "PR #${PR_NUM} on branch '${BRANCH}' -- CI checks failed."
-          echo "Sending to Modulo Branch Fixer pipeline..."
+          echo "Sending to Farna Control Branch Fixer pipeline..."
           # ONE shared retry policy: scripts/dispatch_with_retry.sh. It is the
           # single definition of the classification (429 = capacity saturation,
           # 000/502/503/504 = transient, every other non-2xx = terminal), the
@@ -2492,7 +2492,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Trigger Modulo Branch Fixer
+      - name: Trigger Farna Control Branch Fixer
         # Only dispatch on a real failure. A manually cancelled main run is an
         # intentional action, not a CI break, so we must not dispatch the
         # Branch Fixer for it.
@@ -2504,7 +2504,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           MAIN_SHA: ${{ github.sha }}
           NEEDS_JSON: ${{ toJSON(needs) }}
           GH_TOKEN: ${{ github.token }}
@@ -2622,9 +2622,9 @@ jobs:
   # backend/tests/architecture/test_workflow_structure.py.
 
   self-report-ci:
-    name: Self-report CI stage to Modulo
+    name: Self-report CI stage to Farna Control
     # FAR-666: the lifecycle-map "Farnalabs SDLC (dogfooding)" journey's CI
-    # Validate stage is EXTERNAL (a GitHub Actions workflow, not a Modulo
+    # Validate stage is EXTERNAL (a GitHub Actions workflow, not a Farna Control
     # pipeline), so no pipeline run ever advanced it — merge-queue.yml reports
     # the "merge" stage and deploy.yml the "deploy" stage, but nothing reported
     # "ci". This job closes that gap once the PR-validation jobs have finished.
@@ -2640,7 +2640,7 @@ jobs:
     # journey and the report would be dropped as unmatched. (The leading "#"
     # is stripped by canonicalisation — it was never the issue.)
     #
-    # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a Modulo
+    # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a Farna Control
     # outage can NEVER fail CI. The payload is always recorded in the log; the
     # POST only fires when FARNA_CONTROL_SELF_REPORT_URL is configured, and a POST
     # failure is downgraded to a ::warning::. The endpoint is POST
@@ -2673,7 +2673,7 @@ jobs:
     needs: [current-head-gate, changes, backend-lint, uv-lock-check, backend-test, backend-coverage, backend-non-unit, integration-changed, tier1b-light, frontend, frontend-unit-parity, runner-ci-harness, sonarcloud-scan, sonar-new-issues-gate, coverage-gate, schema-freshness, gitleaks, migration-heads-check, e2e-route-methods-check, break-glass-deploy-gate]
     runs-on: ubicloud-standard-2
     steps:
-      - name: Self-report CI Validate stage to Modulo (fail-open, best-effort)
+      - name: Self-report CI Validate stage to Farna Control (fail-open, best-effort)
         env:
           # Transitional dual-accept: the renamed secret is provisioned over time;
           # fall back to the pre-rebrand secret name until then so the
@@ -2694,7 +2694,7 @@ jobs:
           PAYLOAD=$(jq -n --arg ref "${PR_NUM}" \
             '{event: "workflow_self_report", source: "github_actions", workflow: "ci", stage_id: "ci", work_item_refs: [{"kind": "pr", "ref": $ref, "status": "done"}]}')
 
-          echo "=== Modulo self-report payload (CI Validate) ==="
+          echo "=== Farna Control self-report payload (CI Validate) ==="
           echo "$PAYLOAD"
 
           if [ -z "$FARNA_CONTROL_SELF_REPORT_URL" ]; then
@@ -2712,7 +2712,7 @@ jobs:
             -d "$PAYLOAD") || HTTP_CODE="000"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "::warning::Modulo self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - CI stage recorded in log only (fail-open)."
+            echo "::warning::Farna Control self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - CI stage recorded in log only (fail-open)."
             exit 0
           fi
 
@@ -2721,7 +2721,7 @@ jobs:
           REJECTED=$(jq -r '.rejected // 0' "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 0)
           REF_COUNT=$(echo "$PAYLOAD" | jq '.work_item_refs | length' 2>/dev/null || echo 0)
           if [ "$UNMATCHED" -gt 0 ] || { [ "$ACCEPTED" -eq 0 ] && [ "$REF_COUNT" -gt 0 ]; }; then
-            echo "::warning::Modulo self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
+            echo "::warning::Farna Control self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
             exit 0
           fi
-          echo "Self-report delivered to Modulo (accepted=$ACCEPTED unmatched=$UNMATCHED)."
+          echo "Self-report delivered to Farna Control (accepted=$ACCEPTED unmatched=$UNMATCHED)."

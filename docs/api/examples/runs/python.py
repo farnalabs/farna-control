@@ -1,5 +1,5 @@
 """
-Modulo API Example: Run Lifecycle
+Farna Control API Example: Run Lifecycle
 
 Demonstrates:
   - Trigger a pipeline run

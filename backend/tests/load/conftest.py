@@ -15,7 +15,7 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:8000/api/v1"
 DEFAULT_TIMEOUT = 30.0
-DEFAULT_ADMIN_EMAIL = "admin@modulo.test"
+DEFAULT_ADMIN_EMAIL = "admin@farna-control.test"
 DEFAULT_ADMIN_PASSWORD = "test-password-123"
 _TERMINAL_STATUSES = frozenset({"complete", "failed", "cancelled", "eval_failed"})
 _MIN_POLL_INTERVAL = 0.1
@@ -28,7 +28,7 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 def login(
     client: Any,
-    email: str = "admin@modulo.test",
+    email: str = "admin@farna-control.test",
     password: str = "test-password-123",
     base_url: str = DEFAULT_BASE_URL,
 ) -> str:
