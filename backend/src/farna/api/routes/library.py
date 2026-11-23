@@ -1797,7 +1797,7 @@ async def list_ratings_endpoint(
         async with session.begin():
             await _set_rls_context(session, principal)
             await _require_lifecycle_map_primitive_access(session, principal, primitive_id)
-            result = await list_ratings_for_primitive(session, primitive_id, page=page, page_size=page_size)
+            result = await list_ratings_for_primitive(session, primitive_id, org_id=principal.organisation_id, page=page, page_size=page_size)
     except IntegrityError:
         _log.exception("library.list_ratings_endpoint")
         raise _conflict_error() from None

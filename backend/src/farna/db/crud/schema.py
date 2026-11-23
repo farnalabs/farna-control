@@ -67,12 +67,18 @@ async def get_schema(session: AsyncSession, schema_id: uuid.UUID) -> Schema | No
 async def list_schemas(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     cursor: str | None = None,
     limit: int = 20,
     folder_id: uuid.UUID | None = None,
 ) -> PageResult[Schema]:
-    q = select(Schema)
-    count_q = select(func.count()).select_from(Schema)
+    # FAR-2686: explicit organisation predicate, applied to both the COUNT and
+    # the item query so ``total`` and the page agree. ``organisation_id`` is NOT
+    # NULL on ``schemas`` and there is no shared/sentinel-org schema the clamp
+    # would hide. REQUIRED so a future caller cannot fall back to the RLS-only
+    # shape. (The folder filter narrows further; it is not the org scope.)
+    q = select(Schema).where(Schema.organisation_id == org_id)
+    count_q = select(func.count()).select_from(Schema).where(Schema.organisation_id == org_id)
     if folder_id is not None:
         q = q.where(Schema.folder_id == folder_id)
         count_q = count_q.where(Schema.folder_id == folder_id)

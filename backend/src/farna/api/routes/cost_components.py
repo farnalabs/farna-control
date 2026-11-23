@@ -252,7 +252,7 @@ async def get_components(
     try:
         async with session.begin():
             await set_rls_org(session, current_user.organisation_id)
-            rows = await list_cost_components(session)
+            rows = await list_cost_components(session, org_id=current_user.organisation_id)
         return [_to_response(c) for c in rows]
     except CostFormulaError as exc:
         raise _map_validation_error(exc) from None

@@ -58,7 +58,7 @@ async def test_rating_readers_fail_safe_on_programming_errors() -> None:
 
     list_session = _session_with_results()
     list_session.execute = AsyncMock(side_effect=_programming_error())
-    ratings = await list_ratings_for_primitive(list_session, uuid.uuid4(), page=3, page_size=4)
+    ratings = await list_ratings_for_primitive(list_session, uuid.uuid4(), org_id=uuid.uuid4(), page=3, page_size=4)
     assert isinstance(ratings, PageResult)
     assert not ratings.items
     assert ratings.page == 3
@@ -90,6 +90,6 @@ async def test_rating_list_has_more_when_second_page_exists() -> None:
     ratings = MagicMock()
     ratings.scalars.return_value = [MagicMock(), MagicMock()]
     session = _session_with_results(count, ratings)
-    result = await list_ratings_for_primitive(session, uuid.uuid4(), page=1, page_size=2)
+    result = await list_ratings_for_primitive(session, uuid.uuid4(), org_id=uuid.uuid4(), page=1, page_size=2)
     assert result.has_more is True
     assert len(result.items) == 2
