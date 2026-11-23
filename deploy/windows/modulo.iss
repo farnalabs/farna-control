@@ -434,7 +434,7 @@ begin
     '  Install log      : ' + Redact(LogDisplay) + #13#10 +
     '  Support reference: ' + SupportRef + #13#10 + #13#10 +
     'Send this block AND the install log file above to Farna Control support so the' + #13#10 +
-    'failure can be diagnosed: https://github.com/farnalabs/modulo/issues' + #13#10 +
+    'failure can be diagnosed: https://github.com/farnalabs/farna-control/issues' + #13#10 +
     '----- end of Farna Control install support block -----' + #13#10;
   WriteInstallLog(Msg);
   { MsgBox from [Code] is not suppressible by /SUPPRESSMSGBOXES (Inno Setup

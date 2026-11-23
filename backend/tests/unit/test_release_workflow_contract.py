@@ -688,7 +688,8 @@ def test_rc_validation_uses_predecessor_bundle_image_tag_before_promotion() -> N
 
     assert 'gh release download "$bundle_tag"' in matrix
     assert 'compose_file="$bundle_dir/docker-compose.prod.yml"' in matrix
-    assert 'image = compose.get("services", {}).get("modulo", {}).get("image")' in matrix
+    assert 'service = services.get("farna-control") or services.get("modulo") or {}' in matrix
+    assert 'image = service.get("image")' in matrix
     assert 'old_tag="$(COMPOSE_FILE="$compose_file" BUNDLE_VERSION="$bundle_version" \\' in matrix
     assert "uv run --no-project --no-sync --no-build --with pyyaml==6.0.3 python - <<'PY'" in matrix
     assert 'BUNDLE_VERSION="$bundle_version" python3' not in matrix
