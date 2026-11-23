@@ -770,7 +770,10 @@ describe('AdminCostBreakdownView', () => {
     ]
 
     for (const [testId, labelText] of metricLabels) {
-      const card = wrapper.get(`[data-testid="${testId}"]`).element.closest('.card-base')
+      // The tile's data-testid sits on its root element, with the shared card
+      // surface either being that root or a descendant of it.
+      const tile = wrapper.get(`[data-testid="${testId}"]`).element
+      const card = tile.classList.contains('card-base') ? tile : tile.querySelector('.card-base')
       expect(card).not.toBeNull()
       const label = Array.from(card!.querySelectorAll('p, span')).find(
         (element) => element.textContent?.trim() === labelText,

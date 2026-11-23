@@ -22,7 +22,6 @@ import CardHeader from '../components/ui/CardHeader.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import CardTable from '../components/ui/CardTable.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
 import SummaryCard from '../components/ui/SummaryCard.vue'
 import StatCard from '../components/ui/StatCard.vue'
 
@@ -363,9 +362,9 @@ describe('CardContent, CardTable and CardSkeleton', () => {
   })
 })
 
-describe('MetricCard', () => {
+describe('StatCard metric tile', () => {
   it('renders delta values, direction, percentage, and custom test id', () => {
-    const wrapper = mount(MetricCard, {
+    const wrapper = mount(StatCard, {
       props: { label: 'Runs', value: 12, delta: 2, deltaPct: 16.25, dataTestId: 'metric-card' },
     })
 
@@ -385,7 +384,7 @@ describe('MetricCard', () => {
       [{ delta: 0, deltaPct: 0 }, '0 (0.0%)'],
       [{ delta: 2, deltaPct: -16.25 }, '+2 (-16.3%)'],
     ])('renders valid delta combinations safely: %o', (deltaProps, expected) => {
-      const wrapper = mount(MetricCard, {
+      const wrapper = mount(StatCard, {
         props: { label: 'Runs', value: 12, ...deltaProps },
       })
 
@@ -405,14 +404,14 @@ describe('MetricCard', () => {
       ['muted', 'text-muted-foreground'],
       ['primary', ''],
     ] as const)('maps %s value color', (color, expectedClass) => {
-      const wrapper = mount(MetricCard, { props: { label: 'Runs', value: 1, color } })
+      const wrapper = mount(StatCard, { props: { label: 'Runs', value: 1, color } })
 
       if (expectedClass) expect(wrapper.find('.text-2xl').classes()).toContain(expectedClass)
       else expect(wrapper.find('.text-2xl').classes()).not.toContain('text-success-text')
     })
 
     it('preserves the absent test id when no custom id is provided', () => {
-       expect(mount(MetricCard, { props: { label: 'Runs', value: 1 } }).attributes('data-testid')).toBeUndefined()
+       expect(mount(StatCard, { props: { label: 'Runs', value: 1 } }).attributes('data-testid')).toBeUndefined()
      })
 
 
@@ -422,7 +421,7 @@ describe('MetricCard', () => {
      [{ value: 50, max: 0 }, '0%'],
      [{ value: 50, max: -10 }, '0%'],
    ])('clamps progress safely for %o', (progress, width) => {
-     const wrapper = mount(MetricCard, {
+     const wrapper = mount(StatCard, {
        props: { label: 'Capacity', value: 'Full', progress },
      })
 
@@ -430,7 +429,7 @@ describe('MetricCard', () => {
    })
 
     it('uses the destructive style for over-max progress', () => {
-      const wrapper = mount(MetricCard, {
+      const wrapper = mount(StatCard, {
         props: { label: 'Capacity', value: 'Full', progress: { value: 120, max: 100 } },
       })
 
@@ -438,10 +437,10 @@ describe('MetricCard', () => {
     })
 
      it('falls back to zero progress for non-finite values', () => {
-       const invalidMax = mount(MetricCard, {
+       const invalidMax = mount(StatCard, {
          props: { label: 'Capacity', value: 'Unknown', progress: { value: 50, max: Number.NaN } },
        })
-       const invalidValue = mount(MetricCard, {
+       const invalidValue = mount(StatCard, {
          props: { label: 'Capacity', value: 'Unknown', progress: { value: Number.NaN, max: 100 } },
        })
 
@@ -450,7 +449,7 @@ describe('MetricCard', () => {
      })
 
      it('covers absent progress and invalid delta computed fallbacks', () => {
-       const wrapper = mount(MetricCard, { props: { label: 'Capacity', value: 'Unknown' } })
+       const wrapper = mount(StatCard, { props: { label: 'Capacity', value: 'Unknown' } })
        const vm = wrapper.vm as unknown as { progressBarClass: string; deltaArrow: string; deltaClass: string }
 
        expect(vm.progressBarClass).toBe('bg-primary')
@@ -478,7 +477,7 @@ describe('MetricCard', () => {
        [{ value: 99, max: 100 }, 'bg-warning'],
        [{ value: 100, max: 100 }, 'bg-destructive'],
      ] as const)('maps progress %o to %s', (progress, expectedClass) => {
-        const wrapper = mount(MetricCard, { props: { label: 'Capacity', value: 'Half', progress } })
+        const wrapper = mount(StatCard, { props: { label: 'Capacity', value: 'Half', progress } })
 
         expect(wrapper.find('[style]').classes()).toContain(expectedClass)
      })
