@@ -76,6 +76,11 @@ class SettingsUpdate(BaseModel):
     locale: str | None = None
 
 
+# FAR-2682: deliberate JWT-only route. The resource is the calling ACCOUNT and
+# an ``mk_`` org API key is a machine identity with no account of its own.
+# Recorded as a comment, not a docstring: FastAPI publishes handler docstrings
+# as the public OpenAPI operation description, and a sweep note must not leak
+# into the customer-facing API docs. Do not widen this in a credential sweep.
 @router.get("/me/settings", response_model=SettingsResponse)
 @handle_db_errors("me.get_user_settings")
 async def get_user_settings(
@@ -179,6 +184,9 @@ def _hitl_email_pref_payload(preferences: Any) -> dict[str, Any]:
     return {"default": default, "pipeline_overrides": overrides}
 
 
+# FAR-2682: deliberate JWT-only route. The recipient is the calling HUMAN
+# account; an ``mk_`` key is a machine identity, not an email recipient, so it
+# has no preference to read. Do not widen this in a credential sweep.
 @router.get("/me/hitl-email-preferences", response_model=HitlEmailPreferenceResponse)
 @handle_db_errors("me.get_hitl_email_preferences")
 async def get_hitl_email_preferences(
@@ -352,6 +360,9 @@ async def change_password(
 # ── User-level Assistant Skills ────────────────────────────────────────────
 
 
+# FAR-2682: deliberate JWT-only route. User-owned content keyed on the calling
+# account; an ``mk_`` key is a machine identity with no per-user skills. Do not
+# widen this in a credential sweep.
 @router.get("/me/assistant/skills")
 @handle_db_errors("me.list_user_skills")
 async def list_user_skills(
@@ -480,6 +491,9 @@ class ContextSourceModeUpdate(BaseModel):
     source_mode: str = Field(..., pattern=r"^(always_on|tool|off)$")
 
 
+# FAR-2682: deliberate JWT-only route. The per-user override layer is keyed on
+# the calling account; an ``mk_`` key has no per-user overrides. Do not widen
+# this in a credential sweep.
 @router.get("/me/assistant/context-sources")
 @handle_db_errors("me.get_user_context_sources")
 async def get_user_context_sources(

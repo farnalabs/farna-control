@@ -32,6 +32,7 @@ MSG_TEAM_NOT_FOUND = "Team not found"
 MSG_PIPELINE_NOT_FOUND = "Pipeline not found"
 MSG_FOLDER_NOT_FOUND = "Folder not found"
 MSG_ENVIRONMENT_PROFILE_NOT_FOUND = "Environment profile not found"
+MSG_PRIMITIVE_NOT_FOUND = "Primitive not found"
 
 # Shared permission code (python:S1192): several system-admin routes gate on the
 # same instance-wide permission, so the identity-bearing string lives here once.

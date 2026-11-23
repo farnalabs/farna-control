@@ -217,6 +217,10 @@ def _build_action_list(
     return result
 
 
+# FAR-2682: deliberate JWT-only route. Onboarding is a human first-run
+# experience driven by the browser session (the mutation siblings are on the
+# EXEMPT inventory as "onboarding user action"); an ``mk_`` key has no
+# onboarding journey. Do not widen this in a credential sweep.
 @router.get("/status")
 @handle_db_errors("onboarding.get_onboarding_status")
 async def get_onboarding_status(

@@ -371,6 +371,10 @@ class MyTeamResponse(BaseModel):
     role: str
 
 
+# FAR-2682: deliberate JWT-only route. "My teams" is the calling ACCOUNT's
+# membership list; an ``mk_`` key is a machine identity with no memberships (the
+# machine-readable team list is the admin surface). Do not widen this in a
+# credential sweep.
 @router.get("/my")
 @handle_db_errors("teams.my_teams_endpoint")
 async def my_teams_endpoint(
