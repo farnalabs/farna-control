@@ -48,14 +48,14 @@
            HTTP 200, so it never reaches the non-2xx error region above — report
            the truncated transfer explicitly rather than as a generic failure.
            Inline and non-blocking: the export control re-enables immediately. -->
-      <div
+      <ErrorAlert
         v-if="exportIncomplete"
-        class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+        class="mb-4"
+        compact
         data-testid="admin-run-retention-export-incomplete"
-        role="alert"
-      >
-        {{ exportIncomplete }}
-      </div>
+        :message="exportIncomplete"
+        :retryable="false"
+      />
       <div
         v-if="exportSuccess"
         class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
@@ -198,6 +198,7 @@
           />
             <div v-else-if="candidates.length === 0" data-testid="admin-run-retention-empty">
               <EmptyState
+                variant="bare"
                 :title="$t('views.AdminRunRetentionView.no_runs_match')"
                 :description="$t('views.AdminRunRetentionView.no_runs_match_change_filters')"
               />

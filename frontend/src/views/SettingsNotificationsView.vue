@@ -27,6 +27,7 @@
       >
         <EmptyState
           v-if="categories.length === 0"
+          variant="bare"
           data-testid="settings-notifications-empty"
           :title="$t('views.SettingsNotificationsView.no_categories')"
         />
