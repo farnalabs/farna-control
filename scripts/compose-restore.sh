@@ -11,6 +11,20 @@
 # (--verify-target-schema). A snapshot that is corrupt, foreign, missing or
 # aimed at the wrong cluster is refused BEFORE anything is stopped or wiped.
 #
+# EVERY one-off container overrides the image ENTRYPOINT with
+# `--entrypoint farna-control` (or `sh` for a filesystem check). The all-in-one
+# image's ENTRYPOINT is /entrypoint.sh, which IGNORES its arguments, runs the
+# alignment guard, takes a fresh snapshot, migrates and execs supervisord:
+# appending `restore ...` to it would MIGRATE the live database and hang, while
+# restoring nothing. The CLI is `farna-control` (on PATH in the image); there
+# is no bare `restore` binary.
+#
+# This script NEVER reads or passes the database URL. The one-off container
+# inherits DATABASE_ADMIN_URL from the service environment, and the CLI
+# resolves it there — so the superuser password never appears in a host argv
+# (world-readable via /proc/<pid>/cmdline) and `set -u` cannot abort on a
+# variable only the container has.
+#
 # The confirmation is an explicit ARGUMENT (--confirm), never a --yes baked in
 # by a wrapper: a recovery command that confirms itself is a command that wipes
 # the wrong database without anyone saying so.
@@ -133,16 +147,19 @@ printf 'Verifying snapshot %s before touching anything...\n' "$container_snapsho
 compose run --rm --no-deps --entrypoint sh "$app_service" -c \
   'test -d "$1" || { echo "refusing to restore: no snapshot directory at $1" >&2; exit 1; }' \
   sh "$container_snapshot"
-compose run --rm --no-deps "$app_service" \
-  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run >/dev/null
+# --entrypoint farna-control: run the CLI, and NOTHING else. Without it the
+# image's /entrypoint.sh swallows these arguments, migrates the live database
+# and starts supervisord — the exact opposite of a dry run.
+compose run --rm --no-deps --entrypoint farna-control "$app_service" \
+  restore "$container_snapshot" --dry-run >/dev/null
 
 printf 'Verifying the TARGET database matches the snapshot...\n'
 # Without --data-dir there is no state.json identity to compare, so the
 # equivalent guard verifies the TARGET's recorded schema against the snapshot's:
 # a database that is not the one this snapshot came from (different revision,
 # or not a bootstrapped Farna Control database at all) is refused.
-compose run --rm --no-deps "$app_service" \
-  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" --dry-run \
+compose run --rm --no-deps --entrypoint farna-control "$app_service" \
+  restore "$container_snapshot" --dry-run \
   --verify-target-schema >/dev/null
 
 printf 'Stopping the writers (compose service "%s")...\n' "$app_service"
@@ -154,8 +171,8 @@ printf 'Restoring %s ...\n' "$container_snapshot"
 # is already running; do not restart it. --safety-dump-dir /backups keeps the
 # pre-restore safety dump of the CURRENT database on the volume instead of
 # inside the disposable container.
-compose run --rm --no-deps "$app_service" \
-  restore "$container_snapshot" --db-url "$DATABASE_ADMIN_URL" \
+compose run --rm --no-deps --entrypoint farna-control "$app_service" \
+  restore "$container_snapshot" \
   --yes --verify-target-schema --safety-dump-dir /backups
 
 printf '\nRestore complete. Writers stay stopped.\n'

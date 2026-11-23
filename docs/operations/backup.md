@@ -155,22 +155,26 @@ See the feature's contract line in `docs/product-map/system/runtime.md`.
 
 ## Upgrade Path: Dump Before Migrating
 
-A schema change is a migration event. Every upgrade path now takes the dump
-itself, immediately before the migrations run, so a bad upgrade always has a
-recovery point that does not depend on the operator remembering a command:
+A schema change is a migration event. Every upgrade path that can take the
+dump takes it itself, immediately before the migrations run, so a bad upgrade
+always has a recovery point that does not depend on the operator remembering a
+command:
 
 | Path | Who takes the snapshot | Where it lands |
 |------|------------------------|----------------|
 | Container (compose) | the image entrypoint, immediately before `alembic upgrade heads` and only when a migration is pending | `/backups/pre-upgrade-dump-<TAG>-<ts>/` in the `snapshot_data` volume |
-| Native bundle | `farna-control upgrade` / the installer, before the binary swap | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
+| Native bundle | `farna-control upgrade` / the installer, before the binary swap and only when a migration is pending against the new bundle | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
+| Fly.io | the boot entrypoint, only when `FARNA_CONTROL_SNAPSHOT_DIR` points at a mounted volume (no snapshot volume by default) | `$FARNA_CONTROL_SNAPSHOT_DIR/pre-upgrade-dump-<TAG>-<ts>/` |
 
-Both paths call the same helper and share the same guarantees:
+Every path calls the same helper and shares the same guarantees:
 
 - **Only when a migration is pending.** A database already at the code's
   migration head cannot be changed by the boot, so no snapshot is taken (one
-  line says so). This is what stops a release that migrates and then
-  crash-loops from replacing its own pre-upgrade recovery point on each
-  restart.
+  line says so). The decision is made inside the shared helper, so no caller —
+  not the container boot, not the installer — can bypass it. This is what stops
+  a release that migrates and then crash-loops from replacing its own
+  pre-upgrade recovery point on each restart, and what stops an installer
+  re-run from rotating it for nothing.
 - **Proven complete at dump time.** A plain SQL dump that is cut short still
   replays as a shorter script, so the snapshot is accepted only if pg_dump's
   completion marker is the final non-empty line of the file and the dump
@@ -180,11 +184,14 @@ Both paths call the same helper and share the same guarantees:
   of the snapshots retention keeps. Otherwise the upgrade refuses and says so;
   nothing is changed.
 - **Retention keeps the recovery points that matter.** Dump, verify, then
-  prune. The two newest snapshots at the current schema are kept, and a
-  snapshot recording an OLDER schema is never pruned — it is the only way back
-  to the release that owns the current data. Nothing is deleted before its
-  replacement verifies, and a corrupt (checksum-mismatched) snapshot is the one
-  that is pruned, not the good one beside it.
+  prune. Kept: the two newest verified snapshots, plus the newest snapshot
+  recording EXACTLY the database's current schema — the recovery point a
+  database that did not move since (a failed migration, a rollback) depends on.
+  At most three directories survive; older generations are superseded and
+  deleted, so snapshots cannot accumulate until the disk guard refuses every
+  upgrade. Nothing is deleted before its replacement verifies, and a corrupt
+  (checksum-mismatched) snapshot is the one that is pruned, not the good one
+  beside it.
 - **Replayable by the release that took it.** pg_dump emits the settings of the
   *client* it came from; a client newer than the server writes settings the
   server rejects (pg_dump 17 writes `SET transaction_timeout` /
@@ -234,9 +241,15 @@ The `farna-control` and `alembic` commands in this section run from `backend/`, 
 
 ```bash
 cd /opt/modulo/backend
-uv run farna-control backup --db-url "$DATABASE_URL" \
-  --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
+uv run farna-control backup --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
 ```
+
+`farna-control backup` and `restore` resolve their maintenance connection from
+`--db-url` if given, else `DATABASE_ADMIN_URL`, else the configured
+`DATABASE_URL` — in that order. `DATABASE_ADMIN_URL` is preferred because the
+application role is `NOBYPASSRLS` (a dump through it is row-partial, and a
+restore cannot DROP/CREATE), and because leaving the URL out of the command
+keeps the superuser password out of the shell history and the process argv.
 
 Give every dump its own directory. `--output-dir` creates the directory when it
 is missing but reuses it when it exists, and the files inside it are
@@ -274,8 +287,8 @@ Check the archive first, then restore it (substituting the timestamped
 directory you dumped in step 1):
 
 ```bash
-uv run farna-control restore /backups/pre-upgrade-<timestamp> --db-url "$DATABASE_URL" --dry-run
-uv run farna-control restore /backups/pre-upgrade-<timestamp> --db-url "$DATABASE_URL" --yes
+uv run farna-control restore /backups/pre-upgrade-<timestamp> --dry-run
+uv run farna-control restore /backups/pre-upgrade-<timestamp> --yes
 ```
 
 `restore` verifies every file against the manifest's checksums before it
@@ -312,10 +325,11 @@ restores the pre-upgrade `alembic_version` row, leaving the database recorded
 at the revision it was dumped from.
 
 With `--data-dir`, restore **stops a running launcher itself** and leaves the
-stack stopped; on success it prints the exact `farna-control start --data-dir
-<dir>` command and never restarts anything. Without `--data-dir` it prints the
-compose start command instead. Nothing is auto-restarted: a half-verified
-database must not be handed to an application.
+stack stopped; it prints the exact `farna-control start --data-dir <dir>`
+command on failure as well as success — a failed restore must not leave a dark
+stack with nothing to copy — and never restarts anything. Without `--data-dir`
+it prints the compose start command instead. Nothing is auto-restarted: a
+half-verified database must not be handed to an application.
 
 Note the two different versions in play. The manifest's `schema_versions` field
 records the **migration head of the code that wrote the backup** (`alembic`

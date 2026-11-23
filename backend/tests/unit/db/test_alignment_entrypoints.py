@@ -63,6 +63,9 @@ _SNAPSHOT_ENTRYPOINTS = {
     # migrated.
     "backend/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade 0001_v2_identity_org"),
     "deploy/supervisor/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade heads"),
+    # Fly takes the snapshot through the SAME helper, gated on
+    # FARNA_CONTROL_SNAPSHOT_DIR (Fly has no snapshot volume by default).
+    "deploy/fly/entrypoint.sh": ("python3 -m farna.db.alignment", "python3 -m farna.launcher.upgrade", "alembic upgrade heads"),
 }
 
 

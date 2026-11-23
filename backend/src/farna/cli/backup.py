@@ -122,7 +122,19 @@ __all__ = ["MANIFEST_VERSION", "backup", "cli", "restore"]
 
 
 def _resolve_url(db_url: str | None) -> str:
-    """Resolve a raw PostgreSQL connection string from --db-url or settings.
+    """Resolve the maintenance connection string for pg_dump / psql / psycopg.
+
+    Order: an explicit ``--db-url`` (an operator's argv), then
+    ``DATABASE_ADMIN_URL``, then the configured ``DATABASE_URL``.
+
+    ``DATABASE_ADMIN_URL`` sits SECOND on purpose. It is the owner/migration
+    role, and it is the role these commands need: the application role is
+    ``NOBYPASSRLS``, so a dump taken through ``DATABASE_URL`` is
+    trailer-complete but ROW-PARTIAL, and a restore through it cannot
+    DROP/CREATE the schema. Resolving it from the environment also keeps the
+    superuser password OFF every command line — a recovery helper can invoke
+    ``restore`` with no URL argument at all, so the password never appears in a
+    host argv (world-readable via ``/proc/<pid>/cmdline``).
 
     Normalised through the ONE shared libpq normaliser (``farna.db.url_utils``):
     the application is configured with ``postgresql+asyncpg://`` while
@@ -130,7 +142,7 @@ def _resolve_url(db_url: str | None) -> str:
     snapshot path normalises the same way — so the two dump producers cannot
     disagree about which schemes work.
     """
-    raw = db_url or get_settings().database_url
+    raw = db_url or os.environ.get("DATABASE_ADMIN_URL") or get_settings().database_url
     from farna.db.url_utils import normalise_libpq_url
 
     try:
@@ -236,18 +248,71 @@ def _get_schema_versions() -> list[str]:
         return ["unknown"]
 
 
-def _connect(raw_url: str, *, timeout: int = 10) -> Any:
+#: One ``scheme://user:secret@`` userinfo run. A driver that renders the DSN it
+#: was handed puts the password exactly here.
+_URL_CREDENTIAL_RE = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)(?P<user>[^:/@\s]*):(?P<secret>[^@]*)@")
+
+
+class _SanitisedDatabaseError(RuntimeError):
+    """A driver error whose text carries no credential.
+
+    Raised by :func:`_connect` in place of the driver's own exception. The
+    message is the driver's, scrubbed by :func:`_redact_secrets`, and the
+    original exception type name is preserved so the transcript still says what
+    failed (``OperationalError: connection refused``) without the DSN.
+    """
+
+    def __init__(self, message: str, original_type: str) -> None:
+        super().__init__(f"{original_type}: {message}")
+        self.original_type = original_type
+
+
+def _redact_secrets(text: str, password: str | None = None) -> str:
+    """Scrub a connection password out of text bound for a terminal or a log.
+
+    Two layers, because a password reaches error text in more than one shape:
+
+    * the ``scheme://user:secret@`` userinfo run a driver renders from the DSN
+      it was given; and
+    * the LITERAL password value, in its raw and its percent-encoded forms — a
+      password containing a space or a bad percent escape (``pa%zzword``) is
+      not matchable by the URL pattern, so scrubbing it needs the value.
+
+    Passwords never travel in the DSN these commands hand to psycopg (see
+    :func:`_connect`), so this is the second line of defence, not the first.
+    """
+    redacted = _URL_CREDENTIAL_RE.sub(lambda match: f"{match.group('scheme')}{match.group('user')}:***@", text)
+    if not password:
+        return redacted
+    for candidate in {password, urllib.parse.quote(password, safe=""), urllib.parse.quote_plus(password)}:
+        if candidate:
+            redacted = redacted.replace(candidate, "***")
+    return redacted
+
+
+def _connect(raw_url: str, *, timeout: int = 10, row_factory: Any = None) -> Any:
     """psycopg connect with the password OUT of the DSN.
 
-    Every probe in this module goes through here: psycopg quotes the DSN
-    verbatim in a connection error, and these errors are echoed and logged, so
-    a password left in the DSN becomes a password in the operator's terminal
-    and the logs.
+    EVERY psycopg connection in this module goes through here — the read-only
+    probes, the JSON exports and the checkpoint/credential restore writes
+    alike. psycopg quotes the DSN verbatim in its error text and these errors
+    are echoed and logged, so a password left in the DSN becomes a password in
+    the operator's terminal and the logs. The password is lifted out
+    (``psycopg_connect_args``) and handed to the driver as its ``password=``
+    argument, and any error that still carries it — a driver rendering a DSN,
+    a password with a space or a bad percent escape — is scrubbed by
+    :func:`_redact_secrets` before it is re-raised.
     """
     from farna.db.url_utils import psycopg_connect_args
 
     dsn, password = psycopg_connect_args(raw_url)
-    return psycopg.connect(dsn, connect_timeout=timeout, password=password)
+    kwargs: dict[str, Any] = {"connect_timeout": timeout, "password": password}
+    if row_factory is not None:
+        kwargs["row_factory"] = row_factory
+    try:
+        return psycopg.connect(dsn, **kwargs)
+    except Exception as exc:  # every driver error can quote its input
+        raise _SanitisedDatabaseError(_redact_secrets(str(exc), password), type(exc).__name__) from None
 
 
 def _get_db_version(raw_url: str) -> str:
@@ -349,7 +414,11 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"psql restore timed out after {timeout}s") from exc
     if result.returncode != 0:
-        raise RuntimeError(f"psql restore failed: {result.stderr.decode(errors='replace').strip()}")
+        # psql is handed a password-free URL (the password reaches it as
+        # PGPASSWORD), but libpq warnings can still quote a connection string,
+        # so the stderr text is scrubbed of both shapes before it is raised
+        # (it is printed and logged by the caller).
+        raise RuntimeError(f"psql restore failed: {_redact_secrets(result.stderr.decode(errors='replace').strip(), password)}")
 
 
 def _take_safety_dump(raw_url: str, timeout: int = 300, output_dir: Path | None = None) -> Path | None:
@@ -384,7 +453,7 @@ def _take_safety_dump(raw_url: str, timeout: int = 300, output_dir: Path | None 
         _run_pg_dump(raw_url, safety_dir / _DB_SQL_FILE, timeout=timeout)
     except Exception as exc:
         shutil.rmtree(safety_dir, ignore_errors=True)
-        raise click.ClickException(f"Taking the pre-restore safety dump FAILED — refusing to wipe the current data (nothing was restored). Fix the dump failure, or pass --no-safety-dump to explicitly proceed without a safety net. Original error: {exc}") from exc
+        raise click.ClickException(f"Taking the pre-restore safety dump FAILED — refusing to wipe the current data (nothing was restored). Fix the dump failure, or pass --no-safety-dump to explicitly proceed without a safety net. Original error: {_redact_secrets(str(exc))}") from exc
     click.echo(f"Pre-restore safety dump taken: {safety_dir} (the previous cluster stays restorable)")
     return safety_dir
 
@@ -395,7 +464,7 @@ def _take_safety_dump(raw_url: str, timeout: int = 300, output_dir: Path | None 
 def _export_checkpoint_blobs_sync(raw_url: str) -> list[dict[str, Any]]:
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
-    with psycopg.connect(raw_url, row_factory=dict_row, connect_timeout=10) as conn, conn.cursor() as cur:
+    with _connect(raw_url, row_factory=dict_row) as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM checkpoint_blobs ORDER BY organisation_id, thread_id, checkpoint_ns, channel, version")
         return [_serialise_export_row(row) for row in cur]
 
@@ -403,7 +472,7 @@ def _export_checkpoint_blobs_sync(raw_url: str) -> list[dict[str, Any]]:
 def _export_checkpoints_sync(raw_url: str) -> list[dict[str, Any]]:
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
-    with psycopg.connect(raw_url, row_factory=dict_row, connect_timeout=10) as conn, conn.cursor() as cur:
+    with _connect(raw_url, row_factory=dict_row) as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM checkpoints ORDER BY organisation_id, thread_id, checkpoint_ns, checkpoint_id")
         return [_serialise_export_row(row) for row in cur]
 
@@ -411,7 +480,7 @@ def _export_checkpoints_sync(raw_url: str) -> list[dict[str, Any]]:
 def _export_checkpoint_writes_sync(raw_url: str) -> list[dict[str, Any]]:
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
-    with psycopg.connect(raw_url, row_factory=dict_row, connect_timeout=10) as conn, conn.cursor() as cur:
+    with _connect(raw_url, row_factory=dict_row) as conn, conn.cursor() as cur:
         cur.execute("SELECT * FROM checkpoint_writes ORDER BY organisation_id, thread_id, checkpoint_ns, checkpoint_id, task_id, idx")
         return [_serialise_export_row(row) for row in cur]
 
@@ -423,7 +492,7 @@ def _export_credentials_references_sync(raw_url: str) -> dict[str, list[dict[str
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
     result: dict[str, list[dict[str, Any]]] = {}
-    with psycopg.connect(raw_url, row_factory=dict_row, connect_timeout=10) as conn:
+    with _connect(raw_url, row_factory=dict_row) as conn:
         for table in _CREDENTIALS_TABLES:
             rows: list[dict[str, Any]] = []
             with conn.cursor() as cur:
@@ -444,7 +513,7 @@ def _export_credentials_references_sync(raw_url: str) -> dict[str, list[dict[str
 def _restore_checkpoint_blobs_sync(raw_url: str, blobs: list[dict[str, Any]]) -> int:
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
-    with psycopg.connect(raw_url, connect_timeout=10) as conn:
+    with _connect(raw_url) as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE TABLE checkpoint_blobs CASCADE")
             for row in blobs:
@@ -472,7 +541,7 @@ def _restore_checkpoint_blobs_sync(raw_url: str, blobs: list[dict[str, Any]]) ->
 def _restore_checkpoints_sync(raw_url: str, checkpoints: list[dict[str, Any]]) -> int:
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
-    with psycopg.connect(raw_url, connect_timeout=10) as conn:
+    with _connect(raw_url) as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE TABLE checkpoints CASCADE")
             for row in checkpoints:
@@ -497,7 +566,7 @@ def _restore_checkpoints_sync(raw_url: str, checkpoints: list[dict[str, Any]]) -
 def _restore_checkpoint_writes_sync(raw_url: str, writes: list[dict[str, Any]]) -> int:
     if psycopg is None:
         raise RuntimeError(_ERR_PSYCOPG_UNAVAILABLE)
-    with psycopg.connect(raw_url, connect_timeout=10) as conn:
+    with _connect(raw_url) as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE TABLE checkpoint_writes CASCADE")
             for row in writes:
@@ -536,7 +605,7 @@ def _re_encrypt_credentials_sync(
     new_fernet = Fernet(new_fernet_key.encode())
     counts: dict[str, int] = {}
 
-    with psycopg.connect(raw_url, connect_timeout=10) as conn:
+    with _connect(raw_url) as conn:
         with conn.cursor() as cur:
             for table, rows in creds.items():
                 if table not in _CREDENTIALS_TABLES:
@@ -687,18 +756,27 @@ def _start_command(opts: _RestoreOptions) -> str:
     return "docker compose -f deploy/compose/docker-compose.prod.yml up -d modulo"
 
 
-def _print_start_guidance(opts: _RestoreOptions, *, stopped: bool) -> None:
+def _print_start_guidance(opts: _RestoreOptions, *, stopped: bool, failed: bool = False) -> None:
     """Print the exact start command; NEVER start anything (FAR-2667 item 5).
 
     An automatic restart would hand a half-verified database to an app that
     then refuses to boot; the operator starts it deliberately.
+
+    ``failed`` routes the text to stderr and says the restore did NOT complete.
+    It is printed on BOTH paths because the failure is exactly the moment the
+    writers are already stopped and the operator needs something to copy: a
+    start command that only appears on success leaves a failed native restore
+    with a dark stack and no command to bring it back.
     """
-    click.echo("")
+    stream = sys.stderr if failed else sys.stdout
+    click.echo("", file=stream)
     if stopped:
-        click.echo("The launcher was stopped for the restore and is still stopped.")
-    click.echo("Writers stay stopped. Start the restored release with:")
-    click.echo(f"  {_start_command(opts)}")
-    click.echo("No automatic restart was performed.")
+        click.echo("The launcher was stopped for the restore and is still stopped.", file=stream)
+    if failed:
+        click.echo("The restore did NOT complete. The database may be part-restored; read the failure above before starting anything.", file=stream)
+    click.echo("Writers stay stopped. Start the release with:", file=stream)
+    click.echo(f"  {_start_command(opts)}", file=stream)
+    click.echo("No automatic restart was performed.", file=stream)
 
 
 def _read_state_mac(state_path: Path) -> str | None:
@@ -860,11 +938,8 @@ def _record_last_backup(data_dir: Path, timestamp: str) -> None:
 
 def _server_data_directory(raw_url: str) -> str | None:
     """The server's own ``data_directory`` (best effort; None when unreadable)."""
-    from farna.db.url_utils import psycopg_connect_args
-
     try:
-        dsn, password = psycopg_connect_args(raw_url)
-        with psycopg.connect(dsn, connect_timeout=5, password=password) as conn, conn.cursor() as cur:
+        with _connect(raw_url, timeout=5) as conn, conn.cursor() as cur:
             cur.execute("SHOW data_directory")
             row = cur.fetchone()
     except Exception:
@@ -1646,17 +1721,16 @@ def _run_restore(opts: _RestoreOptions) -> None:
 
     lock = None
     stopped = False
-    if opts.data_dir is not None:
-        # FAR-2667 item 5: a VIABLE restore stops the writers itself (it never
-        # asks the operator to remember a stop) and leaves them stopped. This
-        # runs only after the read-only verification above, so a validation
-        # failure or a preview never leaves a running launcher stopped.
-        # Taking the data-dir lock afterwards is what proves they really are
-        # gone.
-        stopped = _stop_launcher_writers(opts.data_dir)
-        lock = _acquire_data_lock(opts.data_dir, mode="restore")
-
     try:
+        if opts.data_dir is not None:
+            # FAR-2667 item 5: a VIABLE restore stops the writers itself (it never
+            # asks the operator to remember a stop) and leaves them stopped. This
+            # runs only after the read-only verification above, so a validation
+            # failure or a preview never leaves a running launcher stopped.
+            # Taking the data-dir lock afterwards is what proves they really are
+            # gone.
+            stopped = _stop_launcher_writers(opts.data_dir)
+            lock = _acquire_data_lock(opts.data_dir, mode="restore")
         _safety_dump(opts, raw_url)
         _restore_cluster(opts, manifest, raw_url, settings)
         _restore_data_dir(opts, manifest)
@@ -1670,11 +1744,17 @@ def _run_restore(opts: _RestoreOptions) -> None:
         # Already a user-facing failure (including RestorePostureError) with
         # its own remediation message and non-zero exit — do not re-wrap it.
         _log.exception("Restore failed")
+        _print_start_guidance(opts, stopped=stopped, failed=True)
         raise
     except Exception as exc:
-        _log.exception("Restore failed")
-        click.echo(f"Restore failed: {exc}", err=True)
-        raise click.ClickException(str(exc)) from exc
+        detail = _redact_secrets(str(exc))
+        _log.error("Restore failed: %s", detail, exc_info=exc)
+        click.echo(f"Restore failed: {detail}", err=True)
+        # MAJOR: the writers may already be stopped and the database possibly
+        # part-restored. The start command must be printed on the FAILURE path
+        # too, or a failed native restore leaves a dark stack and no way back.
+        _print_start_guidance(opts, stopped=stopped, failed=True)
+        raise click.ClickException(detail) from exc
     finally:
         if lock is not None:
             lock.release()
@@ -1966,9 +2046,8 @@ def cli() -> None:
 @cli.command()
 @click.option(
     "--db-url",
-    envvar="DATABASE_URL",
     default=None,
-    help="Database URL override (default: from settings / DATABASE_URL env)",
+    help="Maintenance connection URL override (default: DATABASE_ADMIN_URL, else DATABASE_URL from settings)",
 )
 @click.option(
     "--output-dir",
@@ -2136,9 +2215,8 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
 @click.argument("backup_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option(
     "--db-url",
-    envvar="DATABASE_URL",
     default=None,
-    help="Database URL override (default: from settings / DATABASE_URL env)",
+    help="Maintenance connection URL override (default: DATABASE_ADMIN_URL, else DATABASE_URL from settings)",
 )
 @click.option(
     "--app-db-url",

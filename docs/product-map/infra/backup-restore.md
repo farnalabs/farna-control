@@ -172,26 +172,33 @@ operator-facing contract lives in `docs/operations/backup.md`.
       (`backend/src/farna/db/plain_dump.py`, `cli/backup.py`;
       `test_upgrade_snapshot.py::TestVerifyDumpComplete`,
       `test_backup.py::TestRestoreDumpIntegrity`).
-- [x] Retention keeps the two most recent VERIFIED snapshots at the current
-      schema and never prunes a snapshot whose recorded schema PRECEDES the
-      database's current head (that is the recovery point the current state
-      depends on), and never prunes before the new snapshot verifies: dump,
-      verify, then prune. A directory another live process is writing (its
-      in-progress marker names a live pid) is never touched; pruning and
-      snapshotting serialise on a per-directory lock. A snapshot that is not
-      intact — including one whose dump checksum no longer matches — is
-      swept, so the corrupt one is pruned rather than the good one beside it
-      (`launcher/upgrade.py::prune_snapshots`, `snapshot_is_intact`;
+- [x] Retention is BOUNDED: it keeps the two newest VERIFIED snapshots plus
+      the newest snapshot recording EXACTLY the database's current schema — the
+      recovery point a database that did not move since (a failed migration, a
+      rollback) actually depends on — and never prunes before the new snapshot
+      verifies: dump, verify, then prune. Older generations are superseded and
+      deleted, so snapshots cannot accumulate until the disk guard refuses every
+      upgrade; at most `retain + 1` directories survive. A directory another live
+      process is writing (its in-progress marker names a live pid) is never
+      touched; pruning and snapshotting serialise on a per-directory lock. A
+      snapshot that is not intact — including one whose dump checksum no longer
+      matches — is swept, so the corrupt one is pruned rather than the good one
+      beside it (`launcher/upgrade.py::prune_snapshots`,
+      `_retention_keep_set`, `snapshot_is_intact`;
       `test_upgrade_snapshot.py::TestPruneSnapshots`,
-      `::TestRetentionKeepsTheRecoveryPoint`,
-      `::TestRetentionVerifiesTheChecksum`, `::TestInFlightSnapshots`).
-- [x] The snapshot only happens when a migration is PENDING: a database already
-      at the code's migration head takes no snapshot, so a release that
-      migrates and then crash-loops cannot rotate its own pre-upgrade recovery
-      point away on restart
-      (`launcher/upgrade.py::migration_pending`;
-      `test_upgrade_snapshot.py::TestMigrationPendingDecision`,
-      `::test_the_pre_upgrade_snapshot_survives_two_failed_restarts`).
+      `::TestRetentionIsBounded`, `::TestRetentionVerifiesTheChecksum`,
+      `::TestInFlightSnapshots`).
+- [x] The snapshot only happens when a migration is PENDING, and the decision
+      is made INSIDE the shared helper so no caller can bypass it: a database
+      already at the target's migration head takes no snapshot, so a release
+      that migrates and then crash-loops — or a plain installer re-run — cannot
+      rotate its own pre-upgrade recovery point away. The comparison is against
+      the TARGET release (`--target-bundle` for the installer, which runs the
+      OLD installation's helper), never the helper's own code
+      (`launcher/upgrade.py::migration_pending`, `pre_upgrade_dump`,
+      `_pending_for_target`; `test_upgrade_snapshot.py::
+      TestMigrationPendingDecision`, `::test_the_pre_upgrade_snapshot_survives_two_failed_restarts`,
+      `test_upgrade_skip_backup.py::TestThePendingCheckCannotBeBypassed`).
 - [x] The disk guard accounts for the snapshots retention KEEPS, not just the
       new dump, so it cannot pass and then hit ENOSPC
       (`launcher/upgrade.py::enforce_snapshot_disk_headroom`;
@@ -241,15 +248,34 @@ operator-facing contract lives in `docs/operations/backup.md`.
       database records exactly the schema revisions the snapshot was taken from
       (`--verify-target-schema`) — the stand-in for the data-dir instance
       identity guard, which the old no-`--data-dir` invocation skipped
-      entirely. The exact start command is printed on failure as well as
-      success (`scripts/compose-restore.sh`,
-      `test_backup_restore_semantics.py::TestVerifyTargetSchema`).
+      entirely. Every one-off container overrides the image ENTRYPOINT with
+      `--entrypoint farna-control`, because the all-in-one image's
+      `/entrypoint.sh` ignores its arguments, migrates and execs supervisord —
+      without the override the "dry run" MIGRATED the live database and
+      restored nothing. The helper never reads or passes a database URL: the
+      one-off container inherits `DATABASE_ADMIN_URL` from the service
+      environment and the CLI resolves it there, so no superuser password
+      reaches a host argv. The exact start command is printed on failure as
+      well as success (`scripts/compose-restore.sh`,
+      `test_backup_restore_semantics.py::TestVerifyTargetSchema`,
+      `test_compose_restore_script.py`).
 - [x] `--skip-backup` skips the DUMP, not the recovery point: it refuses unless
-      an INTACT snapshot already exists under the data dir, and it reads the
-      LIVE database's revisions (not the old bundle's script heads) so an
-      already-migrated-ahead database is still detected
-      (`launcher/upgrade.py::_require_existing_snapshot`,
+      an INTACT snapshot of the CURRENT schema state already exists under the
+      data dir — the snapshot's recorded revisions must EQUAL the live
+      database's, so a snapshot several migrations stale cannot satisfy the
+      requirement — and it reads the LIVE database's revisions (not the old
+      bundle's script heads) so an already-migrated-ahead database is still
+      detected (`launcher/upgrade.py::_require_existing_snapshot`,
       `live_database_revisions`; `test_upgrade_skip_backup.py`).
+- [x] Every upgrade path that can take the snapshot does, through the same
+      helper: the compose entrypoint and the Fly boot both call
+      `farna.launcher.upgrade` between the alignment guard and the migrations.
+      Fly has no snapshot volume by default, so its step is gated on the
+      operator setting `FARNA_CONTROL_SNAPSHOT_DIR` at a mounted volume — the
+      documented exception, not an implied guarantee
+      (`deploy/fly/entrypoint.sh`,
+      `test_alignment_entrypoints.py::test_entrypoint_orders_guard_snapshot_migrate`,
+      `test_compose_restore_script.py::TestTheFlyEntrypointTakesTheSnapshotThroughTheSameHelper`).
 - [x] The compose release bundle ships `compose-restore.sh` — the one documented
       recovery command for that path — which stops the application, restores
       through a one-off container, and prints the exact start command without
@@ -267,6 +293,16 @@ operator-facing contract lives in `docs/operations/backup.md`.
   snapshot container) is out of scope here.
 
 ## Known Gaps
+- **Fly.io takes no pre-upgrade snapshot unless the operator opts in.** The Fly
+  boot calls the same helper, but a Fly machine has no persistent snapshot
+  volume by default; set `FARNA_CONTROL_SNAPSHOT_DIR` to a mounted volume to
+  enable it. Until then Fly is the documented exception to "every upgrade path
+  keeps a recovery point", and a Fly operator must take an out-of-band backup
+  before a schema-changing deploy.
+- The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) does not yet
+  rehearse the snapshot-restore leg (restore the pre-upgrade snapshot, then
+  start the previous image); its rollback leg currently only re-points the
+  image tag. FAR-2674 owns that harness change.
 - The in-product `farna-control backup` directory is written unencrypted. An
   operator who needs encryption at rest must use the `scripts/backup.py`
   archive or store the backup directory on encrypted media.
@@ -286,6 +322,24 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## QA History
 
+- 2026-11-22 (FAR-2667 third review round): fixed the nine findings from the
+  independent verification pass. The documented compose recovery command did
+  not work at all: `docker compose run` never overrode the image ENTRYPOINT, so
+  the "read-only verification" ran `/entrypoint.sh`, migrated the live database
+  and restored nothing, and the bare token `restore` is not installed (now
+  `--entrypoint farna-control --no-deps`). It also required
+  `$DATABASE_ADMIN_URL` in the operator's shell — unbound, so `set -u` aborted,
+  and exporting it put the superuser password on a host argv (now the script
+  references no URL at all; the container resolves it). Seven probes still
+  handed the password-bearing DSN to psycopg, so a password with a space or a
+  bad percent escape reached stderr (now every connection goes through
+  `_connect` and driver error text is scrubbed). Also: the native restore
+  prints its start command on the failure path; `--skip-backup` requires a
+  snapshot of the CURRENT schema; retention is bounded at two snapshots plus
+  the recovery point; the pending check moved inside the shared helper with
+  `--target-bundle` so the installer cannot bypass it; the Fly boot takes the
+  snapshot through the same helper when configured; and the docs no longer
+  claim the RC matrix rehearses the restore (FAR-2674 owns that).
 - 2026-11-22 (FAR-2667 review round): fixed the findings from the five-lens
   review. The compose snapshot could not run at all (libpq rejects the
   `postgresql+asyncpg://` scheme the compose file exports; the `/backups` bind

@@ -488,16 +488,82 @@ class TestMigrationPendingDecision:
         assert Path(next(line for line in captured.out.splitlines() if line.strip())).is_dir()
 
 
-class TestRetentionKeepsTheRecoveryPoint:
-    """An older-head snapshot is the only way back from the current state (C3)."""
+def _make_snapshot(root: Path, name: str, *, heads: list[str], created_at: str) -> Path:
+    """A complete, verification-passing snapshot recording *heads*."""
+    directory = root / f"{SNAPSHOT_PREFIX}{name}"
+    directory.mkdir()
+    (directory / "database.sql").write_bytes(_COMPLETE_PAYLOAD)
+    checksum = hashlib.sha256(_COMPLETE_PAYLOAD).hexdigest()
+    manifest = {"snapshot_for_upgrade": True, "created_at": created_at, "dump_name": "database.sql", "dump_bytes": len(_COMPLETE_PAYLOAD), "dump_sha256": checksum}
+    (directory / SNAPSHOT_MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
+    (directory / _RESTORE_MANIFEST_NAME).write_text(json.dumps({"schema_versions": heads, "file_checksums": {"database.sql": checksum}}), encoding="utf-8")
+    return directory
 
-    def test_an_older_head_snapshot_is_never_pruned(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["old-head"])
-        first = _take(tmp_path, retain=1)
-        monkeypatch.setattr(upgrade_module, "_database_revisions", lambda _url, **_kwargs: ["new-head"])
-        second = _take(tmp_path, retain=1)
-        assert first.directory.exists(), "the pre-upgrade recovery point must survive retention"
-        assert second.directory.exists()
+
+class TestRetentionIsBounded:
+    """The contract is exactly two verified snapshots plus the recovery point.
+
+    Keeping every snapshot that records a differing head is how snapshots
+    accumulated until the disk guard refused every upgrade; keeping only the
+    newest two would drop the only way back to the state the database is
+    actually in. Both directions are pinned here.
+    """
+
+    def test_keeps_the_two_newest_plus_the_snapshot_of_the_current_schema(self, tmp_path: Path) -> None:
+        current = _make_snapshot(tmp_path, "a-current", heads=["head-a"], created_at="2026-01-01T00:00:01+00:00")
+        newer_one = _make_snapshot(tmp_path, "b-newer", heads=["head-b"], created_at="2026-01-01T00:00:02+00:00")
+        newest = _make_snapshot(tmp_path, "c-newest", heads=["head-b"], created_at="2026-01-01T00:00:03+00:00")
+
+        # The database is BACK at head-a (a rollback), so the head-a snapshot is
+        # the recovery point for the current state even though two newer
+        # snapshots of a later schema exist.
+        pruned = prune_snapshots(tmp_path, retain=2, current_heads=["head-a"])
+
+        assert pruned == []
+        assert {current.name, newer_one.name, newest.name} == {entry.name for entry in tmp_path.iterdir() if entry.is_dir()}
+
+    def test_a_superseded_generation_is_pruned(self, tmp_path: Path) -> None:
+        stale = _make_snapshot(tmp_path, "a-stale", heads=["head-a"], created_at="2026-01-01T00:00:01+00:00")
+        older = _make_snapshot(tmp_path, "b-older", heads=["head-b"], created_at="2026-01-01T00:00:02+00:00")
+        newest_one = _make_snapshot(tmp_path, "c-newer", heads=["head-c"], created_at="2026-01-01T00:00:03+00:00")
+        newest = _make_snapshot(tmp_path, "d-newest", heads=["head-c"], created_at="2026-01-01T00:00:04+00:00")
+
+        pruned = prune_snapshots(tmp_path, retain=2, current_heads=["head-c"])
+
+        assert sorted(pruned) == sorted([stale.name, older.name])
+        assert not stale.exists()
+        assert not older.exists()
+        assert newest_one.exists()
+        assert newest.exists()
+
+    def test_retention_never_exceeds_two_plus_the_recovery_point(self, tmp_path: Path) -> None:
+        for index in range(6):
+            _make_snapshot(tmp_path, f"gen-{index}", heads=[f"head-{index}"], created_at=f"2026-01-01T00:00:0{index}+00:00")
+
+        prune_snapshots(tmp_path, retain=2, current_heads=["head-0"])
+
+        survivors = sorted(entry.name for entry in tmp_path.iterdir() if entry.is_dir())
+        assert len(survivors) == 3, survivors
+
+    def test_the_recovery_point_survives_a_retain_of_one(self, tmp_path: Path) -> None:
+        recovery_point = _make_snapshot(tmp_path, "a-current", heads=["head-a"], created_at="2026-01-01T00:00:01+00:00")
+        newest = _make_snapshot(tmp_path, "b-newest", heads=["head-b"], created_at="2026-01-01T00:00:02+00:00")
+
+        pruned = prune_snapshots(tmp_path, retain=1, current_heads=["head-a"])
+
+        assert pruned == []
+        assert recovery_point.exists(), "the pre-upgrade recovery point must survive retention"
+        assert newest.exists()
+
+    def test_unknown_heads_beyond_the_retained_window_are_pruned(self, tmp_path: Path) -> None:
+        oldest = _make_snapshot(tmp_path, "a-oldest", heads=["head-a"], created_at="2026-01-01T00:00:01+00:00")
+        _make_snapshot(tmp_path, "b-older", heads=["head-b"], created_at="2026-01-01T00:00:02+00:00")
+        _make_snapshot(tmp_path, "c-newest", heads=["head-c"], created_at="2026-01-01T00:00:03+00:00")
+
+        pruned = prune_snapshots(tmp_path, retain=2, current_heads=["unknown"])
+
+        assert pruned == [oldest.name]
+        assert not oldest.exists()
 
     def test_the_pre_upgrade_snapshot_survives_two_failed_restarts(self, tmp_path: Path, small_database: None, monkeypatch: pytest.MonkeyPatch) -> None:
         """A release that migrates then crash-loops must not rotate its own

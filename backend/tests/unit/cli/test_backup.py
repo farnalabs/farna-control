@@ -10,7 +10,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import quote_plus
 
+import click
+import psycopg
 import pytest
 from click.testing import CliRunner
 from psycopg.types.json import Jsonb
@@ -2460,6 +2463,184 @@ class TestRestoreStartGuidance:
         monkeypatch.setattr(upgrade_module, "stop_running_stack", lambda data_dir, **kwargs: stopped.append(data_dir))
         assert backup_mod._stop_launcher_writers(data_dir) is True
         assert stopped == [data_dir]
+
+
+#: A syntactically valid Fernet key for the restore paths under test.
+_TEST_FERNET_KEY = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+def _restore_archive(root: Path) -> Path:
+    """A minimal restorable archive: manifest + checksummed complete dump."""
+    archive = root / "archive"
+    archive.mkdir(exist_ok=True)
+    (archive / "database.sql").write_bytes(_COMPLETE_DUMP)
+    manifest = {
+        "timestamp": "2024-01-01T00:00:00+00:00",
+        "backup_type": "full",
+        "db_version": "PostgreSQL 16.0",
+        "schema_versions": ["rev1"],
+        "file_checksums": {"database.sql": hashlib.sha256(_COMPLETE_DUMP).hexdigest()},
+    }
+    (archive / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (archive / "checkpoints.json").write_text("[]", encoding="utf-8")
+    return archive
+
+
+class TestNoPasswordReachesCapturedOutput:
+    """CRITICAL 3: probes handed the password-bearing DSN to psycopg.
+
+    psycopg quotes the DSN it was given in its error text, and the restore
+    transcript prints and logs that text. Two shapes are proven here: a
+    password containing a SPACE and one containing a BAD PERCENT ESCAPE (which
+    ``urlsplit`` happily unquotes to something the URL regex cannot match).
+    """
+
+    @staticmethod
+    def _echoing_driver(observed: dict[str, Any], password: str) -> Any:
+        def _connect(dsn: str, **kwargs: Any) -> Any:
+            observed["dsn"] = dsn
+            observed["password"] = kwargs.get("password")
+            raise psycopg.ProgrammingError(f'invalid connection string "{dsn}"; password={kwargs.get("password")} ({password})')
+
+        return _connect
+
+    @pytest.mark.parametrize("password", ["correct horse battery", "pa%zzword"])
+    def test_the_driver_is_handed_a_credential_free_dsn(self, monkeypatch: pytest.MonkeyPatch, password: str) -> None:
+        from urllib.parse import quote
+
+        from farna.cli import backup as backup_mod
+
+        raw = f"postgresql+asyncpg://farna_control:{quote(password, safe='')}@127.0.0.1:5432/farna_control"
+        observed: dict[str, Any] = {}
+        monkeypatch.setattr(backup_mod.psycopg, "connect", self._echoing_driver(observed, password))
+
+        with pytest.raises(RuntimeError) as excinfo:
+            backup_mod._export_checkpoints_sync(raw)
+
+        assert observed["password"] == password, "the credential must travel as the connect argument"
+        assert password not in observed["dsn"]
+        assert quote(password, safe="") not in observed["dsn"]
+        message = str(excinfo.value)
+        assert password not in message
+        assert quote(password, safe="") not in message
+        assert quote_plus(password) not in message
+        assert "ProgrammingError" in message, "the original driver failure must stay legible"
+
+    @pytest.mark.parametrize("password", ["correct horse battery", "pa%zzword"])
+    def test_the_restore_transcript_never_prints_the_password(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], password: str) -> None:
+        from urllib.parse import quote
+
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        raw = f"postgresql+asyncpg://farna_control:{quote(password, safe='')}@127.0.0.1:5432/farna_control"
+        observed: dict[str, Any] = {}
+        monkeypatch.setenv("DATABASE_ADMIN_URL", raw)
+        monkeypatch.setattr(backup_mod.psycopg, "connect", self._echoing_driver(observed, password))
+        monkeypatch.setattr(backup_mod, "_run_psql", lambda *_a, **_k: None)
+        monkeypatch.setattr(backup_mod, "_ensure_restore_posture", lambda *_a, **_k: None)
+        monkeypatch.setattr(backup_mod, "_db_has_modulo_tables", lambda _url: False)
+        monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+
+        options = backup_mod._RestoreOptions(
+            backup_dir=archive,
+            db_url=None,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=None,
+            replace_cluster=False,
+            no_safety_dump=True,
+        )
+        with pytest.raises(click.ClickException):
+            backup_mod._run_restore(options)
+
+        captured = capsys.readouterr()
+        transcript = captured.out + captured.err
+        assert "Restore failed" in transcript
+        assert password not in transcript
+        assert quote(password, safe="") not in transcript
+
+    def test_every_psycopg_connection_goes_through_the_one_helper(self) -> None:
+        """The ``_connect`` docstring's "every probe goes through here" claim."""
+        import inspect
+
+        from farna.cli import backup as backup_mod
+
+        source = inspect.getsource(backup_mod)
+        assert source.count("psycopg.connect(") == 1, "only _connect may open a psycopg connection"
+        assert source.count("_connect(") >= 8, "the probes, exports and restore writes all route through _connect"
+
+
+class TestStartCommandPrintsOnTheFailurePath:
+    """MAJOR 4: a failure after the stop must still print the start command."""
+
+    def test_a_restore_that_fails_after_stopping_prints_the_start_command(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: True)
+        monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
+        monkeypatch.setattr(backup_mod, "_db_has_modulo_tables", lambda _url: False)
+
+        def _failing_safety_dump(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("pg_dump exploded")
+
+        monkeypatch.setattr(backup_mod, "_safety_dump", _failing_safety_dump)
+        monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+
+        options = backup_mod._RestoreOptions(
+            backup_dir=archive,
+            db_url=_TEST_APP_DB_URL,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+        with pytest.raises(click.ClickException):
+            backup_mod._run_restore(options)
+
+        err = capsys.readouterr().err
+        assert f"farna-control start --data-dir {data_dir}" in err, "the failure path must hand the operator the exact start command"
+        assert "did NOT complete" in err
+        assert "still stopped" in err
+
+    def test_the_success_path_still_prints_it_on_stdout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: True)
+        monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
+        monkeypatch.setattr(backup_mod, "_db_has_modulo_tables", lambda _url: False)
+        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: None)
+        monkeypatch.setattr(backup_mod, "_restore_cluster", lambda *_a, **_k: None)
+        monkeypatch.setattr(backup_mod, "_restore_data_dir", lambda *_a, **_k: None)
+        monkeypatch.setattr(backup_mod, "_ensure_restore_posture", lambda *_a, **_k: None)
+        monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+
+        options = backup_mod._RestoreOptions(
+            backup_dir=archive,
+            db_url=_TEST_APP_DB_URL,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+        backup_mod._run_restore(options)
+
+        out = capsys.readouterr().out
+        assert f"farna-control start --data-dir {data_dir}" in out
 
 
 class TestRestoreCheckpointsSyncErrorPaths:

@@ -129,16 +129,19 @@ than the default `~/.local/opt/farna-control`. The built-in default and
    (`pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/`, never inside
    it) with a restore manifest. The dump is proven complete at dump time
    (pg_dump's completion marker as the final non-empty line), checksummed, and
-   the database's revision(s) are recorded as the snapshot's schema. A database
-   already at the target bundle's head cannot be changed by the boot, so no
-   snapshot is taken and one line says so. Retention keeps the two newest
-   snapshots at the current schema and never prunes a snapshot recording an
-   older head — that is the recovery point the current data depends on. The
-   disk guard refuses the upgrade when the output filesystem has less than
-   `max(2 GB, 1.25 x database size)` free plus the snapshots retention keeps.
-   A failed or unverified dump aborts the upgrade - NO binary swap happens
-   without a verified snapshot. The dump needs the bundled Postgres reachable,
-   so run the upgrade command while the stack is running.
+   the database's revision(s) are recorded as the snapshot's schema. The
+   pending decision is made INSIDE the shared helper and compares the live
+   database with the NEW bundle's migrations (`--target-bundle`), never with
+   the old installation that runs the helper — so a database already at the
+   new bundle's head takes no snapshot (one line says so) and an installer
+   re-run cannot rotate the recovery points for nothing. Retention keeps the
+   two newest verified snapshots plus the newest one recording the database's
+   current schema — a bounded set, so the disk guard cannot eventually refuse
+   every upgrade. The disk guard itself refuses when the output filesystem has
+   less than `max(2 GB, 1.25 x database size)` free plus the snapshots
+   retention keeps. A failed or unverified dump aborts the upgrade - NO binary
+   swap happens without a verified snapshot. The dump needs the bundled
+   Postgres reachable, so run the upgrade command while the stack is running.
 2. Stop + swap. The data dir must not be locked for the swap; the command
    stops the stack, re-points `current` to the new bundle, then boots the
    new bundle's migrations and gates on health.
@@ -149,9 +152,11 @@ than the default `~/.local/opt/farna-control`. The built-in default and
 `--skip-backup` skips the enforced dump, not the recovery point. This flag is
 the loud, explicit acknowledgement that a verified snapshot already exists (the
 stop-then-rerun flow used by the published installer); the upgrade **refuses
-when no intact snapshot is present** under the data dir, and it probes the LIVE
-database for its revision(s) rather than the old bundle's script heads, so a
-database already migrated ahead is still detected.
+when no intact snapshot of the CURRENT schema is present** under the data dir —
+the snapshot's recorded revisions must equal the live database's, so an archive
+several migrations stale cannot satisfy it — and it probes the LIVE database for
+its revision(s) rather than the old bundle's script heads, so a database
+already migrated ahead is still detected.
 
 ### Signed-manifest provisioning state (honest note)
 
@@ -262,10 +267,12 @@ the migrations.
 - the dump is proven complete at dump time (pg_dump's completion marker as the
   final non-empty line), checksummed, and recorded in both `manifest.json` and
   the restore-compatible `backup-info.json`;
-- retention keeps the two most recent snapshots **at the current schema** and
-  never prunes a snapshot whose recorded schema precedes the database's current
-  head — that older snapshot is the only way back to the release that owns the
-  current data. Nothing is deleted before its replacement verifies;
+- retention keeps the two newest verified snapshots **plus the newest snapshot
+  recording the database's current schema** — the recovery point a database
+  that did not move since (a failed migration, a rollback) depends on. At most
+  three directories survive: older generations are superseded and deleted, so
+  snapshots cannot accumulate until the disk guard refuses every upgrade.
+  Nothing is deleted before its replacement verifies;
 - the guard refuses to run the upgrade at all when the output filesystem has
   less than `max(2 GB, 1.25 x database size)` free **plus the snapshots
   retention keeps**, naming the required space, the available space and that
@@ -291,10 +298,19 @@ destroys:
 
 1. **Verify the archive** — `restore --dry-run` in a one-off container checks
    the manifest, checksum coverage, every checksum and the dump's completeness.
+   Each one-off container runs `--entrypoint farna-control … --no-deps`: the
+   image's own `ENTRYPOINT` is `/entrypoint.sh`, which ignores its arguments,
+   takes a snapshot, migrates and execs supervisord, so it must be overridden or
+   the "dry run" would MIGRATE the live database.
 2. **Verify the target** — `--verify-target-schema` refuses unless the target
    database records exactly the schema revisions the snapshot was taken from,
-   so a wrong `DATABASE_ADMIN_URL` cannot wipe an unrelated cluster.
-3. **Stop, restore, stop.** It stops the application, restores the dump,
+   so a wrong target cannot wipe an unrelated cluster.
+3. **No URL, no password.** The helper never reads or passes a database URL: the
+   one-off container inherits `DATABASE_ADMIN_URL` from the service environment
+   and the CLI resolves it there. Nothing needs exporting in the operator's
+   shell, so `set -u` cannot abort the recovery and the superuser password never
+   appears on a host command line.
+4. **Stop, restore, stop.** It stops the application, restores the dump,
    re-applies the application role's grants, and then **stops** — it prints the
    exact start command (on failure as well as success) and never restarts the
    stack:
@@ -308,10 +324,26 @@ database backwards (`alembic downgrade`) is not supported; the snapshot is the
 way back. The pre-restore safety dump of the database you are replacing is
 written into the same snapshot volume, next to the snapshot.
 
-The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) rehearses this on
-a disposable host. Its rollback leg must assert this documented path — restore
-the pre-upgrade snapshot, then start the previous image — rather than assume
-the old image can boot on a newer database.
+**The RC matrix does not rehearse this yet.** `scripts/verify_compose_upgrade_rollback.py`
+currently re-points the image tag for its rollback leg; it never restores the
+pre-upgrade snapshot, so a green matrix is NOT evidence that the restore above
+works. FAR-2674 owns teaching the harness that leg (restore the snapshot, then
+start the previous image, and assert the data came back rather than assuming the
+old image can boot on a newer database). Until it lands, rehearse the restore on
+a disposable host by hand and record the evidence.
+
+### Fly.io
+
+The Fly boot entrypoint (`deploy/fly/entrypoint.sh`) calls the same
+`farna.launcher.upgrade` helper between the release-alignment guard and the
+migration path, but **a Fly machine has no persistent snapshot volume by
+default**, so the step is gated: set `FARNA_CONTROL_SNAPSHOT_DIR` to a mounted
+volume (and `DATABASE_ADMIN_URL`, which the dump requires) to enable it. With
+both set, a snapshot is taken only when a migration is pending and a failure
+aborts the boot before anything is migrated. Without them, **Fly takes no
+pre-upgrade snapshot** — it is the documented exception to "every upgrade path
+keeps a recovery point", and a schema-changing Fly deploy needs an out-of-band
+`farna-control backup` (or `pg_dump`) first.
 
 ### Self-Hosted (Bare Metal / VM)
 

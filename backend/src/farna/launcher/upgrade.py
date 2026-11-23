@@ -304,13 +304,29 @@ def pre_upgrade_dump(
     bin_dir: Path | None = None,
     output_dir: Path | None = None,
     release: str | None = None,
-) -> PreUpgradeSnapshot:
+    target_heads: list[str] | None = None,
+    target_bundle: Path | None = None,
+) -> PreUpgradeSnapshot | None:
     """Perform and verify the NATIVE pre-upgrade pg_dump (FAR-672 / FAR-2667).
 
     Resolves the bundled cluster's owner-role URL from the data dir's
     HMAC-verified state.json + secrets.json, then hands off to
     :func:`take_upgrade_snapshot` — the SAME callable the container
     entrypoint uses, so the native and container paths cannot drift.
+
+    THE PENDING CHECK LIVES HERE, not in the callers. A snapshot is owed only
+    when the boot that follows can actually change the schema; taking one on
+    every installer re-run rotated the recovery points away for no gain, and
+    leaving the decision to each caller is how one of them (``install.sh``)
+    ended up dumping unconditionally. Returns ``None`` when no migration is
+    pending; every caller must report that skip.
+
+    The comparison is against the TARGET release's revisions — ``target_heads``
+    when the caller knows them, else the migration tree under *target_bundle*
+    (the extracted NEW bundle, which is what ``install.sh`` has), else this
+    runtime's own code. A named target whose heads cannot be read reads as
+    "undecidable", which takes the snapshot: an unproven "nothing to do" must
+    never cost the recovery point.
 
     Produces ``<data-dir>/pre-upgrade-dump-[<release>-]<timestamp>/`` beside
     the cluster (never inside ``pgdata/``), containing the pg_dump SQL file,
@@ -327,6 +343,10 @@ def pre_upgrade_dump(
 
     url_with_password, state = _owner_database_url(data_dir)
 
+    if _pending_for_target(url_with_password, target_heads=target_heads, target_bundle=target_bundle) is False:
+        _log.info("upgrade.pre_upgrade_dump_skipped (no migration pending) data_dir=%s", data_dir)
+        return None
+
     # `parent` is the operator-chosen data/snapshot directory, supplied by the
     # bundled installer via the local `farna-control upgrade --data-dir` CLI -- never an
     # HTTP request or agent input. The block above has already refused unless the
@@ -342,6 +362,28 @@ def pre_upgrade_dump(
         bin_dir=bin_dir,
         extra_manifest={"postgres_port": state.postgres_port},
     )
+
+
+def _pending_for_target(
+    url: str,
+    *,
+    target_heads: list[str] | None,
+    target_bundle: Path | None,
+) -> bool | None:
+    """Is a migration pending against the CODE THAT IS ABOUT TO BOOT?
+
+    Never against the helper's own code: the installer runs the OLD
+    installation's helper against the NEW bundle, and the old code's heads are
+    exactly the revisions the live database already records — comparing those
+    would report "nothing pending" for every real upgrade and silently drop
+    the recovery point.
+    """
+    if target_heads is not None:
+        return migration_pending(url, code_heads=list(target_heads))
+    if target_bundle is not None:
+        heads = sorted(_bundle_alembic_heads(target_bundle))
+        return migration_pending(url, code_heads=heads) if heads else None
+    return migration_pending(url)
 
 
 # ---------------------------------------------------------------------------
@@ -433,11 +475,11 @@ def enforce_snapshot_disk_headroom(db_url: str, output_dir: Path, *, current_hea
     Requirement: free bytes at the OUTPUT filesystem >= max(2 GiB,
     1.25 x pg_database_size(current_database())) PLUS the bytes of every
     existing snapshot retention will keep. Without that last term the guard can
-    pass and the write still hits ENOSPC, because retention keeps up to two
-    current-head snapshots and never prunes one recording an older head — the
-    recovery point the current state depends on. Returns the required byte
-    count when the guard passes. The message names the required space, the
-    available space, the shortfall and that nothing has been changed.
+    pass and the write still hits ENOSPC, because retention keeps the two newest
+    snapshots plus the one recording the database's current schema (a bounded
+    set — see :func:`_retention_keep_set`). Returns the required byte count when
+    the guard passes. The message names the required space, the available
+    space, the shortfall and that nothing has been changed.
     """
     database_bytes = _database_size_bytes(db_url)
     retained = _retained_snapshot_bytes(output_dir, current_heads)
@@ -619,22 +661,19 @@ def _recorded_heads(directory: Path) -> list[str]:
     return []
 
 
-def _heads_differ_from_database(heads: list[str], current_heads: list[str] | None) -> bool:
-    """Does this snapshot record a schema state OTHER than the database's now?
+def _records_schema_state(heads: list[str], current_heads: list[str] | None) -> bool:
+    """Does a snapshot's recorded schema EQUAL the database's current one?
 
-    A snapshot whose recorded heads are older than the database's current head
-    is the recovery point the CURRENT state depends on: it is the only way back
-    to the release that wrote this database before the migration in front of us
-    ran. It is never pruned. Unknown heads cannot be compared, so they are kept
-    too (failing safe on the side that preserves the recovery point).
+    Unknown on either side is NOT a match: a snapshot whose schema state cannot
+    be compared cannot be proven to be the recovery point this database
+    depends on, and a recovery path that guesses is worse than one that
+    refuses.
     """
-    if current_heads is None or not current_heads:
-        return False
-    if not heads:
+    if not current_heads or not heads:
         return False
     if "unknown" in heads or "unknown" in current_heads:
-        return True
-    return set(heads) != set(current_heads)
+        return False
+    return set(heads) == set(current_heads)
 
 
 def _snapshot_dirs(output_dir: Path) -> list[Path]:
@@ -659,24 +698,55 @@ def _snapshot_bytes(directory: Path) -> int:
     return total
 
 
+def _retention_keep_set(
+    intact_newest_first: list[Path],
+    *,
+    retain: int,
+    current_heads: list[str] | None,
+    protect: Path | None,
+) -> set[Path]:
+    """The snapshots retention keeps: two verified snapshots + the recovery point.
+
+    The bounded contract (FAR-2667):
+
+    * the newest *retain* INTACT snapshots — the interchangeable recent recovery
+      points;
+    * plus *protect*, the snapshot just written (never deleted);
+    * plus the newest intact snapshot recording EXACTLY the database's current
+      revision(s) — the recovery point for a schema that has not moved since
+      the snapshot (a migration that failed before applying, or a rollback).
+      Without it an operator could hold two newer snapshots of a later schema
+      and no way back to the state this database is actually in.
+
+    Everything else is superseded: an older-head snapshot is strictly worse
+    than the newest snapshot that already contains its data, and keeping every
+    generation is what let snapshots accumulate until the disk guard refused
+    every upgrade. At most ``retain + 1`` directories survive.
+    """
+    keep: set[Path] = {entry.resolve() for entry in intact_newest_first[:retain]}
+    if protect is not None:
+        keep.add(protect.resolve())
+    if current_heads:
+        for entry in intact_newest_first:
+            if _records_schema_state(_recorded_heads(entry), current_heads):
+                keep.add(entry.resolve())
+                break
+    return keep
+
+
+def _intact_newest_first(output_dir: Path) -> list[Path]:
+    """Every INTACT snapshot directory, newest first (checksum-verified)."""
+    return [entry for entry in _snapshot_dirs(output_dir) if snapshot_is_intact(entry)]
+
+
 def _retained_snapshot_bytes(output_dir: Path, current_heads: list[str] | None) -> int:
     """Bytes of existing snapshots retention will KEEP (they need disk too)."""
     try:
-        entries = _snapshot_dirs(output_dir)
+        intact = _intact_newest_first(output_dir)
     except OSError:
         return 0
-    at_head_kept = 0
-    total = 0
-    for entry in entries:
-        if not snapshot_is_intact(entry):
-            continue
-        if _heads_differ_from_database(_recorded_heads(entry), current_heads):
-            total += _snapshot_bytes(entry)
-            continue
-        if at_head_kept < RETENTION_COUNT:
-            at_head_kept += 1
-            total += _snapshot_bytes(entry)
-    return total
+    keep = _retention_keep_set(intact, retain=RETENTION_COUNT, current_heads=current_heads, protect=None)
+    return sum(_snapshot_bytes(entry) for entry in intact if entry.resolve() in keep)
 
 
 def prune_snapshots(
@@ -694,15 +764,14 @@ def prune_snapshots(
     point before its replacement exists. *protect* is the snapshot just written
     and is never deleted.
 
-    Keep rules:
-    * a snapshot recording heads OTHER than the database's current head is the
-      pre-upgrade recovery point the current state depends on — never pruned
-      (unknown heads are kept for the same reason: they cannot be proven
-      interchangeable);
-    * of the snapshots at the current head, the newest *retain* are kept;
+    Keep rules (see :func:`_retention_keep_set`): the two newest intact
+    snapshots, plus the newest one recording the database's CURRENT schema —
+    bounded at ``retain + 1`` directories.
+
     * a directory another LIVE process is still writing is never touched;
     * anything left that is not intact (partial write, interrupted run, corrupt
-      checksum) is debris and is swept.
+      checksum) is debris and is swept;
+    * everything else is a superseded generation and is deleted.
 
     Concurrent boots serialise on :func:`snapshot_dir_lock`. ``_lock_held``
     lets :func:`take_upgrade_snapshot` prune under the lock it already holds.
@@ -723,36 +792,20 @@ def _prune_snapshots_locked(
     current_heads: list[str] | None,
 ) -> list[str]:
     candidates = _snapshot_dirs(output_dir)
-    kept: set[Path] = set()
-    if protect is not None:
-        kept.add(protect.resolve())
-    at_head_kept = 0
+    # Verify each candidate ONCE: `snapshot_is_intact` re-hashes the dump, and
+    # retention must not pay that twice per directory.
+    intact = {entry: snapshot_is_intact(entry) for entry in candidates}
+    keep = _retention_keep_set([entry for entry in candidates if intact[entry]], retain=retain, current_heads=current_heads, protect=protect)
     pruned: list[str] = []
     for entry in candidates:
-        protected_here = entry.resolve() in kept
-        if snapshot_in_progress(entry) and not protected_here:
+        if entry.resolve() in keep:
+            continue
+        if snapshot_in_progress(entry):
             _log.info("upgrade.snapshot_kept_in_flight dir=%s", entry)
-            continue
-        intact = snapshot_is_intact(entry)
-        older_head = intact and _heads_differ_from_database(_recorded_heads(entry), current_heads)
-        if protected_here:
-            if intact and not older_head:
-                at_head_kept += 1
-            continue
-        if not intact:
-            shutil.rmtree(entry, ignore_errors=True)
-            pruned.append(entry.name)
-            _log.info("upgrade.snapshot_pruned_debris dir=%s", entry)
-            continue
-        if older_head:
-            _log.info("upgrade.snapshot_kept_older_head dir=%s", entry)
-            continue
-        if at_head_kept < retain:
-            at_head_kept += 1
             continue
         shutil.rmtree(entry, ignore_errors=True)
         pruned.append(entry.name)
-        _log.info("upgrade.snapshot_pruned dir=%s", entry)
+        _log.info("upgrade.snapshot_pruned%s dir=%s", "" if intact[entry] else "_debris", entry)
     return pruned
 
 
@@ -776,9 +829,10 @@ def take_upgrade_snapshot(
        the shared :func:`farna.db.plain_dump.dump_plain_sql` pipeline.
     4. Prove the dump complete (pg_dump's final completion trailer line),
        checksum it, record the DATABASE's revisions in both manifests.
-    5. Prune: keep the newest *retain* at-head snapshots plus every snapshot
-       whose recorded heads precede the database's current head (never the new
-       one).
+    5. Prune: keep the newest *retain* intact snapshots plus the newest one
+       recording the database's current schema (never the new one) — a bounded
+       set, so successive upgrades cannot accumulate snapshots until the disk
+       guard refuses every one of them.
 
     The directory must never sit inside the Postgres cluster: the callers
     pass the data dir (sibling of ``pgdata/``) or the ``/backups`` mount.
@@ -1086,9 +1140,13 @@ def main(argv: list[str] | None = None) -> int:
 
     A snapshot is taken only when a migration is actually PENDING. A pristine
     database (first install) and a database already at head are both no-ops:
-    one diagnostic line on stderr, nothing on stdout, exit 0. That is what
-    stops a crash-looping release from rotating its own pre-upgrade recovery
-    point away on every restart.
+    one diagnostic line on stderr, nothing on stdout, exit 0. The pending
+    decision is made INSIDE :func:`pre_upgrade_dump`, so the native installer
+    (which runs the OLD installation's helper against the NEW bundle) cannot
+    bypass it; pass ``--target-bundle`` so the comparison is against the
+    release that is about to boot. That is what stops a crash-looping release —
+    or a plain installer re-run — from rotating its own pre-upgrade recovery
+    point away.
 
     STDOUT CARRIES EXACTLY ONE LINE ON SUCCESS: the snapshot directory (or
     nothing at all when no snapshot was needed). install.sh captures the whole
@@ -1105,6 +1163,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, default=None, help="Directory that holds snapshot directories (container path; e.g. /backups)")
     parser.add_argument("--release", default=None, help="Release token recorded in the snapshot directory name")
     parser.add_argument(
+        "--target-bundle",
+        type=Path,
+        default=None,
+        help=("Extracted NEW bundle whose migration tree decides whether a migration is pending (native path). Without it the helper's own code is the target — wrong for the installer, which runs the OLD installation's helper against the NEW bundle."),
+    )
+    parser.add_argument(
         "--skip-if-pristine",
         action="store_true",
         default=False,
@@ -1117,6 +1181,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.db_url is not None and args.output_dir is None:
         parser.error("--db-url requires --output-dir")
     try:
+        snapshot: SnapshotRef | None
         if args.db_url is not None:
             assert args.output_dir is not None  # parser-enforced
             # The compose path passes a SQLAlchemy asyncpg URL; psycopg and
@@ -1132,7 +1197,12 @@ def main(argv: list[str] | None = None) -> int:
             snapshot = take_upgrade_snapshot(args.db_url, args.output_dir, release=args.release, bin_dir=args.bin_dir)
         else:
             assert args.data_dir is not None  # parser-enforced
-            snapshot = pre_upgrade_dump(args.data_dir, bin_dir=args.bin_dir, release=args.release)
+            snapshot = pre_upgrade_dump(
+                args.data_dir,
+                bin_dir=args.bin_dir,
+                release=args.release,
+                target_bundle=args.target_bundle,
+            )
     except UpgradeError as exc:
         # Actionable installer/entrypoint abort text: never a bare traceback.
         print(f"ERROR: {exc}", file=sys.stderr)  # noqa: T201
@@ -1141,6 +1211,11 @@ def main(argv: list[str] | None = None) -> int:
         _log.exception("upgrade.snapshot_unexpected_failure")
         print(f"ERROR: the pre-upgrade snapshot failed unexpectedly ({type(exc).__name__}: {exc}) — the boot is aborted and NO migration was applied. Nothing has been changed.", file=sys.stderr)  # noqa: T201
         return 1
+    if snapshot is None:
+        # The shared helper made the pending decision (see its docstring): no
+        # migration can change this database, so no recovery point is owed.
+        print("No migration is pending against the target release — no pre-upgrade snapshot was taken.", file=sys.stderr)  # noqa: T201
+        return 0
     # The installer/entrypoint captures the FINAL stdout line as the snapshot path.
     print(snapshot.directory)  # noqa: T201
     return 0
@@ -2121,8 +2196,8 @@ def _bundle_alembic_heads(bundle_dir: Path) -> set[str]:
         return set()
 
 
-def _require_existing_snapshot(data_dir: Path) -> Path:
-    """A ``--skip-backup`` run must have a VERIFIED snapshot already on disk.
+def _require_existing_snapshot(data_dir: Path, *, current_heads: list[str] | None = None) -> Path:
+    """A ``--skip-backup`` run must have a VERIFIED snapshot OF THE CURRENT SCHEMA.
 
     ``--skip-backup`` skips the DUMP, not the recovery point: it is the
     installer's second pass (the stack had to be stopped for the swap, so the
@@ -2130,13 +2205,30 @@ def _require_existing_snapshot(data_dir: Path) -> Path:
     Proceeding with no snapshot at all would remove the only way back from a
     forward-migrated schema, which is exactly what the operator is told cannot
     happen — so refuse, naming the flow.
+
+    "Verified" now includes the SCHEMA STATE: the snapshot's recorded
+    revision(s) must equal the LIVE database's current revision(s)
+    (*current_heads*, read by the caller before the swap). An intact snapshot
+    several migrations stale is not a recovery point for this database —
+    restoring it would roll the schema back past data the database already
+    holds — and returning it would point ``restore_guidance`` at an archive
+    that cannot recover the current state. Unknown heads on either side cannot
+    be compared, so they are refused rather than guessed.
     """
     for entry in _snapshot_dirs(data_dir):
-        if snapshot_is_intact(entry):
+        if not snapshot_is_intact(entry):
+            continue
+        recorded = _recorded_heads(entry)
+        if _records_schema_state(recorded, current_heads):
             _log.info("upgrade.skip_backup_snapshot_found dir=%s", entry)
             return entry
+        _log.info("upgrade.skip_backup_snapshot_stale dir=%s recorded=%s current=%s", entry, ",".join(recorded), ",".join(current_heads or []))
     raise UpgradeError(
-        f"Refusing --skip-backup: no verified pre-upgrade snapshot exists under {data_dir}. --skip-backup skips the DUMP, not the recovery point — run the upgrade once with the stack live so the snapshot is taken, then re-run with --skip-backup only if the first pass stopped before the swap."
+        f"Refusing --skip-backup: no verified pre-upgrade snapshot of the CURRENT schema exists under {data_dir}"
+        + (f" (the database records {', '.join(current_heads)})." if current_heads else ".")
+        + " --skip-backup skips the DUMP, not the recovery point: an intact snapshot that records a DIFFERENT schema state "
+        "cannot restore this database. Run the upgrade once with the stack live so a snapshot of the current state is taken, "
+        "then re-run with --skip-backup only if the first pass stopped before the swap."
     )
 
 
@@ -2166,7 +2258,7 @@ def _run_upgrade_preflight(
     _check_pg_major(release_manifest.components, data_dir)
     db_heads = live_database_revisions(data_dir)
     if skip_backup:
-        existing = _require_existing_snapshot(data_dir)
+        existing = _require_existing_snapshot(data_dir, current_heads=db_heads)
         snapshot_dir: Path | None = existing
     else:
         target_heads = _bundle_alembic_heads(bundle_dir)
@@ -2175,8 +2267,21 @@ def _run_upgrade_preflight(
             _log.info("upgrade.no_migration_pending snapshot_skipped=true data_dir=%s heads=%s", data_dir, ",".join(sorted(target_heads)))
             snapshot_dir = None
         else:
-            snapshot = pre_upgrade_dump(data_dir, bin_dir=_prior_pg_bin(reserve_target), release=version)
-            snapshot_dir = snapshot.directory
+            # The helper re-checks pending against the TARGET bundle's heads,
+            # so this decision and its own can never disagree about which code
+            # is being upgraded TO. An UNREADABLE bundle tree is passed as an
+            # EMPTY list (never None): that reads as "undecidable" inside the
+            # helper and takes the snapshot, where None would fall back to this
+            # runtime's own heads and silently skip the recovery point.
+            snapshot = pre_upgrade_dump(
+                data_dir,
+                bin_dir=_prior_pg_bin(reserve_target),
+                release=version,
+                target_heads=sorted(target_heads),
+            )
+            snapshot_dir = snapshot.directory if snapshot is not None else None
+            if snapshot is None:
+                _log.warning("upgrade.snapshot_skipped_after_pending_probe data_dir=%s", data_dir)
     check_no_downgrade(db_heads, snapshot_dir, bundle_dir)
     _quantified_disk_preflight(tarball, data_dir)
     return snapshot_dir

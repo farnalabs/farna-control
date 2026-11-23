@@ -778,8 +778,15 @@ def test_resolve_restore_app_url_refuses_a_missing_source(configured: Any) -> No
 
 
 def test_restore_validates_the_app_url_before_touching_the_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """FAR-2021: an invalid app URL must fail BEFORE the safety dump / wipe."""
-    monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+    """FAR-2021: an invalid app URL must fail BEFORE the safety dump / wipe.
+
+    The TARGET URL now resolves from ``DATABASE_ADMIN_URL`` when ``--db-url`` is
+    absent (that is the compose recovery path, FAR-2667), so it is set to a
+    valid owner URL while the APP-role source stays empty: the failure must
+    still name ``--app-db-url``, proving the app role is never taken from the
+    admin connection.
+    """
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql://farna_control:pw@127.0.0.1:5432/farna_control")
     archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
     restore_cluster = MagicMock()
     safety_dump = MagicMock()

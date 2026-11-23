@@ -41,6 +41,10 @@
 #      written to a versioned snapshot dir inside the data dir, verified
 #      non-empty. ANY dump failure aborts the whole installer — no binary
 #      swap happens without a verified snapshot.
+#      The dump is taken ONLY when a migration is actually pending against
+#      the NEW bundle (the helper makes that decision, with --target-bundle
+#      naming the new bundle): a re-run that installs nothing new is not an
+#      upgrade and must not rotate the recovery points.
 #      The dump needs the bundled Postgres REACHABLE, so run the installer
 #      FIRST (while the launcher is running), then:
 #   2. The installer REFUSES to perform the versioned-dir/current-symlink
@@ -640,6 +644,8 @@ refuse_when_locked() {
 # non-empty verification in the helper itself. ANY failure aborts here and
 # nothing version-specific is laid out. The snapshot path is the helper's
 # final stdout line (the installer reports it; the operator aborts with it).
+# An EMPTY stdout with exit 0 means the helper's pending check found nothing to
+# migrate — reported, never treated as a missing path.
 run_pre_upgrade_dump() {
   local old_root="${INSTALL_ROOT}/current"
   local py="${old_root}/runtime/bin/python3"
@@ -659,13 +665,27 @@ run_pre_upgrade_dump() {
   fi
   [[ -x "${py}" ]] || die "cannot run the pre-upgrade pg_dump: no bundled runtime at ${py} (no prior native install to upgrade — remove the populated data dir or ignore)"
   info "Pre-upgrade pg_dump (enforced by FAR-672) — the bundled stack must be running..."
+  # --target-bundle: the extracted NEW bundle. The helper runs from the OLD
+  # installation, so without it the migration-pending decision would compare
+  # the live database against the code being REPLACED — which always reads "at
+  # head", silently skipping the snapshot for every real upgrade. With it, the
+  # helper takes a snapshot only when the new bundle actually migrates.
   if snapshot_path="$(PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
       FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
-      "${py}" -m "${module}" --data-dir "${DATA_DIR}")"; then
+      "${py}" -m "${module}" --data-dir "${DATA_DIR}" --target-bundle "${bundle_dir}")"; then
     :
   else
     rc=$?
     die "pre-upgrade pg_dump FAILED (exit ${rc}) — upgrade ABORTED, no binary swap was made. The installer aborted BEFORE installing anything; fix the dump failure and re-run. If a verified snapshot ALREADY exists in ${DATA_DIR} and the bundled stack is stopped (a stopped stack cannot be dumped), re-run with --skip-backup:\n  bash farna-control-install.sh --skip-backup"
+  fi
+  if [[ -z "${snapshot_path}" ]]; then
+    # The helper's own pending check decided no migration is owed: the database
+    # already records the new bundle's schema, so an installer re-run must NOT
+    # churn (and rotate) the recovery points.
+    info "No migration is pending against the new bundle — no pre-upgrade snapshot was taken."
+    UPGRADE_SNAPSHOT_PATH=""
+    UPGRADE_SNAPSHOT_NOT_NEEDED=1
+    return 0
   fi
   [[ -d "${snapshot_path}" ]] || die "pre-upgrade pg_dump succeeded but the snapshot path is missing: '${snapshot_path}'"
   UPGRADE_SNAPSHOT_PATH="${snapshot_path}"
@@ -1086,6 +1106,7 @@ newest_pre_upgrade_snapshot() {
 
 stage "pre-upgrade backup"
 UPGRADE_SNAPSHOT_PATH=""
+UPGRADE_SNAPSHOT_NOT_NEEDED=0
 if [[ -f "${DATA_DIR}/state.json" ]]; then
   if [[ -f "${INSTALL_ROOT}/current/runtime/bin/python3" ]]; then
     if [[ "${SKIP_BACKUP}" -eq 1 ]]; then
@@ -1109,6 +1130,8 @@ if [[ -f "${DATA_DIR}/state.json" ]]; then
   refuse_when_locked
   if [[ -n "${UPGRADE_SNAPSHOT_PATH}" ]]; then
     info "Upgrade snapshot requirement satisfied (snapshot: ${UPGRADE_SNAPSHOT_PATH})"
+  elif [[ "${UPGRADE_SNAPSHOT_NOT_NEEDED}" -eq 1 ]]; then
+    info "Upgrade snapshot requirement satisfied (no migration is pending against the new bundle)"
   else
     info "Upgrade snapshot requirement satisfied (--skip-backup run; the existing snapshot in ${DATA_DIR} must be verified by the operator)"
   fi
