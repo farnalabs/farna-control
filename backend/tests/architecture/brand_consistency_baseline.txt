@@ -78,6 +78,14 @@ backend/src/farna/api/frontend_url.py	6
 backend/src/farna/api/main.py	60
 backend/src/farna/api/mcp_audit.py	2
 backend/src/farna/api/mcp_server.py	35
+backend/src/farna/api/mcp_tools/admin.py	3
+backend/src/farna/api/mcp_tools/agents.py	2
+backend/src/farna/api/mcp_tools/connectors.py	2
+backend/src/farna/api/mcp_tools/hitl.py	2
+backend/src/farna/api/mcp_tools/library.py	5
+backend/src/farna/api/mcp_tools/pipelines.py	6
+backend/src/farna/api/mcp_tools/runs.py	5
+backend/src/farna/api/mcp_tools/schema_registry.py	5
 backend/src/farna/api/middleware/csrf.py	3
 backend/src/farna/api/middleware/host_origin.py	1
 backend/src/farna/api/middleware/rate_limiter.py	7

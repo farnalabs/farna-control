@@ -19,4 +19,7 @@ rules:
     severity: ERROR
     paths:
       include:
+        # The MCP graph-write call site lives here after mcp_server was split
+        # into api/mcp_tools/* domain modules.
+        - "**/backend/src/farna/api/mcp_tools/pipelines.py"
         - "**/backend/src/farna/api/mcp_server.py"
