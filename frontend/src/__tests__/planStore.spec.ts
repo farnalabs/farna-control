@@ -231,6 +231,7 @@ describe('usePlanStore', () => {
     store.entitlements = [
       { key: 'identity', name: 'Identity', description: 'Identity and access', granted: true, flags: ['sso', 'scim', 'team_rbac'] },
       { key: 'audit_evidence', name: 'Audit and evidence', description: 'Audit trail', granted: true, flags: ['audit_viewer', 'admin_run_retention'] },
+      { key: 'cost_governance', name: 'Cost governance', description: 'Spend limits and budget controls', granted: true, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
     ]
 
     expect(store.entitlementForFlag('sso')).toBe('identity')
@@ -238,6 +239,9 @@ describe('usePlanStore', () => {
     expect(store.entitlementForFlag('team_rbac')).toBe('identity')
     expect(store.entitlementForFlag('audit_viewer')).toBe('audit_evidence')
     expect(store.entitlementForFlag('admin_run_retention')).toBe('audit_evidence')
+    expect(store.entitlementForFlag('admin_spend_limits')).toBe('cost_governance')
+    expect(store.entitlementForFlag('admin_cost_controls')).toBe('cost_governance')
+    expect(store.entitlementForFlag('admin_cost_breakdown')).toBe('cost_governance')
     expect(store.entitlementForFlag('hitl_reviews')).toBeNull()
   })
 
