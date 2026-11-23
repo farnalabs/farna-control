@@ -1,11 +1,16 @@
 <template>
-  <section class="card p-4 space-y-5" data-testid="determination-proposal">
-    <header class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.proposal_title') }}</h2>
-      <span v-if="proposal" class="text-xs text-muted-foreground">
-        {{ $t('views.DeterminationView.review_state_' + proposal.review_state) }}
-      </span>
-    </header>
+  <BaseCard padding="md" class="space-y-5" data-testid="determination-proposal">
+    <CardHeader
+      heading-level="h2"
+      header-class="mb-0!"
+      :title="$t('views.DeterminationView.proposal_title')"
+    >
+      <template #actions>
+        <span v-if="proposal" class="text-xs text-muted-foreground">
+          {{ $t('views.DeterminationView.review_state_' + proposal.review_state) }}
+        </span>
+      </template>
+    </CardHeader>
 
     <div
       v-if="loading"
@@ -215,11 +220,13 @@
 
       <DeterminationEvidencePanel :element="selectedElement" @close="clearSelection" />
     </template>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import BaseCard from '../ui/BaseCard.vue'
+import CardHeader from '../ui/CardHeader.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import DeterminationEvidencePanel from './DeterminationEvidencePanel.vue'

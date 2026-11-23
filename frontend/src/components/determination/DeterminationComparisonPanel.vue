@@ -1,9 +1,11 @@
 <template>
-  <section class="card p-4 space-y-5" data-testid="determination-comparison">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.comparison_title') }}</h2>
-      <p class="text-sm text-muted-foreground">{{ $t('views.DeterminationView.comparison_hint') }}</p>
-    </header>
+  <BaseCard padding="md" class="space-y-5" data-testid="determination-comparison">
+    <CardHeader
+      heading-level="h2"
+      header-class="mb-0!"
+      :title="$t('views.DeterminationView.comparison_title')"
+      :description="$t('views.DeterminationView.comparison_hint')"
+    />
 
     <p
       class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
@@ -407,12 +409,14 @@
         </section>
       </template>
     </template>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import BaseCard from '../ui/BaseCard.vue'
+import CardHeader from '../ui/CardHeader.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import DeterminationComparisonProvenance from './DeterminationComparisonProvenance.vue'
 import { confidenceBadgeClass } from './confidencePresentation'
