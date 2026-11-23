@@ -134,6 +134,8 @@ _PARENT_REV = "HEAD^"
 
 _ARCH = "backend/tests/architecture"
 
+_PYPROJECT_TOML = "backend/pyproject.toml"
+
 _MISSING = object()
 
 
@@ -321,23 +323,29 @@ def _parse_json_group_pairs(text: str, source: str) -> frozenset[tuple[str, str,
             entry = json.loads(line)
         except json.JSONDecodeError as exc:
             raise RatchetError(f"{source}:{lineno}: not valid JSON: {raw!r} ({exc})") from exc
-        if not isinstance(entry, dict):
-            raise RatchetError(f"{source}:{lineno}: expected a JSON object: {raw!r}")
-        families = sorted(_JSON_FAMILIES & set(entry))
-        if len(families) != 1:
-            raise RatchetError(f"{source}:{lineno}: expected exactly one of {sorted(_JSON_FAMILIES)}, got {families}: {raw!r}")
-        family = families[0]
-        # detail/constant entries carry their members under "modules"; block and
-        # near_body entries carry them in the family key itself.
-        members = entry["modules"] if family in {"detail", "constant"} else entry[family]
-        if not isinstance(members, list) or not all(isinstance(member, str) for member in members):
-            raise RatchetError(f"{source}:{lineno}: {family!r} members must be a list of strings: {raw!r}")
-        unique = sorted(set(members))
-        if len(unique) < 2:
-            raise RatchetError(f"{source}:{lineno}: {family!r} group needs at least two distinct members: {raw!r}")
-        for left, right in combinations(unique, 2):
+        family, members = _json_group(entry, source=source, lineno=lineno, raw=raw)
+        for left, right in combinations(members, 2):
             pairs.add((family, left, right))
     return frozenset(pairs)
+
+
+def _json_group(entry: Any, *, source: str, lineno: int, raw: str) -> tuple[str, list[str]]:
+    """Validate one JSON-lines group and return its ``(family, unique_members)``."""
+    if not isinstance(entry, dict):
+        raise RatchetError(f"{source}:{lineno}: expected a JSON object: {raw!r}")
+    families = sorted(_JSON_FAMILIES & set(entry))
+    if len(families) != 1:
+        raise RatchetError(f"{source}:{lineno}: expected exactly one of {sorted(_JSON_FAMILIES)}, got {families}: {raw!r}")
+    family = families[0]
+    # detail/constant entries carry their members under "modules"; block and
+    # near_body entries carry them in the family key itself.
+    members = entry["modules"] if family in {"detail", "constant"} else entry[family]
+    if not isinstance(members, list) or not all(isinstance(member, str) for member in members):
+        raise RatchetError(f"{source}:{lineno}: {family!r} members must be a list of strings: {raw!r}")
+    unique = sorted(set(members))
+    if len(unique) < 2:
+        raise RatchetError(f"{source}:{lineno}: {family!r} group needs at least two distinct members: {raw!r}")
+    return family, unique
 
 
 def _parse_pyproject_coverage_floor(text: str, source: str) -> dict[str, float]:
@@ -369,17 +377,7 @@ def _parse_thresholds_shell(text: str, source: str) -> dict[str, float]:
         code = raw.split("#", 1)[0].strip()
         if not code:
             continue
-        includes = _INCLUDE_RE.findall(code)
-        plain = [int(match) for match in _FAIL_UNDER_RE.findall(code)]
-        cov = [int(match) for match in _COV_FAIL_UNDER_RE.findall(code)]
-        values = [value for value in (*plain, *cov) if value > 0]
-        if not values:
-            continue
-        if len(values) > 1:
-            raise RatchetError(f"{source}:{lineno}: more than one coverage floor on one line: {raw!r}")
-        value = float(values[0])
-        keys = [f"include:{include}" for include in includes] or ["whole-suite"]
-        for key in keys:
+        for key, value in _shell_line_floors(code, source=source, lineno=lineno, raw=raw):
             if key in floors and floors[key] != value:
                 raise RatchetError(f"{source}:{lineno}: conflicting floors for {key!r}: {floors[key]} vs {value}")
             floors[key] = value
@@ -388,7 +386,39 @@ def _parse_thresholds_shell(text: str, source: str) -> dict[str, float]:
     return floors
 
 
+def _shell_line_floors(code: str, *, source: str, lineno: int, raw: str) -> list[tuple[str, float]]:
+    """The ``(key, floor)`` pairs declared on one non-comment shell line."""
+    includes = _INCLUDE_RE.findall(code)
+    plain = [int(match) for match in _FAIL_UNDER_RE.findall(code)]
+    cov = [int(match) for match in _COV_FAIL_UNDER_RE.findall(code)]
+    values = [value for value in (*plain, *cov) if value > 0]
+    if not values:
+        return []
+    if len(values) > 1:
+        raise RatchetError(f"{source}:{lineno}: more than one coverage floor on one line: {raw!r}")
+    keys = [f"include:{include}" for include in includes] or ["whole-suite"]
+    return [(key, float(values[0])) for key in keys]
+
+
 _GATE_FLOOR_NAMES = frozenset({"COVERAGE_THRESHOLD", "BRANCH_COVERAGE_THRESHOLD", "TINY_DIFF_THRESHOLD"})
+
+
+def _module_constant_assignments(node: ast.stmt) -> tuple[list[ast.expr], ast.expr | None]:
+    if isinstance(node, ast.Assign):
+        return list(node.targets), node.value
+    if isinstance(node, ast.AnnAssign) and node.value is not None:
+        return [node.target], node.value
+    return [], None
+
+
+def _numeric_literal(value_node: ast.expr | None, name: str, source: str) -> float:
+    try:
+        literal = ast.literal_eval(value_node) if value_node is not None else None
+    except (ValueError, TypeError, SyntaxError) as exc:
+        raise RatchetError(f"{source}: {name} is not a literal number: {exc}") from exc
+    if not isinstance(literal, (int, float)) or isinstance(literal, bool):
+        raise RatchetError(f"{source}: {name} must be a number, got {literal!r}")
+    return float(literal)
 
 
 def _parse_module_numeric_constants(text: str, source: str) -> dict[str, float]:
@@ -396,41 +426,35 @@ def _parse_module_numeric_constants(text: str, source: str) -> dict[str, float]:
     tree = _parse_ast(text, source)
     values: dict[str, float] = {}
     for node in tree.body:
-        value_node: ast.expr | None = None
-        targets: list[ast.expr] = []
-        if isinstance(node, ast.Assign):
-            targets = list(node.targets)
-            value_node = node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
-            value_node = node.value
+        targets, value_node = _module_constant_assignments(node)
         for target in targets:
-            if not isinstance(target, ast.Name) or target.id not in _GATE_FLOOR_NAMES:
-                continue
-            try:
-                literal = ast.literal_eval(value_node) if value_node is not None else None
-            except (ValueError, TypeError, SyntaxError) as exc:
-                raise RatchetError(f"{source}: {target.id} is not a literal number: {exc}") from exc
-            if not isinstance(literal, (int, float)) or isinstance(literal, bool):
-                raise RatchetError(f"{source}: {target.id} must be a number, got {literal!r}")
-            values[target.id] = float(literal)
+            if isinstance(target, ast.Name) and target.id in _GATE_FLOOR_NAMES:
+                values[target.id] = _numeric_literal(value_node, target.id, source)
     missing = sorted(_GATE_FLOOR_NAMES - set(values))
     if missing:
         raise RatchetError(f"{source}: expected constant(s) {missing} not found at module level")
     return values
 
 
+def _min_confidence_in_sequence(node: ast.AST) -> int | None:
+    """The ``--min-confidence <int>`` pair inside one list/tuple literal, if any."""
+    if not isinstance(node, (ast.List, ast.Tuple)):
+        return None
+    for index, element in enumerate(node.elts[:-1]):
+        if not isinstance(element, ast.Constant) or element.value != "--min-confidence":
+            continue
+        following = node.elts[index + 1]
+        if isinstance(following, ast.Constant) and isinstance(following.value, str) and following.value.isdigit():
+            return int(following.value)
+    return None
+
+
 def _parse_vulture_min_confidence(text: str, source: str) -> int:
     tree = _parse_ast(text, source)
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.List, ast.Tuple)):
-            continue
-        for index, element in enumerate(node.elts[:-1]):
-            if not isinstance(element, ast.Constant) or element.value != "--min-confidence":
-                continue
-            following = node.elts[index + 1]
-            if isinstance(following, ast.Constant) and isinstance(following.value, str) and following.value.isdigit():
-                return int(following.value)
+        found = _min_confidence_in_sequence(node)
+        if found is not None:
+            return found
     raise RatchetError(f"{source}: no '--min-confidence <int>' pair found in the vulture command")
 
 
@@ -513,21 +537,30 @@ def _parse_mypy_overrides(text: str, source: str) -> dict[str, dict[str, Any]]:
     for index, override in enumerate(overrides, start=1):
         if not isinstance(override, dict):
             raise RatchetError(f"{source}: overrides[{index}] is not a table")
-        modules = override.get("module", _MISSING)
-        if modules is _MISSING:
-            raise RatchetError(f"{source}: overrides[{index}] has no 'module'")
-        if isinstance(modules, str):
-            modules = [modules]
-        if not isinstance(modules, list) or not all(isinstance(module, str) for module in modules):
-            raise RatchetError(f"{source}: overrides[{index}].module must be a string or list of strings")
+        modules = _mypy_override_modules(override, source=source, index=index)
         options = {key: value for key, value in override.items() if key != "module"}
         for module in modules:
-            existing = result.setdefault(module, {})
-            for key, value in options.items():
-                if key in existing and existing[key] != value:
-                    raise RatchetError(f"{source}: conflicting mypy override for {module!r} option {key!r}")
-                existing[key] = value
+            _merge_mypy_options(result, module, options, source=source)
     return result
+
+
+def _mypy_override_modules(override: dict[str, Any], *, source: str, index: int) -> list[str]:
+    modules = override.get("module", _MISSING)
+    if modules is _MISSING:
+        raise RatchetError(f"{source}: overrides[{index}] has no 'module'")
+    if isinstance(modules, str):
+        return [modules]
+    if not isinstance(modules, list) or not all(isinstance(module, str) for module in modules):
+        raise RatchetError(f"{source}: overrides[{index}].module must be a string or list of strings")
+    return modules
+
+
+def _merge_mypy_options(result: dict[str, dict[str, Any]], module: str, options: dict[str, Any], *, source: str) -> None:
+    existing = result.setdefault(module, {})
+    for key, value in options.items():
+        if key in existing and existing[key] != value:
+            raise RatchetError(f"{source}: conflicting mypy override for {module!r} option {key!r}")
+        existing[key] = value
 
 
 def _assignment_targets(node: ast.stmt) -> tuple[list[ast.expr], ast.expr | None]:
@@ -538,24 +571,33 @@ def _assignment_targets(node: ast.stmt) -> tuple[list[ast.expr], ast.expr | None
     return [], None
 
 
-def _parse_excluded_packages(text: str, source: str) -> frozenset[str]:
-    tree = _parse_ast(text, source)
+def _unwrap_collection_call(node: ast.expr) -> ast.expr:
+    """Strip a ``set(...)`` / ``frozenset(...)`` / ``list(...)`` / ``tuple(...)`` wrapper."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"set", "frozenset", "list", "tuple"} and len(node.args) == 1 and not node.keywords:
+        return node.args[0]
+    return node
+
+
+def _excluded_packages_value(tree: ast.Module, source: str) -> ast.expr | None:
     found = False
     value_node: ast.expr | None = None
     for node in tree.body:
         targets, value = _assignment_targets(node)
-        if not any(isinstance(target, ast.Name) and target.id == "EXCLUDED_PACKAGES" for target in targets):
-            continue
-        found = True
-        value_node = value
+        if any(isinstance(target, ast.Name) and target.id == "EXCLUDED_PACKAGES" for target in targets):
+            found = True
+            value_node = value
     if not found:
         raise RatchetError(f"{source}: module-level EXCLUDED_PACKAGES assignment not found")
+    return value_node
+
+
+def _parse_excluded_packages(text: str, source: str) -> frozenset[str]:
+    tree = _parse_ast(text, source)
+    value_node = _excluded_packages_value(tree, source)
     if value_node is None:
         raise RatchetError(f"{source}: EXCLUDED_PACKAGES has no value")
-    if isinstance(value_node, ast.Call) and isinstance(value_node.func, ast.Name) and value_node.func.id in {"set", "frozenset", "list", "tuple"} and len(value_node.args) == 1 and not value_node.keywords:
-        value_node = value_node.args[0]
     try:
-        literal = ast.literal_eval(value_node)
+        literal = ast.literal_eval(_unwrap_collection_call(value_node))
     except (ValueError, TypeError, SyntaxError) as exc:
         raise RatchetError(f"{source}: EXCLUDED_PACKAGES is not a literal collection: {exc}") from exc
     if isinstance(literal, str):
@@ -582,18 +624,26 @@ def _parse_gitleaks_allowlist_paths(text: str, source: str) -> frozenset[str]:
     return frozenset(paths)
 
 
+def _sonar_exclusion_values(line: str) -> frozenset[str] | None:
+    """The exclusion set on a ``sonar.coverage.exclusions=...`` line, else ``None``."""
+    key, _, value = line.partition("=")
+    if key.strip() != "sonar.coverage.exclusions":
+        return None
+    return frozenset(part.strip() for part in value.split(",") if part.strip())
+
+
 def _parse_sonar_coverage_exclusions(text: str, source: str) -> frozenset[str]:
     found: frozenset[str] | None = None
     for lineno, raw in enumerate(text.splitlines(), start=1):
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
-        key, _, value = line.partition("=")
-        if key.strip() != "sonar.coverage.exclusions":
+        values = _sonar_exclusion_values(line)
+        if values is None:
             continue
         if found is not None:
             raise RatchetError(f"{source}:{lineno}: duplicate sonar.coverage.exclusions property")
-        found = frozenset(part.strip() for part in value.split(",") if part.strip())
+        found = values
     if found is None:
         raise RatchetError(f"{source}: no sonar.coverage.exclusions property")
     return found
@@ -653,6 +703,35 @@ def _as_code_set(value: Any, *, option: str) -> set[str]:
     raise RatchetError(f"mypy option {option!r} must be a string or list of strings, got {value!r}")
 
 
+def _mypy_option_unchanged(base_value: Any, current_value: Any) -> bool:
+    if base_value is _MISSING and current_value is _MISSING:
+        return True
+    return base_value is not _MISSING and current_value is not _MISSING and base_value == current_value
+
+
+def _mypy_bool_loosening(module: str, option: str, base_value: Any, current_value: Any, *, loose_value: bool) -> list[str]:
+    if current_value is not _MISSING and not isinstance(current_value, bool):
+        raise RatchetError(f"mypy option {option!r} on {module!r} must be a boolean")
+    if current_value is loose_value and base_value is not loose_value:
+        return [f"{module}: {option} set to {'true' if loose_value else 'false'} (looser)"]
+    return []
+
+
+def _mypy_option_findings(module: str, option: str, base_value: Any, current_value: Any) -> list[str]:
+    """The findings for one changed mypy option, or ``[]`` when it is not looser."""
+    if option == "disable_error_code":
+        added = _as_code_set(current_value, option=option) - _as_code_set(base_value, option=option)
+        return [f"{module}: disable_error_code gained {code!r}" for code in sorted(added)]
+    if option == "enable_error_code":
+        removed = _as_code_set(base_value, option=option) - _as_code_set(current_value, option=option)
+        return [f"{module}: enable_error_code lost {code!r} (looser)" for code in sorted(removed)]
+    if option in _MYPY_LOOSE_WHEN_TRUE:
+        return _mypy_bool_loosening(module, option, base_value, current_value, loose_value=True)
+    if option in _MYPY_LOOSE_WHEN_FALSE:
+        return _mypy_bool_loosening(module, option, base_value, current_value, loose_value=False)
+    raise RatchetError(f"mypy option {option!r} on {module!r} changed but has no known polarity; classify it in the guard (loose-when-true or loose-when-false) before changing it")
+
+
 def _mypy_loosenings(base: dict[str, dict[str, Any]], current: dict[str, dict[str, Any]]) -> list[str]:
     findings: list[str] = []
     for module in sorted(set(base) | set(current)):
@@ -661,28 +740,9 @@ def _mypy_loosenings(base: dict[str, dict[str, Any]], current: dict[str, dict[st
         for option in sorted(set(base_options) | set(current_options)):
             base_value = base_options.get(option, _MISSING)
             current_value = current_options.get(option, _MISSING)
-            if base_value is _MISSING and current_value is _MISSING:
+            if _mypy_option_unchanged(base_value, current_value):
                 continue
-            if base_value is not _MISSING and current_value is not _MISSING and base_value == current_value:
-                continue
-            if option == "disable_error_code":
-                added = _as_code_set(current_value, option=option) - _as_code_set(base_value, option=option)
-                findings.extend(f"{module}: disable_error_code gained {code!r}" for code in sorted(added))
-            elif option == "enable_error_code":
-                removed = _as_code_set(base_value, option=option) - _as_code_set(current_value, option=option)
-                findings.extend(f"{module}: enable_error_code lost {code!r} (looser)" for code in sorted(removed))
-            elif option in _MYPY_LOOSE_WHEN_TRUE:
-                if current_value is not _MISSING and not isinstance(current_value, bool):
-                    raise RatchetError(f"mypy option {option!r} on {module!r} must be a boolean")
-                if current_value is True and base_value is not True:
-                    findings.append(f"{module}: {option} set to true (looser)")
-            elif option in _MYPY_LOOSE_WHEN_FALSE:
-                if current_value is not _MISSING and not isinstance(current_value, bool):
-                    raise RatchetError(f"mypy option {option!r} on {module!r} must be a boolean")
-                if current_value is False and base_value is not False:
-                    findings.append(f"{module}: {option} set to false (looser)")
-            else:
-                raise RatchetError(f"mypy option {option!r} on {module!r} changed but has no known polarity; classify it in the guard (loose-when-true or loose-when-false) before changing it")
+            findings.extend(_mypy_option_findings(module, option, base_value, current_value))
     return findings
 
 
@@ -742,7 +802,7 @@ RATCHETS: tuple[Ratchet, ...] = (
     ),
     Ratchet(
         "coverage-floor",
-        "backend/pyproject.toml",
+        _PYPROJECT_TOML,
         "[tool.coverage.report] fail_under (lower = looser)",
         _parse_pyproject_coverage_floor,
         _lowered_floor_loosenings,
@@ -770,14 +830,14 @@ RATCHETS: tuple[Ratchet, ...] = (
     ),
     Ratchet(
         "ruff-per-file-ignores",
-        "backend/pyproject.toml",
+        _PYPROJECT_TOML,
         "ruff per-file-ignore codes (add = looser)",
         _parse_ruff_per_file_ignores,
         _added_set_loosenings,
     ),
     Ratchet(
         "mypy-overrides",
-        "backend/pyproject.toml",
+        _PYPROJECT_TOML,
         "mypy suppression options per module (add suppression = looser)",
         _parse_mypy_overrides,
         _mypy_loosenings,
@@ -912,22 +972,10 @@ def _run_all(repo_root: Path, explicit_base: str | None) -> int:
         else:
             print(f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} is not loosened against {rev}.", file=sys.stderr)
 
-    for ratchet in introduced:
-        print(
-            f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} does not exist at {rev}; this change introduces the ratchet, so there is nothing to compare yet.",
-            file=sys.stderr,
-        )
+    _print_introduced(introduced, rev)
 
     if failures:
-        print(f"\nratchet-baseline guard: {len(failures)} ratchet(s) LOOSENED against {rev} ({why}):", file=sys.stderr)
-        for ratchet, findings in failures:
-            print(f"  [{ratchet.key}] {ratchet.path} - {ratchet.description}", file=sys.stderr)
-            for finding in findings:
-                print(f"      {finding}", file=sys.stderr)
-        print(
-            "\nA shrink-only ratchet may only be tightened. Fix the drift instead of weakening the gate; if the change is deliberate, get a human decision and record it with the change.",
-            file=sys.stderr,
-        )
+        _print_all_failures(failures, rev, why)
         return 1
 
     print(
@@ -935,6 +983,26 @@ def _run_all(repo_root: Path, explicit_base: str | None) -> int:
         file=sys.stderr,
     )
     return 0
+
+
+def _print_introduced(introduced: list[Ratchet], rev: str) -> None:
+    for ratchet in introduced:
+        print(
+            f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} does not exist at {rev}; this change introduces the ratchet, so there is nothing to compare yet.",
+            file=sys.stderr,
+        )
+
+
+def _print_all_failures(failures: list[tuple[Ratchet, list[str]]], rev: str, why: str) -> None:
+    print(f"\nratchet-baseline guard: {len(failures)} ratchet(s) LOOSENED against {rev} ({why}):", file=sys.stderr)
+    for ratchet, findings in failures:
+        print(f"  [{ratchet.key}] {ratchet.path} - {ratchet.description}", file=sys.stderr)
+        for finding in findings:
+            print(f"      {finding}", file=sys.stderr)
+    print(
+        "\nA shrink-only ratchet may only be tightened. Fix the drift instead of weakening the gate; if the change is deliberate, get a human decision and record it with the change.",
+        file=sys.stderr,
+    )
 
 
 def _main(argv: list[str] | None = None) -> int:
