@@ -12126,7 +12126,7 @@ async def get_schema_versions(
             # Belt-and-braces org check (mirrors the REST route's 404).
             if schema is None or schema.organisation_id != org_id:
                 return {"error": "not_found", "detail": f"Schema {schema_id} not found"}
-            result = await list_schema_versions(s, schid, page=pg, page_size=ps)
+            result = await list_schema_versions(s, schid, org_id=org_id, page=pg, page_size=ps)
 
         return {
             "data": [

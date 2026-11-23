@@ -3185,7 +3185,7 @@ async def list_run_attempts(
             run = await get_run(session, run_id, organisation_id=principal.organisation_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
-            attempts = await db_list_attempts(session, run_id)
+            attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_LIST_RUN_ATTEMPTS)
         raise HTTPException(

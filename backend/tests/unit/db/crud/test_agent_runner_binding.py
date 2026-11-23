@@ -70,7 +70,7 @@ async def test_list_bindings_for_agent_orders_asc() -> None:
     result = MagicMock()
     result.scalars.return_value = rows
     session.execute.return_value = result
-    out = await list_bindings_for_agent(session, _AGENT_ID)
+    out = await list_bindings_for_agent(session, _AGENT_ID, org_id=_ORG_ID)
     assert out == rows
 
 

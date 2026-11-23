@@ -144,6 +144,21 @@ def test_list_bindings_round_trip(client: TestClient) -> None:
     assert items[0]["source_field"] == "api_key"
 
 
+def test_list_bindings_threads_the_callers_org(client: TestClient) -> None:
+    """FAR-2689: the binding read is org-clamped, not agent-id-only."""
+    list_mock = AsyncMock(return_value=[])
+    with (
+        patch(f"{_AGENTS_PREFIX}get_agent", return_value=_make_agent()),
+        patch(f"{_AGENTS_PREFIX}set_rls_org"),
+        patch(f"{_AGENTS_PREFIX}list_bindings_for_agent", new=list_mock),
+    ):
+        resp = client.get(f"/api/v1/agents/{_AGENT_ID}/bindings")
+    assert resp.status_code == 200, resp.text
+    assert list_mock.await_args is not None
+    assert list_mock.await_args.args[1] == _AGENT_ID
+    assert list_mock.await_args.kwargs["org_id"] == _ORG_ID
+
+
 def test_list_bindings_unknown_agent_404(client: TestClient) -> None:
     with (
         patch(f"{_AGENTS_PREFIX}get_agent", return_value=None),

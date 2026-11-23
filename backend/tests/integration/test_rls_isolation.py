@@ -1138,7 +1138,7 @@ async def test_team_memberships_isolated_by_org_rls(
             text("SELECT set_config('app.org_role', :role, true)"),
             {"role": "viewer"},
         )
-        members_a = await list_team_members(session, team_id=team_a.id, page=1, page_size=50)
+        members_a = await list_team_members(session, team_id=team_a.id, org_id=org, page=1, page_size=50)
         assert len(members_a.items) == 1, "Member A should see exactly 1 member in Team A"
         assert members_a.items[0].account_id == account_a
 
@@ -1153,7 +1153,7 @@ async def test_team_memberships_isolated_by_org_rls(
             text("SELECT set_config('app.org_role', :role, true)"),
             {"role": "operator"},
         )
-        members_b = await list_team_members(session, team_id=team_b.id, page=1, page_size=50)
+        members_b = await list_team_members(session, team_id=team_b.id, org_id=org, page=1, page_size=50)
         assert len(members_b.items) == 1, "Member B should see exactly 1 member in Team B"
         assert members_b.items[0].account_id == account_b
 
@@ -1168,7 +1168,7 @@ async def test_team_memberships_isolated_by_org_rls(
             text("SELECT set_config('app.org_role', :role, true)"),
             {"role": "admin"},
         )
-        members_admin_a = await list_team_members(session, team_id=team_a.id, page=1, page_size=50)
+        members_admin_a = await list_team_members(session, team_id=team_a.id, org_id=org, page=1, page_size=50)
         assert len(members_admin_a.items) == 1, "Admin should see 1 member in Team A"
 
 
