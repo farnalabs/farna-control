@@ -71,7 +71,12 @@ async def list_notification_rules(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: the list discloses admin-class delivery configuration (the rule
+    # set and each rule's webhook_url), and every write to it is already gated
+    # by ``error_notification.manage`` (admin). Reuse that admin floor for the
+    # read rather than a viewer/runner read key — a reader who may not manage
+    # where alerts are delivered must not be able to enumerate it either.
+    principal: TenantPrincipal = require_permission(_CODE_ERROR_NOTIFICATION_MANAGE),
 ) -> dict[str, Any]:
     org_id = principal.organisation_id
     if org_id is None:

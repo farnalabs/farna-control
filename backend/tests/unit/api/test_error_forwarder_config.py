@@ -1026,3 +1026,68 @@ class TestRestoreForwarder:
     def test_restore_forwarder_gated_returns_402(self, gated_client: TestClient) -> None:
         resp = gated_client.post("/api/v1/errors/forwarders/sentry/restore")
         assert resp.status_code == 402
+
+
+# ── FAR-2683: the forwarder list is an admin read ───────────────────────────
+#
+# ``GET /api/v1/errors/forwarders`` exposes admin-class integration configuration
+# (per-forwarder enabled/configured state, last test result). Every write
+# endpoint (configure/test/delete/restore) already requires
+# ``error_forwarder.manage`` (admin); the list previously sat behind only the
+# plan-feature gate, so any org member could enumerate it.
+
+
+@pytest.fixture
+def operator_client() -> Generator[TestClient, None, None]:
+    mock_session = _make_mock_session()
+
+    async def override_session() -> AsyncGenerator[AsyncMock, None]:
+        yield mock_session
+
+    app.dependency_overrides[get_settings] = lambda: _make_settings()
+    app.dependency_overrides[get_db_session] = override_session
+    app.dependency_overrides[_get_engine] = lambda: MagicMock()
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
+        username="operator",
+        organisation_id=_ORG_UUID,
+        account_id=_USER_UUID,
+        org_role="operator",
+    )
+    app.dependency_overrides[get_current_tenant_user] = lambda: TenantPrincipal(username="tenant", organisation_id=_ORG_UUID, account_id=_USER_UUID, org_role="operator")
+    mock_plan = MagicMock()
+    mock_plan.feature_enabled.return_value = True
+    app.dependency_overrides[get_plan_context] = lambda: mock_plan
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+class TestListForwardersAuthz:
+    """The list read carries the same admin floor as its writes (FAR-2683)."""
+
+    def test_list_viewer_forbidden(self, viewer_client: TestClient) -> None:
+        resp = viewer_client.get("/api/v1/errors/forwarders")
+        assert resp.status_code == 403, resp.text
+        detail = resp.json()["detail"]
+        assert "error_forwarder.manage" in detail
+        assert "admin" in detail
+
+    def test_list_operator_forbidden(self, operator_client: TestClient) -> None:
+        resp = operator_client.get("/api/v1/errors/forwarders")
+        assert resp.status_code == 403, resp.text
+        assert "error_forwarder.manage" in resp.json()["detail"]
+
+    def test_list_admin_succeeds(self, client: TestClient) -> None:
+        mock_session = _make_mock_session()
+        scalars_mock = MagicMock()
+        scalars_mock.all = MagicMock(return_value=[])
+        mock_session.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=scalars_mock)))
+
+        async def override_session() -> AsyncGenerator[AsyncMock, None]:
+            yield mock_session
+
+        with patch("farna.api.routes.error_forwarder_config.set_rls_org"):
+            client.app.dependency_overrides[get_db_session] = override_session
+            resp = client.get("/api/v1/errors/forwarders")
+
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["forwarders"]) == 6
