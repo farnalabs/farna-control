@@ -989,6 +989,11 @@ export type GuardDenial = { name: string } | LockedRouteTarget
  * capability and offers the upgrade path, instead of bouncing silently to the
  * dashboard with no explanation.
  *
+ * FAR-2687: the same applies to a role refusal — the page names the role(s)
+ * that would open the capability. The reason is what selects which explanation
+ * the locked page shows; the `role` query is only meaningful for `'role'`, so a
+ * below-tier lock keeps exactly the URL it had before.
+ *
  * The capability label comes from the manifest breadcrumb (the same string the
  * breadcrumb bar and document title use); the view upgrades it to the
  * translated sidebar label when it can resolve one.
@@ -1003,6 +1008,14 @@ export function lockedRouteFor(
   if (capability) query.capability = capability
   const tier = to.meta?.requiredTier ?? entry?.required_tier
   if (tier) query.tier = tier
+  if (reason === 'role') {
+    // The roles that would grant access (the manifest list is any-of). Carried
+    // as a comma-separated key list so the view can translate each one; omit it
+    // entirely when the entry declares no roles, and the view falls back to the
+    // generic wording.
+    const requiredRoles = to.meta?.requiredRoles ?? entry?.required_roles
+    if (requiredRoles?.length) query.role = requiredRoles.join(',')
+  }
   query.reason = reason
   return { path: LOCKED_ROUTE_PATH, query }
 }
@@ -1031,7 +1044,12 @@ export async function enforceRoleTierVisibility(
   if (to.meta?.requiredRoles?.length) {
     const orgRole = payload?.org_role
     if (typeof orgRole !== 'string' || !to.meta.requiredRoles.includes(orgRole)) {
-      return { name: 'dashboard' }
+      // FAR-2687: a role denial is not a broken application, exactly like a
+      // below-tier one — land on the locked page, which names the role the
+      // caller needs and the administrator who can grant it, instead of a
+      // silent bounce to the Dashboard. The locked page carries no role gate
+      // of its own (it is not in the manifest), so this cannot loop.
+      return lockedRouteFor(to, 'role')
     }
   }
 
