@@ -475,7 +475,10 @@ describe('StatCard', () => {
     ['destructive', 'bg-destructive/10', 'text-destructive'],
     ['muted', 'bg-muted', 'text-muted-foreground'],
   ] as const)('maps %s color tokens', (color, iconClass, valueClass) => {
-    const wrapper = mount(StatCard, { props: { label: 'Runs', value: 12, color } })
+    const wrapper = mount(StatCard, {
+      props: { label: 'Runs', value: 12, color },
+      slots: { icon: '<circle cx="12" cy="12" r="4" />' },
+    })
 
     expect(wrapper.find('svg').element.parentElement?.className).toContain(iconClass)
     if (valueClass) expect(wrapper.find('.text-2xl').classes()).toContain(valueClass)

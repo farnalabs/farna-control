@@ -1,13 +1,18 @@
 <template>
-  <component :is="to ? 'router-link' : 'div'" :to="to" class="block">
+  <component
+    :is="to ? 'router-link' : 'div'"
+    :to="to"
+    class="block"
+    :data-testid="dataTestId ?? 'dashboard-stats-card'"
+  >
     <BaseCard
       variant="bordered"
       padding="md"
-       :data-testid="dataTestId ?? 'dashboard-stats-card'"
       :class="`card-hover ${props.class ?? ''}`"
     >
       <div class="flex items-center gap-3">
         <div
+          v-if="$slots.icon"
           class="flex h-9 w-9 items-center justify-center rounded-lg"
           :class="iconBgClass"
         >
@@ -26,7 +31,7 @@
         </div>
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium text-muted-foreground">{{ label }}</p>
-          <div class="flex items-baseline gap-2">
+          <div v-if="hasValue" class="flex items-baseline gap-2">
             <p class="text-2xl font-semibold tabular-nums" :class="valueClass">{{ value }}</p>
             <span
               v-if="deltaPct != null"
@@ -48,6 +53,9 @@
           </div>
         </div>
       </div>
+      <!-- Rich metric body (a chart, a secondary breakdown) belongs below the
+           headline value. A plain stat leaves it empty. -->
+      <slot name="content" />
     </BaseCard>
   </component>
 </template>
@@ -70,7 +78,7 @@ export interface StatDelta {
 
 const props = defineProps<{
   label: string
-  value: number | string
+  value?: number | string
   color?: 'primary' | 'success' | 'warning' | 'destructive' | 'muted'
   to?: string
   delta?: StatDelta | null
@@ -80,6 +88,8 @@ const props = defineProps<{
   class?: string
   dataTestId?: string
 }>()
+
+const hasValue = computed(() => props.value !== undefined && props.value !== null && props.value !== '')
 
 const iconBgClass = computed(() => {
   const map: Record<string, string> = {

@@ -1,8 +1,11 @@
 <template>
   <BaseCard
+    :as="as"
     :variant="variant"
     :padding="padding"
     :elevation="elevation"
+    :pressable="pressable"
+    :unavailable="unavailable"
     :data-testid="dataTestId"
     :class="props.class"
   >
@@ -42,6 +45,8 @@ import CardHeader from './CardHeader.vue'
 import CardContent from './CardContent.vue'
 import { computed, useSlots } from 'vue'
 
+type CardElement = 'div' | 'section' | 'form' | 'details' | 'article' | 'aside' | 'nav' | 'li'
+
 const props = withDefaults(defineProps<{
   title?: string
   description?: string
@@ -50,6 +55,9 @@ const props = withDefaults(defineProps<{
   variant?: 'default' | 'bordered' | 'muted' | 'warning' | 'context'
   padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl'
   elevation?: 'none' | 'sm'
+  pressable?: boolean
+  unavailable?: boolean
+  as?: CardElement
   class?: string
   dataTestId?: string
 }>(), {
@@ -58,6 +66,9 @@ const props = withDefaults(defineProps<{
   variant: 'default',
   padding: 'md',
   elevation: 'none',
+  pressable: false,
+  unavailable: false,
+  as: 'div',
 })
 
 const slots = useSlots()

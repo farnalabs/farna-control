@@ -1,5 +1,6 @@
 <template>
-  <div
+  <component
+    :is="as"
     :class="[
       'card',
       'card-base',
@@ -14,11 +15,13 @@
     <slot name="header" />
     <slot />
     <slot name="footer" />
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+
+type CardElement = 'div' | 'section' | 'form' | 'details' | 'article' | 'aside' | 'nav' | 'li'
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'bordered' | 'muted' | 'warning' | 'context'
@@ -26,6 +29,10 @@ const props = withDefaults(defineProps<{
   elevation?: 'none' | 'sm'
   pressable?: boolean
   unavailable?: boolean
+  // The card surface is a visual primitive, not an element choice: a caller
+  // that needs section/form/details semantics keeps it while still getting the
+  // shared surface.
+  as?: CardElement
   class?: string
   dataTestId?: string
 }>(), {
@@ -34,6 +41,7 @@ const props = withDefaults(defineProps<{
   elevation: 'none',
   pressable: false,
   unavailable: false,
+  as: 'div',
 })
 
 const variantClass = computed(() => {
