@@ -909,7 +909,7 @@ async def list_members_endpoint(
             team = await get_team(session, team_id)
             if team is None or team.organisation_id != current_user.organisation_id:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_TEAM_NOT_FOUND)
-            result = await list_team_members(session, team_id=team_id, page=page, page_size=page_size)
+            result = await list_team_members(session, team_id=team_id, org_id=current_user.organisation_id, page=page, page_size=page_size)
     except IntegrityError as exc:
         _log.exception(_CODE_TEAMS_LIST_MEMBERS_ENDPOINT)
         raise HTTPException(
