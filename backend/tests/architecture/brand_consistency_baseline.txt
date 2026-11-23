@@ -152,7 +152,7 @@ backend/src/farna/core/guardrails/compensation.py	1
 backend/src/farna/core/guardrails/coverage.py	14
 backend/src/farna/core/guardrails/loop_intercept.py	11
 backend/src/farna/core/guardrails/sandbox_bridge.py	17
-backend/src/farna/core/library_service/__init__.py	38
+backend/src/farna/core/library_service/__init__.py	36
 backend/src/farna/core/library_service/_seed_data.py	62
 backend/src/farna/core/library_service/install.py	14
 backend/src/farna/core/license_signing.py	1
@@ -478,7 +478,7 @@ backend/tests/unit/core/cost_controller/test_cost_finalize.py	12
 backend/tests/unit/core/cost_controller/test_cost_metrics.py	17
 backend/tests/unit/core/eval/test_override_provenance_findings.py	1
 backend/tests/unit/core/evidence/test_retention.py	1
-backend/tests/unit/core/library_service/test_contribute.py	4
+backend/tests/unit/core/library_service/test_contribute.py	3
 backend/tests/unit/core/library_service/test_install_coverage.py	6
 backend/tests/unit/core/library_service/test_install_field_spec.py	2
 backend/tests/unit/core/library_service/test_registry_lookup_and_listing.py	22
