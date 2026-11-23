@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Modulo API Example: Human-in-the-Loop (HITL) - curl
+# Farna Control API Example: Human-in-the-Loop (HITL) - curl
 #
 # Demonstrates listing, claiming, and approving/rejecting HITL gates.
 #

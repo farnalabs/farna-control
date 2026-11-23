@@ -1,5 +1,5 @@
 """
-Modulo API Example: Human-in-the-Loop (HITL) Gate Management
+Farna Control API Example: Human-in-the-Loop (HITL) Gate Management
 
 Demonstrates:
   - List all pending HITL gates across the org

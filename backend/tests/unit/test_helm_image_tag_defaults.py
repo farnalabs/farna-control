@@ -22,7 +22,7 @@ from typing import Any
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_CHART = _REPO_ROOT / "deploy" / "helm" / "modulo"
+_CHART = _REPO_ROOT / "deploy" / "helm" / "farna-control"
 
 _IMAGE_KEYS = ("backend", "saqRunner", "saqSystem", "frontend")
 _WORKLOAD_TEMPLATES = (

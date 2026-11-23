@@ -1,4 +1,4 @@
-"""Trigger entity resolution + execution for ``modulo apply`` (FAR-681 slice 2).
+"""Trigger entity resolution + execution for ``farna-control apply`` (FAR-681 slice 2).
 
 Identity is (pipeline, name); the composite ``pipeline/name`` key appears in
 plan reports. The pipeline is cross-referenced by NAME — resolvable when it

@@ -42,7 +42,7 @@ _ENV_EXAMPLE = _REPO_ROOT / ".env.prod.example"
 
 #: The service in the prod compose that runs the application image. Only its
 #: ``environment`` reaches the backend (postgres/redis/watchdog are separate).
-_APP_SERVICE = "modulo"
+_APP_SERVICE = "farna-control"
 
 #: Env vars the application reads straight from ``os.environ`` rather than
 #: through ``Settings`` - with the source files that read them, asserted to

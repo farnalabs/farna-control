@@ -155,9 +155,9 @@ _SERVICE_SCRIPTS: tuple[ServiceScript, ...] = (
     # docker-compose smoke test (operator-facing knobs).
     ServiceScript("scripts/smoke-compose.sh", reads=(_pattern(SHELL_READ),)),
     # Helm chart pods: the env entries the app containers receive.
-    ServiceScript("deploy/helm/modulo/templates/backend-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
-    ServiceScript("deploy/helm/modulo/templates/saq-runner-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
-    ServiceScript("deploy/helm/modulo/templates/saq-system-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
+    ServiceScript("deploy/helm/farna-control/templates/backend-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
+    ServiceScript("deploy/helm/farna-control/templates/saq-runner-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
+    ServiceScript("deploy/helm/farna-control/templates/saq-system-deployment.yaml", writes=(_pattern(K8S_ENV_WRITE),)),
 )
 
 #: The canonical names each producer is REQUIRED to write, in the same production
@@ -187,12 +187,12 @@ _REQUIRED_CANONICAL_PRODUCTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = 
         (env_contract.INSTALL_ROOT_ENV, env_contract.DATA_DIR_ENV),
     ),
     (
-        "deploy/helm/modulo/templates/backend-deployment.yaml",
+        "deploy/helm/farna-control/templates/backend-deployment.yaml",
         _pattern(K8S_ENV_WRITE),
         (env_contract.SYSTEM_DATABASE_URL_ENV,),
     ),
     (
-        "deploy/helm/modulo/templates/saq-system-deployment.yaml",
+        "deploy/helm/farna-control/templates/saq-system-deployment.yaml",
         _pattern(K8S_ENV_WRITE),
         (env_contract.SYSTEM_DATABASE_URL_ENV,),
     ),

@@ -18,7 +18,7 @@ Format
 * ``@<ref>`` — optional branch / tag / commit SHA; omitted means ``HEAD``.
   A 40-hex value is a **pin**. Stored graphs may only carry pinned refs
   (enforced at graph-save validation), so every run snapshot contains the
-  resolved commit SHA for audit; ``modulo apply`` resolves movable refs
+  resolved commit SHA for audit; ``farna-control apply`` resolves movable refs
   (branch/tag/HEAD) to their current SHA at plan time and writes the pinned
   form (pin-on-apply).
 * ``#<path>`` — repository-relative path of the file; must be non-empty,
@@ -26,7 +26,7 @@ Format
 
 Resolution / fetch
 ------------------
-* :func:`default_git_content_resolver` — plan-time pinning (``modulo apply``):
+* :func:`default_git_content_resolver` — plan-time pinning (``farna-control apply``):
   identity for an already-pinned ref, otherwise ``git ls-remote`` to resolve a
   movable ref to its current commit SHA (bounded, fail-closed).
 * :func:`fetch_git_content` — run-time rendering (the agent_command rendering
@@ -37,7 +37,7 @@ Resolution / fetch
 
 The module is deliberately lightweight (stdlib + the sibling
 ``workspace_inputs`` ls-remote parser) so the graph validator, the run-time
-renderer, and the ``modulo apply`` CLI can all import it.
+renderer, and the ``farna-control apply`` CLI can all import it.
 
 Fetch bounds (host-side runs)
 ----------------------------
@@ -411,7 +411,7 @@ async def run_git_ls_remote(repo_url: str, *, timeout_seconds: float = LS_REMOTE
 
 
 def default_git_content_resolver(ref: GitContentRef) -> str:
-    """Plan-time resolver used by ``modulo apply`` (identity, else ls-remote).
+    """Plan-time resolver used by ``farna-control apply`` (identity, else ls-remote).
 
     Pinned refs never touch the network. Movable refs resolve via
     :func:`run_git_ls_remote`; every failure mode raises
@@ -694,7 +694,7 @@ async def resolve_git_content_field(
         msg = (
             f"{field or 'content field'} of sandbox_agent node {node_id!r} carries an unpinned "
             f"git content ref {value.strip()!r} — stored graphs must pin the commit "
-            f"({GIT_CONTENT_PREFIX}<repo>@<40-hex-sha>#<path>); 'modulo apply' resolves and pins "
+            f"({GIT_CONTENT_PREFIX}<repo>@<40-hex-sha>#<path>); 'farna-control apply' resolves and pins "
             "movable refs automatically, otherwise resolve the ref and pin it manually"
         )
         raise GitContentRefError(msg)
@@ -776,7 +776,7 @@ def validate_agent_git_content_values(
         except GitContentRefError as exc:
             raise GitContentRefError(f"{label} has an invalid git content ref: {exc}") from None
         if not ref.is_pinned:
-            raise GitContentRefError(f"{label} git content ref {value.strip()!r} is not pinned to a commit SHA — Agent prompts and commands must use git+<repo>@<40-hex-sha>#<path> so runs carry the resolved SHA for audit ('modulo apply' resolves and pins movable refs automatically)")
+            raise GitContentRefError(f"{label} git content ref {value.strip()!r} is not pinned to a commit SHA — Agent prompts and commands must use git+<repo>@<40-hex-sha>#<path> so runs carry the resolved SHA for audit ('farna-control apply' resolves and pins movable refs automatically)")
 
 
 def pin_git_content_node_fields(
@@ -786,7 +786,7 @@ def pin_git_content_node_fields(
 ) -> dict[str, Any]:
     """Resolve + pin every git content ref on a node dict IN PLACE; returns it.
 
-    Used by ``modulo apply`` (plan + write): a movable ref resolves through
+    Used by ``farna-control apply`` (plan + write): a movable ref resolves through
     *resolver* (default :func:`default_git_content_resolver`) to a commit SHA
     and the field is rewritten to the canonical pinned spec, so the desired
     managed view, the PATCH payload, and therefore the stored graph / run

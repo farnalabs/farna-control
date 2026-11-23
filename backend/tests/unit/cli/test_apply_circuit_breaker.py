@@ -1,4 +1,4 @@
-"""FAR-1182: ``modulo apply`` manages the pipeline spend circuit breaker.
+"""FAR-1182: ``farna-control apply`` manages the pipeline spend circuit breaker.
 
 ``circuit_breaker_threshold`` is opt-in per pipeline: managed (hashed and
 written) only when the key is declared, so configs that never mention it do
@@ -27,7 +27,7 @@ _EXISTING_ID = "00000000-0000-0000-0000-0000000000aa"
 def _config(threshold_line: str | None) -> str:
     extra = f"\n      {threshold_line}" if threshold_line is not None else ""
     return f"""
-api_version: modulo.dev/v1
+api_version: farna.dev/v1
 entities:
   pipelines:
     - name: sample
@@ -150,7 +150,7 @@ class TestExecution:
 class TestServerSidePermissionRefusal:
     """FAR-1184: apply surfaces the REST 403 (raise/clear needs cost.manage).
 
-    ``modulo apply`` authenticates as an API key and sends PATCH/POST to the
+    ``farna-control apply`` authenticates as an API key and sends PATCH/POST to the
     REST API — the shared raise/clear gate runs SERVER-SIDE, and the CLI
     reports the 403 as a failed entity with the server's detail. The CLI
     cannot determine ``cost.manage`` locally (it has only the key, no

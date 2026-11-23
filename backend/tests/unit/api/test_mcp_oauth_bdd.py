@@ -83,8 +83,8 @@ def _make_settings() -> Settings:
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
         admin_password="testpass",
-        public_url="https://modulo.example.com",
-        cors_origins="https://modulo.example.com",
+        public_url="https://farna-control.example.com",
+        cors_origins="https://farna-control.example.com",
     )
 
 
@@ -366,7 +366,7 @@ class TestAuthorizeEndpoint:
         assert response.status_code == 302
         assert response.headers.get("Referrer-Policy") == "no-referrer"
         location = response.headers["Location"]
-        assert location.startswith("https://modulo.example.com/oauth/authorize?")
+        assert location.startswith("https://farna-control.example.com/oauth/authorize?")
         assert "client_id=oauth_client_1" in location
         assert "state=xyz" in location
         assert f"code_challenge={_CODE_CHALLENGE}" in location

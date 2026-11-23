@@ -953,7 +953,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1086,7 +1086,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1154,7 +1154,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1199,7 +1199,7 @@ jobs:
     # only logs ::error:: in the Actions tab — invisible unless someone
     # checks. This job dispatches the Branch Fixer as a TRIAGE step: it may
     # conclude the failure is not fixable in code, but the webhook creates a
-    # visible Modulo pipeline run that surfaces the failure in the app UI.
+    # visible Farna Control pipeline run that surfaces the failure in the app UI.
     #
     # Distinguishable from code-failure notifications: the FEEDBACK text
     # begins with "INFRASTRUCTURE FAILURE" so a human reading it knows this
@@ -1230,7 +1230,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -2163,7 +2163,7 @@ jobs:
           }
           Write-Host "staging-control.farna.dev SHA match: $deployedSha"
 
-      - name: Self-report deployed PRs to Modulo (fail-open, best-effort)
+      - name: Self-report deployed PRs to Farna Control (fail-open, best-effort)
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
@@ -2184,12 +2184,12 @@ jobs:
           # never mint). The parser reads the payload's work_item_refs list directly.
           #
           # stage_id: "deploy" names the lifecycle-map stage this workflow completes.
-          # The deploy stage is EXTERNAL (a GitHub Actions workflow, not a Modulo
+          # The deploy stage is EXTERNAL (a GitHub Actions workflow, not a Farna Control
           # pipeline), so it has no pipeline_id for the advancement service to
           # resolve; the endpoint uses stage_id to advance the journey into it.
           #
           # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a
-          # Modulo outage can NEVER fail the deploy. The payload is always recorded
+          # Farna Control outage can NEVER fail the deploy. The payload is always recorded
           # in the log; the POST only fires when FARNA_CONTROL_SELF_REPORT_URL is
           # configured. The endpoint is POST
           # /api/v1/lifecycle-maps/{lifecycle_map_id}/journeys/self-report
@@ -2208,7 +2208,7 @@ jobs:
             '{event: "workflow_self_report", source: "github_actions", workflow: "deploy", stage_id: "deploy", work_item_refs: $refs}' 2>/dev/null) \
             || PAYLOAD='{"event":"workflow_self_report","source":"github_actions","workflow":"deploy","stage_id":"deploy","work_item_refs":[]}'
 
-          echo "=== Modulo self-report payload (deployed PRs) ==="
+          echo "=== Farna Control self-report payload (deployed PRs) ==="
           echo "$PAYLOAD"
 
           if [ -z "$FARNA_CONTROL_SELF_REPORT_URL" ]; then
@@ -2226,7 +2226,7 @@ jobs:
             -d "$PAYLOAD") || HTTP_CODE="000"
 
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "::warning::Modulo self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - deployed PRs recorded in log only (fail-open)."
+            echo "::warning::Farna Control self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - deployed PRs recorded in log only (fail-open)."
             exit 0
           fi
 
@@ -2235,10 +2235,10 @@ jobs:
           REJECTED=$(jq -r '.rejected // 0' "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 0)
           REF_COUNT=$(echo "$PAYLOAD" | jq '.work_item_refs | length' 2>/dev/null || echo 0)
           if [ "$UNMATCHED" -gt 0 ] || { [ "$ACCEPTED" -eq 0 ] && [ "$REF_COUNT" -gt 0 ]; }; then
-            echo "::warning::Modulo self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
+            echo "::warning::Farna Control self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
             exit 0
           fi
-          echo "Self-report delivered to Modulo (accepted=$ACCEPTED unmatched=$UNMATCHED)."
+          echo "Self-report delivered to Farna Control (accepted=$ACCEPTED unmatched=$UNMATCHED)."
 
       - name: Ensure worker machine exists (staging)
         shell: bash
@@ -3877,7 +3877,7 @@ jobs:
     # FAR-908: deploy-production infrastructure failures (Fly API errors,
     # image build failures, migration failures) previously had NO
     # notification. Same rationale as notify-deploy-staging-failure: the
-    # Branch Fixer webhook creates a visible Modulo pipeline run for triage,
+    # Branch Fixer webhook creates a visible Farna Control pipeline run for triage,
     # and the staleness-check/watchdog handle re-dispatch independently.
     #
     # The FEEDBACK text begins with "INFRASTRUCTURE FAILURE" to distinguish
@@ -3908,7 +3908,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -4151,24 +4151,24 @@ jobs:
           |---|---|---|---|---|
           | `deploy-throttle` | Yes | Yes (skips deploy) | Fails loud (::error::) | Actions tab |
           | `deploy-throttle-status` | No | No (visibility only) | N/A — summary annotation | Step summary |
-          | `backend-lint` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `backend-unit` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `frontend-checks` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `integration-tests` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `security-audit` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `pre-deploy-gate` | Yes | Yes (aggregates above) | Branch Fixer webhook | Modulo pipeline |
-          | `notify-deploy-failure` | Yes | No (notification only) | Branch Fixer webhook (ALL downstream failures) | Modulo pipeline |
-          | `deploy-staging` | Yes | Yes | Branch Fixer webhook (triage) + watchdog re-dispatch | Modulo pipeline + Actions |
+          | `backend-lint` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `backend-unit` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `frontend-checks` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `integration-tests` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `security-audit` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `pre-deploy-gate` | Yes | Yes (aggregates above) | Branch Fixer webhook | Farna Control pipeline |
+          | `notify-deploy-failure` | Yes | No (notification only) | Branch Fixer webhook (ALL downstream failures) | Farna Control pipeline |
+          | `deploy-staging` | Yes | Yes | Branch Fixer webhook (triage) + watchdog re-dispatch | Farna Control pipeline + Actions |
           | `notify-deploy-staging-failure` | Yes | No (notification only) | N/A — IS the signal | — |
-          | `staging-e2e` | Yes | Yes | Branch Fixer webhook | Modulo pipeline |
+          | `staging-e2e` | Yes | Yes | Branch Fixer webhook | Farna Control pipeline |
           | `notify-staging-e2e-failure` | Yes | No (notification only) | N/A — IS the signal | — |
-          | `deploy-production` | Yes | Yes | Branch Fixer webhook (triage) + staleness-check escalation | Modulo pipeline + Actions |
+          | `deploy-production` | Yes | Yes | Branch Fixer webhook (triage) + staleness-check escalation | Farna Control pipeline + Actions |
           | `notify-deploy-production-failure` | Yes | No (notification only) | N/A — IS the signal | — |
-          | `prod-smoke` | Yes | Yes | Branch Fixer webhook | Modulo pipeline |
+          | `prod-smoke` | Yes | Yes | Branch Fixer webhook | Farna Control pipeline |
           | `notify-prod-smoke-failure` | Yes | No (notification only) | N/A — IS the signal | — |
 
           ### Coverage rules
-          - **Code failures** (tests, lint): routed to Branch Fixer via webhook → Modulo pipeline run
+          - **Code failures** (tests, lint): routed to Branch Fixer via webhook → Farna Control pipeline run
           - **Infrastructure failures** (deploy-staging, deploy-production): routed to Branch Fixer as triage + deploy-watchdog re-dispatches + deploy-staleness-check escalates
           - **ALL deploy-stage failures** (FAR-912): `notify-deploy-failure` now fires on ANY downstream failure (pre-deploy-gate, deploy-staging, staging-e2e, deploy-production, prod-smoke) — the broad catch-all dispatch for the Branch Fixer; the per-stage notify-* jobs add stage-specific feedback
           - **Notification-only jobs** (notify-*): always succeed; their purpose IS the signal

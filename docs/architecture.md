@@ -391,7 +391,7 @@ Manages the local library of reusable primitives (agents, schemas, workflows, in
 
 ### Declarative Configuration CLI (`farna/cli/apply/`) – FAR-681
 
-`farna-control apply -f <config.yaml>` applies an org's schemas (+ versions), model backends, pipelines and triggers to a live deployment from one YAML file (`api_version: modulo.dev/v1`), driven by `FARNA_CONTROL_URL` + `FARNA_CONTROL_API_KEY` (bearer `mk_` org key). Planning is name-based upsert (RLS-bound to the key's org): each entity chooses created / updated / unchanged / blocked from a canonical managed-field hash, so rerun is idempotent and runtime state (`next_fire_at`, `streak_epoch`, ...) never causes drift. Keys: entities apply in dependency order with per-entity containment; secrets are refs-only (`${env:VAR}` / `secretref://<key>` -- inline literals are a validation error; the server masks stored secrets, so `--refresh-secrets` re-sends trigger configs whose secrets rotated); backend writes are health-check-verified; `--dry-run/--plan` reports without writing; `--diff` is a read-only drift report (plan-shaped, labelled `mode=drift`, with graph node/edge breakdown for drifted pipelines) used as a CI gate -- exit 0 when the org matches the config, exit 1 on drift (created/updated/blocked), and real apply exits 1 on any blocked/failed entity.
+`farna-control apply -f <config.yaml>` applies an org's schemas (+ versions), model backends, pipelines and triggers to a live deployment from one YAML file (`api_version: farna.dev/v1`), driven by `FARNA_CONTROL_URL` + `FARNA_CONTROL_API_KEY` (bearer `mk_` org key). Planning is name-based upsert (RLS-bound to the key's org): each entity chooses created / updated / unchanged / blocked from a canonical managed-field hash, so rerun is idempotent and runtime state (`next_fire_at`, `streak_epoch`, ...) never causes drift. Keys: entities apply in dependency order with per-entity containment; secrets are refs-only (`${env:VAR}` / `secretref://<key>` -- inline literals are a validation error; the server masks stored secrets, so `--refresh-secrets` re-sends trigger configs whose secrets rotated); backend writes are health-check-verified; `--dry-run/--plan` reports without writing; `--diff` is a read-only drift report (plan-shaped, labelled `mode=drift`, with graph node/edge breakdown for drifted pipelines) used as a CI gate -- exit 0 when the org matches the config, exit 1 on drift (created/updated/blocked), and real apply exits 1 on any blocked/failed entity.
 
 #### Git-sourced content refs (FAR-220)
 
@@ -1039,7 +1039,7 @@ Compose files (`docker-compose*.yml` at the repo root; the non-default ones live
 
 ### Kubernetes (Helm)
 
-A maintained, vendor-neutral Helm chart ships at `deploy/helm/modulo/`
+A maintained, vendor-neutral Helm chart ships at `deploy/helm/farna-control/`
 (validated end-to-end on EKS, FAR-1052, 2026-09-23). It deploys the Farna Control
 stack; the Kubernetes runtime provider that runs agent workspaces as
 long-lived pods also ships (FAR-1051) - enabled with

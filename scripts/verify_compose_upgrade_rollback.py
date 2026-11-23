@@ -437,7 +437,7 @@ class Matrix:
                     self.new_tag,
                     "exec",
                     "-T",
-                    "modulo",
+                    "farna-control",
                     "cat",
                     path,
                     expected="captured",
@@ -536,7 +536,7 @@ class Matrix:
             "-d",
             "--force-recreate",
             "--no-deps",
-            "modulo",
+            "farna-control",
             expected="success",
             secret_key=_INVALID_SECRET_KEY,
         )
@@ -545,12 +545,12 @@ class Matrix:
         # so the container log below is recorded as supplementary context only.
         # The assertion reads the backend child log from inside the container.
         child_logs = self._capture_backend_child_logs()
-        failed_container_logs = self.compose("failed-upgrade-logs", self.new_tag, "logs", "--no-color", "--tail=200", "modulo")
+        failed_container_logs = self.compose("failed-upgrade-logs", self.new_tag, "logs", "--no-color", "--tail=200", "farna-control")
         self._assert_failed_upgrade_startup_failure(child_logs, failed_container_logs)
 
         self.compose("rollback-old", self.old_tag, "up", "-d", "--remove-orphans")
         self.ready("rollback-ready", expected=True)
-        self.compose("rollback-logs", self.old_tag, "logs", "--no-color", "--tail=200", "modulo")
+        self.compose("rollback-logs", self.old_tag, "logs", "--no-color", "--tail=200", "farna-control")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -560,7 +560,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--new-tag", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--env-file", type=Path)
-    parser.add_argument("--project-name", default=f"modulo-upgrade-{os.getpid()}")
+    parser.add_argument("--project-name", default=f"farna-control-upgrade-{os.getpid()}")
     parser.add_argument("--port", default="18080")
     parser.add_argument("--timeout", type=int, default=120)
     return parser.parse_args(argv)

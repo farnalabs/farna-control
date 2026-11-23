@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Modulo API Example: Authentication (Login) - curl
+# Farna Control API Example: Authentication (Login) - curl
 #
 # Demonstrates login, token refresh, and logout using curl.
 #

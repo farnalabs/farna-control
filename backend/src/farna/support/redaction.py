@@ -9,7 +9,7 @@ Layers, in the order they are applied to every member's raw text:
    Settings value) is replaced verbatim, including its percent-encoded form.
 3. **Structural ``KEY=value`` scrub** — through the CANONICAL sensitive-field
    classifier (:func:`farna.core.secret_patterns.is_sensitive_field_name`),
-   the same classifier ``modulo env`` and ``modulo doctor --report`` use.
+   the same classifier ``farna-control env`` and ``farna-control doctor --report`` use.
 4. **Shared value patterns** — :func:`farna.core.secret_patterns.mask_secret_values_in_text`
    (GitHub PATs, API keys, bearer tokens, URL userinfo, private keys, JWTs).
 5. **Fail-closed post-assembly gate** — re-scans each already-redacted member.

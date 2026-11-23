@@ -1249,7 +1249,7 @@ def _check_sandbox_git_content_values(
       accept: a misparsed declarative ref would dispatch the raw ref string).
     - ``GIT_CONTENT_REF_UNPINNED`` — well-formed but the ref is movable
       (branch/tag/HEAD). Stored graphs must carry the resolved commit SHA so
-      every run snapshot surfaces the pin for audit; ``modulo apply`` resolves
+      every run snapshot surfaces the pin for audit; ``farna-control apply`` resolves
       and pins movable refs at plan time before writing.
     """
     from farna.core.pipeline_engine.git_content import (
@@ -1276,7 +1276,7 @@ def _check_sandbox_git_content_values(
         if not ref.is_pinned:
             result.error(
                 "GIT_CONTENT_REF_UNPINNED",
-                f"{context} {label} git content ref {value.strip()!r} is not pinned to a commit SHA — stored graphs must use git+<repo>@<40-hex-sha>#<path> so run snapshots carry the resolved SHA for audit ('modulo apply' resolves and pins movable refs automatically)",
+                f"{context} {label} git content ref {value.strip()!r} is not pinned to a commit SHA — stored graphs must use git+<repo>@<40-hex-sha>#<path> so run snapshots carry the resolved SHA for audit ('farna-control apply' resolves and pins movable refs automatically)",
                 node_id=nid,
             )
 

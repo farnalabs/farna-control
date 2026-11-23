@@ -360,7 +360,7 @@ def _raw_dispatch_node() -> dict[str, Any]:
 
 
 def test_every_write_surface_defaults_the_dispatch_verb_to_the_engine_verdict():
-    """The API model and the ``modulo apply`` CLI model must persist EXACTLY the
+    """The API model and the ``farna-control apply`` CLI model must persist EXACTLY the
     verb ``connector_binding_operation`` (the declared single source of truth)
     computes for the same raw node — one rule, one answer, on every surface."""
     from farna.cli.apply.models import ApplyGraphNode

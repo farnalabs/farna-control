@@ -49,7 +49,7 @@ def _build(tmp_path: Path, *, settings: object | None = None) -> tuple[bundle.Bu
         out,
         sources=BundleSources(
             data_dir=tmp_path,
-            doctor_output="modulo doctor: healthy",
+            doctor_output="farna-control doctor: healthy",
             settings=settings,
             environ={},
             enable_db=False,

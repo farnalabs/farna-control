@@ -1,4 +1,4 @@
-"""HTTP execution for ``modulo apply`` (FAR-681, slices 1+2).
+"""HTTP execution for ``farna-control apply`` (FAR-681, slices 1+2).
 
 Transport: sync httpx against FARNA_CONTROL_URL with ``Authorization: Bearer
 <FARNA_CONTROL_API_KEY>`` (the server authenticates bearer tokens as either a user

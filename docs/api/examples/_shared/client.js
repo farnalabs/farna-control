@@ -1,4 +1,4 @@
-// Shared client helpers for the Modulo API documentation examples.
+// Shared client helpers for the Farna Control API documentation examples.
 //
 // The examples under docs/api/examples/* are intentionally runnable,
 // self-contained snippets. They previously duplicated this boilerplate

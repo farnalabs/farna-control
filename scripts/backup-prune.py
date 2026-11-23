@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prune old Modulo backups based on retention policy.  # noqa: N999
+"""Prune old Farna Control backups based on retention policy.  # noqa: N999
 
 Retention:
   - Keep 7 most recent daily backups
@@ -47,7 +47,7 @@ class BackupFile(NamedTuple):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prune old Modulo backups")
+    parser = argparse.ArgumentParser(description="Prune old Farna Control backups")
     parser.add_argument("--backup-dir", "-d", default=".", help="Backup directory")
     parser.add_argument("--dry-run", "-n", action="store_true", help="Show what would be deleted")
     parser.add_argument("--keep-daily", type=int, default=7, help="Daily backups to keep")

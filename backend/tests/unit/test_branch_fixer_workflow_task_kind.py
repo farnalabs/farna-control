@@ -27,7 +27,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "branch-fixer.yml"
-WEBHOOK_STEP = "- name: Send webhook to Modulo Branch Fixer"
+WEBHOOK_STEP = "- name: Send webhook to Farna Control Branch Fixer"
 BASE_OBJECT = "{branchName: $branchName, prNumber: $prNumber, failureDescription: $failureDescription, repository: $repo}"
 
 
