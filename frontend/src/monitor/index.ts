@@ -12,7 +12,7 @@ import { SentryMonitorBackend } from './backends/sentry'
 const MONITOR_BACKEND_INIT_TIMEOUT_MS = 5_000
 
 export function loadMonitorConfig(): MonitorConfig {
-  const runtime = (window as unknown as Record<string, unknown>).__MODULO_CONFIG__
+  const runtime = (window as unknown as Record<string, unknown>).__FARNA_CONFIG__
   const runtimeMonitor =
     runtime && typeof runtime === 'object' && 'monitor' in runtime
       ? (runtime as Record<string, unknown>).monitor as Partial<MonitorConfig> | undefined

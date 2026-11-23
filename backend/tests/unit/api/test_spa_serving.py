@@ -120,7 +120,7 @@ def test_runtime_config_route_serves_allowlisted_keys_only(tmp_path: Path, monke
     response = client.get("/runtime-config.js")
     assert response.status_code == 200
     body = response.text
-    assert body.startswith("window.__MODULO_CONFIG__")
+    assert body.startswith("window.__FARNA_CONFIG__")
     assert '"monitor"' in body
     assert '"autoLogin"' in body
     assert response.headers["cache-control"].startswith("no-cache")

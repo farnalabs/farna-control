@@ -34,7 +34,7 @@ export class BreadcrumbCollector {
   }
 
   add(type: Breadcrumb['type'], data: Record<string, unknown>): void {
-    if ((window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__) return
+    if ((window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__) return
     this.buffer.push({ type, timestamp: new Date().toISOString(), data })
     if (this.buffer.length > this.maxSize) {
       this.buffer = this.buffer.slice(-this.maxSize)

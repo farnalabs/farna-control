@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from farna.core.library_service import (
-    _MODULO_PRIMITIVES,
+    _BUILTIN_PRIMITIVES,
     BuiltinPrimitiveReadOnlyError,
     copy_to_adapt,
     get_primitive,
@@ -211,5 +211,5 @@ async def test_copy_to_adapt_composite_preserves_content_json():
 
 
 def test_modulo_primitives_include_composites():
-    composites = [p for p in _MODULO_PRIMITIVES if p.primitive_type == "composite"]
+    composites = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == "composite"]
     assert {p.slug for p in composites} == _EXPECTED_COMPOSITE_SLUGS

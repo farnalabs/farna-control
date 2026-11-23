@@ -23,7 +23,7 @@ import pytest
 
 from farna.settings import Settings
 
-_FORBIDDEN_PREFIX = "FARNA_CONTROL_MODULO_"
+_FORBIDDEN_PREFIX = "FARNA_CONTROL_" + "MOD" + "ULO_"
 _LEGACY_PREFIX = "MODULO" + "_"
 
 #: Fields whose canonical alias is deliberately NOT the field-name upper-case
@@ -202,7 +202,7 @@ def test_the_canonical_name_is_read(
 
 
 def test_doubled_environment_prefix_is_absent_from_source_tree() -> None:
-    """The canonical shape is FARNA_CONTROL_<NAME>; a doubled FARNA_CONTROL_MODULO_ name is never valid."""
+    """The canonical shape is FARNA_CONTROL_<NAME>; a name that still carries the legacy prefix after the canonical one is never valid."""
     repo_root = Path(__file__).resolve().parents[3]
     guard_file = Path(__file__).resolve()
     git_executable = shutil.which("git")
@@ -224,4 +224,4 @@ def test_doubled_environment_prefix_is_absent_from_source_tree() -> None:
     source_files = [repo_root / relative_path for relative_path in tracked_files if relative_path.endswith(suffixes) or ".env." in Path(relative_path).name]
     source_files = [path for path in source_files if path.resolve() != guard_file.resolve()]
     offenders = [path for path in source_files if _FORBIDDEN_PREFIX in path.read_text(encoding="utf-8", errors="replace")]
-    assert not offenders, "Forbidden FARNA_CONTROL_MODULO_ environment names found in source files; use FARNA_CONTROL_<NAME>."
+    assert not offenders, f"Forbidden {_FORBIDDEN_PREFIX} environment names found in source files; use FARNA_CONTROL_<NAME>."

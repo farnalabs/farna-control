@@ -439,14 +439,18 @@ def _streak_min_window_hours_default(trigger_type: str = "ongoing") -> int:
 
     Per-trigger ``no_delivery_min_window_hours`` config overrides both.
     """
-    env_name = "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS" if trigger_type == "cron" else "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS"
-    raw = os.environ.get(env_name)
+    if trigger_type == "cron":
+        raw = os.environ.get("FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS")
+        default = CRON_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT
+    else:
+        raw = os.environ.get("FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS")
+        default = ONGOING_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT
     if raw is None:
-        return CRON_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT if trigger_type == "cron" else ONGOING_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT
+        return default
     try:
         return max(0, int(raw))
     except (TypeError, ValueError):
-        return CRON_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT if trigger_type == "cron" else ONGOING_MIN_NO_DELIVERY_WINDOW_HOURS_DEFAULT
+        return default
 
 
 def _streak_config(config: dict[str, Any] | None, *, trigger_type: str = "ongoing") -> tuple[int, int]:

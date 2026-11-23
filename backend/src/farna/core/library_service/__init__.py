@@ -14,10 +14,10 @@ from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.core.library_service._seed_data import (
-    _MODULO_BY_ID,
-    _MODULO_BY_SLUG,
-    _MODULO_PRIMITIVES,
-    MODULO_ORG_ID,
+    _BUILTIN_BY_ID,
+    _BUILTIN_BY_SLUG,
+    _BUILTIN_PRIMITIVES,
+    BUILTIN_ORG_ID,
 )
 from farna.db.crud.base import PageResult
 from farna.db.crud.library_primitive import (
@@ -40,13 +40,13 @@ _LOG_COMPONENT = "core.library_service"
 
 
 __all__ = [
+    "BUILTIN_ORG_ID",
     "CONTRIBUTION_DRAFT",
     "CONTRIBUTION_PUBLISHED",
     "CONTRIBUTION_REVIEW_QUEUE",
-    "MODULO_ORG_ID",
-    "_MODULO_BY_ID",
-    "_MODULO_BY_SLUG",
-    "_MODULO_PRIMITIVES",
+    "_BUILTIN_BY_ID",
+    "_BUILTIN_BY_SLUG",
+    "_BUILTIN_PRIMITIVES",
     "BuiltinPrimitiveReadOnlyError",
     "ContributionInvalidTransitionError",
     "ContributionNotFoundError",
@@ -197,7 +197,7 @@ async def get_primitive(
         raise
     if item is not None:
         return item
-    return _MODULO_BY_ID.get(primitive_id)
+    return _BUILTIN_BY_ID.get(primitive_id)
 
 
 async def get_primitive_by_slug(
@@ -265,7 +265,7 @@ async def get_primitive_by_slug(
         raise
     if item is not None:
         return item
-    builtin = _MODULO_BY_SLUG.get((primitive_type, slug))
+    builtin = _BUILTIN_BY_SLUG.get((primitive_type, slug))
     if builtin is not None and version is not None and builtin.version != version:
         return None
     return builtin
@@ -290,7 +290,7 @@ async def _re_read_primitive(
     refreshed = await get_library_primitive(session, primitive_id)
     if refreshed is not None:
         return refreshed, True
-    builtin = _MODULO_BY_ID.get(primitive_id)
+    builtin = _BUILTIN_BY_ID.get(primitive_id)
     if builtin is None:
         raise LookupError(f"Primitive {primitive_id} not found for org {org_id} during copy")
     return builtin, False
@@ -677,7 +677,7 @@ async def list_contribution_versions(
         # never from SQL, and are not contributions — they have no versions.
         # Preserve the pre-existing 404 for a built-in id instead of serving it
         # as a one-row version list.
-        if prim is None or _MODULO_BY_ID.get(primitive_id) is prim:
+        if prim is None or _BUILTIN_BY_ID.get(primitive_id) is prim:
             raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
 
         if prim.version_group_id is None:
@@ -803,11 +803,11 @@ def _filter_modulo(
     """Filter the built-in modulo registry primitives."""
     if primitive_types:
         allowed = set(primitive_types)
-        modulo = [p for p in _MODULO_PRIMITIVES if p.primitive_type in allowed]
+        modulo = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type in allowed]
     elif primitive_type is not None:
-        modulo = [p for p in _MODULO_PRIMITIVES if p.primitive_type == primitive_type]
+        modulo = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == primitive_type]
     else:
-        modulo = list(_MODULO_PRIMITIVES)
+        modulo = list(_BUILTIN_PRIMITIVES)
     if search:
         term = search.strip().lower()
         if term:

@@ -13,7 +13,7 @@ export interface AutoLoginConfig {
 const DEFAULT_DEMO_ORG_SLUG = 'demo'
 
 export function getAutoLoginConfig(): AutoLoginConfig | undefined {
-  const config = window.__MODULO_CONFIG__?.autoLogin
+  const config = window.__FARNA_CONFIG__?.autoLogin
   if (
     !config
     || typeof config.username !== 'string'

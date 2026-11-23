@@ -31,13 +31,13 @@ from fastapi.testclient import TestClient
 
 from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
-from farna.core.library_service import MODULO_ORG_ID
+from farna.core.library_service import BUILTIN_ORG_ID
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session, configure_rls_preamble
 
 _FERNET_KEY = Fernet.generate_key().decode()
 _VALID_32 = "a" * 32
-# Deliberately distinct from ``MODULO_ORG_ID`` (the built-in sentinel org,
+# Deliberately distinct from ``BUILTIN_ORG_ID`` (the built-in sentinel org,
 # ``...0001``): the caller org must differ from the sentinel so the
 # ``_BUILTIN_ORG_ID`` arm of ``_primitive_visible_to`` is genuinely exercised.
 _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
@@ -314,7 +314,7 @@ class TestLibraryPrimitiveReadAcceptsOrgApiKey:
 
     def test_org_api_key_reads_a_builtin_primitive(self) -> None:
         """A built-in lives in the modulo sentinel org and is globally visible."""
-        builtin = _make_primitive(organisation_id=MODULO_ORG_ID)
+        builtin = _make_primitive(organisation_id=BUILTIN_ORG_ID)
         with (
             patch("farna.api.routes.library.get_primitive", new_callable=AsyncMock, return_value=builtin),
             _api_key_request() as client,

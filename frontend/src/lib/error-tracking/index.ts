@@ -200,7 +200,7 @@ export class ErrorTracker {
 }
 
 function isDisabled(): boolean {
-  return !!(window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__
+  return !!(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__
 }
 
 function buildBaseEvent(): ErrorEventInput {

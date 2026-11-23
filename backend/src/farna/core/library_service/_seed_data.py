@@ -18,7 +18,7 @@ from typing import Any
 from farna.db.models.library_primitive import LibraryPrimitive
 
 # Fixed sentinel used as organisation_id for modulo (built-in) primitives.
-MODULO_ORG_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+BUILTIN_ORG_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)
@@ -69,7 +69,7 @@ def _build_builtin(
     """
     p = LibraryPrimitive(
         id=uuid.UUID(pid),
-        organisation_id=MODULO_ORG_ID,
+        organisation_id=BUILTIN_ORG_ID,
         source=source,
         primitive_type=primitive_type,
         name=name,
@@ -128,7 +128,7 @@ def _make_modulo(
 # Built-in Farna Control primitives (in-memory, no DB row required)
 # ---------------------------------------------------------------------------
 
-_MODULO_PRIMITIVES: list[LibraryPrimitive] = [
+_BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
     _make_modulo(
         pid="00000000-0000-0000-0000-000000000010",
         primitive_type="schema",
@@ -1029,7 +1029,7 @@ _INCIDENT_TEMPLATE_EDGES = [
     },
 ]
 
-_MODULO_PRIMITIVES.extend(
+_BUILTIN_PRIMITIVES.extend(
     [
         _make_modulo(
             pid="00000000-0000-0000-0000-000000000080",
@@ -1829,10 +1829,10 @@ _MODULO_PRIMITIVES.extend(
 )
 
 # The library_collection type requires status="published" to be installable.
-for _p in _MODULO_PRIMITIVES:
+for _p in _BUILTIN_PRIMITIVES:
     if _p.primitive_type == "library_collection":
         _p.status = "published"
 
 # Indexes for O(1) registry lookup
-_MODULO_BY_ID: dict[uuid.UUID, LibraryPrimitive] = {p.id: p for p in _MODULO_PRIMITIVES}
-_MODULO_BY_SLUG: dict[tuple[str, str], LibraryPrimitive] = {(p.primitive_type, p.slug): p for p in _MODULO_PRIMITIVES}
+_BUILTIN_BY_ID: dict[uuid.UUID, LibraryPrimitive] = {p.id: p for p in _BUILTIN_PRIMITIVES}
+_BUILTIN_BY_SLUG: dict[tuple[str, str], LibraryPrimitive] = {(p.primitive_type, p.slug): p for p in _BUILTIN_PRIMITIVES}

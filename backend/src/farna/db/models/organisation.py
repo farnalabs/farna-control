@@ -40,9 +40,9 @@ SYSTEM_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 # (library_service/install.py auto-creates the row on first install). It is
 # infrastructure, not a customer org — excluded from admin org listings like
 # the nil-UUID orphan. (Same UUID as core.library_service._seed_data's
-# MODULO_ORG_ID, kept in a single self-contained constant here to avoid a
+# BUILTIN_ORG_ID, kept in a single self-contained constant here to avoid a
 # db.models -> core layering inversion.)
-MODULO_REGISTRY_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+REGISTRY_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 class Organisation(SoftDeleteMixin, Base):

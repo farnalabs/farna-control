@@ -18,7 +18,7 @@ Built-in visibility is pinned in both directions. Native built-ins
 slice — so a plain ``organisation_id =`` clamp cannot hide them. The RLS policy
 on ``library_primitives`` already restricts rows to
 ``organisation_id = current_setting('app.organisation_id')``, so a sentinel-org
-(``MODULO_REGISTRY_ORG_ID``) row is invisible today and must stay invisible.
+(``REGISTRY_ORG_ID``) row is invisible today and must stay invisible.
 These tests fail if a future clamp hides the built-ins, and they fail if the
 clamp is weakened enough to expose the sentinel partition.
 """
@@ -36,13 +36,13 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from farna.core.library_service import (
-    _MODULO_PRIMITIVES,
+    _BUILTIN_PRIMITIVES,
     list_contribution_versions,
     list_contributions,
     list_org_contributions,
     list_primitives,
 )
-from farna.core.library_service._seed_data import MODULO_ORG_ID
+from farna.core.library_service._seed_data import BUILTIN_ORG_ID
 from farna.db.crud.base import PageResult
 from farna.db.crud.library_primitive import list_library_primitives, list_primitives_by_version_group
 from farna.db.models.base import Base
@@ -164,7 +164,7 @@ async def test_list_library_primitives_hides_the_sentinel_org_partition(session:
     # A registry shadow row materialised under the built-in sentinel org. RLS
     # hides this partition from a tenant session; the explicit clamp must too,
     # so a BYPASSRLS connection cannot read another org's built-in shadow rows.
-    sentinel = _primitive(MODULO_ORG_ID, "Sentinel Shadow", source="modulo", slug="sentinel-shadow")
+    sentinel = _primitive(BUILTIN_ORG_ID, "Sentinel Shadow", source="modulo", slug="sentinel-shadow")
     own = _primitive(_ORG_A, "Org A Schema")
     session.add_all([own, sentinel])
     await session.flush()
@@ -191,7 +191,7 @@ async def test_list_primitives_still_serves_the_in_memory_builtins(session: Asyn
     # Built-ins are not rows in the caller's slice: they are merged in from the
     # in-code registry by ``list_primitives``. The clamp must therefore leave
     # them visible while hiding the sentinel-org shadow row.
-    sentinel = _primitive(MODULO_ORG_ID, "Sentinel Shadow", source="modulo", slug="sentinel-shadow")
+    sentinel = _primitive(BUILTIN_ORG_ID, "Sentinel Shadow", source="modulo", slug="sentinel-shadow")
     own = _primitive(_ORG_A, "Org A Schema")
     session.add_all([own, sentinel])
     await session.flush()
@@ -204,10 +204,10 @@ async def test_list_primitives_still_serves_the_in_memory_builtins(session: Asyn
     # exception-swallowed query would drop it and fail here).
     assert own.id in item_ids
     # Every Native built-in is still served to the customer.
-    assert {p.id for p in _MODULO_PRIMITIVES} <= item_ids
+    assert {p.id for p in _BUILTIN_PRIMITIVES} <= item_ids
     # The sentinel partition stays invisible.
     assert sentinel.id not in item_ids
-    assert result.total == 1 + len(_MODULO_PRIMITIVES)
+    assert result.total == 1 + len(_BUILTIN_PRIMITIVES)
 
 
 # ---------------------------------------------------------------------------

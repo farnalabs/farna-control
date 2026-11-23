@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from farna.core.library_service import _MODULO_PRIMITIVES
+from farna.core.library_service import _BUILTIN_PRIMITIVES
 from farna.db.crud.library_primitive import create_library_primitive
 from farna.db.models.library_primitive import LibraryPrimitive
 from farna.settings import get_settings
@@ -24,7 +24,7 @@ async def seed() -> None:
     settings = get_settings()
     engine = create_async_engine(settings.database_url)
     async with AsyncSession(engine) as session:
-        templates = [p for p in _MODULO_PRIMITIVES if p.primitive_type == "pipeline_template"]
+        templates = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == "pipeline_template"]
         for template in templates:
             existing = (
                 await session.execute(

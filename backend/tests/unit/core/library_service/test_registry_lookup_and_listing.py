@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy.exc import ProgrammingError
 
 from farna.core.library_service import (
-    _MODULO_PRIMITIVES,
+    _BUILTIN_PRIMITIVES,
     _filter_modulo,
     _re_read_primitive,
     get_primitive,
@@ -27,7 +27,7 @@ from farna.core.library_service import (
 from farna.db.crud.base import PageResult
 
 _MODULE = "farna.core.library_service"
-_BUILTIN = _MODULO_PRIMITIVES[0]
+_BUILTIN = _BUILTIN_PRIMITIVES[0]
 
 
 def _session() -> MagicMock:
@@ -163,7 +163,7 @@ class TestReReadPrimitive:
 
 class TestFilterModulo:
     def test_no_filter_returns_whole_registry(self) -> None:
-        assert len(_filter_modulo()) == len(_MODULO_PRIMITIVES)
+        assert len(_filter_modulo()) == len(_BUILTIN_PRIMITIVES)
 
     def test_primitive_types_takes_precedence(self) -> None:
         result = _filter_modulo(primitive_types=["schema"], primitive_type="agent")
@@ -181,7 +181,7 @@ class TestFilterModulo:
         assert _BUILTIN in result
 
     def test_blank_search_is_ignored(self) -> None:
-        assert len(_filter_modulo(search="   ")) == len(_MODULO_PRIMITIVES)
+        assert len(_filter_modulo(search="   ")) == len(_BUILTIN_PRIMITIVES)
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ async def _list(lister: AsyncMock, registry: list[object] | None = None, **kwarg
     with (
         patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
         patch(f"{_MODULE}.list_library_primitives", new=lister),
-        patch(f"{_MODULE}._MODULO_PRIMITIVES", registry if registry is not None else [_BUILTIN]),
+        patch(f"{_MODULE}._BUILTIN_PRIMITIVES", registry if registry is not None else [_BUILTIN]),
     ):
         return await list_primitives(_session(), uuid.uuid4(), **kwargs)
 

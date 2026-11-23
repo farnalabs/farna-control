@@ -3,17 +3,17 @@ import { getAutoLoginConfig } from '../config/runtime'
 
 describe('getAutoLoginConfig', () => {
   afterEach(() => {
-    delete window.__MODULO_CONFIG__
+    delete window.__FARNA_CONFIG__
   })
 
   it('does not enable auto-login when runtime credentials are absent', () => {
-    window.__MODULO_CONFIG__ = {}
+    window.__FARNA_CONFIG__ = {}
 
     expect(getAutoLoginConfig()).toBeUndefined()
   })
 
   it('returns explicitly configured demo credentials with default org slug', () => {
-    window.__MODULO_CONFIG__ = {
+    window.__FARNA_CONFIG__ = {
       autoLogin: { username: 'demo', password: 'demo' },
     }
 
@@ -21,7 +21,7 @@ describe('getAutoLoginConfig', () => {
   })
 
   it('returns a custom org slug when provided', () => {
-    window.__MODULO_CONFIG__ = {
+    window.__FARNA_CONFIG__ = {
       autoLogin: { username: 'demo', password: 'demo', orgSlug: 'custom-org' },
     }
 
@@ -29,7 +29,7 @@ describe('getAutoLoginConfig', () => {
   })
 
   it('rejects incomplete or non-string credentials', () => {
-    window.__MODULO_CONFIG__ = {
+    window.__FARNA_CONFIG__ = {
       autoLogin: { username: 'demo', password: undefined },
     }
 

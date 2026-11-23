@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.library_service import get_primitive, get_primitive_by_slug
-from farna.core.library_service._seed_data import MODULO_ORG_ID
+from farna.core.library_service._seed_data import BUILTIN_ORG_ID
 from farna.core.workflow_import_export import BUNDLE_FORMAT_VERSION, materialize_import
 from farna.db.models.agent import Agent
 from farna.db.models.collection_install import CollectionInstall, CollectionInstallEntity
@@ -330,15 +330,15 @@ async def _persist_collection_row(
         # Org-owned DB row — already persisted, nothing to do.
         return collection.id
 
-    await set_rls_org(session, MODULO_ORG_ID)
+    await set_rls_org(session, BUILTIN_ORG_ID)
     try:
-        org_row = await session.get(Organisation, MODULO_ORG_ID)
+        org_row = await session.get(Organisation, BUILTIN_ORG_ID)
         if org_row is None:
             raise CollectionInstallError("The Farna Control sentinel organisation is missing from the database. It is created by migration 0353_baseline_seed_data — run `alembic upgrade head` and retry the install.")
         existing = (
             await session.execute(
                 select(LibraryPrimitive).where(
-                    LibraryPrimitive.organisation_id == MODULO_ORG_ID,
+                    LibraryPrimitive.organisation_id == BUILTIN_ORG_ID,
                     LibraryPrimitive.source == collection.source,
                     LibraryPrimitive.slug == collection.slug,
                     LibraryPrimitive.version == collection.version,

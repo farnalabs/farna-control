@@ -650,12 +650,12 @@ def _response_has_tier(ctx: dict[str, Any], expected_tier: str) -> None:
 
 def _make_tiered_primitive(*, name: str, slug: str, tier: str) -> Any:
     """Build a real LibraryPrimitive with an explicit tier, mirroring _make_modulo."""
-    from farna.core.library_service import MODULO_ORG_ID
+    from farna.core.library_service import BUILTIN_ORG_ID
 
     now = datetime(2025, 1, 1, tzinfo=UTC)
     return LibraryPrimitive(
         id=uuid.uuid4(),
-        organisation_id=MODULO_ORG_ID,
+        organisation_id=BUILTIN_ORG_ID,
         source="modulo",
         primitive_type="schema",
         name=name,

@@ -753,7 +753,7 @@ SANDBOX_AGENT_FAILED_SUMMARY = "Sandbox agent execution failed"
 # field True — marker-based, so an agent-authored failure shape (which never
 # carries the runner's internal marker) can never collide. Single source of
 # truth so runner and executor cannot drift.
-MODULO_SYNTHETIC_FAILURE_MARKER = "modulo_synthetic_failure"
+SYNTHETIC_FAILURE_MARKER = "modulo_synthetic_failure"
 
 
 def _bridge_escalation_failure_detail(exit_code: int, stdout_raw: str) -> str | None:
@@ -10038,7 +10038,7 @@ def _build_sandbox_node_envelope(
         ),
     )
     if output.modulo_synthetic_failure:
-        inner[MODULO_SYNTHETIC_FAILURE_MARKER] = True
+        inner[SYNTHETIC_FAILURE_MARKER] = True
     inner["attempt_key"] = output.attempt_key
     # FAR-1780: type every agent-claimed datum in the envelope ``reported``
     # under the ONE envelope ``provenance`` key (a per-datum map) — the

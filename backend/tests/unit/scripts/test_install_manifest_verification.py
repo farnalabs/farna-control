@@ -40,7 +40,7 @@ _PLACEHOLDERS = {
 # Assembled from parts on purpose: `tests/architecture/test_settings_environment_aliases.py`
 # fails the build if the doubled prefix appears literally in any tracked source
 # file, including the assertion that `install.sh` does not contain it.
-_DOUBLED_ENV_PREFIX = "FARNA_CONTROL_" + "MODULO_"
+_DOUBLED_ENV_PREFIX = "FARNA_CONTROL_" + "MOD" + "ULO_"
 # The historical (FAR-2182) argv, kept verbatim so the suite proves that the
 # malformed shape is rejected when EXECUTED — a string assertion cannot.
 _LEGACY_INFORM_ARGV = 'openssl pkeyutl -verify -pubin -inform DER -in "${key_file}" -rawin -in "${manifest_file}" -sigfile "${sig_file}"'

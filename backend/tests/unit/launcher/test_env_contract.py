@@ -51,11 +51,12 @@ The gate has three halves, all structural:
   re-declared outside the registry;
 * documentation - every ``FARNA_CONTROL_*`` knob ``docs/configuration-reference.md``
   publishes must be accepted by SOME mechanism: this registry, a
-  ``farna.settings`` alias, or a literal read in ``farna/``. A documented
-  spelling that nothing accepts is the FAR-2563 LAN-origins defect (a silent
-  403), so the known gaps are listed explicitly in
-  ``DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS`` - a burn-down list, not a licence:
-  removing an entry is the fix, and an entry that becomes live fails.
+  ``farna.settings`` alias, or a literal read by ``farna/`` or by an explicitly
+  listed out-of-package reader script. A documented spelling that nothing
+  accepts is the FAR-2563 LAN-origins defect (a silent 403), so
+  ``DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS`` remains as the explicit place to record
+  a genuine gap: it is empty today (the burn-down is closed), and the companion
+  test fails if an entry is stale, so it can never become a licence to pass.
 
 Scope: the launcher / installer / container-entrypoint / Helm / API surface,
 i.e. the places that supply process environment to the app directly and the
@@ -663,6 +664,16 @@ def _python_modules() -> list[Path]:
     return sorted(PYTHON_SOURCE_ROOT.rglob("*.py"))
 
 
+#: Python producers/consumers of the documented contract that live OUTSIDE
+#: ``backend/src/farna``. Listed explicitly - adding one is a review gate of its
+#: own, exactly like ``_SERVICE_SCRIPTS`` - so a documented knob read only by a
+#: helper script is proven accepted instead of parked on the burn-down list.
+_EXTRA_READER_SCRIPTS: tuple[str, ...] = (
+    "scripts/backup.py",
+    "scripts/restore.py",
+)
+
+
 def _dotted_module_name(path: Path) -> str:
     parts = path.relative_to(REPO_ROOT).with_suffix("").parts
     return ".".join(parts[parts.index("farna") :])
@@ -688,6 +699,10 @@ def _python_reads() -> list[EnvRead]:
                 project,
             )
         )
+    # The explicitly-listed out-of-package readers. No project re-export map:
+    # they read the canonical literal directly.
+    for relative_path in _EXTRA_READER_SCRIPTS:
+        reads.extend(env_reads((REPO_ROOT / relative_path).read_text(encoding="utf-8"), relative_path))
     return reads
 
 
@@ -736,6 +751,15 @@ def _registry_module_path() -> str:
 def test_python_readers_of_registered_names_go_through_the_registry() -> None:
     problems = reader_problems(_python_reads())
     assert not problems, problems
+
+
+def test_the_reader_sweep_includes_the_backup_scripts() -> None:
+    """Positive half: the passphrase is read outside ``farna/``, so an empty
+    resolved set must never read as clean for the explicitly-listed scripts."""
+    reads = _python_reads()
+    passphrase_reads = [read for read in reads if read.name == "FARNA_CONTROL_BACKUP_PASSPHRASE"]
+
+    assert {read.relative_path for read in passphrase_reads} == {"scripts/backup.py", "scripts/restore.py"}
 
 
 def test_the_python_reader_sweep_sees_the_spa_and_lan_reads() -> None:
@@ -800,23 +824,13 @@ def test_gate_flags_a_redeclared_registered_name() -> None:
 # The documented half: a published knob must be accepted by SOMETHING
 # ---------------------------------------------------------------------------
 
-#: Documented knobs - canonical ``FARNA_CONTROL_*`` or a documented legacy
-#: ``MODULO_*`` spelling - that NO mechanism accepts today: not a registry name,
-#: not a settings alias, and not read as a literal anywhere in ``farna/``. Each
-#: is a real gap of the FAR-2563 class - an operator who sets the documented
-#: spelling is silently ignored - and the fix is to make it live and DELETE its
-#: line here (the companion test fails on a stale entry).
-DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
-    {
-        "FARNA_CONTROL_ADMIN_TOKEN",
-        "FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT",
-        "FARNA_CONTROL_AGENT_MINT_BUDGET_WINDOW_MINUTES",
-        "FARNA_CONTROL_BACKUP_PASSPHRASE",
-        "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS",
-        "FARNA_CONTROL_KUBERNETES_ENABLED",
-        "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS",
-    }
-)
+#: Documented knobs that NO mechanism accepts: not a registry name, not a
+#: settings alias, and not read as a literal by ``farna/`` (or by one of the
+#: explicitly-listed out-of-package reader scripts). It is EMPTY: the burn-down
+#: is closed, and the companion test below still fails if an entry is stale, so
+#: a NEW documented gap must be declared here deliberately - listing one is a
+#: recorded debt, never a way to make the gate pass.
+DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset()
 
 #: Both prefixes a published knob may carry while an old docs page is in flight;
 #: the gate below only requires the canonical half to be accepted.

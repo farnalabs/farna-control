@@ -49,10 +49,10 @@ _log = logging.getLogger(__name__)
 
 # --- Issuance provenance vocabulary (declare once, validate at the boundary) --
 
-ISSUANCE_PROVENANCE_MODULO_MINTED = "modulo_minted"
+ISSUANCE_PROVENANCE_SELF_MINTED = "modulo_minted"
 ISSUANCE_PROVENANCE_BROKER_ISSUED = "broker_issued"
 
-ISSUANCE_PROVENANCES: frozenset[str] = frozenset({ISSUANCE_PROVENANCE_MODULO_MINTED, ISSUANCE_PROVENANCE_BROKER_ISSUED})
+ISSUANCE_PROVENANCES: frozenset[str] = frozenset({ISSUANCE_PROVENANCE_SELF_MINTED, ISSUANCE_PROVENANCE_BROKER_ISSUED})
 
 # The evidence class of a provenance value. ``attested`` = Modulo performed the
 # mint; ``declared`` = Modulo reports a third party's claim. ``observed`` is
@@ -85,7 +85,7 @@ class IssuedRunCredential:
     run_id: uuid.UUID
     node_id: str
     secret: str = field(repr=False, compare=False)
-    provenance: str = ISSUANCE_PROVENANCE_MODULO_MINTED
+    provenance: str = ISSUANCE_PROVENANCE_SELF_MINTED
     provenance_kind: str = PROVENANCE_KIND_ATTESTED
     issuer: str = "modulo"
     expires_at: datetime | None = None
@@ -142,7 +142,7 @@ class ModuloCredentialIssuer:
     """
 
     name: str = "modulo"
-    provenance: str = ISSUANCE_PROVENANCE_MODULO_MINTED
+    provenance: str = ISSUANCE_PROVENANCE_SELF_MINTED
 
     async def issue_for_run(
         self,
