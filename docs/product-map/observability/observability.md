@@ -139,7 +139,15 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       configurable up to 10 per org on the Team tier (3 on Community, where
       webhook rules are also refused 402) (`error_notifications.feature`,
       `api/routes/error_notification_rules.py`,
-      `core/error_tracking/alerting.py`)
+      `core/error_tracking/alerting.py`). Notification-rule configuration is
+      admin-class on every operation, including the list read: the rule set and
+      each rule's `webhook_url` are delivery configuration, so the read reuses
+      the same `error_notification.manage` admin floor as create/update/delete
+      (FAR-2683/FAR-2685); the sibling outbound-endpoint surface is admin-class
+      as well (`admin.notification.manage`, `GET /api/v1/admin/notifications`),
+      and no operator-facing surface reads the rules, so there is no operator
+      need that would justify a separate read key. Operators run pipelines and
+      receive the alerts; they do not own where those alerts are delivered.
 - _Error forwarders behavior detail removed for the MVP cut (see the pointer above)._
 - [x] The forwarder and notification-rule LIST reads are admin-gated, not just
       their writes: `GET /api/v1/errors/forwarders` requires

@@ -76,6 +76,13 @@ async def list_notification_rules(
     # by ``error_notification.manage`` (admin). Reuse that admin floor for the
     # read rather than a viewer/runner read key — a reader who may not manage
     # where alerts are delivered must not be able to enumerate it either.
+    # FAR-2685: confirmed the admin floor is the intended shape, not a stopgap.
+    # No product surface reads this route (there is no notification-rules view;
+    # the frontend only carries the generated API type), no documented operator
+    # need exists, and the sibling outbound-endpoint surface
+    # (``GET /api/v1/admin/notifications``, ``admin.notification.manage``) is
+    # admin-class too. Operators receive the alerts but do not own their
+    # delivery configuration, so no operator read key is warranted.
     principal: TenantPrincipal = require_permission(_CODE_ERROR_NOTIFICATION_MANAGE),
 ) -> dict[str, Any]:
     org_id = principal.organisation_id
