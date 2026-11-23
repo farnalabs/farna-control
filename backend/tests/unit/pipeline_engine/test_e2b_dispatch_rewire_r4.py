@@ -903,9 +903,6 @@ async def test_s4_evidence_probes_run_through_the_sdk_handle() -> None:
         commands = _Commands()
         files = _Files()
 
-        async def close(self) -> None:
-            return None
-
     handle = _Sbx()
 
     with patch("e2b.AsyncSandbox.connect", new=AsyncMock(return_value=handle)):
