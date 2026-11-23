@@ -6118,7 +6118,7 @@ class TestTryAgentFailureElevation:
 
         with patch("farna.settings.get_settings") as mock_get_settings:
             mock_settings = MagicMock()
-            mock_settings.modulo_agent_failure_elevation_enabled = True
+            mock_settings.agent_failure_elevation_enabled = True
             mock_get_settings.return_value = mock_settings
 
             result = _try_agent_failure_elevation(broker, run_id, reason, {"tokens": 100})
@@ -6139,7 +6139,7 @@ class TestTryAgentFailureElevation:
 
         with patch("farna.settings.get_settings") as mock_get_settings:
             mock_settings = MagicMock()
-            mock_settings.modulo_agent_failure_elevation_enabled = False
+            mock_settings.agent_failure_elevation_enabled = False
             mock_get_settings.return_value = mock_settings
 
             result = _try_agent_failure_elevation(broker, run_id, reason, None)
@@ -6202,7 +6202,7 @@ async def test_stream_graph_captures_agent_failure():
         patch("farna.settings.get_settings") as mock_get_settings,
     ):
         mock_settings = MagicMock()
-        mock_settings.modulo_agent_failure_elevation_enabled = True
+        mock_settings.agent_failure_elevation_enabled = True
         mock_get_settings.return_value = mock_settings
 
         status, error_code, _error_detail, _ntu = await executor._stream_graph(
@@ -6256,7 +6256,7 @@ async def test_stream_graph_agent_failure_elevation_disabled():
         patch("farna.settings.get_settings") as mock_get_settings,
     ):
         mock_settings = MagicMock()
-        mock_settings.modulo_agent_failure_elevation_enabled = False
+        mock_settings.agent_failure_elevation_enabled = False
         mock_get_settings.return_value = mock_settings
 
         status, error_code, _error_detail, _ntu = await executor._stream_graph(

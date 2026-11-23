@@ -306,7 +306,7 @@ async def _run_break_glass_watchdog(settings: Settings) -> None:  # NOSONAR S750
     inside ``_run_bootstrap`` (before AND after alembic); a posture failure is
     currently logged as a WARNING (non-fatal) until the non-superuser app role
     migration lands on all envs. This step runs the URL/secret-presence config
-    checks, honouring ``MODULO_BREAK_GLASS_BOOT_FAILURE_MODE``, and publishes
+    checks, honouring ``FARNA_CONTROL_BREAK_GLASS_BOOT_FAILURE_MODE``, and publishes
     the advisory /healthz exposure.
     """
     from farna.api.routes.health import set_break_glass_watchdog
@@ -349,7 +349,7 @@ async def _run_migrations(settings: Settings) -> None:
     The role bootstrap below runs on EVERY boot — warm boots included (it sits
     BEFORE the fast-path return, FAR-1519): it is the reconcile point for role
     credentials, so an upgrade-in-place that later adds
-    ``MODULO_SYSTEM_DATABASE_URL`` repairs the ``farna_control_system`` password on
+    ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` repairs the ``farna_control_system`` password on
     the next restart instead of leaving readiness red until an operator runs
     ``python -m farna.db.bootstrap_role`` by hand. The fast-path still skips
     exactly what it exists to skip — the alembic run and the migration
@@ -560,13 +560,13 @@ async def _seed_modulo_users(settings: Settings) -> None:
     Resolves the engine/factory through THIS layer's seams (the DB layer stays
     free of api imports); behaviour unchanged (FAR-671). Attribute lookups on
     the dependencies module keep the test seams patchable at call time. See
-    the promoted function for the MODULO_USERS contract.
+    the promoted function for the FARNA_CONTROL_USERS contract.
     """
-    if not settings.modulo_users:
+    if not settings.users:
         return
     engine = dependencies.get_or_create_engine(settings)
     factory = dependencies.get_or_create_session_factory(engine)
-    await seed_modulo_users(factory, settings.modulo_users)
+    await seed_modulo_users(factory, settings.users)
 
 
 # The single-user seeder and the rehash helper were promoted verbatim into
@@ -577,13 +577,13 @@ _rehash_existing_user = rehash_existing_user
 
 
 async def _seed_sso_providers(settings: Settings) -> None:
-    """Seed SSO providers from MODULO_OIDC_PROVIDERS env var into DB table.
+    """Seed SSO providers from FARNA_CONTROL_OIDC_PROVIDERS env var into DB table.
 
     This is a one-time migration from the deprecated env-var approach to the
-    DB-backed admin UI approach. Skips if MODULO_OIDC_PROVIDERS is empty,
+    DB-backed admin UI approach. Skips if FARNA_CONTROL_OIDC_PROVIDERS is empty,
     or if any providers already exist in the DB.
     """
-    if not settings.modulo_oidc_providers or settings.modulo_oidc_providers == "[]":
+    if not settings.oidc_providers or settings.oidc_providers == "[]":
         return
 
     from sqlalchemy import select
@@ -608,7 +608,7 @@ async def _seed_sso_providers(settings: Settings) -> None:
             return
 
         try:
-            entries = json.loads(settings.modulo_oidc_providers)
+            entries = json.loads(settings.oidc_providers)
         except (json.JSONDecodeError, TypeError):
             logger.warning("startup.sso_providers_invalid_json")
             return
@@ -630,7 +630,7 @@ async def _seed_sso_providers(settings: Settings) -> None:
                 scopes=json.dumps(["openid", "profile", "email"]),
                 enabled=True,
                 auto_provision=True,
-                default_role=settings.modulo_sso_default_role,
+                default_role=settings.sso_default_role,
                 organisation_id=org.id,
             )
             session.add(provider)
@@ -816,7 +816,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # FAR-1771: event-loop stall attribution on THIS process's loop (the
     # readiness probe that logs "event-loop stall detected" runs here).
-    # Opt-in via MODULO_SLOW_CALLBACK_WARN_MS; unset/0 is a pure no-op.
+    # Opt-in via FARNA_CONTROL_SLOW_CALLBACK_WARN_MS; unset/0 is a pure no-op.
     # Fail-open: observability must never block boot.
     try:
         from farna.core.health_alerts import install_event_loop_stall_attribution
@@ -849,7 +849,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def _configure_license_and_otel(settings: Settings) -> None:
     """Configure the license public key, OTel, and basic runtime warnings."""
-    if settings.modulo_public_url in ("", "http://localhost:8000"):
+    if settings.public_url in ("", "http://localhost:8000"):
         logger.warning("startup.default_public_url")
 
     # FAR-2061 / FAR-2091 / FAR-2093: the licence trust anchor is process
@@ -860,13 +860,13 @@ def _configure_license_and_otel(settings: Settings) -> None:
 
     configure_license_trust_anchor(settings)
 
-    if settings.modulo_db.lower() == "sqlite":
+    if settings.db.lower() == "sqlite":
         logger.warning("startup.sqlite_mode")
 
     if not settings.redis_url:
         raise RuntimeError("REDIS_URL is required. Farna Control uses Redis for event coordination, rate limiting, caching, and session state. Provision Upstash Redis and set REDIS_URL in fly.toml.")
     setup_otel(
-        service_name=settings.modulo_otel_service_name,
+        service_name=settings.otel_service_name,
         telemetry_enabled=is_telemetry_enabled(),
     )
 
@@ -900,7 +900,7 @@ def _configure_capacity_platform_probe(settings: Settings) -> None:
 
 def _discover_plugins(settings: Settings) -> None:
     """Discover installed plugins if plugin discovery is enabled."""
-    if settings.modulo_plugin_discovery:
+    if settings.plugin_discovery:
         from farna.core.plugin_registry import get_plugin_registry
 
         registry = get_plugin_registry()
@@ -953,9 +953,9 @@ async def _run_boot_guards_and_seeds(settings: Settings) -> None:
     except Exception:
         logger.warning("startup.default_org_failed", exc_info=True)
 
-    # Seed MODULO_USERS env var entries into the user table (idempotent).
+    # Seed FARNA_CONTROL_USERS env var entries into the user table (idempotent).
     # Non-fatal: if tables are missing, seeding is retried on next restart.
-    await _boot_seed("modulo_users", _seed_modulo_users(settings))
+    await _boot_seed("users", _seed_modulo_users(settings))
 
     # Seed SSO providers from deprecated env vars into the DB table (idempotent).
     await _boot_seed("sso_providers", _seed_sso_providers(settings))
@@ -974,13 +974,13 @@ async def _run_boot_guards_and_seeds(settings: Settings) -> None:
     await _boot_seed("cost_components", _seed_cost_components(settings))
 
     # Gated demo-org seed framework (FAR-450). Disabled unless
-    # MODULO_SEED_DEMO_ORGS is set; DEMO_ORGS is empty by default so nothing
+    # FARNA_CONTROL_SEED_DEMO_ORGS is set; DEMO_ORGS is empty by default so nothing
     # seeds until follow-up tickets populate it. Non-fatal like the rest.
-    if settings.modulo_seed_demo_orgs:
+    if settings.seed_demo_orgs:
         await _boot_seed("demo_orgs", _seed_demo_orgs(settings))
 
-    # Demo auto-login experience (FAR-535). Fires only when MODULO_DEMO_ENABLED
-    # is truthy AND MODULO_DEMO_USER/MODULO_DEMO_PASSWORD are set — otherwise the
+    # Demo auto-login experience (FAR-535). Fires only when FARNA_CONTROL_DEMO_ENABLED
+    # is truthy AND FARNA_CONTROL_DEMO_USER/FARNA_CONTROL_DEMO_PASSWORD are set — otherwise the
     # seed is a no-op and the default release path behaviour is unchanged.
     await _boot_seed("demo_user", _seed_demo_login(settings))
 
@@ -1126,7 +1126,7 @@ async def _seed_demo_login(settings: Settings) -> str | None:
     """Seed the demo org/user + sample data (FAR-535).
 
     Idempotent and self-gating: ``seed_demo_runtime`` returns None (and writes
-    nothing) unless MODULO_DEMO_ENABLED + MODULO_DEMO_USER + MODULO_DEMO_PASSWORD
+    nothing) unless FARNA_CONTROL_DEMO_ENABLED + FARNA_CONTROL_DEMO_USER + FARNA_CONTROL_DEMO_PASSWORD
     are set. Delegates to the seed module's single transaction wrapper with the
     DI engine-backed session factory — one wrapper, one engine path per caller.
 
@@ -1436,14 +1436,14 @@ app.openapi = _openapi_schema  # type: ignore[method-assign]
 # with the nginx values above.
 
 # The names live in ONE registry shared with the launchers and the gates
-# (FAR-2563). The macOS bundle launcher exported the pre-rebrand
-# ``MODULO_SERVE_SPA`` / ``MODULO_FRONTEND_DIST`` and the Windows launcher
-# exported neither, while this module read the ``FARNA_CONTROL_`` spelling: on
-# macOS the built SPA was never mounted (``/`` answered 404), and on Windows
-# single-port SPA serving did not exist at all. Readers go through ``read_env``
-# so an already-installed bundle that still exports the legacy name keeps
-# working, and so the legacy ``MODULO_LAN_ORIGINS`` spelling (published by the
-# configuration reference before the rebrand) is still honoured.
+# (FAR-2563). Before that fix the macOS bundle launcher exported the product's
+# pre-rebrand names and the Windows launcher exported neither, while this module
+# read the ``FARNA_CONTROL_`` spelling: on macOS the built SPA was never mounted
+# (``/`` answered 404), and on Windows single-port SPA serving did not exist at
+# all. Readers go through ``read_env``, which resolves ONLY the canonical name
+# (``env_contract.candidate_names`` has no legacy fallback) — including the
+# canonical ``FARNA_CONTROL_LAN_ORIGINS`` knob — so a producer that exports a
+# pre-rebrand spelling simply does not reach these readers.
 _SERVE_SPA_ENV = SERVE_SPA_ENV
 _FRONTEND_DIST_ENV = FRONTEND_DIST_ENV
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
@@ -1551,8 +1551,8 @@ def _init_once_mount_spa(app: FastAPI, env: Mapping[str, str] | None = None) -> 
 # Flag-gated (default OFF — Docker/Fly unchanged). Native `farna-control start`
 # (and its bundle launchers) set FARNA_CONTROL_SERVE_SPA=1 +
 # FARNA_CONTROL_FRONTEND_DIST=... to serve the SPA from the API port behind the
-# loopback Host/Origin allowlist. The legacy MODULO_* spellings are still read
-# for bundles installed before the rename (see farna.launcher.env_contract).
+# loopback Host/Origin allowlist. The names are the single canonical contract in
+# farna.launcher.env_contract.
 # Prefixed `_init_once_` so the architecture side-effect test permits this
 # single run-once module-level call (see tests/architecture/test_module_side_effects.py).
 _init_once_mount_spa(app, os.environ)

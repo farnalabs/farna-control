@@ -95,6 +95,9 @@ __all__ = [
     # cannot see the call sites because all three imports are lazy (function-local).
     "_validate_sandbox_managed_inputs_config",
     # --- Service methods exercised by tests / framework wiring (no direct prod call site vulture can see) ---
+    # pydantic-settings invokes this hook BY NAME when building a Settings
+    # instance, so there is no call site for vulture to follow (settings.py).
+    "settings_customise_sources",
     "get_override",
     "expire_stale",
     "get_gate",
@@ -439,4 +442,9 @@ __all__ = [
     #     call sites are the relay tests' stand-ins for ops/diagnostic use) ---
     "wait_ready",  # EventRelay: awaits the subscribe-confirmation signal
     "get_active_relay",  # relay singleton accessor (diagnostic/test-referenced)
+    # --- executor_parts split: public evidence helpers reached by the executor
+    #     through the _ref() call-time bridge, which static analysis cannot see ---
+    "node_declared_success",
+    "compute_work_intact",
+    "build_default_evidence_provider",
 ]

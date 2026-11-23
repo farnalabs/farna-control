@@ -1778,8 +1778,8 @@ jobs:
           if [[ "$dmg_staple_ticket_unavailable" -eq 1 ]]; then
             INSTALL_ENV=(
               env
-              MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1
-              MODULO_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"
+              FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET=1
+              FARNA_CONTROL_MACOS_REHEARSAL_ALLOW_UNSTAPLED_TICKET_REASON="$dmg_ticket_deferral_reason"
             )
           fi
 
@@ -1788,7 +1788,7 @@ jobs:
           # shellcheck disable=SC2016
           run_assertion "install_sh" \
             ${INSTALL_ENV[@]+"${INSTALL_ENV[@]}"} \
-            bash -c 'MODULO_INSTALL_ROOT="$1" MODULO_DATA_DIR="$2" scripts/macos/install.sh "$3"' \
+            bash -c 'FARNA_CONTROL_INSTALL_ROOT="$1" FARNA_CONTROL_DATA_DIR="$2" scripts/macos/install.sh "$3"' \
             bash "$INSTALL_ROOT" "$DATA" "$DMG_WITH_SPACES" || exit 1
           # END install_sh_assertion
 

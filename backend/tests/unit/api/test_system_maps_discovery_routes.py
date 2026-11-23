@@ -74,8 +74,8 @@ def _make_settings(*, dev_mode: bool = True) -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_dev_mode=dev_mode,
+        admin_password="testpass",
+        dev_mode=dev_mode,
     )
 
 
@@ -204,7 +204,7 @@ def test_discovery_denies_without_system_maps_grant() -> None:
 def test_discovery_allows_operator_without_dev_mode() -> None:
     """FAR-2595: an operator with the flag on is NOT bounced by dev mode.
 
-    The deployment runs with ``modulo_dev_mode=False`` (a self-hosted Alpha
+    The deployment runs with ``dev_mode=False`` (a self-hosted Alpha
     default); discovery must still reach the handler and persist a draft.
     """
     mock_session = _make_mock_session()

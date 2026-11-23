@@ -1,7 +1,7 @@
 """HTTP execution for ``modulo apply`` (FAR-681, slices 1+2).
 
-Transport: sync httpx against MODULO_URL with ``Authorization: Bearer
-<MODULO_API_KEY>`` (the server authenticates bearer tokens as either a user
+Transport: sync httpx against FARNA_CONTROL_URL with ``Authorization: Bearer
+<FARNA_CONTROL_API_KEY>`` (the server authenticates bearer tokens as either a user
 JWT or an ``mk_`` org API key; the API key scopes RLS/permissions to the org).
 
 Applies schemas (+ versions), model_backends, pipelines (agent name-refs

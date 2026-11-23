@@ -168,7 +168,7 @@ _ERROR_ENDPOINTS: list[tuple[str, object, str, object, bool, bool, bool]] = [
         "ingest",
         _make_errors_app,
         f"{_EP}._service.ingest_batch",
-        lambda c: c.post("/api/v1/errors/ingest", json=INGEST_PAYLOAD, headers={"X-Modulo-Error-Token": "test"}),
+        lambda c: c.post("/api/v1/errors/ingest", json=INGEST_PAYLOAD, headers={"X-Farna-Control-Error-Token": "test"}),
         False,
         True,
         True,

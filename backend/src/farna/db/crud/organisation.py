@@ -918,7 +918,7 @@ async def resolve_login_tenant(
     ``is_single_org`` is exactly the negation of ``login-context``'s
     ``multi_org`` answer:
 
-    * ``modulo_multi_org_enabled is False`` (the ADR 005 single-org invariant,
+    * ``multi_org_enabled is False`` (the ADR 005 single-org invariant,
       and the default) -> always single-org. ``org`` is the identified tenant
       when there is exactly one login-active org, otherwise ``None``.
     * multi-org enabled -> single-org only when there is exactly one
@@ -937,7 +937,7 @@ async def resolve_login_tenant(
     """
     rows = await list_login_active_orgs(session, limit=2)
 
-    if settings.modulo_multi_org_enabled is False:
+    if settings.multi_org_enabled is False:
         # ADR 005: single-org invariant — report single-org regardless of how
         # many rows exist, but only identify a tenant when it is unambiguous.
         return True, rows[0] if len(rows) == 1 else None

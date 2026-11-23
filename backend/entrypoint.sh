@@ -40,7 +40,7 @@ if [ -n "${FARNA_CONTROL_SNAPSHOT_DIR:-}" ]; then
   fi
   if [ -n "$snapshot" ]; then
     echo "Pre-upgrade snapshot verified: $snapshot"
-    echo "  Restore a bad release with: scripts/compose-restore.sh --confirm $snapshot"
+    echo "  Restore a bad release with: ./compose-restore.sh --confirm $snapshot"
   else
     echo "No pre-upgrade snapshot was needed (fresh database or no migration pending) — see the line above."
   fi

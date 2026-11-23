@@ -1767,7 +1767,7 @@ def test_production_drain_bootstrap_does_not_deadlock_the_deploy() -> None:
     violations: list[str] = []
 
     enter = _run("Enter production sandbox drain")
-    if "MODULO_DEPLOY_DRAIN_TOKEN is not configured" not in enter:
+    if "FARNA_CONTROL_DEPLOY_DRAIN_TOKEN is not configured" not in enter:
         violations.append("  the enter step no longer names the missing-token bootstrap case")
     if "::warning::" not in enter:
         violations.append("  the enter step degrades silently (no ::warning::) when the freeze is unavailable")
@@ -1787,7 +1787,7 @@ def test_production_drain_bootstrap_does_not_deadlock_the_deploy() -> None:
     clear = _run("Clear production sandbox drain")
     if '= "404"' not in clear:
         violations.append("  the clear step does not tolerate the live build lacking the drain route")
-    if "MODULO_DEPLOY_DRAIN_TOKEN is not configured" not in clear:
+    if "FARNA_CONTROL_DEPLOY_DRAIN_TOKEN is not configured" not in clear:
         violations.append("  the clear step does not tolerate nothing being engaged without a token")
     if "exit 1" not in clear:
         violations.append("  the clear step no longer fails closed when a real freeze cannot be cleared")
@@ -1801,7 +1801,7 @@ def test_production_active_run_wait_requires_an_active_admission_freeze() -> Non
     Waiting for ``active_sandbox_runs`` to reach zero is only meaningful when
     new sandbox runs are blocked: with admission still open the count can rise
     at any moment and a zero window may never appear. Observed on 33306b9: the
-    drain freeze was skipped because ``MODULO_DEPLOY_DRAIN_TOKEN`` was
+    drain freeze was skipped because ``FARNA_CONTROL_DEPLOY_DRAIN_TOKEN`` was
     unconfigured, yet the wait gate still ran for the full 60 minutes and
     failed the production deploy while continuous sandbox activity kept the
     count above zero. The gate must read the live ``deployment_drain`` flag and

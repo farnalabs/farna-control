@@ -69,14 +69,14 @@ def _make_stripe_settings(
 ) -> Settings:
     overrides: dict[str, str] = {}
     if license_private_key is not None:
-        overrides["modulo_license_private_key"] = license_private_key
+        overrides["license_private_key"] = license_private_key
     if redis_url is not None:
         overrides["redis_url"] = redis_url
     return Settings(
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
         stripe_secret_key=secret_key,
         stripe_webhook_secret=webhook_secret,
         **overrides,
@@ -503,7 +503,7 @@ def _alert_settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": _VALID_32,
         "fernet_key": _VALID_32,
-        "modulo_admin_password": "testpass",
+        "admin_password": "testpass",
         "stripe_secret_key": "sk_live_123",
         "stripe_webhook_secret": _TEST_SECRET,
         "smtp_host": "smtp.example.com",

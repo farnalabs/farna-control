@@ -153,7 +153,7 @@ def test_poisoned_artifact_refusal_and_verbatim_restore_recovers_previous(tmp_pa
     assert str(snapshot_path) in refusal
     restore_line = _upgrade_restore_head(refusal)
     assert f"ln -sfn versions/1.1.0 {plant['install_root'] / 'current'}" in restore_line
-    assert f"farna-control restore {snapshot_path} --data-dir {plant['data_dir']} --yes" in restore_line
+    assert f'farna-control restore {snapshot_path} --data-dir {plant["data_dir"]} --yes --db-url "$DATABASE_ADMIN_URL"' in restore_line
     # The EMITTED command executes VERBATIM end-to-end: a PATH shim stands
     # in for the `farna-control` binary (recording the argv), so the REAL `ln -sfn`
     # swap-back runs — a crash-safe POSIX primitive, never a sub-GUI copy.
@@ -177,7 +177,8 @@ def test_poisoned_artifact_refusal_and_verbatim_restore_recovers_previous(tmp_pa
     assert final_args[0] == "restore"
     assert final_args[1] == str(snapshot_path)
     assert "--data-dir" in final_args
-    assert final_args[-1] == "--yes"
+    assert "--yes" in final_args
+    assert "--db-url" in final_args
     # The restore pointer now names the PREVIOUS release again, yet the
     # upgrade marker (still on disk) recorded the snapshot for recovery.
     current_link = plant["install_root"] / "current"

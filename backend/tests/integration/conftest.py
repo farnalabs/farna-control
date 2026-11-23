@@ -45,17 +45,11 @@ os.environ.setdefault("SECRET_KEY", "a" * 32)
 os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 os.environ.setdefault("REDIS_URL", "")
 os.environ.setdefault("FARNA_CONTROL_ADMIN_PASSWORD", "test")
-# Settings fields with NO explicit alias (modulo_csrf_enabled, modulo_auth_rate_limit_enabled,
-# modulo_dev_mode) derive their env names as MODULO_CSRF_ENABLED, MODULO_AUTH_RATE_LIMIT_ENABLED,
-# MODULO_DEV_MODE (without the FARNA_CONTROL_ prefix). The launcher uses the
-# FARNA_CONTROL_* prefix. Integration tests must set BOTH spellings because
-# different consumers read different names: pydantic-settings reads the MODULO_*
-# names; some test fixtures read the FARNA_CONTROL_* names directly.
-os.environ.setdefault("MODULO_AUTH_RATE_LIMIT_ENABLED", "false")
+# These knobs declare an explicit FARNA_CONTROL_* alias, which is the one
+# spelling every consumer reads: pydantic-settings and the fixtures that read
+# os.environ directly both resolve it.
 os.environ.setdefault("FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED", "false")
-os.environ.setdefault("MODULO_CSRF_ENABLED", "false")
 os.environ.setdefault("FARNA_CONTROL_CSRF_ENABLED", "false")
-os.environ.setdefault("MODULO_DEV_MODE", "true")
 os.environ.setdefault("FARNA_CONTROL_DEV_MODE", "true")
 
 BACKEND_ROOT = Path(__file__).parents[2]
@@ -138,7 +132,7 @@ def pytest_terminal_summary(
         for nodeid, detail in _leaked_asyncpg_connections:
             terminalreporter.write_line(f"  {nodeid}: {detail}", red=True)
         terminalreporter.write_line(
-            f"  {len(_leaked_asyncpg_connections)} unclosed asyncpg connection(s) were attributed to the test that leaked them and quarantined so they cannot fail an unrelated test. Fix the leaking session/engine; set MODULO_INTEGRATION_STRICT_CONNECTION_LEAKS=1 to make them a hard failure.",
+            f"  {len(_leaked_asyncpg_connections)} unclosed asyncpg connection(s) were attributed to the test that leaked them and quarantined so they cannot fail an unrelated test. Fix the leaking session/engine; set FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS=1 to make them a hard failure.",
             yellow=True,
         )
 
@@ -296,7 +290,7 @@ def db_url(
     # every API-backed integration test fails with a 503.
     session_monkeypatch.setenv("DATABASE_URL", url)
     # Point the system (BYPASSRLS) engine at the same migrated testcontainer.
-    # Without MODULO_SYSTEM_DATABASE_URL set, the process-global system engine
+    # Without FARNA_CONTROL_SYSTEM_DATABASE_URL set, the process-global system engine
     # falls back to the scoped app role and system_engine_is_fallback() becomes
     # True, so pre-auth paths (webhook trigger delivery, cross-org reads) refuse
     # with 503 (system_bootstrap_degraded) and every integration test that
@@ -313,15 +307,10 @@ def db_url(
     # mirrors production: deploy/fly/bootstrap_db.derive_system_database_url
     # swaps the runtime URL's username to ``farna_control_system``.
     #
-    # The Settings field ``modulo_system_database_url`` has NO explicit alias, so
-    # pydantic derives its env name as ``MODULO_SYSTEM_DATABASE_URL`` (not the
-    # launcher's ``FARNA_CONTROL_SYSTEM_DATABASE_URL``). Integration tests
-    # must set BOTH spellings because different consumers read different names:
-    # pydantic-settings reads the MODULO_* name; some test fixtures read the
-    # FARNA_CONTROL_* name directly via os.environ subscript.
+    # ``system_database_url`` declares ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` as
+    # its alias, and the fixtures that read os.environ directly use the same
+    # name, so one spelling satisfies both.
     sys_url = _with_credentials(url, "farna_control_system", "syspass")
-    session_monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", sys_url)
-    session_monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", sys_url)
     session_monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", sys_url)
     return url
 
@@ -383,7 +372,7 @@ def migrated_db_url(db_url: str, session_monkeypatch: pytest.MonkeyPatch) -> str
     app_url = _with_credentials(db_url, "farna_control_app", "apppass")
     bg_url = _with_credentials(db_url, "farna_control_breakglass", "bgpass")
     # farna_control_system: cross-org system-cron role (fail-closed since #2162 —
-    # cron_helpers/saq_worker raise RuntimeError when MODULO_SYSTEM_DATABASE_URL
+    # cron_helpers/saq_worker raise RuntimeError when FARNA_CONTROL_SYSTEM_DATABASE_URL
     # is unset). Provision it with a KNOWN password (bootstrap_role.py parses
     # the role/password out of this URL) and expose it to the session so
     # get_settings() resolves the system engine exactly as in production.
@@ -417,7 +406,6 @@ def migrated_db_url(db_url: str, session_monkeypatch: pytest.MonkeyPatch) -> str
                         "DATABASE_ADMIN_URL": db_url,
                         "FARNA_CONTROL_BREAK_GLASS_DATABASE_URL": bg_url,
                         "FARNA_CONTROL_SYSTEM_DATABASE_URL": sys_url,
-                        "MODULO_SYSTEM_DATABASE_URL": sys_url,
                     },
                 ):
                     await bootstrap_roles(db_url, app_url)
@@ -432,16 +420,11 @@ def migrated_db_url(db_url: str, session_monkeypatch: pytest.MonkeyPatch) -> str
         await eng.dispose()
 
     # Persist for the session: settings consumers (cron_helpers/saq_worker
-    # system engine) read get_settings().modulo_system_database_url at test
+    # system engine) read get_settings().system_database_url at test
     # time, after the per-test get_settings.cache_clear().
-    # The Settings field ``modulo_system_database_url`` has NO explicit alias,
-    # so pydantic derives its env name as ``MODULO_SYSTEM_DATABASE_URL``.
-    # Integration tests must set BOTH spellings because different consumers read
-    # different names: pydantic-settings reads the MODULO_* name; some test
-    # fixtures read the FARNA_CONTROL_* name directly via os.environ
-    # subscript.
-    session_monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", sys_url)
-    session_monkeypatch.setenv("MODULO_SYSTEM_DATABASE_URL", sys_url)
+    # ``system_database_url`` declares ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` as
+    # its alias, and the fixtures that read os.environ directly use the same
+    # name, so one spelling satisfies both.
     session_monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", sys_url)
 
     async def _patch_schema() -> None:
@@ -640,7 +623,7 @@ async def cron_helpers_rls_engine(non_superuser_role: str) -> Generator[None, No
 # surfaced against the test (or fixture) that actually caused it, and consume it
 # there so it cannot fail an unrelated test afterwards. The leak is never
 # swallowed silently: it is logged at ERROR with the test id and repeated in the
-# session summary. Set ``MODULO_INTEGRATION_STRICT_CONNECTION_LEAKS=1`` to make
+# session summary. Set ``FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS=1`` to make
 # a detected leak fail the leaking test outright (the deterministic replacement
 # for the old random-attribution failure) once the remaining sites are fixed.
 #
@@ -1134,10 +1117,10 @@ async def integration_client(db_url: str, app_engine: AsyncEngine) -> AsyncClien
         database_url=db_url,
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_csrf_enabled=False,
-        modulo_auth_rate_limit_enabled=False,
+        csrf_enabled=False,
+        auth_rate_limit_enabled=False,
         redis_url="",
-        modulo_admin_password="",
+        admin_password="",
     )
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:

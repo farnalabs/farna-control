@@ -163,8 +163,8 @@ class FakeAsyncSession:
 
 def _settings(private_key: str = _TEST_PRIV):
     return types.SimpleNamespace(
-        modulo_license_private_key=private_key,
-        modulo_license_key="",
+        license_private_key=private_key,
+        license_key="",
     )
 
 

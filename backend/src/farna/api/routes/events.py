@@ -286,8 +286,8 @@ async def sse_event_stream(
             org_id,
             str(principal.user_id),
             queue,
-            settings.modulo_sse_max_connections_per_org,
-            settings.modulo_sse_max_connections_per_user,
+            settings.sse_max_connections_per_org,
+            settings.sse_max_connections_per_user,
         )
     except HTTPException:
         await event_bus.unsubscribe(org_id, queue)
@@ -304,7 +304,7 @@ async def sse_event_stream(
         _pump_events(
             request,
             queue,
-            settings.modulo_sse_zombie_timeout_seconds,
+            settings.sse_zombie_timeout_seconds,
             org_id,
             event_bus,
             relay,

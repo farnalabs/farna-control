@@ -76,7 +76,7 @@ entities:
             label: Do work
             position: {x: 0, y: 0}
             env_vars:
-              MODULO_USERS: admin:pw123
+              FARNA_CONTROL_USERS: admin:pw123
               LOG_LEVEL: debug
             context_files:
               runbook.md: token ghp_00112233445566778899aabbccddeeff00112233

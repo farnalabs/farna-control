@@ -1,7 +1,7 @@
 """Idempotent demo-org seed for the /demo auto-login experience (FAR-535).
 
-GATED: runs only when ``MODULO_DEMO_ENABLED`` is truthy AND both
-``MODULO_DEMO_USER`` (email) and ``MODULO_DEMO_PASSWORD`` are non-empty
+GATED: runs only when ``FARNA_CONTROL_DEMO_ENABLED`` is truthy AND both
+``FARNA_CONTROL_DEMO_USER`` (email) and ``FARNA_CONTROL_DEMO_PASSWORD`` are non-empty
 (see ``farna.core.demo`` — the neutral gate both this seed and the auth
 route share). Default off — the seed is a no-op otherwise, so the
 default release path behaviour is unchanged.
@@ -2886,7 +2886,7 @@ async def _seed_demo_account(session: AsyncSession, email: str, password: str) -
 
     changed = False
     # Re-stamp the hash every run when the stored hash no longer verifies
-    # against the env password, so rotating MODULO_DEMO_PASSWORD takes effect
+    # against the env password, so rotating FARNA_CONTROL_DEMO_PASSWORD takes effect
     # on the next boot without manual DB surgery. bcrypt hashes are salted, so
     # the comparison must go through verify_password (never hash-to-hash).
     # Corrupt-hash safety: a malformed stored hash must not crash the boot
@@ -3230,9 +3230,9 @@ async def seed_demo(session: AsyncSession) -> str | None:
         _log.info("demo_seed.disabled")
         return None
     # ADR 005: the demo seed creates a second org (slug "demo"). In single-org
-    # deployments (modulo_multi_org_enabled=False), this must not happen — the
+    # deployments (multi_org_enabled=False), this must not happen — the
     # demo login endpoint returns 404 and the demo org is never created.
-    if not settings.modulo_multi_org_enabled:
+    if not settings.multi_org_enabled:
         _log.info("demo_seed.skipped_single_org")
         return None
     email, password = config
@@ -3243,7 +3243,7 @@ async def seed_demo(session: AsyncSession) -> str | None:
     account = await _seed_demo_account(session, email, password)
     await _seed_demo_membership(session, account, org)
 
-    # Operator-misconfiguration observability: MODULO_DEMO_USER should name a
+    # Operator-misconfiguration observability: FARNA_CONTROL_DEMO_USER should name a
     # dedicated account. If it named an existing account with memberships in
     # other orgs, the demo endpoint still only ever mints the demo-org viewer
     # session (see auth._resolve_demo_org_membership) — but flag the stray
@@ -3311,7 +3311,7 @@ def main() -> None:
     """Standalone entry: seed the demo org/user when configured, then exit."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     if demo_login_config(get_settings()) is None:
-        print("[demo-seed] disabled — set MODULO_DEMO_ENABLED, MODULO_DEMO_USER, MODULO_DEMO_PASSWORD")  # noqa: T201
+        print("[demo-seed] disabled — set FARNA_CONTROL_DEMO_ENABLED, FARNA_CONTROL_DEMO_USER, FARNA_CONTROL_DEMO_PASSWORD")  # noqa: T201
         return
     try:
         summary = asyncio.run(seed_demo_runtime())

@@ -221,7 +221,7 @@ async def test_demo_org_seed_failure_is_attributed_when_the_org_row_survives(
 
     monkeypatch.setattr(demo_mod, "DEMO_ORGS", [_DEMO_SPEC])
     # Real failure path: no signing key -> LicenseSigningError BEFORE any DB write.
-    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(modulo_license_private_key=""))
+    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(license_private_key=""))
 
     await seed_demo_orgs(factory)
     await _drain()
@@ -247,7 +247,7 @@ async def test_demo_org_seed_failure_keeps_the_announced_drop_when_no_org_row_su
     """
     assert org_id_var.get() is None
     monkeypatch.setattr(demo_mod, "DEMO_ORGS", [_DEMO_SPEC])
-    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(modulo_license_private_key=""))
+    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(license_private_key=""))
 
     await seed_demo_orgs(factory)
     await _drain()
@@ -280,7 +280,7 @@ async def test_demo_org_seed_failure_with_no_slug_skips_attribution(
         "password": "pw",
     }
     monkeypatch.setattr(demo_mod, "DEMO_ORGS", [no_slug_spec])
-    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(modulo_license_private_key=""))
+    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(license_private_key=""))
 
     await seed_demo_orgs(factory)
     await _drain()
@@ -309,7 +309,7 @@ async def test_demo_org_resolution_failure_degrades_to_no_attribution(
         await conn.execute(text("DROP TABLE organisations"))
 
     monkeypatch.setattr(demo_mod, "DEMO_ORGS", [_DEMO_SPEC])
-    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(modulo_license_private_key=""))
+    monkeypatch.setattr(demo_mod, "get_settings", lambda: types.SimpleNamespace(license_private_key=""))
 
     await seed_demo_orgs(factory)
     await _drain()

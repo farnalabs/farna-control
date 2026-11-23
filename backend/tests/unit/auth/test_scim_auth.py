@@ -24,8 +24,8 @@ def _settings(scim_token: str = "valid-scim-token", default_org_id: str = "") ->
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_scim_token=scim_token,
-        modulo_scim_default_org_id=default_org_id,
+        scim_token=scim_token,
+        scim_default_org_id=default_org_id,
     )
 
 

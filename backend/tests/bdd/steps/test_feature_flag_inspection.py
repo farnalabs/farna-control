@@ -109,8 +109,8 @@ def _setup_client(ctx: dict[str, Any]) -> None:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_valid_32,
         fernet_key=_valid_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="",
+        admin_password="testpass",
+        license_key="",
         # No real Redis for hermetic BDD steps: the feature-flags routes read
         # and write a 60s-TTL cache under ``feature-flags:{org_id}``. In the
         # full BDD suite Redis IS up, so a GET from one scenario writes a

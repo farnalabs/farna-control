@@ -277,7 +277,7 @@ INVENTORY: dict[str, PathRecord] = {
     "seed_demo_org": _exempt("demo_fixture"),
     "seed_demo_orgs": _exempt("demo_fixture"),
     # --- boot seeds enumerated from api/main.py ---------------------------
-    "boot:modulo_users": _audited(
+    "boot:users": _audited(
         # FAR-1561: the seeder appends a SYSTEM-actor `user_seeded` (and
         # `user_rehashed`, which can GRANT the admin role) in the seeding
         # transaction — grant and record commit atomically.
@@ -443,7 +443,7 @@ def test_enumeration_finds_the_expected_registration_sites() -> None:
     assert "execute_run" in _saq_runs_function_names()
     assert "fire_due_triggers" in _saq_cron_function_names()
     assert "reconcile_journeys" in _reconciler_function_names()
-    assert "boot:modulo_users" in _boot_seed_labels()
+    assert "boot:users" in _boot_seed_labels()
 
 
 def test_suite_run_caller_scan_flags_a_future_public_caller(tmp_path: Path) -> None:

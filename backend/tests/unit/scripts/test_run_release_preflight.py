@@ -1464,7 +1464,7 @@ def test_preflight_passes_secrets_but_never_prints_them():
         "AZURE_TENANT_ID",
         "AZURE_SUBSCRIPTION_ID",
         "BUNDLE_MANIFEST_SIGNING_KEY",
-        "MODULO_RELEASE_PR_TOKEN",
+        "FARNA_CONTROL_RELEASE_PR_TOKEN",
     ):
         assert env[secret_name] == f"${{{{ secrets.{secret_name} }}}}"
     # The run block must reference the environment, never interpolate a secret.

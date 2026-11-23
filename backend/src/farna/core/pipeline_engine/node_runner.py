@@ -57,7 +57,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import asdict as _dc_asdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dataclasses import is_dataclass as _dc_is_dataclass
 from dataclasses import replace as _dc_replace
 from datetime import UTC, datetime
@@ -275,7 +275,7 @@ def _node_input_work_item_refs(node_id: str, run_context: dict[str, Any]) -> lis
     entry, so caller input can never forge a malformed stamp through here.
     This NEVER raises — a read or validation failure degrades to fewer/empty
     refs with a warning log plus a counter event. Capped at the unified
-    ``modulo_work_item_refs_cap`` with the deterministic rank-ascending drop
+    ``work_item_refs_cap`` with the deterministic rank-ascending drop
     order (agent first, then derived, then caller, then array position).
     """
     candidates = [(i, entry) for i, entry in enumerate(_validated_node_input_refs(node_id, run_context))]
@@ -663,7 +663,7 @@ _CANCEL_DELIVERY_GRACE_SECONDS = 0.5
 #: once so the three emitters can never drift apart (SonarCloud S1192).
 _CANCEL_DRAIN_FAILED_EVENT = "sandbox_agent.cancel_retention_drain_failed"
 # FAR-458: the per-connector-per-write ``on_unknown`` modes and default live in
-# ONE place — ``farna.connectors.base`` (a stdlib-only leaf imported by both
+# ONE place — ``modulo.connectors.base`` (a stdlib-only leaf imported by both
 # the pipeline engine's gate read and the REST connector's config validation)
 # so the mode set can never drift between the two. The default
 # ``DEFAULT_ON_UNKNOWN`` (``"fail_open"``) re-fires the write on ambiguity
@@ -750,7 +750,7 @@ def _bridge_escalation_failure_detail(exit_code: int, stdout_raw: str) -> str | 
     """Failure detail for a loop stopped by an in-loop escalation (FAR-1694 S2).
 
     The sandbox bridge client refuses an ``escalate``-verdict call, prints a
-    ``MODULO_BRIDGE_ESCALATED:<json>`` marker and exits with
+    ``FARNA_CONTROL_BRIDGE_ESCALATED:<json>`` marker and exits with
     ``BRIDGE_ESCALATED_EXIT_CODE``. Returns a summary-only descriptor of the
     escalation (tool / guardrail / reason — never raw args), or ``None`` when
     the run was not stopped by an escalation. The mid-loop suspension that turns
@@ -1112,7 +1112,7 @@ def _recover_token_usage_from_raw_output(raw_output: str | None) -> dict[str, in
     this recovers them.
 
     FAR-1914 M2: the parse itself lives in the langgraph-free leaf
-    :func:`farna.core.agent_event_evidence.parse_step_finish_evidence` — ONE
+    :func:`modulo.core.agent_event_evidence.parse_step_finish_evidence` — ONE
     implementation shared with the cost finalizer (which is reachable from the
     API and must not import this module). The shipped CLI nests both ``tokens``
     and ``cost`` under ``part``; the leaf reads that shape only.
@@ -1719,7 +1719,7 @@ async def _list_fs_entries_via_provider(
 # ---------------------------------------------------------------------------
 #
 # The dispatch runs through the RuntimeProvider ABC unconditionally (FAR-1050
-# R6 retired ``MODULO_E2B_VIA_PROVIDER`` and the legacy direct path): create,
+# R6 retired ``FARNA_CONTROL_E2B_VIA_PROVIDER`` and the legacy direct path): create,
 # stream and kill remain ONE atomic sequence — the provider is resolved once,
 # before create, and disposed in the finally block — so a sandbox is never
 # provider-created but legacy-killed (or the reverse).
@@ -2933,7 +2933,7 @@ async def _read_run_raw_output_markers_for_gate(
     (qa M4/M5): the old predicate SELECT + fat all-sides fallback reader (two
     statements, a TOCTOU window vs terminalize, and every blob side fetched on
     the per-node hot path) is replaced by the repo's SINGLE fenced
-    markers-scoped reader :func:`farna.db.crud.run_node_outputs.read_run_markers_fenced`
+    markers-scoped reader :func:`modulo.db.crud.run_node_outputs.read_run_markers_fenced`
     — the fence predicates (id + org + claim_token + ``status='running'``)
     moved INTO that one statement, which reassembles the markers
     (new-table-only since B2c - the legacy fallback leg is removed) and
@@ -3499,7 +3499,7 @@ def _connector_gate_enabled(on_unknown: str, *, node_id: str | None = None, run_
 
     The SINGLE authority for gate eligibility: the per-op ``on_unknown`` mode is
     not ``off`` (the op bypasses the gate entirely) AND the opt-in killswitch
-    ``modulo_connector_write_gate_enabled`` is enabled. The killswitch read is
+    ``connector_write_gate_enabled`` is enabled. The killswitch read is
     fail-open — an exception reads as disabled (the gate proceeds on the same
     failure).
 
@@ -3514,7 +3514,7 @@ def _connector_gate_enabled(on_unknown: str, *, node_id: str | None = None, run_
     try:
         from farna.settings import get_settings
 
-        return bool(getattr(get_settings(), "modulo_connector_write_gate_enabled", False))
+        return bool(getattr(get_settings(), "connector_write_gate_enabled", False))
     except Exception:
         # Killswitch read failure must not block a write — proceed (fail-open).
         _log.warning(
@@ -3775,8 +3775,8 @@ async def _connector_write_gate(
     Fail-open in every direction (missing run id / session factory / persisted
     key, killswitch off, DB error, malformed key) returns ``None`` — the write
     proceeds, never blocked. The killswitch
-    ``modulo_connector_write_gate_enabled`` is GENUINELY OPT-IN: it defaults to
-    ``False`` (set in ``farna.settings``), so a deploy never silently suppresses
+    ``connector_write_gate_enabled`` is GENUINELY OPT-IN: it defaults to
+    ``False`` (set in ``modulo.settings``), so a deploy never silently suppresses
     byte-identical re-executed connector writes — a behavioural change vs. the
     pre-FAR-458 contract where every visit fired. Operators enable it explicitly.
     """
@@ -5386,7 +5386,7 @@ async def _dispatch_reject_correction_best_effort(
 #: ------------------------------------------------
 #: ``output`` is ONE SHARED "current node output" slot: every node returns a
 #: value for it and the state reducer replaces it wholesale
-#: (:func:`farna.core.pipeline_engine.graph_cache._pipeline_state_reducer`).
+#: (:func:`modulo.core.pipeline_engine.graph_cache._pipeline_state_reducer`).
 #: The moment the next node runs, ``state["output"]`` holds THAT node's value
 #: while this per-gate key survives in state and in the checkpoint. So the
 #: marker does **not** describe whatever ``state["output"]`` happens to hold
@@ -5410,7 +5410,7 @@ async def _dispatch_reject_correction_best_effort(
 #:     }
 #:
 #: ``attested`` is the governed-run provenance class of a human statement
-#: (:data:`farna.core.provenance.PROVENANCE_ATTESTED` — "governance events
+#: (:data:`modulo.core.provenance.PROVENANCE_ATTESTED` — "governance events
 #: Modulo records natively: approvals, guardrail verdicts, HITL decisions").
 #: Per ADR-042 an ``attested`` datum is a natively-recorded human/governance
 #: statement, NOT a computed measurement and NOT an agent report — and agent
@@ -5958,7 +5958,7 @@ def _serialize_condition_value(value: Any) -> str:
     shared redaction primitive BEFORE truncation (FAR-163: a secret
     straddling the cut point must still be removed) and is then bounded,
     marked when sliced. Serialisation reuses the briefing's deterministic
-    serializer (:func:`farna.core.pipeline_engine.hitl_context.serialize_value`)
+    serializer (:func:`modulo.core.pipeline_engine.hitl_context.serialize_value`)
     instead of re-implementing it; the slice carries the marker WITHIN the cap.
     """
     return slice_with_marker(sanitize_error_text(serialize_value(value)), _CONDITION_RESULT_FIELD_MAX_CHARS)
@@ -6885,7 +6885,7 @@ _DISPATCH_WAIT_RETRY_AFTER_MAX_SECONDS = 300.0
 #: dispatch-node outcome.
 #:
 #: Keys are the substrate codes VERBATIM, exactly as published by
-#: ``farna.connectors.base.CIRunStatus`` (``pending``, ``queued``,
+#: ``modulo.connectors.base.CIRunStatus`` (``pending``, ``queued``,
 #: ``in_progress``, ``success``, ``failure``, ``cancelled``, ``timed_out``,
 #: ``unknown``). Values:
 #:
@@ -6924,7 +6924,7 @@ def _is_transient_dispatch_poll_error(exc: BaseException) -> bool:
       plausibly survive, and the external job is already fired, so abandoning
       the observation would misreport a run that is still going.
     * **Permanent** (propagate immediately, as itself): everything else — the
-      ACL's :class:`~farna.connectors.base.ConnectorPermissionError`, a
+      ACL's :class:`~modulo.connectors.base.ConnectorPermissionError`, a
       connector's fail-loud ``ValueError`` (including Jenkins' intentional
       queue-404), an HTTP **4xx**, and any error we cannot classify. Retrying
       these cannot succeed, and the old blanket ``except Exception`` not only
@@ -7234,7 +7234,7 @@ def _stamp_dispatch_provenance(result: Any, instance_id: str) -> Any:
     ``{"result": ...}`` envelope carrying the same keys. A bare list used to
     pass through unstamped, so a witnessed run list read as an array Modulo
     produced. The key set is the one
-    :data:`farna.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` lifts back
+    :data:`modulo.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` lifts back
     out on the failed-artifact path, so the two cannot drift.
 
     Each provenance key is OVERWRITTEN, never merged — a hostile or
@@ -7266,7 +7266,7 @@ def _dispatch_trigger_failure_envelope(node_id: str, result: dict[str, Any]) -> 
     artifact's ``error`` is the substrate's terminal code VERBATIM (e.g. the
     literal ``"failure"``) and the stamped output — which carries the witness
     provenance — is preserved as ``output``. Every
-    :data:`farna.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` key is ALSO
+    :data:`modulo.core.node_output_split.DISPATCH_PROVENANCE_FIELDS` key is ALSO
     lifted to the envelope top level because the failed-connector branch of
     ``node_output_split._split_connector`` drops ``output``; without the lift the
     provenance would never reach run state from this path.
@@ -8473,7 +8473,7 @@ async def _sandbox_acquire_dispatch_marker(
     (pre-D8 marker shape), and the post-create
     ``_sandbox_store_dispatch_marker_sandbox`` rewrite — so the routing state
     is on the marker from the first durable write onward, not only after the
-    create succeeds. The ``MODULO_E2B_VIA_PROVIDER`` flag this field once
+    create succeeds. The ``FARNA_CONTROL_E2B_VIA_PROVIDER`` flag this field once
     reported was RETIRED by FAR-1050 R6 (PR #1033): the provider path is
     unconditional, so ``via_provider`` now survives as a historical
     attribution field only.
@@ -8870,7 +8870,7 @@ async def _sandbox_issue_run_credential_for_sandbox(
     )
     if issued is not None:
         # Provenance is stamped on the run's telemetry (attested evidence), in
-        # addition to the ``MODULO_CREDENTIAL_PROVENANCE`` env stamp applied by
+        # addition to the ``FARNA_CONTROL_CREDENTIAL_PROVENANCE`` env stamp applied by
         # the dispatch site.
         _emit_script_span_event(
             "credential.issued",
@@ -9638,7 +9638,7 @@ class _SandboxNodeConfig:
     workspace_inputs: list[dict[str, Any]]
     # FAR-899: schema validator mode for output validation.
     # Resolved at runtime from the effective-setting store via
-    # resolve_schema_validator_mode(); the env var MODULO_SCHEMA_VALIDATOR_MODE
+    # resolve_schema_validator_mode(); the env var FARNA_CONTROL_SCHEMA_VALIDATOR_MODE
     # is a first-boot seed only.  Default: "lenient".
     schema_validator_mode: str = "lenient"
     # FAR-899: schema identifier and version for logging/repair.
@@ -9972,7 +9972,7 @@ def _build_sandbox_node_envelope(
     state (``via_provider``) onto the envelope, which the P1b splitter folds
     into ``node_telemetry_json`` verbatim — every run is then attributable
     to provider-mediated execution. Both keys are emitted together. The
-    ``MODULO_E2B_VIA_PROVIDER`` flag ``via_provider`` once reported was
+    ``FARNA_CONTROL_E2B_VIA_PROVIDER`` flag ``via_provider`` once reported was
     RETIRED by FAR-1050 R6 (PR #1033) — the provider path is unconditional —
     so the key is a historical attribution field; callers that pass no tier
     (the Bundled Runner route) get neither, so their envelope key set is
@@ -10097,7 +10097,7 @@ def _build_sandbox_envs(
     Model Backend credential injections) merge AFTER the profile/host creds
     but BEFORE the node's ``env_vars_extra``:
 
-    1. MODULO_* system vars (reserved — set exactly once here).
+    1. FARNA_CONTROL_* system vars (reserved — set exactly once here).
     2. Profile/host standing credentials (host API key / GitHub PAT).
     3. Per-agent model-backend runner bindings (decrypt at provision).
     4. Node ``env_vars_extra`` — the sanctioned override; the reviewbot's
@@ -10110,7 +10110,7 @@ def _build_sandbox_envs(
         "FARNA_CONTROL_INPUT_PAYLOAD": input_json,
     }
     if sandbox_mode != "script":
-        sandbox_envs["APP_MODULO_OPENCODE_API_KEY"] = os.environ.get("APP_MODULO_OPENCODE_API_KEY", "")
+        sandbox_envs["FARNA_CONTROL_OPENCODE_API_KEY"] = os.environ.get("FARNA_CONTROL_OPENCODE_API_KEY", "")
         sandbox_envs["GITHUB_TOKEN"] = os.environ.get("GITHUB_DOGFOOD_PAT_ALL", "") or os.environ.get("GITHUB_DOGFOOD_PAT_WR", "") or os.environ.get("GITHUB_TOKEN", "")
     if runner_bindings:
         sandbox_envs.update(runner_bindings)
@@ -10528,6 +10528,3748 @@ async def _resolve_sandbox_git_content_config(config: _SandboxNodeConfig) -> _Sa
     )
 
 
+def _render_sandbox_prompt_and_command(  # NOSONAR S3776 - one inline Jinja render step; its per-arm except clauses are the documented legacy-command contract
+    *,
+    state: dict[str, Any],
+    node_def: dict[str, Any],
+    sandbox_mode: str,
+    agent_command: str,
+    agent_prompt_template: str,
+    run_context: dict[str, Any],
+    raw_input: Any,
+    run_id: str,
+    node_id: str,
+) -> tuple[str, str] | dict[str, Any]:
+    """Render the sandbox prompt + agent_command, or a ``skipped`` result.
+
+    Returns ``(rendered_prompt, rendered_agent_command)`` on success, or the
+    executor's ``skipped`` result dict when a template references missing input
+    fields (the caller returns it verbatim). Behaviour is unchanged from the
+    former in-body block; extracted from ``_sandbox_agent_impl`` only.
+    """
+    # FAR-436: context_scope — the sandbox agent's run_context VIEW (the keys
+    # fed to the prompt + agent_command templates) is allowlist-gated to the
+    # node's need-to-know set. Internal control keys are always preserved by
+    # filter_run_context_scope (_CONTEXT_ALWAYS_KEPT). Absent scope = legacy.
+    _node_cap = node_def.get("capability_scope") or {}
+    scoped_run_context = filter_run_context_scope(run_context, _node_cap.get("context_scope"))
+    scoped_state = dict(state)
+    scoped_state["run_context"] = scoped_run_context
+
+    # FAR-296 mode split: llm mode renders the prompt + agent_command through
+    # the SandboxedEnvironment; script mode runs script_command VERBATIM —
+    # no Jinja render of the command, no prompt, no template_vars.
+    if sandbox_mode == "script":
+        rendered_prompt: str = ""
+        rendered_agent_command = agent_command
+    else:
+        env = sandbox_jinja_environment()
+        template = env.from_string(agent_prompt_template)
+        template_vars: dict[str, Any] = {
+            "state": scoped_state,
+            "run_context": scoped_run_context,
+            "input": raw_input,
+        }
+        resolved = node_def.get("_resolved_parameters")
+        if isinstance(resolved, dict):
+            template_vars["parameter"] = resolved
+
+        # FAR-1743 / ADR 037 rev 2 (EXPERIMENTAL): the top-level `{{ model }}`
+        # template variable — the dedicated resolution channel. The value is
+        # interpolated from the SNAPSHOT (baked `_resolved_model`), with the
+        # run's frozen `_run_overrides.model` folded in pre-dispatch (run
+        # override wins). Render is interpolation, NEVER resolution: no
+        # registry read here, and `input.model` is neither read nor written
+        # (caller input keeps its own meaning; provenance stays intact).
+        # Reads the full run_context, not the context_scope-filtered view —
+        # the fold-in is a product mechanism, not a user template key.
+        _model_value = effective_model_template_value(node_def, run_context)
+        if _model_value is not None:
+            template_vars["model"] = _model_value
+        elif node_def.get("model_class"):
+            # Fail closed (D3) BEFORE any sandbox work: an opted-in node with
+            # no resolved model must not render `{{ model }}` as empty and
+            # dispatch a sandbox on a blank --model. The normal path bakes at
+            # mint (fail-closed there); this backstop catches a snapshot whose
+            # bake is missing (e.g. an edit-kind snapshot consumed by a run).
+            raise ValueError(f"sandbox_agent node '{node_id}' declares model_class {node_def.get('model_class')!r} but no model was resolved at snapshot mint (no baked _resolved_model and no run-override model) — refusing to dispatch pre-sandbox (ADR 037 D3)")
+
+        try:
+            rendered_prompt = template.render(**template_vars)
+        except (jinja2.UndefinedError, TypeError) as e:
+            _log.warning("Prompt template UndefinedError for run %s: %s", run_id, e)
+            return {
+                "status": "skipped",
+                "summary": f"Skipped: prompt template references missing input fields ({e})",
+                "agent_stdout": "",
+                "agent_stderr": "",
+                "exit_code": 0,
+            }
+
+        # Render agent_command through the same SandboxedEnvironment +
+        # template vars as the prompt, so the LLM model (or any other
+        # command flag) can be a per-run / per-parameter value (e.g.
+        # ``--model {{ input.model }}`` for A/B testing). A command with NO
+        # ``{{ }}`` templates renders to itself unchanged — backward
+        # compatible with every existing pipeline.
+        try:
+            rendered_agent_command = env.from_string(agent_command).render(**template_vars)
+        except (jinja2.UndefinedError, TypeError) as e:
+            _log.warning(
+                "agent_command template UndefinedError for run %s node %s: %s",
+                run_id,
+                node_id,
+                e,
+            )
+            return {
+                "status": "skipped",
+                "summary": f"Skipped: agent_command template references missing input fields ({e})",
+                "agent_stdout": "",
+                "agent_stderr": "",
+                "exit_code": 0,
+            }
+        except jinja2.TemplateSyntaxError as e:
+            # Legacy commands that contain Jinja-like syntax without being
+            # valid templates (e.g. ``${{ }}`` shell fragments or an unclosed
+            # ``{{``) predate #1291 and must keep running verbatim.
+            # Rendering them as templates would crash the run with an
+            # uncaught TemplateSyntaxError.
+            _log.warning(
+                "agent_command is not a valid template for run %s node %s; using verbatim: %s",
+                run_id,
+                node_id,
+                e,
+            )
+            rendered_agent_command = agent_command
+        if not rendered_agent_command.strip():
+            raise ValueError(f"sandbox_agent node '{node_id}' rendered agent_command is empty after template resolution — a sandbox agent cannot run an empty command")
+    return rendered_prompt, rendered_agent_command
+
+
+@dataclass(frozen=True)
+class _SandboxExecContext:
+    """The dispatch-wide bindings the sandbox exec helpers used to close over.
+
+    ``_sandbox_agent_impl`` previously defined five nested async helpers
+    (``_acquire_dispatch_marker``, ``_store_dispatch_marker_sandbox``,
+    ``_store_script_lease``, ``_issue_run_credential_for_sandbox``,
+    ``_clear_dispatch_marker``) that captured its locals by closure. They are
+    hoisted to module level and take this frozen context instead, so the same
+    values are passed explicitly.
+
+    Field use per helper (each reads only this subset):
+      * acquire        — session_factory, claim_lease, org_id, run_id, node_id, provider
+      * store marker   — session_factory, claim_lease, org_id, run_id, attempt_key, provider
+      * script lease   — session_factory, claim_lease, org_id, run_id, attempt_key, provider
+      * run credential — session_factory, org_id, run_id, node_id, sandbox_timeout
+      * clear marker   — session_factory, claim_lease, org_id, run_id
+
+    ``attempt_key`` is the one LATE-BOUND field: it is produced by the fenced
+    acquire inside the dispatch ``try`` and is ``None`` before that. The caller
+    therefore rebuilds the context with ``_dc_replace`` the moment the acquire
+    returns, which reproduces the former closure's late binding exactly (the
+    two store helpers saw ``None`` only if the acquire never succeeded).
+    """
+
+    session_factory: Callable[..., Any] | None
+    org_id: str
+    run_id: str
+    node_id: str
+    claim_lease: str | None
+    sandbox_timeout: int
+    provider: str
+    attempt_key: str | None = None
+
+
+async def _exec_acquire_dispatch_marker(ctx: _SandboxExecContext) -> str | None:
+    """D8 atomic dispatch gate + marker (FAR-594): capacity check and the
+    dispatch reservation commit in ONE transaction — own-row fenced lock,
+    per-org advisory lock (flag-on), lock-free count over the
+    running-only marker population, then the fenced marker UPDATE. The
+    marker carries the tier (``provider``/``written_at``). Applied to
+    EVERY sandbox_agent dispatch regardless of sandbox_mode (the
+    pre-D8 script-only racy pre-gate is REPLACED by this).
+
+    Returns the attempt key on success, ``None`` when denied
+    (superseded / not running — no sandbox may be created). Raises
+    :class:`SandboxCapacityExceededError` (retryable, ``capacity.org``)
+    when at capacity or the lock degraded. Fail-open on any other DB
+    error: the marker is still written best-effort in its own
+    transaction, then the sandbox provisions.
+
+    Hoisted from ``_sandbox_agent_impl``; the former closure locals arrive
+    as ``ctx``.
+    """
+    return await _sandbox_acquire_dispatch_marker(
+        session_factory=ctx.session_factory,
+        claim_lease=ctx.claim_lease,
+        org_id=ctx.org_id,
+        run_id=ctx.run_id,
+        node_id=ctx.node_id,
+        provider=ctx.provider,
+        via_provider=True,
+    )
+
+
+async def _exec_store_dispatch_marker_sandbox(
+    sandbox_id_value: str | None,
+    ctx: _SandboxExecContext,
+) -> None:
+    """Persist the real sandbox id onto the runs row after a successful create.
+
+    Hoisted from ``_sandbox_agent_impl``; the former closure locals arrive
+    as ``ctx``.
+    """
+    await _sandbox_store_dispatch_marker_sandbox(
+        sandbox_id_value,
+        session_factory=ctx.session_factory,
+        claim_lease=ctx.claim_lease,
+        org_id=ctx.org_id,
+        run_id=ctx.run_id,
+        attempt_key=ctx.attempt_key,
+        provider=ctx.provider,
+        via_provider=True,
+    )
+
+
+async def _exec_store_script_lease(ctx: _SandboxExecContext) -> None:
+    """FAR-296 Phase 2 fencing lease: record the script-mode execution claim.
+
+    Reuses the EXISTING ``runs.sandbox_dispatch_state`` machinery — no
+    parallel lease store. Persists ``{"state": "script_executing",
+    "attempt_key": ...}`` IMMEDIATELY BEFORE ``sandbox.commands.run``, so
+    the durable marker proves "the script PROCESS started (execution
+    claimed, completion marker pending)". Fenced on the claim token +
+    status so a superseded original cannot stamp a lease on a successor's
+    row. Fail-open (no session factory / claim lease / org) — the lease
+    is a safety backstop, never a correctness dependency.
+
+    Hoisted from ``_sandbox_agent_impl``; the former closure locals arrive
+    as ``ctx``.
+    """
+    await _sandbox_store_script_lease(
+        session_factory=ctx.session_factory,
+        claim_lease=ctx.claim_lease,
+        org_id=ctx.org_id,
+        run_id=ctx.run_id,
+        attempt_key=ctx.attempt_key,
+        provider=ctx.provider,
+        via_provider=True,
+    )
+
+
+async def _exec_issue_run_credential_for_sandbox(
+    ctx: _SandboxExecContext,
+) -> IssuedRunCredential | None:
+    """Issue a short-TTL run-scoped credential for this sandbox (FAR-1690 A1).
+
+    Returns the issued credential handle (secret + issuance provenance), or
+    None when issuance is unavailable/failed (fail-open — the sandbox runs
+    without the key rather than failing the dispatch). The raw secret is
+    returned to the caller only, which injects it into the sandbox envs —
+    it is NEVER logged, checkpointed, or placed in LangGraph state.
+
+    Hoisted from ``_sandbox_agent_impl``; the former closure locals arrive
+    as ``ctx``.
+    """
+    return await _sandbox_issue_run_credential_for_sandbox(
+        session_factory=ctx.session_factory,
+        org_id=ctx.org_id,
+        run_id=ctx.run_id,
+        node_id=ctx.node_id,
+        sandbox_timeout=ctx.sandbox_timeout,
+    )
+
+
+async def _exec_clear_dispatch_marker(ctx: _SandboxExecContext) -> None:
+    """Fenced marker clear — only when the claim token still matches.
+
+    A superseded original (token rotated by a successor) must not clear
+    the successor's dispatch marker / sandbox id.
+
+    Hoisted from ``_sandbox_agent_impl``; the former closure locals arrive
+    as ``ctx``.
+    """
+    await _sandbox_clear_dispatch_marker(
+        session_factory=ctx.session_factory,
+        claim_lease=ctx.claim_lease,
+        org_id=ctx.org_id,
+        run_id=ctx.run_id,
+    )
+
+
+@dataclass
+class _SandboxDispatchState:
+    """Mutable per-dispatch state threaded through the sandbox phase split.
+
+    ``_sandbox_agent_impl`` used to run its whole dispatch body as one 2,299-line
+    ``try`` block with the dispatch state in plain locals (the FAR-1315 pre-bind
+    pattern). The phases are now separate coroutines, so this object carries
+    that state instead.
+
+    Every phase binds the locals it needs from ``_state`` at its top and writes
+    them back in a ``finally``. That reproduces the former locals EXACTLY: a
+    phase that raises part-way through still leaves every value it had already
+    assigned visible to ``_sandbox_agent_impl``'s ``except`` / ``finally`` arms,
+    which is what the FAR-228 / FAR-704 / FAR-1315 recovery paths depend on.
+    """
+
+    exec_ctx: _SandboxExecContext
+    # --- phases A-E (_sandbox_prepare_dispatch)
+    attempt_key: str | None = None
+    dispatch_marker_set: bool = False
+    runner_bindings: dict[str, str] = field(default_factory=dict)
+    resolved_workspace_inputs: list[Any] = field(default_factory=list)
+    metadata: dict[str, str] = field(default_factory=dict)
+    egress_resolved: Any = None
+    # --- phases F-J (_sandbox_provision_and_materialise)
+    sandbox: Any = None
+    sandbox_id: str | None = None
+    dispatch_provider: Any = None
+    node_schema_profile: Any = None
+    # --- phases K-M (_sandbox_apply_policy_and_exec)
+    artifact_writer: Any = None
+    streaming_writer_instance: Any = None
+    bridge_server: Any = None
+    gh_guard_install_status: str | None = None
+    script_lease_claimed: bool = False
+    stall_reason: str | None = None
+    drain_fn: Any = None
+    drift_results: list[Any] = field(default_factory=list)
+    # --- phases N-T (_sandbox_interpret_result) — read by phase U and by the
+    # outer handlers, exactly as the former locals were.
+    elapsed: float = 0.0
+    exit_code: int = -1
+    stdout_len: int = 0
+    stderr_len: int = 0
+    stdout_truncated: bool = False
+    agent_stdout: str = ""
+    agent_stderr: str = ""
+    agent_stdout_raw: str = ""
+    agent_stderr_raw: str = ""
+    output_json: Any = None
+    pr_url: str = ""
+    cost_estimate_usd: float = 0.0
+
+
+class _SandboxMaterialisation(NamedTuple):
+    """What provisioning hands to the exec phase (phases F-J → K-M)."""
+
+    schema_dir: dict[str, str]
+    input_json: str
+    env_vars_extra: dict[str, str]
+
+
+class _SandboxExecOutcome(NamedTuple):
+    """What the exec phase hands to result interpretation (phases K-M → N-T)."""
+
+    cmd_result: Any
+    watchdog: Any
+
+
+class _SandboxInterpretation(NamedTuple):
+    """What result interpretation hands to envelope assembly (N-T → U)."""
+
+    status: str
+    result_summary: str
+    changed_files: list[str]
+    agent_status: str | None
+    agent_outcome: str | None
+    sandbox_session_lost: bool
+
+
+async def _sandbox_fenced_dispatch_acquire(
+    _exec_ctx: _SandboxExecContext,
+    *,
+    node_id: str,
+    run_id: str,
+) -> tuple[_SandboxExecContext, str]:
+    """Phase A: DB-atomic dispatch-marker acquire, then re-bind the exec context.
+
+    Extracted from ``_sandbox_prepare_dispatch`` (FAR-310 hardening wave 4).
+    The pre-D8 script-only racy check-then-act capacity pre-gate is REPLACED by
+    this atomic gate — one transaction reserves the slot for EVERY sandbox_agent
+    dispatch (any sandbox_mode, any provider tier) before provisioning. Exactly
+    ONE executor wins the dispatch slot; a superseded claim / non-running run is
+    refused BEFORE any sandbox is created. Fail-open when no session factory or
+    no claim lease is available (the heartbeat claim fence remains the primary
+    guard).
+    """
+    attempt_key = await _exec_acquire_dispatch_marker(_exec_ctx)
+    if attempt_key is None:
+        _log.warning(
+            "sandbox_agent.dispatch_marker_denied",
+            extra={"node_id": node_id, "run_id": run_id},
+        )
+        raise SupersededNodeError("E2B dispatch marker denied — run superseded or not running; sandbox not created")
+    # The acquire produced the attempt key, so re-bind the exec context — the
+    # marker-rewrite and script-lease helpers carry it, exactly as the former
+    # nested helpers read the late-bound local.
+    return _dc_replace(_exec_ctx, attempt_key=attempt_key), attempt_key
+
+
+async def _sandbox_resolve_runner_bindings(
+    *,
+    agent_id: uuid.UUID | None,
+    session_factory: Callable[..., Any] | None,
+    org_id: str,
+    run_id: str,
+    node_id: str,
+) -> dict[str, str]:
+    """Phase B: per-agent runner bindings, resolved BEFORE ``create``.
+
+    Extracted from ``_sandbox_prepare_dispatch`` (FAR-310 hardening wave 4).
+    FAR-592 (D6): resolution happens at PROVISION time so a resolution failure
+    (or a Local tier refusal) leaves the sandbox NEVER created and the script
+    PROCESS never started: both error classes stay pre-claim/re-dispatch safe.
+    A fresh short-lived hub per dispatch resolves ONLY the referenced backends
+    and is explicitly disposed inside ``resolve_agent_bindings``. Precedence is
+    deliberate: profile secrets < runner bindings < node ``env_vars_extra`` —
+    THE NODE WINS (see ``_build_sandbox_envs``).
+    """
+    from farna.core.runner_bindings import (
+        AgentBindingResolutionError,
+        LocalProviderBindingsRefusedError,
+        resolve_agent_bindings,
+    )
+
+    _runner_bindings: dict[str, str] = {}
+    if agent_id is None:
+        return _runner_bindings
+    try:
+        _runner_bindings = await asyncio.wait_for(
+            resolve_agent_bindings(
+                session_factory=session_factory,
+                org_id=org_id,
+                agent_id=agent_id,
+                environment_profile_id=_runner_binding_env_profile_id(),
+                run_id=run_id,
+                node_id=node_id,
+            ),
+            # FAR-766: bound the previously-unbounded pre-claim secrets
+            # backend / DB read. A hard stall here also used to ride the
+            # slow nodeless sweep — a timeout is a retryable binding
+            # resolution failure (never terminal harness.unknown).
+            timeout=_sandbox_binding_resolve_timeout(),
+        )
+    except TimeoutError:
+        _log.warning(
+            "sandbox_agent.bindings_resolution_timed_out",
+            extra={
+                "run_id": run_id,
+                "node_id": node_id,
+                "timeout_seconds": _sandbox_binding_resolve_timeout(),
+            },
+        )
+        raise SandboxBindingResolutionError(f"Runner binding resolution timed out after {_sandbox_binding_resolve_timeout()}s for node '{node_id}'") from None
+    except LocalProviderBindingsRefusedError as exc:
+        _log.warning(
+            "sandbox_agent.bindings_local_refused",
+            extra={"run_id": run_id, "node_id": node_id},
+        )
+        # The typed refusal carries the remediation copy (opt-in flag
+        # / tier alternatives) — surface it, never drop it.
+        raise SandboxTierRefusedError(f"Local provider tier refused runner bindings for node '{node_id}': {str(exc)[:_MAX_ERROR_MSG]}") from exc
+    except AgentBindingResolutionError as exc:
+        _log.warning(
+            "sandbox_agent.bindings_resolution_failed",
+            extra={
+                "run_id": run_id,
+                "node_id": node_id,
+                "exc_msg": str(exc)[:_MAX_ERROR_MSG],
+            },
+        )
+        raise SandboxBindingResolutionError(f"Runner binding resolution failed for node '{node_id}': {str(exc)[:_MAX_ERROR_MSG]}") from exc
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        # FAR-592 (D6 F12): a SECRETS-BACKEND hard failure (DB down,
+        # fernet misconfig, unexpected exception shape) must NOT fall
+        # through to the generic ``harness.unknown`` classification —
+        # the pre-claim bindings block is re-dispatch safe, so
+        # non-timeout secrets failures classify as the RETRYABLE
+        # ``sandbox.binding_resolution`` code the D6 rollback trigger
+        # reads.
+        _log.warning(
+            "sandbox_agent.bindings_resolution_failed",
+            extra={"run_id": run_id, "node_id": node_id, "exc_type": type(exc).__name__},
+        )
+        raise SandboxBindingResolutionError(f"Runner binding resolution failed for node '{node_id}': {str(exc)[:_MAX_ERROR_MSG]}") from exc
+    return _runner_bindings
+
+
+async def _sandbox_resolve_managed_workspace_inputs(
+    workspace_inputs: list[dict[str, Any]],
+    *,
+    session_factory: Callable[..., Any] | None,
+    org_id: str,
+    run_id: str,
+    node_id: str,
+) -> list[Any]:
+    """Phase C: resolve managed workspace-input refs → SHA HOST-SIDE.
+
+    Extracted from ``_sandbox_prepare_dispatch`` (FAR-310 hardening wave 4).
+    FAR-800: resolution happens BEFORE any sandbox is created — a resolution
+    failure (ref not found, transient network error) must NEVER create a
+    sandbox. FAR-802: killswitch — when MWI is disabled (default), refuse to
+    provision inputs with a clear error code so the run is never silently
+    pretending inputs were provisioned. The resolved inputs' audit record is
+    persisted best-effort (FAR-801).
+    """
+    _resolved_workspace_inputs: list[Any] = []
+    if not workspace_inputs:
+        return _resolved_workspace_inputs
+    from farna.core.pipeline_engine.workspace_input_orchestration import (
+        ProvisioningError as WorkspaceProvisioningError,
+    )
+    from farna.settings import get_settings as _get_mwi_settings
+
+    if not _get_mwi_settings().workspace_inputs_enabled:
+        raise WorkspaceProvisioningError(
+            "Managed workspace inputs are disabled (FARNA_CONTROL_WORKSPACE_INPUTS_ENABLED is not set or false)",
+            error_code=_CODE_SANDBOX_WORKSPACE_INPUTS_DISABLED,
+            retryable=False,
+        )
+    from farna.core.pipeline_engine.workspace_input_orchestration import (
+        resolve_managed_inputs_host_side,
+    )
+
+    # Wire a real (pinned-transport) httpx client so the least-privilege
+    # read-only credential assertion is ACTIVE in production (the assertion
+    # probes https://api.github.com/user; without a client it is unreachable
+    # and the advertised guarantee silently no-ops). The client is built
+    # through the SSRF egress factory so the resolved address is pinned onto
+    # the connection (no DNS-rebinding window).
+    from farna.core.ssrf import pinned_async_client_sync
+
+    _http_client = pinned_async_client_sync("https://api.github.com", timeout=10.0)
+    try:
+        _resolved_workspace_inputs = await resolve_managed_inputs_host_side(
+            workspace_inputs,
+            org_id=org_id,
+            session_factory=session_factory,
+            http_client=_http_client,
+        )
+    except WorkspaceProvisioningError as exc:
+        _log.warning(
+            "workspace_input.resolution_failed",
+            extra={
+                "run_id": run_id,
+                "node_id": node_id,
+                "error_code": exc.error_code,
+                "retryable": exc.retryable,
+                "detail": str(exc)[:_MAX_ERROR_MSG],
+            },
+        )
+        raise SandboxNodeFailedError(
+            f"Workspace input resolution failed: {str(exc)[:_MAX_ERROR_MSG]}",
+            node_id=node_id,
+        ) from exc
+    finally:
+        await _http_client.aclose()
+
+    # FAR-801: persist the resolved inputs audit record (best-effort).
+    if _resolved_workspace_inputs and session_factory is not None and run_id and org_id:
+        try:
+            import uuid as _uuid
+
+            from farna.core.pipeline_engine.workspace_input_audit import (
+                WorkspaceInputAuditRecord,
+                record_resolved_inputs,
+                redact_url,
+            )
+            from farna.core.pipeline_engine.workspace_input_orchestration import (
+                _extract_host_from_url,
+            )
+            from farna.db.models.run_node_outputs import FINAL_ATTEMPT_KEY
+
+            # Map each resolved input back to its requested ref (kind/value)
+            # for auditability — the audit record should carry the real
+            # movable ref that was resolved, not empty strings.
+            _ref_by_dest = {(wi.get("dest")): (wi.get("ref") or {}) for wi in (workspace_inputs or [])}
+
+            _audit_records = [
+                WorkspaceInputAuditRecord(
+                    input_name=inp.dest,
+                    connector_instance_id=getattr(inp, "connector_instance_id", None),
+                    host=_extract_host_from_url(inp.url) if hasattr(inp, "url") else "",
+                    url_redacted=redact_url(inp.url) if hasattr(inp, "url") else "",
+                    requested_ref_kind=(_ref_by_dest.get(inp.dest) or {}).get("kind", "branch"),
+                    requested_ref_value=(_ref_by_dest.get(inp.dest) or {}).get("value", ""),
+                    resolved_sha=inp.resolved_sha,
+                    final_sha=None,
+                    drift_detected=False,
+                    dest=inp.dest,
+                    status="resolved",
+                )
+                for inp in _resolved_workspace_inputs
+            ]
+            _run_uuid = _uuid.UUID(run_id)
+            _org_uuid = _uuid.UUID(org_id)
+            async with session_factory() as _audit_session, _audit_session.begin():
+                # FAR-801/RBAC: run_node_outputs + runs are RLS FORCE, so
+                # the audit write must run with the tenant context set or
+                # Postgres raises 42501 (swallowed by the best-effort
+                # except) and the row never persists.
+                await set_rls_org(_audit_session, _org_uuid)
+                await record_resolved_inputs(
+                    _audit_session,
+                    run_id=_run_uuid,
+                    organisation_id=_org_uuid,
+                    node_id=node_id,
+                    attempt_key=FINAL_ATTEMPT_KEY,
+                    records=_audit_records,
+                    status="resolved",
+                )
+        except Exception:
+            _log.exception(
+                "workspace_input.audit_record_failed",
+                extra={"run_id": run_id, "node_id": node_id},
+            )
+    return _resolved_workspace_inputs
+
+
+def _sandbox_build_dispatch_metadata(
+    *,
+    resource_limits: dict[str, Any] | None,
+    egress_policy: str | None,
+    egress_allowlist: list[dict[str, Any]] | None,
+    _profile_net_policy: str | None,
+    _resolved_provider: str,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+) -> tuple[dict[str, str], Any]:
+    """Phase D/E: egress resolution, attribution metadata and the spec's inputs.
+
+    Extracted from ``_sandbox_prepare_dispatch`` (FAR-310 hardening wave 4).
+    Returns the metadata dict (a FRESH dict, as the pre-split body built — the
+    caller publishes it back by reference because the OTel/reporting path reads
+    it) and the typed egress resolution the provision/policy phases consume.
+    """
+    # FAR-296 Phase 3/3b-3: egress control + resource limits. deny_all
+    # and selected map to allow_internet_access=False; resource_limits
+    # and the selected-mode host:port allowlist are carried as sandbox
+    # metadata (e2b tags) so a server-side template/config can enforce
+    # them (the e2b SDK has no native allowlist / cap enforcement).
+    _metadata: dict[str, str] = {}
+    if resource_limits:
+        _metadata["resource_limits"] = json.dumps(resource_limits)
+    # FAR-1085: use canonical egress resolution instead of ad-hoc mapping.
+    # The route threads the profile's network_policy (resolved above) so
+    # the canonical resolver can apply the node→profile→provider-default
+    # precedence chain. FAR-1051: the TIER is the resolved provider type
+    # ("e2b" on the legacy route — unchanged; "kubernetes" for a
+    # Kubernetes-bound profile), so a tier that cannot enforce the policy
+    # (e.g. deny_all/selected on Kubernetes, where bounded egress is the
+    # customer's NetworkPolicy) refuses here by name instead of
+    # certifying an enforcement the provider never performs.
+    from farna.core.pipeline_engine.egress import resolve_egress
+
+    _egress_tier = _resolved_provider
+    _egress_resolved = resolve_egress(
+        node_egress_policy=egress_policy,
+        node_egress_allowlist=egress_allowlist,
+        profile_network_policy=_profile_net_policy,
+        tier=_egress_tier,
+    )
+    if _egress_resolved.refusal is not None:
+        raise SandboxTierRefusedError(f"Node '{node_id}' egress refused on {_egress_tier} tier: {_egress_resolved.refusal}")
+    # FAR-1690: record the TYPED egress posture (never a boolean) on the
+    # workspace, riding the same provider-neutral workspace_metadata carrier
+    # as the allowlist below. Full rationale lives on EgressPosture in
+    # core/pipeline_engine/egress.py and the mirrored comment in
+    # runner_dispatch._workspace_spec_for_dispatch; kept as a pointer here so
+    # the two dispatch sites cannot drift.
+    _metadata["modulo.egress.posture"] = _egress_resolved.posture.value
+    if _egress_resolved.policy == "selected" and _egress_resolved.allowlist:
+        _metadata["egress_allowlist"] = json.dumps(_egress_resolved.allowlist)
+    # FAR-1051 (qa-iterate): run/org/node attribution rides the spec's
+    # workspace_metadata — the SAME provider-neutral keys the Docker
+    # route stamps in ``runner_dispatch._workspace_spec_for_dispatch``.
+    # Without them the Kubernetes workspace pod carries no
+    # ``modulo.run.id`` LABEL, and the workspace-orphan reconciler
+    # deliberately skips pods without one (no run to cross-reference),
+    # so a pod that outlives its dispatch could never be reclaimed.
+    # Empty identity values are dropped (parity with that mapper's
+    # ``if value`` filter) rather than stamped as "".
+    for _attribution_key, _attribution_value in (
+        ("modulo.run.id", run_id),
+        ("modulo.org.id", org_id),
+        ("modulo.node.id", node_id),
+    ):
+        if _attribution_value:
+            _metadata[_attribution_key] = str(_attribution_value)
+    return _metadata, _egress_resolved
+
+
+async def _sandbox_prepare_dispatch(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    agent_id: uuid.UUID | None,
+    session_factory: Callable[..., Any] | None,
+    workspace_inputs: list[dict[str, Any]],
+    resource_limits: dict[str, Any] | None,
+    egress_policy: str | None,
+    egress_allowlist: list[dict[str, Any]] | None,
+    _profile_net_policy: str | None,
+    _resolved_provider: str,
+) -> None:
+    """Phases A-E: fenced dispatch acquire, runner bindings, managed workspace
+    inputs, egress resolution and the attribution metadata.
+
+    Extracted from ``_sandbox_agent_impl`` (FAR-310 hardening wave 2); every
+    branch, log line, raise type and ordering is unchanged. Wave 4 moved each
+    phase into its own helper (``_sandbox_fenced_dispatch_acquire``,
+    ``_sandbox_resolve_runner_bindings``,
+    ``_sandbox_resolve_managed_workspace_inputs``,
+    ``_sandbox_build_dispatch_metadata``) leaving this function as the ordered
+    shell. Results land on ``_state`` even when a later phase of this function
+    raises, so the caller's recovery handlers see exactly what the former
+    in-body locals held.
+    """
+    _exec_ctx = _state.exec_ctx
+    attempt_key: str | None = _state.attempt_key
+    dispatch_marker_set: bool = _state.dispatch_marker_set
+    _runner_bindings: dict[str, str] = _state.runner_bindings
+    _resolved_workspace_inputs: list[Any] = _state.resolved_workspace_inputs
+    _metadata: dict[str, str] = _state.metadata
+    _egress_resolved: Any = _state.egress_resolved
+    try:
+        # Phase A: fenced dispatch acquire (the D8 atomic gate — see the helper).
+        _exec_ctx, attempt_key = await _sandbox_fenced_dispatch_acquire(
+            _exec_ctx,
+            node_id=node_id,
+            run_id=run_id,
+        )
+        dispatch_marker_set = True
+
+        # Phase B: per-agent runner bindings (pre-claim safe — see the helper).
+        _runner_bindings = await _sandbox_resolve_runner_bindings(
+            agent_id=agent_id,
+            session_factory=session_factory,
+            org_id=org_id,
+            run_id=run_id,
+            node_id=node_id,
+        )
+
+        # Phase C: managed workspace inputs, resolved host-side (see the helper).
+        _resolved_workspace_inputs = await _sandbox_resolve_managed_workspace_inputs(
+            workspace_inputs,
+            session_factory=session_factory,
+            org_id=org_id,
+            run_id=run_id,
+            node_id=node_id,
+        )
+
+        # Phase D/E: egress resolution + attribution metadata (see the helper).
+        _metadata, _egress_resolved = _sandbox_build_dispatch_metadata(
+            resource_limits=resource_limits,
+            egress_policy=egress_policy,
+            egress_allowlist=egress_allowlist,
+            _profile_net_policy=_profile_net_policy,
+            _resolved_provider=_resolved_provider,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+        )
+    finally:
+        _state.exec_ctx = _exec_ctx
+        _state.attempt_key = attempt_key
+        _state.dispatch_marker_set = dispatch_marker_set
+        _state.runner_bindings = _runner_bindings
+        _state.resolved_workspace_inputs = _resolved_workspace_inputs
+        _state.metadata = _metadata
+        _state.egress_resolved = _egress_resolved
+
+
+class _SandboxProvisioned(NamedTuple):
+    """What workspace provisioning hands the materialisation steps (phase F)."""
+
+    dispatch_provider: Any
+    sandbox_id: str
+    handle: Any
+
+
+async def _sandbox_create_workspace(  # NOSONAR S3776 - one provisioning step; the nested rate-limit backoff + provisioning watchdog are a single documented retry contract
+    _exec_ctx: _SandboxExecContext,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    template_id: str,
+    sandbox_mode: str,
+    sandbox_timeout: int,
+    resource_limits: dict[str, Any] | None,
+    _metadata: dict[str, str],
+    _egress_resolved: Any,
+    _route_provider: Any,
+    _route_image_ref: str | None,
+    _resolved_provider: str,
+) -> _SandboxProvisioned:
+    """Phase F: create the workspace, wrap its handle and stamp its id.
+
+    Extracted from ``_sandbox_provision_and_materialise`` (FAR-310 hardening
+    wave 4). The nested ``try`` around ``create_workspace`` (rate-limit backoff
+    and the provisioning watchdog) is preserved verbatim.
+
+    FAR-296 Phase 4a: E2B concurrent-sandbox rate limits (429 / resource
+    exhausted) are TRANSIENT. ``create_workspace`` is retried with exponential
+    backoff, bounded by the create timeout window and the node timeout. A run
+    that exhausts the retries fails RETRYABLY (``sandbox.rate_limited``) — it
+    must NOT permanently fail as ``harness.unknown``. FAR-766: the dispatch
+    marker is written ("dispatching") BEFORE ``create``; if create never
+    returns the node would sit claimed-but-never-dispatched until the slow
+    35-min ``dispatcher_reconcile`` nodeless sweep, so the provisioning await
+    (create AND the backoff sleeps) is bounded and a bound breach fails
+    RETRYABLY within the window.
+    """
+    from farna.core.runtime_provider import RuntimeProviderError, WorkspaceSpec
+
+    _rate_limit_attempt = 0
+    _provision_timeout = _sandbox_provisioning_timeout()
+    _dispatch_spec: WorkspaceSpec | None = None
+    _dispatch_ref: str | None = None
+    _dispatch_provider = _require_dispatch_provider(_route_provider) if _route_provider is not None else _require_dispatch_provider(await _build_dispatch_provider(_resolved_provider))
+    # FAR-1050 R5: ``E2BRuntimeProvider.create_workspace`` now carries
+    # ``spec.egress_policy`` into the SDK's ``allow_internet_access``
+    # (deny_all/selected/none -> False; default/None -> True), and the
+    # selected-mode allowlist rides the spec's ``workspace_metadata``
+    # under the same key the legacy create stamps. A restrictive
+    # policy is therefore ENFORCED at provision time on this path, so
+    # the earlier "cannot express egress yet — refuse" stopgap is
+    # gone. ``_egress_resolved.refusal`` above still fires for a
+    # genuine tier refusal (e.g. an unrecognised policy).
+    _dispatch_spec = WorkspaceSpec(
+        environment_profile_id=_runner_binding_env_profile_id() or uuid.UUID(int=0),
+        organisation_id=_parse_uuid_opt(org_id) or uuid.UUID(int=0),
+        run_id=_parse_uuid_opt(run_id),
+        # T2 parity with the legacy create kwargs: same template, same
+        # strictly-greater-than-command lifetime (FAR-487/FAR-489).
+        # NOTE (FAR-1051): on a kubernetes route ``_route_image_ref`` is the
+        # kubernetes-bound profile's own ``image_ref`` when set (same source
+        # the bundled-runner mapper, runner_dispatch.py, reads), so one
+        # profile resolves one image on both arms. Only when the profile
+        # declares no image_ref does the E2B-template ``template_id`` fall
+        # through as the pod image — and a non-image template_id then fails
+        # loudly at provision time (ImagePullBackOff ->
+        # ProvisionTimeoutError). Non-kubernetes routes are unchanged.
+        image_ref=_route_image_ref or template_id,
+        timeout_seconds=int(sandbox_timeout + _SANDBOX_LIFETIME_GRACE_S),
+        resource_limits=dict(resource_limits or {}),
+        egress_policy=_egress_resolved.policy,
+        workspace_metadata=dict(_metadata),
+    )
+    try:
+        while True:
+            try:
+                _dispatch_ref = await asyncio.wait_for(
+                    _require_dispatch_provider(_dispatch_provider).create_workspace(_require_dispatch_spec(_dispatch_spec)),
+                    timeout=min(sandbox_timeout, _provision_timeout),
+                )
+                break
+            except Exception as _rle:
+                # The provider's typed RateLimitedError AND the
+                # RateLimitException the E2B provider wraps onto
+                # ``__cause__`` (T8) both land here, so a real 429
+                # still enters this backoff instead of degrading to a
+                # terminal ``harness.unknown``.
+                _rate_limited = _is_rate_limited_error(_rle)
+                if not _rate_limited:
+                    raise
+                _rate_limit_attempt += 1
+                if _rate_limit_attempt > _SANDBOX_RATE_LIMIT_MAX_RETRIES:
+                    raise SandboxQueueTimeoutError(f"E2B rate-limited after {_rate_limit_attempt} attempts creating sandbox for node '{node_id}'") from None
+                _backoff = _SANDBOX_RATE_LIMIT_BASE_BACKOFF_S * (2 ** (_rate_limit_attempt - 1))
+                _log.warning(
+                    "sandbox_agent.e2b_rate_limited_retrying",
+                    extra={
+                        "run_id": run_id,
+                        "node_id": node_id,
+                        "attempt": _rate_limit_attempt,
+                        "backoff_seconds": _backoff,
+                    },
+                )
+                _emit_script_span_event(
+                    "script.rate_limited_retry",
+                    {
+                        "attempt": _rate_limit_attempt,
+                        "backoff_seconds": _backoff,
+                    },
+                )
+                await asyncio.wait_for(
+                    asyncio.sleep(_backoff),
+                    timeout=min(sandbox_timeout, _provision_timeout),
+                )
+    except TimeoutError:
+        _log.warning(
+            "sandbox_agent.provisioning_watchdog_fired",
+            extra={
+                "run_id": run_id,
+                "node_id": node_id,
+                "timeout_seconds": _provision_timeout,
+                "state": "dispatching",
+            },
+        )
+        raise SandboxQueueTimeoutError(f"Sandbox provisioning for node '{node_id}' exceeded {_provision_timeout}s bound (AsyncSandbox.create never returned — stuck dispatching; provider may be degraded)") from None
+    if _dispatch_provider is None or _dispatch_ref is None or not _dispatch_ref:
+        raise RuntimeProviderError("FAR-1050 dispatch lost its runtime provider after create")
+    _sandbox_id = _dispatch_ref
+    sandbox = _ProviderMediatedHandle(_dispatch_provider, _sandbox_id)
+    _emit_script_span_event(
+        "script.provisioned",
+        {
+            "sandbox_id": _sandbox_id,
+            "template": template_id,
+            "mode": sandbox_mode,
+        },
+    )
+    # Persist the real sandbox id so the heartbeat-lost path
+    # (run_executor_with_watchdog) can kill the sandbox by id.
+    await _exec_store_dispatch_marker_sandbox(_sandbox_id, _exec_ctx)
+    return _SandboxProvisioned(dispatch_provider=_dispatch_provider, sandbox_id=_sandbox_id, handle=sandbox)
+
+
+async def _sandbox_upload_context_files(
+    context_files: dict[str, str],
+    *,
+    sandbox_id: str,
+    dispatch_provider: Any,
+    _resolved_provider: str,
+) -> None:
+    """Phase G (part): upload the node's context files into the sandbox.
+
+    Extracted from ``_sandbox_provision_and_materialise`` (FAR-310 hardening
+    wave 4). ``.b64`` entries are base64-decoded and written under the
+    extension-stripped path, exactly as before.
+    """
+    for raw_path, raw_content in context_files.items():
+        write_path = raw_path.removesuffix(".b64") if raw_path.endswith(".b64") else raw_path
+        write_content = base64.b64decode(raw_content).decode() if raw_path.endswith(".b64") else raw_content
+        await asyncio.wait_for(
+            _write_file_via_provider(
+                sandbox_id,
+                write_path,
+                write_content,
+                provider_type=_resolved_provider,
+                borrowed_provider=dispatch_provider,
+            ),
+            timeout=_SANDBOX_IO_TIMEOUT,
+        )
+
+
+async def _sandbox_write_schema_contract(  # NOSONAR S3776 - one advisory-contract write step; the upload/best-effort arms are a single documented FAR-901 seam
+    *,
+    node_id: str,
+    node_def: dict[str, Any],
+    config: _SandboxNodeConfig,
+    sandbox_mode: str,
+    sandbox_id: str,
+    dispatch_provider: Any,
+    _resolved_provider: str,
+    session_factory: Callable[..., Any] | None,
+    rendered_prompt: str,
+) -> tuple[str, Any]:
+    """Phase H: write the advisory schema contract files into the sandbox.
+
+    Extracted from ``_sandbox_provision_and_materialise`` (FAR-310 hardening
+    wave 4). FAR-901: the contract is ADVISORY — Modulo validates
+    independently; these files are inputs for the dispatched runtime's own
+    tooling. Returns the (possibly schema-injection-extended) prompt and the
+    resolved schema profile the caller must publish on ``_state``.
+    """
+    _sandbox_schema_dir = "/home/user/schemas"
+    _node_schema_profile: SchemaProfile = _resolve_schema_profile(node_def) or "verbatim"
+    # Resolve the provider_id from the node's agent → model backend.
+    # Best-effort: the resolver returns None on absence/failure and never raises.
+    _schema_provider_id = await _resolve_provider_id_from_agent(
+        session_factory,
+        _parse_uuid_opt(node_def.get("agent_id")),
+    )
+    # Write to a LOCAL temp dir, then upload to the sandbox.  The contract
+    # writer is E2B-decoupled — it writes to a real filesystem Path.
+    _contract_local_tmp: Path | None = None
+    try:
+        import tempfile
+
+        _contract_local_tmp = Path(tempfile.mkdtemp(prefix="schema_contract_"))
+        _contract_result = write_schema_contract(
+            _contract_local_tmp,
+            node_id=node_id,
+            input_schema=config.input_schema_json,
+            output_schema=config.output_schema_json,
+            profile=_node_schema_profile,
+            provider_id=_schema_provider_id,
+        )
+        if _contract_result.warnings:
+            _log.warning(
+                "contract.write_warnings",
+                extra={"node_id": node_id, "warnings": _contract_result.warnings},
+            )
+        # Upload the schema files into the sandbox via the file API.
+        if _contract_result.schema_files_written:
+            _local_schema_dir = _contract_local_tmp / "schemas" / node_id
+            if _local_schema_dir.is_dir():
+                for _schema_file in _local_schema_dir.iterdir():
+                    if _schema_file.is_file():
+                        _file_content = _schema_file.read_text(encoding="utf-8")
+                        _sandbox_rel = f"{_sandbox_schema_dir}/{node_id}/{_schema_file.name}"
+                        await asyncio.wait_for(
+                            _write_file_via_provider(
+                                sandbox_id,
+                                _sandbox_rel,
+                                _file_content,
+                                provider_type=_resolved_provider,
+                                borrowed_provider=dispatch_provider,
+                            ),
+                            timeout=_SANDBOX_IO_TIMEOUT,
+                        )
+                # LLM mode: inject schema file paths into the rendered prompt.
+                if sandbox_mode != "script":
+                    _input_schema_path = f"{_sandbox_schema_dir}/{node_id}/input.active.json"
+                    _output_schema_path = f"{_sandbox_schema_dir}/{node_id}/output.active.json"
+                    _schema_injection = (
+                        f"\n\n---\nSchema contract files (advisory — Modulo validates independently):\n  Input schema:  {_input_schema_path}\n  Output schema: {_output_schema_path}\n"
+                        f"  Schema dir:    {_sandbox_schema_dir}/{node_id}/\n  Environment:   FARNA_CONTROL_SCHEMA_DIR={_sandbox_schema_dir}\n---"
+                    )
+                    rendered_prompt = rendered_prompt + _schema_injection
+    except Exception:
+        _log.warning(
+            "contract.sandbox_write_failed",
+            extra={"node_id": node_id},
+            exc_info=True,
+        )
+    finally:
+        # FAR-901: the contract files are uploaded to the sandbox above, so
+        # the local temp dir is removed here on EVERY path.  Cleaning up
+        # only in the output-schema validation ``finally`` (further below)
+        # leaked the dir whenever a node declared an input schema but no
+        # output schema, because that validation block never ran.
+        if _contract_local_tmp is not None:
+            import shutil
+
+            shutil.rmtree(_contract_local_tmp, ignore_errors=True)
+    return rendered_prompt, _node_schema_profile
+
+
+async def _sandbox_write_prompt_or_input(
+    *,
+    sandbox_mode: str,
+    sandbox_id: str,
+    dispatch_provider: Any,
+    _resolved_provider: str,
+    rendered_prompt: str,
+    raw_input: Any,
+) -> str:
+    """Phase I (part): write ``prompt.md`` (llm) or ``input.json`` (script).
+
+    Extracted from ``_sandbox_provision_and_materialise`` (FAR-310 hardening
+    wave 4). FAR-296 mode split: llm mode writes the rendered prompt to
+    prompt.md; script mode writes the FULL run input (no 10KB truncation) to
+    /home/user/input.json and never writes a prompt. Returns the input JSON
+    string the sandbox env carries.
+    """
+    _input_json = json.dumps(raw_input)
+    if sandbox_mode == "script":
+        await asyncio.wait_for(
+            _write_file_via_provider(
+                sandbox_id,
+                "/home/user/input.json",
+                _input_json,
+                provider_type=_resolved_provider,
+                borrowed_provider=dispatch_provider,
+            ),
+            timeout=_SANDBOX_IO_TIMEOUT,
+        )
+    else:
+        if len(_input_json) > 10240:
+            _input_json = json.dumps({"_truncated": True, "_key_count": len(raw_input) if isinstance(raw_input, dict) else 0})
+        await asyncio.wait_for(
+            _write_file_via_provider(
+                sandbox_id,
+                "/home/user/prompt.md",
+                rendered_prompt,
+                provider_type=_resolved_provider,
+                borrowed_provider=dispatch_provider,
+            ),
+            timeout=_SANDBOX_IO_TIMEOUT,
+        )
+    return _input_json
+
+
+async def _sandbox_provision_inputs_in_sandbox(
+    sandbox: Any,
+    _resolved_workspace_inputs: list[Any],
+    *,
+    run_id: str,
+    node_id: str,
+) -> None:
+    """Phase I (rest): provision the managed workspace inputs INSIDE the sandbox.
+
+    Extracted from ``_sandbox_provision_and_materialise`` (FAR-310 hardening
+    wave 4). FAR-800: runs AFTER context files and prompt are written but
+    BEFORE the sandbox policy (credential helper, egress) and the agent
+    command. A provisioning failure must KILL the sandbox — the agent command
+    must never run on partial provision.
+    """
+    if not _resolved_workspace_inputs:
+        return
+    from farna.core.pipeline_engine.workspace_input_orchestration import (
+        ProvisioningError as WorkspaceProvisioningError,
+    )
+    from farna.core.pipeline_engine.workspace_input_orchestration import (
+        provision_workspace_inputs_in_sandbox,
+    )
+
+    try:
+        await provision_workspace_inputs_in_sandbox(
+            sandbox,
+            _resolved_workspace_inputs,
+        )
+    except WorkspaceProvisioningError as exc:
+        _log.warning(
+            "workspace_input.provisioning_failed",
+            extra={
+                "run_id": run_id,
+                "node_id": node_id,
+                "error_code": exc.error_code,
+                "detail": str(exc)[:_MAX_ERROR_MSG],
+            },
+        )
+        raise SandboxNodeFailedError(
+            f"Workspace input provisioning failed: {str(exc)[:_MAX_ERROR_MSG]}",
+            node_id=node_id,
+        ) from exc
+
+
+async def _sandbox_build_env_vars_extra(
+    node_def: dict[str, Any],
+    *,
+    session_factory: Callable[..., Any] | None,
+    org_id: str,
+) -> dict[str, str]:
+    """Phase J: resolve the node's env vars and its tool-scope header value.
+
+    Extracted from ``_sandbox_provision_and_materialise`` (FAR-310 hardening
+    wave 4). FAR-418: exposes ``capability_scope.allowed_tools`` so the
+    sandbox agent runtime's MCP client can forward it as the
+    ``X-Farna-Control-Allowed-Tools`` header (the MCP server's McpAuthMiddleware
+    lifts it into the request-scoped allow-list consumed by
+    check_tool_scope). Absent/empty (the UNRESTRICTED default) sets nothing,
+    preserving pre-scope behaviour.
+    """
+    env_vars_extra: dict[str, str] = await resolve_env_var_refs(
+        node_def.get("env_vars") or {},
+        lambda k: _sandbox_resolve_secret_ref(
+            k,
+            session_factory=session_factory,
+            org_id=org_id,
+        ),
+    )
+    _node_scope = node_def.get("capability_scope") or {}
+    _allowed_tools = _node_scope.get("allowed_tools")
+    if _allowed_tools:
+        env_vars_extra["FARNA_CONTROL_ALLOWED_TOOLS"] = ",".join(str(t) for t in _allowed_tools)
+    return env_vars_extra
+
+
+async def _sandbox_provision_and_materialise(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    config: _SandboxNodeConfig,
+    node_def: dict[str, Any],
+    sandbox_mode: str,
+    template_id: str,
+    sandbox_timeout: int,
+    resource_limits: dict[str, Any] | None,
+    context_files: dict[str, str],
+    raw_input: Any,
+    rendered_prompt: str,
+    _route_provider: Any,
+    _route_image_ref: str | None,
+    _resolved_provider: str,
+) -> _SandboxMaterialisation:
+    """Phases F-J: provision the workspace, upload context/contract files,
+    write the prompt (or ``input.json``), provision managed inputs and resolve
+    the sandbox env.
+
+    Wave 4 moved each step into its own helper
+    (``_sandbox_create_workspace`` — which preserves the nested ``try`` around
+    ``create_workspace``, its rate-limit backoff and the provisioning watchdog
+    verbatim — then ``_sandbox_upload_context_files``,
+    ``_sandbox_write_schema_contract``, ``_sandbox_write_prompt_or_input``,
+    ``_sandbox_provision_inputs_in_sandbox`` and
+    ``_sandbox_build_env_vars_extra``), leaving this function as the ordered
+    shell. Returns the three values the exec phase needs that are produced
+    here.
+    """
+    _exec_ctx = _state.exec_ctx
+    sandbox = _state.sandbox
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    _metadata: dict[str, str] = _state.metadata
+    _egress_resolved: Any = _state.egress_resolved
+    _resolved_workspace_inputs: list[Any] = _state.resolved_workspace_inputs
+    _node_schema_profile: Any = _state.node_schema_profile
+    try:
+        # FAR-901: set FARNA_CONTROL_SCHEMA_DIR at sandbox creation time (not
+        # per-command). The env var is set unconditionally — the schema files
+        # may or may not be written (they're advisory), but the env var must be
+        # present for any consumer that checks it.
+        _schema_dir_for_sandbox: dict[str, str] = {
+            "FARNA_CONTROL_SCHEMA_DIR": "/home/user/schemas",
+        }
+
+        # Phase F: create the workspace (rate-limit backoff + provisioning
+        # watchdog — see the helper) and wrap its handle.
+        _provisioned = await _sandbox_create_workspace(
+            _exec_ctx,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            template_id=template_id,
+            sandbox_mode=sandbox_mode,
+            sandbox_timeout=sandbox_timeout,
+            resource_limits=resource_limits,
+            _metadata=_metadata,
+            _egress_resolved=_egress_resolved,
+            _route_provider=_route_provider,
+            _route_image_ref=_route_image_ref,
+            _resolved_provider=_resolved_provider,
+        )
+        _dispatch_provider = _provisioned.dispatch_provider
+        _sandbox_id = _provisioned.sandbox_id
+        sandbox = _provisioned.handle
+
+        # Phase G: context files (see the helper).
+        await _sandbox_upload_context_files(
+            context_files,
+            sandbox_id=_sandbox_id,
+            dispatch_provider=_dispatch_provider,
+            _resolved_provider=_resolved_provider,
+        )
+
+        # Phase H: advisory schema contract files (see the helper). The helper
+        # returns the prompt it may have extended plus the resolved profile the
+        # finally below must publish.
+        rendered_prompt, _node_schema_profile = await _sandbox_write_schema_contract(
+            node_id=node_id,
+            node_def=node_def,
+            config=config,
+            sandbox_mode=sandbox_mode,
+            sandbox_id=_sandbox_id,
+            dispatch_provider=_dispatch_provider,
+            _resolved_provider=_resolved_provider,
+            session_factory=session_factory,
+            rendered_prompt=rendered_prompt,
+        )
+
+        # Phase I: prompt/input write then in-sandbox managed-input provisioning
+        # (see the helpers).
+        _input_json = await _sandbox_write_prompt_or_input(
+            sandbox_mode=sandbox_mode,
+            sandbox_id=_sandbox_id,
+            dispatch_provider=_dispatch_provider,
+            _resolved_provider=_resolved_provider,
+            rendered_prompt=rendered_prompt,
+            raw_input=raw_input,
+        )
+        await _sandbox_provision_inputs_in_sandbox(
+            sandbox,
+            _resolved_workspace_inputs,
+            run_id=run_id,
+            node_id=node_id,
+        )
+
+        # Phase J: env vars + the tool-scope header value (see the helper).
+        env_vars_extra: dict[str, str] = await _sandbox_build_env_vars_extra(
+            node_def,
+            session_factory=session_factory,
+            org_id=org_id,
+        )
+    finally:
+        _state.sandbox = sandbox
+        _state.sandbox_id = _sandbox_id
+        _state.dispatch_provider = _dispatch_provider
+        _state.node_schema_profile = _node_schema_profile
+    return _SandboxMaterialisation(
+        schema_dir=_schema_dir_for_sandbox,
+        input_json=_input_json,
+        env_vars_extra=env_vars_extra,
+    )
+
+
+class _SandboxExecRuntime(NamedTuple):
+    """What the exec-runtime builder hands to the command phase (phases K-M)."""
+
+    watchdog: _SandboxWatchdog
+    stall: _StallDetector
+    stall_timeout: float
+
+
+def _sandbox_resolve_stall_window(
+    *,
+    node_id: str,
+    enable_heartbeat: bool,
+    watch_log_path: str | None,
+    stdout_percentage_delta: float | None,
+    watch_globs: list[str],
+    sandbox_mode: str,
+    stall_timeout_override: Any,
+) -> tuple[_StallDetector, float]:
+    """FAR-306 / FAR-1088: build the per-channel stall detector and resolve the
+    idle watchdog's silence window.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Pure apart from the invalid-override warning log.
+    """
+    # FAR-306 / FAR-1088: per-channel stall detector. The `heartbeat`
+    # channel is refreshed only by REAL output callbacks (stream
+    # chunks / log growth); probe-success liveness sits on the
+    # separate `connection` channel (enabled with the heartbeat,
+    # dropped in strict mode) and — for a STREAMING node only —
+    # counts until the run's first output. `sandbox_mode` scopes that
+    # exclusion: script mode keeps connection liveness unconditionally
+    # (its stdout is redirected to agent.log and a block-buffered
+    # child can be quiet for far longer than the silence window).
+    # The opt-in detectors (log-growth, stdout-delta, filesystem) add
+    # extra channels that must ALL be silent before the watchdog
+    # fires. ``_activity`` remains the stream-buffer/throttle dict
+    # (not a liveness source).
+    _stall = _configure_stall_detector(
+        enable_heartbeat=enable_heartbeat,
+        watch_log_path=watch_log_path,
+        stdout_percentage_delta=stdout_percentage_delta,
+        watch_globs=watch_globs,
+        sandbox_mode=sandbox_mode,
+    )
+    # FAR-98: stall_timeout_seconds (node config) overrides the idle
+    # watchdog's silence window. Resolve the DEFAULT at runtime so
+    # the constant stays patchable (the FAR-97 tests patch it).
+    try:
+        stall_timeout: float = float(stall_timeout_override) if stall_timeout_override is not None else _SANDBOX_IDLE_TIMEOUT
+    except (TypeError, ValueError):
+        _log.warning(
+            "sandbox_agent.stall_timeout_invalid_fallback",
+            extra={"node_id": node_id, "stall_timeout_raw": stall_timeout_override},
+        )
+        stall_timeout = _SANDBOX_IDLE_TIMEOUT
+    return _stall, stall_timeout
+
+
+async def _sandbox_apply_runtime_policy(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    pipeline_id: str,
+    node_def: dict[str, Any],
+    read_only: bool,
+    git_credentials: str | None,
+    single_pr_per_run: bool,
+    delivery_sentinel: str | None,
+    _resolved_provider: str,
+) -> None:
+    """Phase K: apply the enforced sandbox policy before the command runs.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Owns ``gh_guard_install_status`` (published back in ``finally``).
+    """
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    _egress_resolved: Any = _state.egress_resolved
+    _gh_guard_install_status: str | None = _state.gh_guard_install_status
+    try:
+        # FAR-212 PR B: apply the enforced sandbox policy AFTER the Modulo-owned
+        # context files / prompt / input are written but BEFORE the agent/script
+        # command executes. Any policy field set on the node invokes the policy
+        # step (read-only workspace chmod, git-credential scope helper, or
+        # selected-mode egress allowlist). Selected-mode allowlist hostnames are
+        # pre-resolved to concrete IPs so the iptables rules bind real addresses
+        # (an unresolvable host stays denied — fail-closed). The policy is
+        # best-effort at the command level (each step is itself fail-closed) and
+        # never wedges the dispatch.
+        # FAR-1085: use the resolved egress values from resolve_egress, not the
+        # raw config values, so the policy step enforces the same policy the
+        # capability derivation certifies.
+        _resolved_egress_for_policy = _egress_resolved.policy
+        _resolved_allowlist_for_policy = _egress_resolved.allowlist
+        # FAR-1273: OBSERVABLE DISARM. The guard's trigger moved from the
+        # delivery sentinel to the explicit ``single_pr_per_run`` flag, so a
+        # stored graph that predates the flag (e.g. a live Prompt-to-PR node
+        # carrying only ``delivery_sentinel``) loses the in-sandbox guard the
+        # moment this code deploys. Warn at the guard's own decision point so
+        # the disarm is visible in logs/metrics (node id + pipeline id), and
+        # FAIL OPEN: the run proceeds unchanged. Deliberately do NOT re-arm on
+        # the sentinel — that would defeat the ticket; the operator must set
+        # the flag (no JSON-rewriting data migration was shipped).
+        if delivery_sentinel and not single_pr_per_run:
+            _log.warning(
+                "sandbox_agent.single_pr_per_run_flag_missing",
+                extra={
+                    "run_id": run_id,
+                    "node_id": node_id,
+                    "pipeline_id": pipeline_id,
+                    "detail": ("node carries a non-empty delivery_sentinel but NOT single_pr_per_run: the one-PR-per-run gh guard is not installed for this run (set single_pr_per_run=true on the node to arm it)"),
+                },
+            )
+        if _should_apply_sandbox_policy(
+            read_only=read_only,
+            git_credentials=git_credentials,
+            egress_policy=_resolved_egress_for_policy,
+            egress_allowlist=_resolved_allowlist_for_policy,
+            # FAR-1273: a flagged node runs the policy step for the
+            # one-PR-per-run gh guard even with every enforcement control
+            # default (Prompt-to-PR's shape). A delivery sentinel alone does
+            # NOT arm it.
+            single_pr_per_run=single_pr_per_run,
+        ):
+            # FAR-798: thread the node's validated ``allowed_hosts`` (host ->
+            # per-host env-var name) into the sandbox policy so the multi-host
+            # git-credential helper is actually installed when scoped
+            # credentials grant more than one host. Without this, the capability
+            # ``sandbox.git_credentials.multi_host`` certifies a guarantee the
+            # runtime never enforced (capability/enforcement mismatch). Only
+            # relevant for scoped credentials; other scopes ignore it.
+            # Allowlist pre-resolution runs once, BEFORE the isolation call,
+            # so resolution and enforcement use the identical resolved values
+            # (unchanged by FAR-1050 R3 — only the invocation seam moved, onto
+            # ``apply_isolation``; R6 then retired the flag and deleted the
+            # legacy branch, leaving this single unconditional path).
+            _resolved_allowlist = await _resolve_egress_allowlist(_resolved_allowlist_for_policy)
+            _policy_allowed_hosts = node_def.get("allowed_hosts") if git_credentials == "scoped" else None
+            # FAR-1264: when this invocation exists ONLY for the gh guard
+            # (no enforcement control set), its failure must NOT fail the run
+            # — degrade to the prompt-level one-PR-per-run guard, exactly as
+            # before this ticket (the guard install is best-effort by
+            # contract). When an enforcement control IS set, failures keep
+            # propagating unchanged (fail-closed — a node that asked for the
+            # read-only seal / scoped credentials / egress allowlist must
+            # never run without it).
+            _policy_enforces_controls = _has_enforcement_sandbox_controls(
+                read_only=read_only,
+                git_credentials=git_credentials,
+                egress_policy=_resolved_egress_for_policy,
+                egress_allowlist=_resolved_allowlist_for_policy,
+            )
+            try:
+                _gh_guard_install_status = await _apply_isolation_via_provider(
+                    _sandbox_id,
+                    org_id=org_id,
+                    run_id=run_id,
+                    read_only=read_only,
+                    git_credentials=git_credentials,
+                    egress_policy=_resolved_egress_for_policy,
+                    egress_allowlist=_resolved_allowlist,
+                    allowed_hosts=_policy_allowed_hosts,
+                    # FAR-1273: rides the typed IsolationPolicy (the single
+                    # carrier) to the E2B policy call site.
+                    single_pr_per_run=single_pr_per_run,
+                    # FAR-1315: the claiming node's identity for the run's
+                    # one-PR ledger (same typed carrier).
+                    guard_owner=node_id,
+                    # FAR-1051: the profile's provider (legacy E2B route
+                    # unchanged; a kubernetes profile reaches its provider).
+                    # ``borrowed_provider`` threads the dispatch's own
+                    # already-resolved instance so the policy step reuses it
+                    # instead of building a hub per call (closed by the
+                    # dispatch's finally, never here).
+                    provider_type=_resolved_provider,
+                    borrowed_provider=_dispatch_provider,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # The install status is unknown when isolation failed — leave
+                # the pre-bound None so the settle can never read a receipt
+                # probe as definitive.
+                _gh_guard_install_status = None
+                if _policy_enforces_controls:
+                    raise
+                _log.warning(
+                    "sandbox_policy.delivery_guard_install_failed",
+                    extra={
+                        "run_id": run_id,
+                        "node_id": node_id,
+                        "detail": "gh one-PR-per-run guard not installed; degrading to the prompt-level guard",
+                    },
+                    exc_info=True,
+                )
+    finally:
+        _state.gh_guard_install_status = _gh_guard_install_status
+
+
+def _sandbox_init_exec_artifact_writer(
+    *,
+    run_id: str,
+    org_id: str,
+    node_id: str,
+    attempt_key: str | None,
+) -> tuple[Any, Any]:
+    """Build the live-output broker handle and the full-stdout artifact writer.
+
+    Extracted from ``_sandbox_build_exec_runtime`` (FAR-310 hardening wave 3).
+    Both are best-effort: a broker lookup or writer-init failure leaves the
+    corresponding handle ``None`` and never fails the dispatch. Returns
+    ``(artifact_writer, stream_broker)``.
+    """
+    # Live-output streaming (FAR-98): look the run event broker up in
+    # the process-local registry by run id (the broker is never carried
+    # inside LangGraph state — it is not msgpack-serializable, and
+    # carrying it in state broke checkpoint writes for every run).
+    # Buffer stdout/stderr chunks and publish a throttled
+    # node.stdout_chunk / node.stderr_chunk event at most once per
+    # _STREAM_FLUSH_INTERVAL so Run detail can show live output while
+    # the sandbox process runs. No broker registered -> skip silently
+    # (streaming is best-effort, never fatal).
+    _stream_broker = None
+    if run_id:
+        try:
+            _stream_broker = get_registry().get(uuid.UUID(run_id))
+        except (TypeError, ValueError):
+            _stream_broker = None
+
+    # FAR-582: full stdout/stderr side-car artifact writer.
+    # Bound to the node run; appends on every on_stdout/on_stderr
+    # callback; finalized on every terminal path.
+    _artifact_writer: Any = None
+    if run_id and node_id:
+        try:
+            from farna.core.artifacts import ArtifactWriter
+            from farna.core.artifacts.store import get_store
+            from farna.settings import get_settings as _get_settings
+
+            _settings = _get_settings()
+            if getattr(_settings, "artifacts_enabled", True):
+                _artifact_writer = ArtifactWriter(
+                    org_id=org_id,
+                    run_id=run_id,
+                    node_id=node_id,
+                    attempt_key=attempt_key or "",
+                    store=get_store(),
+                    enabled=True,
+                )
+        except Exception:
+            _log.warning(
+                "sandbox_agent.artifact_writer_init_failed",
+                extra={"node_id": node_id, "run_id": run_id},
+            )
+            _artifact_writer = None
+    return _artifact_writer, _stream_broker
+
+
+async def _sandbox_build_exec_runtime(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    sandbox_mode: str,
+    stdout_retention_mode: str,
+    resource_limits: dict[str, Any] | None,
+    enable_heartbeat: bool,
+    watch_log_path: str | None,
+    stdout_percentage_delta: float | None,
+    watch_globs: list[str],
+    wallclock_budget_seconds: int | None,
+    stall_timeout_override: Any,
+    start_time: float,
+    stdout_cap: int,
+    drained_chunks: list[str],
+    _resolved_provider: str,
+) -> _SandboxExecRuntime:
+    """Phases K-M prelude: stall detector, artifact writers and the watchdog.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Owns ``artifact_writer``, ``streaming_writer_instance`` and
+    ``drain_fn`` (published back in ``finally``) and returns the watchdog, the
+    stall detector and the resolved idle window the command phase needs.
+    """
+    sandbox = _state.sandbox
+    attempt_key: str | None = _state.attempt_key
+    _dispatch_provider = _state.dispatch_provider
+    _artifact_writer = _state.artifact_writer
+    _streaming_writer_instance = _state.streaming_writer_instance
+    _drain_fn = _state.drain_fn
+    _drained_chunks = drained_chunks
+    _stdout_cap = stdout_cap
+    try:
+        _stall, stall_timeout = _sandbox_resolve_stall_window(
+            node_id=node_id,
+            enable_heartbeat=enable_heartbeat,
+            watch_log_path=watch_log_path,
+            stdout_percentage_delta=stdout_percentage_delta,
+            watch_globs=watch_globs,
+            sandbox_mode=sandbox_mode,
+            stall_timeout_override=stall_timeout_override,
+        )
+
+        _artifact_writer, _stream_broker = _sandbox_init_exec_artifact_writer(
+            run_id=run_id,
+            org_id=org_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+        )
+
+        watchdog = _SandboxWatchdog(
+            sandbox=sandbox,
+            stall=_stall,
+            node_id=node_id,
+            run_id=run_id,
+            watch=_WatchdogWatchConfig(
+                log_path=watch_log_path,
+                globs=watch_globs,
+                percentage_delta=stdout_percentage_delta,
+            ),
+            resource_limits=resource_limits,
+            sandbox_mode=sandbox_mode,
+            stream_broker=_stream_broker,
+            drained_chunks=_drained_chunks,
+            wall_clock=_WatchdogWallClock(wallclock_budget_seconds, start_time),
+            # FAR-792: only "full" mode widens the drain window to the node
+            # cap (so 5MB can actually be retained); "tail" keeps the legacy
+            # ``_MAX_DRAIN_WINDOW`` bound (and honors test patches of it).
+            drain_window_bytes=_stdout_cap if stdout_retention_mode == "full" else None,
+            # FAR-1051: the probes above run against the profile's provider.
+            provider_type=_resolved_provider,
+        )
+        # FAR-582: assign artifact_writer post-construction to keep
+        # __init__ param count under 13 (S107).
+        watchdog._artifact_writer = _artifact_writer
+        # FAR-1051 follow-up: hand the watchdog the dispatch's own
+        # already-resolved provider (same post-construction pattern) so
+        # its per-tick probes borrow it instead of building a fresh
+        # hub+provider on every tick.
+        watchdog._dispatch_provider = _dispatch_provider
+        _drain_fn = watchdog.drain_sandbox_log
+
+        # FAR-844: streaming artifact writer for incremental stdout capture.
+        # Chunks are fed to the writer during drain_sandbox_log(), so the
+        # full transcript is persisted to the artifact store without
+        # assembling the entire string in memory. The writer computes SHA256
+        # incrementally. It is deliberately UNCAPPED (max_bytes=None): it
+        # must mirror the one-shot _persist_full_stdout_artifact fallback
+        # (which stores the FULL redacted transcript) — the streaming path
+        # is the incremental implementation of that same "keep everything
+        # the drain delivered" contract, NOT the retention-cap truncation
+        # that bounds the inline agent_stdout. Capping it at _stdout_cap
+        # silently dropped the tail of an over-cap redacted stream while the
+        # envelope still advertised truncated=False (FAR-844 review fix).
+        # Uses the same overflow key pattern as _persist_full_stdout_artifact.
+        if attempt_key:
+            try:
+                from farna.core.artifacts.store import get_store as _get_streaming_store
+                from farna.core.artifacts.streaming import StreamingArtifactWriter
+
+                # NOSONAR S2083 - _streaming_overflow_key is a derived artifact
+                # key (attempt_key + a size suffix); it flows into
+                # StreamingArtifactWriter -> LocalArtifactStore, whose _raw_path
+                # rejects path-traversal chars and percent-encodes every segment
+                # (see store.py). No traversal is possible.
+                _streaming_overflow_key = f"{attempt_key}:full:{_stdout_cap}"
+                _streaming_writer_instance = StreamingArtifactWriter(
+                    _get_streaming_store(),
+                    org_id=org_id,
+                    run_id=run_id,
+                    node_id=node_id,
+                    attempt_key=_streaming_overflow_key,
+                    stream="stdout",
+                    max_bytes=None,
+                )
+                watchdog._streaming_writer = _streaming_writer_instance
+            except Exception:
+                _log.warning(
+                    "sandbox_agent.streaming_writer_init_failed",
+                    extra={"node_id": node_id, "run_id": run_id},
+                )
+                _streaming_writer_instance = None
+    finally:
+        _state.artifact_writer = _artifact_writer
+        _state.streaming_writer_instance = _streaming_writer_instance
+        _state.drain_fn = _drain_fn
+    return _SandboxExecRuntime(watchdog=watchdog, stall=_stall, stall_timeout=stall_timeout)
+
+
+async def _sandbox_prepare_exec_environment(
+    _state: _SandboxDispatchState,
+    _materialised: _SandboxMaterialisation,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    pipeline_id: str,
+    sandbox_mode: str,
+    start_time: float,
+    watchdog: _SandboxWatchdog,
+    wallclock_budget_seconds: int | None,
+) -> dict[str, str]:
+    """Build the command environment, claim the script lease, issue a credential.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Owns ``script_lease_claimed`` (published back in ``finally``) and
+    returns the environment dict the command runs with.
+    """
+    _schema_dir_for_sandbox = _materialised.schema_dir
+    _input_json = _materialised.input_json
+    env_vars_extra = _materialised.env_vars_extra
+    _exec_ctx = _state.exec_ctx
+    _runner_bindings: dict[str, str] = _state.runner_bindings
+    _script_lease_claimed: bool = _state.script_lease_claimed
+    sandbox_envs: dict[str, str] = {}
+    try:
+        # Redirect the agent's stdout/stderr into a sandbox log file so
+        # the process writes to a regular file — never a pipe that can
+        # fill and block a long session (FAR-97). The subshell preserves
+        # the command's exit code for the SDK's wait().
+        # System env vars first — provide defaults from the host. DO NOT
+        # move pipeline env before these: pipelines need to override
+        # GITHUB_TOKEN for identity separation (e.g. PR Reviewer uses
+        # farna-reviewbot PAT, not the default GITHUB_TOKEN identity).
+        # The reserved-prefix validator already prevents overriding
+        # FARNA_CONTROL_* vars, so update() below is the sanctioned override.
+        # FAR-592 (D6): ``_runner_bindings`` was resolved BEFORE the sandbox
+        # was created (see the provision-time block above the
+        # ``AsyncSandbox.create`` loop) and merges between the profile
+        # creds and the node envs — THE NODE WINS (see _build_sandbox_envs
+        # docstring for the deliberate precedence).
+        sandbox_envs = _build_sandbox_envs(
+            run_id=run_id,
+            pipeline_id=pipeline_id,
+            org_id=org_id,
+            input_json=_input_json,
+            sandbox_mode=sandbox_mode,
+            env_vars_extra=env_vars_extra,
+            runner_bindings=_runner_bindings,
+        )
+        sandbox_envs = {**_schema_dir_for_sandbox, **sandbox_envs}
+        # FAR-296 Phase 4a: wall-clock spend budget — non-tick path. A very
+        # slow provisioning sequence may already have consumed the budget
+        # before the script process starts. Even though no side effects
+        # occurred, the budget was exhausted — re-dispatching would waste
+        # another provisioning cycle on a run that already consumed its
+        # budget allocation. Script mode only: LLM-mode nodes do not take a
+        # wall-clock budget; raising ScriptBudgetKilledError for an LLM-mode
+        # node would be a misclassification.
+        _check_wallclock_budget_pre_run(
+            sandbox_mode=sandbox_mode,
+            wallclock_budget_seconds=wallclock_budget_seconds,
+            start_time=start_time,
+            watchdog=watchdog,
+            run_id=run_id,
+            node_id=node_id,
+        )
+        # FAR-296 Phase 2 fencing lease (script mode only): persist the
+        # execution claim IMMEDIATELY BEFORE the script process starts so
+        # a durable marker proves the script RAN. Once claimed, any fault
+        # is POST-CLAIM (terminal — never retryable, exactly-once). LLM
+        # mode does NOT take a lease (at-least-once, no fencing).
+        if sandbox_mode == "script":
+            await _exec_store_script_lease(_exec_ctx)
+            _script_lease_claimed = True
+            _emit_script_span_event(
+                "script.lease_claimed",
+                {
+                    "run_id": run_id,
+                    "node_id": node_id,
+                },
+            )
+        # FAR-1690 slice A1: EVERY sandbox dispatch (script AND llm mode)
+        # issues a short-TTL, run-scoped runner-role API key through the
+        # CredentialIssuer seam, so the workspace always holds a run-scoped
+        # token and never only the long-lived host credentials. The key is
+        # per-run, revoked at run finalization (and by the compensating
+        # sweep), and its issuance provenance is stamped as
+        # ``modulo_minted`` (attested — NEVER ``observed``). Fail-open: an
+        # issuance failure leaves the key absent (the sandbox still runs).
+        _issued_credential = await _exec_issue_run_credential_for_sandbox(_exec_ctx)
+        if _issued_credential is not None:
+            sandbox_envs["FARNA_CONTROL_API_KEY"] = _issued_credential.secret
+            sandbox_envs[RUN_CREDENTIAL_PROVENANCE_ENV] = _issued_credential.provenance
+    finally:
+        _state.script_lease_claimed = _script_lease_claimed
+    return sandbox_envs
+
+
+async def _sandbox_wrap_command_with_bridge(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    state: dict[str, Any],
+    rendered_agent_command: str,
+    loop_intercept_config: LoopInterceptConfig | None,
+    sandbox_envs: dict[str, str],
+    _resolved_provider: str,
+) -> str:
+    """FAR-211: start the loop-interception bridge and wrap the command.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Best-effort and fail-open in EVERY direction; owns
+    ``bridge_server`` (published back in ``finally``) and mutates
+    ``sandbox_envs`` in place with the bridge endpoint/config when armed.
+    Returns the command that should actually run.
+    """
+    # The lazy import the pre-split body performed at phase start: every name
+    # below is used only by this block, and the parent module is already
+    # imported at module scope, so importing here is behaviour-identical.
+    from farna.core.guardrails.loop_intercept import (
+        LoopInterceptCallbackServer,
+        bridge_client_source,
+        load_loop_intercept_guardrails,
+        persist_loop_interception_audit,
+    )
+
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    _bridge_server = _state.bridge_server
+    _bridge_wrapped_command = rendered_agent_command
+    try:
+        # FAR-211: start the loop-interception callback server + write
+        # the bridge client into the sandbox. Best-effort and
+        # fail-open in EVERY direction: the bridge is only started when
+        # the node's loop_intercept config is enabled AND the pipeline
+        # has bound guardrails (zero guardrails -> the bridge is
+        # inert); a setup failure disables the bridge for this node but
+        # NEVER blocks the dispatch or wedges the agent loop. The
+        # endpoint is the Modulo sandbox-agent process's localhost —
+        # the ADR 044 amendment documents how it is exposed into the
+        # sandbox (in the test-driven slice it is the same host).
+        if loop_intercept_config is not None and loop_intercept_config.enabled:
+            try:
+                bridge_defs = await load_loop_intercept_guardrails(
+                    session_factory,
+                    org_id=state.get("_org_id"),
+                    pipeline_id=state.get("_pipeline_id"),
+                )
+                if bridge_defs:
+                    _bridge_server = LoopInterceptCallbackServer(
+                        engine=EvalEngine(),
+                        definitions=bridge_defs,
+                        config=loop_intercept_config,
+                        audit_sink=partial(
+                            persist_loop_interception_audit,
+                            session_factory=session_factory,
+                            org_id=org_id,
+                            run_id=run_id,
+                            node_id=node_id,
+                        ),
+                    )
+                    _bridge_port = await _bridge_server.start()
+                    await asyncio.wait_for(
+                        _write_file_via_provider(
+                            _sandbox_id,
+                            "/home/user/modulo_bridge.py",
+                            bridge_client_source(),
+                            provider_type=_resolved_provider,
+                            borrowed_provider=_dispatch_provider,
+                        ),
+                        timeout=_SANDBOX_IO_TIMEOUT,
+                    )
+                    await asyncio.wait_for(
+                        _write_file_via_provider(
+                            _sandbox_id,
+                            "/home/user/modulo_bridge_config.json",
+                            json.dumps(loop_intercept_config.model_dump(mode="json")),
+                            provider_type=_resolved_provider,
+                            borrowed_provider=_dispatch_provider,
+                        ),
+                        timeout=_SANDBOX_IO_TIMEOUT,
+                    )
+                    sandbox_envs["FARNA_CONTROL_BRIDGE_ENDPOINT"] = f"http://127.0.0.1:{_bridge_port}"
+                    sandbox_envs["FARNA_CONTROL_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
+                    # FAR-664 (newline-safe bridge handoff): the rendered
+                    # agent command is handed to the bridge via a FILE, not
+                    # inline after ``--``. An inline interpolation word-
+                    # splits a multi-line command in the outer bash, so only
+                    # its first line would reach the bridge argv and any
+                    # post-heredoc statement would escape guardrail
+                    # interception (same class of bug FAR-651 fixed for the
+                    # outer log-redirect wrap). ``bash <file>`` is a single
+                    # argv element after ``--``; sandbox_bridge.py joins the
+                    # post-``--`` argv and runs it as a shell command, so
+                    # interception semantics are unchanged. Uniform for
+                    # single-line and multi-line commands (one code path).
+                    await asyncio.wait_for(
+                        _write_file_via_provider(
+                            _sandbox_id,
+                            "/home/user/.modulo_bridge_cmd.sh",
+                            rendered_agent_command,
+                            provider_type=_resolved_provider,
+                            borrowed_provider=_dispatch_provider,
+                        ),
+                        timeout=_SANDBOX_IO_TIMEOUT,
+                    )
+                    _bridge_wrapped_command = "python3 /home/user/modulo_bridge.py --wrap -- bash /home/user/.modulo_bridge_cmd.sh"
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _log.exception(
+                    "sandbox_agent.loop_intercept_setup_failed",
+                    extra={"node_id": node_id, "run_id": run_id},
+                )
+                _bridge_server = None
+    finally:
+        _state.bridge_server = _bridge_server
+    return _bridge_wrapped_command
+
+
+async def _sandbox_final_drain_and_drift(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    watchdog: _SandboxWatchdog,
+) -> None:
+    """Phase M: final drain plus post-exec workspace-input drift detection.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Owns ``drift_results`` (published back in ``finally``).
+    """
+    sandbox = _state.sandbox
+    _resolved_workspace_inputs: list[Any] = _state.resolved_workspace_inputs
+    _drift_results: list[Any] = _state.drift_results
+    try:
+        # One final drain so the last growth (between the last tick and the
+        # process exit) is captured before we read output.json. The probe is
+        # fully guarded — on a dead sandbox it returns immediately.
+        await watchdog.drain_sandbox_log()
+
+        # FAR-800: detect workspace input drift AFTER the agent command.
+        # This MUST happen even if drift detection itself fails (wrap in
+        # try/except — the audit write must still occur).  Drift results
+        # are attached to the envelope as first-class run flags.
+        if _resolved_workspace_inputs:
+            from farna.core.pipeline_engine.workspace_input_orchestration import (
+                detect_workspace_input_drift,
+            )
+
+            try:
+                _drift_results = await detect_workspace_input_drift(
+                    sandbox,
+                    _resolved_workspace_inputs,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _log.warning(
+                    "workspace_input.drift_detection_error",
+                    extra={"run_id": run_id, "node_id": node_id},
+                    exc_info=True,
+                )
+                _drift_results = []
+
+            # FAR-801: persist the drift audit record (best-effort).
+            if _drift_results and session_factory is not None and run_id and org_id:
+                try:
+                    import uuid as _uuid
+
+                    from farna.core.pipeline_engine.workspace_input_audit import (
+                        record_drift,
+                    )
+                    from farna.db.models.run_node_outputs import FINAL_ATTEMPT_KEY
+
+                    _final_shas = {d.dest: d.final_sha for d in _drift_results}
+                    _run_uuid = _uuid.UUID(run_id)
+                    _org_uuid = _uuid.UUID(org_id)
+                    async with session_factory() as _audit_session, _audit_session.begin():
+                        # FAR-801/RBAC: run_node_outputs + runs are RLS FORCE, so
+                        # the drift write must run with the tenant context set or
+                        # Postgres raises 42501 (swallowed by the best-effort
+                        # except) and the row + drift flag never persist.
+                        await set_rls_org(_audit_session, _org_uuid)
+                        await record_drift(
+                            _audit_session,
+                            run_id=_run_uuid,
+                            organisation_id=_org_uuid,
+                            node_id=node_id,
+                            attempt_key=FINAL_ATTEMPT_KEY,
+                            final_shas=_final_shas,
+                        )
+                except Exception:
+                    _log.exception(
+                        "workspace_input.drift_audit_failed",
+                        extra={"run_id": run_id, "node_id": node_id},
+                    )
+    finally:
+        _state.drift_results = _drift_results
+
+
+class _SandboxPreparedCommand(NamedTuple):
+    """What command preparation hands to the exec phase (phases K-M)."""
+
+    sandbox_envs: dict[str, str]
+    wrapped_command: str
+
+
+async def _sandbox_prepare_command(
+    _state: _SandboxDispatchState,
+    _materialised: _SandboxMaterialisation,
+    _runtime: _SandboxExecRuntime,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    pipeline_id: str,
+    session_factory: Callable[..., Any] | None,
+    state: dict[str, Any],
+    sandbox_mode: str,
+    rendered_agent_command: str,
+    start_time: float,
+    wallclock_budget_seconds: int | None,
+    loop_intercept_config: LoopInterceptConfig | None,
+    _resolved_provider: str,
+) -> _SandboxPreparedCommand:
+    """Phases K-M setup: environment, bridge and the final budget gate.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Every step is the pre-split body verbatim and runs inside the
+    caller's command ``try`` so the same ``except`` arms classify its failures.
+    The runtime (watchdog + artifact writers) is built by the caller, which
+    publishes the watchdog to its own scope the instant it exists — exactly as
+    the pre-split body did, so a later failure still leaves the watchdog
+    visible to the post-``try`` guard.
+    """
+    sandbox_envs = await _sandbox_prepare_exec_environment(
+        _state,
+        _materialised,
+        node_id=node_id,
+        run_id=run_id,
+        org_id=org_id,
+        pipeline_id=pipeline_id,
+        sandbox_mode=sandbox_mode,
+        start_time=start_time,
+        watchdog=_runtime.watchdog,
+        wallclock_budget_seconds=wallclock_budget_seconds,
+    )
+    _bridge_wrapped_command = await _sandbox_wrap_command_with_bridge(
+        _state,
+        node_id=node_id,
+        run_id=run_id,
+        org_id=org_id,
+        session_factory=session_factory,
+        state=state,
+        rendered_agent_command=rendered_agent_command,
+        loop_intercept_config=loop_intercept_config,
+        sandbox_envs=sandbox_envs,
+        _resolved_provider=_resolved_provider,
+    )
+    # FAR-296 Phase 4a: wall-clock spend budget — non-tick path (final
+    # check immediately before the command starts). A very slow bridge /
+    # env setup may have consumed the budget; do not start the command
+    # past the budget. ``_budget_killed`` may already be set by the
+    # pre-lease check above (script mode) — guard against a double
+    # kill/raise. Script mode only: same rationale as the pre-lease
+    # check.
+    _check_wallclock_budget_pre_run(
+        sandbox_mode=sandbox_mode,
+        wallclock_budget_seconds=wallclock_budget_seconds,
+        start_time=start_time,
+        watchdog=_runtime.watchdog,
+        run_id=run_id,
+        node_id=node_id,
+    )
+    wrapped_command = _wrap_sandbox_command_with_log_redirect(_bridge_wrapped_command, _SANDBOX_LOG_PATH)
+    return _SandboxPreparedCommand(
+        sandbox_envs=sandbox_envs,
+        wrapped_command=wrapped_command,
+    )
+
+
+async def _sandbox_exec_command(
+    _state: _SandboxDispatchState,
+    _prepared: _SandboxPreparedCommand,
+    _runtime: _SandboxExecRuntime,
+    *,
+    node_id: str,
+    run_id: str,
+    sandbox_mode: str,
+    rendered_agent_command: str,
+    sandbox_timeout: int,
+) -> tuple[Any, str | None]:
+    """Start the agent/script process and wait for it under the watchdog.
+
+    Extracted from ``_sandbox_apply_policy_and_exec`` (FAR-310 hardening
+    wave 3). Raises exactly what the pre-split exec body raised; the caller's
+    ``except`` arms (cancel / timeout / superseded / other) are unchanged and
+    still surround this call.
+    """
+    watchdog = _runtime.watchdog
+    _cmd_start_bound = min(sandbox_timeout, 120)
+    _exec_process: Any = None
+    _exec_process = await asyncio.wait_for(
+        _require_dispatch_provider(_state.dispatch_provider).exec_command_stream(
+            _state.sandbox_id or "",
+            # FAR-1470: bash, not sh — ``sh`` on the sandbox image is
+            # dash, which has no ``pipefail`` and aborted any
+            # ``set -euo pipefail`` agent command. bash -c (NOT -lc)
+            # matches today's env behaviour exactly: ``sh -c`` was a
+            # non-login shell inheriting the exec env, and a login
+            # shell would re-source the profile and change PATH.
+            ["bash", "-c", _prepared.wrapped_command],
+            environment=_prepared.sandbox_envs,
+        ),
+        timeout=_cmd_start_bound,
+    )
+    cmd_handle: Any = _exec_process
+    _emit_script_span_event(
+        "script.command_started",
+        {
+            "run_id": run_id,
+            "node_id": node_id,
+            "command": rendered_agent_command[:200] if sandbox_mode == "script" else "llm",
+        },
+    )
+    return await _wait_command_with_exec_process(
+        cmd_handle,
+        total_timeout=sandbox_timeout,
+        idle_timeout=_runtime.stall_timeout,
+        last_activity=_runtime.stall.last_activity,
+        on_tick=watchdog.tick,
+        tick_interval=_SANDBOX_TAIL_INTERVAL,
+        on_stdout=watchdog.on_stdout,
+        on_stderr=watchdog.on_stderr,
+    )
+
+
+async def _sandbox_apply_policy_and_exec(
+    _state: _SandboxDispatchState,
+    _materialised: _SandboxMaterialisation,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    pipeline_id: str,
+    session_factory: Callable[..., Any] | None,
+    state: dict[str, Any],
+    node_def: dict[str, Any],
+    sandbox_mode: str,
+    rendered_agent_command: str,
+    sandbox_timeout: int,
+    start_time: float,
+    stdout_cap: int,
+    stdout_retention_mode: str,
+    resource_limits: dict[str, Any] | None,
+    read_only: bool,
+    git_credentials: str | None,
+    single_pr_per_run: bool,
+    delivery_sentinel: str | None,
+    enable_heartbeat: bool,
+    watch_log_path: str | None,
+    stdout_percentage_delta: float | None,
+    watch_globs: list[str],
+    wallclock_budget_seconds: int | None,
+    stall_timeout_override: Any,
+    loop_intercept_config: LoopInterceptConfig | None,
+    drained_chunks: list[str],
+    _resolved_provider: str,
+) -> _SandboxExecOutcome:
+    """Phases K-M: apply the enforced sandbox policy, run the agent/script
+    command under the watchdog, then do the final drain and workspace-input
+    drift detection.
+
+    Extracted from ``_sandbox_agent_impl`` (FAR-310 hardening wave 2) and
+    decomposed into cohesive sub-phases (FAR-310 hardening wave 3). The
+    385-line nested ``try`` that runs the command is preserved verbatim — its
+    ``except`` arms distinguish cancel-during-exec from cancel-during-provision
+    and that distinction is load-bearing for the FAR-296 stage split.
+
+    Each sub-phase binds from ``_state`` and publishes back in its own
+    ``finally``; the sub-phases own disjoint field sets
+    (``gh_guard_install_status``; ``artifact_writer`` /
+    ``streaming_writer_instance`` / ``drain_fn``; ``script_lease_claimed``;
+    ``bridge_server``; ``drift_results``), so none can clobber another's
+    partial progress. ``stall_reason`` stays owned here because the command
+    outcome overwrites it.
+    """
+    stall_reason: str | None = _state.stall_reason
+    # The watchdog is constructed by ``_sandbox_build_exec_runtime`` — i.e.
+    # INSIDE the command ``try`` below — while the guard after that try's
+    # handlers and the terminal return both read it. Bind it (and
+    # ``cmd_result``, the other pre-try-unset name those reads touch) HERE,
+    # ABOVE the outer ``try`` and therefore above the policy step: a failure in
+    # the policy step, or in any other statement that precedes the watchdog's
+    # construction, can then never reach the guard with an UNBOUND local and
+    # replace the intended error with ``UnboundLocalError``. The exception that
+    # prevented the construction is carried in ``_exec_runtime_exc`` so the
+    # guard can re-raise it (see below) instead of discarding it.
+    watchdog: _SandboxWatchdog | None = None
+    cmd_result: Any = None
+    _exec_runtime_exc: BaseException | None = None
+    try:
+        await _sandbox_apply_runtime_policy(
+            _state,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            pipeline_id=pipeline_id,
+            node_def=node_def,
+            read_only=read_only,
+            git_credentials=git_credentials,
+            single_pr_per_run=single_pr_per_run,
+            delivery_sentinel=delivery_sentinel,
+            _resolved_provider=_resolved_provider,
+        )
+
+        try:
+            _runtime = await _sandbox_build_exec_runtime(
+                _state,
+                node_id=node_id,
+                run_id=run_id,
+                org_id=org_id,
+                sandbox_mode=sandbox_mode,
+                stdout_retention_mode=stdout_retention_mode,
+                resource_limits=resource_limits,
+                enable_heartbeat=enable_heartbeat,
+                watch_log_path=watch_log_path,
+                stdout_percentage_delta=stdout_percentage_delta,
+                watch_globs=watch_globs,
+                wallclock_budget_seconds=wallclock_budget_seconds,
+                stall_timeout_override=stall_timeout_override,
+                start_time=start_time,
+                stdout_cap=stdout_cap,
+                drained_chunks=drained_chunks,
+                _resolved_provider=_resolved_provider,
+            )
+            watchdog = _runtime.watchdog
+            # Track the last time the agent emitted output so the idle
+            # watchdog can fail fast on stalls (FAR-97) — cleared here, before
+            # the command runs, exactly as the pre-split body did.
+            stall_reason = None
+            _prepared = await _sandbox_prepare_command(
+                _state,
+                _materialised,
+                _runtime,
+                node_id=node_id,
+                run_id=run_id,
+                org_id=org_id,
+                pipeline_id=pipeline_id,
+                session_factory=session_factory,
+                state=state,
+                sandbox_mode=sandbox_mode,
+                rendered_agent_command=rendered_agent_command,
+                start_time=start_time,
+                wallclock_budget_seconds=wallclock_budget_seconds,
+                loop_intercept_config=loop_intercept_config,
+                _resolved_provider=_resolved_provider,
+            )
+            cmd_result, stall_reason = await _sandbox_exec_command(
+                _state,
+                _prepared,
+                _runtime,
+                node_id=node_id,
+                run_id=run_id,
+                sandbox_mode=sandbox_mode,
+                rendered_agent_command=rendered_agent_command,
+                sandbox_timeout=sandbox_timeout,
+            )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            _log.warning(
+                "sandbox_agent.command_timed_out",
+                extra={
+                    "node_id": node_id,
+                    "timeout": sandbox_timeout,
+                },
+            )
+            cmd_result = None
+        except SupersededNodeError:
+            # A superseded script lease (rowcount 0 in _store_script_lease)
+            # must propagate as a RETRYABLE SupersededNodeError — never be
+            # swallowed into a post-claim script failure. Raising here lets
+            # the outer handler re-raise it to the executor's retry path.
+            raise
+        except Exception as _cee:
+            _log.exception(
+                "sandbox_agent.command_failed",
+                extra={
+                    "node_id": node_id,
+                    "exc_type": type(_cee).__name__,
+                    "exc_msg": str(_cee)[:_MAX_ERROR_MSG],
+                },
+            )
+            cmd_result = getattr(_cee, "result", None) or _cee
+            if watchdog is None:
+                # The failure predates the watchdog's construction, so there is
+                # no command result to interpret: remember WHY so the guard
+                # below can surface the real cause rather than a synthetic one.
+                _exec_runtime_exc = _cee
+
+        # Narrow watchdog for post-try/except uses (drain, budget checks,
+        # finalize). The watchdog is constructed inside the try block, so on
+        # the "nothing was caught and it is still None" path mypy may flag it
+        # as possibly-unbound. Guard with a runtime check instead of assert
+        # (assert is stripped under -O and is a SonarQube S5779 when inside a
+        # broad try-except). ``watchdog`` and the exception below are pre-bound
+        # above the outer ``try``, so this read is always defined.
+        if watchdog is None:
+            if _exec_runtime_exc is not None:
+                # Re-raise the failure that prevented construction: it is the
+                # dispatch's real cause, and replacing it with the synthetic
+                # RuntimeError below both mis-states the stage ("provisioning
+                # failed before sandbox creation" is false — provisioning
+                # already succeeded) and hides any typed provider error from
+                # the caller's ``_translate_provider_dispatch_error`` pass.
+                raise _exec_runtime_exc
+            raise RuntimeError("watchdog was not constructed — provisioning failed before sandbox creation")
+        await _sandbox_final_drain_and_drift(
+            _state,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            session_factory=session_factory,
+            watchdog=watchdog,
+        )
+    finally:
+        _state.stall_reason = stall_reason
+    return _SandboxExecOutcome(cmd_result=cmd_result, watchdog=watchdog)
+
+
+async def _sandbox_capture_output_streams(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    cmd_result: Any,
+    start_time: float,
+    drained_chunks: list[str],
+    stdout_cap: int,
+) -> None:
+    """Phase N: exit code, raw stream capture, redaction and truncation flags.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    Redaction happens BEFORE truncation (FAR-792) so the credential-scrubbing
+    pass sees the full stream.
+
+    Owns (binds from ``_state``, publishes back in ``finally``): ``elapsed``,
+    ``exit_code``, ``stdout_len``, ``stderr_len``, ``stdout_truncated``,
+    ``agent_stdout``, ``agent_stderr``, ``agent_stdout_raw``,
+    ``agent_stderr_raw``.
+    """
+    elapsed: float = _state.elapsed
+    exit_code: int = _state.exit_code
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    stdout_truncated: bool = _state.stdout_truncated
+    agent_stdout: str = _state.agent_stdout
+    agent_stderr: str = _state.agent_stderr
+    agent_stdout_raw: str = _state.agent_stdout_raw
+    agent_stderr_raw: str = _state.agent_stderr_raw
+    _stdout_cap = stdout_cap
+    try:
+        elapsed = time.monotonic() - start_time
+        exit_code = getattr(cmd_result, "exit_code", -1)
+        # The redirected log file is the process's real stdout — prefer the
+        # drained content (which also survives a timeout where cmd_result is
+        # None and would otherwise surface EMPTY output), falling back to the
+        # SDK's captured stream for non-redirected (legacy) paths.
+        agent_stdout_raw = "".join(drained_chunks) or (getattr(cmd_result, "stdout", "") or "")
+        agent_stderr_raw = getattr(cmd_result, "stderr", "") or ""
+        _stdout_len = len(agent_stdout_raw)
+        _stderr_len = len(agent_stderr_raw)
+        # FAR-792: redact BEFORE truncation so credential-scrubbing sees the
+        # full stream, then slice to the node's effective retention cap.
+        agent_stdout = _redact_raw_output(agent_stdout_raw)[:_stdout_cap]
+        agent_stderr = _redact_raw_output(agent_stderr_raw)[:_stdout_cap]
+        stdout_truncated = _stdout_len > _stdout_cap
+        if stdout_truncated or _stderr_len > _stdout_cap:
+            _log.warning(
+                "sandbox_agent.stdout_stderr_truncated",
+                extra={
+                    "node_id": node_id,
+                    "run_id": run_id,
+                    "retention_cap_bytes": _stdout_cap,
+                    "stderr_truncated": _stderr_len > _stdout_cap,
+                    "stdout_length": _stdout_len,
+                    "stderr_length": _stderr_len,
+                },
+            )
+    finally:
+        _state.elapsed = elapsed
+        _state.exit_code = exit_code
+        _state.stdout_len = _stdout_len
+        _state.stderr_len = _stderr_len
+        _state.stdout_truncated = stdout_truncated
+        _state.agent_stdout = agent_stdout
+        _state.agent_stderr = agent_stderr
+        _state.agent_stdout_raw = agent_stdout_raw
+        _state.agent_stderr_raw = agent_stderr_raw
+
+
+async def _sandbox_derive_command_error(
+    _state: _SandboxDispatchState,
+    *,
+    cmd_result: Any,
+    watchdog: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    sandbox_timeout: int,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    _resolved_provider: str,
+) -> str:
+    """Bridge-escalation detection, delegating the stall/timeout terminal path.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    Returns the derived ``command_error`` for the success path; when the
+    command produced no result at all it delegates to
+    ``_sandbox_stall_or_timeout``, which retains the raw evidence and raises
+    the same terminal error the pre-split body raised.
+
+    Mutates no dispatch state: every branch either returns the derived
+    ``command_error`` or raises.
+    """
+    exit_code: int = _state.exit_code
+    agent_stdout_raw: str = _state.agent_stdout_raw
+
+    # A timed-out command leaves ``cmd_result`` as None: the run timed
+    # out (1800s node timeout) with COMPLETELY EMPTY stdout/stderr and
+    # exit_code -1. Surface a clear explanation instead of silently
+    # returning an empty-summary failure. A STALLED command (idle
+    # watchdog fired, FAR-98) carries a distinct stall_reason so the
+    # two failure modes are distinguishable.
+    command_error: str = ""
+    # FAR-1694 S2 (bridge protocol): detect an in-loop escalation marker and
+    # surface its typed context. No control-flow change — a non-zero exit
+    # still fails the node (fail-closed) until the suspension slice lands.
+    _bridge_escalation_error = _bridge_escalation_failure_detail(exit_code, agent_stdout_raw)
+    if _bridge_escalation_error is not None:
+        command_error = _bridge_escalation_error
+    elif cmd_result is None:
+        await _sandbox_stall_or_timeout(
+            _state,
+            cmd_result=cmd_result,
+            watchdog=watchdog,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            session_factory=session_factory,
+            sandbox_mode=sandbox_mode,
+            sandbox_timeout=sandbox_timeout,
+            delivery_sentinel=delivery_sentinel,
+            stdout_cap=stdout_cap,
+            _resolved_provider=_resolved_provider,
+        )
+    return command_error
+
+
+async def _sandbox_stall_or_timeout(
+    _state: _SandboxDispatchState,
+    *,
+    cmd_result: Any,
+    watchdog: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    sandbox_timeout: int,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    _resolved_provider: str,
+) -> NoReturn:
+    """The no-``cmd_result`` (idle stall / total timeout) terminal path.
+
+    Extracted from ``_sandbox_derive_command_error`` (FAR-310 hardening
+    wave 3): retains the bounded raw evidence (``_sandbox_retain_stall_evidence``
+    fetches the kill reason while the sandbox is still alive, kills it before
+    reading ``output.json``, and persists the artifacts + marker), then raises
+    the exact terminal error the pre-split body raised. Always raises, so it
+    mutates no dispatch state.
+    """
+    command_error, _stall_source = await _sandbox_retain_stall_evidence(
+        _state,
+        cmd_result=cmd_result,
+        node_id=node_id,
+        run_id=run_id,
+        org_id=org_id,
+        session_factory=session_factory,
+        sandbox_timeout=sandbox_timeout,
+        delivery_sentinel=delivery_sentinel,
+        stdout_cap=stdout_cap,
+        _resolved_provider=_resolved_provider,
+    )
+    _script_lease_claimed: bool = _state.script_lease_claimed
+    if watchdog.budget_killed:
+        # FAR-296 Phase 3b-3: the platform-side resource-cap killer
+        # fired — the sandbox was killed for exceeding its limits.
+        # TERMINAL (never retryable, exactly-once) and distinct from
+        # an unknown side-effect state: the kill REASON is known.
+        raise ScriptBudgetKilledError(_script_budget_killed_message(node_id)) from None
+    if _is_script_post_claim_fault(sandbox_mode, _script_lease_claimed):
+        # FAR-296 Phase 2 stage-split (3): the script PROCESS started
+        # (fencing lease claimed) and was terminated mid-execution
+        # (timeout / budget / watchdog) with exit undetermined — the
+        # side effect may or may not have happened. Never retryable:
+        # escalate to needs-human via ``script.side_effect_unknown``.
+        raise ScriptSideEffectUnknownError("Script-mode sandbox terminated mid-execution (side effect unknown): " + (command_error or f"no output within {sandbox_timeout}s"))
+    # FAR-1994: the agent burned tokens before the stall/timeout. The
+    # retained raw stdout carries opencode ``step_finish`` counters; the
+    # failure records ZERO without them. Recover them (agent-reported)
+    # so the terminal write prices the work the agent actually did.
+    _stall_failure = SandboxNodeFailedError(
+        command_error or f"Sandbox agent command failed (no output within {sandbox_timeout}s)",
+        node_id=node_id,
+    )
+    _attach_recovered_token_usage(_stall_failure, _stall_source)
+    raise _stall_failure
+
+
+async def _sandbox_retain_stall_evidence(  # NOSONAR S3776 - one contiguous stall/timeout evidence step; kill-before-read ordering + per-arm persistence are a single FAR-97/FAR-811 contract
+    _state: _SandboxDispatchState,
+    *,
+    cmd_result: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_timeout: int,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    _resolved_provider: str,
+) -> tuple[str, str]:
+    """Retain the bounded raw evidence for an idle stall / total timeout.
+
+    Extracted from ``_sandbox_stall_or_timeout`` (FAR-310 hardening wave 3):
+    fetch the kill reason while the sandbox is still alive, kill it before
+    ``output.json`` can be read, persist the over-cap stdout/stderr artifacts
+    and the raw-output marker. Returns ``(command_error, stall_source)`` for
+    the terminal classification. Mutates no dispatch state beyond the
+    FAR-844 streaming-writer ``cleanup()``.
+
+    ``cmd_result`` is None by construction (the caller only enters this path in
+    that branch) and is taken as a parameter so the FAR-188 source-selection
+    branch below evaluates exactly as it did in the pre-split body.
+    """
+    sandbox = _state.sandbox
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    attempt_key: str | None = _state.attempt_key
+    _streaming_writer_instance = _state.streaming_writer_instance
+    exit_code: int = _state.exit_code
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    stdout_truncated: bool = _state.stdout_truncated
+    agent_stdout_raw: str = _state.agent_stdout_raw
+    agent_stderr_raw: str = _state.agent_stderr_raw
+    stall_reason: str | None = _state.stall_reason
+    _stdout_cap = stdout_cap
+
+    command_error = stall_reason or f"Sandbox agent command produced no output within {sandbox_timeout}s. No stdout/stderr was captured — the agent likely hung before writing any result."
+    # The E2B kill reason only lives in the sandbox logs, and the logs
+    # endpoint only serves live sandboxes — fetch the tail BEFORE the
+    # kill below (FAR-97 observability).
+    # Deliberately fire-and-forget: the tail is not consumed here; the pre-kill probe is the FAR-97 observability contract.
+    await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
+    # The command stalled or timed out. Kill the sandbox BEFORE
+    # reading output.json: the interrupted-but-alive process could
+    # otherwise write a fabricated completion in the grace window
+    # (FAR-97 — Improve Tests reported "improvement applied" with
+    # changed_files: [] exactly this way).
+    try:
+        await asyncio.wait_for(
+            sandbox.kill(request_timeout=_OUTPUT_READ_TIMEOUT),
+            timeout=_OUTPUT_READ_TIMEOUT,
+        )
+    except Exception:
+        _log.exception(
+            "sandbox_agent.kill_before_output_read_failed",
+            extra={"node_id": node_id},
+        )
+    # A6: a stall or total timeout is a retryable sandbox-infra
+    # failure — RAISE (never a silent completed/wrong-success node).
+    # FAR-188: output.json was never read, so retain the captured
+    # stdout as the raw evidence — a pr_url created before the stall
+    # must not be lost either. The drain window keeps only the last
+    # _MAX_DRAIN_WINDOW (512KB) tail, so the marker's raw_output is
+    # a bounded tail (documented in _retain_raw_output_marker).
+    _stall_source: str = agent_stdout_raw
+    if cmd_result is not None:
+        _sdk_stdout = str(getattr(cmd_result, "stdout", "") or "")
+        if len(_sdk_stdout) > len(_stall_source):
+            _stall_source = _sdk_stdout
+    # FAR-811: when redacted stdout exceeds the retention cap, persist
+    # the full redacted transcript to the artifact store and attach the
+    # pointer to the stall marker — mirrors the success path's
+    # _persist_full_stdout_artifact call so downstream consumers can
+    # retrieve the full transcript instead of only the truncated tail.
+    # FAR-811: when the stall/timeout fires and stdout exceeds the
+    # retention cap, persist the full redacted transcript to the artifact
+    # store and attach the pointer to the stall marker — mirrors the
+    # success path's _persist_full_stdout_artifact call so downstream
+    # consumers can retrieve the full transcript instead of only the
+    # truncated tail.
+    #
+    # When cmd_result is None (stall/timeout), the drain window has
+    # already bounded _drained_chunks to _stdout_cap bytes, so
+    # agent_stdout_raw may appear under-cap even though the sandbox log
+    # is larger.  A fresh read of the log file detects the true size and
+    # feeds the artifact store with the full redacted content.
+    _stall_stdout_artifact: dict[str, Any] | None = None
+    _stall_full_stdout: str | None = None
+    if cmd_result is None:
+        try:
+            _fresh_log = await asyncio.wait_for(
+                _read_file_via_provider(
+                    _sandbox_id,
+                    _SANDBOX_LOG_PATH,
+                    provider_type=_resolved_provider,
+                    borrowed_provider=_dispatch_provider,
+                ),
+                timeout=_SANDBOX_TAIL_READ_TIMEOUT,
+            )
+            _fresh_text = _fresh_log if isinstance(_fresh_log, str) else bytes(_fresh_log).decode("utf-8", "replace")
+            if len(_fresh_text) > _stdout_cap:
+                _stall_full_stdout = _fresh_text
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _log.debug(
+                "sandbox_agent.stall_fresh_log_read_failed",
+                extra={"node_id": node_id},
+            )
+    if stdout_truncated or _stall_full_stdout is not None:
+        # FAR-844: clean up the streaming writer's raw file before the
+        # stall path writes its own artifact (fresh read content, not
+        # the drain-window content the streaming writer captured).
+        if _streaming_writer_instance is not None and not _streaming_writer_instance.finalized:
+            try:
+                _streaming_writer_instance.cleanup()
+            except Exception:
+                _log.debug(
+                    "sandbox_agent.streaming_writer_cleanup_failed",
+                    extra={"node_id": node_id, "run_id": run_id},
+                )
+        _redacted_for_artifact = _redact_raw_output(_stall_full_stdout if _stall_full_stdout is not None else agent_stdout_raw)
+        _stall_stdout_artifact = _persist_full_stdout_artifact(
+            org_id=org_id,
+            run_id=run_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+            node_cap=_stdout_cap,
+            redacted_stdout=_redacted_for_artifact,
+        )
+    # FAR-879: stderr parity — persist the full redacted stderr
+    # transcript on the stall/timeout path too.
+    _stall_stderr_artifact: dict[str, Any] | None = None
+    if _stderr_len > _stdout_cap:
+        _stall_stderr_artifact = _persist_full_stderr_artifact(
+            org_id=org_id,
+            run_id=run_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+            node_cap=_stdout_cap,
+            redacted_stderr=_redact_raw_output(agent_stderr_raw),
+        )
+    await _retain_raw_output_marker(
+        session_factory,
+        _RawOutputMarkerRequest(
+            run_id=run_id,
+            org_id_raw=org_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+            summary=("Sandbox agent command stalled/timed out — raw stdout retained (bounded to the node's retention cap)"),
+            source=_stall_source,
+            parse_error=command_error,
+            exit_code=exit_code,
+            stdout_length=_stdout_len,
+            stderr_length=_stderr_len,
+            delivery_sentinel=delivery_sentinel,
+            max_artifact_bytes=_stdout_cap,
+            stdout_artifact=_stall_stdout_artifact,
+            stderr_artifact=_stall_stderr_artifact,
+        ),
+    )
+    return command_error, _stall_source
+
+
+async def _sandbox_read_output_json(
+    _state: _SandboxDispatchState,
+    *,
+    cmd_result: Any,
+    node_id: str,
+    command_error: str,
+    sandbox_timeout: int,
+    start_time: float,
+    _resolved_provider: str,
+) -> tuple[str, str]:
+    """Phase O: read and parse ``output.json`` from the sandbox.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    Owns ``output_json`` (published back in ``finally``); returns the raw file
+    content and the read-error detail the later phases retain as evidence.
+    """
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    exit_code: int = _state.exit_code
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    output_json: Any = _state.output_json
+    raw_output: str = ""
+    output_read_error: str = ""
+    try:
+        if cmd_result is not None:
+            try:
+                _remaining_after_cmd = max(_OUTPUT_READ_TIMEOUT, sandbox_timeout - (time.monotonic() - start_time))
+                raw_output = await asyncio.wait_for(
+                    _read_file_via_provider(
+                        _sandbox_id,
+                        "/home/user/output.json",
+                        provider_type=_resolved_provider,
+                        borrowed_provider=_dispatch_provider,
+                    ),
+                    timeout=_remaining_after_cmd,
+                )
+                output_json = json.loads(raw_output)
+            except asyncio.CancelledError:
+                raise
+            except Exception as _read_exc:
+                output_read_error = f"{type(_read_exc).__name__}: {str(_read_exc)[:_MAX_ERROR_MSG]}"
+                _log.info(
+                    "sandbox_agent.no_output_json",
+                    extra={
+                        "node_id": node_id,
+                        "exit_code": exit_code,
+                        "command_error": command_error,
+                        "output_read_error": output_read_error,
+                        "stdout_length": _stdout_len,
+                        "stderr_length": _stderr_len,
+                        "sandbox_id": _sandbox_id,
+                    },
+                )
+    finally:
+        _state.output_json = output_json
+    return raw_output, output_read_error
+
+
+async def _sandbox_reject_unusable_output(
+    _state: _SandboxDispatchState,
+    *,
+    raw_output: str,
+    output_read_error: str,
+    watchdog: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    sandbox_timeout: int,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    _resolved_provider: str,
+) -> None:
+    """FAR-188: retain evidence for, and reject, an unusable ``output.json``.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    ``output_json is None`` (read failure / JSON null) raises the same terminal
+    error the pre-split body raised; a PARSEABLE non-dict value retains the
+    marker and returns so the caller can fall through to the shaping path.
+
+    Mutates no dispatch state — every branch either raises or returns.
+    """
+    output_json: Any = _state.output_json
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    attempt_key: str | None = _state.attempt_key
+    exit_code: int = _state.exit_code
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    agent_stdout_raw: str = _state.agent_stdout_raw
+    agent_stderr_raw: str = _state.agent_stderr_raw
+    _script_lease_claimed: bool = _state.script_lease_claimed
+    _stdout_cap = stdout_cap
+
+    if output_json is None or not isinstance(output_json, dict):
+        # Evidence is the UNION of raw sources — the file content AND
+        # the captured stdout (a pr_url echoed to stdout when output.json
+        # is present-but-malformed must be found). pr_url is extracted
+        # from the FULL pre-truncation source, then raw_output is
+        # truncated for storage (inside the builder).
+        _raw_parts = [p for p in (_normalize_marker_text(raw_output), agent_stdout_raw) if p]
+        _raw_combined = "\n".join(_raw_parts)
+        if output_json is None:
+            _parse_error = output_read_error or "output.json is empty or JSON null"
+            await _retain_raw_output_marker(
+                session_factory,
+                _RawOutputMarkerRequest(
+                    run_id=run_id,
+                    org_id_raw=org_id,
+                    node_id=node_id,
+                    attempt_key=attempt_key,
+                    summary="Sandbox agent produced no parseable output.json — raw output retained",
+                    source=_raw_combined,
+                    parse_error=_parse_error,
+                    exit_code=exit_code,
+                    stdout_length=_stdout_len,
+                    stderr_length=_stderr_len,
+                    delivery_sentinel=delivery_sentinel,
+                    max_artifact_bytes=_stdout_cap,
+                ),
+            )
+            # FAR-197: surface WHY the agent failed. The captured
+            # stdout/stderr tails plus the E2B log tail (the only place
+            # the kill reason lives) are fetched BEFORE the finally-block
+            # kill, while the sandbox is still alive — the logs endpoint
+            # only serves live sandboxes.
+            _no_output_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
+            if watchdog.budget_killed:
+                # FAR-296 Phase 3b-3: the platform-side resource-cap killer
+                # fired. On the REAL kill path the command handle raises an
+                # e2b SandboxException (not TimeoutError), which lands here
+                # with cmd_result non-None and output.json unreadable — the
+                # kill REASON is known, so never misclassify as
+                # script.invalid_output / script.side_effect_unknown.
+                raise ScriptBudgetKilledError(_script_budget_killed_message(node_id)) from None
+            if _is_script_post_claim_fault(sandbox_mode, _script_lease_claimed):
+                # FAR-296 Phase 2 stage-split (2): the script PROCESS
+                # started (lease claimed) and produced no parseable
+                # output.json — post-claim, TERMINAL (never retryable).
+                raise ScriptInvalidOutputError(
+                    _build_no_output_message(
+                        exit_code=exit_code,
+                        stdout_raw=agent_stdout_raw,
+                        stderr_raw=agent_stderr_raw,
+                        sandbox_id=_sandbox_id,
+                        read_raw=raw_output,
+                        read_error=output_read_error,
+                        log_tail=_no_output_log_tail,
+                    )
+                )
+            # FAR-1994: no parseable output.json, but the retained raw
+            # output (the FULL pre-display-slice source) still carries the
+            # agent's opencode ``step_finish`` token counters. Recover them
+            # as agent-reported usage so the terminal write is not a false
+            # zero; a parse failure attaches nothing (fail-open).
+            _no_output_failure = SandboxNodeFailedError(
+                _build_no_output_message(
+                    exit_code=exit_code,
+                    stdout_raw=agent_stdout_raw,
+                    stderr_raw=agent_stderr_raw,
+                    sandbox_id=_sandbox_id,
+                    read_raw=raw_output,
+                    read_error=output_read_error,
+                    log_tail=_no_output_log_tail,
+                ),
+                node_id=node_id,
+            )
+            _attach_recovered_token_usage(_no_output_failure, _raw_combined)
+            raise _no_output_failure
+        # Parseable non-dict output: retain the marker, do NOT raise —
+        # fall through to the shared shaping path below.
+        await _retain_raw_output_marker(
+            session_factory,
+            _RawOutputMarkerRequest(
+                run_id=run_id,
+                org_id_raw=org_id,
+                node_id=node_id,
+                attempt_key=attempt_key,
+                summary="Sandbox agent output.json parsed to a non-dict value — raw output retained",
+                source=_raw_combined,
+                parse_error=f"output.json parsed to non-dict type {type(output_json).__name__}",
+                exit_code=exit_code,
+                stdout_length=_stdout_len,
+                stderr_length=_stderr_len,
+                delivery_sentinel=delivery_sentinel,
+                max_artifact_bytes=_stdout_cap,
+            ),
+        )
+
+
+async def _sandbox_validate_output_schema(
+    _state: _SandboxDispatchState,
+    *,
+    output_json: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    output_schema_json: dict[str, Any] | None,
+    schema_id: str,
+    schema_version: int,
+    schema_validator_mode: str,
+    start_time: float,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    raw_output: str,
+    _resolved_provider: str,
+) -> None:
+    """Phase S: validate the parsed output against the node's declared schema.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    Persists the enforcement record (best-effort), and on a strict-mode failure
+    finalises artifacts, retains the raw evidence and raises the same terminal
+    error the pre-split body raised (script mode: ``ScriptInvalidOutputError``;
+    LLM mode: retryable ``SandboxNodeFailedError``).
+
+    Owns ``elapsed`` and ``cost_estimate_usd`` on the failure path (published
+    back in ``finally``), exactly as the pre-split body assigned them before
+    raising.
+    """
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    attempt_key: str | None = _state.attempt_key
+    _node_schema_profile: Any = _state.node_schema_profile
+    elapsed: float = _state.elapsed
+    _cost_estimate_usd: float = _state.cost_estimate_usd
+    _stdout_cap = stdout_cap
+    try:
+        # FIX C: validate ANY output against non-empty schema (not just dicts)
+        if isinstance(output_schema_json, dict) and output_schema_json:
+            # FIX B: sandbox path — no synchronous repair invoke available
+            # (run_repair_loop calls invoke synchronously; sandbox APIs are
+            # async). Strict-mode validation failures are terminal with no
+            # auto-repair — documented hard-fail for this path.
+            _sandbox_repair_invoke_fn = None
+
+            from farna.core.pipeline_engine.schema_enforcement import build_enforcement_record
+
+            # FAR-902: repair stats for the enforcement record.  Initialised
+            # BEFORE the try so the terminal-failure arm can still read it.
+            _sandbox_repair_info: dict[str, int] = {}
+            try:
+                # FAR-899: use real JSON Schema validation with mode support
+                # FAR-902: collect repair stats for the enforcement record.
+                _val_outcome, _val_errors, _ = _validate_against_schema(
+                    output_json,
+                    output_schema_json,
+                    mode=schema_validator_mode,
+                    schema_id=schema_id,
+                    schema_version=schema_version,
+                    _repair_invoke_fn=_sandbox_repair_invoke_fn,
+                    _repair_info=_sandbox_repair_info,
+                )
+                # FIX H: log the validation outcome for observability
+                # FAR-902: persist the enforcement record BEFORE terminalization.
+                # Best-effort: a persistence failure must NEVER fail the node.
+                # FAR-902: native_output is False for the sandbox path — the
+                # sandbox runs a CLI (opencode) that returns raw text; Modulo
+                # validates post-hoc, never via the provider's native channel.
+                await _persist_enforcement_record_best_effort(
+                    build_enforcement_record(
+                        outcome=_val_outcome,
+                        resolved_profile=_node_schema_profile if isinstance(_node_schema_profile, str) else None,
+                        native_output=False,
+                        repair_attempts=_sandbox_repair_info.get("repair_attempts", 0),
+                        wasted_attempts=_sandbox_repair_info.get("wasted_attempts", 0),
+                        validation_errors=_val_errors,
+                    ),
+                    session_factory=session_factory,
+                    run_id=run_id,
+                    org_id=org_id,
+                    node_id=node_id,
+                    attempt_key=attempt_key,
+                )
+            except ValueError as _schema_exc:
+                await _sandbox_fail_schema_validation(
+                    _state,
+                    _schema_exc,
+                    output_json=output_json,
+                    node_id=node_id,
+                    run_id=run_id,
+                    org_id=org_id,
+                    session_factory=session_factory,
+                    sandbox_mode=sandbox_mode,
+                    start_time=start_time,
+                    delivery_sentinel=delivery_sentinel,
+                    stdout_cap=stdout_cap,
+                    raw_output=raw_output,
+                    _resolved_provider=_resolved_provider,
+                    _sandbox_repair_info=_sandbox_repair_info,
+                    _node_schema_profile=_node_schema_profile,
+                )
+    finally:
+        _state.elapsed = elapsed
+        _state.cost_estimate_usd = _cost_estimate_usd
+
+
+async def _sandbox_fail_schema_validation(
+    _state: _SandboxDispatchState,
+    _schema_exc: ValueError,
+    *,
+    output_json: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    start_time: float,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    raw_output: str,
+    _resolved_provider: str,
+    _sandbox_repair_info: dict[str, int],
+    _node_schema_profile: Any,
+) -> NoReturn:
+    """Terminal arm of a strict output-schema validation failure.
+
+    Extracted from ``_sandbox_validate_output_schema`` (FAR-310 hardening
+    wave 3). Persists the terminal-failure enforcement record BEFORE the node
+    is terminalized, finalises artifacts, retains the raw evidence and raises
+    the exact terminal error the pre-split body raised (script mode:
+    ``ScriptInvalidOutputError``; LLM mode: retryable
+    ``SandboxNodeFailedError``).
+
+    Owns ``elapsed``/``cost_estimate_usd`` (published back in ``finally``),
+    exactly as the pre-split body assigned them before raising.
+    """
+    _sandbox_id: str | None = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    attempt_key: str | None = _state.attempt_key
+    _script_lease_claimed: bool = _state.script_lease_claimed
+    _artifact_writer = _state.artifact_writer
+    agent_stdout_raw: str = _state.agent_stdout_raw
+    agent_stderr_raw: str = _state.agent_stderr_raw
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    exit_code: int = _state.exit_code
+    elapsed: float = _state.elapsed
+    _cost_estimate_usd: float = _state.cost_estimate_usd
+    _stdout_cap = stdout_cap
+    try:
+        _log.exception(
+            "sandbox_agent.schema_validation_failed",
+            extra={"node_id": node_id},
+        )
+        # FAR-902 (D3): persist the terminal-failure enforcement record
+        # BEFORE the node is terminalized (the raw-output marker,
+        # artifact finalization, and the terminal raise below).
+        await _persist_enforcement_record_best_effort(
+            _build_error_enforcement_record(
+                _schema_exc,
+                resolved_profile=_node_schema_profile if isinstance(_node_schema_profile, str) else None,
+                native_output=False,
+                repair_info=_sandbox_repair_info,
+            ),
+            session_factory=session_factory,
+            run_id=run_id,
+            org_id=org_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+        )
+        if _is_script_post_claim_fault(sandbox_mode, _script_lease_claimed):
+            # FAR-296 Phase 2 stage-split (2): the script PROCESS
+            # started (lease claimed) and its output failed schema
+            # validation — post-claim, TERMINAL (never retryable).
+            # Raise a ScriptModeError subclass (not the shared
+            # OutputSchemaValidationError) so the fault surfaces
+            # under the never-retryable ``script.invalid_output``
+            # code and is excluded from ``failure`` retries. The
+            # generic ``schema_validation_failure`` code is SHARED
+            # with LLM-mode/manual paths and must stay retryable.
+            raise ScriptInvalidOutputError(f"Script-mode output failed schema validation for node '{node_id}': {_schema_exc}") from None
+        elapsed = time.monotonic() - start_time
+        _cost_estimate_usd = _compute_sandbox_cost(elapsed, output_json)
+        # FAR-582: finalize artifacts before the node terminates on the
+        # schema-failure path (both the old envelope return and the
+        # FAR-780 retryable raise below need consistent artifact state).
+        await _finalize_artifact_writer(
+            _artifact_writer,
+            session_factory=session_factory,
+            run_id=run_id,
+            org_id=org_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+        )
+        # FAR-780 (E2B parity — mirrors the bundled runner): an
+        # llm-mode output that violates the node's DECLARED output
+        # contract (a missing schema-required field such as pr_url)
+        # must fail RETRYABLY so runtime_retry re-dispatches the node
+        # in a fresh sandbox. The previous synthetic ``status="failed"``
+        # envelope (modulo_synthetic_failure=True) completed the node
+        # non-retryably: the run proceeded to a blocking eval
+        # (eval.blocked) with the sandbox destroyed and tokens burned,
+        # and the retryable ``sandbox.no_output_json`` path never
+        # fired. The raw agent evidence is retained via the raw-output
+        # marker exactly as the no-output path above (the union of the
+        # output.json file content and the captured stdout), and the
+        # E2B log tail is fetched while the sandbox is STILL ALIVE —
+        # the finally block kills it next.
+        _schema_raw_parts = [p for p in (_normalize_marker_text(raw_output), agent_stdout_raw) if p]
+        await _retain_raw_output_marker(
+            session_factory,
+            _RawOutputMarkerRequest(
+                run_id=run_id,
+                org_id_raw=org_id,
+                node_id=node_id,
+                attempt_key=attempt_key,
+                summary=("Sandbox agent output failed declared output schema validation — raw output retained"),
+                source="\n".join(_schema_raw_parts),
+                parse_error=str(_schema_exc),
+                exit_code=exit_code,
+                stdout_length=_stdout_len,
+                stderr_length=_stderr_len,
+                delivery_sentinel=delivery_sentinel,
+                max_artifact_bytes=_stdout_cap,
+            ),
+        )
+        _schema_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
+        raise SandboxNodeFailedError(
+            _build_schema_failure_message(
+                schema_exc=str(_schema_exc),
+                sandbox_id=_sandbox_id,
+                stdout_raw=agent_stdout_raw,
+                stderr_raw=agent_stderr_raw,
+                log_tail=_schema_log_tail,
+            ),
+            node_id=node_id,
+        ) from None
+    finally:
+        _state.elapsed = elapsed
+        _state.cost_estimate_usd = _cost_estimate_usd
+
+
+async def _sandbox_derive_status(  # NOSONAR S3776 - one status/cost derivation step; the script vs llm envelope arms are a single documented verdict contract
+    _state: _SandboxDispatchState,
+    *,
+    output_json: Any,
+    command_error: str,
+    watchdog: Any,
+    sandbox_mode: str,
+    node_id: str,
+) -> _SandboxInterpretation:
+    """Phase T: status, summary, agent verdict and cost derivation.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    Owns ``pr_url`` and ``cost_estimate_usd`` (published back in ``finally``)
+    and returns the interpretation envelope the caller passes on to phase U.
+    """
+    exit_code: int = _state.exit_code
+    elapsed: float = _state.elapsed
+    pr_url: str = _state.pr_url
+    _cost_estimate_usd: float = _state.cost_estimate_usd
+    try:
+        status: str = "completed" if exit_code == 0 else "failed"
+        result_summary: str = ""
+        changed_files: list[str] = []
+        pr_url = ""
+        # A1 elevation input (agent-failure UX, phase 1): surface the
+        # agent's RAW verdict from output.json VERBATIM — never derived from
+        # exit_code. Missing / non-string values degrade to None so a
+        # missing status can never look like a false "complete".
+        agent_status: str | None = None
+        agent_outcome: str | None = None
+        # FAR-227: the E2B wrapper's fallback echo for a dead opencode
+        # session is NOT an agent verdict — the agent never wrote it. Detect
+        # the placeholder, suppress the fabricated ``agent_status="failed"``
+        # (which A1-elevates to non-retryable ``agent.failed``), and stamp a
+        # distinct marker the executor routes to retryable
+        # ``sandbox.no_output_json`` instead. The summary is preserved so the
+        # failure detail stays visible.
+        sandbox_session_lost: bool = False
+
+        if sandbox_mode == "script":
+            # FAR-296 Phase 2 stage-split (2): a non-zero exit AFTER the
+            # script process started (the fencing lease is claimed) is a
+            # POST-CLAIM fault — TERMINAL, never retryable (exactly-once).
+            # Re-dispatching could double-execute the side-effecting script.
+            if exit_code != 0:
+                if watchdog.budget_killed:
+                    # The command died BECAUSE the platform-side resource-cap
+                    # killer killed the sandbox — never misclassify the kill
+                    # as a generic script.failed.
+                    raise ScriptBudgetKilledError(_script_budget_killed_message(node_id)) from None
+                raise ScriptFailedError(f"Script-mode sandbox exited with code {exit_code} (post-claim, terminal)")
+            # FAR-296 script mode: the raw parsed output IS the node output.
+            # No LLM envelope extraction (summary/changed_files/pr_url/
+            # status/outcome elevation) — output_json carries the script's
+            # output verbatim and the summary is a short auto-generated line.
+            result_summary = f"script mode: exit_code={exit_code}"
+        elif isinstance(output_json, dict):
+            result_summary = output_json.get("summary", "")
+            changed_files = output_json.get("changed_files", [])
+            pr_url = output_json.get("pr_url", "")
+            sandbox_session_lost = _is_sandbox_session_lost_echo(output_json)
+            _raw_status = output_json.get("status")
+            _raw_outcome = output_json.get("outcome")
+            if isinstance(_raw_status, str) and not sandbox_session_lost:
+                agent_status = _raw_status
+            if isinstance(_raw_outcome, str) and not sandbox_session_lost:
+                agent_outcome = _raw_outcome
+            if sandbox_session_lost:
+                # A dead session is never a completed node, regardless of the
+                # command's exit code (the wrapper may exit 0 after echoing).
+                status = "failed"
+
+        if status == "failed" and not result_summary:
+            # Never report a silent empty-summary failure — explain WHY the
+            # command produced no usable output.
+            result_summary = command_error or "Sandbox agent command failed"
+
+        _cost_estimate_usd = _compute_sandbox_cost(elapsed, output_json)
+    finally:
+        _state.pr_url = pr_url
+        _state.cost_estimate_usd = _cost_estimate_usd
+    return _SandboxInterpretation(
+        status=status,
+        result_summary=result_summary,
+        changed_files=changed_files,
+        agent_status=agent_status,
+        agent_outcome=agent_outcome,
+        sandbox_session_lost=sandbox_session_lost,
+    )
+
+
+async def _sandbox_interpret_result(
+    _state: _SandboxDispatchState,
+    *,
+    cmd_result: Any,
+    watchdog: Any,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    sandbox_timeout: int,
+    delivery_sentinel: str | None,
+    output_schema_json: dict[str, Any] | None,
+    schema_id: str,
+    schema_version: int,
+    schema_validator_mode: str,
+    start_time: float,
+    stdout_cap: int,
+    drained_chunks: list[str],
+    _resolved_provider: str,
+) -> _SandboxInterpretation:
+    """Phases N-T: exit code, stream capture/redaction/truncation, the
+    stall/no-output terminal paths, ``output.json`` parsing, OTel span
+    attributes, output-schema validation and status/summary/cost derivation.
+
+    Extracted verbatim (FAR-310 hardening wave 2) and decomposed into cohesive
+    sub-phases (FAR-310 hardening wave 3). Every terminal raise keeps its exact
+    type, message and ordering so the executor's failure classification is
+    unchanged.
+
+    Each sub-phase binds from ``_state`` and publishes back in its own
+    ``finally``, so a raise part-way through leaves ``_state`` holding exactly
+    what the former in-body locals held. The sub-phases own disjoint field
+    sets, so none can clobber another's partial progress:
+    ``_sandbox_capture_output_streams`` owns the stream/exit-code fields,
+    ``_sandbox_read_output_json`` owns ``output_json``,
+    ``_sandbox_validate_output_schema`` owns ``elapsed``/``cost_estimate_usd``
+    on its failure path and ``_sandbox_derive_status`` owns
+    ``pr_url``/``cost_estimate_usd``. ``streaming_writer_instance`` is no longer
+    re-published: phase N only calls ``cleanup()`` and never reassigns it, so
+    the former write-back was a no-op.
+    """
+    await _sandbox_capture_output_streams(
+        _state,
+        node_id=node_id,
+        run_id=run_id,
+        cmd_result=cmd_result,
+        start_time=start_time,
+        drained_chunks=drained_chunks,
+        stdout_cap=stdout_cap,
+    )
+    command_error = await _sandbox_derive_command_error(
+        _state,
+        cmd_result=cmd_result,
+        watchdog=watchdog,
+        node_id=node_id,
+        run_id=run_id,
+        org_id=org_id,
+        session_factory=session_factory,
+        sandbox_mode=sandbox_mode,
+        sandbox_timeout=sandbox_timeout,
+        delivery_sentinel=delivery_sentinel,
+        stdout_cap=stdout_cap,
+        _resolved_provider=_resolved_provider,
+    )
+    raw_output, output_read_error = await _sandbox_read_output_json(
+        _state,
+        cmd_result=cmd_result,
+        node_id=node_id,
+        command_error=command_error,
+        sandbox_timeout=sandbox_timeout,
+        start_time=start_time,
+        _resolved_provider=_resolved_provider,
+    )
+    output_json: Any = _state.output_json
+    await _sandbox_reject_unusable_output(
+        _state,
+        raw_output=raw_output,
+        output_read_error=output_read_error,
+        watchdog=watchdog,
+        node_id=node_id,
+        run_id=run_id,
+        org_id=org_id,
+        session_factory=session_factory,
+        sandbox_mode=sandbox_mode,
+        sandbox_timeout=sandbox_timeout,
+        delivery_sentinel=delivery_sentinel,
+        stdout_cap=stdout_cap,
+        _resolved_provider=_resolved_provider,
+    )
+
+    _sandbox_emit_output_span(
+        _state,
+        node_id=node_id,
+        run_id=run_id,
+        cmd_result=cmd_result,
+        watchdog=watchdog,
+        sandbox_mode=sandbox_mode,
+        start_time=start_time,
+    )
+
+    await _sandbox_validate_output_schema(
+        _state,
+        output_json=output_json,
+        node_id=node_id,
+        run_id=run_id,
+        org_id=org_id,
+        session_factory=session_factory,
+        sandbox_mode=sandbox_mode,
+        output_schema_json=output_schema_json,
+        schema_id=schema_id,
+        schema_version=schema_version,
+        schema_validator_mode=schema_validator_mode,
+        start_time=start_time,
+        delivery_sentinel=delivery_sentinel,
+        stdout_cap=stdout_cap,
+        raw_output=raw_output,
+        _resolved_provider=_resolved_provider,
+    )
+    return await _sandbox_derive_status(
+        _state,
+        output_json=output_json,
+        command_error=command_error,
+        watchdog=watchdog,
+        sandbox_mode=sandbox_mode,
+        node_id=node_id,
+    )
+
+
+def _sandbox_emit_output_span(
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    cmd_result: Any,
+    watchdog: Any,
+    sandbox_mode: str,
+    start_time: float,
+) -> None:
+    """Phases R/pre-S span events: ``script.finalized`` and ``sandbox.agent.output``.
+
+    Extracted from ``_sandbox_interpret_result`` (FAR-310 hardening wave 3).
+    Reads the stream fields phase N published on ``_state``. Purely
+    observational: emits nothing when no span is recording and mutates no
+    dispatch state.
+    """
+    from opentelemetry import trace as _otel_trace
+
+    exit_code: int = _state.exit_code
+    agent_stdout: str = _state.agent_stdout
+    agent_stderr: str = _state.agent_stderr
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    attempt_key: str | None = _state.attempt_key
+
+    if sandbox_mode == "script":
+        _emit_script_span_event(
+            "script.finalized",
+            {
+                "run_id": run_id,
+                "node_id": node_id,
+                "elapsed_seconds": round(time.monotonic() - start_time, 1),
+                "budget_killed": watchdog.budget_killed,
+                "exit_code": exit_code if cmd_result is not None else None,
+            },
+        )
+
+    _span = _otel_trace.get_current_span()
+    if _span.is_recording():
+        _span.add_event(
+            "sandbox.agent.output",
+            {
+                "stdout": agent_stdout[:_MAX_OTEL_LOG_ATTR],
+                "stderr": agent_stderr[:_MAX_OTEL_LOG_ATTR],
+                "stdout_length": _stdout_len,
+                "stderr_length": _stderr_len,
+                "attempt_key": attempt_key or "",
+            },
+        )
+
+
+async def _sandbox_finalise_envelope(  # NOSONAR S3776 - one terminal-envelope assembly step; the sentinel/artifact/envelope writes are a single documented success-path contract
+    _state: _SandboxDispatchState,
+    _interpreted: _SandboxInterpretation,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    sandbox_mode: str,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    _resolved_provider: str,
+) -> dict[str, Any]:
+    """Phase U: delivery-sentinel marker retention, artifact persistence and
+    the terminal node envelope.
+
+    Extracted verbatim (FAR-310 hardening wave 2). This is the dispatch's only
+    success-path ``return``.
+    """
+    status = _interpreted.status
+    result_summary = _interpreted.result_summary
+    changed_files = _interpreted.changed_files
+    agent_status = _interpreted.agent_status
+    agent_outcome = _interpreted.agent_outcome
+    sandbox_session_lost = _interpreted.sandbox_session_lost
+    attempt_key: str | None = _state.attempt_key
+    agent_stdout_raw: str = _state.agent_stdout_raw
+    agent_stderr_raw: str = _state.agent_stderr_raw
+    agent_stdout: str = _state.agent_stdout
+    agent_stderr: str = _state.agent_stderr
+    output_json: Any = _state.output_json
+    pr_url: str = _state.pr_url
+    exit_code: int = _state.exit_code
+    elapsed: float = _state.elapsed
+    _cost_estimate_usd: float = _state.cost_estimate_usd
+    _stdout_len: int = _state.stdout_len
+    _stderr_len: int = _state.stderr_len
+    stdout_truncated: bool = _state.stdout_truncated
+    _drift_results: list[Any] = _state.drift_results
+    stall_reason: str | None = _state.stall_reason
+    _artifact_writer = _state.artifact_writer
+    _streaming_writer_instance = _state.streaming_writer_instance
+    _stdout_cap = stdout_cap
+    # FAR-228 success-path marker: when opt-in AND the sentinel is a
+    # FULL-LINE match in the FULL pre-truncation stdout (``agent_stdout_raw``,
+    # NOT the head-truncated ``agent_stdout``), persist a delivery_done
+    # marker into the marker-row store — the ONLY store guard A /
+    # guard B / classification / gate_fired read. The envelope stamp
+    # alone was unobservable (nothing reads delivery_done from
+    # the outputs dicts); the marker is the durable record that closes the
+    # completed-node-then-process-death gap. Best-effort and fail-open:
+    # a persist failure must never break a successful run.
+    if delivery_sentinel and _source_contains_delivery_sentinel(agent_stdout_raw, delivery_sentinel):
+        try:
+            await _retain_raw_output_marker(
+                session_factory,
+                _RawOutputMarkerRequest(
+                    run_id=run_id,
+                    org_id_raw=org_id,
+                    node_id=node_id,
+                    attempt_key=attempt_key,
+                    summary="Sandbox agent completed with delivery sentinel observed (idempotency gate)",
+                    source=agent_stdout_raw,
+                    parse_error="",
+                    exit_code=exit_code,
+                    stdout_length=_stdout_len,
+                    stderr_length=_stderr_len,
+                    delivery_sentinel=delivery_sentinel,
+                    status=status,
+                    max_artifact_bytes=_stdout_cap,
+                ),
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _log.exception(
+                "sandbox_agent.success_delivery_marker_persist_failed",
+                extra={"node_id": node_id, "run_id": run_id},
+            )
+
+    # FAR-582: finalize artifacts before returning on main success/failure path.
+    await _finalize_artifact_writer(
+        _artifact_writer,
+        session_factory=session_factory,
+        run_id=run_id,
+        org_id=org_id,
+        node_id=node_id,
+        attempt_key=attempt_key,
+    )
+
+    # FAR-811: over-cap redacted stdout is retained IN FULL in the artifact
+    # store with an envelope pointer (`stdout_artifact`) instead of only the
+    # truncated head. Best-effort: a store failure keeps today's inline
+    # (truncated) behaviour with no pointer key. Redaction happened BEFORE
+    # this point (order unchanged) — the stored bytes are the redacted text.
+    # FAR-844: prefer the streaming writer's pointer (incrementally captured
+    # during drain) over the one-shot _persist_full_stdout_artifact fallback.
+    _stdout_artifact: dict[str, Any] | None = None
+    if stdout_truncated:
+        if _streaming_writer_instance is not None:
+            try:
+                _ptr = _streaming_writer_instance.finalize()
+                if _ptr is not None:
+                    # ``truncated`` reflects the streaming writer's ACTUAL
+                    # state (honest notice): the writer is uncapped, so it is
+                    # normally False — but if a future cap is reintroduced or
+                    # the drain fed more than the writer accepted, surface the
+                    # truth rather than advertising a complete artifact.
+                    _stdout_artifact = {
+                        "rel_path": _ptr.get("rel_path"),
+                        "size_bytes": _ptr.get("size_bytes"),
+                        "sha256": _ptr.get("sha256"),
+                        "stream": "stdout",
+                        "compression": _ptr.get("compression"),
+                        "truncated": _streaming_writer_instance.truncated,
+                        "redacted": True,
+                    }
+            except Exception:
+                _log.warning(
+                    "sandbox_agent.streaming_writer_finalize_failed",
+                    extra={"node_id": node_id, "run_id": run_id},
+                )
+        if _stdout_artifact is None:
+            _stdout_artifact = _persist_full_stdout_artifact(
+                org_id=org_id,
+                run_id=run_id,
+                node_id=node_id,
+                attempt_key=attempt_key,
+                node_cap=_stdout_cap,
+                redacted_stdout=_redact_raw_output(agent_stdout_raw),
+            )
+
+    # FAR-879: stderr parity — persist the full redacted stderr transcript
+    # to the artifact store when it exceeds the inline retention cap,
+    # mirroring the stdout path above. Best-effort: a store failure keeps
+    # today's inline (truncated) behaviour with no pointer key.
+    _stderr_artifact: dict[str, Any] | None = None
+    stderr_truncated = _stderr_len > _stdout_cap
+    if stderr_truncated:
+        _stderr_artifact = _persist_full_stderr_artifact(
+            org_id=org_id,
+            run_id=run_id,
+            node_id=node_id,
+            attempt_key=attempt_key,
+            node_cap=_stdout_cap,
+            redacted_stderr=_redact_raw_output(agent_stderr_raw),
+        )
+
+    return _build_sandbox_node_envelope(
+        node_id=node_id,
+        output=_SandboxNodeOutput(
+            status=status,
+            summary=result_summary,
+            changed_files=changed_files,
+            pr_url=pr_url,
+            exit_code=exit_code,
+            wall_clock_time_ms=int(elapsed * 1000),
+            cost_estimate_usd=_cost_estimate_usd,
+            cost_source=output_json,
+            output_json=output_json,
+            agent_stdout=agent_stdout,
+            agent_stderr=agent_stderr,
+            stdout_length=_stdout_len,
+            stderr_length=_stderr_len,
+            stdout_truncated=stdout_truncated,
+            stdout_artifact=_stdout_artifact if _stdout_artifact is not None else _UNSET,
+            stderr_artifact=_stderr_artifact if _stderr_artifact is not None else _UNSET,
+            attempt_key=attempt_key,
+            agent_status=agent_status,
+            agent_outcome=agent_outcome,
+            stall_reason=stall_reason,
+            sandbox_session_lost=sandbox_session_lost,
+            workspace_drift=[
+                {
+                    "dest": d.dest,
+                    "expected_sha": d.expected_sha,
+                    "final_sha": d.final_sha,
+                    "drift_detected": d.drift_detected,
+                }
+                for d in _drift_results
+            ]
+            if _drift_results
+            else _UNSET,
+            workspace_drift_detected=(any(d.drift_detected for d in _drift_results) if _drift_results else _UNSET),
+        ),
+        exclude_from_output=frozenset({"changed_files", "pr_url"}),
+        provider=_resolved_provider,
+        via_provider=True,
+        sandbox_mode=sandbox_mode,
+    )
+
+
+async def _retain_cancellation_evidence(  # NOSONAR S3776 - one cancellation-evidence step; the deliberate nested CancelledError handlers + uncancel calls are a single documented contract
+    _state: _SandboxDispatchState,
+    *,
+    node_id: str,
+    run_id: str,
+    org_id: str,
+    session_factory: Callable[..., Any] | None,
+    delivery_sentinel: str | None,
+    stdout_cap: int,
+    drained_chunks: list[str],
+    _resolved_provider: str,
+) -> None:
+    """FAR-228 / FAR-704: retain delivery + triage evidence before a cancellation
+    re-raises.
+
+    Extracted verbatim from ``_sandbox_agent_impl``'s ``except
+    asyncio.CancelledError`` arm (FAR-310 hardening wave 4): that arm was the
+    largest ``except`` body in the file. It reads the per-dispatch state from
+    ``_state`` — the same fields the arm refreshed from it — so a phase that
+    raised part-way through still contributes exactly what its former locals
+    held.
+
+    INVARIANT: this helper NEVER swallows the dispatch's cancellation. The two
+    nested ``except asyncio.CancelledError`` handlers below are deliberate and
+    call ``_uncancel_current_task()`` so the evidence writes complete; the
+    caller re-raises the original cancellation immediately after this returns.
+    Nothing here raises on a best-effort failure (each write is guarded).
+    """
+    sandbox = _state.sandbox
+    _drain_fn = _state.drain_fn
+    _sandbox_id = _state.sandbox_id
+    _dispatch_provider = _state.dispatch_provider
+    stall_reason = _state.stall_reason
+    attempt_key = _state.attempt_key
+    _stdout_cap = stdout_cap
+    # FAR-228 (THE INCIDENT FIX): before re-raising, retain delivery
+    # evidence. Run 9559's attempt 1 was cancelled AFTER the email was
+    # sent but no marker was retained, so attempt 2 re-sent it. The
+    # cancellation may land between the last 5s drain tick and the
+    # process exit, so do ONE guarded final drain, then best-effort
+    # persist a delivery_done marker when the sentinel is a full-line
+    # match in the drained tail.
+    if _drain_fn is not None and sandbox is not None:
+        # FAR-1914 round-3 M3: ONE sequencer for both looks. A slow
+        # shielded drain must never be re-started by the grace look (that
+        # duplicated bytes and their step_finish costs on the same
+        # _drain_offset); the second look joins the in-flight task instead.
+        _final_drain = _BoundedFinalDrain(
+            _drain_fn,
+            timeout=_IDEMPOTENCY_GATE_CANCEL_PERSIST_TIMEOUT,
+            log_context={"node_id": node_id, "run_id": run_id},
+        )
+
+        await _final_drain.run_once()
+        # FAR-1914 B2: one bounded second look. A delivered-then-killed run
+        # can flush its `gh pr create` line just after the cancellation
+        # lands; without this grace the marker is built from a tail that
+        # predates the delivery and the run reads as a bare failure.
+        if _CANCEL_DELIVERY_GRACE_SECONDS > 0:
+            try:
+                await asyncio.sleep(_CANCEL_DELIVERY_GRACE_SECONDS)
+            except asyncio.CancelledError:  # NOSONAR
+                _uncancel_current_task()
+            # Join the in-flight drain (or start a fresh look once it has
+            # completed) — never a second concurrent drain.
+            await _final_drain.run_once()
+    # FAR-704: retain cancellation TRIAGE evidence whenever a sandbox
+    # existed. The absolute node-deadline watchdog (pipeline_execution)
+    # cancels this dispatch before output.json is ever read, so no node
+    # envelope reaches run_node_outputs — without this marker the run
+    # detail carries nodes:[] and Mode 2 (healthy agent killed at E2B
+    # endAt) vs Mode 3 (provider op-timeout) cannot be told apart
+    # post-hoc. The marker is the dedicated attempt_key-keyed retention
+    # store (FAR-188); it NEVER rides outputs_json / node_telemetry_json
+    # (the Agent Return Contract columns). The FAR-228 delivery_done
+    # stamp rides the SAME marker when the sentinel was drained (the
+    # marker merge is monotone — a later retry never unsets it).
+    if sandbox is not None:
+        _drained_tail = "".join(drained_chunks)
+        # The E2B kill reason only lives in the sandbox logs, and the
+        # logs endpoint only serves live sandboxes — fetch the tail
+        # BEFORE the finally-block kill, while the sandbox may still be
+        # alive (FAR-97/FAR-197 observability, mirrored here). Guarded +
+        # bounded + cancel-safe: a nested cancel or any error degrades
+        # to an empty tail, never blocks the marker write or the
+        # original cancellation's re-raise.
+        _cancel_log_tail = ""
+        try:
+            _cancel_log_tail = await asyncio.wait_for(
+                asyncio.shield(
+                    _read_log_tail_via_provider(
+                        _sandbox_id,
+                        max_bytes=6000,
+                        provider_type=_resolved_provider,
+                        borrowed_provider=_dispatch_provider,
+                    )
+                ),
+                timeout=_IDEMPOTENCY_GATE_CANCEL_PERSIST_TIMEOUT,
+            )
+        # Nested cancellation is deliberate — the triage marker must
+        # still be written; the caller re-raises the original
+        # cancellation after this helper returns.
+        except asyncio.CancelledError:  # NOSONAR
+            _uncancel_current_task()
+        except Exception:
+            _log.exception(
+                "sandbox_agent.cancel_log_tail_fetch_failed",
+                extra={"node_id": node_id, "run_id": run_id},
+            )
+        _cancel_sentinel_hit = bool(delivery_sentinel and _source_contains_delivery_sentinel(_drained_tail, delivery_sentinel))
+        _cancel_pr_url = _extract_pr_url(_drained_tail)
+        # FAR-1914 B2 / C1: the PR url is EVIDENCE, never a gate. Only the
+        # configured full-line sentinel may set ``delivery_done`` — the
+        # idempotency gate suppresses a retry on that field alone, so
+        # arming it from ANY url in the tail (a ``gh pr list --json url``
+        # payload, a quoted url) could turn a false positive into a MISSED
+        # delivery. The url is retained on the marker's existing
+        # non-gating ``pr_url`` field for human/analytics evidence.
+        _cancel_no_output_reason = stall_reason or "Sandbox attempt cancelled before a terminal node envelope was produced (node-deadline watchdog, run cancel, or worker shutdown)"
+        if _cancel_sentinel_hit:
+            _cancel_summary = "Sandbox agent cancelled after delivery sentinel observed — delivery_done retained (idempotency gate)"
+        elif _cancel_pr_url:
+            _cancel_summary = "Sandbox agent cancelled after a PR url was observed — pr_url retained as non-gating evidence"
+        else:
+            _cancel_summary = "Sandbox agent cancelled — triage evidence retained (FAR-704)"
+        _cancel_marker: dict[str, Any] = {
+            "_modulo_marker": True,
+            "status": "failed",
+            "summary": _cancel_summary,
+            "raw_output": _redact_raw_output(_drained_tail)[:_stdout_cap],
+            "parse_error": "",
+            "pr_url": _cancel_pr_url,
+            "exit_code": -1,
+            "stdout_length": len(_drained_tail),
+            "stderr_length": 0,
+            "attempt_key": attempt_key,
+            "node_id": node_id,
+            # FAR-704 triage surface: the run detail API projects markers
+            # carrying this flag into RunResponse.deadline_triage.
+            "deadline_triage": True,
+            "no_output_reason": sanitize_error_text(_cancel_no_output_reason),
+            "sandbox_log_tail": sanitize_error_text(_redact_raw_output(_cancel_log_tail)),
+        }
+        if _cancel_sentinel_hit:
+            _cancel_marker["delivery_done"] = True
+        try:
+            await _sandbox_cancel_retention_persist(
+                session_factory=session_factory,
+                run_id=run_id,
+                org_id=org_id,
+                node_id=node_id,
+                # FAR-2082: the kill's evidence is stored under its OWN key,
+                # never the node's normal attempt key — a kill that produced
+                # nothing must not look like work by row existence, and it
+                # must not overwrite the attempt's real marker. The marker
+                # payload keeps the real attempt_key/node_id (evidence
+                # attribution); only the ROW identity moves.
+                attempt_key=_cancel_triage_attempt_key(run_id, node_id, attempt_key),
+                marker=_cancel_marker,
+            )
+        # Nested cancellation here is deliberate — idempotency-gate cleanup
+        # must not re-raise early or the delivery-done marker is skipped
+        # (FAR-228 fix); the caller re-raises the original cancellation.
+        except asyncio.CancelledError:  # NOSONAR
+            _uncancel_current_task()
+        except Exception:
+            _log.exception(
+                "sandbox_agent.cancel_retention_persist_failed",
+                extra={"node_id": node_id, "run_id": run_id},
+            )
+
+
 async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegates to extracted helpers (FAR-310)
     state: dict[str, Any],
     *,
@@ -10614,22 +14356,11 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
 
     from opentelemetry import trace as _otel_trace
 
-    from farna.core.guardrails.loop_intercept import (
-        LoopInterceptCallbackServer,
-        bridge_client_source,
-        load_loop_intercept_guardrails,
-        persist_loop_interception_audit,
-    )
-    from farna.core.runner_bindings import (
-        AgentBindingResolutionError,
-        LocalProviderBindingsRefusedError,
-        resolve_agent_bindings,
-    )
-
-    # FAR-1050 R4: the provider-neutral vocabulary the dispatch path
-    # builds its WorkspaceSpec and typed refusals from (runtime import so the
-    # names are bound in THIS function's scope on every path).
-    from farna.core.runtime_provider import RuntimeProviderError, WorkspaceSpec
+    # FAR-310: the loop-interception, runner-binding and runtime-provider
+    # names are now imported (lazily, unchanged) inside the phase coroutines
+    # that use them, so a dispatch that never reaches a phase does not import
+    # them either. ``_otel_trace`` stays here — the failure handler below
+    # records the sandbox.agent.output span event.
 
     # FAR-215: mid-run capability re-check at node start (block -> HITL).
     # The gate raises a LangGraph interrupt on block; control only reaches
@@ -10672,7 +14403,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
     #    validation (GraphValidator parity, no silent clamp).
     #  - kubernetes (FAR-1051) -> the provider-mediated path below with the
     #    hub-resolved Kubernetes provider; an unregistered provider raises the
-    #    typed ProviderNotConfiguredError naming MODULO_KUBERNETES_ENABLED
+    #    typed ProviderNotConfiguredError naming FARNA_CONTROL_KUBERNETES_ENABLED
     #    (no silent fallback to E2B or local).
     #  - none -> the historical E2B default route, unchanged.
     #  FAR-1598: BEFORE any of those branches, a bound TEAM-PRIVATE profile
@@ -10755,112 +14486,22 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
     run_context: dict[str, Any] = state.get("run_context") or {}
     raw_input: Any = run_context.get("input", {})
 
-    # FAR-418 (MAJOR-3 fix, sandbox_agent path): the sandbox agent's render view
-    # must be bound by context_scope too — otherwise a gated run_context key leaks
-    # into the rendered prompt (written to /home/user/prompt.md) and agent_command
-    # via ``{{ run_context.<key> }}`` / ``{{ state.run_context.<key> }}``. Mirror
-    # the make_node_fn scoped_state/scoped_run_context boundary. ``raw_input`` stays
-    # sourced from the full run_context so input routing is unaffected.
-    _node_cap = node_def.get("capability_scope") or {}
-    scoped_run_context = filter_run_context_scope(run_context, _node_cap.get("context_scope"))
-    scoped_state = dict(state)
-    scoped_state["run_context"] = scoped_run_context
-
     run_id, pipeline_id, org_id = _run_identity_strs(state)
 
-    # FAR-296 mode split: llm mode renders the prompt + agent_command through
-    # the SandboxedEnvironment; script mode runs script_command VERBATIM —
-    # no Jinja render of the command, no prompt, no template_vars.
-    if sandbox_mode == "script":
-        rendered_prompt: str = ""
-        rendered_agent_command = agent_command
-    else:
-        env = sandbox_jinja_environment()
-        template = env.from_string(agent_prompt_template)
-        # FAR-436: context_scope — the sandbox agent's run_context VIEW (the keys
-        # fed to the prompt + agent_command templates) is allowlist-gated to the
-        # node's need-to-know set. Internal control keys are always preserved by
-        # filter_run_context_scope (_CONTEXT_ALWAYS_KEPT). Absent scope = legacy.
-        _node_cap = node_def.get("capability_scope") or {}
-        scoped_run_context = filter_run_context_scope(run_context, _node_cap.get("context_scope"))
-        template_vars: dict[str, Any] = {
-            "state": scoped_state,
-            "run_context": scoped_run_context,
-            "input": raw_input,
-        }
-        resolved = node_def.get("_resolved_parameters")
-        if isinstance(resolved, dict):
-            template_vars["parameter"] = resolved
-
-        # FAR-1743 / ADR 037 rev 2 (EXPERIMENTAL): the top-level `{{ model }}`
-        # template variable — the dedicated resolution channel. The value is
-        # interpolated from the SNAPSHOT (baked `_resolved_model`), with the
-        # run's frozen `_run_overrides.model` folded in pre-dispatch (run
-        # override wins). Render is interpolation, NEVER resolution: no
-        # registry read here, and `input.model` is neither read nor written
-        # (caller input keeps its own meaning; provenance stays intact).
-        # Reads the full run_context, not the context_scope-filtered view —
-        # the fold-in is a product mechanism, not a user template key.
-        _model_value = effective_model_template_value(node_def, run_context)
-        if _model_value is not None:
-            template_vars["model"] = _model_value
-        elif node_def.get("model_class"):
-            # Fail closed (D3) BEFORE any sandbox work: an opted-in node with
-            # no resolved model must not render `{{ model }}` as empty and
-            # dispatch a sandbox on a blank --model. The normal path bakes at
-            # mint (fail-closed there); this backstop catches a snapshot whose
-            # bake is missing (e.g. an edit-kind snapshot consumed by a run).
-            raise ValueError(f"sandbox_agent node '{node_id}' declares model_class {node_def.get('model_class')!r} but no model was resolved at snapshot mint (no baked _resolved_model and no run-override model) — refusing to dispatch pre-sandbox (ADR 037 D3)")
-
-        try:
-            rendered_prompt = template.render(**template_vars)
-        except (jinja2.UndefinedError, TypeError) as e:
-            _log.warning("Prompt template UndefinedError for run %s: %s", run_id, e)
-            return {
-                "status": "skipped",
-                "summary": f"Skipped: prompt template references missing input fields ({e})",
-                "agent_stdout": "",
-                "agent_stderr": "",
-                "exit_code": 0,
-            }
-
-        # Render agent_command through the same SandboxedEnvironment +
-        # template vars as the prompt, so the LLM model (or any other
-        # command flag) can be a per-run / per-parameter value (e.g.
-        # ``--model {{ input.model }}`` for A/B testing). A command with NO
-        # ``{{ }}`` templates renders to itself unchanged — backward
-        # compatible with every existing pipeline.
-        try:
-            rendered_agent_command = env.from_string(agent_command).render(**template_vars)
-        except (jinja2.UndefinedError, TypeError) as e:
-            _log.warning(
-                "agent_command template UndefinedError for run %s node %s: %s",
-                run_id,
-                node_id,
-                e,
-            )
-            return {
-                "status": "skipped",
-                "summary": f"Skipped: agent_command template references missing input fields ({e})",
-                "agent_stdout": "",
-                "agent_stderr": "",
-                "exit_code": 0,
-            }
-        except jinja2.TemplateSyntaxError as e:
-            # Legacy commands that contain Jinja-like syntax without being
-            # valid templates (e.g. ``${{ }}`` shell fragments or an unclosed
-            # ``{{``) predate #1291 and must keep running verbatim.
-            # Rendering them as templates would crash the run with an
-            # uncaught TemplateSyntaxError.
-            _log.warning(
-                "agent_command is not a valid template for run %s node %s; using verbatim: %s",
-                run_id,
-                node_id,
-                e,
-            )
-            rendered_agent_command = agent_command
-        if not rendered_agent_command.strip():
-            raise ValueError(f"sandbox_agent node '{node_id}' rendered agent_command is empty after template resolution — a sandbox agent cannot run an empty command")
+    _rendered = _render_sandbox_prompt_and_command(
+        state=state,
+        node_def=node_def,
+        sandbox_mode=sandbox_mode,
+        agent_command=agent_command,
+        agent_prompt_template=agent_prompt_template,
+        run_context=run_context,
+        raw_input=raw_input,
+        run_id=run_id,
+        node_id=node_id,
+    )
+    if isinstance(_rendered, dict):
+        return _rendered
+    rendered_prompt, rendered_agent_command = _rendered
 
     start_time = time.monotonic()
     sandbox: _ProviderMediatedHandle | None = None
@@ -10897,7 +14538,6 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
     _stdout_len = 0
     _stderr_len = 0
     _sandbox_id: str | None = None
-    _sandbox_log_tail: str = ""
     agent_stdout: str = ""
     agent_stderr: str = ""
     output_json: Any = None
@@ -10916,18 +14556,17 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
     # instead of raising UnboundLocalError that replaces the cancellation.
     _drain_fn: Any = None
     _drained_chunks: list[str] = []
-    # FAR-704: the cancellation-triage marker (below, in the CancelledError
-    # handler) reads the idle-watchdog stall reason so a stall kill's
-    # no_output_reason carries it. Pre-bound at function scope for the same
-    # reason as _drain_fn: a cancellation during provisioning must not hit
-    # UnboundLocalError inside the handler (the inner try re-assigns it
-    # when the dispatch gets far enough to resolve the stall detector).
-    stall_reason: str | None = None
+    # FAR-704: the idle-watchdog stall reason (published on ``_state`` by the
+    # exec phase) is read by ``_retain_cancellation_evidence`` — the extracted
+    # cancellation handler — so a stall kill's no_output_reason carries it.
+    # No local pre-bind is needed here any more: the helper reads it from
+    # ``_state``, whose ``stall_reason`` field defaults to None.
     # FAR-211: the local loop-interception callback server, started when the
     # node's loop_intercept config is enabled AND the pipeline has bound
     # guardrails. Pre-bound at function scope so the finally-block teardown
-    # short-circuits safely (None) when the bridge was never started.
-    _bridge_server: LoopInterceptCallbackServer | None = None
+    # short-circuits safely (None) when the bridge was never started. The
+    # concrete type is imported lazily by the exec phase, hence ``Any``.
+    _bridge_server: Any = None
     # FAR-1315 (MAJOR 2b): the one-PR guard's INSTALL STATUS as reported by
     # apply_isolation. Pre-bound at function scope so the finally-block
     # settle references it directly (None there means "no live install
@@ -10949,7 +14588,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         try:
             from farna.settings import get_settings
 
-            _gate_enabled = getattr(get_settings(), "modulo_idempotency_gate_enabled", True)
+            _gate_enabled = getattr(get_settings(), "idempotency_gate_enabled", True)
         except Exception:
             _log.warning(
                 "sandbox_agent.idempotency_gate_killswitch_check_failed",
@@ -10971,2067 +14610,146 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
                 )
                 return _idempotency_gate_skipped_envelope(node_id)
 
-    async def _acquire_dispatch_marker() -> str | None:
-        """D8 atomic dispatch gate + marker (FAR-594): capacity check and the
-        dispatch reservation commit in ONE transaction — own-row fenced lock,
-        per-org advisory lock (flag-on), lock-free count over the
-        running-only marker population, then the fenced marker UPDATE. The
-        marker carries the tier (``provider``/``written_at``). Applied to
-        EVERY sandbox_agent dispatch regardless of sandbox_mode (the
-        pre-D8 script-only racy pre-gate is REPLACED by this).
+    # The five dispatch-seam helpers used to be defined here as nested async
+    # functions closing over these locals. They are hoisted to module level and
+    # take this frozen context instead. ``attempt_key`` is not known yet — the
+    # fenced acquire below produces it — so the context is rebuilt with
+    # ``_dc_replace`` immediately after that acquire, which reproduces the old
+    # closure's late binding for the two store helpers.
 
-        Returns the attempt key on success, ``None`` when denied
-        (superseded / not running — no sandbox may be created). Raises
-        :class:`SandboxCapacityExceededError` (retryable, ``capacity.org``)
-        when at capacity or the lock degraded. Fail-open on any other DB
-        error: the marker is still written best-effort in its own
-        transaction, then the sandbox provisions.
-        """
-        return await _sandbox_acquire_dispatch_marker(
-            session_factory=session_factory,
-            claim_lease=claim_lease,
-            org_id=org_id,
-            run_id=run_id,
-            node_id=node_id,
-            provider=_resolved_provider,
-            via_provider=True,
-        )
-
-    async def _store_dispatch_marker_sandbox(sandbox_id_value: str | None) -> None:
-        """Persist the real sandbox id onto the runs row after a successful create."""
-        await _sandbox_store_dispatch_marker_sandbox(
-            sandbox_id_value,
-            session_factory=session_factory,
-            claim_lease=claim_lease,
-            org_id=org_id,
-            run_id=run_id,
-            attempt_key=attempt_key,
-            provider=_resolved_provider,
-            via_provider=True,
-        )
-
-    async def _store_script_lease() -> None:
-        """FAR-296 Phase 2 fencing lease: record the script-mode execution claim.
-
-        Reuses the EXISTING ``runs.sandbox_dispatch_state`` machinery — no
-        parallel lease store. Persists ``{"state": "script_executing",
-        "attempt_key": ...}`` IMMEDIATELY BEFORE ``sandbox.commands.run``, so
-        the durable marker proves "the script PROCESS started (execution
-        claimed, completion marker pending)". Fenced on the claim token +
-        status so a superseded original cannot stamp a lease on a successor's
-        row. Fail-open (no session factory / claim lease / org) — the lease
-        is a safety backstop, never a correctness dependency.
-        """
-        await _sandbox_store_script_lease(
-            session_factory=session_factory,
-            claim_lease=claim_lease,
-            org_id=org_id,
-            run_id=run_id,
-            attempt_key=attempt_key,
-            provider=_resolved_provider,
-            via_provider=True,
-        )
-
-    async def _issue_run_credential_for_sandbox() -> IssuedRunCredential | None:
-        """Issue a short-TTL run-scoped credential for this sandbox (FAR-1690 A1).
-
-        Returns the issued credential handle (secret + issuance provenance), or
-        None when issuance is unavailable/failed (fail-open — the sandbox runs
-        without the key rather than failing the dispatch). The raw secret is
-        returned to the caller only, which injects it into the sandbox envs —
-        it is NEVER logged, checkpointed, or placed in LangGraph state.
-        """
-        return await _sandbox_issue_run_credential_for_sandbox(
+    # FAR-310 hardening wave 2: the dispatch phases below run as separate
+    # coroutines and share this mutable state instead of closing over locals.
+    # ``_exec_ctx`` is not known yet — the fenced acquire inside phase A
+    # produces it (with ``attempt_key``), which reproduces the former closure's
+    # late binding for the two store helpers.
+    _state = _SandboxDispatchState(
+        exec_ctx=_SandboxExecContext(
             session_factory=session_factory,
             org_id=org_id,
             run_id=run_id,
             node_id=node_id,
+            claim_lease=claim_lease,
             sandbox_timeout=sandbox_timeout,
+            provider=_resolved_provider,
         )
-
-    async def _clear_dispatch_marker() -> None:
-        """Fenced marker clear — only when the claim token still matches.
-
-        A superseded original (token rotated by a successor) must not clear
-        the successor's dispatch marker / sandbox id.
-        """
-        await _sandbox_clear_dispatch_marker(
-            session_factory=session_factory,
-            claim_lease=claim_lease,
-            org_id=org_id,
-            run_id=run_id,
-        )
+    )
 
     try:
-        # D8 (FAR-594): the pre-D8 script-only racy check-then-act capacity
-        # pre-gate is REPLACED by the atomic gate inside
-        # ``_acquire_dispatch_marker`` below — one transaction reserves the
-        # slot for EVERY sandbox_agent dispatch (any sandbox_mode, any
-        # provider tier) before provisioning.
-        # DB-atomic dispatch marker (dist/runtime-core A4) — replaces the
-        # retired Redis SETNX E2B fence. Exactly ONE executor wins the
-        # dispatch slot; a superseded claim / non-running run is refused
-        # BEFORE any sandbox is created. Fail-open when no session factory
-        # or no claim lease is available (the heartbeat claim fence remains
-        # the primary guard).
-        if (attempt_key := await _acquire_dispatch_marker()) is None:
-            _log.warning(
-                "sandbox_agent.dispatch_marker_denied",
-                extra={"node_id": node_id, "run_id": run_id},
-            )
-            raise SupersededNodeError("E2B dispatch marker denied — run superseded or not running; sandbox not created")
-        dispatch_marker_set = True
-
-        # FAR-592 (D6): per-agent runner bindings resolve at PROVISION time —
-        # BEFORE ``AsyncSandbox.create`` — so a resolution failure (or a Local
-        # tier refusal) leaves the sandbox NEVER created and the script
-        # PROCESS never started: both error classes stay pre-claim/re-dispatch
-        # safe. A fresh short-lived hub per dispatch resolves ONLY the
-        # referenced backends and is explicitly disposed inside
-        # ``resolve_agent_bindings``. Precedence is deliberate: profile secrets
-        # < runner bindings < node ``env_vars_extra`` — THE NODE WINS (see
-        # ``_build_sandbox_envs``).
-        _runner_bindings: dict[str, str] = {}
-        if agent_id is not None:
-            try:
-                _runner_bindings = await asyncio.wait_for(
-                    resolve_agent_bindings(
-                        session_factory=session_factory,
-                        org_id=org_id,
-                        agent_id=agent_id,
-                        environment_profile_id=_runner_binding_env_profile_id(),
-                        run_id=run_id,
-                        node_id=node_id,
-                    ),
-                    # FAR-766: bound the previously-unbounded pre-claim secrets
-                    # backend / DB read. A hard stall here also used to ride the
-                    # slow nodeless sweep — a timeout is a retryable binding
-                    # resolution failure (never terminal harness.unknown).
-                    timeout=_sandbox_binding_resolve_timeout(),
-                )
-            except TimeoutError:
-                _log.warning(
-                    "sandbox_agent.bindings_resolution_timed_out",
-                    extra={
-                        "run_id": run_id,
-                        "node_id": node_id,
-                        "timeout_seconds": _sandbox_binding_resolve_timeout(),
-                    },
-                )
-                raise SandboxBindingResolutionError(f"Runner binding resolution timed out after {_sandbox_binding_resolve_timeout()}s for node '{node_id}'") from None
-            except LocalProviderBindingsRefusedError as exc:
-                _log.warning(
-                    "sandbox_agent.bindings_local_refused",
-                    extra={"run_id": run_id, "node_id": node_id},
-                )
-                # The typed refusal carries the remediation copy (opt-in flag
-                # / tier alternatives) — surface it, never drop it.
-                raise SandboxTierRefusedError(f"Local provider tier refused runner bindings for node '{node_id}': {str(exc)[:_MAX_ERROR_MSG]}") from exc
-            except AgentBindingResolutionError as exc:
-                _log.warning(
-                    "sandbox_agent.bindings_resolution_failed",
-                    extra={
-                        "run_id": run_id,
-                        "node_id": node_id,
-                        "exc_msg": str(exc)[:_MAX_ERROR_MSG],
-                    },
-                )
-                raise SandboxBindingResolutionError(f"Runner binding resolution failed for node '{node_id}': {str(exc)[:_MAX_ERROR_MSG]}") from exc
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                # FAR-592 (D6 F12): a SECRETS-BACKEND hard failure (DB down,
-                # fernet misconfig, unexpected exception shape) must NOT fall
-                # through to the generic ``harness.unknown`` classification —
-                # the pre-claim bindings block is re-dispatch safe, so
-                # non-timeout secrets failures classify as the RETRYABLE
-                # ``sandbox.binding_resolution`` code the D6 rollback trigger
-                # reads.
-                _log.warning(
-                    "sandbox_agent.bindings_resolution_failed",
-                    extra={"run_id": run_id, "node_id": node_id, "exc_type": type(exc).__name__},
-                )
-                raise SandboxBindingResolutionError(f"Runner binding resolution failed for node '{node_id}': {str(exc)[:_MAX_ERROR_MSG]}") from exc
-
-        # FAR-800: resolve managed workspace input refs → SHA HOST-SIDE
-        # BEFORE any sandbox is created.  A resolution failure (ref not
-        # found, transient network error) must NEVER create a sandbox.
-        # FAR-802: killswitch — when MWI is disabled (default), refuse to
-        # provision inputs with a clear error code so the run is never
-        # silently pretending inputs were provisioned.
-        _resolved_workspace_inputs: list[Any] = []
-        if workspace_inputs:
-            from farna.core.pipeline_engine.workspace_input_orchestration import (
-                ProvisioningError as WorkspaceProvisioningError,
-            )
-            from farna.settings import get_settings as _get_mwi_settings
-
-            if not _get_mwi_settings().modulo_workspace_inputs_enabled:
-                raise WorkspaceProvisioningError(
-                    "Managed workspace inputs are disabled (MODULO_WORKSPACE_INPUTS_ENABLED is not set or false)",
-                    error_code=_CODE_SANDBOX_WORKSPACE_INPUTS_DISABLED,
-                    retryable=False,
-                )
-            from farna.core.pipeline_engine.workspace_input_orchestration import (
-                resolve_managed_inputs_host_side,
-            )
-
-            # Wire a real (pinned-transport) httpx client so the least-privilege
-            # read-only credential assertion is ACTIVE in production (the assertion
-            # probes https://api.github.com/user; without a client it is unreachable
-            # and the advertised guarantee silently no-ops). The client is built
-            # through the SSRF egress factory so the resolved address is pinned onto
-            # the connection (no DNS-rebinding window).
-            from farna.core.ssrf import pinned_async_client_sync
-
-            _http_client = pinned_async_client_sync("https://api.github.com", timeout=10.0)
-            try:
-                _resolved_workspace_inputs = await resolve_managed_inputs_host_side(
-                    workspace_inputs,
-                    org_id=org_id,
-                    session_factory=session_factory,
-                    http_client=_http_client,
-                )
-            except WorkspaceProvisioningError as exc:
-                _log.warning(
-                    "workspace_input.resolution_failed",
-                    extra={
-                        "run_id": run_id,
-                        "node_id": node_id,
-                        "error_code": exc.error_code,
-                        "retryable": exc.retryable,
-                        "detail": str(exc)[:_MAX_ERROR_MSG],
-                    },
-                )
-                raise SandboxNodeFailedError(
-                    f"Workspace input resolution failed: {str(exc)[:_MAX_ERROR_MSG]}",
-                    node_id=node_id,
-                ) from exc
-            finally:
-                await _http_client.aclose()
-
-            # FAR-801: persist the resolved inputs audit record (best-effort).
-            if _resolved_workspace_inputs and session_factory is not None and run_id and org_id:
-                try:
-                    import uuid as _uuid
-
-                    from farna.core.pipeline_engine.workspace_input_audit import (
-                        WorkspaceInputAuditRecord,
-                        record_resolved_inputs,
-                        redact_url,
-                    )
-                    from farna.core.pipeline_engine.workspace_input_orchestration import (
-                        _extract_host_from_url,
-                    )
-                    from farna.db.models.run_node_outputs import FINAL_ATTEMPT_KEY
-
-                    # Map each resolved input back to its requested ref (kind/value)
-                    # for auditability — the audit record should carry the real
-                    # movable ref that was resolved, not empty strings.
-                    _ref_by_dest = {(wi.get("dest")): (wi.get("ref") or {}) for wi in (workspace_inputs or [])}
-
-                    _audit_records = [
-                        WorkspaceInputAuditRecord(
-                            input_name=inp.dest,
-                            connector_instance_id=getattr(inp, "connector_instance_id", None),
-                            host=_extract_host_from_url(inp.url) if hasattr(inp, "url") else "",
-                            url_redacted=redact_url(inp.url) if hasattr(inp, "url") else "",
-                            requested_ref_kind=(_ref_by_dest.get(inp.dest) or {}).get("kind", "branch"),
-                            requested_ref_value=(_ref_by_dest.get(inp.dest) or {}).get("value", ""),
-                            resolved_sha=inp.resolved_sha,
-                            final_sha=None,
-                            drift_detected=False,
-                            dest=inp.dest,
-                            status="resolved",
-                        )
-                        for inp in _resolved_workspace_inputs
-                    ]
-                    _run_uuid = _uuid.UUID(run_id)
-                    _org_uuid = _uuid.UUID(org_id)
-                    async with session_factory() as _audit_session, _audit_session.begin():
-                        # FAR-801/RBAC: run_node_outputs + runs are RLS FORCE, so
-                        # the audit write must run with the tenant context set or
-                        # Postgres raises 42501 (swallowed by the best-effort
-                        # except) and the row never persists.
-                        await set_rls_org(_audit_session, _org_uuid)
-                        await record_resolved_inputs(
-                            _audit_session,
-                            run_id=_run_uuid,
-                            organisation_id=_org_uuid,
-                            node_id=node_id,
-                            attempt_key=FINAL_ATTEMPT_KEY,
-                            records=_audit_records,
-                            status="resolved",
-                        )
-                except Exception:
-                    _log.exception(
-                        "workspace_input.audit_record_failed",
-                        extra={"run_id": run_id, "node_id": node_id},
-                    )
-
-        # FAR-296 Phase 3/3b-3: egress control + resource limits. deny_all
-        # and selected map to allow_internet_access=False; resource_limits
-        # and the selected-mode host:port allowlist are carried as sandbox
-        # metadata (e2b tags) so a server-side template/config can enforce
-        # them (the e2b SDK has no native allowlist / cap enforcement).
-        _metadata: dict[str, str] = {}
-        if resource_limits:
-            _metadata["resource_limits"] = json.dumps(resource_limits)
-        # FAR-1085: use canonical egress resolution instead of ad-hoc mapping.
-        # The route threads the profile's network_policy (resolved above) so
-        # the canonical resolver can apply the node→profile→provider-default
-        # precedence chain. FAR-1051: the TIER is the resolved provider type
-        # ("e2b" on the legacy route — unchanged; "kubernetes" for a
-        # Kubernetes-bound profile), so a tier that cannot enforce the policy
-        # (e.g. deny_all/selected on Kubernetes, where bounded egress is the
-        # customer's NetworkPolicy) refuses here by name instead of
-        # certifying an enforcement the provider never performs.
-        from farna.core.pipeline_engine.egress import resolve_egress
-
-        _egress_tier = _resolved_provider
-        _egress_resolved = resolve_egress(
-            node_egress_policy=egress_policy,
-            node_egress_allowlist=egress_allowlist,
-            profile_network_policy=_profile_net_policy,
-            tier=_egress_tier,
-        )
-        if _egress_resolved.refusal is not None:
-            raise SandboxTierRefusedError(f"Node '{node_id}' egress refused on {_egress_tier} tier: {_egress_resolved.refusal}")
-        # FAR-1690: record the TYPED egress posture (never a boolean) on the
-        # workspace, riding the same provider-neutral workspace_metadata carrier
-        # as the allowlist below. Full rationale lives on EgressPosture in
-        # core/pipeline_engine/egress.py and the mirrored comment in
-        # runner_dispatch._workspace_spec_for_dispatch; kept as a pointer here so
-        # the two dispatch sites cannot drift.
-        _metadata["modulo.egress.posture"] = _egress_resolved.posture.value
-        if _egress_resolved.policy == "selected" and _egress_resolved.allowlist:
-            _metadata["egress_allowlist"] = json.dumps(_egress_resolved.allowlist)
-        # FAR-1051 (qa-iterate): run/org/node attribution rides the spec's
-        # workspace_metadata — the SAME provider-neutral keys the Docker
-        # route stamps in ``runner_dispatch._workspace_spec_for_dispatch``.
-        # Without them the Kubernetes workspace pod carries no
-        # ``modulo.run.id`` LABEL, and the workspace-orphan reconciler
-        # deliberately skips pods without one (no run to cross-reference),
-        # so a pod that outlives its dispatch could never be reclaimed.
-        # Empty identity values are dropped (parity with that mapper's
-        # ``if value`` filter) rather than stamped as "".
-        for _attribution_key, _attribution_value in (
-            ("modulo.run.id", run_id),
-            ("modulo.org.id", org_id),
-            ("modulo.node.id", node_id),
-        ):
-            if _attribution_value:
-                _metadata[_attribution_key] = str(_attribution_value)
-        # FAR-296 Phase 4a: E2B concurrent-sandbox rate limits (429 / resource
-        # exhausted) are TRANSIENT. Retry ``AsyncSandbox.create`` with
-        # exponential backoff, bounded by the create timeout window and the
-        # node timeout. A run that exhausts the retries fails RETRYABLY
-        # (sandbox.rate_limited) — it must NOT permanently fail as
-        # harness.unknown.
-        _rate_limit_attempt = 0
-        # FAR-766: provisioning watchdog. The dispatch marker is written
-        # ("dispatching") BEFORE ``AsyncSandbox.create``; if create never returns
-        # (E2B provider degradation observed 06:05-13:58), the node never reaches
-        # "script_executing" and sits claimed-but-never-dispatched until the
-        # slow 35-min ``dispatcher_reconcile`` nodeless sweep. Bound the
-        # provisioning await so the node fails RETRYABLY within this window.
-        # The bound applies to the create await AND the rate-limit backoff sleeps
-        # so a retry train cannot stack past the window.
-        # FAR-901: set FARNA_CONTROL_SCHEMA_DIR at sandbox creation time (not per-command).
-        # The env var is set unconditionally — the schema files may or may not be
-        # written (they're advisory), but the env var must be present for any
-        # consumer that checks it.
-        _schema_dir_for_sandbox: dict[str, str] = {
-            "FARNA_CONTROL_SCHEMA_DIR": "/home/user/schemas",
-        }
-
-        _provision_timeout = _sandbox_provisioning_timeout()
-        _dispatch_spec: WorkspaceSpec | None = None
-        _dispatch_ref: str | None = None
-        _dispatch_provider = _require_dispatch_provider(_route_provider) if _route_provider is not None else _require_dispatch_provider(await _build_dispatch_provider(_resolved_provider))
-        # FAR-1050 R5: ``E2BRuntimeProvider.create_workspace`` now carries
-        # ``spec.egress_policy`` into the SDK's ``allow_internet_access``
-        # (deny_all/selected/none -> False; default/None -> True), and the
-        # selected-mode allowlist rides the spec's ``workspace_metadata``
-        # under the same key the legacy create stamps. A restrictive
-        # policy is therefore ENFORCED at provision time on this path, so
-        # the earlier "cannot express egress yet — refuse" stopgap is
-        # gone. ``_egress_resolved.refusal`` above still fires for a
-        # genuine tier refusal (e.g. an unrecognised policy).
-        _dispatch_spec = WorkspaceSpec(
-            environment_profile_id=_runner_binding_env_profile_id() or uuid.UUID(int=0),
-            organisation_id=_parse_uuid_opt(org_id) or uuid.UUID(int=0),
-            run_id=_parse_uuid_opt(run_id),
-            # T2 parity with the legacy create kwargs: same template, same
-            # strictly-greater-than-command lifetime (FAR-487/FAR-489).
-            # NOTE (FAR-1051): on a kubernetes route ``_route_image_ref`` is the
-            # kubernetes-bound profile's own ``image_ref`` when set (same source
-            # the bundled-runner mapper, runner_dispatch.py, reads), so one
-            # profile resolves one image on both arms. Only when the profile
-            # declares no image_ref does the E2B-template ``template_id`` fall
-            # through as the pod image — and a non-image template_id then fails
-            # loudly at provision time (ImagePullBackOff ->
-            # ProvisionTimeoutError). Non-kubernetes routes are unchanged.
-            image_ref=_route_image_ref or template_id,
-            timeout_seconds=int(sandbox_timeout + _SANDBOX_LIFETIME_GRACE_S),
-            resource_limits=dict(resource_limits or {}),
-            egress_policy=_egress_resolved.policy,
-            workspace_metadata=dict(_metadata),
-        )
-        try:
-            while True:
-                try:
-                    _dispatch_ref = await asyncio.wait_for(
-                        _require_dispatch_provider(_dispatch_provider).create_workspace(_require_dispatch_spec(_dispatch_spec)),
-                        timeout=min(sandbox_timeout, _provision_timeout),
-                    )
-                    break
-                except Exception as _rle:
-                    # The provider's typed RateLimitedError AND the
-                    # RateLimitException the E2B provider wraps onto
-                    # ``__cause__`` (T8) both land here, so a real 429
-                    # still enters this backoff instead of degrading to a
-                    # terminal ``harness.unknown``.
-                    _rate_limited = _is_rate_limited_error(_rle)
-                    if not _rate_limited:
-                        raise
-                    _rate_limit_attempt += 1
-                    if _rate_limit_attempt > _SANDBOX_RATE_LIMIT_MAX_RETRIES:
-                        raise SandboxQueueTimeoutError(f"E2B rate-limited after {_rate_limit_attempt} attempts creating sandbox for node '{node_id}'") from None
-                    _backoff = _SANDBOX_RATE_LIMIT_BASE_BACKOFF_S * (2 ** (_rate_limit_attempt - 1))
-                    _log.warning(
-                        "sandbox_agent.e2b_rate_limited_retrying",
-                        extra={
-                            "run_id": run_id,
-                            "node_id": node_id,
-                            "attempt": _rate_limit_attempt,
-                            "backoff_seconds": _backoff,
-                        },
-                    )
-                    _emit_script_span_event(
-                        "script.rate_limited_retry",
-                        {
-                            "attempt": _rate_limit_attempt,
-                            "backoff_seconds": _backoff,
-                        },
-                    )
-                    await asyncio.wait_for(
-                        asyncio.sleep(_backoff),
-                        timeout=min(sandbox_timeout, _provision_timeout),
-                    )
-        except TimeoutError:
-            _log.warning(
-                "sandbox_agent.provisioning_watchdog_fired",
-                extra={
-                    "run_id": run_id,
-                    "node_id": node_id,
-                    "timeout_seconds": _provision_timeout,
-                    "state": "dispatching",
-                },
-            )
-            raise SandboxQueueTimeoutError(f"Sandbox provisioning for node '{node_id}' exceeded {_provision_timeout}s bound (AsyncSandbox.create never returned — stuck dispatching; provider may be degraded)") from None
-        if _dispatch_provider is None or _dispatch_ref is None or not _dispatch_ref:
-            raise RuntimeProviderError("FAR-1050 dispatch lost its runtime provider after create")
-        _sandbox_id = _dispatch_ref
-        sandbox = _ProviderMediatedHandle(_dispatch_provider, _sandbox_id)
-        _emit_script_span_event(
-            "script.provisioned",
-            {
-                "sandbox_id": _sandbox_id,
-                "template": template_id,
-                "mode": sandbox_mode,
-            },
-        )
-        # Persist the real sandbox id so the heartbeat-lost path
-        # (run_executor_with_watchdog) can kill the sandbox by id.
-        await _store_dispatch_marker_sandbox(_sandbox_id)
-        for raw_path, raw_content in context_files.items():
-            write_path = raw_path.removesuffix(".b64") if raw_path.endswith(".b64") else raw_path
-            write_content = base64.b64decode(raw_content).decode() if raw_path.endswith(".b64") else raw_content
-            await asyncio.wait_for(
-                _write_file_via_provider(
-                    _sandbox_id,
-                    write_path,
-                    write_content,
-                    provider_type=_resolved_provider,
-                    borrowed_provider=_dispatch_provider,
-                ),
-                timeout=_SANDBOX_IO_TIMEOUT,
-            )
-
-        # FAR-901: write advisory schema contract files into the sandbox.
-        # The contract is ADVISORY — Modulo validates independently; these
-        # files are inputs for the dispatched runtime's own tooling.
-        _sandbox_schema_dir = "/home/user/schemas"
-        _node_schema_profile: SchemaProfile = _resolve_schema_profile(node_def) or "verbatim"
-        # Resolve the provider_id from the node's agent → model backend.
-        # Best-effort: the resolver returns None on absence/failure and never raises.
-        _schema_provider_id = await _resolve_provider_id_from_agent(
-            session_factory,
-            _parse_uuid_opt(node_def.get("agent_id")),
-        )
-        # Write to a LOCAL temp dir, then upload to the sandbox.  The contract
-        # writer is E2B-decoupled — it writes to a real filesystem Path.
-        _contract_local_tmp: Path | None = None
-        try:
-            import tempfile
-
-            _contract_local_tmp = Path(tempfile.mkdtemp(prefix="schema_contract_"))
-            _contract_result = write_schema_contract(
-                _contract_local_tmp,
-                node_id=node_id,
-                input_schema=config.input_schema_json,
-                output_schema=config.output_schema_json,
-                profile=_node_schema_profile,
-                provider_id=_schema_provider_id,
-            )
-            if _contract_result.warnings:
-                _log.warning(
-                    "contract.write_warnings",
-                    extra={"node_id": node_id, "warnings": _contract_result.warnings},
-                )
-            # Upload the schema files into the sandbox via the file API.
-            if _contract_result.schema_files_written:
-                _local_schema_dir = _contract_local_tmp / "schemas" / node_id
-                if _local_schema_dir.is_dir():
-                    for _schema_file in _local_schema_dir.iterdir():
-                        if _schema_file.is_file():
-                            _file_content = _schema_file.read_text(encoding="utf-8")
-                            _sandbox_rel = f"{_sandbox_schema_dir}/{node_id}/{_schema_file.name}"
-                            await asyncio.wait_for(
-                                _write_file_via_provider(
-                                    _sandbox_id,
-                                    _sandbox_rel,
-                                    _file_content,
-                                    provider_type=_resolved_provider,
-                                    borrowed_provider=_dispatch_provider,
-                                ),
-                                timeout=_SANDBOX_IO_TIMEOUT,
-                            )
-                    # LLM mode: inject schema file paths into the rendered prompt.
-                    if sandbox_mode != "script":
-                        _input_schema_path = f"{_sandbox_schema_dir}/{node_id}/input.active.json"
-                        _output_schema_path = f"{_sandbox_schema_dir}/{node_id}/output.active.json"
-                        _schema_injection = (
-                            f"\n\n---\nSchema contract files (advisory — Farna Control validates independently):\n  Input schema:  {_input_schema_path}\n  Output schema: {_output_schema_path}\n"
-                            f"  Schema dir:    {_sandbox_schema_dir}/{node_id}/\n  Environment:   FARNA_CONTROL_SCHEMA_DIR={_sandbox_schema_dir}\n---"
-                        )
-                        rendered_prompt = rendered_prompt + _schema_injection
-        except Exception:
-            _log.warning(
-                "contract.sandbox_write_failed",
-                extra={"node_id": node_id},
-                exc_info=True,
-            )
-        finally:
-            # FAR-901: the contract files are uploaded to the sandbox above, so
-            # the local temp dir is removed here on EVERY path.  Cleaning up
-            # only in the output-schema validation ``finally`` (further below)
-            # leaked the dir whenever a node declared an input schema but no
-            # output schema, because that validation block never ran.
-            if _contract_local_tmp is not None:
-                import shutil
-
-                shutil.rmtree(_contract_local_tmp, ignore_errors=True)
-
-        # FAR-296 mode split: llm mode writes the rendered prompt to
-        # prompt.md; script mode writes the FULL run input (no 10KB
-        # truncation) to /home/user/input.json and never writes a prompt.
-        _input_json = json.dumps(raw_input)
-        if sandbox_mode == "script":
-            await asyncio.wait_for(
-                _write_file_via_provider(
-                    _sandbox_id,
-                    "/home/user/input.json",
-                    _input_json,
-                    provider_type=_resolved_provider,
-                    borrowed_provider=_dispatch_provider,
-                ),
-                timeout=_SANDBOX_IO_TIMEOUT,
-            )
-        else:
-            if len(_input_json) > 10240:
-                _input_json = json.dumps({"_truncated": True, "_key_count": len(raw_input) if isinstance(raw_input, dict) else 0})
-            await asyncio.wait_for(
-                _write_file_via_provider(
-                    _sandbox_id,
-                    "/home/user/prompt.md",
-                    rendered_prompt,
-                    provider_type=_resolved_provider,
-                    borrowed_provider=_dispatch_provider,
-                ),
-                timeout=_SANDBOX_IO_TIMEOUT,
-            )
-
-        # FAR-800: provision managed workspace inputs INSIDE the sandbox.
-        # Runs AFTER context files and prompt are written but BEFORE the
-        # sandbox policy (credential helper, egress) and the agent command.
-        # A provisioning failure must KILL the sandbox — the agent command
-        # must never run on partial provision.
-        _drift_results: list[Any] = []
-        if _resolved_workspace_inputs:
-            from farna.core.pipeline_engine.workspace_input_orchestration import (
-                ProvisioningError as WorkspaceProvisioningError,
-            )
-            from farna.core.pipeline_engine.workspace_input_orchestration import (
-                provision_workspace_inputs_in_sandbox,
-            )
-
-            try:
-                await provision_workspace_inputs_in_sandbox(
-                    sandbox,
-                    _resolved_workspace_inputs,
-                )
-            except WorkspaceProvisioningError as exc:
-                _log.warning(
-                    "workspace_input.provisioning_failed",
-                    extra={
-                        "run_id": run_id,
-                        "node_id": node_id,
-                        "error_code": exc.error_code,
-                        "detail": str(exc)[:_MAX_ERROR_MSG],
-                    },
-                )
-                raise SandboxNodeFailedError(
-                    f"Workspace input provisioning failed: {str(exc)[:_MAX_ERROR_MSG]}",
-                    node_id=node_id,
-                ) from exc
-
-        env_vars_extra: dict[str, str] = await resolve_env_var_refs(
-            node_def.get("env_vars") or {},
-            lambda k: _sandbox_resolve_secret_ref(
-                k,
-                session_factory=session_factory,
-                org_id=org_id,
-            ),
-        )
-
-        # FAR-418: expose the node's capability_scope.allowed_tools to the sandbox
-        # agent runtime (FAR-402 P4 / FAR-418) so the agent's MCP client can
-        # forward it as the ``X-Modulo-Allowed-Tools`` header. The MCP server's
-        # McpAuthMiddleware lifts that header into the request-scoped allow-list
-        # consumed by check_tool_scope, enforcing node-level tool scoping in the
-        # production run path. Absent/empty (the UNRESTRICTED default) sets nothing,
-        # preserving pre-scope behaviour.
-        _node_scope = node_def.get("capability_scope") or {}
-        _allowed_tools = _node_scope.get("allowed_tools")
-        if _allowed_tools:
-            env_vars_extra["FARNA_CONTROL_ALLOWED_TOOLS"] = ",".join(str(t) for t in _allowed_tools)
-
-        # FAR-212 PR B: apply the enforced sandbox policy AFTER the Modulo-owned
-        # context files / prompt / input are written but BEFORE the agent/script
-        # command executes. Any policy field set on the node invokes the policy
-        # step (read-only workspace chmod, git-credential scope helper, or
-        # selected-mode egress allowlist). Selected-mode allowlist hostnames are
-        # pre-resolved to concrete IPs so the iptables rules bind real addresses
-        # (an unresolvable host stays denied — fail-closed). The policy is
-        # best-effort at the command level (each step is itself fail-closed) and
-        # never wedges the dispatch.
-        # FAR-1085: use the resolved egress values from resolve_egress, not the
-        # raw config values, so the policy step enforces the same policy the
-        # capability derivation certifies.
-        _resolved_egress_for_policy = _egress_resolved.policy
-        _resolved_allowlist_for_policy = _egress_resolved.allowlist
-        # FAR-1273: OBSERVABLE DISARM. The guard's trigger moved from the
-        # delivery sentinel to the explicit ``single_pr_per_run`` flag, so a
-        # stored graph that predates the flag (e.g. a live Prompt-to-PR node
-        # carrying only ``delivery_sentinel``) loses the in-sandbox guard the
-        # moment this code deploys. Warn at the guard's own decision point so
-        # the disarm is visible in logs/metrics (node id + pipeline id), and
-        # FAIL OPEN: the run proceeds unchanged. Deliberately do NOT re-arm on
-        # the sentinel — that would defeat the ticket; the operator must set
-        # the flag (no JSON-rewriting data migration was shipped).
-        if delivery_sentinel and not single_pr_per_run:
-            _log.warning(
-                "sandbox_agent.single_pr_per_run_flag_missing",
-                extra={
-                    "run_id": run_id,
-                    "node_id": node_id,
-                    "pipeline_id": pipeline_id,
-                    "detail": ("node carries a non-empty delivery_sentinel but NOT single_pr_per_run: the one-PR-per-run gh guard is not installed for this run (set single_pr_per_run=true on the node to arm it)"),
-                },
-            )
-        if _should_apply_sandbox_policy(
-            read_only=read_only,
-            git_credentials=git_credentials,
-            egress_policy=_resolved_egress_for_policy,
-            egress_allowlist=_resolved_allowlist_for_policy,
-            # FAR-1273: a flagged node runs the policy step for the
-            # one-PR-per-run gh guard even with every enforcement control
-            # default (Prompt-to-PR's shape). A delivery sentinel alone does
-            # NOT arm it.
-            single_pr_per_run=single_pr_per_run,
-        ):
-            # FAR-798: thread the node's validated ``allowed_hosts`` (host ->
-            # per-host env-var name) into the sandbox policy so the multi-host
-            # git-credential helper is actually installed when scoped
-            # credentials grant more than one host. Without this, the capability
-            # ``sandbox.git_credentials.multi_host`` certifies a guarantee the
-            # runtime never enforced (capability/enforcement mismatch). Only
-            # relevant for scoped credentials; other scopes ignore it.
-            # Allowlist pre-resolution runs once, BEFORE the isolation call,
-            # so resolution and enforcement use the identical resolved values
-            # (unchanged by FAR-1050 R3 — only the invocation seam moved, onto
-            # ``apply_isolation``; R6 then retired the flag and deleted the
-            # legacy branch, leaving this single unconditional path).
-            _resolved_allowlist = await _resolve_egress_allowlist(_resolved_allowlist_for_policy)
-            _policy_allowed_hosts = node_def.get("allowed_hosts") if git_credentials == "scoped" else None
-            from farna.settings import get_settings
-
-            # FAR-1264: when this invocation exists ONLY for the gh guard
-            # (no enforcement control set), its failure must NOT fail the run
-            # — degrade to the prompt-level one-PR-per-run guard, exactly as
-            # before this ticket (the guard install is best-effort by
-            # contract). When an enforcement control IS set, failures keep
-            # propagating unchanged (fail-closed — a node that asked for the
-            # read-only seal / scoped credentials / egress allowlist must
-            # never run without it).
-            _policy_enforces_controls = _has_enforcement_sandbox_controls(
-                read_only=read_only,
-                git_credentials=git_credentials,
-                egress_policy=_resolved_egress_for_policy,
-                egress_allowlist=_resolved_allowlist_for_policy,
-            )
-            try:
-                _gh_guard_install_status = await _apply_isolation_via_provider(
-                    _sandbox_id,
-                    org_id=org_id,
-                    run_id=run_id,
-                    read_only=read_only,
-                    git_credentials=git_credentials,
-                    egress_policy=_resolved_egress_for_policy,
-                    egress_allowlist=_resolved_allowlist,
-                    allowed_hosts=_policy_allowed_hosts,
-                    # FAR-1273: rides the typed IsolationPolicy (the single
-                    # carrier) to the E2B policy call site.
-                    single_pr_per_run=single_pr_per_run,
-                    # FAR-1315: the claiming node's identity for the run's
-                    # one-PR ledger (same typed carrier).
-                    guard_owner=node_id,
-                    # FAR-1051: the profile's provider (legacy E2B route
-                    # unchanged; a kubernetes profile reaches its provider).
-                    # ``borrowed_provider`` threads the dispatch's own
-                    # already-resolved instance so the policy step reuses it
-                    # instead of building a hub per call (closed by the
-                    # dispatch's finally, never here).
-                    provider_type=_resolved_provider,
-                    borrowed_provider=_dispatch_provider,
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                # The install status is unknown when isolation failed — leave
-                # the pre-bound None so the settle can never read a receipt
-                # probe as definitive.
-                _gh_guard_install_status = None
-                if _policy_enforces_controls:
-                    raise
-                _log.warning(
-                    "sandbox_policy.delivery_guard_install_failed",
-                    extra={
-                        "run_id": run_id,
-                        "node_id": node_id,
-                        "detail": "gh one-PR-per-run guard not installed; degrading to the prompt-level guard",
-                    },
-                    exc_info=True,
-                )
-
-        # Bound to None up front so the post-provisioning guard below is a real
-        # check on a possibly-unset watchdog (the watchdog is only constructed
-        # once provisioning succeeds inside the try), never an identity test on
-        # an unbound local.
-        watchdog: _SandboxWatchdog | None = None
-        try:
-            # FAR-306 / FAR-1088: per-channel stall detector. The `heartbeat`
-            # channel is refreshed only by REAL output callbacks (stream
-            # chunks / log growth); probe-success liveness sits on the
-            # separate `connection` channel (enabled with the heartbeat,
-            # dropped in strict mode) and — for a STREAMING node only —
-            # counts until the run's first output. `sandbox_mode` scopes that
-            # exclusion: script mode keeps connection liveness unconditionally
-            # (its stdout is redirected to agent.log and a block-buffered
-            # child can be quiet for far longer than the silence window).
-            # The opt-in detectors (log-growth, stdout-delta, filesystem) add
-            # extra channels that must ALL be silent before the watchdog
-            # fires. ``_activity`` remains the stream-buffer/throttle dict
-            # (not a liveness source).
-            _stall = _configure_stall_detector(
-                enable_heartbeat=enable_heartbeat,
-                watch_log_path=watch_log_path,
-                stdout_percentage_delta=stdout_percentage_delta,
-                watch_globs=watch_globs,
-                sandbox_mode=sandbox_mode,
-            )
-            # Track the last time the agent emitted output so the idle
-            # watchdog can fail fast on stalls (FAR-97). The callbacks run
-            # from the SDK's event task and may be async or sync.
-            stall_reason = None
-
-            # FAR-98: stall_timeout_seconds (node config) overrides the idle
-            # watchdog's silence window. Resolve the DEFAULT at runtime so
-            # the constant stays patchable (the FAR-97 tests patch it).
-            try:
-                stall_timeout: float = float(stall_timeout_override) if stall_timeout_override is not None else _SANDBOX_IDLE_TIMEOUT
-            except (TypeError, ValueError):
-                _log.warning(
-                    "sandbox_agent.stall_timeout_invalid_fallback",
-                    extra={"node_id": node_id, "stall_timeout_raw": stall_timeout_override},
-                )
-                stall_timeout = _SANDBOX_IDLE_TIMEOUT
-
-            # Live-output streaming (FAR-98): look the run event broker up in
-            # the process-local registry by run id (the broker is never carried
-            # inside LangGraph state — it is not msgpack-serializable, and
-            # carrying it in state broke checkpoint writes for every run).
-            # Buffer stdout/stderr chunks and publish a throttled
-            # node.stdout_chunk / node.stderr_chunk event at most once per
-            # _STREAM_FLUSH_INTERVAL so Run detail can show live output while
-            # the sandbox process runs. No broker registered -> skip silently
-            # (streaming is best-effort, never fatal).
-            _stream_broker = None
-            if run_id:
-                try:
-                    _stream_broker = get_registry().get(uuid.UUID(run_id))
-                except (TypeError, ValueError):
-                    _stream_broker = None
-
-            # FAR-582: full stdout/stderr side-car artifact writer.
-            # Bound to the node run; appends on every on_stdout/on_stderr
-            # callback; finalized on every terminal path.
-            _artifact_writer = None  # re-binding (annotated at function top)
-            if run_id and node_id:
-                try:
-                    from farna.core.artifacts import ArtifactWriter
-                    from farna.core.artifacts.store import get_store
-                    from farna.settings import get_settings as _get_settings
-
-                    _settings = _get_settings()
-                    if getattr(_settings, "modulo_artifacts_enabled", True):
-                        _artifact_writer = ArtifactWriter(
-                            org_id=org_id,
-                            run_id=run_id,
-                            node_id=node_id,
-                            attempt_key=attempt_key or "",
-                            store=get_store(),
-                            enabled=True,
-                        )
-                except Exception:
-                    _log.warning(
-                        "sandbox_agent.artifact_writer_init_failed",
-                        extra={"node_id": node_id, "run_id": run_id},
-                    )
-                    _artifact_writer = None
-
-            watchdog = _SandboxWatchdog(
-                sandbox=sandbox,
-                stall=_stall,
-                node_id=node_id,
-                run_id=run_id,
-                watch=_WatchdogWatchConfig(
-                    log_path=watch_log_path,
-                    globs=watch_globs,
-                    percentage_delta=stdout_percentage_delta,
-                ),
-                resource_limits=resource_limits,
-                sandbox_mode=sandbox_mode,
-                stream_broker=_stream_broker,
-                drained_chunks=_drained_chunks,
-                wall_clock=_WatchdogWallClock(wallclock_budget_seconds, start_time),
-                # FAR-792: only "full" mode widens the drain window to the node
-                # cap (so 5MB can actually be retained); "tail" keeps the legacy
-                # ``_MAX_DRAIN_WINDOW`` bound (and honors test patches of it).
-                drain_window_bytes=_stdout_cap if stdout_retention_mode == "full" else None,
-                # FAR-1051: the probes above run against the profile's provider.
-                provider_type=_resolved_provider,
-            )
-            # FAR-582: assign artifact_writer post-construction to keep
-            # __init__ param count under 13 (S107).
-            watchdog._artifact_writer = _artifact_writer
-            # FAR-1051 follow-up: hand the watchdog the dispatch's own
-            # already-resolved provider (same post-construction pattern) so
-            # its per-tick probes borrow it instead of building a fresh
-            # hub+provider on every tick.
-            watchdog._dispatch_provider = _dispatch_provider
-            _drain_fn = watchdog.drain_sandbox_log
-
-            # FAR-844: streaming artifact writer for incremental stdout capture.
-            # Chunks are fed to the writer during drain_sandbox_log(), so the
-            # full transcript is persisted to the artifact store without
-            # assembling the entire string in memory. The writer computes SHA256
-            # incrementally. It is deliberately UNCAPPED (max_bytes=None): it
-            # must mirror the one-shot _persist_full_stdout_artifact fallback
-            # (which stores the FULL redacted transcript) — the streaming path
-            # is the incremental implementation of that same "keep everything
-            # the drain delivered" contract, NOT the retention-cap truncation
-            # that bounds the inline agent_stdout. Capping it at _stdout_cap
-            # silently dropped the tail of an over-cap redacted stream while the
-            # envelope still advertised truncated=False (FAR-844 review fix).
-            # Uses the same overflow key pattern as _persist_full_stdout_artifact.
-            if attempt_key:
-                try:
-                    from farna.core.artifacts.store import get_store as _get_streaming_store
-                    from farna.core.artifacts.streaming import StreamingArtifactWriter
-
-                    # NOSONAR S2083 - _streaming_overflow_key is a derived artifact
-                    # key (attempt_key + a size suffix); it flows into
-                    # StreamingArtifactWriter -> LocalArtifactStore, whose _raw_path
-                    # rejects path-traversal chars and percent-encodes every segment
-                    # (see store.py). No traversal is possible.
-                    _streaming_overflow_key = f"{attempt_key}:full:{_stdout_cap}"
-                    _streaming_writer_instance = StreamingArtifactWriter(
-                        _get_streaming_store(),
-                        org_id=org_id,
-                        run_id=run_id,
-                        node_id=node_id,
-                        attempt_key=_streaming_overflow_key,
-                        stream="stdout",
-                        max_bytes=None,
-                    )
-                    watchdog._streaming_writer = _streaming_writer_instance
-                except Exception:
-                    _log.warning(
-                        "sandbox_agent.streaming_writer_init_failed",
-                        extra={"node_id": node_id, "run_id": run_id},
-                    )
-                    _streaming_writer_instance = None
-
-            # Redirect the agent's stdout/stderr into a sandbox log file so
-            # the process writes to a regular file — never a pipe that can
-            # fill and block a long session (FAR-97). The subshell preserves
-            # the command's exit code for the SDK's wait().
-            # System env vars first — provide defaults from the host. DO NOT
-            # move pipeline env before these: pipelines need to override
-            # GITHUB_TOKEN for identity separation (e.g. PR Reviewer uses
-            # farna-reviewbot PAT, not the default GITHUB_TOKEN identity).
-            # The reserved-prefix validator already prevents overriding
-            # MODULO_* vars, so update() below is the sanctioned override.
-            # FAR-592 (D6): ``_runner_bindings`` was resolved BEFORE the sandbox
-            # was created (see the provision-time block above the
-            # ``AsyncSandbox.create`` loop) and merges between the profile
-            # creds and the node envs — THE NODE WINS (see _build_sandbox_envs
-            # docstring for the deliberate precedence).
-            sandbox_envs: dict[str, str] = _build_sandbox_envs(
-                run_id=run_id,
-                pipeline_id=pipeline_id,
-                org_id=org_id,
-                input_json=_input_json,
-                sandbox_mode=sandbox_mode,
-                env_vars_extra=env_vars_extra,
-                runner_bindings=_runner_bindings,
-            )
-            sandbox_envs = {**_schema_dir_for_sandbox, **sandbox_envs}
-            # FAR-296 Phase 4a: wall-clock spend budget — non-tick path. A very
-            # slow provisioning sequence may already have consumed the budget
-            # before the script process starts. Even though no side effects
-            # occurred, the budget was exhausted — re-dispatching would waste
-            # another provisioning cycle on a run that already consumed its
-            # budget allocation. Script mode only: LLM-mode nodes do not take a
-            # wall-clock budget; raising ScriptBudgetKilledError for an LLM-mode
-            # node would be a misclassification.
-            _check_wallclock_budget_pre_run(
-                sandbox_mode=sandbox_mode,
-                wallclock_budget_seconds=wallclock_budget_seconds,
-                start_time=start_time,
-                watchdog=watchdog,
-                run_id=run_id,
-                node_id=node_id,
-            )
-            # FAR-296 Phase 2 fencing lease (script mode only): persist the
-            # execution claim IMMEDIATELY BEFORE the script process starts so
-            # a durable marker proves the script RAN. Once claimed, any fault
-            # is POST-CLAIM (terminal — never retryable, exactly-once). LLM
-            # mode does NOT take a lease (at-least-once, no fencing).
-            if sandbox_mode == "script":
-                await _store_script_lease()
-                _script_lease_claimed = True
-                _emit_script_span_event(
-                    "script.lease_claimed",
-                    {
-                        "run_id": run_id,
-                        "node_id": node_id,
-                    },
-                )
-            # FAR-1690 slice A1: EVERY sandbox dispatch (script AND llm mode)
-            # issues a short-TTL, run-scoped runner-role API key through the
-            # CredentialIssuer seam, so the workspace always holds a run-scoped
-            # token and never only the long-lived host credentials. The key is
-            # per-run, revoked at run finalization (and by the compensating
-            # sweep), and its issuance provenance is stamped as
-            # ``modulo_minted`` (attested — NEVER ``observed``). Fail-open: an
-            # issuance failure leaves the key absent (the sandbox still runs).
-            _issued_credential = await _issue_run_credential_for_sandbox()
-            if _issued_credential is not None:
-                sandbox_envs["FARNA_CONTROL_API_KEY"] = _issued_credential.secret
-                sandbox_envs[RUN_CREDENTIAL_PROVENANCE_ENV] = _issued_credential.provenance
-            _bridge_wrapped_command = rendered_agent_command
-            # FAR-211: start the loop-interception callback server + write
-            # the bridge client into the sandbox. Best-effort and
-            # fail-open in EVERY direction: the bridge is only started when
-            # the node's loop_intercept config is enabled AND the pipeline
-            # has bound guardrails (zero guardrails -> the bridge is
-            # inert); a setup failure disables the bridge for this node but
-            # NEVER blocks the dispatch or wedges the agent loop. The
-            # endpoint is the Modulo sandbox-agent process's localhost —
-            # the ADR 044 amendment documents how it is exposed into the
-            # sandbox (in the test-driven slice it is the same host).
-            if loop_intercept_config is not None and loop_intercept_config.enabled:
-                try:
-                    bridge_defs = await load_loop_intercept_guardrails(
-                        session_factory,
-                        org_id=state.get("_org_id"),
-                        pipeline_id=state.get("_pipeline_id"),
-                    )
-                    if bridge_defs:
-                        _bridge_server = LoopInterceptCallbackServer(
-                            engine=EvalEngine(),
-                            definitions=bridge_defs,
-                            config=loop_intercept_config,
-                            audit_sink=partial(
-                                persist_loop_interception_audit,
-                                session_factory=session_factory,
-                                org_id=org_id,
-                                run_id=run_id,
-                                node_id=node_id,
-                            ),
-                        )
-                        _bridge_port = await _bridge_server.start()
-                        await asyncio.wait_for(
-                            _write_file_via_provider(
-                                _sandbox_id,
-                                "/home/user/modulo_bridge.py",
-                                bridge_client_source(),
-                                provider_type=_resolved_provider,
-                                borrowed_provider=_dispatch_provider,
-                            ),
-                            timeout=_SANDBOX_IO_TIMEOUT,
-                        )
-                        await asyncio.wait_for(
-                            _write_file_via_provider(
-                                _sandbox_id,
-                                "/home/user/modulo_bridge_config.json",
-                                json.dumps(loop_intercept_config.model_dump(mode="json")),
-                                provider_type=_resolved_provider,
-                                borrowed_provider=_dispatch_provider,
-                            ),
-                            timeout=_SANDBOX_IO_TIMEOUT,
-                        )
-                        sandbox_envs["FARNA_CONTROL_BRIDGE_ENDPOINT"] = f"http://127.0.0.1:{_bridge_port}"
-                        sandbox_envs["FARNA_CONTROL_BRIDGE_CONFIG"] = "/home/user/modulo_bridge_config.json"
-                        # FAR-664 (newline-safe bridge handoff): the rendered
-                        # agent command is handed to the bridge via a FILE, not
-                        # inline after ``--``. An inline interpolation word-
-                        # splits a multi-line command in the outer bash, so only
-                        # its first line would reach the bridge argv and any
-                        # post-heredoc statement would escape guardrail
-                        # interception (same class of bug FAR-651 fixed for the
-                        # outer log-redirect wrap). ``bash <file>`` is a single
-                        # argv element after ``--``; sandbox_bridge.py joins the
-                        # post-``--`` argv and runs it as a shell command, so
-                        # interception semantics are unchanged. Uniform for
-                        # single-line and multi-line commands (one code path).
-                        await asyncio.wait_for(
-                            _write_file_via_provider(
-                                _sandbox_id,
-                                "/home/user/.modulo_bridge_cmd.sh",
-                                rendered_agent_command,
-                                provider_type=_resolved_provider,
-                                borrowed_provider=_dispatch_provider,
-                            ),
-                            timeout=_SANDBOX_IO_TIMEOUT,
-                        )
-                        _bridge_wrapped_command = "python3 /home/user/modulo_bridge.py --wrap -- bash /home/user/.modulo_bridge_cmd.sh"
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    _log.exception(
-                        "sandbox_agent.loop_intercept_setup_failed",
-                        extra={"node_id": node_id, "run_id": run_id},
-                    )
-                    _bridge_server = None
-            # FAR-296 Phase 4a: wall-clock spend budget — non-tick path (final
-            # check immediately before the command starts). A very slow bridge /
-            # env setup may have consumed the budget; do not start the command
-            # past the budget. ``_budget_killed`` may already be set by the
-            # pre-lease check above (script mode) — guard against a double
-            # kill/raise. Script mode only: same rationale as the pre-lease
-            # check.
-            _check_wallclock_budget_pre_run(
-                sandbox_mode=sandbox_mode,
-                wallclock_budget_seconds=wallclock_budget_seconds,
-                start_time=start_time,
-                watchdog=watchdog,
-                run_id=run_id,
-                node_id=node_id,
-            )
-            wrapped_command = _wrap_sandbox_command_with_log_redirect(_bridge_wrapped_command, _SANDBOX_LOG_PATH)
-            _cmd_start_bound = min(sandbox_timeout, 120)
-            _exec_process: Any = None
-            _exec_process = await asyncio.wait_for(
-                _require_dispatch_provider(_dispatch_provider).exec_command_stream(
-                    _sandbox_id or "",
-                    # FAR-1470: bash, not sh — ``sh`` on the sandbox image is
-                    # dash, which has no ``pipefail`` and aborted any
-                    # ``set -euo pipefail`` agent command. bash -c (NOT -lc)
-                    # matches today's env behaviour exactly: ``sh -c`` was a
-                    # non-login shell inheriting the exec env, and a login
-                    # shell would re-source the profile and change PATH.
-                    ["bash", "-c", wrapped_command],
-                    environment=sandbox_envs,
-                ),
-                timeout=_cmd_start_bound,
-            )
-            cmd_handle: Any = _exec_process
-            _emit_script_span_event(
-                "script.command_started",
-                {
-                    "run_id": run_id,
-                    "node_id": node_id,
-                    "command": rendered_agent_command[:200] if sandbox_mode == "script" else "llm",
-                },
-            )
-            cmd_result, stall_reason = await _wait_command_with_exec_process(
-                cmd_handle,
-                total_timeout=sandbox_timeout,
-                idle_timeout=stall_timeout,
-                last_activity=_stall.last_activity,
-                on_tick=watchdog.tick,
-                tick_interval=_SANDBOX_TAIL_INTERVAL,
-                on_stdout=watchdog.on_stdout,
-                on_stderr=watchdog.on_stderr,
-            )
-        except asyncio.CancelledError:
-            raise
-        except TimeoutError:
-            _log.warning(
-                "sandbox_agent.command_timed_out",
-                extra={
-                    "node_id": node_id,
-                    "timeout": sandbox_timeout,
-                },
-            )
-            cmd_result = None
-        except SupersededNodeError:
-            # A superseded script lease (rowcount 0 in _store_script_lease)
-            # must propagate as a RETRYABLE SupersededNodeError — never be
-            # swallowed into a post-claim script failure. Raising here lets
-            # the outer handler re-raise it to the executor's retry path.
-            raise
-        except Exception as _cee:
-            _log.exception(
-                "sandbox_agent.command_failed",
-                extra={
-                    "node_id": node_id,
-                    "exc_type": type(_cee).__name__,
-                    "exc_msg": str(_cee)[:_MAX_ERROR_MSG],
-                },
-            )
-            cmd_result = getattr(_cee, "result", None) or _cee
-
-        # Narrow watchdog for post-try/except uses (drain, budget checks, finalize).
-        # The watchdog is constructed inside the try block; if provisioning failed
-        # before construction, mypy may flag this as possibly-unbound. Guard
-        # with a runtime check instead of assert (assert is stripped under -O
-        # and is a SonarQube S5779 when inside a broad try-except).
-        if watchdog is None:
-            raise RuntimeError("watchdog was not constructed — provisioning failed before sandbox creation")
-        # One final drain so the last growth (between the last tick and the
-        # process exit) is captured before we read output.json. The probe is
-        # fully guarded — on a dead sandbox it returns immediately.
-        await watchdog.drain_sandbox_log()
-
-        # FAR-800: detect workspace input drift AFTER the agent command.
-        # This MUST happen even if drift detection itself fails (wrap in
-        # try/except — the audit write must still occur).  Drift results
-        # are attached to the envelope as first-class run flags.
-        if _resolved_workspace_inputs:
-            from farna.core.pipeline_engine.workspace_input_orchestration import (
-                detect_workspace_input_drift,
-            )
-
-            try:
-                _drift_results = await detect_workspace_input_drift(
-                    sandbox,
-                    _resolved_workspace_inputs,
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.warning(
-                    "workspace_input.drift_detection_error",
-                    extra={"run_id": run_id, "node_id": node_id},
-                    exc_info=True,
-                )
-                _drift_results = []
-
-            # FAR-801: persist the drift audit record (best-effort).
-            if _drift_results and session_factory is not None and run_id and org_id:
-                try:
-                    import uuid as _uuid
-
-                    from farna.core.pipeline_engine.workspace_input_audit import (
-                        record_drift,
-                    )
-                    from farna.db.models.run_node_outputs import FINAL_ATTEMPT_KEY
-
-                    _final_shas = {d.dest: d.final_sha for d in _drift_results}
-                    _run_uuid = _uuid.UUID(run_id)
-                    _org_uuid = _uuid.UUID(org_id)
-                    async with session_factory() as _audit_session, _audit_session.begin():
-                        # FAR-801/RBAC: run_node_outputs + runs are RLS FORCE, so
-                        # the drift write must run with the tenant context set or
-                        # Postgres raises 42501 (swallowed by the best-effort
-                        # except) and the row + drift flag never persist.
-                        await set_rls_org(_audit_session, _org_uuid)
-                        await record_drift(
-                            _audit_session,
-                            run_id=_run_uuid,
-                            organisation_id=_org_uuid,
-                            node_id=node_id,
-                            attempt_key=FINAL_ATTEMPT_KEY,
-                            final_shas=_final_shas,
-                        )
-                except Exception:
-                    _log.exception(
-                        "workspace_input.drift_audit_failed",
-                        extra={"run_id": run_id, "node_id": node_id},
-                    )
-
-        elapsed = time.monotonic() - start_time
-        exit_code: int = getattr(cmd_result, "exit_code", -1)
-        # The redirected log file is the process's real stdout — prefer the
-        # drained content (which also survives a timeout where cmd_result is
-        # None and would otherwise surface EMPTY output), falling back to the
-        # SDK's captured stream for non-redirected (legacy) paths.
-        agent_stdout_raw = "".join(_drained_chunks) or (getattr(cmd_result, "stdout", "") or "")
-        agent_stderr_raw = getattr(cmd_result, "stderr", "") or ""
-        _stdout_len = len(agent_stdout_raw)
-        _stderr_len = len(agent_stderr_raw)
-        # FAR-792: redact BEFORE truncation so credential-scrubbing sees the
-        # full stream, then slice to the node's effective retention cap.
-        agent_stdout = _redact_raw_output(agent_stdout_raw)[:_stdout_cap]
-        agent_stderr = _redact_raw_output(agent_stderr_raw)[:_stdout_cap]
-        stdout_truncated = _stdout_len > _stdout_cap
-        if stdout_truncated or _stderr_len > _stdout_cap:
-            _log.warning(
-                "sandbox_agent.stdout_stderr_truncated",
-                extra={
-                    "node_id": node_id,
-                    "run_id": run_id,
-                    "retention_cap_bytes": _stdout_cap,
-                    "stderr_truncated": _stderr_len > _stdout_cap,
-                    "stdout_length": _stdout_len,
-                    "stderr_length": _stderr_len,
-                },
-            )
-
-        # A timed-out command leaves ``cmd_result`` as None: the run timed
-        # out (1800s node timeout) with COMPLETELY EMPTY stdout/stderr and
-        # exit_code -1. Surface a clear explanation instead of silently
-        # returning an empty-summary failure. A STALLED command (idle
-        # watchdog fired, FAR-98) carries a distinct stall_reason so the
-        # two failure modes are distinguishable.
-        command_error: str = ""
-        # FAR-1694 S2 (bridge protocol): detect an in-loop escalation marker and
-        # surface its typed context. No control-flow change — a non-zero exit
-        # still fails the node (fail-closed) until the suspension slice lands.
-        _bridge_escalation_error = _bridge_escalation_failure_detail(exit_code, agent_stdout_raw)
-        if _bridge_escalation_error is not None:
-            command_error = _bridge_escalation_error
-        elif cmd_result is None:
-            command_error = stall_reason or f"Sandbox agent command produced no output within {sandbox_timeout}s. No stdout/stderr was captured — the agent likely hung before writing any result."
-            # The E2B kill reason only lives in the sandbox logs, and the logs
-            # endpoint only serves live sandboxes — fetch the tail BEFORE the
-            # kill below (FAR-97 observability).
-            from farna.settings import get_settings
-
-            _sandbox_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
-            # The command stalled or timed out. Kill the sandbox BEFORE
-            # reading output.json: the interrupted-but-alive process could
-            # otherwise write a fabricated completion in the grace window
-            # (FAR-97 — Improve Tests reported "improvement applied" with
-            # changed_files: [] exactly this way).
-            try:
-                await asyncio.wait_for(
-                    sandbox.kill(request_timeout=_OUTPUT_READ_TIMEOUT),
-                    timeout=_OUTPUT_READ_TIMEOUT,
-                )
-            except Exception:
-                _log.exception(
-                    "sandbox_agent.kill_before_output_read_failed",
-                    extra={"node_id": node_id},
-                )
-            # A6: a stall or total timeout is a retryable sandbox-infra
-            # failure — RAISE (never a silent completed/wrong-success node).
-            # FAR-188: output.json was never read, so retain the captured
-            # stdout as the raw evidence — a pr_url created before the stall
-            # must not be lost either. The drain window keeps only the last
-            # _MAX_DRAIN_WINDOW (512KB) tail, so the marker's raw_output is
-            # a bounded tail (documented in _retain_raw_output_marker).
-            _stall_source: str = agent_stdout_raw
-            if cmd_result is not None:
-                _sdk_stdout = str(getattr(cmd_result, "stdout", "") or "")
-                if len(_sdk_stdout) > len(_stall_source):
-                    _stall_source = _sdk_stdout
-            # FAR-811: when redacted stdout exceeds the retention cap, persist
-            # the full redacted transcript to the artifact store and attach the
-            # pointer to the stall marker — mirrors the success path's
-            # _persist_full_stdout_artifact call so downstream consumers can
-            # retrieve the full transcript instead of only the truncated tail.
-            # FAR-811: when the stall/timeout fires and stdout exceeds the
-            # retention cap, persist the full redacted transcript to the artifact
-            # store and attach the pointer to the stall marker — mirrors the
-            # success path's _persist_full_stdout_artifact call so downstream
-            # consumers can retrieve the full transcript instead of only the
-            # truncated tail.
-            #
-            # When cmd_result is None (stall/timeout), the drain window has
-            # already bounded _drained_chunks to _stdout_cap bytes, so
-            # agent_stdout_raw may appear under-cap even though the sandbox log
-            # is larger.  A fresh read of the log file detects the true size and
-            # feeds the artifact store with the full redacted content.
-            _stall_stdout_artifact: dict[str, Any] | None = None
-            _stall_full_stdout: str | None = None
-            if cmd_result is None:
-                try:
-                    _fresh_log = await asyncio.wait_for(
-                        _read_file_via_provider(
-                            _sandbox_id,
-                            _SANDBOX_LOG_PATH,
-                            provider_type=_resolved_provider,
-                            borrowed_provider=_dispatch_provider,
-                        ),
-                        timeout=_SANDBOX_TAIL_READ_TIMEOUT,
-                    )
-                    _fresh_text = _fresh_log if isinstance(_fresh_log, str) else bytes(_fresh_log).decode("utf-8", "replace")
-                    if len(_fresh_text) > _stdout_cap:
-                        _stall_full_stdout = _fresh_text
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    _log.debug(
-                        "sandbox_agent.stall_fresh_log_read_failed",
-                        extra={"node_id": node_id},
-                    )
-            if stdout_truncated or _stall_full_stdout is not None:
-                # FAR-844: clean up the streaming writer's raw file before the
-                # stall path writes its own artifact (fresh read content, not
-                # the drain-window content the streaming writer captured).
-                if _streaming_writer_instance is not None and not _streaming_writer_instance.finalized:
-                    try:
-                        _streaming_writer_instance.cleanup()
-                    except Exception:
-                        _log.debug(
-                            "sandbox_agent.streaming_writer_cleanup_failed",
-                            extra={"node_id": node_id, "run_id": run_id},
-                        )
-                _redacted_for_artifact = _redact_raw_output(_stall_full_stdout if _stall_full_stdout is not None else agent_stdout_raw)
-                _stall_stdout_artifact = _persist_full_stdout_artifact(
-                    org_id=org_id,
-                    run_id=run_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                    node_cap=_stdout_cap,
-                    redacted_stdout=_redacted_for_artifact,
-                )
-            # FAR-879: stderr parity — persist the full redacted stderr
-            # transcript on the stall/timeout path too.
-            _stall_stderr_artifact: dict[str, Any] | None = None
-            if _stderr_len > _stdout_cap:
-                _stall_stderr_artifact = _persist_full_stderr_artifact(
-                    org_id=org_id,
-                    run_id=run_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                    node_cap=_stdout_cap,
-                    redacted_stderr=_redact_raw_output(agent_stderr_raw),
-                )
-            await _retain_raw_output_marker(
-                session_factory,
-                _RawOutputMarkerRequest(
-                    run_id=run_id,
-                    org_id_raw=org_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                    summary=("Sandbox agent command stalled/timed out — raw stdout retained (bounded to the node's retention cap)"),
-                    source=_stall_source,
-                    parse_error=command_error,
-                    exit_code=exit_code,
-                    stdout_length=_stdout_len,
-                    stderr_length=_stderr_len,
-                    delivery_sentinel=delivery_sentinel,
-                    max_artifact_bytes=_stdout_cap,
-                    stdout_artifact=_stall_stdout_artifact,
-                    stderr_artifact=_stall_stderr_artifact,
-                ),
-            )
-            if watchdog.budget_killed:
-                # FAR-296 Phase 3b-3: the platform-side resource-cap killer
-                # fired — the sandbox was killed for exceeding its limits.
-                # TERMINAL (never retryable, exactly-once) and distinct from
-                # an unknown side-effect state: the kill REASON is known.
-                raise ScriptBudgetKilledError(_script_budget_killed_message(node_id)) from None
-            if _is_script_post_claim_fault(sandbox_mode, _script_lease_claimed):
-                # FAR-296 Phase 2 stage-split (3): the script PROCESS started
-                # (fencing lease claimed) and was terminated mid-execution
-                # (timeout / budget / watchdog) with exit undetermined — the
-                # side effect may or may not have happened. Never retryable:
-                # escalate to needs-human via ``script.side_effect_unknown``.
-                raise ScriptSideEffectUnknownError("Script-mode sandbox terminated mid-execution (side effect unknown): " + (command_error or f"no output within {sandbox_timeout}s"))
-            # FAR-1994: the agent burned tokens before the stall/timeout. The
-            # retained raw stdout carries opencode ``step_finish`` counters; the
-            # failure records ZERO without them. Recover them (agent-reported)
-            # so the terminal write prices the work the agent actually did.
-            _stall_failure = SandboxNodeFailedError(
-                command_error or f"Sandbox agent command failed (no output within {sandbox_timeout}s)",
-                node_id=node_id,
-            )
-            _attach_recovered_token_usage(_stall_failure, _stall_source)
-            raise _stall_failure
-
-        raw_output: str = ""
-        output_read_error: str = ""
-        if cmd_result is not None:
-            try:
-                _remaining_after_cmd = max(_OUTPUT_READ_TIMEOUT, sandbox_timeout - (time.monotonic() - start_time))
-                raw_output = await asyncio.wait_for(
-                    _read_file_via_provider(
-                        _sandbox_id,
-                        "/home/user/output.json",
-                        provider_type=_resolved_provider,
-                        borrowed_provider=_dispatch_provider,
-                    ),
-                    timeout=_remaining_after_cmd,
-                )
-                output_json = json.loads(raw_output)
-            except asyncio.CancelledError:
-                raise
-            except Exception as _read_exc:
-                output_read_error = f"{type(_read_exc).__name__}: {str(_read_exc)[:_MAX_ERROR_MSG]}"
-                _log.info(
-                    "sandbox_agent.no_output_json",
-                    extra={
-                        "node_id": node_id,
-                        "exit_code": exit_code,
-                        "command_error": command_error,
-                        "output_read_error": output_read_error,
-                        "stdout_length": _stdout_len,
-                        "stderr_length": _stderr_len,
-                        "sandbox_id": _sandbox_id,
-                    },
-                )
-
-        # FAR-188: an agent that produced no usable output.json content — a
-        # failed/unparseable read (output_json None) or a PARSEABLE but
-        # non-dict value ([], "str", 123, null). In BOTH cases the raw
-        # evidence is retained (pr_url extraction, marker persist). Only the
-        # TRULY-no-output case (output_json is None — read failure or
-        # json.loads("null")) raises SandboxNodeFailedError: a node with
-        # zero usable work must never complete the run silently (A6).
-        # A parseable non-dict value retains the marker and CONTINUES
-        # through the existing shaping path — agent_status stays None
-        # exactly as before (corrected FIX 4; test_node_runner_agent_status
-        # asserts this proceed-with-None behaviour and stays green).
-        if output_json is None or not isinstance(output_json, dict):
-            # Evidence is the UNION of raw sources — the file content AND
-            # the captured stdout (a pr_url echoed to stdout when output.json
-            # is present-but-malformed must be found). pr_url is extracted
-            # from the FULL pre-truncation source, then raw_output is
-            # truncated for storage (inside the builder).
-            _raw_parts = [p for p in (_normalize_marker_text(raw_output), agent_stdout_raw) if p]
-            _raw_combined = "\n".join(_raw_parts)
-            if output_json is None:
-                _parse_error = output_read_error or "output.json is empty or JSON null"
-                await _retain_raw_output_marker(
-                    session_factory,
-                    _RawOutputMarkerRequest(
-                        run_id=run_id,
-                        org_id_raw=org_id,
-                        node_id=node_id,
-                        attempt_key=attempt_key,
-                        summary="Sandbox agent produced no parseable output.json — raw output retained",
-                        source=_raw_combined,
-                        parse_error=_parse_error,
-                        exit_code=exit_code,
-                        stdout_length=_stdout_len,
-                        stderr_length=_stderr_len,
-                        delivery_sentinel=delivery_sentinel,
-                        max_artifact_bytes=_stdout_cap,
-                    ),
-                )
-                # FAR-197: surface WHY the agent failed. The captured
-                # stdout/stderr tails plus the E2B log tail (the only place
-                # the kill reason lives) are fetched BEFORE the finally-block
-                # kill, while the sandbox is still alive — the logs endpoint
-                # only serves live sandboxes.
-                from farna.settings import get_settings
-
-                _no_output_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
-                if watchdog.budget_killed:
-                    # FAR-296 Phase 3b-3: the platform-side resource-cap killer
-                    # fired. On the REAL kill path the command handle raises an
-                    # e2b SandboxException (not TimeoutError), which lands here
-                    # with cmd_result non-None and output.json unreadable — the
-                    # kill REASON is known, so never misclassify as
-                    # script.invalid_output / script.side_effect_unknown.
-                    raise ScriptBudgetKilledError(_script_budget_killed_message(node_id)) from None
-                if _is_script_post_claim_fault(sandbox_mode, _script_lease_claimed):
-                    # FAR-296 Phase 2 stage-split (2): the script PROCESS
-                    # started (lease claimed) and produced no parseable
-                    # output.json — post-claim, TERMINAL (never retryable).
-                    raise ScriptInvalidOutputError(
-                        _build_no_output_message(
-                            exit_code=exit_code,
-                            stdout_raw=agent_stdout_raw,
-                            stderr_raw=agent_stderr_raw,
-                            sandbox_id=_sandbox_id,
-                            read_raw=raw_output,
-                            read_error=output_read_error,
-                            log_tail=_no_output_log_tail,
-                        )
-                    )
-                # FAR-1994: no parseable output.json, but the retained raw
-                # output (the FULL pre-display-slice source) still carries the
-                # agent's opencode ``step_finish`` token counters. Recover them
-                # as agent-reported usage so the terminal write is not a false
-                # zero; a parse failure attaches nothing (fail-open).
-                _no_output_failure = SandboxNodeFailedError(
-                    _build_no_output_message(
-                        exit_code=exit_code,
-                        stdout_raw=agent_stdout_raw,
-                        stderr_raw=agent_stderr_raw,
-                        sandbox_id=_sandbox_id,
-                        read_raw=raw_output,
-                        read_error=output_read_error,
-                        log_tail=_no_output_log_tail,
-                    ),
-                    node_id=node_id,
-                )
-                _attach_recovered_token_usage(_no_output_failure, _raw_combined)
-                raise _no_output_failure
-            # Parseable non-dict output: retain the marker, do NOT raise —
-            # fall through to the shared shaping path below.
-            await _retain_raw_output_marker(
-                session_factory,
-                _RawOutputMarkerRequest(
-                    run_id=run_id,
-                    org_id_raw=org_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                    summary="Sandbox agent output.json parsed to a non-dict value — raw output retained",
-                    source=_raw_combined,
-                    parse_error=f"output.json parsed to non-dict type {type(output_json).__name__}",
-                    exit_code=exit_code,
-                    stdout_length=_stdout_len,
-                    stderr_length=_stderr_len,
-                    delivery_sentinel=delivery_sentinel,
-                    max_artifact_bytes=_stdout_cap,
-                ),
-            )
-
-        if sandbox_mode == "script":
-            _emit_script_span_event(
-                "script.finalized",
-                {
-                    "run_id": run_id,
-                    "node_id": node_id,
-                    "elapsed_seconds": round(time.monotonic() - start_time, 1),
-                    "budget_killed": watchdog.budget_killed,
-                    "exit_code": exit_code if cmd_result is not None else None,
-                },
-            )
-
-        _span = _otel_trace.get_current_span()
-        if _span.is_recording():
-            _span.add_event(
-                "sandbox.agent.output",
-                {
-                    "stdout": agent_stdout[:_MAX_OTEL_LOG_ATTR],
-                    "stderr": agent_stderr[:_MAX_OTEL_LOG_ATTR],
-                    "stdout_length": _stdout_len,
-                    "stderr_length": _stderr_len,
-                    "attempt_key": attempt_key or "",
-                },
-            )
-
-        # FIX C: validate ANY output against non-empty schema (not just dicts)
-        if isinstance(output_schema_json, dict) and output_schema_json:
-            # FIX B: sandbox path — no synchronous repair invoke available
-            # (run_repair_loop calls invoke synchronously; sandbox APIs are
-            # async). Strict-mode validation failures are terminal with no
-            # auto-repair — documented hard-fail for this path.
-            _sandbox_repair_invoke_fn = None
-
-            from farna.core.pipeline_engine.schema_enforcement import build_enforcement_record
-
-            # FAR-902: repair stats for the enforcement record.  Initialised
-            # BEFORE the try so the terminal-failure arm can still read it.
-            _sandbox_repair_info: dict[str, int] = {}
-            try:
-                # FAR-899: use real JSON Schema validation with mode support
-                # FAR-902: collect repair stats for the enforcement record.
-                _val_outcome, _val_errors, _ = _validate_against_schema(
-                    output_json,
-                    output_schema_json,
-                    mode=schema_validator_mode,
-                    schema_id=schema_id,
-                    schema_version=schema_version,
-                    _repair_invoke_fn=_sandbox_repair_invoke_fn,
-                    _repair_info=_sandbox_repair_info,
-                )
-                # FIX H: log the validation outcome for observability
-                # FAR-902: persist the enforcement record BEFORE terminalization.
-                # Best-effort: a persistence failure must NEVER fail the node.
-                # FAR-902: native_output is False for the sandbox path — the
-                # sandbox runs a CLI (opencode) that returns raw text; Modulo
-                # validates post-hoc, never via the provider's native channel.
-                await _persist_enforcement_record_best_effort(
-                    build_enforcement_record(
-                        outcome=_val_outcome,
-                        resolved_profile=_node_schema_profile if isinstance(_node_schema_profile, str) else None,
-                        native_output=False,
-                        repair_attempts=_sandbox_repair_info.get("repair_attempts", 0),
-                        wasted_attempts=_sandbox_repair_info.get("wasted_attempts", 0),
-                        validation_errors=_val_errors,
-                    ),
-                    session_factory=session_factory,
-                    run_id=run_id,
-                    org_id=org_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                )
-            except ValueError as _schema_exc:
-                _log.exception(
-                    "sandbox_agent.schema_validation_failed",
-                    extra={"node_id": node_id},
-                )
-                # FAR-902 (D3): persist the terminal-failure enforcement record
-                # BEFORE the node is terminalized (the raw-output marker,
-                # artifact finalization, and the terminal raise below).
-                await _persist_enforcement_record_best_effort(
-                    _build_error_enforcement_record(
-                        _schema_exc,
-                        resolved_profile=_node_schema_profile if isinstance(_node_schema_profile, str) else None,
-                        native_output=False,
-                        repair_info=_sandbox_repair_info,
-                    ),
-                    session_factory=session_factory,
-                    run_id=run_id,
-                    org_id=org_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                )
-                if _is_script_post_claim_fault(sandbox_mode, _script_lease_claimed):
-                    # FAR-296 Phase 2 stage-split (2): the script PROCESS
-                    # started (lease claimed) and its output failed schema
-                    # validation — post-claim, TERMINAL (never retryable).
-                    # Raise a ScriptModeError subclass (not the shared
-                    # OutputSchemaValidationError) so the fault surfaces
-                    # under the never-retryable ``script.invalid_output``
-                    # code and is excluded from ``failure`` retries. The
-                    # generic ``schema_validation_failure`` code is SHARED
-                    # with LLM-mode/manual paths and must stay retryable.
-                    raise ScriptInvalidOutputError(f"Script-mode output failed schema validation for node '{node_id}': {_schema_exc}") from None
-                elapsed = time.monotonic() - start_time
-                _cost_estimate_usd = _compute_sandbox_cost(elapsed, output_json)
-                # FAR-582: finalize artifacts before the node terminates on the
-                # schema-failure path (both the old envelope return and the
-                # FAR-780 retryable raise below need consistent artifact state).
-                await _finalize_artifact_writer(
-                    _artifact_writer,
-                    session_factory=session_factory,
-                    run_id=run_id,
-                    org_id=org_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                )
-                # FAR-780 (E2B parity — mirrors the bundled runner): an
-                # llm-mode output that violates the node's DECLARED output
-                # contract (a missing schema-required field such as pr_url)
-                # must fail RETRYABLY so runtime_retry re-dispatches the node
-                # in a fresh sandbox. The previous synthetic ``status="failed"``
-                # envelope (modulo_synthetic_failure=True) completed the node
-                # non-retryably: the run proceeded to a blocking eval
-                # (eval.blocked) with the sandbox destroyed and tokens burned,
-                # and the retryable ``sandbox.no_output_json`` path never
-                # fired. The raw agent evidence is retained via the raw-output
-                # marker exactly as the no-output path above (the union of the
-                # output.json file content and the captured stdout), and the
-                # E2B log tail is fetched while the sandbox is STILL ALIVE —
-                # the finally block kills it next.
-                _schema_raw_parts = [p for p in (_normalize_marker_text(raw_output), agent_stdout_raw) if p]
-                await _retain_raw_output_marker(
-                    session_factory,
-                    _RawOutputMarkerRequest(
-                        run_id=run_id,
-                        org_id_raw=org_id,
-                        node_id=node_id,
-                        attempt_key=attempt_key,
-                        summary=("Sandbox agent output failed declared output schema validation — raw output retained"),
-                        source="\n".join(_schema_raw_parts),
-                        parse_error=str(_schema_exc),
-                        exit_code=exit_code,
-                        stdout_length=_stdout_len,
-                        stderr_length=_stderr_len,
-                        delivery_sentinel=delivery_sentinel,
-                        max_artifact_bytes=_stdout_cap,
-                    ),
-                )
-                from farna.settings import get_settings
-
-                _schema_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
-                raise SandboxNodeFailedError(
-                    _build_schema_failure_message(
-                        schema_exc=str(_schema_exc),
-                        sandbox_id=_sandbox_id,
-                        stdout_raw=agent_stdout_raw,
-                        stderr_raw=agent_stderr_raw,
-                        log_tail=_schema_log_tail,
-                    ),
-                    node_id=node_id,
-                ) from None
-
-        status: str = "completed" if exit_code == 0 else "failed"
-        result_summary: str = ""
-        changed_files: list[str] = []
-        pr_url = ""
-        # A1 elevation input (agent-failure UX, phase 1): surface the
-        # agent's RAW verdict from output.json VERBATIM — never derived from
-        # exit_code. Missing / non-string values degrade to None so a
-        # missing status can never look like a false "complete".
-        agent_status: str | None = None
-        agent_outcome: str | None = None
-        # FAR-227: the E2B wrapper's fallback echo for a dead opencode
-        # session is NOT an agent verdict — the agent never wrote it. Detect
-        # the placeholder, suppress the fabricated ``agent_status="failed"``
-        # (which A1-elevates to non-retryable ``agent.failed``), and stamp a
-        # distinct marker the executor routes to retryable
-        # ``sandbox.no_output_json`` instead. The summary is preserved so the
-        # failure detail stays visible.
-        sandbox_session_lost: bool = False
-
-        if sandbox_mode == "script":
-            # FAR-296 Phase 2 stage-split (2): a non-zero exit AFTER the
-            # script process started (the fencing lease is claimed) is a
-            # POST-CLAIM fault — TERMINAL, never retryable (exactly-once).
-            # Re-dispatching could double-execute the side-effecting script.
-            if exit_code != 0:
-                if watchdog.budget_killed:
-                    # The command died BECAUSE the platform-side resource-cap
-                    # killer killed the sandbox — never misclassify the kill
-                    # as a generic script.failed.
-                    raise ScriptBudgetKilledError(_script_budget_killed_message(node_id)) from None
-                raise ScriptFailedError(f"Script-mode sandbox exited with code {exit_code} (post-claim, terminal)")
-            # FAR-296 script mode: the raw parsed output IS the node output.
-            # No LLM envelope extraction (summary/changed_files/pr_url/
-            # status/outcome elevation) — output_json carries the script's
-            # output verbatim and the summary is a short auto-generated line.
-            result_summary = f"script mode: exit_code={exit_code}"
-        elif isinstance(output_json, dict):
-            result_summary = output_json.get("summary", "")
-            changed_files = output_json.get("changed_files", [])
-            pr_url = output_json.get("pr_url", "")
-            sandbox_session_lost = _is_sandbox_session_lost_echo(output_json)
-            _raw_status = output_json.get("status")
-            _raw_outcome = output_json.get("outcome")
-            if isinstance(_raw_status, str) and not sandbox_session_lost:
-                agent_status = _raw_status
-            if isinstance(_raw_outcome, str) and not sandbox_session_lost:
-                agent_outcome = _raw_outcome
-            if sandbox_session_lost:
-                # A dead session is never a completed node, regardless of the
-                # command's exit code (the wrapper may exit 0 after echoing).
-                status = "failed"
-
-        if status == "failed" and not result_summary:
-            # Never report a silent empty-summary failure — explain WHY the
-            # command produced no usable output.
-            result_summary = command_error or "Sandbox agent command failed"
-
-        _cost_estimate_usd = _compute_sandbox_cost(elapsed, output_json)
-
-        # FAR-228 success-path marker: when opt-in AND the sentinel is a
-        # FULL-LINE match in the FULL pre-truncation stdout (``agent_stdout_raw``,
-        # NOT the head-truncated ``agent_stdout``), persist a delivery_done
-        # marker into the marker-row store — the ONLY store guard A /
-        # guard B / classification / gate_fired read. The envelope stamp
-        # alone was unobservable (nothing reads delivery_done from
-        # the outputs dicts); the marker is the durable record that closes the
-        # completed-node-then-process-death gap. Best-effort and fail-open:
-        # a persist failure must never break a successful run.
-        if delivery_sentinel and _source_contains_delivery_sentinel(agent_stdout_raw, delivery_sentinel):
-            try:
-                await _retain_raw_output_marker(
-                    session_factory,
-                    _RawOutputMarkerRequest(
-                        run_id=run_id,
-                        org_id_raw=org_id,
-                        node_id=node_id,
-                        attempt_key=attempt_key,
-                        summary="Sandbox agent completed with delivery sentinel observed (idempotency gate)",
-                        source=agent_stdout_raw,
-                        parse_error="",
-                        exit_code=exit_code,
-                        stdout_length=_stdout_len,
-                        stderr_length=_stderr_len,
-                        delivery_sentinel=delivery_sentinel,
-                        status=status,
-                        max_artifact_bytes=_stdout_cap,
-                    ),
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                _log.exception(
-                    "sandbox_agent.success_delivery_marker_persist_failed",
-                    extra={"node_id": node_id, "run_id": run_id},
-                )
-
-        # FAR-582: finalize artifacts before returning on main success/failure path.
-        await _finalize_artifact_writer(
-            _artifact_writer,
-            session_factory=session_factory,
+        await _sandbox_prepare_dispatch(
+            _state,
+            node_id=node_id,
             run_id=run_id,
             org_id=org_id,
-            node_id=node_id,
-            attempt_key=attempt_key,
+            agent_id=agent_id,
+            session_factory=session_factory,
+            workspace_inputs=workspace_inputs,
+            resource_limits=resource_limits,
+            egress_policy=egress_policy,
+            egress_allowlist=egress_allowlist,
+            _profile_net_policy=_profile_net_policy,
+            _resolved_provider=_resolved_provider,
         )
-
-        # FAR-811: over-cap redacted stdout is retained IN FULL in the artifact
-        # store with an envelope pointer (`stdout_artifact`) instead of only the
-        # truncated head. Best-effort: a store failure keeps today's inline
-        # (truncated) behaviour with no pointer key. Redaction happened BEFORE
-        # this point (order unchanged) — the stored bytes are the redacted text.
-        # FAR-844: prefer the streaming writer's pointer (incrementally captured
-        # during drain) over the one-shot _persist_full_stdout_artifact fallback.
-        _stdout_artifact: dict[str, Any] | None = None
-        if stdout_truncated:
-            if _streaming_writer_instance is not None:
-                try:
-                    _ptr = _streaming_writer_instance.finalize()
-                    if _ptr is not None:
-                        # ``truncated`` reflects the streaming writer's ACTUAL
-                        # state (honest notice): the writer is uncapped, so it is
-                        # normally False — but if a future cap is reintroduced or
-                        # the drain fed more than the writer accepted, surface the
-                        # truth rather than advertising a complete artifact.
-                        _stdout_artifact = {
-                            "rel_path": _ptr.get("rel_path"),
-                            "size_bytes": _ptr.get("size_bytes"),
-                            "sha256": _ptr.get("sha256"),
-                            "stream": "stdout",
-                            "compression": _ptr.get("compression"),
-                            "truncated": _streaming_writer_instance.truncated,
-                            "redacted": True,
-                        }
-                except Exception:
-                    _log.warning(
-                        "sandbox_agent.streaming_writer_finalize_failed",
-                        extra={"node_id": node_id, "run_id": run_id},
-                    )
-            if _stdout_artifact is None:
-                _stdout_artifact = _persist_full_stdout_artifact(
-                    org_id=org_id,
-                    run_id=run_id,
-                    node_id=node_id,
-                    attempt_key=attempt_key,
-                    node_cap=_stdout_cap,
-                    redacted_stdout=_redact_raw_output(agent_stdout_raw),
-                )
-
-        # FAR-879: stderr parity — persist the full redacted stderr transcript
-        # to the artifact store when it exceeds the inline retention cap,
-        # mirroring the stdout path above. Best-effort: a store failure keeps
-        # today's inline (truncated) behaviour with no pointer key.
-        _stderr_artifact: dict[str, Any] | None = None
-        stderr_truncated = _stderr_len > _stdout_cap
-        if stderr_truncated:
-            _stderr_artifact = _persist_full_stderr_artifact(
-                org_id=org_id,
-                run_id=run_id,
-                node_id=node_id,
-                attempt_key=attempt_key,
-                node_cap=_stdout_cap,
-                redacted_stderr=_redact_raw_output(agent_stderr_raw),
-            )
-
-        return _build_sandbox_node_envelope(
+        _materialised = await _sandbox_provision_and_materialise(
+            _state,
             node_id=node_id,
-            output=_SandboxNodeOutput(
-                status=status,
-                summary=result_summary,
-                changed_files=changed_files,
-                pr_url=pr_url,
-                exit_code=exit_code,
-                wall_clock_time_ms=int(elapsed * 1000),
-                cost_estimate_usd=_cost_estimate_usd,
-                cost_source=output_json,
-                output_json=output_json,
-                agent_stdout=agent_stdout,
-                agent_stderr=agent_stderr,
-                stdout_length=_stdout_len,
-                stderr_length=_stderr_len,
-                stdout_truncated=stdout_truncated,
-                stdout_artifact=_stdout_artifact if _stdout_artifact is not None else _UNSET,
-                stderr_artifact=_stderr_artifact if _stderr_artifact is not None else _UNSET,
-                attempt_key=attempt_key,
-                agent_status=agent_status,
-                agent_outcome=agent_outcome,
-                stall_reason=stall_reason,
-                sandbox_session_lost=sandbox_session_lost,
-                workspace_drift=[
-                    {
-                        "dest": d.dest,
-                        "expected_sha": d.expected_sha,
-                        "final_sha": d.final_sha,
-                        "drift_detected": d.drift_detected,
-                    }
-                    for d in _drift_results
-                ]
-                if _drift_results
-                else _UNSET,
-                workspace_drift_detected=(any(d.drift_detected for d in _drift_results) if _drift_results else _UNSET),
-            ),
-            exclude_from_output=frozenset({"changed_files", "pr_url"}),
-            provider=_resolved_provider,
-            via_provider=True,
+            run_id=run_id,
+            org_id=org_id,
+            session_factory=session_factory,
+            config=config,
+            node_def=node_def,
             sandbox_mode=sandbox_mode,
+            template_id=template_id,
+            sandbox_timeout=sandbox_timeout,
+            resource_limits=resource_limits,
+            context_files=context_files,
+            raw_input=raw_input,
+            rendered_prompt=rendered_prompt,
+            _route_provider=_route_provider,
+            _route_image_ref=_route_image_ref,
+            _resolved_provider=_resolved_provider,
+        )
+        _exec_outcome = await _sandbox_apply_policy_and_exec(
+            _state,
+            _materialised,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            pipeline_id=pipeline_id,
+            session_factory=session_factory,
+            state=state,
+            node_def=node_def,
+            sandbox_mode=sandbox_mode,
+            rendered_agent_command=rendered_agent_command,
+            sandbox_timeout=sandbox_timeout,
+            start_time=start_time,
+            stdout_cap=_stdout_cap,
+            stdout_retention_mode=stdout_retention_mode,
+            resource_limits=resource_limits,
+            read_only=read_only,
+            git_credentials=git_credentials,
+            single_pr_per_run=single_pr_per_run,
+            delivery_sentinel=delivery_sentinel,
+            enable_heartbeat=enable_heartbeat,
+            watch_log_path=watch_log_path,
+            stdout_percentage_delta=stdout_percentage_delta,
+            watch_globs=watch_globs,
+            wallclock_budget_seconds=wallclock_budget_seconds,
+            stall_timeout_override=stall_timeout_override,
+            loop_intercept_config=loop_intercept_config,
+            drained_chunks=_drained_chunks,
+            _resolved_provider=_resolved_provider,
+        )
+        _interpreted = await _sandbox_interpret_result(
+            _state,
+            cmd_result=_exec_outcome.cmd_result,
+            watchdog=_exec_outcome.watchdog,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            session_factory=session_factory,
+            sandbox_mode=sandbox_mode,
+            sandbox_timeout=sandbox_timeout,
+            delivery_sentinel=delivery_sentinel,
+            output_schema_json=output_schema_json,
+            schema_id=schema_id,
+            schema_version=schema_version,
+            schema_validator_mode=schema_validator_mode,
+            start_time=start_time,
+            stdout_cap=_stdout_cap,
+            drained_chunks=_drained_chunks,
+            _resolved_provider=_resolved_provider,
+        )
+        return await _sandbox_finalise_envelope(
+            _state,
+            _interpreted,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            session_factory=session_factory,
+            sandbox_mode=sandbox_mode,
+            delivery_sentinel=delivery_sentinel,
+            stdout_cap=_stdout_cap,
+            _resolved_provider=_resolved_provider,
         )
 
     except asyncio.CancelledError:
-        # FAR-228 (THE INCIDENT FIX): before re-raising, retain delivery
-        # evidence. Run 9559's attempt 1 was cancelled AFTER the email was
-        # sent but no marker was retained, so attempt 2 re-sent it. The
-        # cancellation may land between the last 5s drain tick and the
-        # process exit, so do ONE guarded final drain, then best-effort
-        # persist a delivery_done marker when the sentinel is a full-line
-        # match in the drained tail.
-        if _drain_fn is not None and sandbox is not None:
-            # FAR-1914 round-3 M3: ONE sequencer for both looks. A slow
-            # shielded drain must never be re-started by the grace look (that
-            # duplicated bytes and their step_finish costs on the same
-            # _drain_offset); the second look joins the in-flight task instead.
-            _final_drain = _BoundedFinalDrain(
-                _drain_fn,
-                timeout=_IDEMPOTENCY_GATE_CANCEL_PERSIST_TIMEOUT,
-                log_context={"node_id": node_id, "run_id": run_id},
-            )
-
-            await _final_drain.run_once()
-            # FAR-1914 B2: one bounded second look. A delivered-then-killed run
-            # can flush its `gh pr create` line just after the cancellation
-            # lands; without this grace the marker is built from a tail that
-            # predates the delivery and the run reads as a bare failure.
-            if _CANCEL_DELIVERY_GRACE_SECONDS > 0:
-                try:
-                    await asyncio.sleep(_CANCEL_DELIVERY_GRACE_SECONDS)
-                except asyncio.CancelledError:  # NOSONAR
-                    _uncancel_current_task()
-                # Join the in-flight drain (or start a fresh look once it has
-                # completed) — never a second concurrent drain.
-                await _final_drain.run_once()
-        # FAR-704: retain cancellation TRIAGE evidence whenever a sandbox
-        # existed. The absolute node-deadline watchdog (pipeline_execution)
-        # cancels this dispatch before output.json is ever read, so no node
-        # envelope reaches run_node_outputs — without this marker the run
-        # detail carries nodes:[] and Mode 2 (healthy agent killed at E2B
-        # endAt) vs Mode 3 (provider op-timeout) cannot be told apart
-        # post-hoc. The marker is the dedicated attempt_key-keyed retention
-        # store (FAR-188); it NEVER rides outputs_json / node_telemetry_json
-        # (the Agent Return Contract columns). The FAR-228 delivery_done
-        # stamp rides the SAME marker when the sentinel was drained (the
-        # marker merge is monotone — a later retry never unsets it).
-        if sandbox is not None:
-            _drained_tail = "".join(_drained_chunks)
-            # The E2B kill reason only lives in the sandbox logs, and the
-            # logs endpoint only serves live sandboxes — fetch the tail
-            # BEFORE the finally-block kill, while the sandbox may still be
-            # alive (FAR-97/FAR-197 observability, mirrored here). Guarded +
-            # bounded + cancel-safe: a nested cancel or any error degrades
-            # to an empty tail, never blocks the marker write or the
-            # original cancellation's re-raise.
-            _cancel_log_tail = ""
-            try:
-                _cancel_log_tail = await asyncio.wait_for(
-                    asyncio.shield(
-                        _read_log_tail_via_provider(
-                            _sandbox_id,
-                            max_bytes=6000,
-                            provider_type=_resolved_provider,
-                            borrowed_provider=_dispatch_provider,
-                        )
-                    ),
-                    timeout=_IDEMPOTENCY_GATE_CANCEL_PERSIST_TIMEOUT,
-                )
-            # Nested cancellation is deliberate — the triage marker must
-            # still be written; the original cancellation re-raises below.
-            except asyncio.CancelledError:  # NOSONAR
-                _uncancel_current_task()
-            except Exception:
-                _log.exception(
-                    "sandbox_agent.cancel_log_tail_fetch_failed",
-                    extra={"node_id": node_id, "run_id": run_id},
-                )
-            _cancel_sentinel_hit = bool(delivery_sentinel and _source_contains_delivery_sentinel(_drained_tail, delivery_sentinel))
-            _cancel_pr_url = _extract_pr_url(_drained_tail)
-            # FAR-1914 B2 / C1: the PR url is EVIDENCE, never a gate. Only the
-            # configured full-line sentinel may set ``delivery_done`` — the
-            # idempotency gate suppresses a retry on that field alone, so
-            # arming it from ANY url in the tail (a ``gh pr list --json url``
-            # payload, a quoted url) could turn a false positive into a MISSED
-            # delivery. The url is retained on the marker's existing
-            # non-gating ``pr_url`` field for human/analytics evidence.
-            _cancel_no_output_reason = stall_reason or "Sandbox attempt cancelled before a terminal node envelope was produced (node-deadline watchdog, run cancel, or worker shutdown)"
-            if _cancel_sentinel_hit:
-                _cancel_summary = "Sandbox agent cancelled after delivery sentinel observed — delivery_done retained (idempotency gate)"
-            elif _cancel_pr_url:
-                _cancel_summary = "Sandbox agent cancelled after a PR url was observed — pr_url retained as non-gating evidence"
-            else:
-                _cancel_summary = "Sandbox agent cancelled — triage evidence retained (FAR-704)"
-            _cancel_marker: dict[str, Any] = {
-                "_modulo_marker": True,
-                "status": "failed",
-                "summary": _cancel_summary,
-                "raw_output": _redact_raw_output(_drained_tail)[:_stdout_cap],
-                "parse_error": "",
-                "pr_url": _cancel_pr_url,
-                "exit_code": -1,
-                "stdout_length": len(_drained_tail),
-                "stderr_length": 0,
-                "attempt_key": attempt_key,
-                "node_id": node_id,
-                # FAR-704 triage surface: the run detail API projects markers
-                # carrying this flag into RunResponse.deadline_triage.
-                "deadline_triage": True,
-                "no_output_reason": sanitize_error_text(_cancel_no_output_reason),
-                "sandbox_log_tail": sanitize_error_text(_redact_raw_output(_cancel_log_tail)),
-            }
-            if _cancel_sentinel_hit:
-                _cancel_marker["delivery_done"] = True
-            try:
-                await _sandbox_cancel_retention_persist(
-                    session_factory=session_factory,
-                    run_id=run_id,
-                    org_id=org_id,
-                    node_id=node_id,
-                    # FAR-2082: the kill's evidence is stored under its OWN key,
-                    # never the node's normal attempt key — a kill that produced
-                    # nothing must not look like work by row existence, and it
-                    # must not overwrite the attempt's real marker. The marker
-                    # payload keeps the real attempt_key/node_id (evidence
-                    # attribution); only the ROW identity moves.
-                    attempt_key=_cancel_triage_attempt_key(run_id, node_id, attempt_key),
-                    marker=_cancel_marker,
-                )
-            # Nested cancellation here is deliberate — idempotency-gate cleanup
-            # must not re-raise early or the delivery-done marker is skipped
-            # (FAR-228 fix); the original cancellation re-raises at line 4566.
-            except asyncio.CancelledError:  # NOSONAR
-                _uncancel_current_task()
-            except Exception:
-                _log.exception(
-                    "sandbox_agent.cancel_retention_persist_failed",
-                    extra={"node_id": node_id, "run_id": run_id},
-                )
+        # FAR-310 (hardening wave 4): the arm's body — one bounded final drain
+        # plus the FAR-704 triage marker write — is now
+        # ``_retain_cancellation_evidence``. It reads the per-dispatch state
+        # from ``_state`` itself, so it observes exactly what the former local
+        # refresh left behind; the original cancellation re-raises here, after
+        # the evidence is retained and unconditionally.
+        await _retain_cancellation_evidence(
+            _state,
+            node_id=node_id,
+            run_id=run_id,
+            org_id=org_id,
+            session_factory=session_factory,
+            delivery_sentinel=delivery_sentinel,
+            stdout_cap=_stdout_cap,
+            drained_chunks=_drained_chunks,
+            _resolved_provider=_resolved_provider,
+        )
         raise
     except (SupersededNodeError, SandboxNodeFailedError, ScriptModeError):
         # A6: the retryable/superseded node-failure classes propagate to the
@@ -13044,6 +14762,23 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         # output dict that would let the run land 'complete'.
         raise
     except Exception as _exc:
+        # FAR-310: refresh this arm's locals from ``_state`` (see the
+        # CancelledError arm) so a phase that failed part-way through still
+        # contributes its captured evidence to the failure envelope below.
+        sandbox = _state.sandbox
+        _sandbox_id = _state.sandbox_id
+        _dispatch_provider = _state.dispatch_provider
+        agent_stdout = _state.agent_stdout
+        agent_stderr = _state.agent_stderr
+        agent_stdout_raw = _state.agent_stdout_raw
+        agent_stderr_raw = _state.agent_stderr_raw
+        output_json = _state.output_json
+        _stdout_len = _state.stdout_len
+        _stderr_len = _state.stderr_len
+        _cost_estimate_usd = _state.cost_estimate_usd
+        _artifact_writer = _state.artifact_writer
+        _streaming_writer_instance = _state.streaming_writer_instance
+        attempt_key = _state.attempt_key
         _translated = _translate_provider_dispatch_error(_exc)
         if _translated is not None:
             raise _translated from _exc
@@ -13080,7 +14815,6 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         _exc_output_json = output_json
         # Best-effort sandbox trace on the generic-exception path too — the
         # sandbox may already be dead, in which case the helper returns "".
-        from farna.settings import get_settings
 
         _exc_log_tail = await _read_log_tail_via_provider(_sandbox_id, max_bytes=6000, provider_type=_resolved_provider, borrowed_provider=_dispatch_provider)
         _cost_estimate_usd = _compute_sandbox_cost(elapsed, _exc_output_json)
@@ -13175,6 +14909,22 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
             sandbox_mode=sandbox_mode,
         )
     finally:
+        # FAR-310: refresh this finally's locals from ``_state`` so teardown
+        # observes every value a phase assigned, whichever path got here.
+        sandbox = _state.sandbox
+        _sandbox_id = _state.sandbox_id
+        _dispatch_provider = _state.dispatch_provider
+        dispatch_marker_set = _state.dispatch_marker_set
+        _exec_ctx = _state.exec_ctx
+        agent_stdout = _state.agent_stdout
+        agent_stderr = _state.agent_stderr
+        agent_stdout_raw = _state.agent_stdout_raw
+        agent_stderr_raw = _state.agent_stderr_raw
+        pr_url = _state.pr_url
+        output_json = _state.output_json
+        _gh_guard_install_status = _state.gh_guard_install_status
+        _bridge_server = _state.bridge_server
+        _streaming_writer_instance = _state.streaming_writer_instance
         # FAR-1315: settle this node's run-scoped one-PR guard slot. Runs ONLY
         # for flagged nodes (the flag is bound before the try), is exception-
         # safe (never masks teardown), and reads the captured streams /
@@ -13344,7 +15094,7 @@ async def _sandbox_agent_impl(  # NOSONAR S3776 - sandbox root dispatch; delegat
         # superseded original must not clear the successor's marker.
         if dispatch_marker_set:
             try:
-                await _clear_dispatch_marker()
+                await _exec_clear_dispatch_marker(_exec_ctx)
             except asyncio.CancelledError:
                 raise
             except Exception:

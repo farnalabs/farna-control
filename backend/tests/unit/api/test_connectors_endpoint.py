@@ -56,7 +56,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_FERNET_KEY,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -2196,7 +2196,7 @@ def test_patch_github_missing_scopes_returns_422(client: TestClient) -> None:
 # ── FAR-1762: GHES instance-aware verification ────────────────────────────
 
 _GHE_BASE_URL = "https://ghe.example.com/api/v3"
-_VERIFICATION_WARNING_HEADER = "X-Modulo-Verification-Warning"
+_VERIFICATION_WARNING_HEADER = "X-Farna-Control-Verification-Warning"
 
 
 def test_create_github_verifies_against_configured_ghes_base(client: TestClient) -> None:
@@ -2243,7 +2243,7 @@ def test_create_github_without_base_url_verifies_against_default(client: TestCli
 def test_create_github_unreachable_instance_is_non_fatal_with_warning_header(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
     """FAR-1762: an unreachable instance must NOT block creation, and must NOT
     be silent — the connector is created and the response carries the
-    ``X-Modulo-Verification-Warning`` header saying the token was not verified.
+    ``X-Farna-Control-Verification-Warning`` header saying the token was not verified.
     A typed transport failure (``GitHubNetworkError``) is the "instance
     unreachable" signal; an unclassified ``ValueError`` stays a 422 (see
     ``test_github_scope_verification_error_on_create``)."""

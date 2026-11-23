@@ -113,7 +113,7 @@ def client_system_admin(mock_session):
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_multi_org_enabled=True,
+        multi_org_enabled=True,
     )
     app.dependency_overrides[get_settings] = lambda: settings
     transport = ASGITransport(app=app)
@@ -860,7 +860,7 @@ class TestOrgLicenseValidationFailure:
             pytest.param(
                 REASON_ANCHOR_MISMATCH,
                 "Signature verification failed",
-                "Set MODULO_LICENSE_PUBLIC_KEY to the public key Farnalabs issued with your licence.",
+                "Set FARNA_CONTROL_LICENSE_PUBLIC_KEY to the public key Farnalabs issued with your licence.",
                 id="anchor-mismatch",
             ),
             pytest.param(REASON_EXPIRED, "License has expired", None, id="expired"),

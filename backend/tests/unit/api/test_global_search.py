@@ -231,7 +231,7 @@ class TestGlobalSearchEndpoint:
 
     def test_ordinary_admin_search_excludes_lifecycle_maps(self, client: TestClient, mock_db: AsyncMock) -> None:
         mock_db.execute.return_value = _make_result(all_rows=[], scalar_value=0)
-        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(modulo_dev_mode=False)):
+        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(dev_mode=False)):
             resp = client.get("/api/v1/admin/search?q=map&type=library")
         assert resp.status_code == 200
         assert not resp.json()["results"]
@@ -240,7 +240,7 @@ class TestGlobalSearchEndpoint:
 
     def test_internal_admin_search_includes_lifecycle_maps(self, client: TestClient, mock_db: AsyncMock) -> None:
         mock_db.execute.return_value = _make_result(all_rows=[], scalar_value=0)
-        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(modulo_dev_mode=True)):
+        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(dev_mode=True)):
             resp = client.get("/api/v1/admin/search?q=map&type=library")
         assert resp.status_code == 200
         query_params = [_data_query_params(call) for call in mock_db.execute.call_args_list]
@@ -248,7 +248,7 @@ class TestGlobalSearchEndpoint:
 
     def test_ordinary_admin_audit_search_excludes_lifecycle_map_events(self, client: TestClient, mock_db: AsyncMock) -> None:
         mock_db.execute.return_value = _make_result(all_rows=[], scalar_value=0)
-        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(modulo_dev_mode=False)):
+        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(dev_mode=False)):
             resp = client.get("/api/v1/admin/search?q=lifecycle&type=audit")
         assert resp.status_code == 200
         assert not resp.json()["results"]
@@ -258,7 +258,7 @@ class TestGlobalSearchEndpoint:
 
     def test_ordinary_admin_audit_search_excludes_lifecycle_map_version_events(self, client: TestClient, mock_db: AsyncMock) -> None:
         mock_db.execute.return_value = _make_result(all_rows=[], scalar_value=0)
-        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(modulo_dev_mode=False)):
+        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(dev_mode=False)):
             resp = client.get("/api/v1/admin/search?q=lifecycle_map_version_updated&type=audit")
         assert resp.status_code == 200
         assert not resp.json()["results"]
@@ -268,7 +268,7 @@ class TestGlobalSearchEndpoint:
 
     def test_internal_admin_audit_search_includes_lifecycle_map_events(self, client: TestClient, mock_db: AsyncMock) -> None:
         mock_db.execute.return_value = _make_result(all_rows=[], scalar_value=0)
-        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(modulo_dev_mode=True)):
+        with patch("farna.api.routes.admin.get_settings", return_value=MagicMock(dev_mode=True)):
             resp = client.get("/api/v1/admin/search?q=lifecycle_map_version_updated&type=audit")
         assert resp.status_code == 200
         query_params = [_data_query_params(call) for call in mock_db.execute.call_args_list]

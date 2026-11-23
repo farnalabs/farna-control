@@ -25,8 +25,8 @@ def _settings_without_license() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="",
+        admin_password="testpass",
+        license_key="",
     )
 
 
@@ -35,8 +35,8 @@ def _settings_with_license() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_license_key="valid-license-key",
+        admin_password="testpass",
+        license_key="valid-license-key",
     )
 
 

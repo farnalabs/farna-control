@@ -89,7 +89,7 @@ const ENVS: Record<string, TestEnv> = {
     orgSlug: getOrgSlug(),
     credentials: {
       // Staging uses the real admin account, provided via E2E_ADMIN_EMAIL /
-      // E2E_ADMIN_PASSWORD (must match the deployment's MODULO_USERS).
+      // E2E_ADMIN_PASSWORD (must match the deployment's FARNA_CONTROL_USERS).
       admin: { email: process.env.E2E_ADMIN_EMAIL || '', password: process.env.E2E_ADMIN_PASSWORD || '' },
       ...SHARED_CREDENTIALS,
     },

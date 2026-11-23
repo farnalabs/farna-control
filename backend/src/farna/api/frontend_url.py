@@ -5,13 +5,13 @@ both surfaces derive the same value from a single source of truth.
 
 Resolution order (deployment-agnostic):
 
-1. ``MODULO_FRONTEND_URL`` (env / ``settings.modulo_frontend_url``) — set
+1. ``FARNA_CONTROL_FRONTEND_URL`` (env / ``settings.frontend_url``) — set
    only when the SPA and API are on *different* origins (split-origin
    deployment).
-2. ``MODULO_PUBLIC_URL`` (env / ``settings.modulo_public_url``) — the
+2. ``FARNA_CONTROL_PUBLIC_URL`` (env / ``settings.public_url``) — the
    correct default because the standard self-host topology has nginx
    serving the SPA and the API on the same origin. A runtime
-   ``MODULO_PUBLIC_URL`` override (``key_bridge.get_public_url``) wins
+   ``FARNA_CONTROL_PUBLIC_URL`` override (``key_bridge.get_public_url``) wins
    over the boot-time Settings value when one is set.
 3. ``http://localhost:5173`` when both are empty (local dev fallback).
 
@@ -35,5 +35,5 @@ _DEFAULT_FALLBACK = "http://localhost:5173"
 
 def resolve_frontend_url(settings: Settings) -> str:
     """Return the browser-facing frontend base URL, trailing slash stripped."""
-    raw = settings.modulo_frontend_url or get_public_url(settings)
+    raw = settings.frontend_url or get_public_url(settings)
     return (raw or _DEFAULT_FALLBACK).rstrip("/")

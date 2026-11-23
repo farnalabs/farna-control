@@ -32,7 +32,7 @@ The restore is fail-open on a DB blip (the request-scoped / per-job refresh
 self-heals), but FAIL-CLOSED on the trust anchor: a persisted licence that can
 only verify against the built-in development anchor outside debug refuses to
 boot rather than silently running a paying customer on Community — the same rule
-``MODULO_LICENSE_KEY`` already has (FAR-2091).
+``FARNA_CONTROL_LICENSE_KEY`` already has (FAR-2091).
 """
 
 from __future__ import annotations
@@ -53,9 +53,9 @@ def configure_license_trust_anchor(settings: Any) -> None:
 
     * ``set_dev_anchor_trusted(settings.debug)`` — the shipped development key
       is a trust anchor only in debug.
-    * ``MODULO_LICENSE_PUBLIC_KEY``, when configured, replaces the built-in
+    * ``FARNA_CONTROL_LICENSE_PUBLIC_KEY``, when configured, replaces the built-in
       development anchor; a malformed key fails the boot.
-    * Outside debug, a configured ``MODULO_LICENSE_KEY`` with no usable anchor
+    * Outside debug, a configured ``FARNA_CONTROL_LICENSE_KEY`` with no usable anchor
       raises ``DEV_ANCHOR_STARTUP_ERROR``: such a licence can never verify, so
       starting the process would silently run on the Community tier.
     * Booting with no licence at all stays valid — the ordinary self-hosted
@@ -72,12 +72,12 @@ def configure_license_trust_anchor(settings: Any) -> None:
 
     license_mod.set_dev_anchor_trusted(debug)
 
-    public_key = getattr(settings, "modulo_license_public_key", "") or ""
+    public_key = getattr(settings, "license_public_key", "") or ""
     if public_key:
         try:
             license_mod.set_public_key(public_key)
         except ValueError as exc:
-            raise RuntimeError(f"FARNA_CONTROL_LICENSE_PUBLIC_KEY (or MODULO_LICENSE_PUBLIC_KEY) is not a valid Ed25519 public key (expected 64 hex characters): {exc}") from exc
+            raise RuntimeError(f"FARNA_CONTROL_LICENSE_PUBLIC_KEY is not a valid Ed25519 public key (expected 64 hex characters): {exc}") from exc
         _log.info("startup.license_public_key_configured")
     elif not debug:
         _log.warning("startup.default_license_key_in_use")
@@ -86,7 +86,7 @@ def configure_license_trust_anchor(settings: Any) -> None:
     # anchor can never verify, so fail the boot with the FIX rather than start
     # a process that silently runs on Community. Booting WITHOUT a licence key
     # stays valid — that is the ordinary self-hosted Community deployment.
-    license_key = getattr(settings, "modulo_license_key", "") or ""
+    license_key = getattr(settings, "license_key", "") or ""
     if not debug and license_key and license_mod.is_dev_anchor_in_use():
         raise RuntimeError(license_mod.DEV_ANCHOR_STARTUP_ERROR)
 

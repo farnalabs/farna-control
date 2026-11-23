@@ -415,7 +415,7 @@ class TestAnonymousPlanTenantScope:
         from farna.api import dependencies as deps
 
         settings = MagicMock()
-        settings.modulo_multi_org_enabled = False
+        settings.multi_org_enabled = False
         with pytest.raises(HTTPException) as excinfo:
             await deps.resolve_anonymous_plan_context(settings, self._session([]))
         assert excinfo.value.status_code == 503
@@ -464,7 +464,7 @@ class TestAnonymousPlanTenantScope:
         org.id = "tenant-org"
         org.settings_json = {"license_key": key}
         settings = MagicMock()
-        settings.modulo_license_key = ""
+        settings.license_key = ""
         try:
             assert ff.resolve_effective_license(settings, org) is None
         finally:
@@ -484,7 +484,7 @@ class TestAnonymousPlanTenantScope:
         set_public_key(public_key)
         clear_license()
         settings = MagicMock()
-        settings.modulo_license_key = key
+        settings.license_key = key
 
         async def _real_plan(_settings: object, session: object, org: object = None) -> object:
             assert org is None
@@ -517,7 +517,7 @@ class TestSystemEngineIsFallback:
         from farna.api import dependencies as deps
 
         class _UnprovisionedSettings:
-            modulo_system_database_url = ""
+            system_database_url = ""
 
         monkeypatch.setattr(deps, "get_settings", lambda: _UnprovisionedSettings())
         saved_engine = deps._SYSTEM_ASYNC_ENGINE
@@ -534,7 +534,7 @@ class TestSystemEngineIsFallback:
         from farna.api import dependencies as deps
 
         class _ProvisionedSettings:
-            modulo_system_database_url = "postgresql+asyncpg://localhost/system-test"
+            system_database_url = "postgresql+asyncpg://localhost/system-test"
             db_pool_recycle_seconds = 1500
 
         monkeypatch.setattr(deps, "get_settings", lambda: _ProvisionedSettings())
@@ -559,7 +559,7 @@ class TestSystemEngineIsFallback:
         from farna.api import dependencies as deps
 
         class _SqliteSettings:
-            modulo_system_database_url = "sqlite+aiosqlite:///system-test.db"
+            system_database_url = "sqlite+aiosqlite:///system-test.db"
             db_pool_recycle_seconds = 1500
 
         monkeypatch.setattr(deps, "get_settings", lambda: _SqliteSettings())
@@ -597,7 +597,7 @@ class TestSystemEnginePoolRecycle:
         from farna.api import dependencies as deps
 
         class _ProvisionedSettings:
-            modulo_system_database_url = "postgresql+asyncpg://localhost/system-test"
+            system_database_url = "postgresql+asyncpg://localhost/system-test"
             db_pool_recycle_seconds = 1500
 
         monkeypatch.setattr(deps, "get_settings", lambda: _ProvisionedSettings())

@@ -55,8 +55,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
-        modulo_multi_org_enabled=True,
+        admin_password="testpass",
+        multi_org_enabled=True,
     )
 
 
@@ -72,8 +72,8 @@ def _make_redis_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
-        modulo_multi_org_enabled=True,
+        admin_password="testpass",
+        multi_org_enabled=True,
         redis_url="redis://localhost:6379/0",
     )
 

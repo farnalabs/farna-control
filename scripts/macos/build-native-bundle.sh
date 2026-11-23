@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
        farna.launcher.env_contract; the spa_env_contract_gate below reads them
        back out of this source and fails THIS BUILD on any drift. The consumers
        are farna.api.main._SERVE_SPA_ENV / _FRONTEND_DIST_ENV: FAR-2563/FAR-2564
-       was the pre-rebrand MODULO_ spelling exported here while nothing read it,
+       was the pre-rebrand spelling exported here while nothing read it,
        so the installed app never mounted the SPA and "/" returned the API JSON
        instead of the SPA entry document. backend/tests/unit/launcher/
        test_native_shim_env_contract.py derives both sides from the real files
@@ -326,8 +326,8 @@ PY
 
 # SPA env contract gate (FAR-2563). The launcher exports the single-port SPA
 # flag and the dist directory; farna.api.main reads those names. FAR-2563 was
-# the third rebrand drift: this launcher exported the pre-rebrand MODULO_*
-# spelling while the API read FARNA_CONTROL_*, so the built SPA was never
+# the third rebrand drift: this launcher exported a pre-rebrand spelling while
+# the API read FARNA_CONTROL_*, so the built SPA was never
 # mounted and every installed app answered "/" with 404. Read the exported
 # names back out of the compiled source and hold them against the registry, and
 # hold the dist value against the directory the layout block populates.
@@ -347,7 +347,6 @@ from pathlib import Path
 
 from farna.launcher.env_contract import (
     FRONTEND_DIST_ENV,
-    LEGACY_ALIASES,
     SERVE_SPA_ENV,
     read_env,
 )
@@ -367,15 +366,14 @@ if errors:
     for error in errors:
         print(f"::error::{error}", file=sys.stderr)
     raise SystemExit(1)
-# The reader must resolve what this launcher exports, so a legacy-only export
-# (an installed bundle from before the rename) cannot silently strand the SPA.
+# The reader must resolve exactly what this launcher exports; there is one
+# namespace, so a drifted export name cannot silently strand the SPA.
 source = {exported_serve: "1", exported_dist: str(exported_dist_dir)}
 resolved_dist = Path(read_env(source, FRONTEND_DIST_ENV))
 if resolved_dist != exported_dist_dir:
     print(f"::error::read_env({FRONTEND_DIST_ENV!r}) returned {resolved_dist}, not the exported {exported_dist_dir}", file=sys.stderr)
     raise SystemExit(1)
-legacy = LEGACY_ALIASES.get(FRONTEND_DIST_ENV, ())
-print(f"spa env contract: serve={SERVE_SPA_ENV} dist={FRONTEND_DIST_ENV} dir={resolved_dist} legacy={','.join(legacy) or 'none'}")
+print(f"spa env contract: serve={SERVE_SPA_ENV} dist={FRONTEND_DIST_ENV} dir={resolved_dist}")
 PY
 # END spa_env_contract_gate
 

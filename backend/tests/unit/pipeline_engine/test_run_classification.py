@@ -2059,7 +2059,7 @@ def _settings(**overrides: object) -> MagicMock:
         "redis_url": "redis://localhost:6379/0",
         "saq_redis_pool_size": 5,
         "saq_run_claim_cap": 20,
-        "modulo_telemetry_enabled": False,
+        "telemetry_enabled": False,
     }
     base.update(overrides)
     return MagicMock(**base)

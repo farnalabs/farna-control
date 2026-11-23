@@ -47,8 +47,8 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key=_VALID_32,
         fernet_key=_VALID_32,
-        modulo_admin_password="testpass",
-        modulo_public_url="https://modulo.example.com",
+        admin_password="testpass",
+        public_url="https://modulo.example.com",
     )
 
 
@@ -470,8 +470,8 @@ class TestRegisterOAuthClient:
                 database_url="postgresql+asyncpg://localhost/test",
                 secret_key=_VALID_32,
                 fernet_key=_VALID_32,
-                modulo_admin_password="testpass",
-                modulo_public_url="http://localhost:8000",
+                admin_password="testpass",
+                public_url="http://localhost:8000",
             )
 
         app.dependency_overrides[get_settings] = _settings_no_url
@@ -486,7 +486,7 @@ class TestRegisterOAuthClient:
                     },
                 )
             assert resp.status_code == 500
-            assert "MODULO_PUBLIC_URL" in resp.json()["detail"]
+            assert "FARNA_CONTROL_PUBLIC_URL" in resp.json()["detail"]
         finally:
             app.dependency_overrides[get_settings] = _make_settings
 

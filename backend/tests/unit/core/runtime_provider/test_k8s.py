@@ -870,7 +870,7 @@ class TestDestroyAndStatus:
 
 class TestDeploymentIdentity:
     def test_falls_back_to_the_hostname_never_a_shared_constant(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Docker parity: ``MODULO_RUNNER_MACHINE_ID`` first, hostname second.
+        """Docker parity: ``FARNA_CONTROL_RUNNER_MACHINE_ID`` first, hostname second.
 
         The constant fallback this had (``"unspecified"``) collapsed two
         deployments sharing one namespace onto ONE identity, so each

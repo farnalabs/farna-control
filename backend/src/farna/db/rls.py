@@ -431,7 +431,7 @@ def register_tenant_filter() -> None:
     same 200+ CRUD functions and 30+ route handlers work on SQLite (test-only)
     without any code changes.
     """
-    db_type = get_settings().modulo_db.lower()
+    db_type = get_settings().db.lower()
     if db_type == "postgres":
         _log.info("Skipping ORM tenant filter — Postgres RLS handles scoping")
         return

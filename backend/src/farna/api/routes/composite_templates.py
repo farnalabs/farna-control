@@ -3,7 +3,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -16,7 +16,11 @@ from farna.api.constants import (
     MSG_INTERNAL_SERVER_ERROR,
 )
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
-from farna.api.dependencies import get_db_session, require_permission
+from farna.api.dependencies import (
+    get_db_session,
+    require_permission,
+    require_permission_any_credential,
+)
 from farna.api.middleware.sensitive_mask import mask_pipeline_graph_node, resolve_and_reject_mask_sentinels
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
@@ -33,10 +37,16 @@ from farna.db.crud.composite_template import (
     soft_delete_composite_template,
     update_composite_template,
 )
+from farna.db.models.composite_template import CompositeTemplate
 from farna.db.rls import set_rls_org
 
 _MSG_COMPOSITE_TEMPLATE_NOT_FOUND = "Composite template not found"
 _PERM_PIPELINE_UPDATE = "pipeline.update"
+# FAR-2681: reading a composite template is reading a sub-pipeline graph, so it
+# carries the same viewer-level permission as the pipeline graph read — and the
+# any-credential variant, because a caller holding an ``mk_`` org key can
+# already read the pipeline graph that references this template by id.
+_PERM_COMPOSITE_READ = "pipeline.graph.read"
 
 _CODE_LIST_COMPOSITE_TEMPLATES_ENDPOINT = "composite_templates.list_composite_templates_endpoint"
 _CODE_CREATE_COMPOSITE_TEMPLATE_ENDPOINT = "composite_templates.create_composite_template_endpoint"
@@ -51,8 +61,9 @@ _CODE_PUBLISH_COMPOSITE_ENDPOINT = "composite_templates.publish_composite_endpoi
 def _mask_sub_pipeline_graph(graph: dict[str, Any] | None) -> dict[str, Any]:
     """Mask credential-bearing node fields inside a sub-pipeline graph (FAR-1181).
 
-    Composite templates are readable by EVERY org member
-    (``get_current_tenant_user``, no team gate) and ``save-as-composite`` can
+    Every org member who holds the viewer-level ``pipeline.graph.read``
+    permission can read a template (JWT or ``mk_`` org API key, no team gate —
+    composite templates have no team owner), and ``save-as-composite`` can
     copy a pipeline's node ``env_vars`` verbatim, so the template's
     ``sub_pipeline_graph_json`` must never surface a raw secret. Reuses the
     same per-node masker the pipeline graph read applies — no new detection
@@ -155,13 +166,31 @@ def _mask_template_response(template: Any) -> CompositeTemplateResponse:
     return resp
 
 
+def _template_visible_to(
+    template: CompositeTemplate | None,
+    principal: TenantPrincipal,
+) -> TypeGuard[CompositeTemplate]:
+    """Return whether *template* belongs to the caller's organisation (FAR-2681).
+
+    The by-id lookup is already org-scoped by RLS (Postgres) / the tenant
+    filter (test SQLite), so a cross-tenant id normally resolves to ``None``.
+    This request-time guard is defence-in-depth on the same terms as the
+    agents / connectors / model-backends IDOR deny: a route that ever executes
+    with RLS inactive (break-glass or misconfigured deployment) must still
+    404 a foreign row rather than return it.
+
+    A ``TypeGuard`` so a true result also narrows the ORM row for the caller.
+    """
+    return template is not None and template.organisation_id == principal.organisation_id
+
+
 @router.get("")
 @handle_db_errors(_CODE_LIST_COMPOSITE_TEMPLATES_ENDPOINT)
 async def list_composite_templates_endpoint(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_PERM_COMPOSITE_READ),
 ) -> CompositeTemplateListResponse:
     try:
         async with session.begin():
@@ -265,7 +294,7 @@ async def create_composite_template_endpoint(
 async def get_composite_template_endpoint(
     template_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_PERM_COMPOSITE_READ),
 ) -> CompositeTemplateResponse:
     try:
         async with session.begin():
@@ -292,7 +321,7 @@ async def get_composite_template_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=MSG_INTERNAL_SERVER_ERROR,
         ) from None
-    if template is None:
+    if not _template_visible_to(template, principal):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_COMPOSITE_TEMPLATE_NOT_FOUND)
     return _mask_template_response(template)
 
@@ -497,7 +526,7 @@ class EditorGraphUpdate(BaseModel):
 async def get_composite_editor_endpoint(
     template_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    principal: TenantPrincipal = require_permission_any_credential(_PERM_COMPOSITE_READ),
 ) -> EditorGraphResponse:
     try:
         async with session.begin():
@@ -517,7 +546,7 @@ async def get_composite_editor_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=MSG_INTERNAL_SERVER_ERROR,
         ) from None
-    if template is None:
+    if not _template_visible_to(template, principal):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_COMPOSITE_TEMPLATE_NOT_FOUND)
     graph = template.sub_pipeline_graph_json
     # FAR-1181: mask the same credential-bearing node fields the pipeline graph

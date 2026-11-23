@@ -133,7 +133,7 @@ def create_secrets_backend(
 ) -> SecretsBackend:
     """Factory: return the configured SecretsBackend.
 
-    Reads *backend_name* (default ``MODULO_SECRETS_BACKEND`` env var, fallback
+    Reads *backend_name* (default ``FARNA_CONTROL_SECRETS_BACKEND`` env var, fallback
     ``"fernet"``) and constructs the matching implementation.
 
     External secrets backends (``vault``, ``aws``) are built whenever they are
@@ -150,7 +150,7 @@ def create_secrets_backend(
         session: Optional SQLAlchemy async session (required by FernetSecretsBackend
             when storing secrets in the database).
         backend_name: Override the backend name. If *None* the env var
-            ``MODULO_SECRETS_BACKEND`` is read.
+            ``FARNA_CONTROL_SECRETS_BACKEND`` is read.
 
     Returns:
         A ready-to-use ``SecretsBackend`` instance.
@@ -182,5 +182,5 @@ def create_secrets_backend(
 
             return AWSSecretsManagerBackend()
         case _:
-            msg = f"Unknown MODULO_SECRETS_BACKEND: {name!r}. Must be one of: 'fernet', 'vault', 'aws'."
+            msg = f"Unknown FARNA_CONTROL_SECRETS_BACKEND: {name!r}. Must be one of: 'fernet', 'vault', 'aws'."
             raise ValueError(msg)

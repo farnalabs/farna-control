@@ -27,7 +27,7 @@ from tests.unit.mcp.helpers import FERNET_KEY, ORG_ID, USER_ID, AuthContext, mak
 def _make_settings(*, dev_mode: bool = True) -> MagicMock:
     settings = MagicMock()
     settings.fernet_key = FERNET_KEY
-    settings.modulo_dev_mode = dev_mode
+    settings.dev_mode = dev_mode
     return settings
 
 

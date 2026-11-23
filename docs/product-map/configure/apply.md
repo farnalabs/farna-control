@@ -195,7 +195,7 @@ see the [`farna-control apply` GitHub Actions example](../../modulo-apply-github
 - [x] Output: human-friendly table (`render_table`: create/update/block/fail/
       unchanged lines + summary counts, or drift-prefixed variants) or
       `--output json` / `--json` (the full report); 401 surfaces "check
-      `MODULO_API_KEY`" (the message still uses the legacy name), 404 "server
+      `FARNA_CONTROL_API_KEY`" (the message still uses the legacy name), 404 "server
       does not expose endpoint ... / older
       version", network errors surface as "apply failed: ..."
       (`test_apply_cli.py`)

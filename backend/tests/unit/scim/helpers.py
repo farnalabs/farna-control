@@ -50,10 +50,10 @@ def make_settings(**overrides: object) -> "Settings":
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": VALID_32,
         "fernet_key": VALID_32,
-        "modulo_admin_password": "testpass",
-        "modulo_license_key": "team-license",
-        "modulo_scim_token": SCIM_TOKEN,
-        "modulo_public_url": "http://localhost:8000",
+        "admin_password": "testpass",
+        "license_key": "team-license",
+        "scim_token": SCIM_TOKEN,
+        "public_url": "http://localhost:8000",
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

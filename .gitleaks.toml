@@ -17,7 +17,7 @@ tags = ["modulo", "credentials"]
 [[patterns]]
 id = "modulo-db-url"
 description = "Modulo DATABASE_URL exposure"
-regex = '''(?i)(DATABASE_URL|MODULO_DB)\s*=\s*['\"][^'\"]+['\"]'''
+regex = '''(?i)(DATABASE_URL|FARNA_CONTROL_DB)\s*=\s*['\"][^'\"]+['\"]'''
 tags = ["modulo", "database"]
 
 # Include Gitleaks default rules via --no-git flag

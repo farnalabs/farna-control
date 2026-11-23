@@ -258,7 +258,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
       reaches a host argv. The exact start command is printed on failure as
       well as success (`scripts/compose-restore.sh`,
       `test_backup_restore_semantics.py::TestVerifyTargetSchema`,
-      `test_compose_restore_script.py`).
+      `test_compose_restore_wiring.py`).
 - [x] `--skip-backup` skips the DUMP, not the recovery point: it refuses unless
       an INTACT snapshot of the CURRENT schema state already exists under the
       data dir — the snapshot's recorded revisions must EQUAL the live
@@ -275,7 +275,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
       documented exception, not an implied guarantee
       (`deploy/fly/entrypoint.sh`,
       `test_alignment_entrypoints.py::test_entrypoint_orders_guard_snapshot_migrate`,
-      `test_compose_restore_script.py::TestTheFlyEntrypointTakesTheSnapshotThroughTheSameHelper`).
+      `test_compose_restore_wiring.py::TestTheFlyEntrypointTakesTheSnapshotThroughTheSameHelper`).
 - [x] The compose release bundle ships `compose-restore.sh` — the one documented
       recovery command for that path — which stops the application, restores
       through a one-off container, and prints the exact start command without

@@ -17,7 +17,7 @@ Scrub list (ADR 031 Decision 2, verbatim):
   LD_AUDIT, LD_BIND_NOW, ...), covered by the prefix; the individual
   ``LD_PRELOAD``/``LD_LIBRARY_PATH``/``LD_AUDIT`` names stay in the exact set
   as self-documentation.
-* ``MODULO_TEST_PAUSE_AT`` — the initdb deterministic-pause test seam must
+* ``FARNA_CONTROL_TEST_PAUSE_AT`` — the initdb deterministic-pause test seam must
   never leak from a developer shell into a production launcher boot (a stale
   value would silently block mid-bootstrap).
 * ``DYLD_*`` — every macOS dynamic-loader variable (covered by prefix; the

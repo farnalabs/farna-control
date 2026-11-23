@@ -238,7 +238,7 @@ class TestGetAvailableFeaturesSuccess(AuthContext):
         mock_session: AsyncMock,
         mock_validate_auth: AsyncMock,
     ) -> None:
-        mock_get_settings.return_value = MagicMock(modulo_dev_mode=False)
+        mock_get_settings.return_value = MagicMock(dev_mode=False)
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
@@ -279,7 +279,7 @@ class TestGetAvailableFeaturesSuccess(AuthContext):
     ) -> None:
         from farna.api.mcp_server import _ctx_key_grants
 
-        mock_get_settings.return_value = MagicMock(modulo_dev_mode=True)
+        mock_get_settings.return_value = MagicMock(dev_mode=True)
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
@@ -331,7 +331,7 @@ class TestSystemMapsInternalFlagMCP:
         from farna.api.mcp_server import _ctx_org_id
 
         _ctx_org_id.set(make_session_scope().org_id)
-        mock_get_settings.return_value = MagicMock(modulo_dev_mode=False)
+        mock_get_settings.return_value = MagicMock(dev_mode=False)
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
@@ -373,7 +373,7 @@ class TestSystemMapsInternalFlagMCP:
 
         _ctx_org_id.set(make_session_scope().org_id)
         _ctx_role.set("operator")
-        mock_get_settings.return_value = MagicMock(modulo_dev_mode=True)
+        mock_get_settings.return_value = MagicMock(dev_mode=True)
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
@@ -412,7 +412,7 @@ class TestSystemMapsInternalFlagMCP:
         from farna.api.mcp_server import _ctx_key_grants, _ctx_org_id
 
         _ctx_org_id.set(make_session_scope().org_id)
-        mock_get_settings.return_value = MagicMock(modulo_dev_mode=True)
+        mock_get_settings.return_value = MagicMock(dev_mode=True)
         plan_ctx = MagicMock()
         plan_ctx.tier.return_value = "community"
         plan_ctx.list_enabled_features.return_value = [
@@ -464,7 +464,7 @@ class TestSystemMapsAccessUsesSharedGrantCheck:
         """FAR-2595: the MCP gate mirrors REST and does not read dev mode."""
         from farna.api.mcp_server import _ctx_key_grants, _ctx_role, _mcp_internal_system_maps_access
 
-        with patch("farna.api.mcp_server.get_settings", return_value=MagicMock(modulo_dev_mode=False)):
+        with patch("farna.api.mcp_server.get_settings", return_value=MagicMock(dev_mode=False)):
             _ctx_role.set("operator")
             _ctx_key_grants.set(frozenset({"system_maps_access"}))
             try:
@@ -506,7 +506,7 @@ class TestSystemMapsAccessUsesSharedGrantCheck:
                 principal,
                 "system_maps_access",
                 require_dev_mode=True,
-                settings=MagicMock(modulo_dev_mode=True),
+                settings=MagicMock(dev_mode=True),
             )
         assert excinfo.value.status_code == HTTPStatus.FORBIDDEN
 
@@ -574,7 +574,7 @@ class TestListFeatureFlagsVisibility(AuthContext):
         registry.tier_gap_flags.return_value = [unrelated_flag, system_maps_flag]
         mock_registry.return_value = registry
         mock_session.return_value = make_session_context(make_session_scope())
-        settings = MagicMock(modulo_license_key="", modulo_dev_mode=True)
+        settings = MagicMock(license_key="", dev_mode=True)
         mock_get_settings.return_value = settings
 
         _ctx_role.set("operator")

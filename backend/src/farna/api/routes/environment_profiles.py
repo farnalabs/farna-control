@@ -84,9 +84,9 @@ def _get_hub() -> RuntimeProviderHub:
     from farna.settings import get_settings
 
     settings = get_settings()
-    # FAR-1135: MODULO_MAX_LOCAL_CONCURRENCY is hot-reloadable — the runtime
+    # FAR-1135: FARNA_CONTROL_MAX_LOCAL_CONCURRENCY is hot-reloadable — the runtime
     # override wins over the boot-time Settings value on each fresh hub.
-    concurrency = override_int_or("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", settings.modulo_max_local_concurrency)
+    concurrency = override_int_or("FARNA_CONTROL_MAX_LOCAL_CONCURRENCY", settings.max_local_concurrency)
     return build_hub(max_local_concurrency=concurrency)
 
 

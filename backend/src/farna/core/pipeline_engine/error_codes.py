@@ -560,7 +560,7 @@ ERROR_CODE_REGISTRY: dict[str, ErrorCodeSpec] = {
     # FAR-1558 follow-up: the bundled-runner dispatch route rejected the
     # pipeline-bound environment profile — a provider that was NEVER
     # dispatch-relevant (local / inert local_docker), a missing dispatch
-    # binding (MODULO_DOCKER_HOST / kubernetes opt-in / image_ref), or a
+    # binding (FARNA_CONTROL_DOCKER_HOST / kubernetes opt-in / image_ref), or a
     # locked-policy mismatch. Raised ONLY at dispatch as the typed
     # ``SandboxDispatchUnboundError``; the executor's generic catch publishes
     # ``type(exc).__name__``, so the LEGACY_ALIASES entry below is what keeps

@@ -210,8 +210,8 @@ def record_heuristic_probe_cost(usd: float) -> None:
 def evidence_enabled() -> bool:
     """Rollout gate for the evidence/no-op machinery (§15.13). Default ON.
 
-    Env override ``MODULO_HEURISTIC_ENABLED`` wins (manual rollout knob);
-    otherwise falls back to ``settings.modulo_heuristic_enabled`` when the
+    Env override ``FARNA_CONTROL_HEURISTIC_ENABLED`` wins (manual rollout knob);
+    otherwise falls back to ``settings.heuristic_enabled`` when the
     field exists, else True. Consumed via ``getattr`` because settings.py is
     outside this work's file scope — the field can ship in a follow-up without
     a code change here.
@@ -222,7 +222,7 @@ def evidence_enabled() -> bool:
     try:
         from farna.settings import get_settings
 
-        return bool(getattr(get_settings(), "modulo_heuristic_enabled", True))
+        return bool(getattr(get_settings(), "heuristic_enabled", True))
     except Exception:
         return True
 

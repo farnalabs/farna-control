@@ -111,7 +111,7 @@ def test_main_warns_when_system_url_derivation_fails(
     bootstrap_db.main()
 
     err = capsys.readouterr().err
-    assert "cannot derive MODULO_SYSTEM_DATABASE_URL" in err
+    assert "cannot derive FARNA_CONTROL_SYSTEM_DATABASE_URL" in err
     assert "no usable password/userinfo" in err
 
 

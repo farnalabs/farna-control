@@ -290,7 +290,16 @@ def _redact_secrets(text: str, password: str | None = None) -> str:
     return redacted
 
 
-def _connect(raw_url: str, *, timeout: int = 10, row_factory: Any = None) -> Any:
+def _redact_url_secrets(text: str, raw_url: str) -> str:
+    """Scrub *raw_url*'s own password and any URL userinfo out of *text*."""
+    try:
+        _dsn, password = _decredential_url(raw_url)
+    except Exception:  # an unparseable URL has no password to scrub
+        password = None
+    return _redact_secrets(text, password)
+
+
+def _connect(raw_url: str, *, timeout: int = 10, row_factory: Any | None = None) -> Any:
     """psycopg connect with the password OUT of the DSN.
 
     EVERY psycopg connection in this module goes through here — the read-only
@@ -306,11 +315,11 @@ def _connect(raw_url: str, *, timeout: int = 10, row_factory: Any = None) -> Any
     from farna.db.url_utils import psycopg_connect_args
 
     dsn, password = psycopg_connect_args(raw_url)
-    kwargs: dict[str, Any] = {"connect_timeout": timeout, "password": password}
+    connect_kwargs: dict[str, Any] = {"connect_timeout": timeout, "password": password}
     if row_factory is not None:
-        kwargs["row_factory"] = row_factory
+        connect_kwargs["row_factory"] = row_factory
     try:
-        return psycopg.connect(dsn, **kwargs)
+        return psycopg.connect(dsn, **connect_kwargs)
     except Exception as exc:  # every driver error can quote its input
         raise _SanitisedDatabaseError(_redact_secrets(str(exc), password), type(exc).__name__) from None
 
@@ -341,7 +350,8 @@ def _decredential_url(raw_url: str) -> tuple[str, str | None]:
     Returns ``(url_without_password, password)``. pg_dump/psql must never
     receive the password as an argv element: argv is world-readable via
     ``/proc/<pid>/cmdline`` while the child runs. The password travels in the
-    child-scoped ``PGPASSWORD`` env var instead (see _pg_child_env).
+    child-scoped ``PGPASSWORD`` env var instead (see
+    :func:`farna.db.url_utils.pg_child_env`).
 
     Delegates to :func:`farna.db.url_utils.split_postgres_credentials` — the
     ONE implementation the pre-upgrade snapshot shares, so a password holding
@@ -351,15 +361,6 @@ def _decredential_url(raw_url: str) -> tuple[str, str | None]:
     from farna.db.url_utils import split_postgres_credentials
 
     return split_postgres_credentials(raw_url)
-
-
-def _pg_child_env(password: str | None) -> dict[str, str]:
-    """Child-scoped env for pg_dump/psql: the password ONLY as PGPASSWORD."""
-    env = dict(os.environ)
-    env.pop("PGPASSWORD", None)
-    if password is not None:
-        env["PGPASSWORD"] = password
-    return env
 
 
 def _run_pg_dump(raw_url: str, output: Path, timeout: int = 300) -> None:
@@ -396,6 +397,8 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
 
 def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     _check_tool("psql")
+    from farna.db.url_utils import pg_child_env
+
     url_without_password, password = _decredential_url(raw_url)
     # -X (no ~/.psqlrc): an operator's psqlrc could `\set ON_ERROR_STOP off`,
     # and psql would then exit 0 after a rolled-back restore. The explicit
@@ -409,7 +412,7 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     try:
         with input_path.open("rb") as f:
             result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
-                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=_pg_child_env(password)
+                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
             )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"psql restore timed out after {timeout}s") from exc
@@ -453,7 +456,7 @@ def _take_safety_dump(raw_url: str, timeout: int = 300, output_dir: Path | None 
         _run_pg_dump(raw_url, safety_dir / _DB_SQL_FILE, timeout=timeout)
     except Exception as exc:
         shutil.rmtree(safety_dir, ignore_errors=True)
-        raise click.ClickException(f"Taking the pre-restore safety dump FAILED — refusing to wipe the current data (nothing was restored). Fix the dump failure, or pass --no-safety-dump to explicitly proceed without a safety net. Original error: {_redact_secrets(str(exc))}") from exc
+        raise click.ClickException(f"Taking the pre-restore safety dump FAILED — refusing to wipe the current data (nothing was restored). Fix the dump failure, or pass --no-safety-dump to explicitly proceed without a safety net. Original error: {_redact_url_secrets(str(exc), raw_url)}") from exc
     click.echo(f"Pre-restore safety dump taken: {safety_dir} (the previous cluster stays restorable)")
     return safety_dir
 
@@ -1722,16 +1725,21 @@ def _run_restore(opts: _RestoreOptions) -> None:
     lock = None
     stopped = False
     try:
+        # The safety dump MUST run BEFORE the stop: a bundled deployment's
+        # Postgres is a launcher child, so `stop_running_stack` (below) takes
+        # the server down and a dump from a stopped cluster cannot run.
+        # pg_dump is transactionally consistent, so a dump while the old
+        # writers are still live is safe.
+        _safety_dump(opts, raw_url)
         if opts.data_dir is not None:
-            # FAR-2667 item 5: a VIABLE restore stops the writers itself (it never
-            # asks the operator to remember a stop) and leaves them stopped. This
-            # runs only after the read-only verification above, so a validation
-            # failure or a preview never leaves a running launcher stopped.
-            # Taking the data-dir lock afterwards is what proves they really are
-            # gone.
+            # FAR-2667 item 5: a VIABLE restore stops the writers itself (it
+            # never asks the operator to remember a stop) and leaves them
+            # stopped. This runs only after the read-only verification above,
+            # so a validation failure or a preview never leaves a running
+            # launcher stopped. Taking the data-dir lock afterwards is what
+            # proves they really are gone.
             stopped = _stop_launcher_writers(opts.data_dir)
             lock = _acquire_data_lock(opts.data_dir, mode="restore")
-        _safety_dump(opts, raw_url)
         _restore_cluster(opts, manifest, raw_url, settings)
         _restore_data_dir(opts, manifest)
 
@@ -1747,10 +1755,10 @@ def _run_restore(opts: _RestoreOptions) -> None:
         _print_start_guidance(opts, stopped=stopped, failed=True)
         raise
     except Exception as exc:
-        detail = _redact_secrets(str(exc))
+        detail = _redact_url_secrets(str(exc), raw_url)
         _log.error("Restore failed: %s", detail, exc_info=exc)
         click.echo(f"Restore failed: {detail}", err=True)
-        # MAJOR: the writers may already be stopped and the database possibly
+        # The writers may already be stopped and the database possibly
         # part-restored. The start command must be printed on the FAILURE path
         # too, or a failed native restore leaves a dark stack and no way back.
         _print_start_guidance(opts, stopped=stopped, failed=True)

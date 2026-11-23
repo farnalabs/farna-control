@@ -236,7 +236,7 @@ def _resolve_license_info(settings: Settings) -> LicenseInfo:
 
     1. System-level in-memory licence (``store_license()``) — its tier and
        features are reported, ``is_valid=True``.
-    2. System-level env-var licence (``settings.modulo_license_key``) — only
+    2. System-level env-var licence (``settings.license_key``) — only
        reported when ``parse_and_verify`` confirms it; an unverifiable key
        falls through (never trusted on mere presence).
     3. No valid licence — ``tier="community"``, no features,
@@ -458,7 +458,7 @@ async def plan_bootstrap(
     expires_at, license_org_id = _resolve_license_expiry(settings, org)
     return PlanBootstrapResponse(
         license=PlanLicenseInfo(tier=plan_ctx.tier(), expires_at=expires_at, org_id=license_org_id),
-        dev_mode=bool(settings.modulo_dev_mode),
+        dev_mode=bool(settings.dev_mode),
         flags=[
             PlanFlagInfo(
                 name=flag.name,

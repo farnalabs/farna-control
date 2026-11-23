@@ -458,7 +458,7 @@ def bootstrap_oidc_realm(
     """Create the realm, an OIDC client, and a REAL browser-driveable user.
 
     ``redirect_uri`` is the EXACT per-provider Modulo callback URL the real
-    code path derives from ``modulo_public_url`` — a URL the IdP must come
+    code path derives from ``public_url`` — a URL the IdP must come
     back to with ``code`` and ``state`` params.
     """
     realm = f"kc-oidc-{uuid.uuid4().hex[:8]}"

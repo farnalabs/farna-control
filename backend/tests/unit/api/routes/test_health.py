@@ -68,7 +68,7 @@ def _make_settings(redis_url: str = "redis://localhost:6379/0") -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="test",
+        admin_password="test",
         redis_url=redis_url,
     )
 
@@ -1029,7 +1029,7 @@ class TestRunnerWorkspaceReconcileNotApplicable:
     sweep's error reading — while CONFIGURED deployments keep the exact
     stats path (engine-unreachable still surfaces as degraded)."""
 
-    _REASON = "no Docker endpoint configured (MODULO_DOCKER_HOST unset, no socket)"
+    _REASON = "no Docker endpoint configured (FARNA_CONTROL_DOCKER_HOST unset, no socket)"
 
     async def _read(self, reason: str | None, fake: _FakeStatsRedis) -> Any:
         with (

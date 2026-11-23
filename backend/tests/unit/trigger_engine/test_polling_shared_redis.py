@@ -213,7 +213,7 @@ def test_resolver_returns_none_when_redis_not_configured(monkeypatch: pytest.Mon
     """Redis genuinely not configured -> None (no shared budget exists to multiply)."""
     from farna.core import connector_hub
 
-    monkeypatch.setattr("farna.settings.get_settings", lambda: MagicMock(redis_url="", modulo_db="postgresql"))
+    monkeypatch.setattr("farna.settings.get_settings", lambda: MagicMock(redis_url="", db="postgresql"))
     assert connector_hub.resolve_shared_rate_limit_redis("org-1") is None
 
 
@@ -223,7 +223,7 @@ def test_resolver_returns_none_on_sqlite(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(redis_url="redis://localhost:6379/0", modulo_db="sqlite"),
+        lambda: MagicMock(redis_url="redis://localhost:6379/0", db="sqlite"),
     )
     assert connector_hub.resolve_shared_rate_limit_redis("org-1") is None
 
@@ -234,7 +234,7 @@ def test_resolver_returns_none_without_tenant(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(redis_url="redis://localhost:6379/0", modulo_db="postgresql"),
+        lambda: MagicMock(redis_url="redis://localhost:6379/0", db="postgresql"),
     )
     assert connector_hub.resolve_shared_rate_limit_redis(None) is None
 
@@ -245,7 +245,7 @@ def test_resolver_builds_shared_client_when_configured_with_tenant(monkeypatch: 
 
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(redis_url="redis://localhost:6379/0", modulo_db="postgresql"),
+        lambda: MagicMock(redis_url="redis://localhost:6379/0", db="postgresql"),
     )
     client = connector_hub.resolve_shared_rate_limit_redis("org-1")
     assert client is not None
@@ -269,7 +269,7 @@ def test_resolver_fails_closed_on_client_construction_failure(monkeypatch: pytes
 
     monkeypatch.setattr(
         "farna.settings.get_settings",
-        lambda: MagicMock(redis_url="redis://localhost:6379/0", modulo_db="postgresql"),
+        lambda: MagicMock(redis_url="redis://localhost:6379/0", db="postgresql"),
     )
 
     class _BrokenFromUrl:

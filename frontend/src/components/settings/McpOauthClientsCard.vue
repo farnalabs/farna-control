@@ -352,7 +352,7 @@ const props = defineProps<{
   /** Org role is admin|operator - the backend gate on all three endpoints. */
   canManage: boolean
   /**
-   * MODULO_PUBLIC_URL is configured well enough for the OAuth flow (FAR-1282).
+   * FARNA_CONTROL_PUBLIC_URL is configured well enough for the OAuth flow (FAR-1282).
    * Derived ONCE by the owning view from the MCP status URL and passed down,
    * so this card never re-derives it. When false the server-side guard in
    * `api/routes/mcp_oauth.py` would reject the register call with a 500, so
@@ -554,7 +554,7 @@ function toggleOauthScope(scope: string) {
 }
 
 function openRegisterOauthDialog() {
-  // FAR-1282: the button is disabled when MODULO_PUBLIC_URL is missing, but
+  // FAR-1282: the button is disabled when FARNA_CONTROL_PUBLIC_URL is missing, but
   // this guard keeps the invariant true for any other entry point (keyboard,
   // a future caller) rather than relying on the disabled attribute alone.
   if (!props.publicUrlConfigured) return

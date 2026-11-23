@@ -68,7 +68,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="testpass",
+        admin_password="testpass",
     )
 
 
@@ -1062,7 +1062,7 @@ async def test_test_polling_condition_real_autobegin_false_session_returns_poll_
             with (
                 patch(
                     "farna.settings.get_settings",
-                    return_value=MagicMock(fernet_key="b" * 44, redis_url="", modulo_db="sqlite"),
+                    return_value=MagicMock(fernet_key="b" * 44, redis_url="", db="sqlite"),
                 ),
                 patch(
                     "farna.core.secrets_backend.create_secrets_backend",

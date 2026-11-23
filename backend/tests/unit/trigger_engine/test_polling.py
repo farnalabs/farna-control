@@ -192,7 +192,7 @@ def mock_settings():
         settings = MagicMock()
         settings.database_url = "postgresql+asyncpg://localhost/test"
         settings.fernet_key = _VALID_32
-        settings.modulo_secrets_backend = "fernet"
+        settings.secrets_backend = "fernet"
         mock.return_value = settings
         yield mock
 

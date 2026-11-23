@@ -21,7 +21,7 @@ from farna.core.rate_limiter import RateLimiterRegistry
 
 class TestCreateRegistry:
     def test_sqlite_disables_rate_limiting(self):
-        registry = _create_registry(make_settings(modulo_db="sqlite"))
+        registry = _create_registry(make_settings(db="sqlite"))
         assert isinstance(registry, _NoopRateLimiter)
         assert rl_mod.redis_available is False
 

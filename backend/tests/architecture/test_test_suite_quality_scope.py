@@ -1,4 +1,4 @@
-"""Tests for the MODULO_TEST_STYLE_SCOPE opt-in scanning behaviour.
+"""Tests for the FARNA_CONTROL_TEST_STYLE_SCOPE opt-in scanning behaviour.
 
 Verifies that ``_iter_test_modules()`` honours the env var and that
 ``_resolve_scope_paths()`` correctly resolves, caches, and filters paths; that
@@ -206,7 +206,7 @@ class TestDeadFixtureLensUnderScope:
     never drives ``test_no_dead_fixtures`` itself — so a regression in the
     wiring between those helpers and the lens (e.g. feeding the used-name set
     the scoped files only, the original bug) would slip past it. This class
-    exercises the real lens end-to-end under ``MODULO_TEST_STYLE_SCOPE``.
+    exercises the real lens end-to-end under ``FARNA_CONTROL_TEST_STYLE_SCOPE``.
 
     Regression: scoping the scan to a changed ``bdd/conftest.py`` flagged its
     live ``unauth_client`` fixture as dead, because the lens built its "used"
@@ -272,7 +272,7 @@ class TestBaselineStalenessUnderScope:
     """The stale-baseline ratchet must only judge modules the scoped scan
     actually visited.
 
-    Regression: the ``--changed-files`` wrapper sets ``MODULO_TEST_STYLE_SCOPE``
+    Regression: the ``--changed-files`` wrapper sets ``FARNA_CONTROL_TEST_STYLE_SCOPE``
     to the changed test files, and every baseline entry lives in a BDD step
     module — so a scoped run whose changed set excluded those steps read the
     whole baseline as "no longer violating" and failed with phantom stale

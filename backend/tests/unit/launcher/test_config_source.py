@@ -348,7 +348,7 @@ def test_source_system_database_url_environment_wins_over_composed(monkeypatch: 
     monkeypatch.delenv("REDIS_URL", raising=False)
     monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "postgresql://user:pass@host:5432/modulo")
     resolved = LauncherConfigSource(data_dir)()
-    assert "modulo_system_database_url" not in resolved  # the operator's env wins
+    assert "system_database_url" not in resolved  # the operator's env wins
     assert resolved["database_url"] == "postgresql+asyncpg://farna_control_app:pg-pw@127.0.0.1:15432/farna_control"
     assert resolved["redis_url"] == "redis://:redis-pw@127.0.0.1:16379/0"
 
@@ -366,7 +366,7 @@ def test_source_derives_system_url_from_the_operators_database_url(clean_launche
     monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     resolved = LauncherConfigSource(data_dir)()
     assert "database_url" not in resolved
-    system = resolved.get("modulo_system_database_url", "")
+    system = resolved.get("system_database_url", "")
     expected_prefixes = (
         "postgresql://farna_control_system:op-pass@db.example.com:5432/modulo",
         "postgresql+asyncpg://farna_control_system:op-pass@db.example.com:5432/modulo",
@@ -374,7 +374,7 @@ def test_source_derives_system_url_from_the_operators_database_url(clean_launche
     assert system.startswith(expected_prefixes)
     assert "127.0.0.1" not in system
     assert "pg-pw" not in system
-    assert "modulo_system_database_url" in resolved
+    assert "system_database_url" in resolved
     assert "farna_control_system_database_url" not in resolved
 
 
@@ -396,7 +396,7 @@ def test_source_skips_empty_composed_values(clean_launcher_env, monkeypatch: pyt
     De-stubbed (review finding): the composition with a NO-PASSWORD URL is
     the case that caused the regression — ``compose_config`` returns a
     real dict whose ``FARNA_CONTROL_SYSTEM_DATABASE_URL`` is present-but-blank —
-    and the source must omit it, never write ``modulo_system_database_url=''``.
+    and the source must omit it, never write ``system_database_url=''``.
     """
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -410,7 +410,7 @@ def test_source_skips_empty_composed_values(clean_launcher_env, monkeypatch: pyt
     composed = compose_config(_state(), password_free)
     assert not composed["FARNA_CONTROL_SYSTEM_DATABASE_URL"]  # blank key IS present in the composition
     resolved = LauncherConfigSource(data_dir)()
-    assert "modulo_system_database_url" not in resolved  # blank value omitted, not injected
+    assert "system_database_url" not in resolved  # blank value omitted, not injected
     assert resolved  # the non-blank composed values are still injected
     assert all(resolved.values())
 

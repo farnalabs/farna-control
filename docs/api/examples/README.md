@@ -5,7 +5,7 @@ Standalone, copy-paste runnable code examples in **Python** (`httpx`), **curl**,
 ## Prerequisites
 
 - A running Farna Control instance (default: `http://localhost:8000`)
-- An active user account (`MODULO_EMAIL` / `MODULO_PASSWORD`)
+- An active user account (`FARNA_CONTROL_EMAIL` / `FARNA_CONTROL_PASSWORD`)
 - Python 3 with `httpx` for the Python examples, Node.js for the JavaScript
   examples, and `bash` plus `jq` for the curl examples (the shell scripts use
   `jq` to parse responses)
@@ -18,7 +18,7 @@ cookie. The refresh token never appears in a response body (FAR-1197).
 `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout` read that cookie,
 not a request body, and are additionally guarded by a double-submit CSRF
 check: the `XSRF-TOKEN` cookie must be echoed in an `X-CSRF-Token` header,
-or the request fails with 403 (`modulo_csrf_enabled`, default on). Every
+or the request fails with 403 (`csrf_enabled`, default on). Every
 authenticated call carries `Authorization: Bearer <access_token>`.
 
 Login and refresh both set fresh `modulo_session`, `modulo_refresh`, and
@@ -34,9 +34,9 @@ which a client should surface to the user.
 ## Quick Start
 
 ```bash
-export MODULO_URL=http://localhost:8000
-export MODULO_EMAIL=admin@example.com
-export MODULO_PASSWORD=changeme
+export FARNA_CONTROL_URL=http://localhost:8000
+export FARNA_CONTROL_EMAIL=admin@example.com
+export FARNA_CONTROL_PASSWORD=changeme
 
 # Python examples
 pip install httpx
@@ -114,11 +114,11 @@ bash library/curl.sh
 
 | Variable | Default | Description |
 |---|---|---|
-| `MODULO_URL` | `http://localhost:8000` | Base URL of the Farna Control API server |
-| `MODULO_EMAIL` | _(required)_ | Email for authentication |
-| `MODULO_PASSWORD` | _(required)_ | Password for authentication |
-| `MODULO_POLL_INTERVAL` | `2` | Seconds between run status polls (`full-workflow.py`) |
-| `MODULO_MAX_POLLS` | `30` | Maximum poll attempts (`full-workflow.py`) |
+| `FARNA_CONTROL_URL` | `http://localhost:8000` | Base URL of the Farna Control API server |
+| `FARNA_CONTROL_EMAIL` | _(required)_ | Email for authentication |
+| `FARNA_CONTROL_PASSWORD` | _(required)_ | Password for authentication |
+| `FARNA_CONTROL_POLL_INTERVAL` | `2` | Seconds between run status polls (`full-workflow.py`) |
+| `FARNA_CONTROL_MAX_POLLS` | `30` | Maximum poll attempts (`full-workflow.py`) |
 
 ## API Endpoints Used
 

@@ -53,7 +53,7 @@ def _settings_values() -> dict[str, Any]:
         "database_url": "postgresql+asyncpg://localhost/test",
         "secret_key": "a" * 32,
         "fernet_key": "a" * 32,
-        "modulo_admin_password": "test",
+        "admin_password": "test",
         "redis_url": "",
     }
 
@@ -63,17 +63,17 @@ def _settings_values() -> dict[str, Any]:
 # field and every request answers ``422 query.overrides: Field required``.
 def _make_settings() -> Settings:
     """A Settings instance with a pinned public URL."""
-    return Settings(**_settings_values(), modulo_public_url=_PUBLIC)
+    return Settings(**_settings_values(), public_url=_PUBLIC)
 
 
 def _make_settings_without_public_url() -> Settings:
     """A Settings instance with an EMPTY public URL."""
-    return Settings(**_settings_values(), modulo_public_url="")
+    return Settings(**_settings_values(), public_url="")
 
 
 def _make_settings_localhost_default() -> Settings:
     """A Settings instance left at the ``http://localhost:8000`` placeholder default."""
-    return Settings(**_settings_values(), modulo_public_url="http://localhost:8000")
+    return Settings(**_settings_values(), public_url="http://localhost:8000")
 
 
 def _content_type(resp: Any) -> str:
@@ -220,7 +220,7 @@ def test_discovery_fails_visible_when_public_url_is_unset(client: TestClient, pa
     app.dependency_overrides[get_settings] = _make_settings_without_public_url
     resp = client.get(path)
     assert resp.status_code == 500
-    assert resp.json()["detail"] == "MODULO_PUBLIC_URL must be configured"
+    assert resp.json()["detail"] == "FARNA_CONTROL_PUBLIC_URL must be configured"
 
 
 @pytest.mark.parametrize("path", [_AUTHORIZATION_SERVER_PATH, _PROTECTED_RESOURCE_PATH, _PROTECTED_RESOURCE_MCP_PATH])
@@ -234,7 +234,7 @@ def test_discovery_fails_visible_when_public_url_is_the_localhost_default(client
     app.dependency_overrides[get_settings] = _make_settings_localhost_default
     resp = client.get(path)
     assert resp.status_code == 500
-    assert resp.json()["detail"] == "MODULO_PUBLIC_URL must be configured"
+    assert resp.json()["detail"] == "FARNA_CONTROL_PUBLIC_URL must be configured"
 
 
 def test_challenge_falls_back_to_request_origin_when_public_url_unset(client: TestClient) -> None:

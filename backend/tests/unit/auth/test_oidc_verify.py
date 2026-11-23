@@ -777,7 +777,7 @@ class TestOidcCallbackIntegration:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "testprovider",
@@ -839,7 +839,7 @@ class TestOidcCallbackIntegration:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "testprovider",
@@ -891,7 +891,7 @@ class TestOidcCallbackIntegration:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "testprovider",
@@ -933,7 +933,7 @@ class TestOidcCallbackIntegration:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "testprovider",
@@ -978,7 +978,7 @@ class TestOidcCallbackIntegration:
             database_url="postgresql+asyncpg://localhost/test",
             secret_key="a" * 32,
             fernet_key="a" * 32,
-            modulo_oidc_providers=json.dumps(
+            oidc_providers=json.dumps(
                 [
                     {
                         "provider_id": "testprovider",

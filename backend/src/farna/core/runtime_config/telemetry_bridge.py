@@ -55,7 +55,7 @@ def is_telemetry_enabled() -> bool:
     # torn down for test isolation.
     from farna.settings import get_settings
 
-    return get_settings().modulo_telemetry_enabled
+    return get_settings().telemetry_enabled
 
 
 def toggle_telemetry(enabled: bool) -> None:
@@ -78,6 +78,6 @@ def toggle_telemetry(enabled: bool) -> None:
 
     settings = get_settings()
     setup_otel(
-        service_name=settings.modulo_otel_service_name,
+        service_name=settings.otel_service_name,
         telemetry_enabled=enabled,
     )

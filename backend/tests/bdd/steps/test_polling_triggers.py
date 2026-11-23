@@ -254,7 +254,7 @@ def _fire_polling_trigger(ctx: dict[str, Any]) -> dict[str, Any]:
         mock_settings.return_value = MagicMock(
             database_url="postgresql+asyncpg://localhost/test",
             fernet_key="a" * 32,
-            modulo_secrets_backend="fernet",
+            secrets_backend="fernet",
         )
         backend = AsyncMock()
         backend.get_secret.return_value = '{"token": "test-token"}'

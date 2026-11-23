@@ -9,9 +9,9 @@ Demonstrates:
   - Delete pipeline
 
 Usage:
-  export MODULO_URL=http://localhost:8000
-  export MODULO_EMAIL=admin@example.com
-  export MODULO_PASSWORD=changeme
+  export FARNA_CONTROL_URL=http://localhost:8000
+  export FARNA_CONTROL_EMAIL=admin@example.com
+  export FARNA_CONTROL_PASSWORD=changeme
   python pipelines/python.py
 """
 
@@ -20,9 +20,9 @@ import sys
 
 import httpx
 
-BASE_URL = os.getenv("MODULO_URL", "http://localhost:8000").rstrip("/")
-EMAIL = os.getenv("MODULO_EMAIL")
-PASSWORD = os.getenv("MODULO_PASSWORD")
+BASE_URL = os.getenv("FARNA_CONTROL_URL", "http://localhost:8000").rstrip("/")
+EMAIL = os.getenv("FARNA_CONTROL_EMAIL")
+PASSWORD = os.getenv("FARNA_CONTROL_PASSWORD")
 
 
 def bail(msg: str):
@@ -45,7 +45,7 @@ def login(client: httpx.Client) -> str:
 
 def main():
     if not EMAIL or not PASSWORD:
-        bail("MODULO_EMAIL and MODULO_PASSWORD must be set")
+        bail("FARNA_CONTROL_EMAIL and FARNA_CONTROL_PASSWORD must be set")
 
     client = httpx.Client(base_url=BASE_URL, timeout=30)
     token = login(client)

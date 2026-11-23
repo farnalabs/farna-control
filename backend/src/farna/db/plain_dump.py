@@ -319,15 +319,6 @@ def _open_private(path: Path) -> BinaryIO:
     return os.fdopen(handle_fd, "wb")
 
 
-def _pg_child_env(password: str | None) -> dict[str, str]:
-    """Child-scoped env for pg_dump: the password ONLY as PGPASSWORD."""
-    env = dict(os.environ)
-    env.pop("PGPASSWORD", None)
-    if password is not None:
-        env["PGPASSWORD"] = password
-    return env
-
-
 def dump_plain_sql(
     db_url: str,
     output: Path,
@@ -343,7 +334,7 @@ def dump_plain_sql(
     scheme and stripped of its password (it goes to the child as ``PGPASSWORD``
     only), so a SQLAlchemy ``postgresql+asyncpg://`` URL works here too.
     """
-    from farna.db.url_utils import normalise_libpq_url, split_postgres_credentials
+    from farna.db.url_utils import normalise_libpq_url, pg_child_env, split_postgres_credentials
 
     executable = resolve_pg_dump(pg_dump)
     dsn, password = split_postgres_credentials(normalise_libpq_url(db_url))
@@ -351,13 +342,13 @@ def dump_plain_sql(
     fd = os.open(str(output), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _PRIVATE_MODE)
     try:
         with os.fdopen(fd, "wb") as out:
-            completed = subprocess.run(  # nosec B603 — pinned argv, trusted synthesized input  # noqa: S603
+            completed = subprocess.run(  # nosec B603 — pinned argv, trusted synthesized input  # noqa: S603  # NOSONAR S8705 — argv[0] is resolve_pg_dump()'s validated path, the flags are literals, and dsn comes from the operator's own DATABASE_URL; the executable is a trusted path from this binary, never an untrusted caller-supplied CLI argument, and there is no shell
                 argv,
                 stdout=out,
                 stderr=subprocess.PIPE,
                 check=False,
                 timeout=timeout_seconds,
-                env=_pg_child_env(password),
+                env=pg_child_env(password),
             )
     except subprocess.TimeoutExpired as exc:
         raise DumpError(f"pg_dump timed out after {timeout_seconds}s") from exc

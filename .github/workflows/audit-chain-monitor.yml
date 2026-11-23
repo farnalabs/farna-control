@@ -54,7 +54,7 @@ jobs:
       # live-tested against control.farna.dev. The monitor therefore logs in with
       # the prod admin credentials (POST /api/v1/auth/login; body field is
       # `email`, NOT `username` - a `username` body returns HTTP 422) and
-      # carries the returned JWT access token as MODULO_TOKEN. The token is
+      # carries the returned JWT access token as FARNA_CONTROL_TOKEN. The token is
       # masked before it reaches $GITHUB_ENV so it never appears in logs.
       #
       # Fail-open on missing credentials (the repo's monitor convention):
@@ -101,7 +101,7 @@ jobs:
           fi
 
           echo "::add-mask::$TOKEN"
-          echo "MODULO_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "FARNA_CONTROL_TOKEN=$TOKEN" >> "$GITHUB_ENV"
           echo "authenticated=true" >> "$GITHUB_OUTPUT"
           echo "admin login OK - JWT access token acquired for the audit-chain checks"
 
@@ -109,7 +109,7 @@ jobs:
       # Endpoint verified: backend/src/farna/api/routes/audit.py:32
       # (router prefix "/api/v1/admin/audit") + :146 (GET "/verify").
       #
-      # Auth: `Authorization: Bearer ${MODULO_TOKEN}` - the admin JWT from the
+      # Auth: `Authorization: Bearer ${FARNA_CONTROL_TOKEN}` - the admin JWT from the
       # Authenticate step above (FAR-1468). An API key can never satisfy
       # audit.manage (admin-only), so the old smoke-test API-key path was
       # removed.
@@ -130,8 +130,8 @@ jobs:
         run: |
           # Fail-open: no token means the Authenticate step was skipped for
           # want of a credential - warn and exit 0, exactly as before.
-          if [ -z "$MODULO_TOKEN" ]; then
-            echo "::warning::MODULO_TOKEN not available (admin login skipped) - skipping audit-chain integrity check (FAR-1468)."
+          if [ -z "$FARNA_CONTROL_TOKEN" ]; then
+            echo "::warning::FARNA_CONTROL_TOKEN not available (admin login skipped) - skipping audit-chain integrity check (FAR-1468)."
             exit 0
           fi
 
@@ -144,7 +144,7 @@ jobs:
           HTTP_CODE="000"
           for i in 1 2 3; do
             HTTP_CODE=$(curl -sS -m 20 -o "$BODY_FILE" -w "%{http_code}" \
-              -H "Authorization: Bearer ${MODULO_TOKEN}" \
+              -H "Authorization: Bearer ${FARNA_CONTROL_TOKEN}" \
               "https://control.farna.dev/api/v1/admin/audit/verify" 2>/dev/null) || HTTP_CODE="000"
             if [ "$HTTP_CODE" = "200" ]; then
               OK=true
@@ -244,8 +244,8 @@ jobs:
         if: success() || failure()
         shell: bash
         run: |
-          if [ -z "$MODULO_TOKEN" ]; then
-            echo "::warning::MODULO_TOKEN not available (admin login skipped) - skipping audit-chain continuity check (FAR-1468)."
+          if [ -z "$FARNA_CONTROL_TOKEN" ]; then
+            echo "::warning::FARNA_CONTROL_TOKEN not available (admin login skipped) - skipping audit-chain continuity check (FAR-1468)."
             exit 0
           fi
 
@@ -255,7 +255,7 @@ jobs:
           HTTP_CODE="000"
           for i in 1 2 3; do
             HTTP_CODE=$(curl -sS -m 20 -o "$BODY_FILE" -w "%{http_code}" \
-              -H "Authorization: Bearer ${MODULO_TOKEN}" \
+              -H "Authorization: Bearer ${FARNA_CONTROL_TOKEN}" \
               "https://control.farna.dev/api/v1/admin/audit?limit=1" 2>/dev/null) || HTTP_CODE="000"
             if [ "$HTTP_CODE" = "200" ]; then
               OK=true

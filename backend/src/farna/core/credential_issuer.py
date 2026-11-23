@@ -23,7 +23,7 @@ attestation kinds — every other value, ``observed`` included, is rejected at
 construction so a forbidden/unlisted value cannot enter the run metadata.
 
 The provenance is stamped where the run actually reads its credential — the
-``MODULO_CREDENTIAL_PROVENANCE`` sandbox env var (kept unspoofable by the
+``FARNA_CONTROL_CREDENTIAL_PROVENANCE`` sandbox env var (kept unspoofable by the
 reserved-env-var denylist) — in addition to riding on the returned credential
 handle.
 
@@ -67,7 +67,7 @@ PROVENANCE_KIND_DECLARED = "declared"
 PROVENANCE_KINDS: frozenset[str] = frozenset({PROVENANCE_KIND_ATTESTED, PROVENANCE_KIND_DECLARED})
 
 # The sandbox env var the run reads its issuance provenance from. Reserved via
-# ``db.runner_binding_constraints.RESERVED_ENV_VAR_PREFIXES`` (``MODULO_``) and
+# ``db.runner_binding_constraints.RESERVED_ENV_VAR_PREFIXES`` (``FARNA_CONTROL_``) and
 # the exact-name denylist, so a node's ``env_vars``/binding cannot spoof it.
 RUN_CREDENTIAL_PROVENANCE_ENV = "FARNA_CONTROL_CREDENTIAL_PROVENANCE"
 

@@ -59,9 +59,9 @@ def _make_settings(**overrides: object) -> Settings:
         "secret_key": _VALID_32,
         "fernet_key": _FERNET_KEY,
         "fernet_key_old": "",
-        "modulo_admin_password": "testpass",
+        "admin_password": "testpass",
         "redis_url": "redis://localhost:6379/0",
-        "modulo_public_url": "http://localhost:8000",
+        "public_url": "http://localhost:8000",
         "watchdog_enabled": False,
     }
     values.update(overrides)
@@ -269,17 +269,17 @@ async def test_main_users_wrapper_resolves_factory_and_delegates(monkeypatch: py
 
     called: dict[str, Any] = {}
 
-    async def _fake_seeder(factory: Any, modulo_users: str) -> None:
+    async def _fake_seeder(factory: Any, users: str) -> None:
         called["factory"] = factory
-        called["modulo_users"] = modulo_users
+        called["users"] = users
 
     monkeypatch.setattr(main_module, "seed_modulo_users", _fake_seeder)
     session = _mock_session()
     factory = _patch_db_seams(monkeypatch, session)
-    settings = _make_settings(modulo_users="x:y")
+    settings = _make_settings(users="x:y")
     await main_module._seed_modulo_users(settings)
     assert called["factory"] is factory
-    assert called["modulo_users"] == "x:y"
+    assert called["users"] == "x:y"
 
 
 @pytest.mark.anyio
@@ -293,7 +293,7 @@ async def test_main_users_wrapper_skips_empty_users_without_seams(
         raise AssertionError("seeder must not run for an empty FARNA_CONTROL_USERS")
 
     monkeypatch.setattr(main_module, "seed_modulo_users", _fail)
-    settings = _make_settings(modulo_users="")
+    settings = _make_settings(users="")
     await main_module._seed_modulo_users(settings)
 
 

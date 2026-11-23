@@ -780,7 +780,7 @@ class TestCheckInstanceSwitch:
     These tests exercise the REAL shared helper (only its ``get_config`` DB seam
     and the licence read are patched) so they pin the semantics the dump gate
     inherits: fail-closed bool/string coercion — the stored string ``"false"``
-    must NOT read as enabled — the ``MODULO_PRODUCT_ANALYTICS_ENABLED`` env
+    must NOT read as enabled — the ``FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED`` env
     fallback, and the licence-derived default.
     """
 

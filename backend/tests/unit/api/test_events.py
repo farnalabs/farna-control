@@ -30,7 +30,7 @@ def _make_settings() -> Settings:
         database_url="postgresql+asyncpg://localhost/test",
         secret_key="a" * 32,
         fernet_key="a" * 32,
-        modulo_admin_password="test",
+        admin_password="test",
         redis_url="",
     )
 
@@ -318,7 +318,7 @@ class TestSSERoute:
         principal = _make_principal()
         org_id = str(principal.organisation_id)
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_max_connections_per_org = 0  # force 429
+        mock_settings.sse_max_connections_per_org = 0  # force 429
         mock_request = AsyncMock()
         mock_request.is_disconnected = AsyncMock(return_value=False)
 
@@ -341,8 +341,8 @@ class TestSSERoute:
 
         principal = _make_principal()
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_max_connections_per_org = 10
-        mock_settings.modulo_sse_max_connections_per_user = 10
+        mock_settings.sse_max_connections_per_org = 10
+        mock_settings.sse_max_connections_per_user = 10
         mock_request = AsyncMock()
         mock_request.is_disconnected = AsyncMock(return_value=True)  # disconnect immediately
 
@@ -363,7 +363,7 @@ class TestSSERoute:
 
         principal = _make_principal()
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_zombie_timeout_seconds = 0.1  # very short
+        mock_settings.sse_zombie_timeout_seconds = 0.1  # very short
         mock_request = AsyncMock()
         # Return True on first call (enter loop), then False (exit loop)
         disconnect_calls = [False, True]
@@ -392,7 +392,7 @@ class TestSSERoute:
         principal = _make_principal()
         org_id = str(principal.organisation_id)
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_zombie_timeout_seconds = 5.0
+        mock_settings.sse_zombie_timeout_seconds = 5.0
         mock_request = AsyncMock()
 
         # Subscribe first so we can publish, then disconnect
@@ -433,7 +433,7 @@ class TestSSERoute:
         principal = _make_principal()
         org_id = str(principal.organisation_id)
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_zombie_timeout_seconds = 5.0
+        mock_settings.sse_zombie_timeout_seconds = 5.0
         mock_request = AsyncMock()
 
         # is_disconnected returns True immediately to exit the loop
@@ -462,7 +462,7 @@ class TestSSERoute:
         principal = _make_principal()
         org_id = str(principal.organisation_id)
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_zombie_timeout_seconds = 5.0
+        mock_settings.sse_zombie_timeout_seconds = 5.0
         mock_request = AsyncMock()
 
         call_count = 0
@@ -501,8 +501,8 @@ class TestSSERoute:
         principal = _make_principal()
         org_id = str(principal.organisation_id)
         mock_settings = _make_settings()
-        mock_settings.modulo_sse_max_connections_per_org = 100
-        mock_settings.modulo_sse_max_connections_per_user = 0  # force 429
+        mock_settings.sse_max_connections_per_org = 100
+        mock_settings.sse_max_connections_per_user = 0  # force 429
         mock_request = AsyncMock()
         mock_request.is_disconnected = AsyncMock(return_value=False)
 
@@ -609,9 +609,9 @@ async def _run_sse_with_relay(monkeypatch: pytest.MonkeyPatch, fake_relay: Magic
     monkeypatch.setattr(ev, "_ensure_relay", AsyncMock(return_value=fake_relay))
     principal = _make_principal()
     settings = _make_settings()
-    settings.modulo_sse_zombie_timeout_seconds = 5.0
-    settings.modulo_sse_max_connections_per_org = 10
-    settings.modulo_sse_max_connections_per_user = 10
+    settings.sse_zombie_timeout_seconds = 5.0
+    settings.sse_max_connections_per_org = 10
+    settings.sse_max_connections_per_user = 10
     request = AsyncMock()
     request.is_disconnected = AsyncMock(return_value=True)
     return await ev.sse_event_stream(request=request, settings=settings, principal=principal)
