@@ -81,13 +81,17 @@ per-organisation `system_maps` feature flag (resolved with the organisation's
 the operator/admin role and `system_maps_access` grant. Those two classes are
 API gates. The UI is release-gated separately (FAR-2638): System Maps ships at
 Beta, so both `/system-maps` and `/system-maps/:id` are `private_preview`
-routes in the product manifest and the surface (sidebar entry, router and the
-dashboard System Overview card) is visible only when developer mode is enabled
-and never in a demo session. The backend authoring predicate still does not
-require developer mode (FAR-2595), so the API stays callable without dev mode;
-the flag remains OFF until an org admin (or system admin) enables it. Both
-classes are registered in the manifest `features:` registry as
-`feat-system-maps`. MCP discovery applies the same authoring predicate
+routes in the product manifest, so the surface is reachable only when developer
+mode is enabled. The demo gate is enforced at the entry points that consult the
+demo flag: the sidebar entry and the dashboard System Overview card are hidden
+even when developer mode is on. The router guard
+(`enforceRoleTierVisibility`) checks developer mode only (it does not consult
+the demo flag), so a demo session on a dev-mode instance can still reach
+`/system-maps` and `/system-maps/:id` by direct URL. The backend authoring
+predicate still does not require developer mode (FAR-2595), so the API stays
+callable without dev mode; the flag remains OFF until an org admin (or system
+admin) enables it. Both classes are registered in the manifest `features:`
+registry as `feat-system-maps`. MCP discovery applies the same authoring predicate
 (operator/admin role + `system_maps_access` grant, no developer mode) as the
 REST gate (FAR-2595).
 
@@ -171,9 +175,12 @@ point in time.
       `test_system_maps_routes.py`, `test_permissions.py`,
       `test_feature_flag_registry.py`). The published-read API needs no
       developer mode and no elevated role: the seeded demo viewer reaches it
-      through the same permission, while writes still 403. The UI is not
-      reachable in a demo session until Beta, because a `private_preview` route
-      is hidden from demo sessions even when developer mode is on (FAR-2638)
+      through the same permission, while writes still 403. The sidebar entry
+      and the dashboard System Overview card are hidden in a demo session until
+      Beta even when developer mode is on (FAR-2638, FAR-535). The route itself
+      is `private_preview`, so it needs developer mode, but the router guard
+      does not additionally consult the demo flag: a demo session on a
+      dev-mode instance can still open `/system-maps` by direct URL until Beta
 - [x] The permission vocabulary is registered and enforced on every shipped
       route: `system_maps_access` is operator; `system_map.list`,
       `system_map.revision.get`, `system_map.revision.diff` and
