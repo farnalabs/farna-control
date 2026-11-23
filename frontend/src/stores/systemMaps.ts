@@ -101,7 +101,9 @@ export function isReleaseGatedVisibility(
  * through `toNavItem` → `isNavItemVisible`, the router through
  * `hydrateManifestMeta`). The store is not a component and cannot build the
  * sidebar's visibility context, so it reads the SAME manifest route entry and
- * applies the SAME rule — no parallel gate on a different signal.
+ * applies its own narrower gate: `private_preview` and `in_dev` both need
+ * developer mode, and the store also refuses a demo session for either (the
+ * sidebar refuses a demo session only for `private_preview`).
  */
 const systemMapsReleaseGated = isReleaseGatedVisibility(
   (manifest as {
@@ -165,10 +167,14 @@ export const useSystemMapsStore = defineStore('systemMaps', () => {
   )
   /**
    * FAR-2638: whether the manifest release gate permits System Maps surfaces
-   * for this caller. A `private_preview` / `in_dev` route needs developer mode
-   * and is never shown in a demo session — the exact rule `isNavItemVisible`
-   * applies, so a dashboard entry point (the System Overview card) cannot leak
-   * a surface the sidebar hides and the router bounces.
+   * for this caller. System Maps is `private_preview`, so today this matches
+   * what `isNavItemVisible` decides for it: developer mode on, and never a
+   * demo session. It is deliberately not the shared predicate: for an `in_dev`
+   * route the sidebar needs only developer mode and would show it to a demo
+   * session, whereas this store also hides it there. That difference cannot
+   * affect System Maps while its routes stay `private_preview`, and the
+   * stricter demo guard means a dashboard entry point never surfaces a preview
+   * in a demo session.
    */
   const systemMapsReleased = computed(
     () => !systemMapsReleaseGated || (planStore.devMode && !isDemoSession()),

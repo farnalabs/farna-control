@@ -73,17 +73,20 @@ unpublished draft graph from it, and lets an operator author, revise and
 publish that graph as a delivery System Map. Since FAR-2363 the surface has two
 access classes: every principal with the viewer-level `system_maps.read`
 permission can read the **published** maps, revisions, overview, history,
-by-time and diff views (routes `/system-maps` and `/system-maps/:id`, visible in
-the manifest as `public` and gated on `required_permissions:
-[system_maps.read]`), while authoring (discovery, create, update, delete,
-publish, archive, restore-as-new and apply) is a clearly-labelled Beta-preview
-surface behind the default-OFF, per-organisation `system_maps` feature flag
-(resolved with the organisation's `feature_overrides` applied, so an admin
-toggle really unlocks the API) plus the operator/admin role and
-`system_maps_access` grant. FAR-2595 removed the
-developer-mode requirement from that authoring gate so Alpha self-hosters can
-dogfood it; the flag remains OFF until an org admin (or system admin) enables
-it. Both classes are registered in the manifest `features:` registry as
+by-time and diff views (`required_permissions: [system_maps.read]`), while
+authoring (discovery, create, update, delete, publish, archive, restore-as-new
+and apply) is a clearly-labelled Beta-preview surface behind the default-OFF,
+per-organisation `system_maps` feature flag (resolved with the organisation's
+`feature_overrides` applied, so an admin toggle really unlocks the API) plus
+the operator/admin role and `system_maps_access` grant. Those two classes are
+API gates. The UI is release-gated separately (FAR-2638): System Maps ships at
+Beta, so both `/system-maps` and `/system-maps/:id` are `private_preview`
+routes in the product manifest and the surface (sidebar entry, router and the
+dashboard System Overview card) is visible only when developer mode is enabled
+and never in a demo session. The backend authoring predicate still does not
+require developer mode (FAR-2595), so the API stays callable without dev mode;
+the flag remains OFF until an org admin (or system admin) enables it. Both
+classes are registered in the manifest `features:` registry as
 `feat-system-maps`. MCP discovery applies the same authoring predicate
 (operator/admin role + `system_maps_access` grant, no developer mode) as the
 REST gate (FAR-2595).
@@ -96,7 +99,9 @@ The published-read routes sit on their own router
 a viewer. The authoring routes keep the operator gate: the operator role
 floor, the `system_maps_access` grant for grant-bearing API keys, and the
 `system_maps` feature flag, all resolved server-side on each request. Developer
-mode is deliberately NOT part of this gate (FAR-2595).
+mode is deliberately NOT part of this API gate (FAR-2595); the
+`private_preview` route visibility described above is a separate UI release
+gate, not an API one.
 Legacy JWTs and keys with no grant set keep the role-based behavior rather
 than being refused for the missing grant. Nothing publishes automatically.
 
@@ -164,9 +169,11 @@ point in time.
       (`auth/permissions.py`, `api/dependencies.py`, `api/routes/system_maps.py`,
       `core/feature_flags.py`, `api/main.py`;
       `test_system_maps_routes.py`, `test_permissions.py`,
-      `test_feature_flag_registry.py`). The demo path needs no developer mode
-      and no elevated role: the seeded demo viewer reaches the published read
-      model through the same permission, while writes still 403
+      `test_feature_flag_registry.py`). The published-read API needs no
+      developer mode and no elevated role: the seeded demo viewer reaches it
+      through the same permission, while writes still 403. The UI is not
+      reachable in a demo session until Beta, because a `private_preview` route
+      is hidden from demo sessions even when developer mode is on (FAR-2638)
 - [x] The permission vocabulary is registered and enforced on every shipped
       route: `system_maps_access` is operator; `system_map.list`,
       `system_map.revision.get`, `system_map.revision.diff` and
@@ -353,7 +360,10 @@ point in time.
       `SystemMapGraphEditor.spec.ts`)
 - [x] The dashboard card renders the real overview aggregate for the default
       (or first) published map, with loading, empty, error and retry states,
-      and only after the store access probe settles with the flag enabled
+      and only after the store access probe settles with the flag enabled AND
+      the manifest release gate permits the surface (`systemMapsReleased`:
+      `private_preview` needs developer mode and is never shown in a demo
+      session, FAR-2638)
       (`frontend/src/components/dashboard/DashboardSystemOverview.vue`,
       `frontend/src/views/DashboardView.vue`;
       `DashboardSystemOverview.spec.ts`, `systemMapsStore.spec.ts`)
