@@ -3146,27 +3146,24 @@ _RUNS_LIST_DEFERRED_COLUMNS: tuple[str, ...] = (
 
 def _runs_list_scope_filters(
     *,
-    organisation_id: uuid.UUID | None,
+    organisation_id: uuid.UUID,
     team_id: uuid.UUID | None,
     account_id: uuid.UUID | None,
 ) -> list[Any]:
     """Tenant / team boundary predicates shared by the runs list queries.
 
-    Defence-in-depth: when *organisation_id* is provided the predicate is added
-    so cross-tenant access is impossible even if RLS is misconfigured.
-
-    A team-scoped caller sees runs for its own team's pipelines plus org-level
-    pipelines (no owner team) — the same boundary the MCP guard applies. The
-    run's stamped owner is the source of truth; runs predating the create-time
-    stamp (NULL) fall back to the pipeline's owner so a NULL stamp can never
-    widen the boundary. Viewer reads are bounded by the account's team
+    The organisation predicate is ALWAYS applied (FAR-2689 made it
+    non-optional so cross-tenant access is impossible even if RLS is
+    misconfigured). A team-scoped caller sees runs for its own team's pipelines
+    plus org-level pipelines (no owner team) — the same boundary the MCP guard
+    applies. The run's stamped owner is the source of truth; runs predating the
+    create-time stamp (NULL) fall back to the pipeline's owner so a NULL stamp
+    can never widen the boundary. Viewer reads are bounded by the account's team
     memberships rather than a team-scoped credential boundary (``run.list`` is
     viewer-reachable), using the same effective owner so a NULL run stamp can
     never widen the boundary.
     """
-    clauses: list[Any] = []
-    if organisation_id is not None:
-        clauses.append(Run.organisation_id == organisation_id)
+    clauses: list[Any] = [Run.organisation_id == organisation_id]
     if team_id is not None:
         effective_owner = func.coalesce(Run.owner_team_id, Pipeline.owner_team_id)
         clauses.append(team_scope_clause(effective_owner, team_id))
@@ -3206,7 +3203,7 @@ def _runs_list_attribute_filters(
 async def list_runs(
     session: AsyncSession,
     *,
-    organisation_id: uuid.UUID | None = None,
+    organisation_id: uuid.UUID,
     pipeline_id: uuid.UUID | None = None,
     status: str | None = None,
     trigger_type: str | None = None,
@@ -3219,12 +3216,19 @@ async def list_runs(
     variant_group_id: uuid.UUID | None = None,
     batch_id: uuid.UUID | None = None,
 ) -> PageResult[Run]:
-    """List runs with optional org-scoped filtering.
+    """List runs for one organisation with optional attribute filtering.
 
-    Defence-in-depth: when *organisation_id* is provided, the query also
-    filters on ``organisation_id`` so cross-tenant access is impossible even
-    if RLS is misconfigured. ``variant_group_id`` and ``batch_id`` narrow to
-    a variant group's runs or a single fired batch (FAR-332 3e).
+    The organisation predicate is MANDATORY (FAR-2689, closing on this helper
+    the same class FAR-2684/FAR-2686 swept elsewhere): the query always filters
+    on ``organisation_id`` so cross-tenant reads are impossible even if RLS is
+    misconfigured. ``runs.organisation_id`` is NOT NULL and every row belongs to
+    exactly one org (there is no shared/sentinel org), so the clamp hides
+    nothing it should show. The parameter has no default deliberately — the
+    earlier optional shape let a future caller silently regress to an RLS-only
+    read.
+
+    ``variant_group_id`` and ``batch_id`` narrow to a variant group's runs or a
+    single fired batch (FAR-332 3e).
 
     Heavy payload columns (see ``_RUNS_LIST_DEFERRED_COLUMNS``) are deferred so
     a page SELECT never detoasts megabyte-scale JSONB the responses never read.

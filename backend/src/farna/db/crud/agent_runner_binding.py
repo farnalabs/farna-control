@@ -20,8 +20,26 @@ from farna.db.runner_binding_constraints import BindingValidationError, validate
 _log = logging.getLogger(__name__)
 
 
-async def list_bindings_for_agent(session: AsyncSession, agent_id: uuid.UUID) -> list[AgentRunnerBinding]:
-    result = await session.execute(select(AgentRunnerBinding).where(AgentRunnerBinding.agent_id == agent_id).order_by(AgentRunnerBinding.created_at.asc()))
+async def list_bindings_for_agent(session: AsyncSession, agent_id: uuid.UUID, *, org_id: uuid.UUID) -> list[AgentRunnerBinding]:
+    """Every binding row for *agent_id*, in creation order.
+
+    FAR-2689: the agent id alone is not an org boundary — carry an explicit
+    ``organisation_id`` predicate so a ``BYPASSRLS``/misconfigured-RLS session
+    cannot read another org's bindings for an agent id it guessed.
+    ``organisation_id`` is NOT NULL on ``agent_runner_bindings``, it is part of
+    the table's ``UNIQUE (organisation_id, agent_id, target_env_var)`` identity,
+    and :func:`replace_agent_bindings` writes the caller's org, so the clamp
+    hides nothing it should show. ``org_id`` is REQUIRED so a future caller
+    cannot fall back to the parent-id-only shape.
+    """
+    result = await session.execute(
+        select(AgentRunnerBinding)
+        .where(
+            AgentRunnerBinding.agent_id == agent_id,
+            AgentRunnerBinding.organisation_id == org_id,
+        )
+        .order_by(AgentRunnerBinding.created_at.asc())
+    )
     return list(result.scalars())
 
 
