@@ -28,14 +28,18 @@
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadCategories" />
 
     <template v-else>
-      <div v-if="editorMode === 'add'" class="card p-6">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.AdminNodeCategoriesView.new_node_category') }}</h2>
+      <DataCard
+        v-if="editorMode === 'add'"
+        heading-level="h2"
+        padding="lg"
+        :title="$t('views.AdminNodeCategoriesView.new_node_category')"
+      >
         <NodeCategoryEditor
           :category="null"
           @saved="onCategoryCreated"
           @cancelled="closeEditor"
         />
-      </div>
+      </DataCard>
 
       <div v-if="categories.length === 0 && editorMode === null" class="card p-8 text-center">
         <p class="text-lg font-medium">{{ $t('views.AdminNodeCategoriesView.no_node_categories_configured') }}</p>
@@ -90,14 +94,18 @@
         </table>
       </div>
 
-      <div v-if="editCategoryId" class="card p-6">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.AdminNodeCategoriesView.edit_node_category') }}</h2>
+      <DataCard
+        v-if="editCategoryId"
+        heading-level="h2"
+        padding="lg"
+        :title="$t('views.AdminNodeCategoriesView.edit_node_category')"
+      >
         <NodeCategoryEditor
           :category="editingCategory"
           @saved="onCategoryUpdated"
           @cancelled="closeEditor"
         />
-      </div>
+      </DataCard>
 
       <div v-if="deleteConfirmCategoryId" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
         <p class="text-sm font-medium text-destructive-text">{{ $t('views.AdminNodeCategoriesView.delete_confirm', { name: deleteConfirmName }) }}</p>
@@ -129,6 +137,7 @@ import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
 import { formatApiError } from '../lib/api/formatError'
 import NodeCategoryEditor from '../components/NodeCategoryEditor.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { usePlanStore } from '../stores/planStore'
