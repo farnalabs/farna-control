@@ -110,14 +110,14 @@ async def test_template_listing_filters_search_category_and_paginates(session: A
     )
     await session.flush()
 
-    result = await list_templates(session, page=1, page_size=1, category="review", search=" alpha ")
+    result = await list_templates(session, org_id=_ORG_A, page=1, page_size=1, category="review", search=" alpha ")
 
     assert result.total == 1
     assert len(result.items) == 1
     assert result.items[0].name == "Alpha review"
     assert result.has_more is False
 
-    all_templates = await list_templates(session, page=1, page_size=20, search="   ")
+    all_templates = await list_templates(session, org_id=_ORG_A, page=1, page_size=20, search="   ")
     assert all_templates.total == 2
 
     with pytest.MonkeyPatch.context() as monkeypatch:
@@ -127,7 +127,7 @@ async def test_template_listing_filters_search_category_and_paginates(session: A
             raise ProgrammingError("missing", {}, RuntimeError("missing"))
 
         monkeypatch.setattr(session, "execute", fail_execute)
-        fallback = await list_templates(session)
+        fallback = await list_templates(session, org_id=_ORG_A)
     assert fallback.total == 0
     assert not fallback.items
 

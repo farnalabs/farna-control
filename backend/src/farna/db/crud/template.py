@@ -16,12 +16,24 @@ TEMPLATE_TYPE = "pipeline_template"
 async def list_templates(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
     category: str | None = None,
     search: str | None = None,
 ) -> PageResult[LibraryPrimitive]:
-    conditions = [LibraryPrimitive.primitive_type == TEMPLATE_TYPE]
+    # FAR-2684: carry an explicit organisation predicate so the template list is
+    # never scoped by row-level security alone. ``organisation_id`` is NOT NULL
+    # on ``library_primitives`` and there are no null-org shared rows (the native
+    # built-ins live in the modulo sentinel org and are merged in memory by the
+    # library listing, not read here), so clamping to the caller's org hides
+    # nothing it should show and closes the BYPASSRLS / misconfigured-RLS hole.
+    # ``org_id`` is REQUIRED (no ``None`` default) so a future caller cannot
+    # silently fall back to the RLS-only shape.
+    conditions = [
+        LibraryPrimitive.primitive_type == TEMPLATE_TYPE,
+        LibraryPrimitive.organisation_id == org_id,
+    ]
     if category is not None:
         conditions.append(LibraryPrimitive.category == category)
     if search is not None and search.strip():

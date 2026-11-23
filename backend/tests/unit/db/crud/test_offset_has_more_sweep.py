@@ -298,7 +298,7 @@ async def _setup_templates(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_templates(session, page=page, page_size=page_size)
+    return lambda page, page_size: list_templates(session, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_team_members(session: AsyncSession) -> PageCall:
