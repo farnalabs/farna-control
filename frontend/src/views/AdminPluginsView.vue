@@ -17,7 +17,7 @@
         <EmptyState
           v-if="plugins.length === 0"
           :title="$t('views.AdminPluginsView.no_plugins_installed')"
-          description="Install plugins via pip to extend Farna Control with additional connectors and model backends."
+          :description="$t('views.AdminPluginsView.no_plugins_installed_description')"
         />
 
         <div v-else class="table-wrapper">

@@ -2019,6 +2019,7 @@ export default {
       "last_checked": "Last Checked",
       "expand_details": "Expand details",
       "no_plugins_installed": "No plugins installed",
+      "no_plugins_installed_description": "Install plugins via pip to extend Farna Control with additional connectors and model backends.",
       "health_detail": "Health Detail",
       "plugin_id": "Plugin ID",
       "enable_plugin": "Enable plugin",

@@ -8,7 +8,7 @@
     <BaseCard
       variant="bordered"
       padding="md"
-      :class="`card-hover ${props.class ?? ''}`"
+      :class="`${to ? 'card-hover' : ''} ${props.class ?? ''}`"
     >
       <div class="flex items-center gap-3">
         <div

@@ -1,6 +1,5 @@
 <template>
   <DataCard
-    pressable
     padding="lg"
     class="flex flex-col"
     :data-testid="`library-item-${prim.id}`"

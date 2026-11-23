@@ -58,6 +58,7 @@
 
           <EmptyState
             v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0"
+            variant="bare"
             :title="$t('views.CopyPipelineWizard.no_pipelines_available')"
             :description="$t('views.CopyPipelineWizard.create_one_from_the_library_first')"
           />
