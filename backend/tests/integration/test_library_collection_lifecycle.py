@@ -25,7 +25,7 @@ from farna.api.routes.library import (
     get_collection_install_endpoint,
 )
 from farna.auth.jwt import TenantPrincipal
-from farna.core.library_service._seed_data import MODULO_ORG_ID
+from farna.core.library_service._seed_data import BUILTIN_ORG_ID
 from farna.core.library_service.grant import grant_collection_agents
 from farna.core.library_service.install import CollectionInstallError, install_collection
 from farna.core.library_service.runnability import _org_has_model_backend, compute_runnable
@@ -827,7 +827,7 @@ async def test_grant_registry_collection_agents(
 
 
 # ---------------------------------------------------------------------------
-# Test 5: Install a SHIPPED modulo collection (ADR 032 - prove the fix)
+# Test 5: Install a SHIPPED built-in collection (ADR 032 - prove the fix)
 # ---------------------------------------------------------------------------
 
 
@@ -841,15 +841,15 @@ async def test_install_shipped_github_pr_reviewer_collection(
     """Install the shipped in-code github-pr-reviewer collection (ADR 032 §4).
 
     Nothing is pre-seeded in this org's RLS slice for the collection or its
-    pins — they come from the library_service resolver (in-code modulo
+    pins — they come from the library_service resolver (in-code built-in
     registry). Asserts the full round trip: schema + agents (standalone +
     template) + pipeline materialised, provenance stamped, the installed
     agent's output schema round-trips to the installed schema entity, and
     the connector checklist carries the github connector requirement.
     """
-    from farna.core.library_service._seed_data import _MODULO_PRIMITIVES
+    from farna.core.library_service._seed_data import _BUILTIN_PRIMITIVES
 
-    collection = next(p for p in _MODULO_PRIMITIVES if p.slug == "github-pr-reviewer")
+    collection = next(p for p in _BUILTIN_PRIMITIVES if p.slug == "github-pr-reviewer")
 
     install = await install_collection(db_session, org, user, collection.id)
     await db_session.commit()
@@ -945,9 +945,9 @@ async def test_shipped_install_persists_only_collection_row_under_sentinel_rls(
     5. A second install in the same org is refused ("already installed") and
        does not duplicate the sentinel row.
     """
-    from farna.core.library_service._seed_data import _MODULO_PRIMITIVES
+    from farna.core.library_service._seed_data import _BUILTIN_PRIMITIVES
 
-    collection = next(p for p in _MODULO_PRIMITIVES if p.slug == "github-pr-reviewer")
+    collection = next(p for p in _BUILTIN_PRIMITIVES if p.slug == "github-pr-reviewer")
 
     install = await install_collection(db_session, org, user, collection.id)
     await db_session.commit()
@@ -956,7 +956,7 @@ async def test_shipped_install_persists_only_collection_row_under_sentinel_rls(
     async with db_engine.connect() as conn:
         rows = await conn.execute(
             text("SELECT id, organisation_id, source, slug, version FROM library_primitives WHERE organisation_id = :oid"),
-            {"oid": str(MODULO_ORG_ID)},
+            {"oid": str(BUILTIN_ORG_ID)},
         )
         sentinel_rows = rows.all()
     assert len(sentinel_rows) == 1
@@ -971,14 +971,14 @@ async def test_shipped_install_persists_only_collection_row_under_sentinel_rls(
     async with app_factory() as app_session:
         await app_session.execute(text("SELECT 1"))  # begin the RLS-scoped transaction
         await set_rls_org(app_session, org)
-        sentinel_org = await app_session.get(Organisation, MODULO_ORG_ID)
+        sentinel_org = await app_session.get(Organisation, BUILTIN_ORG_ID)
         assert sentinel_org is not None
 
     # 4: sentinel-owned collection row visible to the app role ONLY under the
     # sentinel org's RLS context.
     async with app_factory() as app_session:
         await app_session.execute(text("SELECT 1"))  # begin the RLS-scoped transaction
-        await set_rls_org(app_session, MODULO_ORG_ID)
+        await set_rls_org(app_session, BUILTIN_ORG_ID)
         row = await app_session.get(LibraryPrimitive, install.collection_id)
         assert row is not None
         assert row.slug == collection.slug
@@ -992,7 +992,7 @@ async def test_shipped_install_persists_only_collection_row_under_sentinel_rls(
     async with db_engine.connect() as conn:
         count = await conn.execute(
             text("SELECT count(*) FROM library_primitives WHERE organisation_id = :oid"),
-            {"oid": str(MODULO_ORG_ID)},
+            {"oid": str(BUILTIN_ORG_ID)},
         )
         assert count.scalar_one() == 1
 

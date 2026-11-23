@@ -253,3 +253,43 @@ async def pipeline_team_scope_team_blind(
     if row is None:
         return None
     return BlindPipelineScope(owner_team_id=row[0], visibility=row[1])
+
+
+@dataclass(frozen=True)
+class RunEffectiveOwner:
+    """A run's effective owning team, resolved without drifting from team RLS.
+
+    ``owner_team_id`` is the stamped ``Run.owner_team_id`` when present, else
+    the owning pipeline's current ``owner_team_id`` (None for an org-level
+    pipeline). ``pipeline_present`` is False ONLY for a NULL-stamp run whose
+    pipeline cannot be resolved even team-blind (absent or soft-deleted): the
+    effective owner is then unknown, so a boundary check MUST deny rather than
+    treat the run as org-level.
+    """
+
+    owner_team_id: uuid.UUID | None
+    pipeline_present: bool
+
+
+async def run_effective_owner_team_id(session: AsyncSession, run: Run) -> RunEffectiveOwner:
+    """Resolve a run's effective owning team, TEAM-BLIND for pre-stamp rows.
+
+    FAR-681 / FAR-1513: ``Run.owner_team_id`` is the source of truth, but
+    pre-stamp runs carry NULL and fall back to the pipeline's current owner.
+    That fallback MUST be resolved team-blind
+    (:func:`pipeline_team_scope_team_blind`): ``pipelines`` carries
+    ``rls_team_isolation``, so a caller-facing read returns NOTHING for
+    another team's ``visibility='team'`` pipeline, which resolved the owner to
+    None and failed OPEN — the exact FAR-1513 boundary bypass. A pipeline that
+    is absent (or soft-deleted) even to the team-blind read is reported as
+    ``pipeline_present=False`` so callers deny instead of guessing org-level.
+
+    Centralising the owner precedence here gives REST and MCP one authoritative
+    effective-owner source; the REST guard consumes it today.
+    """
+    if run.owner_team_id is not None:
+        return RunEffectiveOwner(owner_team_id=run.owner_team_id, pipeline_present=True)
+    scope = await pipeline_team_scope_team_blind(session, run.pipeline_id)
+    if scope is None:
+        return RunEffectiveOwner(owner_team_id=None, pipeline_present=False)
+    return RunEffectiveOwner(owner_team_id=scope.owner_team_id, pipeline_present=True)

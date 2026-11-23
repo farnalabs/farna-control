@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from jsonschema import Draft202012Validator
 
-from farna.core.library_service import _MODULO_PRIMITIVES
+from farna.core.library_service import _BUILTIN_PRIMITIVES
 from farna.core.seed_data.library_schemas import SCHEMAS
 
 _PRIMITIVE_SLUG = "pr-review-decision"
@@ -43,8 +43,8 @@ _REVIEW_VERDICT: dict = {
 
 
 def _find_seed_primitive():
-    """Return the PR Review Decision seed primitive from _MODULO_PRIMITIVES."""
-    for p in _MODULO_PRIMITIVES:
+    """Return the PR Review Decision seed primitive from _BUILTIN_PRIMITIVES."""
+    for p in _BUILTIN_PRIMITIVES:
         if p.slug == _PRIMITIVE_SLUG and p.primitive_type == _PRIMITIVE_TYPE:
             return p
     return None
@@ -65,7 +65,7 @@ def _find_schema_entry():
 
 def test_primitive_exists_in_seed_data():
     prim = _find_seed_primitive()
-    assert prim is not None, f"Schema primitive '{_PRIMITIVE_SLUG}' not found in _MODULO_PRIMITIVES"
+    assert prim is not None, f"Schema primitive '{_PRIMITIVE_SLUG}' not found in _BUILTIN_PRIMITIVES"
 
 
 def test_primitive_has_correct_type():

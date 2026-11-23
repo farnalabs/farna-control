@@ -34,7 +34,7 @@ from farna.core.audit_coverage import audited
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
 from farna.core.library_service import (
-    MODULO_ORG_ID as _BUILTIN_ORG_ID,
+    BUILTIN_ORG_ID as _BUILTIN_ORG_ID,
 )
 from farna.core.library_service import (
     BuiltinPrimitiveReadOnlyError,
