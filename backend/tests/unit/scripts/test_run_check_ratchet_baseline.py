@@ -72,6 +72,19 @@ def test_parse_baseline_rejects_a_duplicate_path():
 
 
 # ---------------------------------------------------------------------------
+# Option-like git arguments (argument-injection hardening)
+# ---------------------------------------------------------------------------
+def test_validated_git_arg_accepts_a_revision():
+    assert mod._validated_git_arg("origin/main", "revision") == "origin/main"
+
+
+@pytest.mark.parametrize("value", ["", "--output=/tmp/pwn", "-c core.pager=cat"])
+def test_validated_git_arg_rejects_option_like_values(value):
+    with pytest.raises(mod.RatchetError, match="option-like"):
+        mod._validated_git_arg(value, "revision")
+
+
+# ---------------------------------------------------------------------------
 # Comparison
 # ---------------------------------------------------------------------------
 def test_compare_flags_an_added_entry():
@@ -232,6 +245,16 @@ def test_end_to_end_unreadable_explicit_base_fails_closed(tmp_path):
 
     assert proc.returncode == 1, proc.stderr
     assert "FAILED CLOSED" in proc.stderr
+
+
+def test_end_to_end_option_like_explicit_base_fails_closed(tmp_path):
+    repo = _make_repo(tmp_path)
+
+    proc = _run(repo, "--base=--output=/tmp/pwn")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "FAILED CLOSED" in proc.stderr
+    assert "option-like" in proc.stderr
 
 
 def test_end_to_end_missing_working_tree_baseline_fails_closed(tmp_path):

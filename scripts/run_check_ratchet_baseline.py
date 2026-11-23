@@ -82,9 +82,26 @@ DEFAULT_BASELINE = "backend/tests/architecture/brand_consistency_baseline.txt"
 #: Environment hint the CI workflow passes for a push event.
 BASE_ENV_VAR = "RATCHET_BASE_REV"
 
+#: The single-commit parent revision, used as a documented fallback base.
+_PARENT_REV = "HEAD^"
+
 
 class RatchetError(RuntimeError):
     """A failure that must stop the guard (never silently pass)."""
+
+
+def _validated_git_arg(value: str, what: str) -> str:
+    """Reject a git argument that git would read as an option.
+
+    ``_git`` runs git directly (no shell), so there is no shell-injection surface,
+    but a revision or path beginning with ``-`` would be interpreted by git as an
+    OPTION (argument injection). A revision from ``--base``/``RATCHET_BASE_REV``
+    and a repo-relative baseline path are never legitimately option-like, so
+    reject them rather than let one reach argv.
+    """
+    if not value or value.startswith("-"):
+        raise RatchetError(f"{what} {value!r} is option-like and cannot be passed to git safely")
+    return value
 
 
 def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -119,7 +136,7 @@ def _resolve_repo_root() -> Path:
 
 
 def _rev_exists(repo_root: Path, rev: str) -> bool:
-    result = _git(repo_root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+    result = _git(repo_root, "rev-parse", "--verify", "--quiet", f"{_validated_git_arg(rev, 'revision')}^{{commit}}")
     return result.returncode == 0 and bool(result.stdout.strip())
 
 
@@ -135,7 +152,7 @@ def _resolve_base(repo_root: Path, explicit: str | None) -> tuple[str, str]:
         return hint, f"{BASE_ENV_VAR} (push event's previous tip)"
 
     if _rev_exists(repo_root, "HEAD^2"):
-        return "HEAD^", "HEAD^ (first parent of the PR merge commit)"
+        return _PARENT_REV, "HEAD^ (first parent of the PR merge commit)"
 
     base_ref = os.environ.get("GITHUB_BASE_REF", "").strip()
     if base_ref:
@@ -144,8 +161,8 @@ def _resolve_base(repo_root: Path, explicit: str | None) -> tuple[str, str]:
                 return candidate, f"{candidate} (GITHUB_BASE_REF)"
         raise RatchetError(f"GITHUB_BASE_REF={base_ref!r} is set but neither 'origin/{base_ref}' nor '{base_ref}' resolves; refusing to pass with an unreadable base")
 
-    if _rev_exists(repo_root, "HEAD^"):
-        return "HEAD^", "HEAD^ (previous commit; no pull-request base available)"
+    if _rev_exists(repo_root, _PARENT_REV):
+        return _PARENT_REV, "HEAD^ (previous commit; no pull-request base available)"
 
     raise RatchetError("no base revision could be resolved (no --base, no usable RATCHET_BASE_REV, no PR merge commit, no GITHUB_BASE_REF, and HEAD has no parent); refusing to pass with an unreadable base")
 
@@ -180,6 +197,7 @@ def read_baseline_at_rev(repo_root: Path, rev: str, relpath: str) -> str | None:
     """
     if not _rev_exists(repo_root, rev):
         raise RatchetError(f"base revision {rev!r} does not resolve; refusing to pass with an unreadable base")
+    relpath = _validated_git_arg(relpath, "baseline path")
     probe = _git(repo_root, "cat-file", "-e", f"{rev}:{relpath}")
     if probe.returncode != 0:
         return None
