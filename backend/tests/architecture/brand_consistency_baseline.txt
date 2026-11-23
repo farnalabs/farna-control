@@ -15,8 +15,7 @@
 .github/workflows/ci.yml	17
 .github/workflows/claude-plugin-validate.yml	24
 .github/workflows/dast-auth.yml	6
-.github/workflows/deploy-watchdog.yml	2
-.github/workflows/deploy.yml	40
+.github/workflows/deploy.yml	5
 .github/workflows/fast-lane-post-merge.yml	1
 .github/workflows/k8s-conformance.yml	2
 .github/workflows/macos-installer.yml	40
@@ -31,7 +30,6 @@
 .github/workflows/rc-validate.yml	10
 .github/workflows/release-unified.yml	7
 .github/workflows/schemathesis-nightly.yml	7
-.github/workflows/web-watchdog.yml	2
 .github/workflows/windows-artifacts.yml	7
 .github/workflows/windows-installer.yml	5
 .gitignore	1
@@ -279,7 +277,6 @@ backend/tests/architecture/test_reviewer_independence.py	2
 backend/tests/architecture/test_settings_environment_aliases.py	8
 backend/tests/architecture/test_test_suite_quality.py	2
 backend/tests/architecture/test_test_suite_safety_nets.py	1
-backend/tests/architecture/test_workflow_structure.py	1
 backend/tests/bdd/features/auth/login.feature	1
 backend/tests/bdd/features/auth/sso_oidc.feature	1
 backend/tests/bdd/features/auth/sso_saml.feature	1
@@ -652,7 +649,7 @@ backend/tests/unit/test_analytics_facts.py	8
 backend/tests/unit/test_bootstrap_db.py	36
 backend/tests/unit/test_csp_settings.py	2
 backend/tests/unit/test_deploy_scripts.py	7
-backend/tests/unit/test_deploy_workflow_rehearsal.py	20
+backend/tests/unit/test_deploy_workflow_rehearsal.py	19
 backend/tests/unit/test_docker_compose_wiring.py	1
 backend/tests/unit/test_guardrail_loop_intercept.py	3
 backend/tests/unit/test_helm_image_tag_defaults.py	3
@@ -682,13 +679,12 @@ deploy/compose/.env.prod.example	1
 deploy/compose/runner.yml	4
 deploy/docker/runner-opencode.Dockerfile	1
 deploy/fly/entrypoint.sh	2
-deploy/fly/fly.staging.toml	10
+deploy/fly/fly.staging.toml	9
 deploy/helm/farna-control/README.md	10
 deploy/helm/farna-control/templates/_helpers.tpl	2
 deploy/helm/farna-control/templates/networkpolicy.yaml	2
 deploy/helm/farna-control/values.eks.example.yaml	7
 deploy/helm/farna-control/values.yaml	3
-deploy/runbooks/web-machine-recovery.md	12
 deploy/windows/BUNDLE-BUILD.md	17
 deploy/windows/INSTALLER-INFO.txt	2
 deploy/windows/modulo.iss	20
@@ -751,7 +747,7 @@ docs/support.md	14
 docs/system-requirements.md	5
 docs/troubleshooting.md	7
 docs/upgrade-process.md	7
-fly.toml	22
+fly.toml	17
 frontend/Dockerfile.mutation	2
 frontend/index.html	2
 frontend/public/runtime-config.js	2

@@ -1697,7 +1697,7 @@ def test_production_deploy_waits_for_active_sandbox_runs_before_fly_swap() -> No
     assert "Wait for active sandbox runs to finish (production)" in names
     wait_step = next(step for step in production_steps if isinstance(step, dict) and step.get("name") == "Wait for active sandbox runs to finish (production)")
     script = str(wait_step.get("run") or "")
-    deploy_index = names.index("Deploy to app-modulo")
+    deploy_index = names.index("Deploy to farna-control")
     wait_index = names.index("Wait for active sandbox runs to finish (production)")
     assert wait_index < deploy_index
     assert "/api/v1/deployment" in script
