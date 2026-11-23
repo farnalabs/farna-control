@@ -48,6 +48,9 @@ class TestStopLauncherWriters:
         monkeypatch.setattr("farna.launcher.supervisor._read_lock_holder", lambda _path: SimpleNamespace(pid=4321))
         monkeypatch.setattr("farna.launcher.upgrade._pid_alive", lambda _pid: True)
         monkeypatch.setattr("farna.launcher.upgrade.stop_running_stack", lambda _data_dir: None)
+        # The verified-liveness seam is POSIX-only; pin it so the assertion
+        # is the same on every developer platform (the sibling suite does this too).
+        monkeypatch.setattr(backup_mod.os, "name", "posix")
         assert backup_mod._stop_launcher_writers(tmp_path) is True
 
     def test_an_upgrade_error_during_stop_refuses_the_restore(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -59,6 +62,9 @@ class TestStopLauncherWriters:
         monkeypatch.setattr("farna.launcher.supervisor._read_lock_holder", lambda _path: SimpleNamespace(pid=4321))
         monkeypatch.setattr("farna.launcher.upgrade._pid_alive", lambda _pid: True)
         monkeypatch.setattr("farna.launcher.upgrade.stop_running_stack", _stop)
+        # The verified-liveness seam is POSIX-only; pin it so the assertion
+        # is the same on every developer platform (the sibling suite does this too).
+        monkeypatch.setattr(backup_mod.os, "name", "posix")
         with pytest.raises(click.ClickException, match="still running after a stop request"):
             backup_mod._stop_launcher_writers(tmp_path)
 
@@ -69,6 +75,9 @@ class TestStopLauncherWriters:
         monkeypatch.setattr("farna.launcher.supervisor._read_lock_holder", lambda _path: SimpleNamespace(pid=4321))
         monkeypatch.setattr("farna.launcher.upgrade._pid_alive", lambda _pid: True)
         monkeypatch.setattr("farna.launcher.upgrade.stop_running_stack", _stop)
+        # The verified-liveness seam is POSIX-only; pin it so the assertion
+        # is the same on every developer platform (the sibling suite does this too).
+        monkeypatch.setattr(backup_mod.os, "name", "posix")
         with pytest.raises(click.ClickException, match="cannot be stopped from here"):
             backup_mod._stop_launcher_writers(tmp_path)
 
@@ -269,12 +278,18 @@ class TestCheckTargetSchemaMatches:
         assert "ROLLS THOSE MIGRATIONS BACK" in capsys.readouterr().err
 
 
-class TestRedactPassword:
-    def test_an_unparseable_url_returns_the_text_unchanged(self) -> None:
-        assert backup_mod._redact_password("some error text", "postgresql://owner:secret@db:not-a-port/x") == "some error text"
+class TestRedactSecrets:
+    def test_an_unparseable_url_leaves_the_text_alone(self) -> None:
+        assert backup_mod._redact_url_secrets("some error text", "postgresql://owner:secret@db:not-a-port/x") == "some error text"
 
-    def test_the_password_is_replaced(self) -> None:
-        assert backup_mod._redact_password("failed for owner:secret@db", "postgresql://owner:secret@db/x") == "failed for owner:***@db"
+    def test_the_url_userinfo_is_replaced(self) -> None:
+        assert backup_mod._redact_url_secrets("failed for postgresql://owner:secret@db/x", "postgresql://owner:secret@db/x") == "failed for postgresql://owner:***@db/x"
+
+    def test_a_password_with_a_space_is_replaced(self) -> None:
+        assert backup_mod._redact_secrets("boom proof pa ss", "proof pa ss") == "boom ***"
+
+    def test_a_bad_percent_escape_is_replaced_in_both_forms(self) -> None:
+        assert backup_mod._redact_secrets("raw pa%zzword encoded pa%25zzword", "pa%zzword") == "raw *** encoded ***"
 
 
 class TestArchiveMember:

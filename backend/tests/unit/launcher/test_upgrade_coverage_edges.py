@@ -27,6 +27,7 @@ import pytest
 
 from farna.db import plain_dump
 from farna.launcher import upgrade as upgrade_module
+from farna.launcher.platform import binary_name
 from farna.launcher.upgrade import (
     SNAPSHOT_MANIFEST_NAME,
     SNAPSHOT_PREFIX,
@@ -239,14 +240,18 @@ class TestRetentionHelpers:
         (directory / SNAPSHOT_MANIFEST_NAME).write_text(json.dumps({"schema_versions": []}), encoding="utf-8")
         assert not _recorded_heads(directory)
 
-    def test_unknown_heads_are_treated_as_different(self) -> None:
-        assert upgrade_module._heads_differ_from_database(["unknown"], ["head1"]) is True
+    def test_unknown_heads_are_never_a_match(self) -> None:
+        """Unknown on either side cannot be proven to be the recovery point."""
+        assert upgrade_module._records_schema_state(["unknown"], ["head1"]) is False
 
-    def test_unrecorded_heads_are_treated_as_the_same(self) -> None:
-        assert upgrade_module._heads_differ_from_database([], ["head1"]) is False
+    def test_unrecorded_heads_are_never_a_match(self) -> None:
+        assert upgrade_module._records_schema_state([], ["head1"]) is False
 
-    def test_missing_current_heads_are_treated_as_the_same(self) -> None:
-        assert upgrade_module._heads_differ_from_database(["head1"], None) is False
+    def test_missing_current_heads_are_never_a_match(self) -> None:
+        assert upgrade_module._records_schema_state(["head1"], None) is False
+
+    def test_equal_heads_are_a_match(self) -> None:
+        assert upgrade_module._records_schema_state(["head1"], ["head1"]) is True
 
     def test_snapshot_bytes_skips_an_entry_that_cannot_be_statted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         directory = tmp_path / "snap"
@@ -368,10 +373,13 @@ class TestResolvePgDumpBundle:
     def test_a_bundled_binary_is_preferred_over_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         bundled = tmp_path / "bundled"
         bundled.mkdir()
-        (bundled / "pg_dump").write_text("#!/bin/sh\n", encoding="utf-8")
+        # The platform's executable name: the bundled dir is probed with
+        # `binary_name("pg_dump")`, which is pg_dump.exe on Windows.
+        bundled_binary = bundled / binary_name("pg_dump")
+        bundled_binary.write_text("#!/bin/sh\n", encoding="utf-8")
         monkeypatch.delenv("FARNA_CONTROL_BUNDLED_BIN_DIR", raising=False)
         monkeypatch.setattr(upgrade_module, "_resolve_pg_bin_dir", lambda _bin_dir: bundled)
-        assert upgrade_module._resolve_pg_dump(None) == str(bundled / "pg_dump")
+        assert upgrade_module._resolve_pg_dump(None) == str(bundled_binary)
 
 
 class TestBundleMigrationTree:

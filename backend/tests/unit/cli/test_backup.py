@@ -2539,7 +2539,7 @@ class TestNoPasswordReachesCapturedOutput:
         monkeypatch.setattr(backup_mod.psycopg, "connect", self._echoing_driver(observed, password))
         monkeypatch.setattr(backup_mod, "_run_psql", lambda *_a, **_k: None)
         monkeypatch.setattr(backup_mod, "_ensure_restore_posture", lambda *_a, **_k: None)
-        monkeypatch.setattr(backup_mod, "_db_has_modulo_tables", lambda _url: False)
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
         monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
 
         options = backup_mod._RestoreOptions(
@@ -2584,7 +2584,45 @@ class TestStartCommandPrintsOnTheFailurePath:
         data_dir.mkdir()
         monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: True)
         monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
-        monkeypatch.setattr(backup_mod, "_db_has_modulo_tables", lambda _url: False)
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
+        # The safety dump runs BEFORE the stop (a bundled Postgres dies with the
+        # launcher), so this test fails the step that follows the stop — the
+        # case where the stack is genuinely dark.
+        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: None)
+
+        def _failing_restore_cluster(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("psql exploded")
+
+        monkeypatch.setattr(backup_mod, "_restore_cluster", _failing_restore_cluster)
+        monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+
+        options = backup_mod._RestoreOptions(
+            backup_dir=archive,
+            db_url=_TEST_APP_DB_URL,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+        with pytest.raises(click.ClickException):
+            backup_mod._run_restore(options)
+
+        err = capsys.readouterr().err
+        assert f"farna-control start --data-dir {data_dir}" in err, "the failure path must hand the operator the exact start command"
+        assert "did NOT complete" in err
+        assert "still stopped" in err
+
+    def test_a_failure_before_the_stop_still_prints_the_start_command(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        """Even a pre-stop failure must leave the operator a command to run."""
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
 
         def _failing_safety_dump(*_args: Any, **_kwargs: Any) -> None:
             raise RuntimeError("pg_dump exploded")
@@ -2607,9 +2645,7 @@ class TestStartCommandPrintsOnTheFailurePath:
             backup_mod._run_restore(options)
 
         err = capsys.readouterr().err
-        assert f"farna-control start --data-dir {data_dir}" in err, "the failure path must hand the operator the exact start command"
-        assert "did NOT complete" in err
-        assert "still stopped" in err
+        assert f"farna-control start --data-dir {data_dir}" in err
 
     def test_the_success_path_still_prints_it_on_stdout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         from farna.cli import backup as backup_mod
@@ -2619,7 +2655,7 @@ class TestStartCommandPrintsOnTheFailurePath:
         data_dir.mkdir()
         monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: True)
         monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
-        monkeypatch.setattr(backup_mod, "_db_has_modulo_tables", lambda _url: False)
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
         monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: None)
         monkeypatch.setattr(backup_mod, "_restore_cluster", lambda *_a, **_k: None)
         monkeypatch.setattr(backup_mod, "_restore_data_dir", lambda *_a, **_k: None)
