@@ -815,10 +815,6 @@ DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS: frozenset[str] = frozenset(
         "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS",
         "FARNA_CONTROL_KUBERNETES_ENABLED",
         "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS",
-        # Legacy ``MODULO_`` spelling the configuration reference still
-        # publishes; no mechanism the gate recognises accepts it, so an operator
-        # who sets it is silently ignored and it stays listed here.
-        "MODULO_ADMIN_SECRET",
     }
 )
 
