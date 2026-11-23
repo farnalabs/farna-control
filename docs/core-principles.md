@@ -17,7 +17,7 @@ A run executes against a frozen `PipelineSnapshot`: agent versions, schema pins,
 **Benefit:** pause for a week, resume, same behavior; the audit trail stays truthful.
 
 ## 3. Audit as a first-class output
-Every state-changing action produces an immutable, org-scoped AuditEvent (actor, action, resource, timestamp). Append-only at DB level (0005 triggers), SHA-256-linked chain for verifiability. SOC 2 evidence export builds on it.
+Every state-changing action produces an immutable, org-scoped AuditEvent (actor, action, resource, timestamp). Append-only at DB level (the `audit_events_no_update` / `audit_events_no_delete` triggers ship in the baseline migration `backend/src/farna/db/migrations/versions/0351_baseline_rls.py`), SHA-256-linked chain for verifiability. SOC 2 evidence export builds on it.
 **Why:** governance requires a record you can trust after the fact; the trail is a product output, not an afterthought.
 **Where:** `farna/core/audit_logger/`, ADR 004 (user-deactivation-replaces-deletion).
 **Benefit:** the history you inspect is exactly what happened; auditors and operators read the same truth.

@@ -600,7 +600,7 @@ Both events are subscribable on the admin notification endpoints (see
 them. Nothing here gates or refuses admission – it is signal, not enforcement.
 
 The sweep's aggregate is served by the partial index
-`ix_runs_webhook_decay_sweep` (migration 0334): only webhook-triggered terminal
+`ix_runs_webhook_decay_sweep` (baseline migration `0350_baseline_schema.py`): only webhook-triggered terminal
 runs enter it, keyed on `completed_at`, so the per-minute window read is a
 bounded index scan rather than a scan of `runs`.
 
