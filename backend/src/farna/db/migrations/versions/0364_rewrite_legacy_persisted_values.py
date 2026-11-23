@@ -57,16 +57,16 @@ Downgrade: the exact reverse (new -> old) under the same widen/rewrite/narrow
 shape, narrowing to the LEGACY vocabulary and restoring the ``content_json``
 stage types.
 
-Revision ID: 0363_rewrite_legacy_persisted_values
-Revises: 0362_rename_legacy_db_objects
+Revision ID: 0364_rewrite_legacy_persisted_values
+Revises: 0363_lower_operational_flag_tiers
 Create Date: 2026-11-23
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0363_rewrite_legacy_persisted_values"
-down_revision: str | None = "0362_rename_legacy_db_objects"
+revision: str = "0364_rewrite_legacy_persisted_values"
+down_revision: str | None = "0363_lower_operational_flag_tiers"
 branch_labels = None
 depends_on = None
 

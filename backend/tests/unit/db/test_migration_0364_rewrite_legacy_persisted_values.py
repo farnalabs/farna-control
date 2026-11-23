@@ -1,7 +1,7 @@
-"""The 0363 migration rewrites the last persisted legacy values (FAR-2652).
+"""The 0364 migration rewrites the last persisted legacy values (FAR-2652).
 
 0362 renamed the legacy database *objects*. The values below live inside rows,
-so 0363 widens each CHECK vocabulary, rewrites the rows, then narrows the
+so 0364 widens each CHECK vocabulary, rewrites the rows, then narrows the
 vocabulary again; it also renames the sentinel organisation's display name.
 
 These tests EXECUTE the migration's own statements against a real PostgreSQL,
@@ -25,6 +25,7 @@ the real-DB tests skip (never silently pass).
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import os
 import re
@@ -38,7 +39,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.engine import make_url
 
-_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0363_rewrite_legacy_persisted_values.py"
+_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0364_rewrite_legacy_persisted_values.py"
 _PG_URL_ENV = "FARNA_2652_TEST_PG_URL"
 
 #: A second organisation that also carries the retired display name. The rename
@@ -47,7 +48,7 @@ _OTHER_ORG_ID = "11111111-1111-1111-1111-111111111111"
 
 
 def _load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0363_rewrite_legacy_persisted_values", _MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_0364_rewrite_legacy_persisted_values", _MIGRATION_PATH)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -60,6 +61,25 @@ def _sync_url(raw: str) -> str:
     return re.sub(r"^postgresql(\+[a-z0-9]+)?://", "postgresql+psycopg://", raw, flags=re.IGNORECASE)
 
 
+def _docker_daemon_socket_present() -> bool:
+    """Leak-free check for a local Docker daemon before touching testcontainers.
+
+    ``docker.from_env()`` leaves its probe socket open when the local unix socket
+    is absent, and this module runs under the gated-suite warning gate
+    (``-W error::pytest.PytestUnraisableExceptionWarning``), which escalates that
+    leak to a session error. Checking the well-known socket paths first keeps a
+    no-Docker run a clean skip. An explicit ``DOCKER_HOST`` (remote, dind, ssh) is
+    always honoured by deferring to testcontainers.
+    """
+    if os.environ.get("DOCKER_HOST"):
+        return True
+    candidates = [Path("/var/run/docker.sock"), Path("~/.docker/run/docker.sock").expanduser()]
+    xdg_runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if xdg_runtime:
+        candidates.append(Path(xdg_runtime) / "docker.sock")
+    return any(path.exists() for path in candidates)
+
+
 @pytest.fixture(scope="module")
 def pg_url() -> Iterator[str]:
     """Throwaway PostgreSQL URL: env-provisioned, else testcontainers, else skip."""
@@ -68,15 +88,24 @@ def pg_url() -> Iterator[str]:
         yield _sync_url(env_url)
         return
 
+    if not _docker_daemon_socket_present():
+        pytest.skip("testcontainers Postgres unavailable (no Docker daemon socket reachable)")
+
     try:
         from testcontainers.community.postgres import PostgresContainer
     except Exception as exc:  # capability-gated skip, never a silent pass
         pytest.skip(f"testcontainers Postgres unavailable (driver missing): {exc}")
 
+    # A configured-but-unreachable endpoint can still fail after open; close the
+    # client on the skip path so the failure leaves no socket behind.
+    container = None
     try:
         container = PostgresContainer("postgres:16-alpine")
         container.start()
     except Exception as exc:  # capability-gated skip, never a silent pass
+        if container is not None:
+            with contextlib.suppress(Exception):
+                container.stop()
         pytest.skip(f"testcontainers Postgres unavailable (no Docker): {exc}")
     try:
         yield _sync_url(container.get_connection_url())
@@ -89,7 +118,7 @@ def engine(pg_url: str) -> Iterator[sa.Engine]:
     """A fresh database per test — the migration hard-codes the ``public`` schema."""
     base_url = make_url(pg_url)
     admin = sa.create_engine(base_url, isolation_level="AUTOCOMMIT")
-    database = f"m0363_{uuid.uuid4().hex[:12]}"
+    database = f"m0364_{uuid.uuid4().hex[:12]}"
     with admin.connect() as conn:
         conn.exec_driver_sql(f'CREATE DATABASE "{database}"')
     test_engine = sa.create_engine(base_url.set(database=database))
@@ -256,8 +285,8 @@ def _table_counts(conn: sa.Connection) -> dict[str, int]:
 def test_revision_continues_the_current_single_head() -> None:
     module = _load_migration()
 
-    assert module.revision == "0363_rewrite_legacy_persisted_values"
-    assert module.down_revision == "0362_rename_legacy_db_objects"
+    assert module.revision == "0364_rewrite_legacy_persisted_values"
+    assert module.down_revision == "0363_lower_operational_flag_tiers"
 
 
 def test_upgrade_rewrites_every_legacy_value_and_narrows_the_vocabulary(engine: sa.Engine, monkeypatch: pytest.MonkeyPatch) -> None:
