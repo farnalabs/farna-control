@@ -897,7 +897,11 @@ async def test_s4_evidence_probes_run_through_the_sdk_handle() -> None:
             entry.name = "output.json"
             entry.size = 10
             entry.isdir = False
-            return [entry]
+            nameless = MagicMock()
+            nameless.name = ""
+            nameless.size = 0
+            nameless.isdir = False
+            return [entry, nameless]
 
     class _Sbx:
         commands = _Commands()
