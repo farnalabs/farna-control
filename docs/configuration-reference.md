@@ -625,7 +625,7 @@ via the admin API. Unknown/absent keys default to safe values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). The legacy `MODULO_BACKUP_PASSPHRASE` spelling is still read as a fallback. |
+| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). `FARNA_CONTROL_BACKUP_PASSPHRASE` is the only spelling read; there is no legacy alias. |
 
 See [`docs/operations/backup.md`](./operations/backup.md) for backup configuration.
 
