@@ -9,13 +9,13 @@ Authz: every tool maps to the same permission key as the corresponding REST
 route and is gated through ``_check_agent_tool_scope``; list_feature_flags
 additionally enforces the strict system-admin gate REST's
 ``require_system_permission`` applies. Plan-feature parity with the REST routes
-is enforced through ``_require_plan_feature``: ``get_audit_log`` carries
-``audit_viewer`` (FAR-2119), and (FAR-2129) ``list_plugins`` carries
-``plugin_management``, ``list_sso_providers`` carries ``sso`` and
-``get_schema_versions`` carries ``schema_version_history``. ``list_teams``
-instead mirrors REST's ``require_entitlement("identity")`` through
-``_require_plan_entitlement`` (FAR-2665) so killing one member flag of the
-Identity bundle does not refuse MCP while the REST route stays open. The
+is enforced through ``_require_plan_feature``: ``list_plugins`` carries
+``plugin_management`` and ``get_schema_versions`` carries
+``schema_version_history``. Tools mirroring an ENTITLED REST route instead go
+through ``_require_plan_entitlement`` (FAR-2665) so killing one member flag of
+a bundle does not refuse MCP while the REST route stays open: ``get_audit_log``
+carries ``audit_evidence`` (FAR-2119), ``list_sso_providers`` and ``list_teams``
+carry ``identity`` (FAR-2129). The
 pipeline-diff tool must mask
 credential-bearing node fields (FAR-1181 parity with the REST route), and the
 SSO listing must never surface client secrets.
@@ -516,11 +516,11 @@ class TestGetAuditLog(AuthContext):
         mock_session: AsyncMock,
         mock_validate: AsyncMock,
     ) -> None:
-        """Community tier: no audit_viewer entitlement, so MCP refuses.
+        """Community tier: no Audit-and-evidence entitlement, so MCP refuses.
 
-        FAR-2119 — the MCP surface must produce the same ``feature_required``
-        shape as the other gated MCP tools, and must refuse BEFORE reading any
-        events.
+        FAR-2119 / FAR-2665 — the MCP surface must produce the same
+        ``feature_required`` shape as the other gated MCP tools, and must refuse
+        BEFORE reading any events.
         """
         mock_session.return_value = make_session_context(make_session_scope())
 
@@ -529,7 +529,7 @@ class TestGetAuditLog(AuthContext):
             result = await get_audit_log()
 
         assert result["error"] == "feature_required"
-        assert "audit_viewer" in result["detail"]
+        assert "Audit and evidence" in result["detail"]
         mock_events.assert_not_awaited()
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
@@ -541,7 +541,7 @@ class TestGetAuditLog(AuthContext):
         mock_session: AsyncMock,
         mock_validate: AsyncMock,
     ) -> None:
-        """Team tier: audit_viewer is licensed, so the events surface as before."""
+        """Team tier: Audit and evidence is licensed, so the events surface as before."""
         event = {"id": str(uuid.uuid4()), "event_type": "run.completed"}
         mock_events.return_value = {
             "items": [event],
@@ -557,6 +557,38 @@ class TestGetAuditLog(AuthContext):
 
         assert result["total"] == 1
         assert result["items"] == [event]
+        mock_events.assert_awaited_once()
+
+    @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
+    @patch("farna.api.mcp_server._session")
+    @patch("farna.core.audit_logger.list_audit_events", new_callable=AsyncMock)
+    async def test_audit_viewer_killed_but_audit_evidence_live_is_allowed(
+        self,
+        mock_events: AsyncMock,
+        mock_session: AsyncMock,
+        mock_validate: AsyncMock,
+    ) -> None:
+        """REST/MCP parity: killing one member flag must not refuse MCP.
+
+        GET /api/v1/admin/audit gates on the Audit-and-evidence ENTITLEMENT
+        (``audit_viewer``, ``admin_run_retention``), so killing ``audit_viewer``
+        alone must leave the MCP tool reachable while the sibling flag keeps the
+        capability live (FAR-2665).
+        """
+        mock_events.return_value = {"items": [], "total": 0, "next_cursor": None, "limit": 50}
+        mock_session.return_value = make_session_context(make_session_scope())
+        plan = _FlagStatePlan({"admin_run_retention"})
+        with (
+            patch(
+                "farna.db.crud.organisation.get_organisation",
+                new=AsyncMock(return_value=MagicMock(settings_json={})),
+            ),
+            patch("farna.core.feature_flags.resolve_plan_context", new=AsyncMock(return_value=plan)),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock()),
+        ):
+            result = await get_audit_log()
+
+        assert "error" not in result
         mock_events.assert_awaited_once()
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
@@ -888,7 +920,7 @@ class TestListSsoProviders(AuthContext):
         mock_session: AsyncMock,
         mock_validate: AsyncMock,
     ) -> None:
-        """FAR-2129: Community plan is refused before the provider table is read."""
+        """FAR-2129 / FAR-2665: Community plan is refused before the provider table is read."""
         mock_session.return_value = make_session_context(make_session_scope())
 
         org_patch, plan_patch, settings_patch = _patch_plan(enabled=False)
@@ -896,8 +928,40 @@ class TestListSsoProviders(AuthContext):
             result = await list_sso_providers()
 
         assert result["error"] == "feature_required"
-        assert "sso" in result["detail"]
+        assert "Identity" in result["detail"]
         mock_list.assert_not_awaited()
+
+    @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
+    @patch("farna.api.mcp_server._session")
+    @patch("farna.db.crud.sso_provider.list_providers", new_callable=AsyncMock)
+    async def test_sso_killed_but_identity_live_is_allowed(
+        self,
+        mock_list: AsyncMock,
+        mock_session: AsyncMock,
+        mock_validate: AsyncMock,
+    ) -> None:
+        """REST/MCP parity: killing one member flag must not refuse MCP.
+
+        GET /api/v1/admin/sso/providers gates on the Identity ENTITLEMENT
+        (``sso``, ``scim``, ``team_rbac``), so killing ``sso`` alone must leave
+        the MCP tool reachable while a sibling flag keeps the capability live
+        (FAR-2665).
+        """
+        mock_list.return_value = []
+        mock_session.return_value = make_session_context(make_session_scope())
+        plan = _FlagStatePlan({"scim"})
+        with (
+            patch(
+                "farna.db.crud.organisation.get_organisation",
+                new=AsyncMock(return_value=MagicMock(settings_json={})),
+            ),
+            patch("farna.core.feature_flags.resolve_plan_context", new=AsyncMock(return_value=plan)),
+            patch("farna.api.mcp_server.get_settings", return_value=MagicMock()),
+        ):
+            result = await list_sso_providers()
+
+        assert "error" not in result
+        mock_list.assert_awaited_once()
 
 
 class TestEvalSuites(AuthContext):

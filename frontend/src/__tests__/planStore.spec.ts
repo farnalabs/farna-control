@@ -209,6 +209,73 @@ describe('usePlanStore', () => {
     expect(store.entitlementForFlag('mcp_server')).toBeNull()
   })
 
+  it('hasEntitlement reflects the granted set, refusing ungranted and unknown keys', () => {
+    const store = usePlanStore()
+    store.entitlements = [
+      { key: 'identity', name: 'Identity', description: 'Identity and access', granted: true, flags: ['sso', 'scim'] },
+      { key: 'audit_evidence', name: 'Audit and evidence', description: 'Audit trail', granted: false, flags: ['audit_viewer'] },
+    ]
+
+    expect(store.hasEntitlement('identity')).toBe(true)
+    expect(store.hasEntitlement('audit_evidence')).toBe(false)
+    expect(store.hasEntitlement('cost_governance')).toBe(false)
+  })
+
+  it('hasEntitlement is false before the plan payload lands', () => {
+    const store = usePlanStore()
+    expect(store.hasEntitlement('identity')).toBe(false)
+  })
+
+  it('entitlementForFlag maps every covered flag to its entitlement', () => {
+    const store = usePlanStore()
+    store.entitlements = [
+      { key: 'identity', name: 'Identity', description: 'Identity and access', granted: true, flags: ['sso', 'scim', 'team_rbac'] },
+      { key: 'audit_evidence', name: 'Audit and evidence', description: 'Audit trail', granted: true, flags: ['audit_viewer', 'admin_run_retention'] },
+    ]
+
+    expect(store.entitlementForFlag('sso')).toBe('identity')
+    expect(store.entitlementForFlag('scim')).toBe('identity')
+    expect(store.entitlementForFlag('team_rbac')).toBe('identity')
+    expect(store.entitlementForFlag('audit_viewer')).toBe('audit_evidence')
+    expect(store.entitlementForFlag('admin_run_retention')).toBe('audit_evidence')
+    expect(store.entitlementForFlag('hitl_reviews')).toBeNull()
+  })
+
+  it('getEntitlementLabel returns the payload name and falls back to the key', () => {
+    const store = usePlanStore()
+    store.entitlements = [
+      { key: 'identity', name: 'Identity', description: 'Identity and access', granted: true, flags: ['sso'] },
+    ]
+
+    expect(store.getEntitlementLabel('identity')).toBe('Identity')
+    expect(store.getEntitlementLabel('cost_governance')).toBe('cost_governance')
+  })
+
+  it('fetchPlan populates entitlements from the plan payload', async () => {
+    const { api } = await import('../lib/api/client')
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/plan') {
+        return Promise.resolve({
+          data: {
+            ...mockPlanResponse,
+            entitlements: [
+              { key: 'identity', name: 'Identity', description: 'Identity and access', granted: true, flags: ['sso', 'scim'] },
+            ],
+          },
+          error: null,
+        })
+      }
+      return Promise.resolve({ data: mockTiersResponse, error: null })
+    })
+
+    const store = usePlanStore()
+    await store.fetchPlan()
+
+    expect(store.entitlements).toHaveLength(1)
+    expect(store.hasEntitlement('identity')).toBe(true)
+    expect(store.isEntitledFlag('sso')).toBe(true)
+  })
+
   it('getTierLabel falls back to a capitalized tier id for unknown tiers', async () => {
     const store = usePlanStore()
     await store.fetchPlan()
