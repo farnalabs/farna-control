@@ -385,7 +385,7 @@ _BUILTIN_REGISTRY: dict[str, RegistryEntry] = {
             name="modulo-dogfood-pipeline",
             primitive_type="workflow",
             description=("End-to-end pipeline that builds Farna Control from a GitHub issue: reads spec, generates code, applies changes, runs tests, and creates a PR with HITL review."),
-            tags=["workflow", "dogfood", "modulo", "pipeline"],
+            tags=["workflow", "dogfood", "farna-control", "pipeline"],
             content_json={
                 "nodes": [
                     {"id": "issue-reader", "agent": "issue-reader"},

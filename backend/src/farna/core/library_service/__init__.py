@@ -673,10 +673,10 @@ async def list_contribution_versions(
         prim = await get_primitive(s, org_id, primitive_id, explicit_org_filter=org_id)
 
         # ``get_primitive`` falls back to the in-memory built-in registry when
-        # the org-clamped DB lookup misses. Built-ins (native source) are
-        # served from memory, never from SQL, and are not contributions — they
-        # have no versions. Preserve the pre-existing 404 for a built-in id
-        # instead of serving it as a one-row version list.
+        # the org-clamped DB lookup misses. Built-ins are served from memory,
+        # never from SQL, and are not contributions — they have no versions.
+        # Preserve the pre-existing 404 for a built-in id instead of serving it
+        # as a one-row version list.
         if prim is None or _BUILTIN_BY_ID.get(primitive_id) is prim:
             raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
 

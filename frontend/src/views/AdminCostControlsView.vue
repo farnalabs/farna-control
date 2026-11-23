@@ -63,7 +63,7 @@
            heading-level="h2"
          >
            <template #default>
-            <EmptyState v-if="teams.length === 0" :title="$t('views.AdminCostControlsView.no_teams_found')" />
+            <EmptyState v-if="teams.length === 0" variant="bare" :title="$t('views.AdminCostControlsView.no_teams_found')" />
             <DataTable
               v-else
               :columns="[

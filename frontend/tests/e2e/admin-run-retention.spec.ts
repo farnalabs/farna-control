@@ -6,9 +6,12 @@ test.describe('Admin Run Retention', { tag: "@regression" }, () => {
     await page.goto('/admin/run-retention')
     if (!systemAdmin) {
       // FAR-938: the SYSTEM sidebar group is system-admin-only. The staging/prod
-      // e2e identity is a regular org admin, so the router guard redirects to '/'.
-      await expect(page).toHaveURL(/\/$/)
-      await expect(page.locator('h1')).toContainText('Dashboard')
+      // e2e identity is a regular org admin, so FAR-2664 refuses the navigation
+      // onto the locked page (naming the instance-admin restriction) instead of
+      // silently bouncing back to the dashboard.
+      await expect(page).toHaveURL(/\/locked\?.*reason=system_admin/)
+      await expect(page.getByTestId('locked-route')).toBeVisible()
+      await expect(page.locator('h1')).toContainText('restricted to instance administrators')
       return
     }
     await expect(page.locator('h1')).toContainText('Run Retention')

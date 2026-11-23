@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model:visible="modelValue" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }">
+  <Dialog v-model:visible="modelValue" :modal="true" :dismissable-mask="true" :style="{ width }">
     <template #header>
       <div>
         <div class="text-lg font-semibold">{{ title }}</div>
@@ -33,7 +33,7 @@
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   title: string
   description?: string
   confirmText?: string
@@ -43,7 +43,9 @@ const props = defineProps<{
   confirmSeverity?: 'primary' | 'secondary' | 'success' | 'info' | 'warn' | 'help' | 'danger' | 'contrast'
   cancelTestId?: string
   confirmTestId?: string
-}>()
+  /** Dialog width — the historical default is 28rem. */
+  width?: string
+}>(), { width: '28rem' })
 
 const modelValue = defineModel<boolean>('open')
 const emit = defineEmits<{
