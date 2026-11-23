@@ -18,12 +18,16 @@ async function mockLocalCostRoutes(page: Page) {
 
 test.describe('Admin Spend Limits', { tag: "@regression" }, () => {
   test('renders the Spend Limits page', { tag: "@regression" }, async ({ page, env }) => {
+    await loginAsAdmin(page, env)
+    // Register the limits fixture AFTER loginAsAdmin: Playwright runs route
+    // handlers in reverse registration order, so the `**/api/v1/**` catch-all
+    // that loginAsAdmin installs would otherwise win and this mock would
+    // never run (FAR-2694).
     if (env.name === 'local') {
       await page.route('**/api/v1/admin/costs/limits*', (route) => {
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organisation_id: 'test-org', org_daily_spend_limit: 100, team_limits: [] }) })
       })
     }
-    await loginAsAdmin(page, env)
     await page.goto('/admin/costs/limits', { timeout: 60000 })
     await expect(page.locator('h1')).toContainText('Spend Limits')
     await expect(
