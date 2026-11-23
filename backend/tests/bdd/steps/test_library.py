@@ -649,13 +649,13 @@ def _response_has_tier(ctx: dict[str, Any], expected_tier: str) -> None:
 
 
 def _make_tiered_primitive(*, name: str, slug: str, tier: str) -> Any:
-    """Build a real LibraryPrimitive with an explicit tier, mirroring _make_modulo."""
-    from farna.core.library_service import MODULO_ORG_ID
+    """Build a real LibraryPrimitive with an explicit tier, mirroring _make_native."""
+    from farna.core.library_service import BUILTIN_ORG_ID
 
     now = datetime(2025, 1, 1, tzinfo=UTC)
     return LibraryPrimitive(
         id=uuid.uuid4(),
-        organisation_id=MODULO_ORG_ID,
+        organisation_id=BUILTIN_ORG_ID,
         source="modulo",
         primitive_type="schema",
         name=name,
@@ -693,7 +693,7 @@ def _builtin_library_has_in_dev(ctx: dict[str, Any]) -> None:
 def _list_libraries_with_primitives(client: Any, ctx: dict[str, Any], params: dict[str, str]) -> None:
     tiered = ctx.get("tier_primitives")
     assert tiered is not None, "No tiered primitives in context — use the Given step"
-    with patch("farna.core.library_service._filter_modulo", return_value=tiered):
+    with patch("farna.core.library_service._filter_builtins", return_value=tiered):
         ctx["response"] = client.get("/api/v1/libraries", params=params)
 
 
@@ -712,7 +712,7 @@ def _viewer_lists_libraries_with_include_in_dev(viewer_client: Any, ctx: dict[st
     """Viewer-role listing: the operator-gated In-Dev reveal must be denied (403)."""
     tiered = ctx.get("tier_primitives")
     assert tiered is not None, "No tiered primitives in context — use the Given step"
-    with patch("farna.core.library_service._filter_modulo", return_value=tiered):
+    with patch("farna.core.library_service._filter_builtins", return_value=tiered):
         ctx["response"] = viewer_client.get("/api/v1/libraries", params={"include_in_dev": "true"})
     request.node._resp = ctx["response"]
 

@@ -148,7 +148,7 @@ def _build_list_conditions(
     argument is required. An optional org argument let a caller silently fall
     back to an RLS-only read, which a ``BYPASSRLS`` (or misconfigured-RLS)
     connection turns into a cross-tenant list. This clamp cannot hide the
-    Native library built-ins: ``source='modulo'`` primitives are merged from the
+    Native library built-ins: they are merged from the
     in-code registry in ``core.library_service.list_primitives`` and are not
     rows in the caller's slice, and the ``library_primitives`` RLS policy
     already restricts rows to ``organisation_id = current_setting(...)`` — so

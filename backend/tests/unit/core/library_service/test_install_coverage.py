@@ -22,7 +22,7 @@ import pytest
 
 from farna.core import workflow_import_export as wix
 from farna.core.library_service import install as install_mod
-from farna.core.library_service._seed_data import MODULO_ORG_ID
+from farna.core.library_service._seed_data import BUILTIN_ORG_ID
 from farna.core.library_service.install import (
     CollectionInstallError,
     CollectionNotPublishedError,
@@ -357,7 +357,7 @@ class TestPersistCollectionRow:
             pytest.raises(CollectionInstallError),
         ):
             await _persist_collection_row(session, _ORG_ID, coll)
-        assert [call.args[1] for call in rls.call_args_list] == [MODULO_ORG_ID, _ORG_ID]
+        assert [call.args[1] for call in rls.call_args_list] == [BUILTIN_ORG_ID, _ORG_ID]
 
     async def test_tuple_hit_same_content_reuses_row(self) -> None:
         coll = _collection()
