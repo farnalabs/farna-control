@@ -442,20 +442,23 @@ _UNGUARDED_SITES: set[tuple[str, str]] = {
     # FAR-1610: the capacity claim/demote ``update_run_status`` calls moved with
     # the method body into ``_claim_under_capacity`` (``_check_capacity`` now
     # delegates to it); the source-scan pin is keyed by the enclosing function.
-    ("core/pipeline_engine/executor.py", "_claim_under_capacity"),
+    # The whole admission group (claim / demote / retry-budget / spend-ceiling /
+    # policy-pin) was subsequently extracted verbatim into the
+    # ``executor_parts.admission`` mixin, so the pins are keyed by that module.
+    ("core/pipeline_engine/executor_parts/admission.py", "_claim_under_capacity"),
     # FAR-2076: the capacity demotion was split back out of
     # ``_claim_under_capacity`` into its own ``_demote_for_capacity`` helper.
     # Like the claim-path write it sends only status + the decline
     # error_code/error_detail + the claim fence (from_status/claim_token) and
     # NEVER outputs_json/node_telemetry_json — a no-blobs site, so no guard.
-    ("core/pipeline_engine/executor.py", "_demote_for_capacity"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_demote_for_capacity"),
     # FAR-2076: the retry-budget refusal terminalizes with status "failed" +
     # error_code/error_detail + the claim fence only — no outputs/telemetry
     # kwargs, so it cannot raise DualWriteError and needs no guard.
-    ("core/pipeline_engine/executor.py", "_retry_budget_gate"),
-    ("core/pipeline_engine/executor.py", "_check_policy_gate_pin"),
-    ("core/pipeline_engine/executor.py", "_check_spend_ceiling_gate"),
-    ("core/pipeline_engine/executor.py", "_claim_run_and_audit"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_retry_budget_gate"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_check_policy_gate_pin"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_check_spend_ceiling_gate"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_claim_run_and_audit"),
     # FAR-366 refactor moved the resume first-transaction body (including the
     # "running" status write) out of ``resume`` into ``_resume_load_and_validate``;
     # the write still sends status + claimed_by only — no outputs/telemetry — so

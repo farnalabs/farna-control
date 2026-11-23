@@ -152,7 +152,10 @@ def _gap(note: str) -> PathRecord:
     return PathRecord(classification=_GAP, note=note)
 
 
-_EXECUTOR = ("src/farna/core/pipeline_engine/executor.py", 'event_type="run_started"')
+# The ``run_started`` append lives on ``_claim_run_and_audit``, which was
+# extracted verbatim into the ``executor_parts.admission`` mixin that
+# ``PipelineExecutor`` inherits from — the evidence follows the code.
+_EXECUTOR = ("src/farna/core/pipeline_engine/executor_parts/admission.py", 'event_type="run_started"')
 _TERMINAL_ADVANCE = ("src/farna/core/run_terminal_advance.py", 'event_type="run.sweep_terminalised"')
 
 #: The inventory. Keys are either a bare SAQ/reconciler function name or

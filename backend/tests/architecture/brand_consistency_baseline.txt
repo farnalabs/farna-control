@@ -192,7 +192,8 @@ backend/src/farna/core/pipeline_engine/decorator.py	1
 backend/src/farna/core/pipeline_engine/egress.py	8
 backend/src/farna/core/pipeline_engine/eval_persist_order.py	4
 backend/src/farna/core/pipeline_engine/evidence.py	6
-backend/src/farna/core/pipeline_engine/executor.py	4
+backend/src/farna/core/pipeline_engine/executor.py	3
+backend/src/farna/core/pipeline_engine/executor_parts/admission.py	1
 backend/src/farna/core/pipeline_engine/executor_parts/finalize.py	5
 backend/src/farna/core/pipeline_engine/executor_parts/run_shape.py	5
 backend/src/farna/core/pipeline_engine/failure_context.py	2

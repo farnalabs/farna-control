@@ -464,4 +464,12 @@ __all__ = [
     "_failure_build_sha",  # run_execute.py failure attribution
     "_failure_column",  # run_execute.py failure attribution
     "_enrich_failure_detail",  # run_execute.py failure attribution
+    # --- executor_parts step 5 (hub / admission mixins): collaborators reached
+    #     from the moved bodies through the _ref() call-time bridge, which static
+    #     analysis cannot see. ``set_model_backend_hub`` lost its last direct
+    #     caller when ``_init_model_backend_hub`` moved into hubs.py (the moved
+    #     body sets the hub through ``_ref("set_model_backend_hub")``); it stays
+    #     re-exported by executor.py for the mock.patch targets the bridge exists
+    #     to keep intercepting. ---
+    "set_model_backend_hub",  # hubs.py model-backend ContextVar setter
 ]

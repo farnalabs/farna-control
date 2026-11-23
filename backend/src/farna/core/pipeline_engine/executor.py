@@ -51,13 +51,13 @@ from opentelemetry.trace import set_span_in_context  # noqa: F401
 from sqlalchemy import Boolean, Uuid, bindparam, func, select, text, update  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from farna.connectors._rate_bucket import SharedBudgetUnavailableError
+from farna.connectors._rate_bucket import SharedBudgetUnavailableError  # noqa: F401
 from farna.connectors.base import node_fires_dispatch_job  # noqa: F401
-from farna.core.audit_logger import append_audit_event
+from farna.core.audit_logger import append_audit_event  # noqa: F401
 from farna.core.audit_logger.labels import (
     SYSTEM_ACTOR,  # noqa: F401
-    compose_run_started_summary,
-    resolve_run_actor,
+    compose_run_started_summary,  # noqa: F401
+    resolve_run_actor,  # noqa: F401
     short_id,  # noqa: F401
 )
 from farna.core.connector_hub.locking import _uuid_to_lock_keys
@@ -77,7 +77,7 @@ from farna.core.graph_validator import GraphValidator  # noqa: F401
 from farna.core.graph_validator._types import ValidationResult  # noqa: F401
 from farna.core.hitl_manager import HITLManager  # noqa: F401
 from farna.core.hitl_manager.gate_coalescing import SUPERSEDE_REASON, evaluate_gate_coalescing  # noqa: F401
-from farna.core.model_backend_hub import ModelBackendHub
+from farna.core.model_backend_hub import ModelBackendHub  # noqa: F401
 from farna.core.node_output_split import (
     DEFAULT_NODE_TYPE,  # noqa: F401
     SPLITTABLE_NODE_TYPES,  # noqa: F401
@@ -100,13 +100,13 @@ from farna.core.pipeline_engine.decorator import (
     RunCancelledError,  # noqa: F401
     set_audit_hook,  # noqa: F401
     set_cancellation_check,  # noqa: F401
-    set_connector_hub,
-    set_model_backend_hub,
+    set_connector_hub,  # noqa: F401
+    set_model_backend_hub,  # noqa: F401
 )
 from farna.core.pipeline_engine.error_codes import (
     _CODE_CONNECTOR_FAILED,  # noqa: F401
     _CODE_CONNECTOR_UNKNOWN,  # noqa: F401
-    _CODE_HARNESS_RETRY_BUDGET_EXHAUSTED,
+    _CODE_HARNESS_RETRY_BUDGET_EXHAUSTED,  # noqa: F401
     _CODE_SANDBOX_AGENT_FAILED,  # noqa: F401
     _CODE_SANDBOX_NO_OUTPUT_JSON,  # noqa: F401
     map_legacy_code,  # noqa: F401
@@ -172,9 +172,9 @@ from farna.core.pipeline_engine.runtime_retry import COMPENSATION_FAILED_CODE, C
 from farna.core.retry_budget import (
     # The ONE retry-budget module (zero-import leaf): the bound, the ceiling and
     # the consumed measure all live there so no path can define a second copy.
-    retry_budget_exhausted,
-    retry_executions_consumed,
-    retry_max_executions,
+    retry_budget_exhausted,  # noqa: F401
+    retry_executions_consumed,  # noqa: F401
+    retry_max_executions,  # noqa: F401
 )
 from farna.core.run_context.autonomy import (
     PIPELINE_EARNED_AT_START_KEY,  # noqa: F401
@@ -182,41 +182,41 @@ from farna.core.run_context.autonomy import (
     AutonomyLevel,
     autonomy_level_rank,  # noqa: F401
 )
-from farna.core.run_provenance import run_provenance_fields
-from farna.core.spend_ceiling import ORG_CEILING_EXCEEDED, evaluate_org_spend_ceiling
+from farna.core.run_provenance import run_provenance_fields  # noqa: F401
+from farna.core.spend_ceiling import ORG_CEILING_EXCEEDED, evaluate_org_spend_ceiling  # noqa: F401
 from farna.core.trigger_engine.agent_signal import fire_agent_signal  # noqa: F401
 from farna.db.crud.hitl_review_config import (
     parse_hitl_review_id,
     resolve_hitl_review_config,  # noqa: F401
     resolve_review_window_for_gate,  # noqa: F401
 )
-from farna.db.crud.organisation_cost_state import get_org_cost_state
+from farna.db.crud.organisation_cost_state import get_org_cost_state  # noqa: F401
 from farna.db.crud.pipeline import get_pipeline  # noqa: F401
-from farna.db.crud.row_lock import set_mutation_row_lock_timeout
+from farna.db.crud.row_lock import set_mutation_row_lock_timeout  # noqa: F401
 from farna.db.crud.run import (
-    ERROR_CODE_ORG_CAPACITY_LIMITED,
-    ERROR_CODE_PIPELINE_CAPACITY,
+    ERROR_CODE_ORG_CAPACITY_LIMITED,  # noqa: F401
+    ERROR_CODE_PIPELINE_CAPACITY,  # noqa: F401
     _graph_contains_sandbox_agent,
-    _verify_policy_gate_pin_fingerprint,
-    count_active_runs_for_org,
-    count_active_runs_for_pipeline,
+    _verify_policy_gate_pin_fingerprint,  # noqa: F401
+    count_active_runs_for_org,  # noqa: F401
+    count_active_runs_for_pipeline,  # noqa: F401
     count_active_sandbox_runs_for_org,
-    get_org_run_concurrency_limit,
-    get_run,
+    get_org_run_concurrency_limit,  # noqa: F401
+    get_run,  # noqa: F401
     get_sandbox_concurrency_limit,
-    update_run_status,
+    update_run_status,  # noqa: F401
 )
 from farna.db.crud.run_node_outputs import DualWriteError, read_run_blobs, read_run_markers  # noqa: F401
 from farna.db.models.eval import Eval
 from farna.db.models.hitl_claim import HitlClaim  # noqa: F401
-from farna.db.models.model_backend import ModelBackend
-from farna.db.models.organisation import Organisation
-from farna.db.models.pipeline import Pipeline
+from farna.db.models.model_backend import ModelBackend  # noqa: F401
+from farna.db.models.organisation import Organisation  # noqa: F401
+from farna.db.models.pipeline import Pipeline  # noqa: F401
 from farna.db.models.pipeline_snapshot import PipelineSnapshot
 from farna.db.models.policy_gate import PolicyGate
-from farna.db.models.run import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES, Run
+from farna.db.models.run import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES, Run  # noqa: F401
 from farna.db.models.run_attempt import ATTEMPT_TERMINAL_REASON_RESET  # noqa: F401
-from farna.db.rls import set_rls_execution_context, set_rls_org
+from farna.db.rls import set_rls_execution_context, set_rls_org  # noqa: F401
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, is_lock_abort, sqlstate_of  # noqa: F401
 from farna.otel_bridge import LangGraphOtelBridge, trace_id_for_thread  # noqa: F401
 
@@ -228,13 +228,15 @@ from farna.otel_bridge import LangGraphOtelBridge, trace_id_for_thread  # noqa: 
 # resolving. Do not redefine these names in this module.
 #
 # ``_FinalizeMixin`` / ``_TelemetryMixin`` / ``_HitlMixin`` / ``_StreamingMixin``
-# / ``_RunExecuteMixin`` are the step 2-4 class splits: the finalize, telemetry,
-# HITL, stream-phase and execute/resume method groups moved into mixin modules,
-# imported under private aliases so they do NOT join this module's importable
-# surface.
+# / ``_RunExecuteMixin`` / ``_HubsMixin`` / ``_AdmissionMixin`` are the class
+# splits: the finalize, telemetry, HITL, stream-phase, execute/resume, hub and
+# admission method groups moved into mixin modules, imported under private
+# aliases so they do NOT join this module's importable surface.
 # ---------------------------------------------------------------------------
+from .executor_parts.admission import AdmissionMixin as _AdmissionMixin
 from .executor_parts.finalize import FinalizeMixin as _FinalizeMixin
 from .executor_parts.hitl import HitlMixin as _HitlMixin
+from .executor_parts.hubs import HubsMixin as _HubsMixin
 from .executor_parts.outcomes import (
     _connector_artifact_error_code,
     _connector_artifact_matches,
@@ -557,7 +559,7 @@ def _enrich_failure_detail(raw_detail: str, exc: BaseException) -> str:
     return enrich_error_detail(raw_detail, exc)
 
 
-class PipelineExecutor(_HitlMixin, _StreamingMixin, _RunExecuteMixin, _FinalizeMixin, _TelemetryMixin):
+class PipelineExecutor(_HitlMixin, _StreamingMixin, _RunExecuteMixin, _FinalizeMixin, _TelemetryMixin, _HubsMixin, _AdmissionMixin):
     """Execute a single pipeline run (HITL-aware, supports parallel fan-out).
 
     ``astream_events`` delivers every node's events (including nodes running in
@@ -652,893 +654,6 @@ class PipelineExecutor(_HitlMixin, _StreamingMixin, _RunExecuteMixin, _FinalizeM
         # first node dispatch.  Read by the zombie watchdog when the grace
         # period fires.
         self._dispatch_phase_tracker: Any | None = None
-
-    async def _check_capacity(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        max_concurrent: int,
-        graph_json: dict[str, Any] | None = None,
-        snapshot_id: uuid.UUID | None = None,
-    ) -> Run:
-        """Non-blocking capacity check using count-based comparison.
-
-        Soft-cap, no advisory lock. If the pipeline's ``max_concurrent_runs``
-        limit OR the organisation's sandbox concurrency cap (when the graph
-        contains a ``sandbox_agent`` node and a cap is configured) OR the
-        organisation's run-concurrency cap (``run_concurrency_limit``, when
-        configured) is reached, the run is atomically demoted back to
-        ``pending`` with a reason marker on ``error_code``
-        (``pipeline_capacity`` / ``org_capacity_limited``) and recovered by
-        ``dispatcher_reconcile`` (cron_helpers) / the stale-run sweep
-        (pipeline_execution) — plan F3b: no in-process retry loop.
-
-        The org run-concurrency cap is the CLAIM-TIME backstop for the
-        dispatch-time admission gate in ``dispatch_run``. Dispatch-time
-        admission counts active runs in one transaction but enqueues later;
-        newly-enqueued runs stay ``pending`` (invisible to the count) until a
-        worker claims them, so a burst of dispatches can each see
-        ``active < limit`` and all enqueue — exceeding the org cap by the
-        batch size. Re-checking the org run cap here, at claim time, closes
-        that TOCTOU window (mirroring the sandbox-cap claim-time check).
-
-        When *max_concurrent* is 0 or negative the pipeline is unlimited, but
-        the organisation caps (sandbox + run, if configured) still apply.
-
-        Fail-open, loud: any error reading the org settings, counting org
-        runs, or scanning the graph logs a warning and ADMITS the run (treats
-        it as no-cap) rather than raising.
-
-        A 55P03 row-lock timeout on the admission transaction is
-        retried ONCE. That transaction also spends one execution attempt, so a
-        silent recovery would let the graph run uncounted. A second consecutive
-        timeout does NOT terminalise: the executor attempts the fenced
-        pending-reset and raises :class:`AdmissionLockTimeoutError`, which
-        ``run_executor_with_watchdog`` maps to the non-terminal ``deferred``
-        outcome. The run consumed zero executions (both admissions rolled
-        back). The run's resting state depends on the reset: a CONFIRMED reset
-        leaves it ``pending`` for ``dispatcher_reconcile``; a reset that itself
-        timed out (``None``) leaves it ``running`` under our claim token for the
-        nodeless/age backstop; a reset that RAISED leaves its outcome
-        ``unknown``, worded as both possibilities. Either way the next
-        admission counts the attempt.
-        """
-        org_sandbox_cap, org_sandbox_host_only, org_sandbox_population = await self._read_org_sandbox_cap_full(org_id, graph_json, snapshot_id)
-        org_run_limit: int | None = await self._read_org_run_concurrency_limit(org_id)
-
-        # The admission transaction ALSO spends one execution against
-        # the retry budget (see ``_claim_under_capacity``). A 55P03 row-lock
-        # timeout rolls that transaction back WHOLE — including the bump — so
-        # proceeding after recovery would execute the graph UNCOUNTED. Retry the
-        # admission+bump transaction exactly once.
-        #
-        # If the second attempt also times out, DEFER rather than terminalise.
-        # Both attempts rolled back, so the run has consumed zero executions;
-        # killing it ``executor_failed`` would be worse than the capacity-lock
-        # behaviour this replaced. The run was already claimed ``running``, so
-        # it must be handed back explicitly: the fenced pending-reset (the
-        # established non-terminal deferral path used by the retry policy and
-        # the watchdogs) leaves it recoverable by ``dispatcher_reconcile``'s
-        # re-enqueue leg. Safe for a non-idempotent graph despite
-        # ``_fenced_pending_reset``'s idempotency rule: ZERO nodes have
-        # executed here (admission precedes streaming), so a re-dispatch cannot
-        # repeat a side effect.
-        run, first_timeout = await self._claim_or_lock_timeout(
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            max_concurrent=max_concurrent,
-            org_sandbox_cap=org_sandbox_cap,
-            org_sandbox_host_only=org_sandbox_host_only,
-            org_sandbox_population=org_sandbox_population,
-            org_run_limit=org_run_limit,
-        )
-        if run is not None:
-            return run
-        _log.warning(
-            "pipeline.capacity_check_lock_timeout run=%s — bounded mutation_row_lock_timeout_ms wait expired on the claim-time write; retrying the admission+bump transaction once",
-            run_id,
-            exc_info=first_timeout,
-        )
-        run, second_timeout = await self._claim_or_lock_timeout(
-            run_id=run_id,
-            org_id=org_id,
-            pipeline_id=pipeline_id,
-            max_concurrent=max_concurrent,
-            org_sandbox_cap=org_sandbox_cap,
-            org_sandbox_host_only=org_sandbox_host_only,
-            org_sandbox_population=org_sandbox_population,
-            org_run_limit=org_run_limit,
-        )
-        if run is not None:
-            return run
-        return await self._defer_after_admission_lock_timeout(run_id=run_id, org_id=org_id, lock_timeout=second_timeout)
-
-    async def _claim_or_lock_timeout(self, **kwargs: Any) -> tuple[Run | None, Exception | None]:
-        """Attempt ONE admission, translating a 55P03 row-lock timeout into data.
-
-        The admission transaction also spends one execution against the retry
-        budget, so a lock timeout rolls the bump back WHOLE. Returning the
-        timeout (instead of raising) lets the caller retry exactly once and then
-        defer; every non-55P03 failure and cancellation propagates unchanged.
-        """
-        try:
-            return await self._claim_under_capacity(**kwargs), None
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            if sqlstate_of(exc) != LOCK_NOT_AVAILABLE_SQLSTATE:
-                raise
-            return None, exc
-
-    async def _defer_after_admission_lock_timeout(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        lock_timeout: Exception | None,
-    ) -> NoReturn:
-        """Hand a zero-execution run back to ``pending`` after a second 55P03.
-
-        The reset's OUTCOME is carried as a tri-state (plus "unknown" for an
-        unexpected reset failure) — never a bool, because a fence loss (rowcount
-        0) and a timeout (``None``) are different facts and the deferral log
-        must describe each truthfully. The raised error maps to the non-terminal
-        ``deferred`` outcome, so the run is never terminal-failed after consuming
-        zero executions.
-        """
-        reset_state: AdmissionResetState = "unknown"
-        try:
-            reset = await self._fenced_pending_reset(run_id=run_id, org_id=org_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            # The reset RAISED, so its outcome cannot be determined here.
-            # ``unknown`` names BOTH possible resting states and claims neither
-            # — a landed reset leaves the row ``pending`` (recovered by
-            # dispatcher_reconcile's re-enqueue leg), a reset that did not land
-            # leaves it ``running`` (the nodeless/age backstop). Deliberately no
-            # re-read: opening a session just to look at the row is more surface
-            # than this ambiguity warrants.
-            _log.warning(
-                "pipeline.capacity_check_lock_timeout run=%s — fenced pending-reset raised after the second admission timeout, so whether it landed is unknown; the deferral names both possible sweeps",
-                run_id,
-                exc_info=True,
-            )
-        else:
-            if reset is None:
-                reset_state = "timeout"
-            elif reset:
-                reset_state = "confirmed"
-            else:
-                reset_state = "fence_lost"
-        _log.warning(
-            "pipeline.capacity_check_lock_timeout run=%s — second bounded "
-            "mutation_row_lock_timeout_ms wait expired; the admission and its "
-            "execution-budget bump rolled back, so the attempt is NOT executed "
-            "uncounted. Deferring (fenced pending-reset=%s) instead of "
-            "terminal-failing a run that consumed zero executions",
-            run_id,
-            reset_state,
-            exc_info=True,
-        )
-        # The deferral's observable contract differs with the reset: a confirmed
-        # reset leaves the run ``pending`` (reconciled); a fence loss is owned by
-        # a successor / already non-running; a timeout leaves the row most likely
-        # running (backstop); a raised reset leaves the outcome ``unknown`` and
-        # both possible resting states are named.
-        raise AdmissionLockTimeoutError(run_id, attempts=2, reset_state=reset_state) from lock_timeout
-
-    async def _claim_under_capacity(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        max_concurrent: int,
-        org_sandbox_cap: int | None,
-        org_sandbox_host_only: bool,
-        org_sandbox_population: str,
-        org_run_limit: int | None,
-    ) -> Run:
-        """Claim the run or demote it to pending, in one bounded transaction.
-
-        ``set_mutation_row_lock_timeout`` bounds the hot ``runs``
-        row-lock wait BEFORE this transaction's first lock (``get_run`` below
-        is a plain read; the first lock is the cancel/claim/demote write). This
-        claim-time write is a RECOVERY path — the run was already claimed
-        ``running`` by ``claim_run_async``, so a contended row must NOT
-        terminal-fail it. Issued in the caller's transaction; the shared
-        ``update_run_status`` stays unbounded -.
-        """
-        async with self._session_factory() as session, session.begin():
-            await set_rls_org(session, org_id)
-            await set_rls_execution_context(session)
-            await set_mutation_row_lock_timeout(session)
-            run = await get_run(session, run_id)
-            if run is None:
-                raise RunNotFoundError(run_id)
-            if run.cancellation_requested:
-                await update_run_status(session, run_id, "cancelled")
-                cancelled_run = await get_run(session, run_id)
-                if cancelled_run is None:
-                    raise RunNotFoundError(run_id)
-                return cancelled_run
-
-            capacity = await self._capacity_snapshot(
-                session,
-                run_id=run_id,
-                org_id=org_id,
-                pipeline_id=pipeline_id,
-                max_concurrent=max_concurrent,
-                org_sandbox_cap=org_sandbox_cap,
-                org_sandbox_host_only=org_sandbox_host_only,
-                org_sandbox_population=org_sandbox_population,
-                org_run_limit=org_run_limit,
-            )
-            if not _all_capacities_ok(capacity.pipeline_ok, capacity.sandbox_ok, capacity.run_ok):
-                return await self._demote_for_capacity(
-                    session,
-                    run_id=run_id,
-                    max_concurrent=max_concurrent,
-                    capacity=capacity,
-                    org_sandbox_cap=org_sandbox_cap,
-                    org_run_limit=org_run_limit,
-                )
-
-            if run.status not in _ADMISSIBLE_STATUSES:
-                # The run went terminal (or hold) while a retry was backing
-                # off — never resurrect it. Return it untouched so the
-                # caller does not resume execution.
-                return run
-            refused = await self._retry_budget_gate(
-                session,
-                run=run,
-                run_id=run_id,
-                org_id=org_id,
-                pipeline_id=pipeline_id,
-            )
-            if refused is not None:
-                return refused
-            admitted = await self._claim_run_and_audit(
-                session=session,
-                run_id=run_id,
-                org_id=org_id,
-                pipeline_id=pipeline_id,
-            )
-            # This attempt is EXECUTING — spend ONE execution
-            # against the pipeline's retry budget. Placement is the
-            # invariant: the capacity check above has passed (a demotion
-            # returns above and never reaches this line), so the counter
-            # grows if and only if the execution attempt actually begins.
-            # Stamped in the SAME transaction as the admission decision, so
-            # a crash immediately after this commit still leaves the
-            # attempt counted; every pre-node death that follows
-            # (checkpointer setup, graph compile, hub init) therefore
-            # consumes budget, because the attempt was made. It is NEVER
-            # stamped by the SAQ claim (``claim_run_async``) — that runs
-            # before capacity and would charge a demoted claim — and never
-            # by the resume claim (a checkpoint continuation, not a graph
-            # execution).
-            await self._spend_execution_attempt(session, run_id=run_id, org_id=org_id)
-            return admitted
-
-    async def _spend_execution_attempt(
-        self,
-        session: AsyncSession,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-    ) -> None:
-        """Spend ONE execution and open the matching per-attempt history row.
-
-        Called from ``_claim_under_capacity`` in the SAME transaction as the
-        admission decision, so the spend and the attempt row describe one
-        event and can never disagree.
-
-        The per-attempt row is FAIL-OPEN, inside a SAVEPOINT: diagnostics must
-        never fail the admission. A bare try/except would be wrong on Postgres
-        — a failed statement aborts the WHOLE transaction, so the caller's
-        admission commit would fail instead of the attempt write alone. The
-        savepoint rolls back just this statement. ``model_used`` is unknown at
-        admission (nodes have not run).
-        """
-        from farna.core.pipeline_execution import bump_execution_attempt_count
-
-        counted = await bump_execution_attempt_count(
-            session,
-            run_id,
-            org_id,
-            claim_token=self._claim_token,
-        )
-        if not counted:
-            # The token/status fence rejected the bump. The caller's admission
-            # branch proved the row was admissible, so this is a concurrent
-            # transition (a successor rotated the token, or the row left
-            # ``running`` in the same instant). Never let that be
-            # indistinguishable from a successful spend: WARN, and proceed
-            # only because every later write the attempt makes is itself
-            # token-fenced (a successor that took the run spent its own
-            # attempt in its own admission).
-            _log.warning(
-                "pipeline.execution_attempt_not_counted run=%s org=%s — the claim-token/status fence rejected the execution-budget bump; the attempt proceeds against a superseded or no-longer-running row (its writes remain fenced)",
-                run_id,
-                org_id,
-            )
-            return
-        # Gated on ``counted``: a fence-rejected bump opened no execution, so
-        # writing a row would make attempts OUTNUMBER ``execution_attempt_count``.
-        try:
-            from farna.db.crud.run_attempts import start_attempt
-
-            async with session.begin_nested():
-                await start_attempt(session, run_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.execution_attempt_row_failed run=%s org=%s — the per-attempt history row could not be written; the execution proceeds (attempt history is diagnostics, never a gate)",
-                run_id,
-                org_id,
-                exc_info=True,
-            )
-
-    async def _capacity_snapshot(
-        self,
-        session: AsyncSession,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-        max_concurrent: int,
-        org_sandbox_cap: int | None,
-        org_sandbox_host_only: bool,
-        org_sandbox_population: str,
-        org_run_limit: int | None,
-    ) -> _CapacitySnapshot:
-        """Read the three capacity gates once, in the admission transaction."""
-        pipeline_ok = True
-        active_count = 0
-        if max_concurrent > 0:
-            active_count = await count_active_runs_for_pipeline(session, pipeline_id, include_pending=False, exclude_run_id=run_id)
-            pipeline_ok = active_count < max_concurrent
-
-        sandbox_count = 0
-        if org_sandbox_cap is not None:
-            sandbox_count = await self._org_sandbox_active_count(
-                session,
-                org_id,
-                run_id,
-                population=org_sandbox_population,
-                host_resource_only=org_sandbox_host_only,
-            )
-        sandbox_ok = org_sandbox_cap is None or sandbox_count < org_sandbox_cap
-
-        run_count = 0
-        if org_run_limit is not None:
-            run_count = await self._org_run_active_count(session, org_id, run_id)
-        run_ok = org_run_limit is None or run_count < org_run_limit
-        return _CapacitySnapshot(
-            pipeline_ok=pipeline_ok,
-            active_count=active_count,
-            sandbox_ok=sandbox_ok,
-            sandbox_count=sandbox_count,
-            run_ok=run_ok,
-            run_count=run_count,
-        )
-
-    async def _retry_budget_gate(
-        self,
-        session: AsyncSession,
-        *,
-        run: Run,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-    ) -> Run | None:
-        """Refuse an admission that would exceed the pipeline's retry budget.
-
-        Defence in depth: THIS is the single point every graph
-        execution is granted through (the capacity check has passed; the caller
-        spends one execution after this gate). Returns the terminal row when the
-        attempt is refused and ``None`` when the caller may admit. The policy is
-        read here (soft-delete opt-out) rather than threaded
-        from a caller, so no call site can omit the gate. ``None``/``{}``
-        imposes no ceiling and is unaffected.
-        """
-        from farna.db.soft_delete import include_soft_deleted
-
-        pipeline_row = (await session.execute(include_soft_deleted(select(Pipeline).where(Pipeline.id == pipeline_id)))).scalar_one_or_none()
-        retry_policy = getattr(pipeline_row, "retry_policy", None)
-        ceiling = retry_max_executions(retry_policy)
-        consumed = retry_executions_consumed(execution_attempt_count=getattr(run, "execution_attempt_count", 0))
-        if ceiling is None or not retry_budget_exhausted(retry_policy, execution_attempt_count=consumed):
-            return None
-        terminal_run = await update_run_status(
-            session,
-            run_id,
-            "failed",
-            error_code=_CODE_HARNESS_RETRY_BUDGET_EXHAUSTED,
-            error_detail=(f"Run not admitted: its retry_policy budget is exhausted (execution_attempt_count={consumed} >= ceiling {ceiling}); the graph was not executed."),
-            claim_token=self._claim_token,
-            from_status="running",
-        )
-        if terminal_run is None:
-            # The fenced write lost the row (cancellation raised, or a
-            # superseded claim, in the same instant). Do NOT invent a terminal
-            # row: re-read whatever the row now is.
-            #
-            # This MUST be a genuine re-read: the fenced write above is a raw
-            # UPDATE that bypasses the ORM identity map, so a plain ``get_run``
-            # in THIS session returns the STALE object loaded at the top of the
-            # transaction — its ``claim_token``/``cancellation_requested``/
-            # ``status`` are the pre-write values, making the reason split
-            # below unreachable and masking a row that already left
-            # ``running``. ``populate_existing`` forces the row read.
-            terminal_run = await session.get(Run, run_id, populate_existing=True)
-            if terminal_run is None:
-                raise RunNotFoundError(run_id)
-            _log.warning(
-                "pipeline.retry_budget_gate_fence_lost run=%s org=%s status=%s — the terminal write was rejected; re-read the row instead of admitting the execution",
-                run_id,
-                org_id,
-                terminal_run.status,
-            )
-            if terminal_run.status == "running":
-                # A superseded token or a cancellation-pending row is STILL
-                # ``running``, so ``execute()``'s ``status != "running"`` bail
-                # would let it stream — exactly the execution past the ceiling
-                # this gate exists to refuse. Keep the attempt non-executing:
-                # raise, and let the wrapper map it to a non-terminal outcome.
-                # Only a genuinely non-running row (a terminal or held state)
-                # may be returned untouched.
-                if terminal_run.claim_token != self._claim_token:
-                    raise RetryBudgetGateRefusedError(run_id, reason="superseded claim token")
-                if terminal_run.cancellation_requested:
-                    raise RetryBudgetGateRefusedError(run_id, reason="cancellation pending")
-                raise RetryBudgetGateRefusedError(run_id, reason="fence lost")
-            return terminal_run
-        _log.warning(
-            "pipeline.retry_budget_exhausted_at_admission run=%s org=%s execution_attempts=%s ceiling=%s — refused to execute past the retry_policy budget",
-            run_id,
-            org_id,
-            consumed,
-            ceiling,
-        )
-        return terminal_run
-
-    async def _demote_for_capacity(
-        self,
-        session: AsyncSession,
-        *,
-        run_id: uuid.UUID,
-        max_concurrent: int,
-        capacity: _CapacitySnapshot,
-        org_sandbox_cap: int | None,
-        org_run_limit: int | None,
-    ) -> Run:
-        """Demote an over-capacity claim back to ``pending`` with a reason marker.
-
-        The recovery sweeps (dispatcher_reconcile / stale-run) pick it up. FENCED
-        to this executor's claim token and only from ``running`` (A1): a
-        superseded original (token rotated by a successor) cannot demote the
-        successor's running row back to pending.
-
-        D8: this claim-time demotion is explicitly ADVISORY — a
-        best-effort, lock-free, population-only read (its own-row lock exists
-        only at this fenced demote write) that must NEVER take the per-org
-        advisory lock (a count-then-row shape would invert the uniform
-        row→advisory ordering). The runner-marker reconciliation sweep is its
-        named backstop.
-        """
-        decline_code, decline_detail = self._capacity_decline(
-            max_concurrent=max_concurrent,
-            active_count=capacity.active_count,
-            _pipeline_capacity_ok=capacity.pipeline_ok,
-            org_sandbox_cap=org_sandbox_cap,
-            org_count=capacity.sandbox_count,
-            org_capacity_ok=capacity.sandbox_ok,
-            org_run_limit=org_run_limit,
-            org_run_count=capacity.run_count,
-            org_run_capacity_ok=capacity.run_ok,
-        )
-        await update_run_status(
-            session,
-            run_id,
-            "pending",
-            error_code=decline_code,
-            error_detail=decline_detail,
-            claim_token=self._claim_token,
-            from_status="running",
-        )
-        pending_run = await get_run(session, run_id)
-        if pending_run is None:
-            raise RunNotFoundError(run_id)
-        return pending_run
-
-    async def _check_spend_ceiling_gate(
-        self,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        claim_token: str | None,
-    ) -> Run | None:
-        """Halt a run BEFORE any billable step when the org budget is exhausted.
-
-        Reads the org's lifetime spend ceiling and its consumed total
-        from the per-org cost-state row (``organisation_cost_state``; .
-        If the org is already at/over its ceiling (no remaining budget for ANY
-        new run), the run is terminalized as ``cost_ceiling_exceeded`` and
-        returned so ``execute()`` never spawns an LLM / E2B call. Returns
-        ``None`` when the run may proceed (no ceiling, budget remaining, or any
-        read error).
-
-        FAIL-OPEN by design (mirrors ``_check_capacity``): a settings/DB read
-        failure must NEVER block the run — the terminal ledger block in
-        ``finalize.py`` is the authoritative hard ceiling that refuses billing
-        beyond the limit regardless of this pre-gate.
-
-        Only the org ceiling is checked here (the per-run ceiling is enforced
-        after the run has incurred cost, at the terminal ledger block, because a
-        run's cost is only known once nodes have executed).
-        """
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                # Bound the hot ``runs`` row-lock wait BEFORE the
-                # transaction's first lock (the terminalizing
-                # ``update_run_status`` below). Issued in the caller's
-                # transaction; the shared ``update_run_status`` stays unbounded
-                # -. A 55P03 lands in this method's existing fail-open
-                # ``except Exception`` (WARNING + return None) — the ledger block
-                # remains the authoritative hard ceiling.
-                await set_mutation_row_lock_timeout(session)
-                # Opt out of the global soft-delete filter — a
-                # pending-deletion org (deleted_at stamped at initiate) is still
-                # operationally live.  Skipping here means the pre-dispatch
-                # ceiling gate returns None and the run proceeds unchecked.
-                from farna.db.soft_delete import include_soft_deleted
-
-                org = (await session.execute(include_soft_deleted(select(Organisation).where(Organisation.id == org_id)))).scalar_one_or_none()
-                if org is None:
-                    return None
-                # The ceiling/cumulative live on the per-org cost-state
-                # row; a missing row is the defaults (both ceilings unlimited,
-                # cumulative 0), not an error.
-                state = await get_org_cost_state(session, org_id)
-                # Pass a minimal 1-cent charge as the "next run" so the gate
-                # honours the documented at-ceiling / kill-switch semantics: with
-                # zero remaining budget (cumulative >= ceiling, or ceiling == 0)
-                # the run must be terminalized BEFORE any billable work, not left
-                # to the finalize ledger block. A ceiling of 0 therefore blocks
-                # every new run, and an org exactly at its ceiling (1 cent would
-                # exceed it) is halted. A genuinely non-empty remaining budget
-                # (>= 1 cent) still passes so the run can execute.
-                decision = evaluate_org_spend_ceiling(
-                    org_cumulative_spend_cents=(state.org_cumulative_spend_cents or 0) if state is not None else 0,
-                    additional_cents=1,
-                    spend_ceiling_cents=state.spend_ceiling_cents if state is not None else None,
-                )
-                if decision.allowed:
-                    return None
-                await update_run_status(
-                    session,
-                    run_id,
-                    "cost_ceiling_exceeded",
-                    error_code=ORG_CEILING_EXCEEDED,
-                    error_detail=decision.message,
-                    claim_token=claim_token,
-                )
-                halted_run = await get_run(session, run_id)
-                if halted_run is None:
-                    raise RunNotFoundError(run_id)
-                _log.info(
-                    "pipeline.spend_ceiling_gate_halt",
-                    extra={"run_id": str(run_id), "org_id": str(org_id)},
-                )
-                return halted_run
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception(
-                "pipeline.spend_ceiling_gate_failed",
-                extra={"run_id": str(run_id), "org_id": str(org_id)},
-            )
-            return None
-
-    async def _check_policy_gate_pin(
-        self,
-        session: AsyncSession,
-        *,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        snapshot: PipelineSnapshot,
-        claim_token: str | None,
-    ) -> Run | None:
-        """Re-verify the snapshot's policy-gate pin fingerprint.
-
-        Fail-CLOSED backstop for §3.4 on BOTH the execute() and resume()
-        paths: the run-creation seam blocks a mismatched snapshot before
-        dispatch, but the snapshot's pin columns could be corrupted AFTER
-        creation (direct DB write, partial restore, migration accident).
-        A mismatch terminalizes the run ``eval_failed`` / ``eval_blocked``
-        BEFORE any evaluation happens, and the caller returns the row early
-        — no compensation and no finalize run, because nothing has executed
-        (spend-ceiling-gate early-return precedent).
-
-        Returns ``None`` when there is nothing to verify: an unpinned
-        snapshot (legacy NULL fingerprint) or a non-``str`` fingerprint
-        (a test double / stand-in — gated so one can never trip a block).
-        The terminalizing write happens in the CALLER's transaction
-        (*session* is caller-owned so the execute() and resume() paths can
-        pass a session that already holds the run's row lock).
-        """
-        fingerprint = snapshot.policy_gate_pins_fingerprint
-        if not isinstance(fingerprint, str):
-            # Unpinned (NULL) or a non-string stand-in — pre-pinning
-            # behaviour: fall back to the pipeline's live gates.
-            return None
-        blocked, block_message = _verify_policy_gate_pin_fingerprint(
-            org_id=org_id,
-            run_id=run_id,
-            snapshot_id=snapshot.id,
-            snap_pins=snapshot.policy_gate_pins_json,
-            saved_fingerprint=fingerprint,
-            pipeline_id=snapshot.pipeline_id,
-            snapshot_version=snapshot.snapshot_version,
-        )
-        if not blocked:
-            return None
-        await update_run_status(
-            session,
-            run_id,
-            "eval_failed",
-            error_code="eval_blocked",
-            error_detail=block_message,
-            claim_token=claim_token,
-        )
-        halted_run = await get_run(session, run_id)
-        if halted_run is None:
-            raise RunNotFoundError(run_id)
-        _log.error(
-            "policy_gates.pin_fingerprint_mismatch_terminalized",
-            extra={
-                "run_id": str(run_id),
-                "org_id": str(org_id),
-                "snapshot_id": str(snapshot.id),
-                "pipeline_id": str(snapshot.pipeline_id),
-            },
-        )
-        return halted_run
-
-    async def _claim_run_and_audit(
-        self,
-        *,
-        session: AsyncSession,
-        run_id: uuid.UUID,
-        org_id: uuid.UUID,
-        pipeline_id: uuid.UUID,
-    ) -> Run:
-        """Claim a capacity-admitted run (pending→running) and fire ``run_started``.
-
-        Extracted from ``_check_capacity`` (pure refactor). PRD §8.12: a run
-        "starts" exactly once — the pending→running claim transition in the
-        execute() path. The resume() path sets ``running`` directly (no
-        _check_capacity call) so the event fires once per run, not once per
-        resume. Failure-isolated: a broken audit append must never block run
-        admission (the savepoint rollback undoes only the audit write).
-        """
-        await update_run_status(
-            session,
-            run_id,
-            "running",
-            claimed_by=_WORKER_ID,
-            clear_error_code=True,
-        )
-        running_run = await get_run(session, run_id)
-        if running_run is None:
-            raise RunNotFoundError(run_id)
-        try:
-            actor_user_id, actor_label = resolve_run_actor(
-                trigger_type=running_run.trigger_type,
-                trigger_id=running_run.trigger_id,
-                account_id=running_run.account_id,
-            )
-            payload: dict[str, Any] = {
-                "pipeline_id": str(pipeline_id),
-                # The run-keyed audit payload carries the
-                # run's execution origin ('dispatched' / NULL) so the audit log
-                # can tell a dispatched run from one Modulo executed. Composed
-                # from the shared serializer — core may not import
-                # the API layer, which is exactly why the serializer lives here
-                # in core and serves both layers.
-                **run_provenance_fields(running_run),
-                "summary": compose_run_started_summary(
-                    await _safe_pipeline_name(session, pipeline_id, org_id, run_id),
-                    pipeline_id,
-                    running_run.trigger_type,
-                ),
-            }
-            if actor_label is not None:
-                payload["actor"] = actor_label
-            await append_audit_event(
-                session,
-                org_id=org_id,
-                event_type="run_started",
-                actor_user_id=actor_user_id,
-                resource_type="run",
-                resource_id=run_id,
-                payload_json=payload,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.run_started_audit_failed",
-                extra={"run_id": str(run_id), "org_id": str(org_id)},
-                exc_info=True,
-            )
-        return running_run
-
-    async def _org_sandbox_active_count(
-        self,
-        session: AsyncSession,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-        *,
-        population: str = "graph",
-        host_resource_only: bool = False,
-    ) -> int:
-        """Count the org's active sandbox runs (fail-open to 0 on read error).
-
-        D8: ``population="marker"`` (the flag-on claim-time path)
-        counts the narrowed running-only marker population; the default
-        ``"graph"`` keeps the pre-D8 sandbox-graph count for flag-off.
-        """
-        try:
-            if population == "marker":
-                from farna.core.runner_capacity import count_active_runner_dispatches_for_decision
-
-                return await count_active_runner_dispatches_for_decision(session, org_id, exclude_run_id=run_id, host_resource_only=host_resource_only)
-            return await count_active_sandbox_runs_for_org(session, org_id, exclude_run_id=run_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.sandbox_org_count_failed",
-                extra={"org_id": str(org_id), "run_id": str(run_id)},
-                exc_info=True,
-            )
-            return 0
-
-    async def _org_run_active_count(self, session: AsyncSession, org_id: uuid.UUID, run_id: uuid.UUID) -> int:
-        """Count the org's active runs (fail-open to 0 on read error)."""
-        try:
-            return await count_active_runs_for_org(session, org_id, include_pending=False, exclude_run_id=run_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.org_run_count_failed",
-                extra={"org_id": str(org_id), "run_id": str(run_id)},
-                exc_info=True,
-            )
-            return 0
-
-    async def _read_org_sandbox_cap_full(
-        self,
-        org_id: uuid.UUID,
-        graph_json: dict[str, Any] | None,
-        snapshot_id: uuid.UUID | None,
-    ) -> tuple[int | None, bool, str]:
-        """The claim-time cap read + its count-population contract (D8).
-
-        Returns ``(cap, host_resource_only, population)``: flag-on resolves
-        the tier-scoped cap through the shared runner-capacity reader (the
-        absent-key Docker-tier default 4 counts host-resource providers only;
-        an explicit value gates ALL runner dispatches) and pairs it with the
-        matching ``"marker"`` population; flag-off keeps the pre-D8
-        ``enforced_cap`` + ``"graph"`` population exactly.
-
-        E2B carve-out omission (D8 qa F14, documented at both sites): this
-        claim-time read does not model the dispatch gate's e2b skip — the
-        demotion it drives is an ADVISORY backstop (the dispatch gate is the
-        enforcement point), so a conservative host-only count here is
-        acceptable over-demotion, never lost work.
-        """
-        try:
-            has_sandbox = _sandbox_agent_for_snapshot(snapshot_id, graph_json) if snapshot_id is not None else _graph_contains_sandbox_agent(graph_json)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.sandbox_graph_scan_failed",
-                extra={"org_id": str(org_id)},
-                exc_info=True,
-            )
-            return None, False, "graph"
-        if not has_sandbox:
-            return None, False, "graph"
-        try:
-            from farna.settings import get_settings
-
-            flag_on = get_settings().runner_capacity_gate_enabled
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                if flag_on:
-                    from farna.core.runner_capacity import read_runner_cap_contract
-
-                    cap, host_resource_only = await read_runner_cap_contract(session, org_id)
-                    return cap, host_resource_only, "marker"
-                # The one reader returns the full contract; this
-                # claim-time cap read enforces the flag-off window cap only
-                # (absent key = no gate until D8's rollout flag).
-                return (await get_sandbox_concurrency_limit(session, org_id)).enforced_cap, False, "graph"
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.sandbox_cap_read_failed",
-                extra={"org_id": str(org_id)},
-                exc_info=True,
-            )
-            return None, False, "graph"
-
-    async def _read_org_run_concurrency_limit(self, org_id: uuid.UUID) -> int | None:
-        """Read the org's run-concurrency cap (``None`` = no cap / fail-open).
-
-        Mirrors :meth:`_read_org_sandbox_cap_full` but for the org-wide
-        ``run_concurrency_limit`` (applies to EVERY run, not just sandbox
-        graphs). Fail-open: any read error logs a warning and treats the org
-        as uncapped.
-        """
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                return await get_org_run_concurrency_limit(session, org_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.warning(
-                "pipeline.org_run_cap_read_failed",
-                extra={"org_id": str(org_id)},
-                exc_info=True,
-            )
-            return None
-
-    @staticmethod
-    def _capacity_decline(
-        *,
-        max_concurrent: int,
-        active_count: int,
-        _pipeline_capacity_ok: bool,
-        org_sandbox_cap: int | None,
-        org_count: int,
-        org_capacity_ok: bool,
-        org_run_limit: int | None = None,
-        org_run_count: int = 0,
-        org_run_capacity_ok: bool = True,
-    ) -> tuple[str, str]:
-        """Pick the capacity reason marker + sanitized human detail."""
-        if not org_capacity_ok and org_sandbox_cap is not None:
-            return (
-                ERROR_CODE_ORG_CAPACITY_LIMITED,
-                f"Org sandbox concurrency limit reached: {org_count} active, cap {org_sandbox_cap}",
-            )
-        if not org_run_capacity_ok and org_run_limit is not None:
-            return (
-                ERROR_CODE_ORG_CAPACITY_LIMITED,
-                f"Org run concurrency limit reached: {org_run_count} active, cap {org_run_limit}",
-            )
-        return (
-            ERROR_CODE_PIPELINE_CAPACITY,
-            f"Pipeline max_concurrent_runs reached: {active_count} active, limit {max_concurrent}",
-        )
 
     async def _load_claimed_conformance_guardrails(
         self,
@@ -2203,387 +1318,6 @@ class PipelineExecutor(_HitlMixin, _StreamingMixin, _RunExecuteMixin, _FinalizeM
             )
         return output
 
-    async def _init_model_backend_hub(self, org_id: uuid.UUID) -> ModelBackendHub | None:
-        """Load active model backends for the org and initialise ModelBackendHub.
-
-        Sets the hub on the current ContextVar so node_runner can access it.
-        Returns the hub (or None if no backends are configured) for cleanup
-        in the caller's finally block.
-        """
-        hub: ModelBackendHub | None = None
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                backend_rows = (
-                    (
-                        await session.execute(
-                            select(ModelBackend).where(
-                                ModelBackend.organisation_id == org_id,
-                                ModelBackend.status == "active",
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                if isinstance(backend_rows, list) and backend_rows:
-                    from farna.settings import get_settings
-
-                    _settings = get_settings()
-                    from farna.core.secrets_backend import create_secrets_backend
-
-                    secrets_backend = create_secrets_backend(
-                        fernet_key=_settings.fernet_key,
-                        session=session,
-                    )
-                    hub = ModelBackendHub()
-                    await hub.__aenter__()
-                    await hub.initialise(backend_rows, secrets_backend=secrets_backend)
-                    set_model_backend_hub(hub)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("pipeline.model_backend_hub_init_failed")
-            if hub is not None:
-                await _teardown_hub(hub)
-            hub = None
-        return hub
-
-    async def _load_connector_scope_grants(
-        self,
-        session: Any,
-        org_id: uuid.UUID,
-        agent_ids: list[uuid.UUID],
-    ) -> tuple[dict[str, set[str]], set[str]]:
-        """Load connector grants and apply the FAR-764 execution gate.
-
-        Agents from a ``registry_sourced`` collection install (registry-sourced
-        installs still set it) that the operator has not yet granted are
-        returned in the gated set and lose their connector grants
-        (default-deny until ``grant_collection_agents`` flips the install).
-        """
-        from sqlalchemy import select
-
-        from farna.core.capability_scope import agent_granted_connector_types
-        from farna.db.models.agent import Agent
-        from farna.db.models.collection_install import CollectionInstall
-
-        grants: dict[str, set[str]] = {}
-        gated: set[str] = set()
-        if not agent_ids:
-            return grants, gated
-        agent_rows = (await session.execute(select(Agent).where(Agent.id.in_(agent_ids), Agent.organisation_id == org_id))).scalars().all()
-        install_ids = {cid for agent in agent_rows if (cid := getattr(agent, "collection_install_id", None)) is not None}
-        install_rows = []
-        if install_ids:
-            install_rows = (await session.execute(select(CollectionInstall).where(CollectionInstall.install_id.in_(install_ids)))).scalars().all()
-        gated_installs = {str(ci.install_id) for ci in install_rows if ci.registry_sourced and not ci.agents_granted}
-        for agent in agent_rows:
-            agent_key = str(agent.id)
-            grants[agent_key] = agent_granted_connector_types(agent.connector_type_refs)
-            collection_install_id = getattr(agent, "collection_install_id", None)
-            if collection_install_id is not None and str(collection_install_id) in gated_installs:
-                gated.add(agent_key)
-                grants.pop(agent_key, None)
-        return grants, gated
-
-    async def _resolve_run_connector_scope(
-        self,
-        session: Any,
-        org_id: uuid.UUID,
-        graph_json: dict[str, Any] | None,
-    ) -> list[str] | None:
-        """Resolve the run-level fetch scope (deny-by-default, FAR-435 on FAR-418).
-
-        With *graph_json* (the run-start path) the scope is the union of every
-        node's ``capability_scope.allowed_connectors`` and the referenced
-        Agents' ``connector_type_refs`` grants; it is cached on the executor
-        (``_run_connector_scope``) and reused by the compensation path (which
-        has no graph).
-
-        The connector scope is deny-by-default: only connector types granted by
-        referenced agents are returned.
-
-        Also enforces the execution gate (FAR-764 / ADR 032 D2): agents whose
-        ``collection_install_id`` references a registry-sourced,
-        not-yet-granted install get NO connector scope (default-deny) and are
-        recorded in ``_registry_gated_agents`` for the node-level gate.
-        """
-        if graph_json is None:
-            return self._run_connector_scope
-
-        from farna.core.capability_scope import compute_run_fetch_scope
-
-        agent_ids = _connector_scope_agent_ids(graph_json)
-        grants, registry_gated = await self._load_connector_scope_grants(
-            session,
-            org_id,
-            agent_ids,
-        )
-        self._registry_gated_agents = registry_gated
-        allowed_connectors = compute_run_fetch_scope(graph_json, grants)
-        self._run_connector_scope = allowed_connectors
-        return allowed_connectors
-
-    async def _persist_connector_degraded_markers(self, session: Any, hub: Any) -> None:
-        """FAR-495 degraded-marker persistence (best-effort, own savepoint).
-
-        Persists a degraded marker for the skipped instances and clears stale
-        markers for instances that initialised successfully (a connector fixed
-        via a config/plugin change stops being flagged degraded), inside its
-        own savepoint so a failure here can NEVER fail or roll back the
-        run-start transaction (the hub itself already logged the skips). Only
-        instances actually attempted this run appear in ``hub.skipped`` /
-        ``hub.healthy``, so out-of-scope instances are never touched.
-        """
-        from farna.db.crud.connector_instance import (
-            clear_degraded_markers,
-            mark_instances_degraded,
-        )
-
-        try:
-            async with session.begin_nested():
-                if hub.skipped:
-                    await mark_instances_degraded(session, hub.skipped)
-                if hub.healthy:
-                    await clear_degraded_markers(session, hub.healthy)
-        except Exception:
-            # No run id in scope here (_init_connector_hub is
-            # org-scoped); the instance ids are the correlatable
-            # identifiers.
-            _log.warning(
-                "pipeline.connector_degraded_marker_failed skipped=%s healthy=%s",
-                sorted(str(i) for i in hub.skipped),
-                sorted(str(i) for i in hub.healthy),
-                exc_info=True,
-            )
-
-    async def _build_connector_hub(
-        self,
-        session: Any,
-        org_id: uuid.UUID,
-        rows: list[Any],
-        allowed_connectors: list[str] | None,
-    ) -> Any:
-        """Build, enter and initialise the ConnectorHub for the active rows.
-
-        Connectors confirmed configured — any failure below re-raises
-        (fail closed) via the configured path. The runtime-provider
-        hub stays reachable for the teardown path via the ConnectorHub
-        constructor seam (``runtime_provider=`` -> ``_runtime_provider``);
-        _teardown_hub acloses it there, disposing provider-tracked workspaces
-        e.g. billable E2B sandboxes.
-        """
-        from farna.core.connector_hub import ConnectorHub
-        from farna.core.pipeline_engine.decorator import set_connector_hub
-        from farna.core.runtime_provider import create_default_hub
-        from farna.core.secrets_backend import create_secrets_backend
-        from farna.settings import get_settings
-
-        _settings = get_settings()
-        secrets_backend = create_secrets_backend(
-            fernet_key=_settings.fernet_key,
-            session=session,
-        )
-        runtime_hub = create_default_hub()
-        hub: ConnectorHub | None = None
-        try:
-            hub = ConnectorHub(
-                secrets_backend=secrets_backend,
-                runtime_provider=runtime_hub,
-                org_id=str(org_id),
-            )
-            await hub.__aenter__()
-            await hub.initialise(rows, allowed_connectors=allowed_connectors)
-            if hub.skipped or hub.healthy:
-                await self._persist_connector_degraded_markers(session, hub)
-            set_connector_hub(hub)
-        except BaseException:
-            # A partially-initialised hub (constructed but __aenter__ or
-            # initialise raised) must still be torn down before the
-            # fail-closed re-raise: the caller sees hub=None for this
-            # failure mode (this helper never returned), so without this
-            # guard the teardown — and with it the runtime-provider
-            # aclose disposing provider-tracked workspaces (e.g.
-            # billable E2B sandboxes) — would be skipped exactly here.
-            # Cleanup failures are logged inside _teardown_hub and
-            # suppressed here so they never mask the original error.
-            if hub is not None:
-                with suppress(Exception):
-                    await _teardown_hub(hub)
-            raise
-        return hub
-
-    async def _hub_init_failure_hub(self, connectors_configured: bool, hub: Any) -> Any | None:
-        """Fail-closed teardown for a generic hub-init failure; returns the final hub.
-
-        *connectors_configured* means connectors ARE configured, OR we could
-        NOT establish that they are NOT (a read/query error with the
-        fail-closed default). A run that may require connector work must never
-        fall through to ``hub=None`` — the node_runner would treat it as
-        vacuous success, silently no-op'ing a configured remote integration
-        and finalising the run GREEN. Re-raise so the run terminalises as
-        FAILED.
-
-        Defensive: ``connectors_configured`` is False ONLY on a confirmed
-        empty result, which never raises — this branch is otherwise
-        unreachable. Keep the vacuous-success return for safety.
-        """
-        if connectors_configured:
-            _log.exception("pipeline.connector_hub_init_failed_configured")
-            if hub is not None:
-                await _teardown_hub(hub)
-            raise
-        _log.exception("pipeline.connector_hub_init_failed")
-        if hub is not None:
-            await _teardown_hub(hub)
-        return None
-
-    async def _init_connector_hub(
-        self,
-        org_id: uuid.UUID,
-        *,
-        graph_json: dict[str, Any] | None = None,
-    ) -> Any | None:
-        """Load active ConnectorInstance rows for the org and initialise ConnectorHub.
-
-        Sets the hub on the current ContextVar so make_connector_fn can access it.
-        Returns the hub (or None if no connectors are configured).
-
-        When *graph_json* is provided (the run-start path), the hub applies a
-        run-level fetch scope (deny-by-default, FAR-435 building on FAR-418): the
-        union of every node's ``capability_scope.allowed_connectors`` and the
-        referenced Agents' ``connector_type_refs`` grants. The hub decrypts ONLY
-        those connectors, so out-of-scope credentials are never disclosed. The scope
-        is cached on the executor and reused by the compensation path (which has no
-        graph) so both apply the same deny-by-default fetch gate.
-
-        Contract (fail-closed on the configured path):
-          - If NO active connectors are configured for this run, returns None —
-            the node_runner treats a None hub as vacuous success, which is correct
-            only when no connector work is expected.
-          - If connectors ARE configured, any failure to build the hub (settings
-            read, secrets_backend construction, ConnectorHub construction,
-            ``__aenter__``, or ``initialise``) RAISES, so the run terminalises as
-            FAILED rather than silently completing green with no connector work.
-        """
-        hub: Any | None = None
-        # Fail-closed default (FAR-439): ``connectors_configured`` starts True so
-        # that ANY failure that prevents us from determining whether connectors
-        # exist — a failed session / RLS / ``session.execute`` read, a settings
-        # read, secrets_backend construction, ConnectorHub construction,
-        # ``__aenter__``, or ``initialise`` — takes the re-raise path below. It is
-        # set False ONLY when the reader query returns a confirmed-EMPTY result
-        # (no error): the single case where ``hub=None`` (vacuous success) is
-        # correct. A read/query error is NOT swallowed into the None path —
-        # "couldn't determine whether connectors exist" is a fatal hub-build
-        # failure (fail closed), not evidence that none are configured.
-        connectors_configured = True
-        try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                from sqlalchemy import select
-
-                from farna.db.models.connector_instance import ConnectorInstance
-
-                allowed_connectors = await self._resolve_run_connector_scope(session, org_id, graph_json)
-
-                rows = (
-                    (
-                        await session.execute(
-                            select(ConnectorInstance).where(
-                                ConnectorInstance.organisation_id == org_id,
-                                ConnectorInstance.status == "active",
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                if isinstance(rows, list) and rows:
-                    # Connectors confirmed configured: build the hub (fail-closed).
-                    hub = await self._build_connector_hub(session, org_id, rows, allowed_connectors)
-                else:
-                    # Confirmed-EMPTY result (no error): the ONE genuine "no
-                    # connectors configured" case. ``connectors_configured`` False
-                    # -> ``hub=None`` (vacuous success). Unreachable from a read
-                    # error — the fail-closed default above re-raises instead.
-                    connectors_configured = False
-        except asyncio.CancelledError:
-            raise
-        except SharedBudgetUnavailableError:
-            # Configured-but-unconstructable shared Redis budget / settings-read
-            # failure on the executor path (FAR-439). Swallowing it and returning
-            # None would make the connector node vacuously "succeed" with the
-            # "no connector hub" fallback, silently no-op'ing the remote
-            # integration and finalising the run GREEN. Fail closed, loudly.
-            _log.exception("pipeline.connector_hub_init_failed_shared_budget")
-            if hub is not None:
-                await _teardown_hub(hub)
-            raise
-        except Exception:
-            hub = await self._hub_init_failure_hub(connectors_configured, hub)
-        return hub
-
-    async def _compensate_blocked_run_best_effort(
-        self,
-        *,
-        org_id: uuid.UUID,
-        run_id: uuid.UUID,
-        executed_nodes: dict[str, Any],
-    ) -> None:
-        """Run-termination compensation for a guardrail-blocked mid-run terminalization (FAR-291).
-
-        A run whose earlier nodes performed connector side effects (pushed a PR,
-        flipped a Linear status) before a later node's output was
-        guardrail-blocked must have those side effects compensated. Invoked from
-        ``_finalize_run_after_stream`` AFTER the terminal status write
-        (``finalize_cost``), so both the ``execute()`` and ``resume()`` paths
-        share this single wiring point.
-
-        Uses its OWN fresh session (``set_rls_org`` inside ``session.begin``)
-        and a FRESH connector hub for the compensation window — it never touches
-        the claim_token-fenced ``finalize_cost`` transaction, and the hub
-        teardown cannot interfere with the run's own hub lifecycle. Best-effort
-        + failure-isolated (guard-the-guard): every raise is logged here and
-        never propagates into terminalization.
-        """
-        hub: Any | None = None
-        try:
-            hub = await self._init_connector_hub(org_id)
-            # The compensation + summary write commit INSIDE this session
-            # transaction (so the blocked_partial summary is durable) BEFORE
-            # the hub is torn down. If teardown failed inside the transaction
-            # block it would roll the summary back with it — guard-the-guard:
-            # teardown must never lose an already-committed compensation.
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
-                await set_rls_execution_context(session)
-                run = await get_run(session, run_id)
-                if run is None:
-                    _log.warning("guardrails.compensation.run_not_found run=%s", run_id)
-                    return
-                from farna.core.guardrails.compensation import compensate_blocked_run
-
-                await compensate_blocked_run(
-                    session,
-                    run,
-                    guardrail_block=run.error_detail or "",
-                    connector_hub=hub,
-                    executed_nodes=executed_nodes,
-                    blocking_eval_name="",
-                )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _log.exception("guardrails.compensation.error run=%s", run_id)
-        finally:
-            if hub is not None:
-                await _teardown_hub(hub)
-            set_connector_hub(None)
-
     async def _enforce_resume_sandbox_capacity(
         self,
         session: AsyncSession,
@@ -2787,12 +1521,20 @@ class PipelineExecutor(_HitlMixin, _StreamingMixin, _RunExecuteMixin, _FinalizeM
 # End of the PipelineExecutor class body.
 #
 # ``_HitlMixin`` / ``_StreamingMixin`` / ``_RunExecuteMixin`` /
-# ``_FinalizeMixin`` / ``_TelemetryMixin`` are private aliases for the mixin
-# bases (steps 2-4 of GAPS-harden-w2-executor.md section 5). They are composition
-# detail, not importable surface: dropping the bindings here keeps ``dir()`` on
-# this module exactly what it was before the split. Everything the rest of the
-# codebase imports or ``mock.patch``es still resolves, because the methods live
-# on the class through the MRO and the moved bodies resolve their free names via
-# ``executor_parts.support._ref``.
+# ``_FinalizeMixin`` / ``_TelemetryMixin`` / ``_HubsMixin`` / ``_AdmissionMixin``
+# are private aliases for the mixin bases (GAPS-harden-w2-executor.md section 5).
+# They are composition detail, not importable surface: dropping the bindings here
+# keeps ``dir()`` on this module exactly what it was before the split. Everything
+# the rest of the codebase imports or ``mock.patch``es still resolves, because
+# the methods live on the class through the MRO and the moved bodies resolve
+# their free names via ``executor_parts.support._ref``.
 # ---------------------------------------------------------------------------
-del _HitlMixin, _StreamingMixin, _RunExecuteMixin, _FinalizeMixin, _TelemetryMixin
+del (
+    _HitlMixin,
+    _StreamingMixin,
+    _RunExecuteMixin,
+    _FinalizeMixin,
+    _TelemetryMixin,
+    _HubsMixin,
+    _AdmissionMixin,
+)
