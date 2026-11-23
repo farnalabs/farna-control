@@ -843,7 +843,9 @@ describe('RunsListView', () => {
 
     // Page 2 is loaded; the response to the next click must be page 3 (last).
     mockResponses['/api/v1/runs'] = listWith(manyRuns.slice(10, 30), { next_cursor: null, has_more: false, total: 35 })
-    await nextBtn.trigger('click')
+    // The footer's pagination control is remounted after each page load, so a
+    // click must target the live element rather than the pre-load node.
+    await wrapper.find('[data-testid="runs-list-next-page"]').trigger('click')
     await flushPromises()
     await nextTick()
     expect(api.GET).toHaveBeenLastCalledWith('/api/v1/runs', expect.objectContaining({
@@ -858,7 +860,8 @@ describe('RunsListView', () => {
       params: { query: expect.objectContaining({ cursor: 'cursor-1' }) },
     }))
 
-    await prevBtn.trigger('click')
+    // Prev back to the first page, again on the freshly mounted control.
+    await wrapper.find('[data-testid="runs-list-prev-page"]').trigger('click')
     await flushPromises()
     await nextTick()
     const lastCall = (api.GET as any).mock.calls.at(-1)
