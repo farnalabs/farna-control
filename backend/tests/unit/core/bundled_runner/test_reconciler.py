@@ -355,6 +355,76 @@ async def test_docker_source_parses_labels_into_ages() -> None:
     assert entries[0].created_age_s > 0
 
 
+async def test_docker_source_reads_labels_from_the_inspect_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real aiodocker containers expose the inspect payload in ``_container``
+    (no public ``Labels`` attribute); the source reads the run id and age from
+    ``_container["Labels"]``."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    real = SimpleNamespace(
+        Id="inspect-container",
+        _container={
+            "Labels": {
+                runner_reconciler._RUN_ID_LABEL: "run-inspect",
+                runner_reconciler._MACHINE_LABEL: "deployment-a",
+                runner_reconciler._CREATED_AT_LABEL: "1",
+            }
+        },
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[real])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert [entry.id for entry in entries] == ["inspect-container"]
+    assert entries[0].run_id == "run-inspect"
+    assert entries[0].created_age_s > 0
+
+
+async def test_docker_source_falls_back_to_attribute_labels_when_inspect_payload_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the inspect payload carries no Labels, the source falls back to the
+    object's own ``Labels`` attribute (a partial-inspect / test-double shape)."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    partial = SimpleNamespace(
+        Id="partial-container",
+        _container={},
+        Labels={
+            runner_reconciler._RUN_ID_LABEL: "run-fallback",
+            runner_reconciler._CREATED_AT_LABEL: "1",
+        },
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[partial])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert [entry.id for entry in entries] == ["partial-container"]
+    assert entries[0].run_id == "run-fallback"
+
+
+async def test_docker_source_skips_a_container_without_a_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A labelled container with no run id (either spelling) is skipped: the
+    sweep has no active run to cross-reference it against."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    no_run = SimpleNamespace(
+        Id="no-run-container",
+        Labels={runner_reconciler._MACHINE_LABEL: "deployment-a"},
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[no_run])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert entries == []
+
+
 def test_docker_source_rejects_remote_endpoint_without_tls(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-1038: the reconciler shares the provider's TLS gate — a remote
     cleartext endpoint is rejected at source construction, not silently

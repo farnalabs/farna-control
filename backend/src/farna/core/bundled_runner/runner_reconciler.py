@@ -132,6 +132,33 @@ class _DockerWorkspaceSource:
             self._client = aiodocker.Docker(url=self._docker_host)
         return self._client
 
+    @staticmethod
+    def _parse_container(container: Any, now: float) -> _LabelledContainer | None:
+        """Map one listed Docker container onto the carrier, or skip it.
+
+        Real aiodocker ``DockerContainer`` objects carry the inspect payload in
+        ``_container`` (no public ``Labels`` attribute); test doubles set
+        ``Labels`` (or ``_Labels``) directly. A container with no run id in
+        either the current or legacy spelling is skipped: without a run id
+        there is no cross-reference to fail-safe on.
+        """
+        raw = getattr(container, "_container", None)
+        labels: dict[str, str] = {}
+        if isinstance(raw, dict):
+            labels = raw.get("Labels") or {}
+        if not labels:
+            labels = getattr(container, "Labels", None) or getattr(container, "_Labels", None) or {}
+        run_id = preferred(labels, _RUN_ID_LABEL, _LEGACY_CONTAINER_RUN_ID_LABEL)
+        if not run_id:
+            return None
+        container_id = getattr(container, "Id", "") or getattr(container, "id", "")
+        created = float(preferred(labels, _CREATED_AT_LABEL, _LEGACY_CONTAINER_CREATED_AT_LABEL, "0") or 0)
+        return _LabelledContainer(
+            id=container_id,
+            run_id=run_id,
+            created_age_s=(now - created) if created else 0.0,
+        )
+
     async def list_labelled_workspaces(self) -> list[_LabelledContainer]:
         """List this deployment's labelled workspace containers + their ages.
 
@@ -149,30 +176,11 @@ class _DockerWorkspaceSource:
         for machine_label in (_MACHINE_LABEL, _LEGACY_CONTAINER_MACHINE_LABEL):
             results = await client.containers.list(filters={"label": [f"{machine_label}={identity}"]})
             for container in results:
-                # Real aiodocker DockerContainer objects carry the inspect payload
-                # in ``_container`` (no public Labels attribute); test doubles set
-                # ``Labels`` directly.
-                raw = getattr(container, "_container", None)
-                labels: dict[str, str] = {}
-                if isinstance(raw, dict):
-                    labels = raw.get("Labels") or {}
-                if not labels:
-                    labels = getattr(container, "Labels", None) or getattr(container, "_Labels", None) or {}
-                run_id = preferred(labels, _RUN_ID_LABEL, _LEGACY_CONTAINER_RUN_ID_LABEL)
-                if not run_id:
+                entry = self._parse_container(container, now)
+                if entry is None or entry.id in seen:
                     continue
-                container_id = getattr(container, "Id", "") or getattr(container, "id", "")
-                if container_id in seen:
-                    continue
-                seen.add(container_id)
-                created = float(preferred(labels, _CREATED_AT_LABEL, _LEGACY_CONTAINER_CREATED_AT_LABEL, "0") or 0)
-                entries.append(
-                    _LabelledContainer(
-                        id=container_id,
-                        run_id=run_id,
-                        created_age_s=(now - created) if created else 0.0,
-                    )
-                )
+                seen.add(entry.id)
+                entries.append(entry)
         return entries
 
     async def destroy_by_container_id(self, container_id: str) -> None:

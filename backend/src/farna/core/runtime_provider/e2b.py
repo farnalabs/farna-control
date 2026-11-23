@@ -730,6 +730,45 @@ class E2BRuntimeProvider(RuntimeProvider):
     # Identity-scoped enumeration primitive (FAR-1275)
     # ------------------------------------------------------------------
 
+    async def _collect_identity_key(
+        self,
+        identity_key: str,
+        wanted: str,
+        now: float,
+        entries: list[WorkspaceListEntry],
+        seen: set[str],
+        pages: int,
+    ) -> int:
+        """Enumerate one identity-key query into *entries*; return pages used.
+
+        Shares the caller's page budget so the documented pagination bound
+        holds across BOTH identity-key queries, and de-duplicates by
+        ``provider_ref`` so a sandbox returned by both the current and legacy
+        queries is listed once.
+        """
+        from e2b import AsyncSandbox, SandboxQuery
+
+        paginator = AsyncSandbox.list(
+            query=SandboxQuery(metadata={identity_key: wanted}),
+            api_key=self._api_key,
+            request_timeout=_LIST_PAGE_TIMEOUT,
+        )
+        while paginator.has_next:
+            pages += 1
+            if pages > _LIST_MAX_PAGES:
+                _log.warning(
+                    "list_workspaces_by_identity: page cap %d reached — stopping enumeration",
+                    _LIST_MAX_PAGES,
+                )
+                break
+            page = await asyncio.wait_for(paginator.next_items(), timeout=_LIST_PAGE_TIMEOUT)
+            for info in page:
+                entry = _workspace_list_entry(info, wanted, now)
+                if entry is not None and entry.provider_ref not in seen:
+                    seen.add(entry.provider_ref)
+                    entries.append(entry)
+        return pages
+
     async def list_workspaces_by_identity(self, identity: str) -> list[WorkspaceListEntry]:
         """List this deployment's running sandboxes (FAR-1275 ABC primitive).
 
@@ -759,8 +798,6 @@ class E2BRuntimeProvider(RuntimeProvider):
         key) never matches — it stays unreclaimable exactly as before, never
         wrongly reclaimable.
         """
-        from e2b import AsyncSandbox, SandboxQuery
-
         wanted = identity.strip()
         if not wanted:
             # Fail closed: every sandbox this provider stamps carries a
@@ -777,25 +814,7 @@ class E2BRuntimeProvider(RuntimeProvider):
         # pagination bound holds for the whole enumeration.
         pages = 0
         for identity_key in (_DEPLOYMENT_IDENTITY_METADATA_KEY, _LEGACY_DEPLOYMENT_IDENTITY_METADATA_KEY):
-            paginator = AsyncSandbox.list(
-                query=SandboxQuery(metadata={identity_key: wanted}),
-                api_key=self._api_key,
-                request_timeout=_LIST_PAGE_TIMEOUT,
-            )
-            while paginator.has_next:
-                pages += 1
-                if pages > _LIST_MAX_PAGES:
-                    _log.warning(
-                        "list_workspaces_by_identity: page cap %d reached — stopping enumeration",
-                        _LIST_MAX_PAGES,
-                    )
-                    break
-                page = await asyncio.wait_for(paginator.next_items(), timeout=_LIST_PAGE_TIMEOUT)
-                for info in page:
-                    entry = _workspace_list_entry(info, wanted, now)
-                    if entry is not None and entry.provider_ref not in seen:
-                        seen.add(entry.provider_ref)
-                        entries.append(entry)
+            pages = await self._collect_identity_key(identity_key, wanted, now, entries, seen, pages)
             if pages > _LIST_MAX_PAGES:
                 break
         return entries
