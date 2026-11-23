@@ -27,6 +27,7 @@ import yaml
 _GIT_SHA_PATTERN = re.compile(r"^[\da-fA-F]{7,40}$", re.ASCII)
 _SEMVER_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(-[a-zA-Z\d.]+)?$", re.ASCII)
 _COMPOSE_FILENAME = "docker-compose.prod.yml"
+_COMPOSE_RESTORE_FILENAME = "compose-restore.sh"
 
 
 def validate_release_tag(tag: str) -> str:
@@ -348,7 +349,7 @@ def build_compose_release(
     # FAR-2667: the documented recovery command ships WITH the artifact, so a
     # failed upgrade never depends on the operator reconstructing a
     # `docker compose run` invocation from documentation.
-    restore_helper = repo_root / "scripts" / "compose-restore.sh"
+    restore_helper = repo_root / "scripts" / _COMPOSE_RESTORE_FILENAME
     if not restore_helper.is_file():
         raise FileNotFoundError(f"Compose restore helper not found: {restore_helper}")
 
@@ -359,11 +360,11 @@ def build_compose_release(
         ".env.example": env_content.encode("utf-8"),
         "quickstart.md": quickstart_content.encode("utf-8"),
         "init-env.sh": _INIT_ENV_SH.encode("utf-8"),
-        "compose-restore.sh": restore_helper.read_bytes(),
+        _COMPOSE_RESTORE_FILENAME: restore_helper.read_bytes(),
     }
     # These two are meant to be executed by the operator, so they ship 0755;
     # everything else is read-only data.
-    executable = frozenset({"init-env.sh", "compose-restore.sh"})
+    executable = frozenset({"init-env.sh", _COMPOSE_RESTORE_FILENAME})
 
     # Compute SHA256SUMS over the files
     sums_lines: list[str] = []

@@ -76,6 +76,7 @@ _log = logging.getLogger(__name__)
 # Repeated error message and backup-artifact filenames (S1192). Constants are
 # pure aliases — the exported file names are part of the on-disk backup layout.
 _ERR_PSYCOPG_UNAVAILABLE = "psycopg library is not available"
+_ALEMBIC_INI = "alembic.ini"
 _DB_SQL_FILE = "database.sql"
 _BLOBS_JSON_FILE = "checkpoint_blobs.json"
 _CHECKPOINTS_JSON_FILE = "checkpoints.json"
@@ -226,7 +227,7 @@ def _write_json(path: Path, data: Any) -> None:
 def _get_backend_dir() -> Path:
     resolved = Path(__file__).resolve()
     for candidate in (resolved.parent.parent.parent, resolved.parent.parent.parent.parent):
-        if (candidate / "pyproject.toml").exists() and (candidate / "alembic.ini").exists():
+        if (candidate / "pyproject.toml").exists() and (candidate / _ALEMBIC_INI).exists():
             return candidate
     return resolved.parent.parent.parent.parent
 
@@ -237,7 +238,7 @@ def _get_schema_versions() -> list[str]:
         from alembic.script import ScriptDirectory
 
         backend_dir = _get_backend_dir()
-        alembic_ini = backend_dir / "alembic.ini"
+        alembic_ini = backend_dir / _ALEMBIC_INI
         if not alembic_ini.exists():
             return ["unknown"]
         cfg = Config(str(alembic_ini))
@@ -1190,7 +1191,7 @@ def _known_revisions() -> list[str] | None:
         from alembic.script import ScriptDirectory
 
         backend_dir = _get_backend_dir()
-        alembic_ini = backend_dir / "alembic.ini"
+        alembic_ini = backend_dir / _ALEMBIC_INI
         if not alembic_ini.exists():
             return None
         script = ScriptDirectory.from_config(Config(str(alembic_ini)))
@@ -1268,7 +1269,7 @@ def _known_revision_ancestry(head_revision: str) -> set[str] | None:
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
-        alembic_ini = _get_backend_dir() / "alembic.ini"
+        alembic_ini = _get_backend_dir() / _ALEMBIC_INI
         if not alembic_ini.exists():
             return None
         script = ScriptDirectory.from_config(Config(str(alembic_ini)))
