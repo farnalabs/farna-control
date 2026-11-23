@@ -1195,10 +1195,11 @@ async def _seed_tier_catalog() -> None:
             )
 
         # Reconcile: prune every catalog row whose name is not in the current
-        # code registry. Retiring a flag is a code-only change and the INSERT
-        # above is upsert-only (``ON CONFLICT DO NOTHING``), so without this a
-        # retired flag's row lingers and stays user-visible in the DB-backed
-        # admin Feature Flags listing (the FAR-1875 defect). No table holds a
+        # code registry. The INSERT above only reconciles rows whose ``name`` is
+        # in the registry (``ON CONFLICT DO UPDATE``), so a retired name has no
+        # incoming row to update and its row lingers. Without this prune it
+        # stays user-visible in the DB-backed admin Feature Flags listing (the
+        # FAR-1875 defect). No table holds a
         # foreign key to ``feature_flag_catalog`` (verified against the fully
         # migrated schema: its only constraints are its own PK on ``name`` and
         # its FK to ``tier_catalog``), so this DELETE cannot raise an FK

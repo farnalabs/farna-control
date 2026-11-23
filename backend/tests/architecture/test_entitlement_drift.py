@@ -143,15 +143,17 @@ class TestEveryCommercialGateNamesAnEntitlement:
     def test_every_entitled_flag_is_enforced_somewhere(self) -> None:
         backend = _backend_text()
         frontend = _frontend_text()
-        gates = _backend_entitlement_gates()
         missing: list[str] = []
         for entitlement in ENTITLEMENTS.values():
             for flag in entitlement.flags:
-                if entitlement.key in gates:
+                # Per-flag enforcement: an entitlement gate on a route answers
+                # "is this capability bought?", it does not read the individual
+                # flag. A flag no code path ever reads is a dead kill switch -
+                # toggling it off changes nothing - so require a flag gate
+                # somewhere for every entitled flag.
+                if any(flag in pattern.findall(backend) for pattern in _FLAG_GATE_PATTERNS):
                     continue
-                if any(pattern.search(backend) for pattern in _FLAG_GATE_PATTERNS if flag in pattern.findall(backend)):
-                    continue
-                if any(pattern.search(frontend) for pattern in _FRONTEND_FLAG_PATTERNS if flag in pattern.findall(frontend)):
+                if any(flag in pattern.findall(frontend) for pattern in _FRONTEND_FLAG_PATTERNS):
                     continue
                 missing.append(f"{flag} ({entitlement.key})")
-        assert not missing, f"Entitled flags are neither entitlement-gated nor flag-gated anywhere: {missing}"
+        assert not missing, "Entitled flags are never read by a flag gate in backend or frontend, so switching them off has no effect (dead kill switch): " + ", ".join(missing)
