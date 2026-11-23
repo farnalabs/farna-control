@@ -164,7 +164,7 @@ detection work.
 | `FERNET_KEY_OLD` | No | – | Previous Fernet key for no-downtime rotation; decrypt falls back to this when `FERNET_KEY` is rotated |
 | `FARNA_CONTROL_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
 | `FARNA_CONTROL_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `FARNA_CONTROL_ADMIN_PASSWORD` or `FARNA_CONTROL_USERS` must be set) |
-| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool). The legacy `MODULO_ADMIN_SECRET` spelling is still read as a fallback. |
+| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool). `FARNA_CONTROL_ADMIN_SECRET` is the only spelling read; there is no legacy alias. |
 | `FARNA_CONTROL_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class). The `--token` flag takes precedence. |
 | `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `GUARDRAIL_DESTROY_PEPPER` | For destroy-mode redaction | `""` | HMAC pepper used by guardrails in `destroy` redaction mode to key replacement tokens. Empty (the default) leaves it unset, and a guardrail that declares a destroy-mode redaction rule then fails closed - the rule is rejected at save time and the block is terminal at the edge. Never logged. Rotating it breaks cross-run linkage of already-destroyed tokens by design. |
@@ -625,7 +625,7 @@ via the admin API. Unknown/absent keys default to safe values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). The legacy `MODULO_BACKUP_PASSPHRASE` spelling is still read as a fallback. |
+| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). `FARNA_CONTROL_BACKUP_PASSPHRASE` is the only spelling read; there is no legacy alias. |
 
 See [`docs/operations/backup.md`](./operations/backup.md) for backup configuration.
 
@@ -861,7 +861,7 @@ is best-effort and never gates readiness: it is skipped when no `GITHUB_TOKEN` /
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool (legacy `MODULO_ADMIN_SECRET` still read as a fallback) |
+| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool. `FARNA_CONTROL_ADMIN_SECRET` is the only spelling read; there is no legacy alias. |
 | `FARNA_CONTROL_ADMIN_TOKEN` | For CLI | – | Admin JWT for `farna-control migrate` CLI tool |
 
 ---
