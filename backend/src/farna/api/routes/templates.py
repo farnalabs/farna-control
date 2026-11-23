@@ -107,6 +107,7 @@ async def list_templates_endpoint(
             await set_rls_user_context(session, principal.account_id, principal.org_role)
             result = await list_templates(
                 session,
+                org_id=principal.organisation_id,
                 page=page,
                 page_size=page_size,
                 category=category,
