@@ -25,6 +25,7 @@ from farna.db.crud.library_primitive import (
     get_library_primitive,
     list_library_primitives,
     list_primitives_by_version_group,
+    mark_update_available,
     update_library_primitive,
 )
 from farna.db.models.collection_install import CollectionInstall
@@ -666,9 +667,17 @@ async def list_contribution_versions(
     """Return all versions for a contribution primitive, newest first."""
 
     async def _do(s: AsyncSession) -> tuple[list[LibraryPrimitive], LibraryPrimitive]:
-        prim = await get_library_primitive(s, primitive_id)
+        # FAR-2696: resolve the seed through the clamped resolver rather than
+        # the id-only CRUD read, so a guessed (foreign-org) contribution id
+        # cannot cross orgs on a BYPASSRLS connection.
+        prim = await get_primitive(s, org_id, primitive_id, explicit_org_filter=org_id)
 
-        if prim is None:
+        # ``get_primitive`` falls back to the in-memory built-in registry when
+        # the org-clamped DB lookup misses. Built-ins (``source='modulo'``) are
+        # served from memory, never from SQL, and are not contributions — they
+        # have no versions. Preserve the pre-existing 404 for a built-in id
+        # instead of serving it as a one-row version list.
+        if prim is None or _MODULO_BY_ID.get(primitive_id) is prim:
             raise ContributionNotFoundError(f"Contribution {primitive_id} not found")
 
         if prim.version_group_id is None:
@@ -688,7 +697,7 @@ async def list_contribution_versions(
     return sorted(results, key=lambda p: _parse_version_key(p.version), reverse=True)
 
 
-async def _mark_update_recipients(s: AsyncSession, prim: LibraryPrimitive) -> None:
+async def _mark_update_recipients(s: AsyncSession, org_id: uuid.UUID, prim: LibraryPrimitive) -> None:
     """Back-propagate the new version id to every auto-update recipient.
 
     Two recipient classes (FAR-759): fork copies (``forked_from`` pointing at
@@ -697,18 +706,36 @@ async def _mark_update_recipients(s: AsyncSession, prim: LibraryPrimitive) -> No
     — the latter is how an installed collection surfaces "update available".
     Both are gated on the recipient row's ``auto_update`` flag; the stamp is
     a notification only, applying it remains an operator-initiated upgrade.
+
+    FAR-2696: every SELECT here is clamped to ``org_id`` — the outer recipient
+    predicate, the correlated version-group subquery and the
+    ``collection_install`` subquery — and the stamp goes through the
+    org-clamped ``mark_update_available`` write. Before this, all three reads
+    and the write were org-free, so a ``BYPASSRLS`` connection stamped
+    another organisation's forks. The version-group id is not an org boundary
+    on its own; the org predicate is.
     """
     group_id = prim.version_group_id
     if group_id is None:
         return
 
-    fork_stmt = select(LibraryPrimitive).where(LibraryPrimitive.forked_from.in_(select(LibraryPrimitive.id).where(LibraryPrimitive.version_group_id == group_id)))
+    group_member_ids = select(LibraryPrimitive.id).where(
+        LibraryPrimitive.version_group_id == group_id,
+        LibraryPrimitive.organisation_id == org_id,
+    )
+    fork_stmt = select(LibraryPrimitive).where(
+        LibraryPrimitive.forked_from.in_(group_member_ids),
+        LibraryPrimitive.organisation_id == org_id,
+    )
     installed_stmt = select(LibraryPrimitive).where(
-        LibraryPrimitive.id.in_(select(CollectionInstall.collection_id)),
+        LibraryPrimitive.id.in_(
+            select(CollectionInstall.collection_id).where(CollectionInstall.organisation_id == org_id),
+        ),
         or_(
             LibraryPrimitive.version_group_id == group_id,
             LibraryPrimitive.id == group_id,
         ),
+        LibraryPrimitive.organisation_id == org_id,
     )
 
     recipients: list[LibraryPrimitive] = []
@@ -719,10 +746,11 @@ async def _mark_update_recipients(s: AsyncSession, prim: LibraryPrimitive) -> No
         if not copy.auto_update:
             continue
         try:
-            await update_library_primitive(
+            await mark_update_available(
                 s,
-                copy.id,
-                {"update_available_version_id": prim.id},
+                org_id=org_id,
+                recipient_id=copy.id,
+                version_id=prim.id,
             )
         except SQLAlchemyError:
             logger.exception("notify_importers_of_update: failed to update copy %s", copy.id)
@@ -742,10 +770,14 @@ async def notify_importers_of_update(
     """
 
     async def _notify(s: AsyncSession) -> None:
+        # Point read keyed by an id the caller resolved through an org-scoped
+        # path (the publish route loads the draft collection in-org first).
+        # The fan-out below is where the org boundary is enforced: recipients
+        # and the stamp are both clamped to ``org_id`` (FAR-2696).
         prim = await get_library_primitive(s, primitive_id)
         if prim is None:
             return
-        await _mark_update_recipients(s, prim)
+        await _mark_update_recipients(s, org_id, prim)
 
     try:
         await _scoped_execute(session, org_id, _notify)

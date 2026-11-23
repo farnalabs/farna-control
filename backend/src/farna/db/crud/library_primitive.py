@@ -1,6 +1,35 @@
 """Org-scoped CRUD for LibraryPrimitive.
 
-All functions require RLS org context to be set by the caller.
+Two isolation postures live in this module (FAR-2696):
+
+* **Clamped helpers** apply an explicit ``organisation_id`` predicate, so they
+  stay isolated on a connection whose role bypasses RLS (``BYPASSRLS``) or on a
+  database whose policy is missing. ``mark_update_available`` (FAR-2696) is one:
+  its REQUIRED org rides on the UPDATE statement itself, not only on a
+  preceding SELECT.
+* **Point helpers** — ``get_library_primitive``, ``update_library_primitive``,
+  ``soft_delete_library_primitive``, ``restore_library_primitive`` and
+  ``copy_to_adapt`` — are keyed by a primitive id the caller has already
+  resolved through an org-scoped path (an RLS-bound route transaction, or the
+  clamped ``core.library_service.get_primitive(..., explicit_org_filter=...)``
+  resolver). PostgreSQL row-level security is the INTENDED boundary for them:
+  the ``rls_org_isolation`` policy on ``library_primitives`` restricts every
+  row to ``organisation_id = current_setting('app.organisation_id')``.
+
+This is a recorded decision (FAR-2696), not an oversight. The point helpers
+are reached only from ``api.routes.library`` and ``core.library_service``; the
+install / grant / upgrade / uninstall paths resolve through the clamped
+``get_primitive`` / ``get_primitive_by_slug`` instead, never through these
+helpers. The residual risk of the decision is a ``BYPASSRLS`` session (an
+integration-test superuser or a misconfigured deployment) or a missing/disabled
+policy: a caller that must stay isolated under that posture passes the org to
+the clamped resolver, or uses a clamped helper such as
+``mark_update_available`` for a write. Threading a required org through the
+point helpers was rejected because it would change a security-critical
+signature used by the library read, write, delete, restore and copy routes
+while the id handed in is already resolved in-org before it arrives; the
+integrity-critical fan-out write that could not rely on that property was
+given its own clamped helper instead.
 """
 
 import logging
@@ -28,6 +57,15 @@ async def copy_to_adapt(
     target_team_id: uuid.UUID | None,
     account_id: uuid.UUID | None,
 ) -> LibraryPrimitive | None:
+    """Copy a primitive into ``target_org_id`` as a fork (point read; see module docstring).
+
+    The source read is the RLS-bound point read: ``trg_library_primitives_forked_from_tenant``
+    requires a fork's ``forked_from`` to reference a primitive in the SAME
+    organisation as the new row, so the source is in ``target_org_id`` by
+    construction. No production caller — the service-level
+    ``core.library_service.copy_to_adapt`` is the one the route uses; this
+    remains for the pre-service test coverage.
+    """
     source = await get_library_primitive(session, primitive_id)
     if source is None:
         return None
@@ -77,6 +115,12 @@ async def get_library_primitive(
     *,
     include_deleted: bool = False,
 ) -> LibraryPrimitive | None:
+    """Read one primitive by id (point helper — RLS is the boundary; see module docstring).
+
+    The id must have been resolved through an org-scoped path before it reaches
+    here. Use ``core.library_service.get_primitive(..., explicit_org_filter=org_id)``
+    instead when the caller must stay isolated on a ``BYPASSRLS`` session.
+    """
     stmt = select(LibraryPrimitive).where(LibraryPrimitive.id == primitive_id)
     stmt = include_soft_deleted(stmt) if include_deleted else stmt.where(LibraryPrimitive.deleted_at.is_(None))
     result = await session.execute(stmt)
@@ -347,12 +391,50 @@ async def update_library_primitive(
     primitive_id: uuid.UUID,
     updates: dict[str, Any],
 ) -> LibraryPrimitive | None:
+    """Apply an update to one primitive by id (point helper — RLS is the boundary).
+
+    See the module docstring. The read-modify-write is keyed by an id already
+    resolved in-org; ``mark_update_available`` is the clamped single-statement
+    variant for the integrity-critical update fan-out.
+    """
     primitive = await get_library_primitive(session, primitive_id)
     if primitive is None:
         return None
     apply_updates(primitive, updates)
     await session.flush()
     return primitive
+
+
+async def mark_update_available(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    recipient_id: uuid.UUID,
+    version_id: uuid.UUID,
+) -> LibraryPrimitive | None:
+    """Stamp ``update_available_version_id`` on a recipient IN ``org_id``.
+
+    FAR-2696: the update fan-out (``core.library_service._mark_update_recipients``)
+    used to stamp through the id-only ``update_library_primitive``, so a
+    ``BYPASSRLS`` session could stamp a row in another organisation. This
+    variant carries a REQUIRED org and applies it as an ``organisation_id``
+    predicate on the UPDATE itself — the write, not merely the preceding
+    SELECT, is clamped. Returns the stamped row, or ``None`` when no live row
+    in ``org_id`` matches ``recipient_id`` (foreign and soft-deleted rows are
+    skipped, exactly as the point helper's ``deleted_at`` filter skipped them).
+    """
+    result = await session.execute(
+        update(LibraryPrimitive)
+        .where(
+            LibraryPrimitive.id == recipient_id,
+            LibraryPrimitive.organisation_id == org_id,
+            LibraryPrimitive.deleted_at.is_(None),
+        )
+        .values(update_available_version_id=version_id)
+        .returning(LibraryPrimitive)
+    )
+    await session.flush()
+    return result.scalar_one_or_none()
 
 
 async def list_primitives_by_version_group(
@@ -376,12 +458,21 @@ async def list_primitives_by_version_group(
 
 
 async def soft_delete_library_primitive(session: AsyncSession, primitive_id: uuid.UUID) -> LibraryPrimitive | None:
+    """Soft-delete one primitive by id (point helper — RLS is the boundary).
+
+    See the module docstring. The id is resolved in-org on the route before it
+    arrives here.
+    """
     result = await session.execute(update(LibraryPrimitive).where(LibraryPrimitive.id == primitive_id, LibraryPrimitive.deleted_at.is_(None)).values(deleted_at=func.now()).returning(LibraryPrimitive))
     await session.flush()
     return result.scalar_one_or_none()
 
 
 async def restore_library_primitive(session: AsyncSession, primitive_id: uuid.UUID) -> LibraryPrimitive | None:
+    """Restore one soft-deleted primitive by id (point helper — RLS is the boundary).
+
+    See the module docstring.
+    """
     result = await session.execute(update(LibraryPrimitive).where(LibraryPrimitive.id == primitive_id, LibraryPrimitive.deleted_at.is_not(None)).values(deleted_at=None).returning(LibraryPrimitive))
     await session.flush()
     return result.scalar_one_or_none()
