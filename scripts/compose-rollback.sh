@@ -48,6 +48,10 @@ case "$tag" in
     printf 'refusing tag %s: use the release version (letters, digits, dot, dash, underscore)\n' "$tag" >&2
     exit 2
     ;;
+  *)
+    # Valid tag: no disallowed characters, nothing to sanitise.
+    :
+    ;;
 esac
 
 app_service="${FARNA_CONTROL_APP_SERVICE:-farna-control}"

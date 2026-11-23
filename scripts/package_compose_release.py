@@ -302,6 +302,13 @@ def _find_repo_root() -> Path:
     return Path.cwd()
 
 
+def _require_repo_file(path: Path, *, kind: str) -> Path:
+    """Return `path` if it is an existing file, else raise FileNotFoundError."""
+    if not path.is_file():
+        raise FileNotFoundError(f"{kind} not found: {path}")
+    return path
+
+
 def build_compose_release(
     *,
     version: str,
@@ -361,16 +368,18 @@ def build_compose_release(
     # FAR-2667: the documented recovery command ships WITH the artifact, so a
     # failed upgrade never depends on the operator reconstructing a
     # `docker compose run` invocation from documentation.
-    restore_helper = repo_root / "scripts" / _COMPOSE_RESTORE_FILENAME
-    if not restore_helper.is_file():
-        raise FileNotFoundError(f"Compose restore helper not found: {restore_helper}")
+    restore_helper = _require_repo_file(
+        repo_root / "scripts" / _COMPOSE_RESTORE_FILENAME,
+        kind="Compose restore helper",
+    )
 
     # FAR-2667: and the way BACK to the previous image ships too. The packaged
     # compose pins a literal image tag, so `TAG=` cannot move it; the helper is
     # the only instruction that actually starts the previous release.
-    rollback_helper = repo_root / "scripts" / _COMPOSE_ROLLBACK_FILENAME
-    if not rollback_helper.is_file():
-        raise FileNotFoundError(f"Compose rollback helper not found: {rollback_helper}")
+    rollback_helper = _require_repo_file(
+        repo_root / "scripts" / _COMPOSE_ROLLBACK_FILENAME,
+        kind="Compose rollback helper",
+    )
 
     # Prepare file bytes map for tarball
     files_to_pack: dict[str, bytes] = {
