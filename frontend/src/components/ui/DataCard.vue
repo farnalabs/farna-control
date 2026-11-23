@@ -4,16 +4,14 @@
     :padding="padding"
     :elevation="elevation"
     :data-testid="dataTestId"
-    :class="cardClass"
+    :class="props.class"
   >
     <CardHeader
       v-if="hasHeader"
       :title="title"
       :description="description"
       :heading-level="headingLevel"
-      :title-class="titleClass"
-      :description-class="descriptionClass"
-      :header-class="headerClass"
+      :size="size"
       :data-testid="dataTestId ? `${dataTestId}-header` : undefined"
     >
       <template v-if="$slots.headerActions" #actions>
@@ -21,13 +19,12 @@
       </template>
     </CardHeader>
 
-    <div
+    <CardContent
       v-if="$slots.default"
-      class="card-content"
       :data-testid="dataTestId ? `${dataTestId}-content` : undefined"
     >
       <slot />
-    </div>
+    </CardContent>
 
     <div
       v-if="$slots.footer"
@@ -42,34 +39,29 @@
 <script setup lang="ts">
 import BaseCard from './BaseCard.vue'
 import CardHeader from './CardHeader.vue'
+import CardContent from './CardContent.vue'
 import { computed, useSlots } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   title?: string
   description?: string
   headingLevel?: 'h2' | 'h3' | 'h4'
-  variant?: 'default' | 'bordered' | 'elevated' | 'muted' | 'context'
-  padding?: 'none' | 'sm' | 'md' | 'lg'
-  elevation?: 'none' | 'sm' | 'md' | 'lg'
-  titleClass?: string
-  descriptionClass?: string
-  headerClass?: string
+  size?: 'md' | 'sm'
+  variant?: 'default' | 'bordered' | 'muted' | 'warning' | 'context'
+  padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl'
+  elevation?: 'none' | 'sm'
+  class?: string
   dataTestId?: string
-  cardClass?: string
-}>()
+}>(), {
+  headingLevel: 'h3',
+  size: 'md',
+  variant: 'default',
+  padding: 'md',
+  elevation: 'none',
+})
 
 const slots = useSlots()
 const hasHeader = computed(() =>
   !!props.title || !!props.description || !!slots.headerActions
 )
 </script>
-
-<style scoped>
-.card-content {
-  /* Content slot wrapper - can be extended with utilities if needed */
-}
-
-.card-footer {
-  /* Footer wrapper with separator */
-}
-</style>

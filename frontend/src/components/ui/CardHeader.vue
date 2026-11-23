@@ -2,7 +2,7 @@
   <div
     v-if="hasHeaderContent"
     class="card-header flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-4"
-    :class="[divider && 'border-b border-border pb-3', headerClass]"
+    :class="divider && 'border-b border-border pb-3'"
     :data-testid="dataTestId"
   >
     <div class="flex min-w-0 flex-1 items-start gap-3">
@@ -13,15 +13,13 @@
         <component
           :is="headingLevel"
           v-if="title"
-          class="text-base font-semibold"
           :class="titleClass"
         >
           {{ title }}
         </component>
         <p
           v-if="description"
-          class="mt-1 text-sm"
-          :class="descriptionClass || 'text-muted-foreground'"
+          :class="descriptionClass"
         >
           {{ description }}
         </p>
@@ -36,20 +34,31 @@
 <script setup lang="ts">
 import { computed, useSlots } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   title?: string
   description?: string
   headingLevel?: 'h2' | 'h3' | 'h4'
-  titleClass?: string
-  descriptionClass?: string
-  headerClass?: string
+  size?: 'md' | 'sm'
   divider?: boolean
   dataTestId?: string
-}>()
+}>(), {
+  headingLevel: 'h3',
+  size: 'md',
+  divider: false,
+})
 
 const slots = useSlots()
-const headingLevel = computed(() => props.headingLevel ?? 'h3')
 const hasHeaderContent = computed(() =>
   !!props.title || !!props.description || !!slots.actions || !!slots.leading
+)
+
+const titleClass = computed(() =>
+  props.size === 'sm' ? 'text-sm font-medium' : 'text-base font-semibold'
+)
+
+const descriptionClass = computed(() =>
+  props.size === 'sm'
+    ? 'mt-1 text-xs text-muted-foreground'
+    : 'mt-1 text-sm text-muted-foreground'
 )
 </script>
