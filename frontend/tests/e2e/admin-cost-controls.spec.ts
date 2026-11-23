@@ -34,10 +34,14 @@ test.describe('Admin Spend Limits', { tag: "@regression" }, () => {
 
 test.describe('Admin Cost Controls', { tag: "@regression" }, () => {
   test('renders the Cost Controls page', { tag: "@regression" }, async ({ page, env }) => {
+    await loginAsAdmin(page, env)
+    // Register the cost fixtures AFTER loginAsAdmin: Playwright runs route
+    // handlers in reverse registration order, so the `**/api/v1/**` catch-all
+    // that loginAsAdmin installs would otherwise win and these mocks would
+    // never run (FAR-2694).
     if (env.name === 'local') {
       await mockLocalCostRoutes(page)
     }
-    await loginAsAdmin(page, env)
     await page.goto('/admin/costs/controls', { timeout: 60000 })
     await expect(page.locator('h1')).toContainText('Cost Controls')
     await expect(
@@ -46,28 +50,31 @@ test.describe('Admin Cost Controls', { tag: "@regression" }, () => {
   })
 
   test('insets the titled card headers inside their cards (FAR-2694)', { tag: "@regression" }, async ({ page, env }) => {
+    await loginAsAdmin(page, env)
+    // Register the cost fixtures AFTER loginAsAdmin: Playwright runs route
+    // handlers in reverse registration order, so the `**/api/v1/**` catch-all
+    // that loginAsAdmin installs would otherwise win and these mocks would
+    // never run (FAR-2694).
     if (env.name === 'local') {
       await mockLocalCostRoutes(page)
     }
-    await loginAsAdmin(page, env)
     await page.goto('/admin/costs/controls', { timeout: 60000 })
     await expect(page.locator('h1')).toContainText('Cost Controls')
 
+    // Settle the page first: a rendered card OR the gate-disabled notice means
+    // the plan/feature state resolved.
     const gatedOut = page.getByTestId('feature-gate-disabled')
     await expect(
       page.getByTestId('cc-total-spend').or(gatedOut)
     ).toBeVisible({ timeout: 15000 })
 
-    if (await gatedOut.isVisible()) {
-      // The target has the feature switched off, so no card renders to measure
-      // and the gate-disabled alternative path stays green. The local mock
-      // target always grants admin_cost_controls (MOCK_PLAN carries the
-      // cost_governance grant), so a local run must never legitimately reach
-      // this branch - the padding assertion below is its regression guard.
-      expect(env.name, 'the local mock target grants admin_cost_controls, so the card must render').not.toBe('local')
-      return
-    }
-
+    // FeatureGate renders the same slot, dimmed, when the feature is switched
+    // off (`show-disabled`): `<slot />` sits inside an opacity-40 wrapper and
+    // the notice is an absolutely-positioned overlay, so the cards and their
+    // headings DO render and their geometry stays measurable. The inset
+    // assertion therefore runs in both the enabled and the operator-disabled
+    // state instead of skipping the disabled one (a skipped assertion would
+    // let the operator kill-switch hide a padding regression).
     for (const title of ['Budget Overview', 'Team Budgets']) {
       const heading = page.getByRole('heading', { name: title, exact: true })
       await expect(heading).toBeVisible()
