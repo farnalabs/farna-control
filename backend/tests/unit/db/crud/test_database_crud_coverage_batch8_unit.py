@@ -65,7 +65,7 @@ async def test_pipeline_folder_crud_all_paths() -> None:
     assert await pipeline_folder.move_pipeline_to_folder(session(result(one=None)), uuid.uuid4(), None) is None
 
     listed = session(result(rows=[existing]))
-    assert await pipeline_folder.list_folders(listed) == [existing]
+    assert await pipeline_folder.list_folders(listed, org_id=ORG) == [existing]
     assert await pipeline_folder.delete_folder(session(result(one=None)), uuid.uuid4()) is False
     delete_db = session(result(one=existing), result(rows=[]), result(rows=[]))
     assert await pipeline_folder.delete_folder(delete_db, existing.id) is True
@@ -93,7 +93,7 @@ async def test_schema_folder_crud_all_paths() -> None:
         await schema_folder.move_schema_to_folder(session(result(one=schema), result(one=foreign_folder)), schema.id, uuid.uuid4(), ORG)
     assert await schema_folder.move_schema_to_folder(session(result(one=None)), uuid.uuid4(), None) is None
 
-    assert await schema_folder.list_folders(session(result(rows=[existing]))) == [existing]
+    assert await schema_folder.list_folders(session(result(rows=[existing])), org_id=ORG) == [existing]
     assert await schema_folder.delete_folder(session(result(one=None)), uuid.uuid4()) is False
     delete_db = session(result(one=existing), result(rows=[]), result(rows=[]))
     assert await schema_folder.delete_folder(delete_db, existing.id) is True

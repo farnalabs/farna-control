@@ -222,7 +222,7 @@ async def test_list_variant_groups_pagination(
             variants=[],
         )
 
-    items, total = await list_variant_groups(rls_session, page=1, page_size=2)
+    items, total = await list_variant_groups(rls_session, org_id=test_org, page=1, page_size=2)
     assert total >= 3
     assert len(items) == 2
 
@@ -238,7 +238,7 @@ async def test_list_variant_groups_filtered_by_pipeline(
     await create_variant_group(rls_session, org_id=test_org, pipeline_id=pipe_a, name="A-1", variants=[])
     await create_variant_group(rls_session, org_id=test_org, pipeline_id=pipe_b, name="B-1", variants=[])
 
-    items_a, total_a = await list_variant_groups(rls_session, pipeline_id=pipe_a)
+    items_a, total_a = await list_variant_groups(rls_session, org_id=test_org, pipeline_id=pipe_a)
     assert total_a == 1
     assert items_a[0].name == "A-1"
 

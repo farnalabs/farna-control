@@ -193,7 +193,7 @@ class TestListCostComponents:
         comp = _mock_component()
         mock_session.execute = AsyncMock(return_value=_exec_scalars([comp]))
 
-        result = await list_cost_components(mock_session)
+        result = await list_cost_components(mock_session, org_id=uuid.uuid4())
 
         assert len(result) == 1
         assert result[0] is comp
@@ -201,7 +201,7 @@ class TestListCostComponents:
     async def test_returns_empty(self, mock_session: AsyncMock) -> None:
         mock_session.execute = AsyncMock(return_value=_exec_scalars([]))
 
-        result = await list_cost_components(mock_session)
+        result = await list_cost_components(mock_session, org_id=uuid.uuid4())
 
         assert result == []
 

@@ -100,8 +100,12 @@ async def create_cost_component(
     return component
 
 
-async def list_cost_components(session: AsyncSession) -> list[CostComponent]:
-    result = await session.execute(select(CostComponent).where(CostComponent.deleted_at.is_(None)).order_by(CostComponent.sort_order, CostComponent.name))
+async def list_cost_components(session: AsyncSession, *, org_id: uuid.UUID) -> list[CostComponent]:
+    # FAR-2686: explicit organisation predicate so the list is never scoped by
+    # row-level security alone. ``organisation_id`` is NOT NULL and every
+    # component belongs to exactly one org (no shared/sentinel-org rows).
+    # REQUIRED so a future caller cannot fall back to the RLS-only shape.
+    result = await session.execute(select(CostComponent).where(CostComponent.organisation_id == org_id, CostComponent.deleted_at.is_(None)).order_by(CostComponent.sort_order, CostComponent.name))
     return list(result.scalars().all())
 
 

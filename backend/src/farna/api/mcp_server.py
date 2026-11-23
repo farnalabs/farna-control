@@ -10921,7 +10921,7 @@ async def list_agents(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_agents(s, cursor=cursor, page_size=lim)
+            result = await db_list_agents(s, org_id=org_id, cursor=cursor, page_size=lim)
 
         return {
             "data": [_agent_item(a) for a in result.items],
@@ -12632,7 +12632,7 @@ async def list_schemas(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_schemas(s, cursor=cursor, limit=lim)
+            result = await db_list_schemas(s, org_id=org_id, cursor=cursor, limit=lim)
 
         return {
             "data": [
@@ -12687,7 +12687,7 @@ async def list_environment_profiles(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_environment_profiles(s, cursor=cursor, page_size=lim)
+            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim)
 
         return {
             "data": [

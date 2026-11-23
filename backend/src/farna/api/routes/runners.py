@@ -267,7 +267,7 @@ async def get_runners_status(
             profiles_page: list[EnvironmentProfile] = []
             page = 1
             while True:
-                result_page = await list_environment_profiles(session, page=page, page_size=100)
+                result_page = await list_environment_profiles(session, org_id=principal.organisation_id, page=page, page_size=100)
                 profiles_page.extend(result_page.items)
                 if page * 100 >= result_page.total or not result_page.items:
                     break
