@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import json
 import os
 import re
 import uuid
@@ -282,6 +283,17 @@ def _table_counts(conn: sa.Connection) -> dict[str, int]:
     }
 
 
+def _content_documents(conn: sa.Connection) -> dict[str, str]:
+    """Map every ``lifecycle_maps`` row id to its ``content_json`` as text.
+
+    Keyed by id and rendered via ``::text`` so an equality between two reads
+    compares the stored JSON value exactly, including key and array order — the
+    property a re-aggregation of ``stages`` could silently change.
+    """
+    rows = conn.exec_driver_sql("SELECT id, content_json::text FROM public.lifecycle_maps").all()
+    return {str(row[0]): row[1] for row in rows}
+
+
 def test_revision_continues_the_current_single_head() -> None:
     module = _load_migration()
 
@@ -325,6 +337,9 @@ def test_upgrade_rewrites_every_legacy_value_and_narrows_the_vocabulary(engine: 
     assert '"notes": "keep me"' in mixed
     assert '"edges": [{"id": "e1", "source": "s1", "target": "s2"}]' in mixed
     assert '"type": "external"' in mixed
+    # Stage order is positional downstream, so the array rebuild must preserve it.
+    rewritten_stages = json.loads(mixed)["stages"]
+    assert [stage["id"] for stage in rewritten_stages] == ["s1", "s2"]
     plain = next(text for text in documents.values() if "keep me" not in text)
     assert '"type": "manual"' in plain
 
@@ -369,12 +384,15 @@ def test_upgrade_is_idempotent(engine: sa.Engine, monkeypatch: pytest.MonkeyPatc
 
     _run(engine, monkeypatch, module, "upgrade")
     with engine.connect() as conn:
-        first = (dict(_source_counts(conn)), _table_counts(conn))
+        first = (dict(_source_counts(conn)), _table_counts(conn), _content_documents(conn))
 
     _run(engine, monkeypatch, module, "upgrade")
     with engine.connect() as conn:
-        second = (dict(_source_counts(conn)), _table_counts(conn))
+        second = (dict(_source_counts(conn)), _table_counts(conn), _content_documents(conn))
 
+    # ``content_json`` is included so a rewrite that is not byte-stable on a
+    # second run (e.g. it re-aggregates the stage array in a different order)
+    # is caught — the count and source comparisons alone would miss it.
     assert second == first
 
 

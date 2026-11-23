@@ -170,6 +170,9 @@ _REWRITE_STAGE_SQL = "UPDATE public.lifecycle_map_stages SET stage_type = :after
 #: rebuilt. The containment predicate limits the statement to rows that actually
 #: carry the old value and makes a re-run a no-op. ``jsonb_set`` is only reached
 #: for an element whose ``type`` matches, so a malformed element is left alone.
+#: ``WITH ORDINALITY`` plus ``ORDER BY ord`` pins the rebuilt array to its original
+#: element order: stage order is positional downstream, and an unordered
+#: ``jsonb_agg`` may return rows in any order and silently reorder the stages.
 _REWRITE_STAGE_CONTENT_SQL = """
 UPDATE public.lifecycle_maps
 SET content_json = jsonb_set(
@@ -182,8 +185,9 @@ SET content_json = jsonb_set(
                                THEN jsonb_set(stage, '{type}', to_jsonb(CAST(:after AS text)))
                            ELSE stage
                        END
+                       ORDER BY ord
                    )
-            FROM jsonb_array_elements(content_json -> 'stages') AS stage
+            FROM jsonb_array_elements(content_json -> 'stages') WITH ORDINALITY AS staged(stage, ord)
         )
     )
 WHERE jsonb_typeof(content_json -> 'stages') = 'array'
