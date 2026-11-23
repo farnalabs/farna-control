@@ -132,6 +132,7 @@ from farna.core.runtime_provider import (
     UnknownRefError,
     WorkspaceSpec,
 )
+from farna.core.workspace_labels import CREATED_AT, MACHINE_ID, PROVIDER, preferred, stamp
 
 _log = logging.getLogger(__name__)
 
@@ -169,10 +170,17 @@ _POD_GRACE_PERIOD_SECONDS = 5
 _WORKSPACE_WAIT_CMD = ["sh", "-c", "while :; do sleep 3600; done"]
 
 # Pod identity labels/annotations (reconciliation + attribution).
-_PROVIDER_LABEL = "modulo.provider"
+_PROVIDER_LABEL = PROVIDER
 _PROVIDER_LABEL_VALUE = "kubernetes"
-_CREATED_AT_LABEL = "modulo.created_at"
-_MACHINE_ANNOTATION = "modulo.machine.id"
+_CREATED_AT_LABEL = CREATED_AT
+_MACHINE_ANNOTATION = MACHINE_ID
+# FAR-2693: the pre-rename keys. Stamped alongside the current ones and read
+# as a fallback, so pods created before the dual-write release stay listable
+# and reclaimable; remove once no live pod can predate it (see
+# farna.core.workspace_labels for the removal condition).
+_LEGACY_PROVIDER_LABEL = "modulo.provider"
+_LEGACY_POD_CREATED_AT_LABEL = "modulo.created_at"
+_LEGACY_MACHINE_ID_ANNOTATION = "modulo.machine.id"
 
 # Pod label keys/values are a restricted vocabulary (RFC 1123 label syntax);
 # raw metadata always rides the annotations where anything fits.
@@ -253,15 +261,16 @@ class WorkspacePodRef:
     """One Modulo workspace pod as the reconciler's sweep sees it (FAR-1051).
 
     Deliberately carries the pod's labels RAW rather than a pre-extracted run
-    id: the ``modulo.run.id`` label key belongs to the workspace-orphan
-    reconciler (it owns the label vocabulary it filters on for every
-    provider), while pod identity — namespace, deployment-identity
-    annotation, creation timestamp — belongs to this provider.
+    id: the run-id label key belongs to the workspace-orphan reconciler (it
+    owns the label vocabulary it filters on for every provider, and it reads
+    the current key with a legacy fallback — FAR-2693), while pod identity —
+    namespace, deployment-identity annotation, creation timestamp — belongs
+    to this provider.
 
-    ``created_age_s`` is ``now - modulo.created_at`` (epoch seconds), or
-    ``0.0`` when the marker is absent/unparseable — never a negative or
-    fabricated age, so a pod without a creation marker can never become a
-    grace-period destroy candidate.
+    ``created_age_s`` is ``now - creation marker`` (epoch seconds, current key
+    first with a legacy fallback), or ``0.0`` when the marker is
+    absent/unparseable — never a negative or fabricated age, so a pod without
+    a creation marker can never become a grace-period destroy candidate.
     """
 
     ref: str
@@ -415,15 +424,16 @@ class KubernetesRuntimeProvider(RuntimeProvider):
 
         Reserved identity keys are stamped AFTER the metadata loop (ordering
         mirror of ``DockerRuntimeProvider._build_workspace_labels``) and win
-        outright: operator-supplied ``workspace_metadata`` carrying
-        ``modulo.provider`` / ``modulo.created_at`` / ``modulo.machine.id``
-        must never re-stamp them. A pod whose ``modulo.provider`` label said
-        anything but ``kubernetes`` would be refused by
-        ``destroy_workspace_by_ref`` and filtered out by
+        outright: operator-supplied ``workspace_metadata`` carrying the
+        provider / creation-marker / machine-id keys must never re-stamp
+        them. A pod whose provider label said anything but ``kubernetes``
+        would be refused by ``destroy_workspace_by_ref`` and filtered out by
         ``list_workspace_pods`` — a permanent, unreclaimable leak. Identity
         keys are ASSIGNED (not ``setdefault``): the identity is this
         provider's own fact, never caller input. Non-reserved keys (e.g.
-        ``modulo.run.id``, stamped by dispatch) still flow through.
+        ``farna-control.run.id``, stamped by dispatch) still flow through.
+        FAR-2693 dual-write: every reserved key is stamped under its current
+        name AND its legacy name with the same value.
         """
         metadata = dict(spec.workspace_metadata or {})
 
@@ -432,13 +442,13 @@ class KubernetesRuntimeProvider(RuntimeProvider):
             if _LABEL_KEY_RE.match(key) and len(key) <= _LABEL_VALUE_MAX:
                 labels[key] = self._sanitize_label_value(str(value))
         # Reserved identity labels — applied last, always authoritative.
-        labels[_PROVIDER_LABEL] = _PROVIDER_LABEL_VALUE
-        labels[_CREATED_AT_LABEL] = str(int(time.time()))
+        stamp(labels, _PROVIDER_LABEL, _LEGACY_PROVIDER_LABEL, _PROVIDER_LABEL_VALUE)
+        stamp(labels, _CREATED_AT_LABEL, _LEGACY_POD_CREATED_AT_LABEL, str(int(time.time())))
 
         annotations = dict(metadata)
         # Reserved identity annotations — likewise applied last.
-        annotations[_PROVIDER_LABEL] = _PROVIDER_LABEL_VALUE
-        annotations[_MACHINE_ANNOTATION] = self._deployment_identity()
+        stamp(annotations, _PROVIDER_LABEL, _LEGACY_PROVIDER_LABEL, _PROVIDER_LABEL_VALUE)
+        stamp(annotations, _MACHINE_ANNOTATION, _LEGACY_MACHINE_ID_ANNOTATION, self._deployment_identity())
         return labels, annotations
 
     @staticmethod
@@ -987,9 +997,9 @@ class KubernetesRuntimeProvider(RuntimeProvider):
         """Destroy the pod given only its name (ADR 040 reclamation primitive).
 
         Contract (see :meth:`RuntimeProvider.destroy_workspace_by_ref`):
-          - already-gone / foreign ref (no ``modulo.provider=kubernetes``
-            label) -> idempotent success (``True``), the foreign pod is never
-            touched;
+          - already-gone / foreign ref (no provider label of ours — current
+            or legacy) -> idempotent success (``True``), the foreign pod is
+            never touched;
           - returns ``True`` when the pod is confirmed gone (deleted by this
             call or already gone), ``False`` when the destroy could not be
             confirmed — failures are logged and swallowed (best-effort).
@@ -1006,8 +1016,11 @@ class KubernetesRuntimeProvider(RuntimeProvider):
             _log.debug("destroy_workspace_by_ref: pod %s already gone", provider_ref)
             return True
         labels = getattr(getattr(pod, "metadata", None), "labels", None) or {}
-        if labels.get(_PROVIDER_LABEL) != _PROVIDER_LABEL_VALUE:
-            _log.debug("destroy_workspace_by_ref: %s is not a Modulo workspace pod; leaving it", provider_ref)
+        # FAR-2693 dual-read: a pod created before the rename carries only the
+        # legacy provider label and must still be reclaimable.
+        provider_value = preferred(labels, _PROVIDER_LABEL, _LEGACY_PROVIDER_LABEL)
+        if provider_value != _PROVIDER_LABEL_VALUE:
+            _log.debug("destroy_workspace_by_ref: %s is not a Farna Control workspace pod; leaving it", provider_ref)
             return True
         try:
             core = await self._get_core()
@@ -1027,36 +1040,42 @@ class KubernetesRuntimeProvider(RuntimeProvider):
         return True
 
     async def list_workspace_pods(self) -> list[WorkspacePodRef]:
-        """List this deployment's Modulo workspace pods in the namespace.
+        """List this deployment's Farna Control workspace pods in the namespace.
 
         The listing primitive behind the workspace-orphan reconciler's
         Kubernetes source (FAR-1051 — "reconciler as single owner of K8s
         runs"). Two scoping layers, mirroring the Docker source's container
         filter:
 
-        - server-side selector ``modulo.provider=kubernetes`` — never a
-          foreign pod;
-        - client-side deployment-identity match on the ``modulo.machine.id``
-          ANNOTATION (pods carry the identity as an annotation, not a label),
-          so two Modulo deployments sharing one namespace never reconcile
-          each other's workspace pods.
+        - server-side selector on the provider label (``kubernetes``) — never
+          a foreign pod. FAR-2693: the selector is issued for BOTH the
+          current and the legacy provider label and the results are merged,
+          so a pod created before the rename is still listed (and thus
+          reclaimable) while it carries only the legacy label;
+        - client-side deployment-identity match on the machine-id ANNOTATION
+          (pods carry the identity as an annotation, not a label; current
+          key first, legacy fallback), so two Farna Control deployments
+          sharing one namespace never reconcile each other's workspace pods.
 
         Any listing failure propagates: a configured-but-unreachable cluster
         must surface as a reported sweep failure, never a silent empty list.
         """
         core = await self._get_core()
-        pods = await core.list_namespaced_pod(
-            namespace=self._namespace,
-            label_selector=f"{_PROVIDER_LABEL}={_PROVIDER_LABEL_VALUE}",
-        )
         identity = self._deployment_identity()
         now = time.time()
         entries: list[WorkspacePodRef] = []
-        for pod in getattr(pods, "items", None) or []:
-            entry = self._workspace_pod_entry(pod, identity, now)
-            if entry is None:
-                continue
-            entries.append(entry)
+        seen: set[str] = set()
+        for provider_label in (_PROVIDER_LABEL, _LEGACY_PROVIDER_LABEL):
+            pods = await core.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=f"{provider_label}={_PROVIDER_LABEL_VALUE}",
+            )
+            for pod in getattr(pods, "items", None) or []:
+                entry = self._workspace_pod_entry(pod, identity, now)
+                if entry is None or entry.ref in seen:
+                    continue
+                seen.add(entry.ref)
+                entries.append(entry)
         return entries
 
     def _workspace_pod_entry(self, pod: Any, identity: str, now: float) -> WorkspacePodRef | None:
@@ -1065,11 +1084,13 @@ class KubernetesRuntimeProvider(RuntimeProvider):
         if metadata is None:
             return None
         annotations = getattr(metadata, "annotations", None) or {}
-        if annotations.get(_MACHINE_ANNOTATION) != identity:
+        # FAR-2693 dual-read: current identity annotation first, legacy
+        # fallback so a pre-rename pod still matches this deployment.
+        if preferred(annotations, _MACHINE_ANNOTATION, _LEGACY_MACHINE_ID_ANNOTATION) != identity:
             return None
         labels = getattr(metadata, "labels", None) or {}
         try:
-            created = float(labels.get(_CREATED_AT_LABEL, "0") or 0)
+            created = float(preferred(labels, _CREATED_AT_LABEL, _LEGACY_POD_CREATED_AT_LABEL, "0") or 0)
         except (TypeError, ValueError):
             created = 0.0
         ref = getattr(metadata, "name", "") or ""

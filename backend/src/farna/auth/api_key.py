@@ -457,7 +457,7 @@ async def revoke_run_api_key_sweep(
     raw-SQL terminalizers, saq_hooks._mark_run_failed, transition_run,
     request_cancellation). For each such run it drives the single sealed terminal
     step :func:`farna.core.run_teardown.seal_run_teardown` — revoke the run's
-    credential(s), destroy every workspace labelled ``modulo.run.id``, and write
+    credential(s), destroy every workspace labelled with the run id, and write
     ONE ``run.teardown_sealed`` fact — so the compensating path seals exactly as
     the executor path does (FAR-1690 D2: one choke point, one sweep, not two).
     The executor path already seals at finalization; this sweep is the backstop.
