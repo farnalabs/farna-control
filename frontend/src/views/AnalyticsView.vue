@@ -60,9 +60,12 @@
         />
 
         <div v-else class="space-y-4">
-          <div class="card p-4" data-testid="analytics-overview-chart">
-            <div class="mb-3 flex items-center justify-between">
-              <h2 class="text-base font-semibold">{{ chartTitle }}</h2>
+          <DataCard
+            :title="chartTitle"
+            heading-level="h2"
+            data-testid="analytics-overview-chart"
+          >
+            <template #headerActions>
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
@@ -73,7 +76,7 @@
                 <span class="inline-block h-2 w-2 rounded-full bg-amber-400" aria-hidden="true"></span>
                 {{ $t('views.AnalyticsView.capacity_overlay_toggle') }}
               </button>
-            </div>
+            </template>
 
             <!-- Capacity summary cards -->
             <div
@@ -82,22 +85,22 @@
               data-testid="analytics-capacity-summary"
               aria-live="polite"
             >
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_avg_queue_wait') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatCapacityMs(store.capacitySummary.avgQueueWaitMs) }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_failures') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ store.capacitySummary.totalCapacityFailures.toLocaleString() }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_avg_wait') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatCapacityMs(store.capacitySummary.avgCapacityWaitMs) }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_stalls') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ store.capacitySummary.totalStalls.toLocaleString() }}</p>
-              </div>
+              <MetricCard
+                :label="$t('views.AnalyticsView.capacity_avg_queue_wait')"
+                :value="formatCapacityMs(store.capacitySummary.avgQueueWaitMs)"
+              />
+              <MetricCard
+                :label="$t('views.AnalyticsView.capacity_failures')"
+                :value="store.capacitySummary.totalCapacityFailures.toLocaleString()"
+              />
+              <MetricCard
+                :label="$t('views.AnalyticsView.capacity_avg_wait')"
+                :value="formatCapacityMs(store.capacitySummary.avgCapacityWaitMs)"
+              />
+              <MetricCard
+                :label="$t('views.AnalyticsView.capacity_stalls')"
+                :value="store.capacitySummary.totalStalls.toLocaleString()"
+              />
             </div>
 
             <AnalyticsChart
@@ -107,7 +110,7 @@
               :dimension="store.filters.dimension"
               :show-overlay="store.showCapacityOverlay"
             />
-          </div>
+          </DataCard>
 
           <details class="card p-4" data-testid="analytics-details">
             <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
@@ -185,6 +188,8 @@ import EmptyState from "../components/shared/EmptyState.vue";
 import AnalyticsChart from "../components/analytics/AnalyticsChart.vue";
 import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";
 import CapacityQueuePanel from "../components/analytics/CapacityQueuePanel.vue";
+import DataCard from "../components/ui/DataCard.vue";
+import MetricCard from "../components/ui/MetricCard.vue";
 import { formatApiError } from "../lib/api/formatError";
 import { errorCodeLabel, executionOriginLabel } from "../utils/runUtils";
 import {
