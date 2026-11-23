@@ -213,7 +213,7 @@ async def get_primitive_by_slug(
 
     Resolver fallback ordering (ADR 032 §4 visibility — DB → registry):
     the org-scoped ``library_primitives`` DB row wins, then the in-code
-    modulo registry. The in-code source is visible to EVERY organisation and
+    built-in registry. The in-code source is visible to EVERY organisation and
     carries no DB row in the org's RLS slice, so callers must not assume a
     returned primitive is DB-persisted.
 
@@ -284,7 +284,7 @@ async def _re_read_primitive(
     """Re-read the source inside the copy transaction to avoid TOCTOU.
 
     Returns ``(primitive, in_db)`` — ``in_db`` is False when the source came
-    from the in-memory modulo registry (it has no ``library_primitives`` row,
+    from the in-memory built-in registry (it has no ``library_primitives`` row,
     so ``forked_from`` cannot reference it: the FK would fail).
     """
     refreshed = await get_library_primitive(session, primitive_id)
@@ -376,7 +376,7 @@ async def copy_to_adapt(
                 target_team_id,
                 created_by,
                 # ``forked_from`` has an FK on library_primitives — in-memory
-                # builtin sources (modulo registry) have no row, so the
+                # builtin sources (in-memory registry) have no row, so the
                 # copy must not reference them or the insert fails with an FK
                 # violation (internal_error 500 on copy_library_primitive).
                 forked_from=refreshed.id if in_db else None,
@@ -794,25 +794,25 @@ async def notify_importers_of_update(
 # ---------------------------------------------------------------------------
 
 
-def _filter_modulo(
+def _filter_builtin(
     *,
     primitive_type: str | None = None,
     primitive_types: list[str] | None = None,
     search: str | None = None,
 ) -> list[LibraryPrimitive]:
-    """Filter the built-in modulo registry primitives."""
+    """Filter the built-in registry primitives."""
     if primitive_types:
         allowed = set(primitive_types)
-        modulo = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type in allowed]
+        builtin = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type in allowed]
     elif primitive_type is not None:
-        modulo = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == primitive_type]
+        builtin = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == primitive_type]
     else:
-        modulo = list(_BUILTIN_PRIMITIVES)
+        builtin = list(_BUILTIN_PRIMITIVES)
     if search:
         term = search.strip().lower()
         if term:
-            modulo = [p for p in modulo if term in (p.name or "").lower() or term in (p.description or "").lower()]
-    return modulo
+            builtin = [p for p in builtin if term in (p.name or "").lower() or term in (p.description or "").lower()]
+    return builtin
 
 
 async def _load_org_page(
@@ -913,19 +913,19 @@ async def list_primitives(
     # ``conditions``), so ``org_page.total`` is already the exact filtered
     # universe count and is passed through unchanged.
     org_items = list(org_page.items)
-    modulo: list[LibraryPrimitive] = []
+    builtin: list[LibraryPrimitive] = []
     if source is None or source == "modulo":
-        modulo = _filter_modulo(
+        builtin = _filter_builtin(
             primitive_type=primitive_type,
             primitive_types=primitive_types,
             search=search,
         )
     if excluded_tiers:
         org_items = [p for p in org_items if p.tier not in excluded_tiers]
-        modulo = [p for p in modulo if p.tier not in excluded_tiers]
+        builtin = [p for p in builtin if p.tier not in excluded_tiers]
 
-    all_items: list[LibraryPrimitive] = org_items + modulo
-    total = org_page.total + len(modulo)
+    all_items: list[LibraryPrimitive] = org_items + builtin
+    total = org_page.total + len(builtin)
     # ``has_more`` is derived here rather than forwarded from ``org_page`` so
     # the envelope can never contradict its own items.
     has_more = (page - 1) * page_size + len(all_items) < total
@@ -934,8 +934,8 @@ async def list_primitives(
         total=total,
         page=page,
         page_size=page_size,
-        # ``next_cursor`` continues the org slice only. The in-memory modulo
-        # built-ins are bounded and are re-merged in full on every page; they
+        # ``next_cursor`` continues the org slice only. The in-memory built-ins
+        # are bounded and are re-merged in full on every page; they
         # share no ordering key with the org rows, so the asymmetry is
         # deliberate. ``has_more`` is the authoritative "another page" signal.
         next_cursor=org_page.next_cursor,

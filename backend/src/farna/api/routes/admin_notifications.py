@@ -45,6 +45,7 @@ from farna.core.notifier import (
     EVENT_RUN_STALLED,
     EVENT_TRIGGER_DEACTIVATED,
     EVENT_TRIGGER_STREAK_ALERT,
+    NOTIFIER_USER_AGENT,
     endpoint_events_to_list,
 )
 from farna.core.ssrf import pinned_async_client, validate_outbound_url
@@ -60,7 +61,6 @@ _CODE_NOTIFICATIONS_DELIVERY_TABLE_MISSING = "notifications.delivery_table_missi
 _MSG_NOTIFICATION_DELIVERY_LOGGING_NOT = "Notification delivery logging is not available. Run database migrations to enable it."
 _CODE_NOTIFICATIONS_DB_ERROR = "notifications.db_error"
 _CODE_NOTIFICATIONS_UNEXPECTED_ERROR = "notifications.unexpected_error"
-_MSG_NOTIFIER_USER_AGENT = "Modulo-Notifier/1.0"
 _MSG_APPLICATION_JSON = "application/json"
 _CODE_NOTIFICATIONS_ENDPOINT_TABLE_MISSING = "notifications.endpoint_table_missing"
 _MSG_WEBHOOK_NOT_FOUND = "Webhook not found"
@@ -637,7 +637,7 @@ async def _retry_one_delivery(
     """
     body, retained_ciphertext = _retry_request_body(delivery, settings.fernet_key)
 
-    headers = {"Content-Type": _MSG_APPLICATION_JSON, "User-Agent": _MSG_NOTIFIER_USER_AGENT}
+    headers = {"Content-Type": _MSG_APPLICATION_JSON, "User-Agent": NOTIFIER_USER_AGENT}
     if ep.secret_ciphertext:
         try:
             async with session.begin():
@@ -1083,7 +1083,7 @@ async def test_webhook(
         }
     ).encode()
 
-    headers = {"Content-Type": _MSG_APPLICATION_JSON, "User-Agent": _MSG_NOTIFIER_USER_AGENT}
+    headers = {"Content-Type": _MSG_APPLICATION_JSON, "User-Agent": NOTIFIER_USER_AGENT}
     if ep.secret_ciphertext:
         try:
             async with session.begin():

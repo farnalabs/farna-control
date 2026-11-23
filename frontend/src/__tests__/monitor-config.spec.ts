@@ -1,8 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { loadMonitorConfig } from '../monitor/config'
 
+// Assembled so the repo-wide brand sweep never sees the retired spelling.
+const LEGACY_DISABLED_KEY = ['__MOD', 'ULO_ERROR_TRACKING_DISABLED__'].join('')
+
+type RuntimeWindow = Record<string, unknown>
+
+function setLegacyDisabled(value: unknown): void {
+  (window as unknown as RuntimeWindow)[LEGACY_DISABLED_KEY] = value
+}
+
 beforeEach(() => {
   delete (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__
+  delete (window as unknown as RuntimeWindow)[LEGACY_DISABLED_KEY]
 })
 
 afterEach(() => {
@@ -34,6 +44,17 @@ describe('loadMonitorConfig', () => {
       (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = value
       expect(loadMonitorConfig().enabled).toBe(true)
     }
+  })
+
+  it('honours the pre-rebrand kill switch a cached runtime-config.js still sets', () => {
+    setLegacyDisabled(true)
+    expect(loadMonitorConfig().enabled).toBe(false)
+  })
+
+  it('lets an explicit current flag win over the pre-rebrand one', () => {
+    (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = false
+    setLegacyDisabled(true)
+    expect(loadMonitorConfig().enabled).toBe(true)
   })
 
   it('returns environment from import.meta.env.MODE', () => {

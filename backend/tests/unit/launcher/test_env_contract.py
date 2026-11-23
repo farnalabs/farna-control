@@ -80,17 +80,18 @@ from pathlib import Path
 import pytest
 
 from farna.launcher import env_contract
+from tests.helpers.env_prefixes import RETIRED_ENV_PREFIX
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PYTHON_SOURCE_ROOT = REPO_ROOT / "backend" / "src" / "farna"
 SETTINGS_MODULE = PYTHON_SOURCE_ROOT / "settings.py"
 CONFIGURATION_REFERENCE = REPO_ROOT / "docs" / "configuration-reference.md"
 
-#: The canonical namespace. Constructed rather than written literally where the
-#: gate needs to demonstrate the removed spelling, so this file itself holds no
-#: bare legacy name for a source sweep to trip over.
+#: The canonical namespace. The retired spelling comes from the one shared
+#: helper (assembled there) so this file itself holds no bare legacy name for a
+#: source sweep to trip over.
 CANONICAL_PREFIX = env_contract.CANONICAL_PREFIX
-LEGACY_PREFIX = "MOD" + "ULO" + "_"
+LEGACY_PREFIX = RETIRED_ENV_PREFIX
 
 #: Shell ``export NAME=...``.
 SHELL_EXPORT_WRITE = r"^\s*export\s+({names})="
@@ -556,6 +557,10 @@ _READ_CALL_ATTRS = frozenset({"get", "getenv"})
 #: Project helpers that read one env var by name.
 _READ_CALL_NAMES = frozenset({"override_or", "override_int_or", "override_float_or"})
 _ROUTED_CALL_NAME = "read_env"
+#: CLI option constructors whose ``envvar=`` keyword IS the environment read.
+_ENVVAR_OPTION_NAMES = frozenset({"option", "Option"})
+#: The modules that own those constructors (``click.option`` / ``typer.Option``).
+_CLI_MODULES = frozenset({"click", "typer"})
 
 
 @dataclass(frozen=True)
@@ -587,8 +592,27 @@ def _assignments(tree: ast.Module) -> list[tuple[str, ast.expr | None]]:
     return pairs
 
 
-def _module_bindings(tree: ast.Module, project: dict[str, dict[str, str]] | None = None) -> dict[str, str]:
-    """Resolve ``identifier -> env name`` for one module.
+def _bound_env_names(value: ast.expr, bindings: dict[str, set[str]]) -> set[str]:
+    """Env names a binding value can resolve to.
+
+    A simple conditional name (``X = A if cond else B``) folds to BOTH arms: the
+    read through ``X`` may take either spelling, so each must count as accepted.
+    """
+    literal = _literal_env_name(value)
+    if literal is not None:
+        return {literal}
+    if isinstance(value, ast.IfExp):
+        return _bound_env_names(value.body, bindings) | _bound_env_names(value.orelse, bindings)
+    if isinstance(value, ast.Name):
+        return set(bindings.get(value.id, set()))
+    if isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name) and value.value.id == "env_contract":
+        attribute = getattr(env_contract, value.attr, None)
+        return {attribute} if isinstance(attribute, str) else set()
+    return set()
+
+
+def _module_bindings(tree: ast.Module, project: dict[str, dict[str, set[str]]] | None = None) -> dict[str, set[str]]:
+    """Resolve ``identifier -> possible env names`` for one module.
 
     Handles registry imports (``from ...env_contract import SERVE_SPA_ENV``),
     imports from a project module that re-exports a registry name (``from
@@ -596,67 +620,137 @@ def _module_bindings(tree: ast.Module, project: dict[str, dict[str, str]] | None
     (``X = "FARNA_CONTROL_Y"``) and aliases of any of them
     (``_SERVE_SPA_ENV = SERVE_SPA_ENV``, ``X = env_contract.Y``), so a reader
     hiding behind a constant is still identified - the shape the pre-fix
-    LAN-origins read used.
+    LAN-origins read used. A conditional name binds both its arms.
     """
-    bindings: dict[str, str] = {}
+    bindings: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.ImportFrom) or not node.module:
             continue
         for alias in node.names:
             imported = getattr(env_contract, alias.name, None) if node.module.endswith("env_contract") else None
-            if not isinstance(imported, str):
-                imported = (project or {}).get(node.module, {}).get(alias.name)
             if isinstance(imported, str):
-                bindings[alias.asname or alias.name] = imported
+                bindings[alias.asname or alias.name] = {imported}
+                continue
+            re_exported = (project or {}).get(node.module, {}).get(alias.name)
+            if re_exported:
+                bindings[alias.asname or alias.name] = set(re_exported)
     assignments = _assignments(tree)
     changed = True
     while changed:
         changed = False
         for target, value in assignments:
-            if target in bindings or value is None:
+            if value is None:
                 continue
-            resolved = _literal_env_name(value)
-            if resolved is None and isinstance(value, ast.Name):
-                resolved = bindings.get(value.id)
-            elif resolved is None and isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name) and value.value.id == "env_contract":
-                attribute = getattr(env_contract, value.attr, None)
-                resolved = attribute if isinstance(attribute, str) else None
-            if resolved:
-                bindings[target] = resolved
+            resolved = _bound_env_names(value, bindings)
+            if resolved and not resolved <= bindings.get(target, set()):
+                bindings[target] = bindings.get(target, set()) | resolved
                 changed = True
     return bindings
 
 
-def _key_name(node: ast.expr | None, bindings: dict[str, str]) -> str | None:
+def _key_names(node: ast.expr | None, bindings: dict[str, set[str]]) -> list[str]:
+    """Every env name the expression may denote (a conditional names both arms)."""
+    if node is None:
+        return []
     literal = _literal_env_name(node)
     if literal is not None:
-        return literal
+        return [literal]
     if isinstance(node, ast.Name):
-        return bindings.get(node.id)
-    return None
+        return sorted(bindings.get(node.id, set()))
+    if isinstance(node, ast.IfExp):
+        return sorted(set(_key_names(node.body, bindings)) | set(_key_names(node.orelse, bindings)))
+    return []
 
 
-def env_reads(source: str, relative_path: str, project: dict[str, dict[str, str]] | None = None) -> list[EnvRead]:
-    """Enumerate every environment read in one module's source."""
+def _call_name(func: ast.expr) -> str:
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    if isinstance(func, ast.Name):
+        return func.id
+    return ""
+
+
+def _is_envvar_option(func: ast.expr) -> bool:
+    """``click.option`` / ``typer.Option`` (or the bare imported constructor)."""
+    if isinstance(func, ast.Attribute):
+        owner = func.value
+        return func.attr in _ENVVAR_OPTION_NAMES and isinstance(owner, ast.Name) and owner.id in _CLI_MODULES
+    return isinstance(func, ast.Name) and func.id in _ENVVAR_OPTION_NAMES
+
+
+def _environ_key_param_indexes(func: ast.FunctionDef | ast.AsyncFunctionDef) -> set[int]:
+    """Indexes of parameters a function passes as an ``os.environ`` read key."""
+    params = [arg.arg for arg in (*func.args.posonlyargs, *func.args.args)]
+    indexes: set[int] = set()
+    for child in ast.walk(func):
+        key: ast.expr | None = None
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+            receiver = child.func.value
+            if child.func.attr == "getenv" or (child.func.attr == "get" and isinstance(receiver, ast.Attribute) and receiver.attr == "environ"):
+                key = child.args[0] if child.args else None
+        elif isinstance(child, ast.Subscript) and isinstance(child.value, ast.Attribute) and child.value.attr == "environ":
+            key = child.slice
+        if isinstance(key, ast.Name) and key.id in params:
+            indexes.add(params.index(key.id))
+    return indexes
+
+
+def _single_name_helpers(tree: ast.Module) -> dict[str, int]:
+    """Functions in this module that read exactly one env var through a parameter.
+
+    Returns ``function name -> positional parameter index`` for the simple shape
+    ``def _env_int(name, default): ... os.environ.get(name) ...``. A call to it
+    then counts as a read of the literal it passes at that index, so production
+    code can keep ONE name source of truth instead of duplicating the read at
+    every call site - the detector carries the knowledge, not the caller.
+    """
+    helpers: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        indexes = _environ_key_param_indexes(node)
+        if len(indexes) == 1:
+            helpers[node.name] = next(iter(indexes))
+    return helpers
+
+
+def env_reads(source: str, relative_path: str, project: dict[str, dict[str, set[str]]] | None = None) -> list[EnvRead]:
+    """Enumerate every environment read in one module's source.
+
+    Recognises a direct read (``os.environ.get`` / ``environ[...]`` /
+    ``getenv`` and the project's single-name override helpers), a registered
+    read through :func:`read_env`, a CLI option's ``envvar=``
+    (``click.option`` / ``typer.Option``), and a call to a local single-name
+    helper (whose name parameter is read one frame down).
+    """
     tree = ast.parse(source)
     bindings = _module_bindings(tree, project)
+    helpers = _single_name_helpers(tree)
     reads: list[EnvRead] = []
+
+    def add(names: list[str], *, through_registry: bool) -> None:
+        for name in names:
+            read = EnvRead(name, relative_path, through_registry)
+            if read not in reads:
+                reads.append(read)
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
-            call = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ""
+            call = _call_name(func)
             if call == _ROUTED_CALL_NAME:
-                name = _key_name(node.args[1] if len(node.args) > 1 else None, bindings)
-                if name:
-                    reads.append(EnvRead(name, relative_path, True))
+                add(_key_names(node.args[1] if len(node.args) > 1 else None, bindings), through_registry=True)
             elif call in _READ_CALL_ATTRS or call in _READ_CALL_NAMES:
-                name = _key_name(node.args[0] if node.args else None, bindings)
-                if name:
-                    reads.append(EnvRead(name, relative_path, False))
+                add(_key_names(node.args[0] if node.args else None, bindings), through_registry=False)
+            elif _is_envvar_option(func):
+                for keyword in node.keywords:
+                    if keyword.arg == "envvar":
+                        add(_key_names(keyword.value, bindings), through_registry=False)
+            elif call in helpers:
+                index = helpers[call]
+                add(_key_names(node.args[index] if len(node.args) > index else None, bindings), through_registry=False)
         elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == "environ":
-            name = _key_name(node.slice, bindings)
-            if name:
-                reads.append(EnvRead(name, relative_path, False))
+            add(_key_names(node.slice, bindings), through_registry=False)
     return reads
 
 
@@ -679,9 +773,9 @@ def _dotted_module_name(path: Path) -> str:
     return ".".join(parts[parts.index("farna") :])
 
 
-def _project_bindings() -> dict[str, dict[str, str]]:
-    """Every module's own ``identifier -> env name`` map, for re-export resolution."""
-    project: dict[str, dict[str, str]] = {}
+def _project_bindings() -> dict[str, dict[str, set[str]]]:
+    """Every module's own ``identifier -> possible env names`` map, for re-export resolution."""
+    project: dict[str, dict[str, set[str]]] = {}
     for path in _python_modules():
         tree = ast.parse(path.read_text(encoding="utf-8"))
         project[_dotted_module_name(path)] = _module_bindings(tree)
@@ -759,7 +853,9 @@ def test_the_reader_sweep_includes_the_backup_scripts() -> None:
     reads = _python_reads()
     passphrase_reads = [read for read in reads if read.name == "FARNA_CONTROL_BACKUP_PASSPHRASE"]
 
-    assert {read.relative_path for read in passphrase_reads} == {"scripts/backup.py", "scripts/restore.py"}
+    # A subset check: the two scripts must both be seen, and a future reader is
+    # welcome rather than a failure (exact equality made the sweep brittle).
+    assert {"scripts/backup.py", "scripts/restore.py"} <= {read.relative_path for read in passphrase_reads}
 
 
 def test_the_python_reader_sweep_sees_the_spa_and_lan_reads() -> None:
@@ -820,6 +916,49 @@ def test_gate_flags_a_redeclared_registered_name() -> None:
     assert env_contract.LAN_ORIGINS_ENV in problems[0]
 
 
+#: The CLI option constructors whose ``envvar=`` is an environment read. Each
+#: shape is a separate mutation below so a detector regression fails on the
+#: exact form rather than being masked by a sibling.
+_CLI_ENVVAR_SHAPES: tuple[tuple[str, str], ...] = (
+    ("click", 'import click\n\n@click.option("--token", envvar="FARNA_CONTROL_ADMIN_TOKEN", default=None)\ndef cli(token: str | None) -> None: ...\n'),
+    ("typer", 'import typer\n\nTOKEN = typer.Option(None, envvar="FARNA_CONTROL_ADMIN_TOKEN")\n'),
+)
+
+
+@pytest.mark.parametrize(("module", "source"), _CLI_ENVVAR_SHAPES, ids=[module for module, _source in _CLI_ENVVAR_SHAPES])
+def test_gate_resolves_a_cli_option_envvar(module: str, source: str) -> None:
+    """Mutation: a documented knob read through ``click``/``typer`` ``envvar=``
+    is a real read, so it must not be parked on the burn-down list."""
+    reads = env_reads(source, f"backend/src/farna/cli/synthetic_{module}.py")
+
+    assert [read.name for read in reads] == ["FARNA_CONTROL_ADMIN_TOKEN"], reads
+    assert not reads[0].through_registry
+
+
+def test_gate_resolves_a_single_name_helper_parameter() -> None:
+    """Mutation: the idiomatic one-name-source helper must be understood.
+
+    ``_env_int(name, ...)`` reads ``os.environ.get(name)`` one frame down; the
+    detector must attribute the call site's literal to it so production code
+    does not have to duplicate the read to satisfy the gate.
+    """
+    source = 'import os\n\n\ndef _env_int(name: str, default: int) -> int:\n    raw = os.environ.get(name)\n    return int(raw) if raw else default\n\n\nLIMIT = "FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT"\n\n\ndef resolve() -> int:\n    return _env_int(LIMIT, 10)\n'
+    reads = env_reads(source, "backend/src/farna/core/synthetic_budget.py")
+
+    assert [read.name for read in reads] == ["FARNA_CONTROL_AGENT_MINT_BUDGET_LIMIT"], reads
+
+
+def test_gate_folds_a_conditional_env_name() -> None:
+    """Mutation: a ternary name binds BOTH arms, so each documented knob counts."""
+    source = 'import os\n\n\ndef read(trigger_type: str) -> str | None:\n    name = "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS" if trigger_type == "cron" else "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS"\n    return os.environ.get(name)\n'
+    reads = env_reads(source, "backend/src/farna/core/synthetic_streak.py")
+
+    assert {read.name for read in reads} == {
+        "FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS",
+        "FARNA_CONTROL_ONGOING_STREAK_MIN_WINDOW_HOURS",
+    }, reads
+
+
 # ---------------------------------------------------------------------------
 # The documented half: a published knob must be accepted by SOMETHING
 # ---------------------------------------------------------------------------
@@ -876,10 +1015,37 @@ def test_every_documented_knob_is_accepted_somewhere() -> None:
     assert not missing, f"documented knobs no mechanism accepts (add a settings alias, a registry name, or list a real gap): {missing}"
 
 
+def gap_list_problems(gaps: frozenset[str], *, accepted: set[str], documented: set[str]) -> list[str]:
+    """Return every stale entry in a documented-knob gap list.
+
+    Extracted from the gate so the predicate can be proven against a SYNTHETIC
+    list: the real list is empty, and an empty set makes both membership checks
+    vacuous, so the only mutation that proves the check works supplies entries.
+    """
+    problems: list[str] = []
+    for name in sorted(gaps & accepted):
+        problems.append(f"{name} is now accepted - delete it from DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS")
+    for name in sorted(gaps - documented):
+        problems.append(f"{name} is no longer documented - delete it from DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS")
+    return problems
+
+
 def test_the_documented_knob_gap_list_holds_only_live_gaps() -> None:
     """Burn-down discipline: a fixed knob must be deleted from the list."""
-    accepted = _accepted_knobs()
-    documented = _documented_env_knobs()
+    problems = gap_list_problems(DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS, accepted=_accepted_knobs(), documented=_documented_env_knobs())
 
-    assert not sorted(DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS & accepted), "now accepted - delete these entries"
-    assert not sorted(DOCUMENTED_KNOBS_WITHOUT_AN_ALIAS - documented), "no longer documented - delete these entries"
+    assert not problems, problems
+
+
+def test_the_gap_list_check_flags_stale_entries() -> None:
+    """Mutation: the empty real list must not make the staleness check vacuous."""
+    gaps = frozenset({"FARNA_CONTROL_NOW_ACCEPTED", "FARNA_CONTROL_NO_LONGER_DOCUMENTED", "FARNA_CONTROL_STILL_A_GAP"})
+    problems = gap_list_problems(
+        gaps,
+        accepted={"FARNA_CONTROL_NOW_ACCEPTED"},
+        documented={"FARNA_CONTROL_STILL_A_GAP", "FARNA_CONTROL_NOW_ACCEPTED"},
+    )
+
+    assert len(problems) == 2, problems
+    assert any("FARNA_CONTROL_NOW_ACCEPTED" in problem for problem in problems)
+    assert any("FARNA_CONTROL_NO_LONGER_DOCUMENTED" in problem for problem in problems)

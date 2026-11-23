@@ -102,8 +102,9 @@ _MINT_BUDGET_UPSERT_SQL = text(
 )
 
 
-def _parse_env_int(raw: str | None, name: str, default: int, minimum: int) -> int:
-    """Parse an int env override; malformed/below-minimum values fall back."""
+def _env_int(name: str, default: int, minimum: int) -> int:
+    """Read an int env override; malformed/below-minimum values fall back."""
+    raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
     try:
@@ -130,14 +131,9 @@ def current_window_start(window_minutes: int, *, now: datetime | None = None) ->
 
 
 def _resolve_budget_config() -> tuple[int, int]:
-    """Resolve (limit, window_minutes) from env with sane defaults.
-
-    The ``os.environ.get`` calls stay at this call site (rather than inside the
-    parsing helper) so the env-contract gate can see the documented literal
-    spelling accepted by a real reader.
-    """
-    limit = _parse_env_int(os.environ.get(ENV_AGENT_MINT_BUDGET_LIMIT), ENV_AGENT_MINT_BUDGET_LIMIT, DEFAULT_BUDGET_LIMIT, minimum=1)
-    window_minutes = _parse_env_int(os.environ.get(ENV_AGENT_MINT_BUDGET_WINDOW_MINUTES), ENV_AGENT_MINT_BUDGET_WINDOW_MINUTES, DEFAULT_WINDOW_MINUTES, minimum=1)
+    """Resolve (limit, window_minutes) from env with sane defaults."""
+    limit = _env_int(ENV_AGENT_MINT_BUDGET_LIMIT, DEFAULT_BUDGET_LIMIT, minimum=1)
+    window_minutes = _env_int(ENV_AGENT_MINT_BUDGET_WINDOW_MINUTES, DEFAULT_WINDOW_MINUTES, minimum=1)
     return limit, window_minutes
 
 

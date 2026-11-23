@@ -22,9 +22,10 @@ from typing import Any
 import pytest
 
 from farna.settings import Settings
+from tests.helpers.env_prefixes import RETIRED_DOUBLED_ENV_PREFIX, RETIRED_ENV_PREFIX
 
-_FORBIDDEN_PREFIX = "FARNA_CONTROL_" + "MOD" + "ULO_"
-_LEGACY_PREFIX = "MODULO" + "_"
+_FORBIDDEN_PREFIX = RETIRED_DOUBLED_ENV_PREFIX
+_LEGACY_PREFIX = RETIRED_ENV_PREFIX
 
 #: Fields whose canonical alias is deliberately NOT the field-name upper-case
 #: spelling. Each entry states why; a new entry is a review decision, not a

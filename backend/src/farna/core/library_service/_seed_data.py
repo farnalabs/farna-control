@@ -17,7 +17,11 @@ from typing import Any
 
 from farna.db.models.library_primitive import LibraryPrimitive
 
-# Fixed sentinel used as organisation_id for modulo (built-in) primitives.
+# Fixed sentinel used as organisation_id for built-in primitives. It is the
+# SAME identity as REGISTRY_ORG_ID in farna.db.models.organisation (the
+# library-install sentinel); the two are separate constants only to keep the
+# db.models -> core import direction one-way, and their equality is pinned by
+# tests/architecture/test_sentinel_org_ids.py.
 BUILTIN_ORG_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
@@ -63,9 +67,10 @@ def _build_builtin(
 ) -> LibraryPrimitive:
     """Construct an in-memory built-in primitive (native ``modulo`` source).
 
-    Built-ins are the Native library (``source="modulo"``); the retired
-    ``community`` source is no longer seeded. They live in the modulo sentinel
-    org so they are visible to every organisation, and are ``tier="native"``.
+    Built-ins are the Native library (``source="modulo"``, a persisted value);
+    the retired ``community`` source is no longer seeded. They live in the
+    built-in sentinel org so they are visible to every organisation, and are
+    ``tier="native"``.
     """
     p = LibraryPrimitive(
         id=uuid.UUID(pid),
@@ -100,7 +105,7 @@ def _build_builtin(
     return p
 
 
-def _make_modulo(
+def _make_builtin(
     pid: str,
     primitive_type: str,
     name: str,
@@ -129,7 +134,7 @@ def _make_modulo(
 # ---------------------------------------------------------------------------
 
 _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000010",
         primitive_type="schema",
         name="PRD Input Schema",
@@ -146,7 +151,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["schema", "product", "prd"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000011",
         primitive_type="schema",
         name="Requirements Output Schema",
@@ -167,7 +172,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["schema", "requirements", "prd"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000012",
         primitive_type="schema",
         name="PR Review Decision",
@@ -197,7 +202,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["schema", "pr", "review", "github", "decision"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000020",
         primitive_type="agent",
         name="PRD Ingestion Agent",
@@ -210,7 +215,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["agent", "prd", "ingestion"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000021",
         primitive_type="agent",
         name="Requirements Writer Agent",
@@ -223,7 +228,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["agent", "requirements", "prd"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000030",
         primitive_type="workflow",
         name="PRD to Requirements",
@@ -239,7 +244,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["workflow", "prd", "requirements"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000040",
         primitive_type="test_fixture",
         name="Example Test Fixture",
@@ -258,7 +263,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
     # -----------------------------------------------------------------------
     # Simplest Workflow primitives (agent + workflow)
     # -----------------------------------------------------------------------
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000065",
         primitive_type="agent",
         name="Spec Implementer",
@@ -286,7 +291,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["agent", "spec-implementer", "simplest-workflow", "day-1"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000071",
         primitive_type="workflow",
         name="Simplest Workflow",
@@ -310,7 +315,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
     # -----------------------------------------------------------------------
     # Farna Control example composite primitives
     # -----------------------------------------------------------------------
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000090",
         primitive_type="composite",
         name="Approver",
@@ -359,7 +364,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["composite", "approval", "gate", "validation"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000091",
         primitive_type="composite",
         name="Booleaner",
@@ -408,7 +413,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["composite", "boolean", "decision", "validation"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000092",
         primitive_type="composite",
         name="Devil\u2019s Advocate",
@@ -493,7 +498,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["composite", "devils-advocate", "critique", "decision", "strategy"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000093",
         primitive_type="composite",
         name="Triage",
@@ -542,7 +547,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["composite", "triage", "classification", "bug", "feature"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000094",
         primitive_type="composite",
         name="LLM Council",
@@ -613,7 +618,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["composite", "llm-council", "ensemble", "consensus", "decision"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000095",
         primitive_type="composite",
         name="Structured Output Enforcer",
@@ -671,7 +676,7 @@ _BUILTIN_PRIMITIVES: list[LibraryPrimitive] = [
         },
         tags=["composite", "structuring", "json", "schema", "enforcer"],
     ),
-    _make_modulo(
+    _make_builtin(
         pid="00000000-0000-0000-0000-000000000096",
         primitive_type="composite",
         name="Complexity Estimator",
@@ -1031,7 +1036,7 @@ _INCIDENT_TEMPLATE_EDGES = [
 
 _BUILTIN_PRIMITIVES.extend(
     [
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-000000000080",
             primitive_type="pipeline_template",
             name="PR Review Pipeline",
@@ -1047,7 +1052,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "code-review", "pr", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-000000000081",
             primitive_type="pipeline_template",
             name="Release Checklist Pipeline",
@@ -1063,7 +1068,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "release", "changelog", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-000000000082",
             primitive_type="pipeline_template",
             name="Incident Response Pipeline",
@@ -1079,7 +1084,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "incident-response", "alerting", "runbook"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-000000000097",
             primitive_type="agent",
             name="PR Review Agent",
@@ -1107,7 +1112,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "code-review", "pr", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-000000000098",
             primitive_type="library_collection",
             name="GitHub PR Reviewer",
@@ -1133,7 +1138,7 @@ _BUILTIN_PRIMITIVES.extend(
         # -------------------------------------------------------------------
         # FAR-787: Prompt-to-PR bundle (FAR-781)
         # -------------------------------------------------------------------
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A0",
             primitive_type="agent",
             name="Prompt-to-PR Implement Agent",
@@ -1165,7 +1170,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "prompt-to-pr", "code-generation", "github", "sandbox"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A1",
             primitive_type="pipeline_template",
             name="Prompt-to-PR Pipeline",
@@ -1240,7 +1245,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "prompt-to-pr", "code-generation", "pr", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-000000000099",
             primitive_type="library_collection",
             name="Prompt-to-PR",
@@ -1267,7 +1272,7 @@ _BUILTIN_PRIMITIVES.extend(
         # -------------------------------------------------------------------
         # FAR-787: Changelog Generator bundle (FAR-782)
         # -------------------------------------------------------------------
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A2",
             primitive_type="agent",
             name=_CHANGELOG_AGENT_NAME,
@@ -1296,7 +1301,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "changelog", "release", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A3",
             primitive_type="pipeline_template",
             name="Changelog Pipeline",
@@ -1359,7 +1364,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "changelog", "release", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-00000000009A",
             primitive_type="library_collection",
             name=_CHANGELOG_GENERATOR_NAME,
@@ -1384,7 +1389,7 @@ _BUILTIN_PRIMITIVES.extend(
         # -------------------------------------------------------------------
         # FAR-787: Release Notes bundle (FAR-783)
         # -------------------------------------------------------------------
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000AA",
             primitive_type="agent",
             name=_RELEASE_NOTES_AGENT_NAME,
@@ -1411,7 +1416,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "release-notes", "github", "linear"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-00000000009F",
             primitive_type="pipeline_template",
             name="Release Notes Pipeline",
@@ -1473,7 +1478,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "release-notes", "github", "linear"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-00000000009B",
             primitive_type="library_collection",
             name="Release Notes Generator",
@@ -1498,7 +1503,7 @@ _BUILTIN_PRIMITIVES.extend(
         # -------------------------------------------------------------------
         # FAR-787: PR Description Writer bundle (FAR-784)
         # -------------------------------------------------------------------
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A6",
             primitive_type="agent",
             name=_PR_DESCRIPTION_AGENT_NAME,
@@ -1528,7 +1533,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "pr-description", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A7",
             primitive_type="pipeline_template",
             name="PR Description Pipeline",
@@ -1562,7 +1567,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "pr-description", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-00000000009C",
             primitive_type="library_collection",
             name="PR Description Writer",
@@ -1587,7 +1592,7 @@ _BUILTIN_PRIMITIVES.extend(
         # -------------------------------------------------------------------
         # FAR-787: Issue Triage bundle (FAR-785)
         # -------------------------------------------------------------------
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A8",
             primitive_type="agent",
             name=_ISSUE_TRIAGE_AGENT_NAME,
@@ -1618,7 +1623,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "triage", "issues", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A9",
             primitive_type="pipeline_template",
             name="Issue Triage Pipeline",
@@ -1676,7 +1681,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "triage", "issues", "github"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-00000000009D",
             primitive_type="library_collection",
             name="Issue Triage",
@@ -1701,7 +1706,7 @@ _BUILTIN_PRIMITIVES.extend(
         # -------------------------------------------------------------------
         # FAR-787: License Checker bundle (FAR-786)
         # -------------------------------------------------------------------
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A4",
             primitive_type="agent",
             name=_LICENSE_CHECKER_AGENT_NAME,
@@ -1739,7 +1744,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["agent", "license", "compliance", "dependencies"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-0000000000A5",
             primitive_type="pipeline_template",
             name="License Checker Pipeline",
@@ -1803,7 +1808,7 @@ _BUILTIN_PRIMITIVES.extend(
             },
             tags=["pipeline_template", "license", "compliance", "dependencies"],
         ),
-        _make_modulo(
+        _make_builtin(
             pid="00000000-0000-0000-0000-00000000009E",
             primitive_type="library_collection",
             name="License Checker",

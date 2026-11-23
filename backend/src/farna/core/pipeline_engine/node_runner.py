@@ -753,6 +753,8 @@ SANDBOX_AGENT_FAILED_SUMMARY = "Sandbox agent execution failed"
 # field True — marker-based, so an agent-authored failure shape (which never
 # carries the runner's internal marker) can never collide. Single source of
 # truth so runner and executor cannot drift.
+# Persisted value: the key is written into node output JSON that recovery and
+# backfill read across releases, so rename the CONSTANT, never the string.
 SYNTHETIC_FAILURE_MARKER = "modulo_synthetic_failure"
 
 

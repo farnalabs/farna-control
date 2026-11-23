@@ -1,3 +1,5 @@
+import { isErrorTrackingDisabled } from '../config/runtime'
+
 export interface TrackingRuntimeConfig {
   enabled: boolean
   environment: string
@@ -5,7 +7,7 @@ export interface TrackingRuntimeConfig {
 
 export function loadMonitorConfig(): TrackingRuntimeConfig {
   return {
-    enabled: !(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__,
+    enabled: !isErrorTrackingDisabled(),
     environment: import.meta.env.MODE,
   }
 }

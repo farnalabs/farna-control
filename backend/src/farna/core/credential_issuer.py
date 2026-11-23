@@ -49,6 +49,9 @@ _log = logging.getLogger(__name__)
 
 # --- Issuance provenance vocabulary (declare once, validate at the boundary) --
 
+#: Persisted value: this string is written into credential records and run
+#: telemetry, so it is a storage/observability contract — rename the CONSTANT
+#: if you like, never the value.
 ISSUANCE_PROVENANCE_SELF_MINTED = "modulo_minted"
 ISSUANCE_PROVENANCE_BROKER_ISSUED = "broker_issued"
 

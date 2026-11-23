@@ -223,7 +223,7 @@ backend/src/farna/db/migrations/versions/0350_baseline_schema.py	26
 backend/src/farna/db/migrations/versions/0351_baseline_rls.py	4
 backend/src/farna/db/migrations/versions/0352_baseline_privileges.py	2
 backend/src/farna/db/migrations/versions/0353_baseline_seed_data.py	2
-backend/src/farna/db/migrations/versions/0357_rebrand_library_seed_copy.py	15
+backend/src/farna/db/migrations/versions/0357_rebrand_library_seed_copy.py	16
 backend/src/farna/db/migrations/versions/0362_rename_legacy_db_objects.py	13
 backend/src/farna/db/models/account.py	1
 backend/src/farna/db/models/external_agent.py	4

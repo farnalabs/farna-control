@@ -29,6 +29,8 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from tests.helpers.env_prefixes import RETIRED_DOUBLED_ENV_PREFIX
+
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _INSTALL_SH = _REPO_ROOT / "scripts" / "install.sh"
 _OPENSSL_MARKER = "openssl pkeyutl"
@@ -39,8 +41,9 @@ _PLACEHOLDERS = {
 }
 # Assembled from parts on purpose: `tests/architecture/test_settings_environment_aliases.py`
 # fails the build if the doubled prefix appears literally in any tracked source
-# file, including the assertion that `install.sh` does not contain it.
-_DOUBLED_ENV_PREFIX = "FARNA_CONTROL_" + "MOD" + "ULO_"
+# file, including the assertion that `install.sh` does not contain it. The one
+# construction lives in `tests.helpers.env_prefixes`.
+_DOUBLED_ENV_PREFIX = RETIRED_DOUBLED_ENV_PREFIX
 # The historical (FAR-2182) argv, kept verbatim so the suite proves that the
 # malformed shape is rejected when EXECUTED — a string assertion cannot.
 _LEGACY_INFORM_ARGV = 'openssl pkeyutl -verify -pubin -inform DER -in "${key_file}" -rawin -in "${manifest_file}" -sigfile "${sig_file}"'

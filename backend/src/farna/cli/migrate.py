@@ -502,6 +502,7 @@ def _verify_export(meta: dict[str, Any], records: list[dict[str, Any]]) -> bool:
 @click.group()
 @click.option(
     "--token",
+    envvar="FARNA_CONTROL_ADMIN_TOKEN",
     default=None,
     help="Admin JWT (or set FARNA_CONTROL_ADMIN_TOKEN)",
 )
@@ -509,11 +510,10 @@ def _verify_export(meta: dict[str, Any], records: list[dict[str, Any]]) -> bool:
 def cli(ctx: click.Context, token: str | None) -> None:
     """Farna Control migration tool — export, import, and verify org data."""
     ctx.ensure_object(dict)
-    # Read the documented env spelling explicitly (rather than through click's
-    # ``envvar=``), so the env-contract gate sees this knob accepted by a real
-    # reader in ``farna/`` instead of listing it as a documented gap.
-    resolved_token = token or os.environ.get("FARNA_CONTROL_ADMIN_TOKEN", "") or None
-    admin_id = _resolve_admin_auth(resolved_token)
+    # click fills ``token`` from FARNA_CONTROL_ADMIN_TOKEN when the flag is not
+    # given; an EXPLICIT ``--token ""`` stays empty and therefore never falls
+    # through to the env var (only the ADMIN_SECRET fallback can apply).
+    admin_id = _resolve_admin_auth(token)
     if admin_id is None:
         raise click.ClickException("Admin authentication required. Provide --token / FARNA_CONTROL_ADMIN_TOKEN or set FARNA_CONTROL_ADMIN_SECRET environment variable.")
     ctx.obj["admin_user_id"] = admin_id

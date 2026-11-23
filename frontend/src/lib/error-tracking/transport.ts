@@ -1,5 +1,6 @@
 import type { ErrorEventInput, SessionKeyResponse } from './types'
 import { getAccessToken, onAuthChange } from '../api/client'
+import { isErrorTrackingDisabled } from '../../config/runtime'
 
 let _sessionKey: string | null = null
 let _keyPromise: Promise<string | null> | null = null
@@ -44,7 +45,7 @@ export function disposeTransport(): void {
 }
 
 function isDisabled(): boolean {
-  return !!(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__
+  return isErrorTrackingDisabled()
 }
 
 async function getSessionKey(): Promise<string | null> {

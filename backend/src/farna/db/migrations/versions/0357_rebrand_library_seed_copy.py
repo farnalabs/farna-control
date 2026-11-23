@@ -89,7 +89,7 @@ depends_on = None
 _SEED_AUTHOR_BEFORE = "modulo"
 _SEED_AUTHOR_AFTER = "Farna Control"
 
-#: ``_seed_data._BUILTIN_PRIMITIVES`` -> ``simplest-workflow`` description, before
+#: ``_seed_data._MODULO_PRIMITIVES`` -> ``simplest-workflow`` description, before
 #: and after PR #3300. This is the ONLY seeded name/description that carried the
 #: brand noun. The two strings differ only by that noun (asserted in
 #: ``tests/unit/db/test_migration_0357_rebrand_library_seed_copy.py``).

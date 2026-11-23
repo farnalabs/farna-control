@@ -272,9 +272,9 @@ def egress_tier_for_provider_type(provider_type: str) -> str | None:
     return None
 
 
-def _env_flag_enabled(raw_value: str | None) -> bool:
-    """Return whether an operator opt-in flag's raw value is an enabling one."""
-    value = (raw_value or "").strip().lower()
+def _env_flag_enabled(env_var: str) -> bool:
+    """Return whether an operator opt-in flag env var is set to an enabling value."""
+    value = (os.environ.get(env_var) or "").strip().lower()
     return bool(value) and value not in _ENV_FLAG_OFF_VALUES
 
 
@@ -925,7 +925,7 @@ def build_hub(max_local_concurrency: int = 2) -> RuntimeProviderHub:
             # ProviderNotConfiguredError with remediation).
             _log.warning("Docker provider not registered (TLS required): %s", exc)
 
-    if _env_flag_enabled(os.environ.get(_KUBERNETES_ENV_VAR)):
+    if _env_flag_enabled(_KUBERNETES_ENV_VAR):
         try:
             from farna.core.runtime_provider.k8s import KubernetesRuntimeProvider
 

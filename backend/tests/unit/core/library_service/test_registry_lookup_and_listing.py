@@ -18,7 +18,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from farna.core.library_service import (
     _BUILTIN_PRIMITIVES,
-    _filter_modulo,
+    _filter_builtin,
     _re_read_primitive,
     get_primitive,
     get_primitive_by_slug,
@@ -157,31 +157,31 @@ class TestReReadPrimitive:
 
 
 # ---------------------------------------------------------------------------
-# _filter_modulo
+# _filter_builtin
 # ---------------------------------------------------------------------------
 
 
 class TestFilterModulo:
     def test_no_filter_returns_whole_registry(self) -> None:
-        assert len(_filter_modulo()) == len(_BUILTIN_PRIMITIVES)
+        assert len(_filter_builtin()) == len(_BUILTIN_PRIMITIVES)
 
     def test_primitive_types_takes_precedence(self) -> None:
-        result = _filter_modulo(primitive_types=["schema"], primitive_type="agent")
+        result = _filter_builtin(primitive_types=["schema"], primitive_type="agent")
         assert result
         assert {p.primitive_type for p in result} == {"schema"}
 
     def test_single_primitive_type(self) -> None:
-        result = _filter_modulo(primitive_type="schema")
+        result = _filter_builtin(primitive_type="schema")
         assert result
         assert {p.primitive_type for p in result} == {"schema"}
 
     def test_search_matches_name_case_insensitively(self) -> None:
         term = _BUILTIN.name.upper()
-        result = _filter_modulo(search=f"  {term}  ")
+        result = _filter_builtin(search=f"  {term}  ")
         assert _BUILTIN in result
 
     def test_blank_search_is_ignored(self) -> None:
-        assert len(_filter_modulo(search="   ")) == len(_BUILTIN_PRIMITIVES)
+        assert len(_filter_builtin(search="   ")) == len(_BUILTIN_PRIMITIVES)
 
 
 # ---------------------------------------------------------------------------
