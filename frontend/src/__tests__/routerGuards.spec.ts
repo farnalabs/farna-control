@@ -397,6 +397,26 @@ describe('enforceRoleTierVisibility', () => {
     })
   })
 
+  it('omits the role query when a role refusal names no roles (FAR-2687)', () => {
+    // Defensive path: a role refusal for a route that declares no required
+    // roles carries no `role` query, so the locked page falls back to the
+    // generic wording rather than naming an empty list.
+    const target = lockedRouteFor(
+      {
+        path: '/no-roles',
+        fullPath: '/no-roles',
+        matched: [],
+        meta: {},
+      } as never,
+      'role',
+    )
+
+    expect(target).toEqual({
+      path: '/locked',
+      query: { from: '/no-roles', reason: 'role' },
+    })
+  })
+
   it('allows on requiredTier when at the minimum tier', async () => {
     decodeJwtPayload.mockReturnValue({})
     planStore.isAtMinimumTier.mockReturnValue(true)
