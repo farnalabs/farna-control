@@ -20,6 +20,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from farna.api.routes import runs as runs_module
 from farna.api.routes.runs import RunNotFoundError
@@ -166,3 +167,62 @@ async def test_events_loader_applies_the_same_boundary() -> None:
         pytest.raises(RunNotFoundError),
     ):
         await runs_module._do_get_run(factory, _team_scoped_key_principal(), _RUN_ID)
+
+
+def _foreign_team_run() -> MagicMock:
+    return _make_run(owner_team_id=_TEAM_B)
+
+
+@pytest.mark.asyncio
+async def test_rerun_of_another_teams_run_is_not_found() -> None:
+    """A team-A key cannot rerun a team-B run: 404, never a leaky 403."""
+    run = _foreign_team_run()
+    session = _mock_session(run)
+
+    with (
+        patch.object(runs_module, "set_rls_org", AsyncMock()),
+        patch.object(runs_module, "set_rls_user_context", AsyncMock()),
+        patch.object(runs_module, "get_run", AsyncMock(return_value=run)),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await runs_module.trigger_rerun(_RUN_ID, session, MagicMock(), _team_scoped_key_principal())
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_work_item_enrichment_of_another_teams_run_is_not_found() -> None:
+    """The enrichment read carries the same team boundary (FAR-737 surface)."""
+    run = _foreign_team_run()
+    session = _mock_session(run)
+
+    with (
+        patch.object(runs_module, "set_rls_org", AsyncMock()),
+        patch.object(runs_module, "get_run", AsyncMock(return_value=run)),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await runs_module.get_run_work_item_enrichment(
+            _RUN_ID,
+            session=session,
+            principal=_team_scoped_key_principal(),
+            settings=MagicMock(),
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_attempts_of_another_teams_run_are_not_found() -> None:
+    """The per-attempt history carries the same team boundary (FAR-2078 surface)."""
+    run = _foreign_team_run()
+    session = _mock_session(run)
+
+    with (
+        patch.object(runs_module, "set_rls_org", AsyncMock()),
+        patch.object(runs_module, "set_rls_user_context", AsyncMock()),
+        patch.object(runs_module, "get_run", AsyncMock(return_value=run)),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await runs_module.list_run_attempts(_RUN_ID, session=session, principal=_team_scoped_key_principal())
+
+    assert exc_info.value.status_code == 404
