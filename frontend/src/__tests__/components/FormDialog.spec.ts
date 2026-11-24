@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 import FormDialog from '../../components/shared/FormDialog.vue'
 
@@ -46,5 +46,29 @@ describe('FormDialog', () => {
 
   it('falls back to the localized confirm label while loading when no texts are given', () => {
     expect(mountDialog({ loading: true }).findAll('button')[1].text()).toBe('Confirm')
+  })
+})
+
+describe('FormDialog accessible name (real PrimeVue Dialog)', () => {
+  it('names the dialog after its title via a resolvable aria-labelledby target', async () => {
+    const wrapper = mount(FormDialog, {
+      attachTo: document.body,
+      props: { open: true, title: 'Create Lifecycle Map' },
+      global: { mocks: { $t: (key: string) => key } },
+    })
+    await flushPromises()
+
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')
+    expect(dialog).not.toBeNull()
+
+    const labelledBy = dialog!.getAttribute('aria-labelledby')
+    expect(labelledBy).toBeTruthy()
+
+    const label = document.getElementById(labelledBy!)
+    expect(label).not.toBeNull()
+    expect(label!.textContent).toContain('Create Lifecycle Map')
+
+    wrapper.unmount()
+    document.querySelectorAll('.p-dialog-mask').forEach((el) => el.remove())
   })
 })
