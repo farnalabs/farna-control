@@ -1457,7 +1457,12 @@ describe('EvalEditorView — policy gate (FAR-1106 chunk 6, spec §7a)', () => {
       disabled_at: null,
     })
     const toggle = wrapper.find('[data-testid="policy-gate-toggle"]')
+    // The shared ToggleSwitch contract: a native button switch with its checked
+    // state and accessible name exposed to assistive technology.
+    expect(toggle.element.tagName).toBe('BUTTON')
+    expect(toggle.attributes('role')).toBe('switch')
     expect(toggle.attributes('aria-checked')).toBe('true')
+    expect(toggle.attributes('aria-label')).toBe('Enable or disable policy gate')
     responders.gateToggle = ok({ enabled: false, enabled_at: null, disabled_at: '2026-02-02T00:00:00Z' })
 
     await toggle.trigger('click')
