@@ -64,6 +64,10 @@ def _begin_session() -> AsyncMock:
     session = AsyncMock()
     result = MagicMock()
     result.scalar_one_or_none = MagicMock(return_value=None)
+    # ADR 070 Phase 1A: start_attempt reads (organisation_id, owner_team_id) with
+    # a single `.first()`; the double has no runs row, so the attempt is skipped
+    # exactly as the pre-change scalar_one_or_none() arm did.
+    result.first = MagicMock(return_value=None)
     session.execute = AsyncMock(return_value=result)
     begin_cm = MagicMock()
     begin_cm.__aenter__ = AsyncMock(return_value=None)

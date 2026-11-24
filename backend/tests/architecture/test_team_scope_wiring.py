@@ -31,8 +31,14 @@ from sqlalchemy.orm import DeclarativeBase
 
 from farna.api.team_scope import TEAM_SCOPED_RESOLVERS
 from farna.db.models import (
+    Evidence,
     Journey,
+    Node,
+    NodeObservation,
     Run,
+    RunAttempt,
+    RunEvidence,
+    RunNodeOutput,
     SuiteRun,
     SystemMapNode,
 )
@@ -76,6 +82,19 @@ MODELS_WITH_OWNER_TEAM_ID_NO_VISIBILITY: list[tuple[type[Any], str]] = [
     (
         SystemMapNode,
         "SystemMapNode access derives from its parent revision/map (ADR 038 §5); no own visibility column",
+    ),
+    # ADR 070 Phase 1A - the runs-family children denormalise their parent run's
+    # team so the Phase 1B team predicate can be answered from the row itself.
+    # None of them carries a visibility column: a child is exactly as visible as
+    # its parent run, and a run has no visibility column either (ADR 070 §4).
+    (RunAttempt, "RunAttempt access derives from its parent run (ADR 070 §4); no own visibility column"),
+    (RunNodeOutput, "RunNodeOutput access derives from its parent run (ADR 070 §4); no own visibility column"),
+    (RunEvidence, "RunEvidence access derives from its parent run (ADR 070 §4); no own visibility column"),
+    (NodeObservation, "NodeObservation access derives from its parent run (ADR 070 §4); no own visibility column"),
+    (Evidence, "Evidence access derives from its subject - a run for run-subject facts (ADR 070 §4); no own visibility column"),
+    (
+        Node,
+        "Node access derives from its parent pipeline (ADR 070 §4); deprecated composite-template store, no own visibility column",
     ),
 ]
 
