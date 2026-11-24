@@ -219,14 +219,17 @@ manifest `features:` registry.
       defaulting to OFF: the Linux and macOS installers ask on an interactive
       terminal (and take the default silently when stdin is not a terminal or
       `--no-telemetry-prompt` is passed), and the Windows wizard shows one
-      custom page with the decline option pre-selected. Accepting writes
-      `FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL`,
+      custom page with the decline option pre-selected. Accepting on Linux or
+      macOS writes `FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL`,
       `FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET` (a freshly generated
       secret) and `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true` into the
-      launcher's `config.env` (owner-only mode 600 on POSIX); declining writes
-      none of the three, so "no telemetry by default" holds
+      launcher's `config.env` (owner-only mode 600 on POSIX); accepting on
+      Windows writes the endpoint and the ON switch and leaves the secret to
+      the launcher, which mints a 32-byte hex secret on first boot when an
+      endpoint is configured and no secret exists; declining writes
+      none of them, so "no telemetry by default" holds
       (`scripts/install.sh`, `scripts/macos/install.sh`,
-      `deploy/windows/modulo.iss`;
+      `deploy/windows/modulo.iss`, `backend/src/farna/launcher/config_source.py`;
       `scripts/test-windows-installer.ps1` compiles the installer `[Code]`
       against Inno support stubs and asserts the default-OFF contract).
 - [x] The release pipeline gates the native artifacts end to end: the Linux
@@ -282,7 +285,9 @@ manifest `features:` registry.
   `.env.prod.example` files and `docs/configuration-reference.md`. Verified the
   Linux installer end to end in a throwaway HOME (decline writes nothing,
   accept writes all three with a mode-600 file) and the Windows `[Code]`
-  section compiles under Free Pascal; ISCC cannot run on the Linux host.
+  section compiles under Free Pascal; the Windows path writes only the endpoint
+  and the ON switch, leaving the instance secret to the launcher (FAR-2747),
+  and ISCC cannot run on the Linux host.
 - 2026-11-22: Added this tracker after walking the product map and finding the
   shipped native single-install distribution (ADR 031) had no entry in either
   product-map layer, even though the Linux bundle installer, macOS DMG pipeline,
