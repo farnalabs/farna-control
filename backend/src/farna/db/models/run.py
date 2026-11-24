@@ -433,6 +433,29 @@ class Run(OrgScoped):
     run_group_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     run_number: Mapped[int] = mapped_column(Integer, nullable=False)
     owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
+    # ADR 070 ��4 / Phase 1A - the LEGACY-UNOWNED marker.
+    #
+    # TRUE marks a run of a CURRENTLY team-owned pipeline whose team owner could
+    # not be resolved from the pipeline's ownership history (the audit-event chain
+    # is missing, broken, or says the pipeline had no team at ``created_at``).
+    # Such a run keeps ``owner_team_id IS NULL`` and is legacy: it is
+    # admin-only after the Phase 1B policy flip, never "org-visible".
+    #
+    # NULL = not legacy. It covers every other run: one whose owner is stamped
+    # (``owner_team_id IS NOT NULL``) and one whose pipeline is org-level today
+    # (``owner_team_id IS NULL`` AND the pipeline is unowned - a genuinely
+    # org-level run, distinguishable from this marker by the pipeline's own
+    # owner). The Phase 1B data precondition therefore reads:
+    # zero rows where ``owner_team_id IS NULL`` AND the pipeline is team-owned
+    # AND ``owner_unresolved IS NOT TRUE`` - enforced by
+    # ``tests/integration/db/test_runs_family_owner_team.py``.
+    #
+    # Nullable (no server default) by design: additive column, no table rewrite
+    # of the largest table, and the tri-state (NULL / TRUE) is the whole
+    # vocabulary - FALSE would add a second spelling of NULL with no reader.
+    # Migration 0365 sets it; no application write path sets or clears it, so it
+    # cannot be stamped by accident.
+    owner_unresolved: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # account_id (FAR-1443): deliberately NOT indexed — no query filters this
     # column (it is written at create and read for display only; the sole
     # WHERE against it is by primary key), so migration 0283 drops

@@ -147,6 +147,16 @@ class SuiteRun(OrgScoped):
     )
 
     owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), nullable=True, index=True)
+    # ADR 070 ��4 / Phase 1A - the LEGACY-UNOWNED marker, identical in meaning to
+    # ``runs.owner_unresolved`` (see that column's comment for the full contract).
+    # A suite run carries the team of the pipeline whose trigger fired it (the
+    # pipeline id lives in ``extra['pipeline_id']``), stamped at creation and
+    # resolved from the pipeline's ownership history by migration 0365. TRUE =
+    # the pipeline is team-owned today but the owner at ``created_at`` could not
+    # be resolved, so the row stays unowned and legacy (admin-only after the
+    # Phase 1B flip). Nullable, no server default: additive, and NULL is "not
+    # legacy".
+    owner_unresolved: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     suite_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("eval_suites.id", ondelete="RESTRICT"), nullable=False, index=True)
     dataset_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("eval_datasets.id", ondelete="RESTRICT"), nullable=False, index=True)
     # SNAPSHOT of dataset membership at creation — immutable.

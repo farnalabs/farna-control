@@ -2099,6 +2099,7 @@ async def _persist_guardrail_eval_results(
     run_id: uuid.UUID,
     guardrail_results: list[Any],
     guardrail_observed_by_eval: dict[uuid.UUID, bool],
+    owner_team_id: uuid.UUID | None = None,
 ) -> None:
     """Persist guardrail eval results (evidence deltas vs the pre-act base).
 
@@ -2179,6 +2180,11 @@ async def _persist_guardrail_eval_results(
             value=gr.passed,
             producer_type="eval",
             producer_id=gr.eval_id,
+            # ADR 070 Phase 1A: the fact belongs to the run's team. ``create_run``
+            # has already resolved and stamped ``Run.owner_team_id`` (or left it
+            # NULL for an org-level pipeline), so this can never differ from the
+            # run it describes.
+            owner_team_id=owner_team_id,
         )
 
 
@@ -2889,6 +2895,7 @@ async def _finalise_created_run(
             run_id=run_id,
             guardrail_results=interception.results,
             guardrail_observed_by_eval=interception.observed_by_eval,
+            owner_team_id=run.owner_team_id,
         )
     await _hydrate_journeys(session, org_id, canonical_refs)
     if interception.blocked:

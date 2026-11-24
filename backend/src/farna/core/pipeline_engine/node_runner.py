@@ -5741,7 +5741,7 @@ def _build_human_gate_decision(action: Any, decision: Any) -> Any:
     )
 
 
-def _ground_one_human_gate_evidence(
+async def _ground_one_human_gate_evidence(
     session: Any,
     dto: EvalDefDTO,
     *,
@@ -5764,6 +5764,7 @@ def _ground_one_human_gate_evidence(
         HumanGateView,
         resolve_human_evaluation,
     )
+    from farna.db.run_ownership import resolve_run_owner_team_id
 
     # Re-checked here so mypy narrows policy_gate_id (the list comprehension
     # filter in ``_human_gated_dtos`` does not narrow the element type).
@@ -5814,6 +5815,10 @@ def _ground_one_human_gate_evidence(
         value=outcome.result,
         producer_type="policy_gate",
         producer_id=dto.policy_gate_id,
+        # ADR 070 Phase 1A: the fact belongs to the run's team. Resolved from the
+        # run (never the live pipeline) in this same transaction; NULL when the
+        # run's pipeline is org-level or the run is legacy-unowned.
+        owner_team_id=await resolve_run_owner_team_id(session, run_id),
     )
 
 
@@ -5864,7 +5869,7 @@ async def _ground_human_gate_evidence_body(
         await set_rls_org(session, org_id)
         await set_rls_execution_context(session)
         for dto in human_dtos:
-            _ground_one_human_gate_evidence(
+            await _ground_one_human_gate_evidence(
                 session,
                 dto,
                 human_decision=human_decision,

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.models.node_observation import NodeObservation
+from farna.db.run_ownership import resolve_run_owner_team_id
 from farna.util.uuid import coerce_uuid
 
 
@@ -49,6 +50,10 @@ async def observe_node(
         id=uuid.uuid4(),
         organisation_id=organisation_id,
         run_id=run_id,
+        # ADR 070 Phase 1A: the observation inherits the parent RUN's team in the
+        # same transaction (never the live pipeline's - a reassigned pipeline must
+        # not move a historical run's observation to the new team).
+        owner_team_id=await resolve_run_owner_team_id(session, run_id),
         node_id=coerce_uuid(node_id),
         account_id=observed_by,
         human_observed_at=datetime.now(UTC),
