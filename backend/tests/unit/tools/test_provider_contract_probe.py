@@ -6,6 +6,8 @@ Proves the behaviours that make a nightly live probe safe:
 * a mutated golden fails the check;
 * a changed response shape is reported, never auto-accepted (the golden is
   not rewritten by check mode);
+* check mode shapes the actual response at the depth each golden records, so
+  editing the config ``max_depth`` cannot manufacture drift;
 * a secret never reaches a golden, the report, or stdout/stderr;
 * fail-closed skips: a missing credential, a missing golden and an unrecorded
   golden each fail by default and pass only via an explicit allow list;
@@ -202,6 +204,50 @@ def test_changed_shape_is_reported_not_auto_accepted(tmp_path: Path, monkeypatch
     assert result["drift"][0]["path"] == "$.alpha"
     # Check mode must never rewrite the golden to "accept" the change.
     assert goldens.read_text(encoding="utf-8") == before
+
+
+def test_check_shapes_actual_at_the_goldens_recorded_depth(tmp_path: Path, monkeypatch: Any) -> None:
+    """The golden's recorded max_depth governs the actual shape in check mode.
+
+    Building the actual at the CONFIG's depth made the golden's max_depth dead
+    metadata: a golden recorded flat (depth 1) compared against an actual
+    rebuilt at the config's depth 2 reported every nested key as phantom
+    ``added`` drift. That turned editing the documented knob into false drift
+    across the board and pressured a re-record of a genuinely unchanged payload.
+    """
+    monkeypatch.setenv("ACME_TOKEN", "test-token")
+    # The config pins depth 2; the golden was recorded at depth 1 (its nested
+    # object is a bare type, without the keys depth 2 would pin).
+    config = _write_config(tmp_path, [_probe(max_depth=2)])
+    flat = {"type": "object", "keys": {"alpha": {"type": "string"}, "nested": {"type": "object"}}}
+    goldens = _write_goldens(tmp_path, flat, max_depth=1)
+    report = tmp_path / "report.json"
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(_URL).mock(return_value=httpx.Response(200, json={"alpha": "x", "nested": {"beta": 1}}))
+        exit_code = _run(config, goldens, report)
+
+    assert exit_code == 0
+    result = _read_report(report)["results"][0]
+    assert result["status"] == "pass"
+    assert not result["additions"]
+
+
+def test_check_falls_back_to_config_depth_when_golden_records_none(tmp_path: Path, monkeypatch: Any) -> None:
+    """A golden that records no max_depth is shaped at the configured depth."""
+    monkeypatch.setenv("ACME_TOKEN", "test-token")
+    config = _write_config(tmp_path, [_probe(max_depth=2)])
+    entry = _golden_entry({"type": "object", "keys": {"data": {"type": "object", "keys": {"id": {"type": "string"}}}}})
+    del entry["max_depth"]
+    goldens = _write_goldens_entries(tmp_path, {"acme/ping": entry})
+    report = tmp_path / "report.json"
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(_URL).mock(return_value=httpx.Response(200, json={"data": {"id": "x"}}))
+        exit_code = _run(config, goldens, report)
+
+    assert exit_code == 0
+    assert _read_report(report)["results"][0]["status"] == "pass"
 
 
 def test_addition_is_breaking_by_default(tmp_path: Path, monkeypatch: Any) -> None:
@@ -900,6 +946,12 @@ def test_real_config_and_goldens_are_consistent() -> None:
 
         shape = manifest["goldens"][key]["shape"]
         assert isinstance(shape, dict), key
+        # Check mode shapes the actual response at the depth the golden records,
+        # so every committed golden must carry a usable depth.
+        depth = manifest["goldens"][key].get("max_depth")
+        assert isinstance(depth, int), key
+        assert not isinstance(depth, bool), key
+        assert depth >= 0, key
         for rule in definition.get("normalise") or []:
             resolves = probe.path_in_shape(shape, rule["path"].split("."))
             if rule["rule"] == "drop":

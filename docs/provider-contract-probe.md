@@ -51,6 +51,23 @@ but it may never **widen**: an `object` array that now also holds a string or a
 `null` is `type_changed` drift, even though `object` is still one member of the
 actual union.
 
+### Shape depth
+
+`max_depth` sets how many levels deep a shape is pinned. **Each golden records
+the depth it was built at**, and check mode shapes the live response at *that
+recorded depth* - the same way it uses the golden's recorded status class. The
+config's `defaults.max_depth` (or a probe's `max_depth`) therefore sets the depth
+used when **recording** a golden, and is only a fallback for a golden that
+records no depth.
+
+This matters: rebuilding the actual at the config depth instead made the
+golden's `max_depth` dead metadata. A golden recorded at depth 1 compared
+against an actual rebuilt at depth 2 reports every nested key as phantom `added`
+drift (and a deeper golden rebuilt shallower reports them as `missing`), so
+editing the documented knob would turn every probe into false drift and pressure
+a re-record of an unchanged payload. Changing the pinned depth is a deliberate
+act: record the golden again at the new depth behind review.
+
 Because goldens hold key names and type names only, **a secret or customer value
 can never reach a golden**. Request and response headers are never persisted,
 and any credential value (plus URL userinfo) is scrubbed from every error string
@@ -89,6 +106,13 @@ probe is an unexcused "not yet recorded" skip and the run exits `1`.
 That is deliberate. The nightly is **expected to be red** until each golden is
 recorded live behind review (see below). A green nightly in this state would
 mean the job was proving nothing.
+
+A red run does not raise an issue while it is in this bootstrap shape: the
+workflow's failure step detects that nothing was attempted and that every skip
+is "not yet recorded", and stays quiet. Once the run attempts probes, a failure
+opens (or refreshes) a single de-duplicated issue carrying the report summary,
+so a real drift is visible without reading the scheduled-run history or opening
+an artifact.
 
 The run counts **attempts**, not passes: if it issues no request at all it exits
 non-zero, even when every skip is explicitly excused. This is what stops the
@@ -198,7 +222,7 @@ the in-script deadline.
        env: MODULO_PROBE_EXAMPLE_TOKEN
      env_vars:                  # the ONLY env vars this probe may read
        - MODULO_PROBE_EXAMPLE_TOKEN
-     max_depth: 1               # how many shape levels to pin
+     max_depth: 1               # shape levels recorded into the golden
      normalise:                 # volatile handling lives HERE, not in code
        - path: data.id
          rule: volatile
@@ -378,11 +402,23 @@ authenticates the git fetches `uv sync` makes for git-pinned dependencies), so
 no later step or third-party action can read it; it is not in workflow-level
 `env`. Provider credentials are passed only to the probe step.
 
+On failure, a final `if: failure()` step opens, or appends to, a single open
+issue titled `[provider-contract-probe] nightly drift`, with the report summary
+and the worst probes. The job grants `issues: write` (and keeps `contents: read`
+for checkout) so that step can use the workflow token, while the workflow-wide
+permission stays `contents: read`. The step reads the generated report and stays
+silent in the bootstrap state described above, so the expected red does not
+produce an issue every night. If the run failed before writing a report (an
+install or setup failure), the issue says so instead.
+
 ## Tests
 
 `backend/tests/unit/tools/test_provider_contract_probe.py` uses respx and a temp
 directory. It proves, among other things: a mutated golden fails; a changed
-shape is reported and not auto-accepted; a secret never appears in output;
+shape is reported and not auto-accepted; check mode shapes the actual at the
+depth each golden records (so editing the config `max_depth` cannot manufacture
+drift) and falls back to the config depth only for a golden that records none; a
+secret never appears in output;
 missing credential / missing golden / unrecorded golden each fail by default and
 pass only via an allow list; a run that attempts **zero** probes fails even when
 every skip is excused; `429` is retried honouring `Retry-After` and a

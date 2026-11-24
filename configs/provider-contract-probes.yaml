@@ -12,7 +12,11 @@
 # defaults:               applied to every probe unless the probe overrides it
 #   success_status_class: "2xx" | "4xx" | ... (status CLASS, not an exact code)
 #   timeout_seconds:      per-request HTTP timeout
-#   max_depth:            shape depth to pin (see scripts/provider_contract_probe.py)
+#   max_depth:            shape depth recorded into a golden. Check mode shapes
+#                         the LIVE response at the depth the GOLDEN records (the
+#                         golden is the authority, as with its status class), so
+#                         this is the record-time depth and the fallback for a
+#                         golden that records none.
 #   strict_shape:         when true (the default) an ADDED object key is drift
 #   deadline_seconds:     overall wall-clock budget for the whole check run
 #   retry:                attempts / base_delay_seconds / max_delay_seconds
@@ -35,7 +39,7 @@
 #                         authority), so a config edit cannot make this probe
 #                         read another provider's secret.
 #   success_status_class: optional override
-#   max_depth:            optional override
+#   max_depth:            optional override (record-time depth)
 #   strict_shape:         optional override
 #   timeout_seconds:      optional override
 #   normalise:            list of {path, rule} declared HERE, never in code

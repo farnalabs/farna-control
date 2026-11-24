@@ -45,6 +45,11 @@ jobs:
     # report upload. The step budget must exceed the script's own deadline, or
     # the runner kills the job before the probe can write its failure report.
     timeout-minutes: 35
+    # Minimal for the job: checkout reads the tree, and the drift step below
+    # needs to open/comment on an issue with the workflow token.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -127,3 +132,83 @@ jobs:
           path: contract-goldens/report.json
           if-no-files-found: warn
           retention-days: 14
+
+      # A real drift otherwise surfaces only as a red scheduled run and an
+      # artifact nobody opens. Raise a de-duplicated issue carrying the report
+      # summary, and refresh that same issue on every later failing night.
+      #
+      # The deliberate bootstrap state is skipped: with no golden recorded yet
+      # the run has zero attempts and every skip is "not yet recorded", so the
+      # red is expected and must not page every night until goldens are recorded
+      # behind review.
+      - name: Open or refresh the drift issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT: contract-goldens/report.json
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body_file="$(mktemp)"
+          python3 - "${REPORT}" "${body_file}" "${RUN_URL}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          report_path, body_path = Path(sys.argv[1]), Path(sys.argv[2])
+          run_url = sys.argv[3]
+          header = f"Nightly provider contract probe failed. Latest failing run: {run_url}"
+
+          try:
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+          except (OSError, ValueError):
+              body_path.write_text(f"{header}\n\nThe run failed before the probe could write a report (install or setup step).\n", encoding="utf-8")
+              raise SystemExit(0)
+
+          summary = report.get("summary") or {}
+          results = report.get("results") or []
+          skipped = [row for row in results if row.get("status") == "skipped"]
+          bootstrap = summary.get("attempted", 0) == 0 and bool(skipped) and all("not yet recorded" in (row.get("reason") or "") for row in skipped)
+          if bootstrap:
+              # Expected red until the goldens are recorded behind review. An
+              # empty body tells the shell step to raise nothing.
+              raise SystemExit(0)
+
+          keys = ("attempted", "passed", "drifted", "unavailable", "errors", "skipped", "skipped_unexcused")
+          lines = [header, "", "Summary: " + ", ".join(f"{key}={summary.get(key, 0)}" for key in keys)]
+          problems = [
+              row
+              for row in results
+              if row.get("status") in ("drift", "error", "unavailable") or (row.get("status") == "skipped" and not row.get("allowed"))
+          ]
+          if problems:
+              lines.extend(["", "| Probe | Status | Detail |", "| --- | --- | --- |"])
+              for row in problems:
+                  detail = ""
+                  if row.get("drift"):
+                      detail = ", ".join(f"{item.get('kind')} {item.get('path')}" for item in row["drift"])
+                  elif row.get("additions"):
+                      detail = "added " + ", ".join(item.get("path", "") for item in row["additions"])
+                  elif row.get("error"):
+                      detail = str(row["error"])
+                  elif row.get("reason"):
+                      detail = str(row["reason"])
+                  detail = detail.replace("|", "\\|")
+                  lines.append(f"| {row.get('provider')}/{row.get('operation')} | {row.get('status')} | {detail} |")
+          lines.extend(["", "Full JSON report: the `provider-contract-report` artifact on that run."])
+          body_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          if [ ! -s "${body_file}" ]; then
+            echo "no golden recorded yet (expected bootstrap red) - not raising an issue"
+            exit 0
+          fi
+          title="[provider-contract-probe] nightly drift"
+          existing="$(gh issue list --search "in:title provider-contract-probe" --state open --json number --jq '.[0].number // ""')"
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body-file "${body_file}"
+            echo "refreshed existing drift issue #${existing}"
+          else
+            gh issue create --title "${title}" --body-file "${body_file}" --label "bug"
+            echo "opened a new drift issue"
+          fi

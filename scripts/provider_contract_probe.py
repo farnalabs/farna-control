@@ -1053,11 +1053,37 @@ def _call_with_retries(
     raise ProviderUnavailableError(f"request failed after {attempts} attempt(s): {last_error}")
 
 
-def _shape_from_response(probe: dict[str, Any], defaults: dict[str, Any], response: httpx.Response) -> dict[str, Any]:
-    _, max_depth = _probe_settings(probe, defaults)
+def _shape_from_response(
+    probe: dict[str, Any],
+    defaults: dict[str, Any],
+    response: httpx.Response,
+    max_depth: int | None = None,
+) -> dict[str, Any]:
+    """Shape *response*, at *max_depth* when given (check mode) else the config depth."""
+    if max_depth is None:
+        _, max_depth = _probe_settings(probe, defaults)
     payload = response.json()
     normalised = normalise(payload, probe.get("normalise") or [])
     return shape_of(normalised, 0, max_depth)
+
+
+def _golden_depth(golden: dict[str, Any], probe: dict[str, Any], defaults: dict[str, Any]) -> int:
+    """Return the depth to shape the ACTUAL response at in check mode.
+
+    The golden's recorded ``max_depth`` governs the comparison, mirroring the
+    recorded ``success_status_class``: it is the depth the golden's shape was
+    actually built at, and shaping the actual at a different depth makes that
+    metadata dead. Rebuilding at the config depth reports every key below it as
+    phantom ``added`` drift (a shallower golden) or as ``missing`` drift (a
+    deeper one), so editing the documented ``max_depth`` knob would turn every
+    probe into false drift and pressure a re-record. Fall back to the config
+    depth only for a golden that records no usable depth.
+    """
+    recorded = golden.get("max_depth")
+    if isinstance(recorded, int) and not isinstance(recorded, bool) and recorded >= 0:
+        return recorded
+    _, configured = _probe_settings(probe, defaults)
+    return configured
 
 
 def _row(probe: dict[str, Any], status: str, *, attempted: bool = False, **fields: Any) -> dict[str, Any]:
@@ -1107,7 +1133,7 @@ def _check_one(
             return _row(probe, "error", attempted=True, status_code=response.status_code, attempts=attempts, error=f"status class {actual_class} != expected {expected_class}")
 
         try:
-            actual_shape = _shape_from_response(probe, defaults, response)
+            actual_shape = _shape_from_response(probe, defaults, response, max_depth=_golden_depth(golden, probe, defaults))
         except ValueError as exc:
             return _row(probe, "error", attempted=True, status_code=response.status_code, error=_scrub(f"non-JSON response: {exc}", secrets))
 
