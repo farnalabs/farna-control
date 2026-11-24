@@ -76,7 +76,7 @@
         </div>
         <!-- FormDialog renders the visible confirm button in its footer, outside
              this form; a hidden submit keeps Enter-to-submit working. -->
-        <button type="submit" hidden>Save</button>
+        <button type="submit" hidden>{{ $t('common.save') }}</button>
       </form>
   </FormDialog>
 
