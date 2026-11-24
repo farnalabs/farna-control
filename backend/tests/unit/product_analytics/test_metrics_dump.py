@@ -97,15 +97,51 @@ class TestSignOutboundBatch:
         assert sig1 != sig2
 
     def test_matches_receiver_algorithm(self) -> None:
-        """The signer mirrors the receiver: canonical payload + ``ts:seq``."""
+        """The signer mirrors the receiver: canonical payload + ts + seq, no separator.
+
+        This is the receiver's real algorithm, written out independently here
+        (``farnalabs/farna-control-telemetry``, ``hmac_verify.compute_hmac``)::
+
+            message = payload_bytes + str(timestamp).encode() + str(sequence).encode()
+
+        A non-integral float timestamp is used deliberately so a ``%.6f``
+        rendering (``"100.25"`` -> ``"100.250000"``) cannot pass by accident.
+        """
         secret = "my-secret"
         payload = {"z": 1, "a": {"nested": [1, 2]}, "m": "value"}
-        ts = 100.0
+        ts = 100.25
         seq = 20260810
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-        message = canonical + f"{ts}:{seq}".encode()
+
+        payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        message = payload_bytes + str(ts).encode() + str(seq).encode()
         expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+
         assert sign_outbound_batch(secret, payload, ts, seq) == expected
+
+    def test_colon_separated_message_does_not_match(self) -> None:
+        """Pin the exact defect: a ``ts:seq`` message must NOT verify.
+
+        The live receiver concatenates ``str(timestamp)`` and ``str(sequence)``
+        with no separator.  The earlier colon-separated form produced a digest
+        that passed this suite but failed against the receiver, so assert both
+        directions here: the receiver layout matches and the colon layout does
+        not.
+        """
+        secret = "test-secret-key-at-least-32-bytes!!"
+        payload = {"instance_id": "i-1", "date": "2026-08-10", "schema_version": 2}
+        ts = 1700000000.5
+        seq = 20260810
+
+        payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        receiver_message = payload_bytes + str(ts).encode() + str(seq).encode()
+        receiver_mac = hmac.new(secret.encode(), receiver_message, hashlib.sha256).hexdigest()
+        colon_message = payload_bytes + f"{ts}:{seq}".encode()
+        colon_mac = hmac.new(secret.encode(), colon_message, hashlib.sha256).hexdigest()
+
+        assert receiver_mac != colon_mac
+        signature = sign_outbound_batch(secret, payload, ts, seq)
+        assert signature == receiver_mac
+        assert signature != colon_mac
 
 
 # --- Schema version ---
@@ -855,16 +891,25 @@ class TestBatchEnvelopeContract:
 
     @pytest.mark.asyncio
     async def test_hmac_matches_receiver_algorithm_independently(self) -> None:
-        """Recompute the HMAC the way the receiver does — no shared helper."""
+        """Recompute the HMAC the way the receiver does — no shared helper.
+
+        The receiver builds ``payload_bytes + str(timestamp).encode() +
+        str(sequence).encode()`` with NO separator, so this recomputes exactly
+        that and asserts the colon-separated form would not match.
+        """
         secret = "receiver-side-secret"
         result, raw_body, _headers, client = await self._capture_request(secret=secret, timestamp=1700000000.5, sequence=20260810)
         assert result[0] is True
 
         body = json.loads(raw_body)
-        canonical = json.dumps(body["payload"], sort_keys=True, separators=(",", ":")).encode()
-        message = canonical + f"{body['timestamp']}:{body['sequence']}".encode()
-        expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+        payload_bytes = json.dumps(body["payload"], sort_keys=True, separators=(",", ":")).encode()
+        receiver_message = payload_bytes + str(body["timestamp"]).encode() + str(body["sequence"]).encode()
+        expected = hmac.new(secret.encode(), receiver_message, hashlib.sha256).hexdigest()
         assert body["hmac"] == expected
+
+        colon_message = payload_bytes + f"{body['timestamp']}:{body['sequence']}".encode()
+        colon_mac = hmac.new(secret.encode(), colon_message, hashlib.sha256).hexdigest()
+        assert body["hmac"] != colon_mac
 
         await client.close()
 

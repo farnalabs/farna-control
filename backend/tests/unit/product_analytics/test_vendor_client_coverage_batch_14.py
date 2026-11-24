@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -85,4 +88,40 @@ async def test_vendor_client_sends_x_farna_headers_and_no_x_modulo_headers():
     assert headers["X-Farna-Sequence"] == "7"
     legacy = [name for name in headers if name.lower().startswith("x-farna-control-")]
     assert len(legacy) == 0
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_vendor_client_signs_body_with_receiver_no_separator_layout():
+    """The posted ``hmac`` matches the receiver's real byte layout.
+
+    Written out independently as the receiver computes it
+    (``farnalabs/farna-control-telemetry``, ``hmac_verify.compute_hmac``)::
+
+        message = payload_bytes + str(timestamp).encode() + str(sequence).encode()
+
+    The same freshly captured float must be signed, sent in the envelope and
+    sent in ``X-Farna-Timestamp`` — the receiver rejects a timestamp older than
+    300 seconds, so signing a different value would fail live.
+    """
+    secret = "instance-secret"
+    timestamp = 1700000000.5
+    sequence = 20260810
+    client = VendorClient("https://vendor.example", secret)
+    client._http_client = AsyncMock(is_closed=False)
+    client._http_client.post = AsyncMock(return_value=MagicMock(status_code=200, is_success=True, text="", headers={}))
+
+    result = await client.post_batch(_payload(), timestamp, sequence)
+
+    assert result == (True, 200, None)
+    call_kwargs = client._http_client.post.await_args.kwargs
+    body = json.loads(call_kwargs["content"])
+    payload_bytes = json.dumps(body["payload"], sort_keys=True, separators=(",", ":")).encode()
+    receiver_message = payload_bytes + str(timestamp).encode() + str(sequence).encode()
+    receiver_mac = hmac.new(secret.encode(), receiver_message, hashlib.sha256).hexdigest()
+
+    assert body["hmac"] == receiver_mac
+    assert call_kwargs["headers"]["X-Farna-Signature"] == receiver_mac
+    assert body["timestamp"] == timestamp
+    assert call_kwargs["headers"]["X-Farna-Timestamp"] == str(timestamp)
     await client.close()

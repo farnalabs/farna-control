@@ -49,17 +49,26 @@ def sign_outbound_batch(
 
     This mirrors the receiver's ``hmac_verify.compute_hmac`` exactly::
 
-        HMAC-SHA256(
-            key   = secret,
-            msg   = canonical_json(payload, sort_keys=True, separators=(",", ":"))
-                    + f"{timestamp}:{sequence}".encode(),
-        ).hexdigest()
+        def compute_hmac(secret, payload_bytes, timestamp, sequence):
+            message = payload_bytes + str(timestamp).encode() + str(sequence).encode()
+            return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
     ``payload`` is the aggregate payload **sub-object** that is placed at
-    ``body["payload"]`` — never the whole envelope.  Note the message format is
-    ``<canonical payload bytes><timestamp>:<sequence>`` with a plain float
-    rendering of ``timestamp`` (no ``%.6f`` precision); that is the receiver's
-    contract.
+    ``body["payload"]`` — never the whole envelope.  The signed message is::
+
+        canonical_json(payload, sort_keys=True, separators=(",", ":"))
+        + str(timestamp).encode()
+        + str(sequence).encode()
+
+    There is **no separator** between the timestamp and the sequence: the bytes
+    are the canonical JSON immediately followed by ``str(timestamp)`` and then
+    ``str(sequence)``.  ``timestamp`` renders as a plain float (``str(1.5)`` ->
+    ``"1.5"``), never ``%.6f``.  Do not insert a colon, pipe or any other
+    delimiter — the live receiver would reject the signature.
+
+    The signed ``timestamp`` must be the same freshly captured float sent in the
+    ``X-Farna-Timestamp`` header and the ``timestamp`` envelope field, because
+    the receiver rejects ``abs(now - timestamp) > 300``.
 
     It is **NOT** interchangeable with the rotation-request signer in
     :mod:`farna.core.product_analytics.hmac_verify`: that module signs with a
@@ -67,7 +76,7 @@ def sign_outbound_batch(
     Never reuse this helper to sign or verify rotation requests, and never reuse
     the ``hmac_verify`` helper for outbound batches.
     """
-    message = _canonical_payload_bytes(payload) + f"{timestamp}:{sequence}".encode()
+    message = _canonical_payload_bytes(payload) + str(timestamp).encode() + str(sequence).encode()
     return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
 
