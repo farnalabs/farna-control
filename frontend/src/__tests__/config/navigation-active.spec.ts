@@ -83,6 +83,13 @@ const OWNED_SUBPAGES: Array<{ owner: string; subpages: RouteFixture[] }> = [
     subpages: [{ path: '/runs/run-1', name: 'run-detail' }],
   },
   {
+    owner: '/evals',
+    subpages: [
+      { path: '/evals/editor', name: 'eval-editor' },
+      { path: '/evals/proposals', name: 'eval-proposals-queue' },
+    ],
+  },
+  {
     owner: '/schemas',
     subpages: [
       { path: '/schemas/editor', name: 'schema-editor' },
