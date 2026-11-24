@@ -666,14 +666,26 @@ run_pre_upgrade_dump() {
   fi
   [[ -x "${py}" ]] || die "cannot run the pre-upgrade pg_dump: no bundled runtime at ${py} (no prior native install to upgrade — remove the populated data dir or ignore)"
   info "Pre-upgrade pg_dump (enforced by FAR-672) — the bundled stack must be running..."
-  # --target-bundle: the extracted NEW bundle. The helper runs from the OLD
-  # installation, so without it the migration-pending decision would compare
-  # the live database against the code being REPLACED — which always reads "at
-  # head", silently skipping the snapshot for every real upgrade. With it, the
-  # helper takes a snapshot only when the new bundle actually migrates.
+  # The helper runs from the OLD installation, so if it understands
+  # --target-bundle it can compare the live database against the NEW bundle and
+  # take a snapshot only when the new bundle actually migrates. An OLDER helper
+  # (origin/main and every released bundle up to the one that added the flag)
+  # uses argparse with only --data-dir/--bin-dir: handing it --target-bundle
+  # exits 2 "unrecognized arguments" and the FIRST native upgrade aborts before
+  # any swap. Probe the installed helper first and fall back to a plain
+  # --data-dir dump (which always dumps — a recovery point before an upgrade is
+  # never wrong, just occasionally redundant).
+  local -a dump_args=(--data-dir "${DATA_DIR}")
+  if PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
+      FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
+      "${py}" -m "${module}" --help 2>/dev/null | grep -q -- "--target-bundle"; then
+    dump_args+=(--target-bundle "${bundle_dir}")
+  else
+    info "WARNING: the installed upgrade helper predates --target-bundle; taking a plain --data-dir dump (it cannot detect whether the new bundle migrates, so a snapshot is always taken)."
+  fi
   if snapshot_path="$(PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
       FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
-      "${py}" -m "${module}" --data-dir "${DATA_DIR}" --target-bundle "${bundle_dir}")"; then
+      "${py}" -m "${module}" "${dump_args[@]}")"; then
     :
   else
     rc=$?

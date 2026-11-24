@@ -1407,10 +1407,12 @@ def restore_guidance(
         return f"{fault}\n{body}\nExact manual restore command:\n  {link_cmd}"
     head = "Manual restore - this restores BOTH the binary AND the data. The attempted upgrade's\nboot may have forward-migrated the database schema past the old bundle's migration\nhead, so restoring the old binary ALONE is not sufficient."
     # `--db-url "$DATABASE_ADMIN_URL"` (a shell reference, never a literal
-    # credential) makes the recovery connect to the OWNER database the upgrade
-    # dumped from; without it a native operator shell with no DATABASE_URL set
-    # has nothing for the restore to connect to. The database must be reachable
-    # when this runs (start the previous release first if it is bundled).
+    # credential) names the OWNER/admin database explicitly. It is REQUIRED for
+    # a --data-dir restore: the restore stops the launcher, which supervises the
+    # bundled PostgreSQL, so the target must be independently reachable and must
+    # NOT be the bundled launcher's database. Without the explicit URL a native
+    # operator shell with no DATABASE_URL would resolve the bundled one and the
+    # replay would connect to a server the restore just stopped.
     restore_cmd = f'farna-control restore {snapshot} --data-dir {data_dir} --yes --db-url "$DATABASE_ADMIN_URL"'
     compound = link_cmd + " && " + restore_cmd
     return f"{fault}\n{head}\nPre-upgrade snapshot: {snapshot}\nExact manual restore command:\n  {compound}"

@@ -105,6 +105,23 @@ class TestPreambleRewrite:
         # The completeness marker must survive the rewrite.
         assert assert_complete(path) == len(text.encode("utf-8"))
 
+    def test_a_meta_command_shaped_copy_line_before_the_trailer_survives(self, tmp_path: Path) -> None:
+        """S5: only the wrapper AFTER the completion trailer may be removed.
+
+        A COPY-data line that happens to look like ``\\unrestrict <token>`` sits
+        before the trailer and is real data. Stripping every meta-shaped line in
+        the tail would silently delete it while ``assert_complete`` still passed.
+        """
+        payload = b"--\n-- PostgreSQL database dump\n--\n\nSELECT 1;\nCOPY t (v) FROM stdin;\n\\unrestrict not-a-wrapper-token\n\\.\n" + _TRAILER + b"\\unrestrict wrapper123\n"
+        path = _dump(tmp_path, payload)
+
+        strip_unsupported_preamble_settings(path, set())
+
+        text = path.read_text(encoding="utf-8")
+        assert "\\unrestrict not-a-wrapper-token" in text, "a COPY-data line before the trailer is data, not a wrapper"
+        assert "wrapper123" not in text, "the post-trailer dump wrapper must be removed"
+        assert assert_complete(path) == len(text.encode("utf-8"))
+
     def test_a_set_inside_a_function_body_is_never_touched(self, tmp_path: Path) -> None:
         payload = b"--\n-- PostgreSQL database dump\n--\n\nCREATE FUNCTION f() RETURNS void AS $$\nSET transaction_timeout = 0;\n$$ LANGUAGE sql;\n" + _TRAILER
         path = _dump(tmp_path, payload)
@@ -146,6 +163,29 @@ class TestSharedPipeline:
         assert seen["argv"][-1] == "postgresql://owner@db:5432/farna_control"
         assert "sup3r" not in " ".join(seen["argv"])
         assert seen["env"]["PGPASSWORD"] == "sup3r"
+
+    def test_dump_plain_sql_keeps_a_complete_dump_when_pg_settings_is_unreadable(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """S6: the preamble rewrite is a replay aid, not the completeness proof."""
+        output = tmp_path / "database.sql"
+
+        def _run(_argv: list[str], **kwargs: Any) -> MagicMock:
+            stdout = kwargs.get("stdout")
+            if stdout is not None:
+                stdout.write(_TRAILER)
+            return MagicMock(returncode=0, stderr=b"")
+
+        def _unreadable(_url: str, **_kw: Any) -> set[str]:
+            raise DumpError("cannot read the target server's settings")
+
+        with (
+            patch.object(plain_dump, "server_guc_names", _unreadable),
+            patch("farna.db.plain_dump.subprocess.run", side_effect=_run),
+            caplog.at_level("WARNING"),
+        ):
+            size = dump_plain_sql("postgresql://owner@db:5432/x", output, pg_dump="/usr/bin/pg_dump")
+
+        assert size == len(_TRAILER), "a transient pg_settings failure must not discard a complete dump"
+        assert any("dump.guc_probe_failed" in record.message for record in caplog.records), "the skip must be loud"
 
     def test_dump_plain_sql_refuses_a_truncated_dump(self, tmp_path: Path) -> None:
         def _run(_argv: list[str], **kwargs: Any) -> MagicMock:

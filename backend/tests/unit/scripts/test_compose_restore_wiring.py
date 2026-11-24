@@ -24,7 +24,10 @@ pin what makes the recovery work:
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -155,6 +158,58 @@ class TestTheInstallerCannotBypassThePendingCheck:
     def test_the_dump_is_told_which_bundle_it_is_upgrading_to(self) -> None:
         """The helper runs the OLD install, so it must be told the NEW bundle."""
         assert '--target-bundle "${bundle_dir}"' in self._install_text()
+
+    def test_the_installer_probes_the_old_helper_before_passing_the_new_flag(self) -> None:
+        """The flag is passed ONLY after proving the installed helper accepts it.
+
+        origin/main and every released helper up to the one that added the flag
+        use argparse with only ``--data-dir``/``--bin-dir``; handing them
+        ``--target-bundle`` exits 2 and the first native upgrade aborts. The
+        installer must probe ``--help`` and fall back to a plain ``--data-dir``
+        dump. The old ``test_the_dump_is_told_which_bundle_it_is_upgrading_to``
+        only checked the flag string, so it stayed green while the first upgrade
+        was broken.
+        """
+        text = self._install_text()
+        assert '"${py}" -m "${module}" --help' in text, "the installer must ask the installed helper whether it supports the flag"
+        assert 'grep -q -- "--target-bundle"' in text
+        # The fallback base carries ONLY --data-dir; the new flag is appended
+        # conditionally, never baked into the single invocation.
+        assert 'dump_args=(--data-dir "${DATA_DIR}")' in text
+        assert 'dump_args+=(--target-bundle "${bundle_dir}")' in text
+
+    def test_an_old_helper_rejects_the_flag_and_a_new_one_accepts_it(self, tmp_path: Path) -> None:
+        """Drive the real argparse contract the probe relies on.
+
+        The probe treats "``--help`` mentions ``--target-bundle``" as support.
+        These fakes are the two real parser shapes: the pre-flag helper (exactly
+        ``--data-dir``/``--bin-dir``) rejects the flag with exit 2, and a helper
+        that defines it advertises it in ``--help``.
+        """
+        old_source = "import argparse\np = argparse.ArgumentParser(prog='python -m farna.launcher.upgrade')\np.add_argument('--data-dir', required=True)\np.add_argument('--bin-dir', default=None)\np.parse_args()\n"
+        new_source = "import argparse\np = argparse.ArgumentParser(prog='python -m farna.launcher.upgrade')\np.add_argument('--data-dir', required=True)\np.add_argument('--bin-dir', default=None)\np.add_argument('--target-bundle', default=None)\np.parse_args()\n"
+        (tmp_path / "old_helper.py").write_text(old_source, encoding="utf-8")
+        (tmp_path / "new_helper.py").write_text(new_source, encoding="utf-8")
+        env = {**os.environ, "PYTHONPATH": str(tmp_path)}
+
+        def _run(module: str, *args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(  # noqa: S603 — fixed argv, test-local fake modules
+                [sys.executable, "-m", module, *args],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+                check=False,
+            )
+
+        old_help = _run("old_helper", "--help")
+        new_help = _run("new_helper", "--help")
+        assert "--target-bundle" not in old_help.stdout
+        assert "--target-bundle" in new_help.stdout
+
+        old_reject = _run("old_helper", "--data-dir", str(tmp_path), "--target-bundle", str(tmp_path))
+        assert old_reject.returncode == 2, old_reject.stderr
+        assert "unrecognized arguments" in old_reject.stderr
 
     def test_an_empty_snapshot_path_is_reported_as_a_skip(self) -> None:
         text = self._install_text()

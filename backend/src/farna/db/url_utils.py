@@ -46,7 +46,7 @@ Settings contract.
 """
 
 import os
-from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
 # ---------------------------------------------------------------------------
 # The three database role names (THE single definition, FAR-2570)
@@ -104,7 +104,7 @@ _POSTGRES_SCHEMES = frozenset({"postgres", "postgresql", "postgresql+asyncpg", "
 
 #: SQLAlchemy driver prefixes that a libpq client (psycopg / pg_dump / psql)
 #: cannot parse. libpq only understands ``postgresql://`` / ``postgres://``.
-_LISTPQ_UNSUPPORTED_PREFIXES = ("postgresql+asyncpg://", "postgresql+psycopg://", "postgresql+psycopg2://")
+_LIBPQ_UNSUPPORTED_PREFIXES = ("postgresql+asyncpg://", "postgresql+psycopg://", "postgresql+psycopg2://")
 
 
 def normalise_libpq_url(url: str) -> str:
@@ -123,7 +123,7 @@ def normalise_libpq_url(url: str) -> str:
     refused loudly rather than handed to a driver that would fail confusingly
     deeper in the call stack.
     """
-    if url.startswith(_LISTPQ_UNSUPPORTED_PREFIXES):
+    if url.startswith(_LIBPQ_UNSUPPORTED_PREFIXES):
         return _POSTGRESQL_PREFIX + url.split("://", 1)[1]
     if url.startswith(_POSTGRES_PREFIX):
         return _POSTGRESQL_PREFIX + url[len(_POSTGRES_PREFIX) :]
@@ -153,7 +153,10 @@ def split_postgres_credentials(url: str) -> tuple[str, str | None]:
     hostname = parts.hostname or ""
     if ":" in hostname:  # IPv6 literal: urlsplit strips the brackets
         hostname = f"[{hostname}]"
-    userinfo = f"{quote(parts.username, safe='')}@" if parts.username else ""
+    # ``urlsplit`` does NOT percent-decode the username, so it is already in the
+    # encoded form ``urlunsplit`` expects. Re-quoting it would double-encode an
+    # already percent-encoded name (``us%40er`` -> ``us%2540er``).
+    userinfo = f"{parts.username}@" if parts.username else ""
     netloc = f"{userinfo}{hostname}"
     if parts.port is not None:
         netloc += f":{parts.port}"

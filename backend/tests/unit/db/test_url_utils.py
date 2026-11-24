@@ -326,6 +326,9 @@ def test_both_url_forms_reach_a_working_psycopg_connection_string(sqlalchemy_url
         ("postgresql://u:p%23a%3Fss@db:5432/x", "postgresql://u@db:5432/x", "p#a?ss"),
         # IPv6 literal keeps its brackets in the rebuilt netloc.
         ("postgresql://u:pw@[::1]:5432/x", "postgresql://u@[::1]:5432/x", "pw"),
+        # An already percent-encoded username is preserved verbatim, not
+        # double-encoded (``us%40er`` must not become ``us%2540er``).
+        ("postgresql://us%40er:pw@db:5432/x", "postgresql://us%40er@db:5432/x", "pw"),
     ],
 )
 def test_split_postgres_credentials_removes_the_password_from_the_dsn(url: str, expected_dsn: str, expected_password: str | None) -> None:

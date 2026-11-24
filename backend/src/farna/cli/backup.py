@@ -725,6 +725,24 @@ def _acquire_data_lock(data_dir: Path, *, mode: str) -> Any:
     return lock
 
 
+def _live_launcher_holder(data_dir: Path) -> Any | None:
+    """The lock holder of a LIVE launcher for *data_dir*, or None.
+
+    A lock record whose PID is gone is stale (the kernel released the flock when
+    the process died) and is treated as "nothing running". Non-POSIX platforms
+    have no verified-liveness seam, so they are also reported as "not live" —
+    the data-dir lock acquisition is the authority that then refuses loudly.
+    """
+    from farna.launcher.supervisor import _read_lock_holder
+
+    holder = _read_lock_holder(data_dir.parent / (data_dir.name + ".lock"))
+    if holder is None or os.name != "posix":
+        return None
+    from farna.launcher.upgrade import _pid_alive
+
+    return holder if _pid_alive(holder.pid) else None
+
+
 def _stop_launcher_writers(data_dir: Path) -> bool:
     """Stop a LIVE launcher so the restore owns the database (FAR-2667).
 
@@ -733,15 +751,11 @@ def _stop_launcher_writers(data_dir: Path) -> bool:
     writer remains). On a platform without the verified-liveness seam the
     holder is not signalled — the lock acquisition refuses loudly instead.
     """
-    from farna.launcher.supervisor import _read_lock_holder
-
-    holder = _read_lock_holder(data_dir.parent / (data_dir.name + ".lock"))
-    if holder is None or os.name != "posix":
+    holder = _live_launcher_holder(data_dir)
+    if holder is None:
         return False
-    from farna.launcher.upgrade import UpgradeError, _pid_alive, stop_running_stack
+    from farna.launcher.upgrade import UpgradeError, stop_running_stack
 
-    if not _pid_alive(holder.pid):
-        return False  # stale record: the kernel released the flock when it died
     click.echo(f"Stopping the running launcher (holder PID {holder.pid}) before the restore...")
     try:
         stop_running_stack(data_dir)
@@ -751,6 +765,40 @@ def _stop_launcher_writers(data_dir: Path) -> bool:
         raise click.ClickException(f"Refusing to restore: the running launcher for {data_dir} (holder PID {holder.pid}) cannot be stopped from here ({exc}). Stop it first: farna-control stop --data-dir {data_dir}") from exc
     click.echo("  Launcher stopped. It stays stopped until you start it again.")
     return True
+
+
+def _require_reachable_target_for_native_restore(opts: _RestoreOptions) -> None:
+    """Refuse a ``--data-dir`` restore that would tear down its own target.
+
+    A native restore stops the launcher, and the launcher supervises the
+    bundled PostgreSQL (``launcher/entry.py``: the postgres child has
+    ``shutdown_priority=1``), so a replay through the silently-resolved
+    ``DATABASE_URL`` would connect to a server that the same command just
+    stopped — nothing is listening and nothing restarts it. The target must be
+    named EXPLICITLY (``--db-url`` or ``DATABASE_ADMIN_URL``) so it is an
+    independently reachable admin database the stop does not take down.
+
+    This runs AFTER the read-only verification and BEFORE any destructive step,
+    so a refusal has no side effects. ``--dry-run`` never reaches here (the
+    preview short-circuits in ``_validate_targets``), and a data dir with no
+    live launcher is left alone: nothing is stopped, so the resolved target is
+    whatever the operator already has running.
+    """
+    if opts.data_dir is None:
+        return
+    if opts.db_url or os.environ.get("DATABASE_ADMIN_URL"):
+        return
+    holder = _live_launcher_holder(opts.data_dir)
+    if holder is None:
+        return
+    raise click.ClickException(
+        "Refusing to restore: a --data-dir restore stops the running launcher "
+        f"(holder PID {holder.pid}), and the launcher supervises the bundled "
+        "PostgreSQL — so the database the restore would connect to is taken down "
+        "by the same command. Pass --db-url pointing at an independently reachable "
+        "admin database (or export DATABASE_ADMIN_URL) so the target survives the "
+        "stop. See docs/operations/backup.md."
+    )
 
 
 def _start_command(opts: _RestoreOptions) -> str:
@@ -1739,6 +1787,11 @@ def _run_restore(opts: _RestoreOptions) -> None:
     # it takes a lock or touches the stack.
     if not _validate_targets(opts, manifest, raw_url, settings):
         return
+
+    # Before ANY destructive step: a native --data-dir restore stops the
+    # launcher (and with it the bundled PostgreSQL), so it needs an explicitly
+    # named, independently reachable target. Refuse here, side-effect free.
+    _require_reachable_target_for_native_restore(opts)
 
     lock = None
     stopped = False

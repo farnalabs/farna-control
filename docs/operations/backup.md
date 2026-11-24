@@ -331,6 +331,14 @@ stack with nothing to copy — and never restarts anything. Without `--data-dir`
 it prints the compose start command instead. Nothing is auto-restarted: a
 half-verified database must not be handed to an application.
 
+Because that stop also takes down the bundled PostgreSQL the launcher
+supervises, a `--data-dir` restore **requires an explicit, independently
+reachable target** (`--db-url`, or `DATABASE_ADMIN_URL` exported): the replay
+must not fall back to the bundled `DATABASE_URL`, which the restore's own stop
+has just shut down. If no explicit URL is given while a launcher is running, the
+restore refuses before touching anything and names the fix — point `--db-url` at
+an admin database the stop does not take down.
+
 Note the two different versions in play. The manifest's `schema_versions` field
 records the **migration head of the code that wrote the backup** (`alembic`
 script heads), not the database's `alembic_version` row. The two differ whenever

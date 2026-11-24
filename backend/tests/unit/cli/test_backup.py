@@ -2733,3 +2733,174 @@ class TestRestoreCheckpointWritesSyncErrorPaths:
 
         with pytest.raises(RuntimeError, match="Invalid organisation_id"):
             _restore_checkpoint_writes_sync("postgresql://localhost/db", writes)
+
+
+class TestNativeRestoreRequiresAReachableExplicitTarget:
+    """FAR-2667: a --data-dir restore stops the launcher, so its target must be
+    an explicitly-named database that survives the stop.
+
+    The launcher supervises the bundled PostgreSQL (``shutdown_priority=1``), so
+    a restore that silently resolved the bundled ``DATABASE_URL`` stopped the
+    server and then tried to replay into nothing. These tests pin the fix: refuse
+    before any side effect when the target is implicit, and prove a REAL
+    connection succeeds after the stop when the target is explicit.
+    """
+
+    @staticmethod
+    def _guard_options(tmp_path: Path, db_url: str | None) -> Any:
+        from farna.cli import backup as backup_mod
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(exist_ok=True)
+        return backup_mod._RestoreOptions(
+            backup_dir=tmp_path,
+            db_url=db_url,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+
+    def test_a_database_admin_url_in_the_environment_counts_as_explicit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
+        options = self._guard_options(tmp_path, db_url=None)
+        monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql://admin@db:5432/farna_control")
+        backup_mod._require_reachable_target_for_native_restore(options)  # no raise
+
+        monkeypatch.delenv("DATABASE_ADMIN_URL")
+        with pytest.raises(click.ClickException, match="independently reachable"):
+            backup_mod._require_reachable_target_for_native_restore(options)
+
+    def test_a_data_dir_restore_without_a_target_needs_no_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        # data_dir=None: nothing is stopped, so the guard is a no-op regardless.
+        monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
+        options = backup_mod._RestoreOptions(
+            backup_dir=tmp_path,
+            db_url=None,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=None,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+        backup_mod._require_reachable_target_for_native_restore(options)
+
+    def test_live_holder_is_none_off_posix_or_when_the_pid_is_gone(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+        from farna.launcher import upgrade as upgrade_module
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (tmp_path / "data.lock").write_text(json.dumps({"pid": 4242, "mode": "serve"}), encoding="utf-8")
+
+        monkeypatch.setattr(backup_mod.os, "name", "nt")
+        assert backup_mod._live_launcher_holder(data_dir) is None, "off POSIX there is no verified-liveness seam"
+
+        monkeypatch.setattr(backup_mod.os, "name", "posix")
+        monkeypatch.setattr(upgrade_module, "_pid_alive", lambda _pid: False)
+        assert backup_mod._live_launcher_holder(data_dir) is None, "a stale lock record is not a live launcher"
+
+    def test_refuses_without_an_explicit_url_when_a_launcher_would_be_stopped(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        calls: list[str] = []
+        monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
+        monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
+        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: calls.append("safety_dump"))
+        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda *_a, **_k: calls.append("stop") or True)
+        monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+
+        options = backup_mod._RestoreOptions(
+            backup_dir=archive,
+            db_url=None,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+        with pytest.raises(click.ClickException, match="independently reachable"):
+            backup_mod._run_restore(options)
+
+        assert calls == [], "the refusal must precede the safety dump and the stop (side-effect free)"
+
+    def test_with_an_explicit_url_the_replay_connects_really_after_the_stop(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import socket
+
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        # Only database.sql: the REAL _restore_cluster then does one real
+        # connection (via _run_psql) instead of also replaying JSON exports.
+        (archive / "checkpoints.json").unlink()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        order: list[str] = []
+
+        # A real listener stands in for the explicit admin database. The REAL
+        # _restore_cluster runs below and its _run_psql opens a REAL TCP
+        # connection, so the test fails if the target is not reachable after the
+        # stop — the exact defect the fully-mocked tests could not catch.
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        try:
+            monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
+            monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
+            monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
+            monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: order.append("safety_dump"))
+
+            def _stop(_data_dir: Path) -> bool:
+                # The stop tears down the bundled server; the EXPLICIT target is a
+                # different, already-running listener and must stay reachable.
+                order.append("stop")
+                return True
+
+            monkeypatch.setattr(backup_mod, "_stop_launcher_writers", _stop)
+
+            def _run_psql(_url: str, _input: Path, **_kwargs: Any) -> None:
+                with socket.create_connection(("127.0.0.1", port), timeout=2):
+                    pass
+                order.append("connect")
+
+            monkeypatch.setattr(backup_mod, "_run_psql", _run_psql)
+            # The collation probe is a second connection after the SQL replay;
+            # it is not the ordering under test.
+            monkeypatch.setattr(backup_mod, "_check_collation_versions_sync", lambda _url: None)
+            monkeypatch.setattr(backup_mod, "_restore_data_dir", lambda *_a, **_k: None)
+            monkeypatch.setattr(backup_mod, "_ensure_restore_posture", lambda *_a, **_k: None)
+            monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+
+            options = backup_mod._RestoreOptions(
+                backup_dir=archive,
+                db_url=f"postgresql://admin:pw@127.0.0.1:{port}/farna_control",
+                app_db_url=_TEST_APP_DB_URL,
+                yes=True,
+                previous_fernet_key=None,
+                dry_run=False,
+                data_dir=data_dir,
+                replace_cluster=False,
+                no_safety_dump=False,
+            )
+            backup_mod._run_restore(options)
+        finally:
+            listener.close()
+
+        assert order == ["safety_dump", "stop", "connect"], order

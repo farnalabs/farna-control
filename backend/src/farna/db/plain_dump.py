@@ -262,12 +262,18 @@ def _strip_preamble_streaming(dump_path: Path, supported: set[str]) -> list[str]
 
 
 def _strip_trailing_meta_commands(dump_path: Path) -> bool:
-    """Drop a trailing ``\\unrestrict <token>`` (pg_dump 17+); True when changed.
+    """Drop ``\\restrict``/``\\unrestrict`` lines that FOLLOW the dump trailer.
 
-    Only whole lines inside the FINAL ``_TAIL_BYTES`` are considered, so a
-    meta-command-shaped string inside COPY data earlier in the file is never
-    touched. The file is rewritten through a 0600 temp sibling and atomically
-    replaced — never read into memory.
+    pg_dump 17+ wraps the whole dump in ``\\restrict`` / ``\\unrestrict`` psql
+    meta-commands, and a ``\\unrestrict <token>`` line is the LAST line of the
+    file. An older psql rejects them, so they must go — but ONLY the dump-level
+    wrapper, never a meta-command-shaped COPY-data line. So the completion
+    trailer is located first and only whole lines AFTER it are removed: a
+    ``\\unrestrict <token>`` value inside the final ``_TAIL_BYTES`` of COPY data
+    survives, while the post-trailer wrapper (which is what a newer pg_dump
+    appends) is dropped and ``assert_complete`` still sees the trailer as the
+    last non-meta line. The file is rewritten through a 0600 temp sibling and
+    atomically replaced — never read into memory.
     """
     size = dump_path.stat().st_size
     start = max(0, size - _TAIL_BYTES)
@@ -275,9 +281,20 @@ def _strip_trailing_meta_commands(dump_path: Path) -> bool:
         handle.seek(start)
         tail = handle.read(_TAIL_BYTES)
     lines = tail.splitlines(keepends=True)
-    kept = [line for line in lines if not _META_COMMAND.match(line.strip())]
-    if len(kept) == len(lines):
+    # The trailer is a fixed comment line; everything after it is the wrapper.
+    marker_index: int | None = None
+    for index, line in enumerate(lines):
+        if line.strip() == DUMP_COMPLETE_MARKER:
+            marker_index = index
+    if marker_index is None:
+        # No trailer in the tail: there is nothing to anchor "after the dump"
+        # to, so leave the file exactly as it is (assert_complete reports the
+        # missing trailer).
         return False
+    kept_after = [line for line in lines[marker_index + 1 :] if not _META_COMMAND.match(line.strip())]
+    if len(kept_after) == len(lines) - marker_index - 1:
+        return False
+    kept = lines[: marker_index + 1] + kept_after
     fd, temp_name = tempfile.mkstemp(prefix=f".{dump_path.name}.", suffix=".tail", dir=str(dump_path.parent))
     os.close(fd)
     temp_path = Path(temp_name)
@@ -355,9 +372,21 @@ def dump_plain_sql(
     if completed.returncode != 0:
         stderr_text = completed.stderr.decode(errors="replace").strip()
         raise DumpError(stderr_text or f"pg_dump exited with code {completed.returncode}")
-    remove_unsupported = strip_unsupported_preamble_settings(output, server_guc_names(db_url))
-    if remove_unsupported:
-        import logging
+    # The preamble rewrite is a REPLAY AID (letting an older psql accept a
+    # newer pg_dump's GUC prelude), never the completeness proof. A transient
+    # reconnect failure while reading the target's pg_settings must therefore
+    # NOT discard an otherwise complete dump: skip the rewrite loudly and let
+    # assert_complete below be the evidence that the dump finished.
+    import logging
 
-        logging.getLogger(__name__).warning("dump.preamble_rewritten removed=%s", ",".join(remove_unsupported))
+    log = logging.getLogger(__name__)
+    try:
+        supported = server_guc_names(db_url)
+    except DumpError as exc:
+        log.warning("dump.guc_probe_failed skipped_preamble_rewrite error=%s", exc)
+        remove_unsupported: list[str] = []
+    else:
+        remove_unsupported = strip_unsupported_preamble_settings(output, supported)
+    if remove_unsupported:
+        log.warning("dump.preamble_rewritten removed=%s", ",".join(remove_unsupported))
     return assert_complete(output)
