@@ -1180,6 +1180,9 @@ configure_product_analytics_optin() {
           [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" ]] && continue ;;
         FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED)
           [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]] && continue ;;
+        *)
+          :
+          ;;
       esac
       carry="${carry}${line}"$'\n'
     done < <(printf '%s\n' "${existing}" \
