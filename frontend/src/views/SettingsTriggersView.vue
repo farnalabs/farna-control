@@ -38,14 +38,14 @@
           {{ orgTriggersPaused ? $t('views.SettingsTriggersView.resume_triggers') : $t('views.SettingsTriggersView.pause_all_triggers_action') }}
         </Button>
       </template>
-      <p
+      <ErrorAlert
         v-if="pauseError"
         data-testid="settings-triggers-pause-error"
-        role="alert"
-        class="mt-2 text-sm font-medium text-destructive"
-      >
-        {{ pauseError }}
-      </p>
+        compact
+        class="mt-2 font-medium"
+        :message="pauseError"
+        :retryable="false"
+      />
     </DataCard>
 
     <!-- STATE-3 (ux-conformance): a determinate-shaped table skeleton, not an
@@ -554,14 +554,14 @@
       :loading="deleting"
       @confirm="deleteTrigger"
     >
-      <p
+      <ErrorAlert
         v-if="deleteError"
         data-testid="settings-triggers-delete-error"
-        role="alert"
-        class="text-sm font-medium text-destructive"
-      >
-        {{ deleteError }}
-      </p>
+        compact
+        class="mt-3 font-medium"
+        :message="deleteError"
+        :retryable="false"
+      />
     </FormDialog>
   </div>
   </FeatureGate>

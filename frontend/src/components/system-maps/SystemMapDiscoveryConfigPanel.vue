@@ -56,10 +56,10 @@
             </AppSelect>
           </div>
           <p v-if="loading" class="text-sm text-muted-foreground" aria-live="polite">{{ $t('views.SystemMapDetailView.loading_ai_options') }}</p>
-          <p v-if="failed" class="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive">{{ failedMessage }}</p>
+          <ErrorAlert v-if="failed" compact :message="failedMessage" :retryable="false" />
         </div>
         <p v-if="submitting" class="rounded border bg-muted/40 p-3 text-sm" aria-live="polite" data-testid="system-map-discovery-request-loading">{{ $t('views.SystemMapDetailView.discovery_request_loading') }}</p>
-        <p v-if="submitError" class="rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive" data-testid="system-map-discovery-request-error">{{ submitError }}</p>
+        <ErrorAlert v-if="submitError" compact :message="submitError" :retryable="false" data-testid="system-map-discovery-request-error" />
       </form>
       <footer class="border-t px-4 py-3 flex justify-end gap-2">
         <button type="button" class="rounded border px-3 py-1.5 text-sm" :disabled="submitting" @click="$emit('close')" data-testid="system-map-discovery-config-cancel">{{ $t('common.cancel') }}</button>
@@ -76,6 +76,7 @@ import { api } from '../../lib/api/client'
 import type { components } from '../../lib/api/schema'
 import type { DiscoveryMode } from '../../stores/systemMaps'
 import AppSelect from '../shared/AppSelect.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 
 type Backend = components['schemas']['ModelBackendResponse']
 type Evaluation = components['schemas']['EvalDefinitionResponse']
