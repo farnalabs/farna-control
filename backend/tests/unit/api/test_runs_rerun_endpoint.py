@@ -266,7 +266,10 @@ def test_rerun_completed_and_failed_sources_return_202(client: TestClient, sourc
     dispatch.assert_awaited_once()
     assert dispatch.await_args.args[0] == str(rerun.id)
     assert dispatch.await_args.args[1] == str(_ORG_ID)
-    assert dispatch.await_args.kwargs["queue"] == "runs"
+    # The route must NOT hardcode the queue name: dispatch_run resolves it from
+    # settings.saq_runs_queue (``runs`` on prod, ``staging-runs`` on staging). A
+    # hardcoded "runs" would enqueue to a queue no worker consumes on staging.
+    assert "queue" not in dispatch.await_args.kwargs
 
 
 def test_rerun_pins_source_snapshot_and_copies_payload(client: TestClient) -> None:

@@ -135,7 +135,7 @@ async def _ingest_slack_dispatch_error(run_id: str, org_id: str, detail: str) ->
 async def _dispatch_slack_run(run_id: str, org_id: str) -> None:
     """Dispatch a slack-created run via fail-fast SAQ enqueue (background)."""
     try:
-        outcome, _job_id = await dispatch_run(str(run_id), str(org_id), queue="runs", fail_fast=True)
+        outcome, _job_id = await dispatch_run(str(run_id), str(org_id), fail_fast=True)
     except asyncio.CancelledError:
         raise
     except Exception as exc:

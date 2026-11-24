@@ -194,7 +194,7 @@ async def _dispatch_webhook_run(run_id: str, org_id: str) -> None:
     reported.
     """
     try:
-        outcome, _job_id = await dispatch_run(str(run_id), str(org_id), queue="runs", fail_fast=True)
+        outcome, _job_id = await dispatch_run(str(run_id), str(org_id), fail_fast=True)
     except asyncio.CancelledError:
         raise
     except Exception as exc:
