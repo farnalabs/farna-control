@@ -10,8 +10,23 @@ import { installEntitlementNavigationGuard } from './target-tier'
 
 type SsoBackendProcess = { stop: () => Promise<void> }
 
+/**
+ * How long the spawned fixture may take to answer `/healthz`.
+ *
+ * The fixture imports the production FastAPI app (hundreds of modules) before
+ * it can serve anything, so its cold-start cost is the app's import cost, not
+ * the server's bind time. Measured 15.1 s on a warm venv on this shared host
+ * (2026-11-24, FAR-2718), which the original 15 s deadline raced: the first
+ * SSO case failed while the second passed from the same tree. A cold venv is
+ * slower still, because the first import compiles bytecode for the whole app.
+ * The wait stays BOUNDED: a genuinely broken boot (e.g. the settings validator
+ * refusing the DSN) still fails here after this deadline, with the recorded
+ * probe error and the child's exit code.
+ */
+const SSO_FIXTURE_READY_TIMEOUT_MS = 60_000
+
 async function waitForPort(port: number, child: ChildProcess): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + SSO_FIXTURE_READY_TIMEOUT_MS
   let lastProbeError: unknown
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`[sso-fixture] backend exited before readiness (code ${child.exitCode})`)
@@ -26,7 +41,7 @@ async function waitForPort(port: number, child: ChildProcess): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   throw new Error(
-    `[sso-fixture] backend did not become ready on port ${port} within 15000ms (last probe error: ${String(lastProbeError)})`,
+    `[sso-fixture] backend did not become ready on port ${port} within ${SSO_FIXTURE_READY_TIMEOUT_MS}ms (last probe error: ${String(lastProbeError)})`,
     { cause: lastProbeError },
   )
 }
@@ -50,6 +65,12 @@ async function startLocalSsoBackend(): Promise<SsoBackendProcess> {
       FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED: 'false',
       REDIS_URL: 'redis://127.0.0.1:0/0',
       FARNA_CONTROL_DB: 'sqlite',
+      // FARNA_CONTROL_DB=sqlite is a TEST-ONLY opt-in (ADR 068): the settings
+      // validator refuses to boot a 'sqlite' runtime DSN unless the opt-in is
+      // also set. This fixture IS the test suite, so it opts in here next to
+      // the other FARNA_CONTROL_* vars it owns. Without it the fixture exits
+      // before /healthz and the two SSO cases in login.spec.ts fail on boot.
+      FARNA_CONTROL_ALLOW_SQLITE: '1',
     },
   })
   child.stdout?.on('data', (chunk) => process.stderr.write(`[sso-fixture] ${chunk}`))
