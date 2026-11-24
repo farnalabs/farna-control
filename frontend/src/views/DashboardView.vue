@@ -115,11 +115,14 @@
         </router-link>
       </div>
       <!-- Team breakdown (Team only) -->
-      <div v-if="isTeam && summary.teams && summary.teams.length > 0" class="card p-4">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">{{ $t('views.DashboardView.team_breakdown') }}</h2>
+      <DataCard
+        v-if="isTeam && summary.teams && summary.teams.length > 0"
+        :title="$t('views.DashboardView.team_breakdown')"
+        heading-level="h2"
+      >
+        <template #headerActions>
           <span class="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">{{ $t('views.DashboardView.team') }}</span>
-        </div>
+        </template>
         <!-- FAR-2539: clip at the card edge and scroll inside it on phones. -->
         <!-- A11Y-3: the scroll region is a keyboard-reachable focus stop. The
              sr-only instructions and focus ring mirror the DataTable and
@@ -189,12 +192,14 @@
           </tbody>
         </table>
         </div>
-      </div>
+      </DataCard>
       <!-- Trend chart section -->
-      <div v-if="planStore.featureEnabled('dashboard_charts')" class="card p-4" data-testid="dashboard-run-activity">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">{{ $t('views.DashboardView.run_activity') }}</h2>
-        </div>
+      <DataCard
+        v-if="planStore.featureEnabled('dashboard_charts')"
+        :title="$t('views.DashboardView.run_activity')"
+        heading-level="h2"
+        data-testid="dashboard-run-activity"
+      >
         <div v-if="trendData.length > 1" class="space-y-4">
           <div>
             <p class="text-xs font-medium text-muted-foreground mb-1">{{ $t('views.DashboardView.run_count') }}</p>
@@ -220,10 +225,13 @@
         <div v-else class="mt-2 flex h-12 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground" aria-live="polite">
           {{ $t('views.DashboardView.no_data_trends') }}
         </div>
-      </div>
+      </DataCard>
       <!-- Recent runs list -->
-      <div class="card p-4" data-testid="dashboard-recent-runs">
-        <h2 class="text-base font-semibold mb-4">{{ $t('views.DashboardView.recent_runs') }}</h2>
+      <DataCard
+        :title="$t('views.DashboardView.recent_runs')"
+        heading-level="h2"
+        data-testid="dashboard-recent-runs"
+      >
         <DataTable
           :columns="recentRunColumns"
           :rows="summary.recent_runs"
@@ -255,7 +263,7 @@
             <span class="text-xs text-muted-foreground">{{ String(row.trigger_type ?? '') }}</span>
           </template>
         </DataTable>
-      </div>
+      </DataCard>
     </template>
   </div>
 </template>
@@ -272,6 +280,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
 import StatCard from '../components/StatCard.vue'
 import { DataTable, type Column } from '../components/ui/data-table'
+import DataCard from '../components/ui/DataCard.vue'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'
 import { RUN_STATUS } from '../constants/filters'
 import { formatMoney } from '../lib/money'

@@ -33,15 +33,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from farna.auth.jwt import AuthenticatedPrincipal
+from farna.db.crud import team_scope
 from farna.db.crud.run import get_run
-from farna.db.crud.team_scope import (
-    pipeline_team_scope_team_blind,
-    team_blind_org_scope,
-    viewer_run_scope_visible,
-)
+from farna.db.crud.team_scope import team_blind_org_scope, viewer_run_scope_visible
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +47,11 @@ if TYPE_CHECKING:
 
 #: ``(session, run_id, *, organisation_id)`` → the org-scoped run or ``None``.
 RunFetcher = Callable[..., Awaitable["Run | None"]]
+
+#: The run's effective owner could not be resolved (pipeline absent/hidden).
+#: Distinct from ``None``, which means a genuinely org-level run: an unresolved
+#: owner must fail CLOSED, never be treated as org-level (FAR-1513).
+OWNER_UNRESOLVED: Any = object()
 
 
 def team_boundary_blocked(
@@ -85,8 +87,11 @@ async def effective_run_owner_team_id(session: AsyncSession, run: Run) -> uuid.U
     """
     if run.owner_team_id is not None:
         return run.owner_team_id
-    scope = await pipeline_team_scope_team_blind(session, run.pipeline_id)
-    return None if scope is None else scope.owner_team_id
+    # Resolve through the defining module at call time, not a bound name: the
+    # boundary resolver is patched on farna.db.crud.team_scope in tests, and a
+    # module-level import would make that patch silently non-intercepting.
+    scope = await team_scope.pipeline_team_scope_team_blind(session, run.pipeline_id)
+    return OWNER_UNRESOLVED if scope is None else scope.owner_team_id
 
 
 async def run_visible_to_principal(
@@ -107,6 +112,10 @@ async def run_visible_to_principal(
     if principal.org_role == "admin":
         return True
     owner_team_id = await effective_run_owner_team_id(session, run)
+    # An owner that cannot be resolved (pipeline absent or hidden) is unknown,
+    # not org-level: fail closed so a pre-stamp run can never leak by omission.
+    if owner_team_id is OWNER_UNRESOLVED:
+        return False
     # A principal shape without ``team_id`` is an unbound credential: the field
     # exists on every production principal, and reading it defensively keeps the
     # guard usable from the lightweight principal stand-ins in tests.

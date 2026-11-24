@@ -45,13 +45,13 @@ _SET_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 # Anchored on the block so an unrelated dependency's version line can never be
 # rewritten; a format change makes the pattern miss, which the fail-loud
 # contract below reports instead of silently skipping the mirror.
-_UV_LOCK_MODULO_BLOCK_RE = re.compile(r'(?m)^\[\[package\]\]\r?\nname = "farna-control"\r?\nversion = "([^"]+)"')
+_UV_LOCK_FARNA_BLOCK_RE = re.compile(r'(?m)^\[\[package\]\]\r?\nname = "farna-control"\r?\nversion = "([^"]+)"')
 
 
 def _extract_version(content: str, path: Path) -> str | None:
     """Pull the version value out of one target file's content."""
     if path.name == UV_LOCK_FILENAME:
-        m = _UV_LOCK_MODULO_BLOCK_RE.search(content)
+        m = _UV_LOCK_FARNA_BLOCK_RE.search(content)
     elif path.suffix == ".toml":
         m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', content)
     elif path.suffix in (".yaml", ".yml"):

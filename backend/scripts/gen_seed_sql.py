@@ -2,11 +2,11 @@
 
 import json
 
-from farna.core.library_service import _MODULO_PRIMITIVES
+from farna.core.library_service import _BUILTIN_PRIMITIVES
 
 ORG_ID = "6a6d7112-2058-4d65-ac75-465a12a94563"
 
-templates = [p for p in _MODULO_PRIMITIVES if p.primitive_type == "pipeline_template"]
+templates = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == "pipeline_template"]
 
 for t in templates:
     content = dict(t.content_json)

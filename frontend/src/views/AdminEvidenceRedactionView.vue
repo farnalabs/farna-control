@@ -55,10 +55,12 @@
         <ErrorAlert :message="refetchLoadError" :on-retry="loadRules" />
       </div>
 
-      <div v-if="formOpen" class="card mb-4 p-6">
-        <h2 class="mb-4 text-base font-semibold" data-testid="admin-evidence-redaction-form-title">
-          {{ editingRule ? $t('views.AdminEvidenceRedaction.edit_rule') : $t('views.AdminEvidenceRedaction.new_rule') }}
-        </h2>
+      <BaseCard v-if="formOpen" padding="lg" class="mb-4">
+        <CardHeader
+          heading-level="h2"
+          :title="editingRule ? $t('views.AdminEvidenceRedaction.edit_rule') : $t('views.AdminEvidenceRedaction.new_rule')"
+          data-testid="admin-evidence-redaction-form-title"
+        />
 
         <form class="space-y-4" @submit.prevent="saveRule">
           <div>
@@ -164,7 +166,7 @@
             </button>
           </div>
         </form>
-      </div>
+      </BaseCard>
 
       <p
         v-if="statusMessage"
@@ -269,6 +271,8 @@ import AppSelect from '../components/shared/AppSelect.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'

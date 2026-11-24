@@ -16,7 +16,7 @@ describe('StagePalette', () => {
   it('sets the copy effect and stage type for every palette item', async () => {
     const wrapper = mount(StagePalette)
     const buttons = wrapper.findAll('button')
-    const types = ['modulo', 'external', 'manual', 'placeholder']
+    const types = ['farna_control', 'external', 'manual', 'placeholder']
 
     for (const [index, type] of types.entries()) {
       const dataTransfer = {

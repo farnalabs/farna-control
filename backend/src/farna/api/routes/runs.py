@@ -249,6 +249,21 @@ def _run_detail_statement(principal: TenantPrincipal, run_id: uuid.UUID) -> Sele
     return select(Run).options(selectinload(Run.pipeline)).where(Run.id == run_id, Run.organisation_id == principal.organisation_id)
 
 
+async def _run_owned_by_another_team(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    run: Run,
+) -> bool:
+    """True when the principal is outside the run's boundary (ADR 070 §4).
+
+    Backwards-compatible negative form of
+    :func:`farna.api.run_scope.run_visible_to_principal`. The predicate itself
+    lives once in :mod:`farna.api.run_scope`; this wrapper keeps the #3398
+    call sites and their tests working against the same single implementation.
+    """
+    return not await run_visible_to_principal(session, principal, run)
+
+
 async def _load_run_in_scope(
     session: AsyncSession,
     principal: TenantPrincipal,
@@ -2010,6 +2025,8 @@ async def trigger_rerun(
             source_run = await _load_run_in_scope(session, principal, run_id)
             if source_run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, source_run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             run = await _create_rerun_run(session, principal, source_run)
             run_id_new = run.id
             # Build the response while the transaction is still open (same
@@ -2674,6 +2691,8 @@ async def get_run_work_item_enrichment(
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             refs = run.work_item_refs
             raw_payload = getattr(run, "input_payload", None)
             payload = raw_payload if isinstance(raw_payload, dict) else None
@@ -3211,6 +3230,8 @@ async def list_run_attempts(
             await set_rls_user_context(session, principal.account_id, principal.org_role)
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, run):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
     except IntegrityError:

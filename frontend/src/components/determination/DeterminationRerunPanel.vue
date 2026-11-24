@@ -1,9 +1,11 @@
 <template>
-  <section class="card p-4 space-y-5" data-testid="determination-rerun">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.rerun_title') }}</h2>
-      <p class="text-sm text-muted-foreground">{{ $t('views.DeterminationView.rerun_hint') }}</p>
-    </header>
+  <BaseCard padding="md" class="space-y-5" data-testid="determination-rerun">
+    <CardHeader
+      heading-level="h2"
+      header-class="mb-0!"
+      :title="$t('views.DeterminationView.rerun_title')"
+      :description="$t('views.DeterminationView.rerun_hint')"
+    />
 
     <p
       class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
@@ -381,12 +383,14 @@
         </section>
       </section>
     </template>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import BaseCard from '../ui/BaseCard.vue'
+import CardHeader from '../ui/CardHeader.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import DeterminationEvidenceRefs from './DeterminationEvidenceRefs.vue'
 import DeterminationRerunAttempt from './DeterminationRerunAttempt.vue'

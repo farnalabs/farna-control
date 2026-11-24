@@ -15,8 +15,7 @@
       <ErrorAlert v-else-if="error" :message="error" :on-retry="loadProviders" />
 
       <template v-else>
-        <div v-if="formMode === 'add'" class="card max-w-3xl p-6">
-          <h2 class="mb-4 text-base font-semibold">{{ $t('views.SettingsSsoView.new_sso_provider') }}</h2>
+        <SectionCard v-if="formMode === 'add'" class="max-w-3xl" :title="$t('views.SettingsSsoView.new_sso_provider')">
           <SsoProviderForm
             :data="formData"
             :saving="saving"
@@ -29,7 +28,7 @@
             @submit="createProvider"
             @cancel="closeForm"
           />
-        </div>
+        </SectionCard>
 
         <div v-if="providers.length === 0" class="card p-8 text-center">
           <p class="text-lg font-medium">{{ $t('views.SettingsSsoView.no_providers_title') }}</p>
@@ -195,6 +194,7 @@ import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import SsoProviderForm, { type SsoPresetInfo, type SsoFormState } from '../components/SsoProviderForm.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import SectionCard from '../components/shared/SectionCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'

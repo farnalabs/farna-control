@@ -60,7 +60,7 @@ function makeStage(overrides: Partial<LifecycleMapStage> = {}): LifecycleMapStag
     id: 'stage-1',
     name: 'Ingest',
     description: 'Bring data in',
-    type: 'modulo',
+    type: 'farna_control',
     owner_badge: 'Duncan',
     graduated: false,
     pipeline_id: 'pipe-1',
@@ -137,7 +137,7 @@ describe('LifecycleMapRenderer', () => {
       stageId: 'stage-1',
       label: 'Ingest',
       description: 'Bring data in',
-      type: 'modulo',
+      type: 'farna_control',
       ownerBadge: 'Duncan',
       graduated: false,
       pipelineId: 'pipe-1',
@@ -185,7 +185,7 @@ describe('LifecycleMapRenderer', () => {
     expect(text).toContain('Duncan')
   })
 
-  it('calls onModuloStageClick for a modulo stage and onExternalStageClick for an external stage', async () => {
+  it('calls onModuloStageClick for a farna_control stage and onExternalStageClick for an external stage', async () => {
     const onModulo = vi.fn()
     const onExternal = vi.fn()
     const wrapper = mountRenderer({

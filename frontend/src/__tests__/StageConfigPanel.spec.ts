@@ -3,7 +3,7 @@
  *
  * Covers: reactive form sync from props, emit of every field, stage type
  * button rendering & selection, conditional pipeline/external_url panels,
- * isGraduatable computed (modulo, external, manual, placeholder × graduated),
+ * isGraduatable computed (farna_control, external, manual, placeholder × graduated),
  * graduate emit, and prop reactivity.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -74,10 +74,10 @@ describe('StageConfigPanel initial form sync', () => {
   })
 
   it('syncs stage_type from props', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo' })
+    const wrapper = mountPanel({ stage_type: 'farna_control' })
     await flushPromises()
     const vm = wrapper.vm as unknown as { form: { stage_type: string } }
-    expect(vm.form.stage_type).toBe('modulo')
+    expect(vm.form.stage_type).toBe('farna_control')
   })
 
   it('syncs pipeline_id from props', async () => {
@@ -152,7 +152,7 @@ describe('StageConfigPanel null prop fallbacks', () => {
 
 describe('StageConfigPanel emits', () => {
   it('emits update for every field when props change', async () => {
-    const wrapper = mountPanel({ name: 'Build', stage_type: 'modulo' })
+    const wrapper = mountPanel({ name: 'Build', stage_type: 'farna_control' })
     await flushPromises()
 
     // Change props to trigger the watcher → form update → deep watcher → emit
@@ -172,7 +172,7 @@ describe('StageConfigPanel emits', () => {
   })
 
   it('emits stage_type value when prop changes', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo' })
+    const wrapper = mountPanel({ stage_type: 'farna_control' })
     await flushPromises()
 
     await wrapper.setProps({ stage_type: 'external' })
@@ -265,12 +265,12 @@ describe('StageConfigPanel stage type selection', () => {
 
     // Find and click the Modulo button
     const buttons = wrapper.findAll('button[type="button"]')
-    const moduloBtn = buttons.find(b => b.text().includes('Farna Control'))!
-    await moduloBtn.trigger('click')
+    const farnaControlBtn = buttons.find(b => b.text().includes('Farna Control'))!
+    await farnaControlBtn.trigger('click')
     await flushPromises()
 
     const vm = wrapper.vm as unknown as { form: { stage_type: string } }
-    expect(vm.form.stage_type).toBe('modulo')
+    expect(vm.form.stage_type).toBe('farna_control')
   })
 
   it('can switch to external type', async () => {
@@ -300,16 +300,16 @@ describe('StageConfigPanel stage type selection', () => {
   })
 })
 
-/* ── Conditional pipeline select (modulo) ─────────────────────────────── */
+/* ── Conditional pipeline select (farna_control) ─────────────────────────────── */
 
 describe('StageConfigPanel pipeline select', () => {
-  it('shows pipeline select when stage_type is modulo', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo' })
+  it('shows pipeline select when stage_type is farna_control', async () => {
+    const wrapper = mountPanel({ stage_type: 'farna_control' })
     await flushPromises()
     expect(wrapper.find('[data-testid="select-Pipeline"]').exists()).toBe(true)
   })
 
-  it('hides pipeline select when stage_type is not modulo', async () => {
+  it('hides pipeline select when stage_type is not farna_control', async () => {
     const wrapper = mountPanel({ stage_type: 'external' })
     await flushPromises()
     expect(wrapper.find('[data-testid="select-Pipeline"]').exists()).toBe(false)
@@ -328,7 +328,7 @@ describe('StageConfigPanel pipeline select', () => {
   })
 
   it('passes pipelines as options', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo' })
+    const wrapper = mountPanel({ stage_type: 'farna_control' })
     await flushPromises()
     const select = wrapper.find('[data-testid="select-Pipeline"]')
     const options = select.findAll('option')
@@ -348,7 +348,7 @@ describe('StageConfigPanel external_url', () => {
   })
 
   it('hides external_url input when stage_type is not external', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo' })
+    const wrapper = mountPanel({ stage_type: 'farna_control' })
     await flushPromises()
     expect(wrapper.text()).not.toContain('External URL')
   })
@@ -377,8 +377,8 @@ describe('StageConfigPanel isGraduatable', () => {
     expect(vm.isGraduatable).toBe(true)
   })
 
-  it('is false for modulo type when not graduated', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo', graduated: false })
+  it('is false for farna_control type when not graduated', async () => {
+    const wrapper = mountPanel({ stage_type: 'farna_control', graduated: false })
     await flushPromises()
     const vm = wrapper.vm as unknown as { isGraduatable: boolean }
     expect(vm.isGraduatable).toBe(false)
@@ -425,8 +425,8 @@ describe('StageConfigPanel graduate button', () => {
     expect(gradBtn).toBeDefined()
   })
 
-  it('hides graduate button for modulo type', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo', graduated: false })
+  it('hides graduate button for farna_control type', async () => {
+    const wrapper = mountPanel({ stage_type: 'farna_control', graduated: false })
     await flushPromises()
     const buttons = wrapper.findAll('[data-testid="button"]')
     const gradBtn = buttons.find(b => b.text().includes('Graduate Stage'))
@@ -491,15 +491,15 @@ describe('StageConfigPanel prop reactivity', () => {
     const wrapper = mountPanel({ stage_type: 'placeholder' })
     await flushPromises()
 
-    await wrapper.setProps({ stage_type: 'modulo' })
+    await wrapper.setProps({ stage_type: 'farna_control' })
     await flushPromises()
 
     const vm = wrapper.vm as unknown as { form: { stage_type: string } }
-    expect(vm.form.stage_type).toBe('modulo')
+    expect(vm.form.stage_type).toBe('farna_control')
   })
 
   it('updates form when pipeline_id prop changes', async () => {
-    const wrapper = mountPanel({ stage_type: 'modulo', pipeline_id: null })
+    const wrapper = mountPanel({ stage_type: 'farna_control', pipeline_id: null })
     await flushPromises()
 
     await wrapper.setProps({ pipeline_id: 'pipe-2' })
@@ -584,12 +584,12 @@ describe('StageConfigPanel stageTypeOptions', () => {
     expect(vm.stageTypeOptions).toHaveLength(4)
   })
 
-  it('has modulo, external, manual, placeholder values', async () => {
+  it('has farna_control, external, manual, placeholder values', async () => {
     const wrapper = mountPanel()
     await flushPromises()
     const vm = wrapper.vm as unknown as { stageTypeOptions: Array<{ value: string }> }
     const values = vm.stageTypeOptions.map(o => o.value)
-    expect(values).toContain('modulo')
+    expect(values).toContain('farna_control')
     expect(values).toContain('external')
     expect(values).toContain('manual')
     expect(values).toContain('placeholder')

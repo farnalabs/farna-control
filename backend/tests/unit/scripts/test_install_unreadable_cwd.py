@@ -42,6 +42,8 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from tests.helpers.env_prefixes import retired_env_name
+
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _INSTALL_SH = _REPO_ROOT / "scripts" / "install.sh"
 
@@ -285,7 +287,7 @@ def test_relative_legacy_shim_override_is_anchored_at_the_invocation_directory(t
 
 def test_a_stale_legacy_data_dir_name_is_ignored(tmp_path: Path) -> None:
     """A pre-rebrand override name is not honoured: the cutover has one spelling."""
-    legacy = "MOD" + "ULO" + "_DATA_DIR"
+    legacy = retired_env_name("DATA_DIR")
     result, env = _run_install(tmp_path, cwd_mode=0o755, relative=False, env_overrides={legacy: "relative-data"})
 
     _assert_installed(result, env)
@@ -294,7 +296,7 @@ def test_a_stale_legacy_data_dir_name_is_ignored(tmp_path: Path) -> None:
 
 def test_a_stale_legacy_shim_path_name_is_ignored(tmp_path: Path) -> None:
     """A pre-rebrand shim-path override cannot make the installer refuse a shim."""
-    legacy = "MOD" + "ULO" + "_LEGACY_SHIM_PATH"
+    legacy = retired_env_name("LEGACY_SHIM_PATH")
     shim = _invocation_dir(tmp_path) / "relative-shim" / "modulo"
     shim.parent.mkdir(parents=True)
     shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

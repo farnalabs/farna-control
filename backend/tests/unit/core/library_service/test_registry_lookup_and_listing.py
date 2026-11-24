@@ -1,9 +1,9 @@
-"""Lookup fallbacks and listing over the built-in modulo registry.
+"""Lookup fallbacks and listing over the built-in registry.
 
-Removing the community library must not remove the in-code modulo registry:
+Removing the community library must not remove the in-code built-in registry:
 ``get_primitive`` / ``get_primitive_by_slug`` / ``_re_read_primitive`` still
 fall back to it on a DB miss, and ``list_primitives`` still serves it on the
-``source="modulo"`` and default (merged) paths, while every other ``source``
+``source="farna_control"`` and default (merged) paths, while every other ``source``
 value (local / registry) reaches the SQL filter with an exact COUNT. The
 ``community`` source is retired (migration 0356), so it is no longer a live
 DB-only source and is not exercised here.
@@ -17,8 +17,8 @@ import pytest
 from sqlalchemy.exc import ProgrammingError
 
 from farna.core.library_service import (
-    _MODULO_PRIMITIVES,
-    _filter_modulo,
+    _BUILTIN_PRIMITIVES,
+    _filter_builtins,
     _re_read_primitive,
     get_primitive,
     get_primitive_by_slug,
@@ -27,7 +27,7 @@ from farna.core.library_service import (
 from farna.db.crud.base import PageResult
 
 _MODULE = "farna.core.library_service"
-_BUILTIN = _MODULO_PRIMITIVES[0]
+_BUILTIN = _BUILTIN_PRIMITIVES[0]
 
 
 def _session() -> MagicMock:
@@ -69,7 +69,7 @@ class TestGetPrimitiveRegistryFallback:
         ):
             assert await get_primitive(_session(), uuid.uuid4(), row.id) is row
 
-    async def test_db_miss_falls_back_to_modulo_registry(self) -> None:
+    async def test_db_miss_falls_back_to_builtin_registry(self) -> None:
         with (
             patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
             patch(f"{_MODULE}.get_library_primitive", new=AsyncMock(return_value=None)),
@@ -96,7 +96,7 @@ class TestGetPrimitiveBySlugRegistryFallback:
             result = await get_primitive_by_slug(_slug_session(row), uuid.uuid4(), _BUILTIN.primitive_type, _BUILTIN.slug)
         assert result is row
 
-    async def test_db_miss_falls_back_to_modulo_registry(self) -> None:
+    async def test_db_miss_falls_back_to_builtin_registry(self) -> None:
         with patch(f"{_MODULE}.set_rls_org", new=AsyncMock()):
             result = await get_primitive_by_slug(_slug_session(None), uuid.uuid4(), _BUILTIN.primitive_type, _BUILTIN.slug)
         assert result is _BUILTIN
@@ -157,31 +157,31 @@ class TestReReadPrimitive:
 
 
 # ---------------------------------------------------------------------------
-# _filter_modulo
+# _filter_builtins
 # ---------------------------------------------------------------------------
 
 
-class TestFilterModulo:
+class TestFilterBuiltins:
     def test_no_filter_returns_whole_registry(self) -> None:
-        assert len(_filter_modulo()) == len(_MODULO_PRIMITIVES)
+        assert len(_filter_builtins()) == len(_BUILTIN_PRIMITIVES)
 
     def test_primitive_types_takes_precedence(self) -> None:
-        result = _filter_modulo(primitive_types=["schema"], primitive_type="agent")
+        result = _filter_builtins(primitive_types=["schema"], primitive_type="agent")
         assert result
         assert {p.primitive_type for p in result} == {"schema"}
 
     def test_single_primitive_type(self) -> None:
-        result = _filter_modulo(primitive_type="schema")
+        result = _filter_builtins(primitive_type="schema")
         assert result
         assert {p.primitive_type for p in result} == {"schema"}
 
     def test_search_matches_name_case_insensitively(self) -> None:
         term = _BUILTIN.name.upper()
-        result = _filter_modulo(search=f"  {term}  ")
+        result = _filter_builtins(search=f"  {term}  ")
         assert _BUILTIN in result
 
     def test_blank_search_is_ignored(self) -> None:
-        assert len(_filter_modulo(search="   ")) == len(_MODULO_PRIMITIVES)
+        assert len(_filter_builtins(search="   ")) == len(_BUILTIN_PRIMITIVES)
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ async def _list(lister: AsyncMock, registry: list[object] | None = None, **kwarg
     with (
         patch(f"{_MODULE}.set_rls_org", new=AsyncMock()),
         patch(f"{_MODULE}.list_library_primitives", new=lister),
-        patch(f"{_MODULE}._MODULO_PRIMITIVES", registry if registry is not None else [_BUILTIN]),
+        patch(f"{_MODULE}._BUILTIN_PRIMITIVES", registry if registry is not None else [_BUILTIN]),
     ):
         return await list_primitives(_session(), uuid.uuid4(), **kwargs)
 
@@ -224,18 +224,18 @@ class TestListPrimitivesSourceFilter:
         assert result.total == 1
         assert result.has_more is False
 
-    async def test_modulo_source_appends_whole_registry(self) -> None:
+    async def test_builtin_source_appends_whole_registry(self) -> None:
         in_dev = _prim(tier="in_dev")
         lister = AsyncMock(return_value=_org_page([], total=0))
-        result = await _list(lister, registry=[_BUILTIN, in_dev], source="modulo")
-        assert lister.await_args.kwargs["source"] == "modulo"
+        result = await _list(lister, registry=[_BUILTIN, in_dev], source="farna_control")
+        assert lister.await_args.kwargs["source"] == "farna_control"
         assert result.items == [_BUILTIN]
         assert result.total == 1
 
     async def test_empty_excluded_tiers_keeps_in_dev(self) -> None:
         in_dev = _prim(tier="in_dev")
         lister = AsyncMock(return_value=_org_page([], total=0))
-        result = await _list(lister, registry=[_BUILTIN, in_dev], source="modulo", excluded_tiers=[])
+        result = await _list(lister, registry=[_BUILTIN, in_dev], source="farna_control", excluded_tiers=[])
         assert result.items == [_BUILTIN, in_dev]
 
 

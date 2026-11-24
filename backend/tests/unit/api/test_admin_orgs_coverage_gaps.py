@@ -29,7 +29,7 @@ from farna.auth.dependencies import get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
 from farna.core.license import LicenseValidation
 from farna.db.models.organisation import (
-    MODULO_REGISTRY_ORG_ID,
+    REGISTRY_ORG_ID,
     SYSTEM_ORG_ID,
     Organisation,
 )
@@ -236,7 +236,7 @@ def test_list_orgs_hides_registry_sentinel_org(api: tuple[TestClient, AsyncMock]
     collection installs) must not appear in the admin org listing, while a
     normal tenant org and the orphan exclusion still pass."""
     client, _ = api
-    sentinel = _org(org_id=MODULO_REGISTRY_ORG_ID, name="Modulo", slug="modulo")
+    sentinel = _org(org_id=REGISTRY_ORG_ID, name="Modulo", slug="modulo")
     orphan = _org(org_id=SYSTEM_ORG_ID, name="orphan", slug="orphan")
     monkeypatch.setattr(admin_orgs, "list_organisations", AsyncMock(return_value=[_org(), sentinel, orphan]))
     resp = client.get("/api/v1/admin/orgs")
@@ -322,7 +322,7 @@ def test_delete_org_refuses_the_callers_own_org_409(api: tuple[TestClient, Async
     delete_organisation.assert_not_awaited()
 
 
-@pytest.mark.parametrize("reserved_org_id", [SYSTEM_ORG_ID, MODULO_REGISTRY_ORG_ID], ids=["system", "registry"])
+@pytest.mark.parametrize("reserved_org_id", [SYSTEM_ORG_ID, REGISTRY_ORG_ID], ids=["system", "registry"])
 def test_delete_org_refuses_reserved_infrastructure_orgs_404(
     api: tuple[TestClient, AsyncMock],
     monkeypatch: pytest.MonkeyPatch,
@@ -332,7 +332,7 @@ def test_delete_org_refuses_reserved_infrastructure_orgs_404(
     infrastructure, not tenants: they must never be deletable."""
     client, _ = api
     # Sign the caller into a normal tenant so the reserved check is the guard
-    # under test (MODULO_REGISTRY_ORG_ID happens to share the fixture's default
+    # under test (REGISTRY_ORG_ID happens to share the fixture's default
     # caller org id, which would otherwise hit the self-delete 409 first).
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
         username="sysadmin",

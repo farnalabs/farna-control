@@ -86,6 +86,15 @@ data:
             add_header Cache-Control "no-cache, must-revalidate";
         }
 
+        # runtime-config.js is regenerated at container start and publishes a
+        # global that changes across releases. Never let a client pin an
+        # immutable copy of it: an exact match beats the static-extension
+        # regex below.
+        location = /runtime-config.js {
+            add_header Cache-Control "no-store, must-revalidate";
+            try_files $uri =404;
+        }
+
         # Static assets with long cache
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
             expires 1y;

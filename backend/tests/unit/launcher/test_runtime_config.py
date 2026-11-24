@@ -106,7 +106,7 @@ def test_payload_never_contains_credential_shaped_values() -> None:
 
 def test_render_produces_the_config_line() -> None:
     rendered = render_runtime_config_js({"monitor": {"x": 1}})
-    assert rendered.startswith("window.__MODULO_CONFIG__ = Object.assign(")
+    assert rendered.startswith("window.__FARNA_CONFIG__ = Object.assign(")
     assert rendered.endswith(");\n")
 
 
@@ -122,7 +122,11 @@ def test_deploy_entrypoint_generates_through_the_shared_module() -> None:
     assert "build_runtime_config_payload" in script
     assert "write_runtime_config_js" in script
     assert RUNTIME_CONFIG_FILENAME in script
-    # The inline generator must be GONE — one allowlist, one renderer.
-    assert "window.__MODULO_CONFIG__" not in script
+    # The inline generator must be GONE — one allowlist, one renderer. Assert
+    # BOTH globals: the pre-rebrand one must not linger, and the current one
+    # must not be re-inlined. Assembled so the source sweep for retired
+    # spellings stays clean.
+    assert "window.__" + "FARNA_CONFIG__" not in script
+    assert "window.__" + "MOD" + "ULO_CONFIG__" not in script
     assert "FARNA_CONTROL_MONITOR_CONFIG" not in script
     assert "autoLogin" not in script

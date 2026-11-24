@@ -33,28 +33,18 @@
       </div>
 
       <div v-else class="space-y-6">
-        <DataCard v-for="fwd in forwarders" :key="fwd.forwarder_type" variant="bordered" padding="none" elevation="sm">
-          <div class="flex items-center justify-between p-4">
-            <div class="flex items-center gap-3">
+        <BaseCard v-for="fwd in forwarders" :key="fwd.forwarder_type" variant="bordered" padding="none" elevation="sm">
+          <CardHeader
+            :title="fwd.display_name"
+            :description="fwd.last_test_ok === true ? $t('views.SettingsErrorForwardersView.connected') : fwd.last_test_ok === false ? $t('views.SettingsErrorForwardersView.failed') : $t('views.SettingsErrorForwardersView.not_tested')"
+            header-class="px-4 pt-4"
+          >
+            <template #leading>
               <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
                 <span class="text-lg font-bold text-muted-foreground">{{ fwd.display_name.charAt(0) }}</span>
               </div>
-              <div>
-                <h3 class="font-semibold">{{ fwd.display_name }}</h3>
-                <div class="flex items-center gap-2 mt-0.5">
-                  <span
-                    aria-hidden="true"
-                    class="inline-block h-2 w-2 rounded-full"
-                    :class="fwd.last_test_ok === true ? 'bg-green-500' : fwd.last_test_ok === false ? 'bg-red-500' : 'bg-gray-400'"
-                    :title="fwd.last_test_ok === true ? $t('views.SettingsErrorForwardersView.last_test_passed') : fwd.last_test_ok === false ? $t('views.SettingsErrorForwardersView.last_test_failed') : $t('views.SettingsErrorForwardersView.not_tested')"
-                  />
-                  <span class="text-xs text-muted-foreground">
-                    {{ fwd.last_test_ok === true ? $t('views.SettingsErrorForwardersView.connected') : fwd.last_test_ok === false ? $t('views.SettingsErrorForwardersView.failed') : $t('views.SettingsErrorForwardersView.not_tested') }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center gap-3">
+            </template>
+            <template #actions>
               <span
                 v-if="!fwd.configured"
                 class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600"
@@ -77,8 +67,8 @@
                   />
                 </div>
               </button>
-            </div>
-          </div>
+            </template>
+          </CardHeader>
 
           <div
             v-if="expanded[fwd.forwarder_type]"
@@ -278,7 +268,7 @@
               :retryable="false"
             />
           </div>
-        </DataCard>
+        </BaseCard>
       </div>
     </FeatureGate>
   </div>
@@ -295,7 +285,8 @@ import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'
 

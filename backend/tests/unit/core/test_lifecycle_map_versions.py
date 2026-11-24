@@ -118,7 +118,7 @@ def test_normalize_content_empty_payload_stays_empty() -> None:
 def test_normalize_content_accepts_canonical_shape() -> None:
     content = {
         "stages": [
-            {"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)},
+            {"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)},
             {"id": "s2", "name": "Approve", "type": "manual", "pipeline_id": None},
         ],
         "edges": [{"id": "e1", "source": "s1", "target": "s2", "trigger_type": "pipeline_completed"}],
@@ -187,12 +187,12 @@ def test_normalize_content_rejects_missing_stage_type() -> None:
 
 def test_normalize_content_rejects_invalid_pipeline_id_shape() -> None:
     with pytest.raises(LifecycleMapContentError, match="'pipeline_id' must be a string or null"):
-        normalize_content({"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": 42}]})
+        normalize_content({"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": 42}]})
 
 
 def test_normalize_content_rejects_non_uuid_pipeline_id() -> None:
     with pytest.raises(LifecycleMapContentError, match="not a valid UUID"):
-        normalize_content({"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": "not-a-uuid"}]})
+        normalize_content({"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": "not-a-uuid"}]})
 
 
 def test_normalize_content_rejects_non_array_edges() -> None:
@@ -265,7 +265,7 @@ def test_normalize_content_accepts_transitions_alias() -> None:
     result = normalize_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
             ],
             "transitions": [{"id": "e1", "source": "s1", "target": "s2"}],
@@ -286,7 +286,7 @@ def test_normalize_content_accepts_acyclic_transition_chain() -> None:
     result = normalize_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
                 {"id": "s3", "name": "Deploy", "type": "external"},
             ],
@@ -309,7 +309,7 @@ def test_normalize_content_rejects_duplicate_stage_ids() -> None:
         normalize_content(
             {
                 "stages": [
-                    {"id": "s1", "name": "Build", "type": "modulo"},
+                    {"id": "s1", "name": "Build", "type": "farna_control"},
                     {"id": "s1", "name": "Build again", "type": "manual"},
                 ]
             }
@@ -322,7 +322,7 @@ def test_normalize_content_rejects_duplicate_stage_ids_with_no_edges() -> None:
         normalize_content(
             {
                 "stages": [
-                    {"id": "s1", "name": "Build", "type": "modulo"},
+                    {"id": "s1", "name": "Build", "type": "farna_control"},
                     {"id": "s1", "name": "Build again", "type": "manual"},
                 ],
                 "edges": [],
@@ -335,7 +335,7 @@ def test_normalize_content_rejects_duplicate_edge_ids() -> None:
         normalize_content(
             {
                 "stages": [
-                    {"id": "s1", "name": "Build", "type": "modulo"},
+                    {"id": "s1", "name": "Build", "type": "farna_control"},
                     {"id": "s2", "name": "Approve", "type": "manual"},
                 ],
                 "edges": [
@@ -350,7 +350,7 @@ def test_normalize_content_rejects_dangling_edge_source() -> None:
     with pytest.raises(LifecycleMapContentError, match="source stage 'ghost' is not defined"):
         normalize_content(
             {
-                "stages": [{"id": "s1", "name": "Build", "type": "modulo"}],
+                "stages": [{"id": "s1", "name": "Build", "type": "farna_control"}],
                 "edges": [{"id": "e1", "source": "ghost", "target": "s1"}],
             }
         )
@@ -360,7 +360,7 @@ def test_normalize_content_rejects_dangling_edge_target() -> None:
     with pytest.raises(LifecycleMapContentError, match="target stage 'ghost' is not defined"):
         normalize_content(
             {
-                "stages": [{"id": "s1", "name": "Build", "type": "modulo"}],
+                "stages": [{"id": "s1", "name": "Build", "type": "farna_control"}],
                 "edges": [{"id": "e1", "source": "s1", "target": "ghost"}],
             }
         )
@@ -377,7 +377,7 @@ def test_normalize_content_rejects_circular_transitions() -> None:
         normalize_content(
             {
                 "stages": [
-                    {"id": "s1", "name": "Build", "type": "modulo"},
+                    {"id": "s1", "name": "Build", "type": "farna_control"},
                     {"id": "s2", "name": "Approve", "type": "manual"},
                 ],
                 "edges": [
@@ -392,7 +392,7 @@ def test_normalize_content_rejects_self_loop_transition() -> None:
     with pytest.raises(LifecycleMapContentError, match="transitions form a cycle"):
         normalize_content(
             {
-                "stages": [{"id": "s1", "name": "Build", "type": "modulo"}],
+                "stages": [{"id": "s1", "name": "Build", "type": "farna_control"}],
                 "edges": [{"id": "e1", "source": "s1", "target": "s1"}],
             }
         )
@@ -419,7 +419,7 @@ def test_normalize_content_rejects_three_node_cycle() -> None:
         normalize_content(
             {
                 "stages": [
-                    {"id": "s1", "name": "Build", "type": "modulo"},
+                    {"id": "s1", "name": "Build", "type": "farna_control"},
                     {"id": "s2", "name": "Approve", "type": "manual"},
                     {"id": "s3", "name": "Deploy", "type": "external"},
                 ],
@@ -437,7 +437,7 @@ def test_normalize_content_cycle_error_names_the_path() -> None:
         normalize_content(
             {
                 "stages": [
-                    {"id": "s1", "name": "Build", "type": "modulo"},
+                    {"id": "s1", "name": "Build", "type": "farna_control"},
                     {"id": "s2", "name": "Approve", "type": "manual"},
                     {"id": "s3", "name": "Deploy", "type": "external"},
                 ],
@@ -454,7 +454,7 @@ def test_normalize_content_accepts_unconnected_and_parallel_edges() -> None:
     result = normalize_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
                 {"id": "s3", "name": "Review", "type": "manual"},
                 {"id": "s4", "name": "Deploy", "type": "external"},
@@ -474,7 +474,7 @@ def test_normalize_content_preserves_stage_positions() -> None:
     result = normalize_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo", "x": 120.0, "y": 240.0},
+                {"id": "s1", "name": "Build", "type": "farna_control", "x": 120.0, "y": 240.0},
                 {"id": "s2", "name": "Deploy", "type": "external", "x": 420.0, "y": 240.0},
             ],
             "edges": [{"id": "e1", "source": "s1", "target": "s2"}],
@@ -492,7 +492,7 @@ def test_normalize_content_does_not_inject_positions_for_legacy_stages() -> None
     result = normalize_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Deploy", "type": "external"},
             ],
             "edges": [{"id": "e1", "source": "s1", "target": "s2"}],
@@ -522,7 +522,7 @@ def test_clean_legacy_content_dedupes_stage_ids() -> None:
     cleaned, changes = clean_legacy_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s1", "name": "Build again", "type": "manual"},
             ],
             "edges": [],
@@ -537,7 +537,7 @@ def test_clean_legacy_content_dedupes_edge_ids() -> None:
     cleaned, changes = clean_legacy_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
             ],
             "edges": [
@@ -554,7 +554,7 @@ def test_clean_legacy_content_dedupes_edge_ids() -> None:
 def test_clean_legacy_content_drops_dangling_edges() -> None:
     cleaned, changes = clean_legacy_content(
         {
-            "stages": [{"id": "s1", "name": "Build", "type": "modulo"}],
+            "stages": [{"id": "s1", "name": "Build", "type": "farna_control"}],
             "edges": [
                 {"id": "e1", "source": "ghost", "target": "s1"},
                 {"id": "e2", "source": "s1", "target": "ghost"},
@@ -571,7 +571,7 @@ def test_clean_legacy_content_breaks_transition_cycle_greedily() -> None:
     cleaned, changes = clean_legacy_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
             ],
             "edges": [
@@ -588,7 +588,7 @@ def test_clean_legacy_content_breaks_transition_cycle_greedily() -> None:
 def test_clean_legacy_content_drops_self_loop() -> None:
     cleaned, changes = clean_legacy_content(
         {
-            "stages": [{"id": "s1", "name": "Build", "type": "modulo"}],
+            "stages": [{"id": "s1", "name": "Build", "type": "farna_control"}],
             "edges": [{"id": "e1", "source": "s1", "target": "s1"}],
         }
     )
@@ -601,7 +601,7 @@ def test_clean_legacy_content_keeps_larger_acyclic_graph_intact() -> None:
     """Only cycle-closing edges are dropped — a healthy acyclic graph is preserved."""
     content = {
         "stages": [
-            {"id": "s1", "name": "Build", "type": "modulo"},
+            {"id": "s1", "name": "Build", "type": "farna_control"},
             {"id": "s2", "name": "Review", "type": "manual"},
             {"id": "s3", "name": "Deploy", "type": "external"},
         ],
@@ -619,7 +619,7 @@ def test_clean_legacy_content_keeps_larger_acyclic_graph_intact() -> None:
 def test_clean_legacy_content_preserves_notes_and_metadata_keys() -> None:
     content = {
         "stages": [
-            {"id": "s1", "name": "Build", "type": "modulo"},
+            {"id": "s1", "name": "Build", "type": "farna_control"},
             {"id": "s1", "name": "dup", "type": "manual"},
         ],
         "edges": [],
@@ -636,7 +636,7 @@ def test_clean_legacy_content_preserves_notes_and_metadata_keys() -> None:
 def test_clean_legacy_content_drops_non_dict_stage_and_edge() -> None:
     cleaned, changes = clean_legacy_content(
         {
-            "stages": ["not-a-dict", {"id": "s1", "name": "Build", "type": "modulo"}],
+            "stages": ["not-a-dict", {"id": "s1", "name": "Build", "type": "farna_control"}],
             "edges": ["also-not-an-edge", {"id": "e1", "source": "s1", "target": "s1"}],
         }
     )
@@ -651,7 +651,7 @@ def test_clean_legacy_content_honours_editor_alias_edge_keys() -> None:
     cleaned, changes = clean_legacy_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
             ],
             "edges": [{"id": "e1", "source_stage_id": "s1", "target_stage_id": "s2"}],
@@ -666,7 +666,7 @@ def test_clean_legacy_content_drops_transitions_alias() -> None:
     cleaned, changes = clean_legacy_content(
         {
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
             ],
             "transitions": [{"id": "e1", "source": "s1", "target": "s2"}],
@@ -681,7 +681,7 @@ def test_clean_legacy_content_drops_transitions_alias() -> None:
 def test_clean_legacy_content_returns_no_changes_for_clean_content() -> None:
     content = {
         "stages": [
-            {"id": "s1", "name": "Build", "type": "modulo"},
+            {"id": "s1", "name": "Build", "type": "farna_control"},
             {"id": "s2", "name": "Approve", "type": "manual"},
         ],
         "edges": [{"id": "e1", "source": "s1", "target": "s2"}],
@@ -700,7 +700,7 @@ def test_clean_legacy_content_leaves_non_list_stages_for_manual_repair() -> None
 
 
 def test_clean_legacy_content_leaves_non_list_edges_for_manual_repair() -> None:
-    content = {"stages": [{"id": "s1", "name": "Build", "type": "modulo"}], "edges": {"id": "e1"}}
+    content = {"stages": [{"id": "s1", "name": "Build", "type": "farna_control"}], "edges": {"id": "e1"}}
     cleaned, changes = clean_legacy_content(content)
     assert cleaned == content
     assert any("left for manual repair" in c and "edges/transitions must be an array" in c for c in changes)
@@ -718,7 +718,7 @@ def test_clean_legacy_content_complex_messy_legacy_map_fully_repairs() -> None:
         {
             "stages": [
                 {"id": "s1", "name": "Inbox", "type": "manual"},
-                {"id": "s2", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)},
+                {"id": "s2", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)},
                 {"id": "s2", "name": "Build dup", "type": "manual"},
                 {"id": "s3", "name": "Approve", "type": "manual"},
             ],
@@ -755,7 +755,7 @@ async def test_save_map_version_bumps_version_and_derives_junction(session: Asyn
         session,
         _MAP_ID,
         stages=[
-            {"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)},
+            {"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)},
             {"id": "s2", "name": "Approve", "type": "manual"},
         ],
         edges=[{"id": "e1", "source": "s1", "target": "s2"}],
@@ -764,7 +764,7 @@ async def test_save_map_version_bumps_version_and_derives_junction(session: Asyn
 
     assert result is lm
     assert lm.version == 3
-    assert lm.content_json["stages"][0]["type"] == "modulo"
+    assert lm.content_json["stages"][0]["type"] == "farna_control"
     assert lm.content_json["notes"] == "release cut"
 
     derived = [c.args[0] for c in session.add.call_args_list if isinstance(c.args[0], LifecycleMapStage)]
@@ -794,7 +794,7 @@ async def test_save_map_version_rejects_pipeline_registered_elsewhere(session: A
         await save_map_version(
             session,
             _MAP_ID,
-            stages=[{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)}],
+            stages=[{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)}],
             edges=[],
             notes="",
         )
@@ -824,7 +824,7 @@ async def test_save_map_version_rejects_dangling_edge(session: AsyncMock) -> Non
         await save_map_version(
             session,
             _MAP_ID,
-            stages=[{"id": "s1", "name": "Build", "type": "modulo"}],
+            stages=[{"id": "s1", "name": "Build", "type": "farna_control"}],
             edges=[{"id": "e1", "source": "s1", "target": "ghost"}],
             notes="",
         )
@@ -840,7 +840,7 @@ async def test_save_map_version_rejects_duplicate_stage_ids(session: AsyncMock) 
             session,
             _MAP_ID,
             stages=[
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s1", "name": "Build again", "type": "manual"},
             ],
             edges=[],
@@ -858,7 +858,7 @@ async def test_save_map_version_rejects_duplicate_edge_ids(session: AsyncMock) -
             session,
             _MAP_ID,
             stages=[
-                {"id": "s1", "name": "Build", "type": "modulo"},
+                {"id": "s1", "name": "Build", "type": "farna_control"},
                 {"id": "s2", "name": "Approve", "type": "manual"},
             ],
             edges=[
@@ -893,7 +893,7 @@ async def test_graduate_stage_marks_graduated_and_links_pipeline(session: AsyncM
     assert lm.version == 2
     stage = lm.content_json["stages"][0]
     assert stage["graduated"] is True
-    assert stage["type"] == "modulo"
+    assert stage["type"] == "farna_control"
     assert stage["pipeline_id"] == str(_PIPE_ID)
 
 
@@ -934,7 +934,7 @@ async def test_check_pipeline_uniqueness_skips_non_dict_stage(session: AsyncMock
 
 
 async def test_check_pipeline_uniqueness_skips_invalid_pipeline_uuid(session: AsyncMock) -> None:
-    lm = _make_map(content_json={"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": "not-a-uuid"}]})
+    lm = _make_map(content_json={"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": "not-a-uuid"}]})
     await _check_pipeline_uniqueness(session, lm)
     session.execute.assert_not_awaited()
 
@@ -960,7 +960,7 @@ async def test_delete_lifecycle_map_removes_junction_rows(session: AsyncMock) ->
 async def test_restore_lifecycle_map_rederives_junction_rows(session: AsyncMock) -> None:
     lm = _make_map(
         deleted_at=datetime.now(UTC),
-        content_json={"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)}]},
+        content_json={"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)}]},
     )
     session.execute.return_value = MagicMock(scalar_one_or_none=MagicMock(return_value=lm))
 
@@ -980,7 +980,7 @@ async def test_restore_lifecycle_map_propagates_integrity_error_for_re_registere
     restore route maps it to 409 (not a generic SQLAlchemyError 503)."""
     lm = _make_map(
         deleted_at=datetime.now(UTC),
-        content_json={"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)}]},
+        content_json={"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)}]},
     )
     session.execute.return_value = MagicMock(scalar_one_or_none=MagicMock(return_value=lm))
     session.flush = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception("duplicate key")))
@@ -1004,11 +1004,11 @@ async def test_update_lifecycle_map_normalizes_content_and_derives(session: Asyn
     result = await update_lifecycle_map(
         session,
         _MAP_ID,
-        {"content_json": {"stages": [{"id": "s1", "name": "Build", "stage_type": "modulo"}]}},
+        {"content_json": {"stages": [{"id": "s1", "name": "Build", "stage_type": "farna_control"}]}},
     )
 
     assert result is lm
-    assert lm.content_json["stages"][0]["type"] == "modulo"
+    assert lm.content_json["stages"][0]["type"] == "farna_control"
     assert "stage_type" not in lm.content_json["stages"][0]
     derived = [c.args[0] for c in session.add.call_args_list if isinstance(c.args[0], LifecycleMapStage)]
     assert len(derived) == 1
@@ -1196,7 +1196,7 @@ async def test_update_lifecycle_map_content_path_locks_row_for_update(session: A
     await update_lifecycle_map(
         session,
         _MAP_ID,
-        {"content_json": {"stages": [{"id": "s1", "name": "Build", "type": "modulo"}]}},
+        {"content_json": {"stages": [{"id": "s1", "name": "Build", "type": "farna_control"}]}},
     )
 
     sql = _compiled_sql(_stmt(session, 0))
@@ -1331,7 +1331,7 @@ class TestLifecycleMapConcurrentSaves:
             maker = async_sessionmaker(engine, expire_on_commit=False, autobegin=False)
 
             stages = [
-                {"id": "stage-1", "name": "Build", "type": "modulo", "x": 123.0, "y": 456.0},
+                {"id": "stage-1", "name": "Build", "type": "farna_control", "x": 123.0, "y": 456.0},
                 {"id": "stage-2", "name": "Merge", "type": "manual", "x": 0.0, "y": 0.0},
             ]
             edges = [
@@ -1376,7 +1376,7 @@ class TestLifecycleMapConcurrentSaves:
             # transitions (with the same edge metadata) back through PUT. The
             # server must preserve the metadata, not null it.
             positions_only_stages = [
-                {"id": "stage-1", "name": "Build", "type": "modulo", "x": 200.0, "y": 300.0},
+                {"id": "stage-1", "name": "Build", "type": "farna_control", "x": 200.0, "y": 300.0},
                 {"id": "stage-2", "name": "Merge", "type": "manual", "x": 0.0, "y": 0.0},
             ]
             positions_only_edges = [
@@ -1459,7 +1459,7 @@ async def test_create_lifecycle_map_rejects_pipeline_registered_elsewhere(sessio
     """The create path runs the friendly pipeline-uniqueness pre-check, so a
     duplicate pipeline-in-active-map fails with a clear conflict error before
     the DB partial unique index fires (which would surface as a generic 409)."""
-    created = _make_map(content_json={"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)}]})
+    created = _make_map(content_json={"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)}]})
     session.execute.return_value = MagicMock(all=MagicMock(return_value=[(_PIPE_ID,)]))
 
     with (
@@ -1471,7 +1471,7 @@ async def test_create_lifecycle_map_rejects_pipeline_registered_elsewhere(sessio
             org_id=_ORG_ID,
             name="Release Plan",
             account_id=_ACCOUNT_ID,
-            content_json={"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)}]},
+            content_json={"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)}]},
         )
 
 
@@ -1503,7 +1503,7 @@ async def test_create_lifecycle_map_validates_content_when_provided(session: Asy
             name="Broken",
             account_id=_ACCOUNT_ID,
             content_json={
-                "stages": [{"id": "s1", "name": "Build", "type": "modulo"}],
+                "stages": [{"id": "s1", "name": "Build", "type": "farna_control"}],
                 "edges": [{"id": "e1", "source": "ghost", "target": "s1"}],
             },
         )
@@ -1518,7 +1518,7 @@ async def test_derive_skips_shape_incompatible_rows(session: AsyncMock) -> None:
     lm = _make_map(
         content_json={
             "stages": [
-                {"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)},
+                {"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)},
                 "not-a-dict",
                 {"id": "s2", "name": "External", "type": "external", "pipeline_id": "not-a-uuid"},
             ]
@@ -1958,7 +1958,7 @@ async def test_save_version_route_writes_audit_event() -> None:
         await save_lifecycle_map_version_endpoint(
             lifecycle_map_id=_MAP_ID,
             req=VersionSaveRequest(
-                stages=[{"id": "s1", "name": "Build", "type": "modulo"}],
+                stages=[{"id": "s1", "name": "Build", "type": "farna_control"}],
                 edges=[],
                 notes="saved from editor",
             ),
@@ -1993,7 +1993,7 @@ async def test_update_version_route_writes_audit_event() -> None:
             lifecycle_map_id=_MAP_ID,
             version_id=_MAP_ID,
             req=VersionSaveRequest(
-                stages=[{"id": "s1", "name": "Build", "type": "modulo"}],
+                stages=[{"id": "s1", "name": "Build", "type": "farna_control"}],
                 edges=[{"id": "e1", "source": "s1", "target": "s2", "trigger_type": "pipeline_completed"}],
                 notes="saved from editor",
             ),
@@ -2156,7 +2156,7 @@ class TestUpdateLifecycleMapRoute:
                     f"/api/v1/lifecycle-maps/{_MAP_ID}",
                     json={
                         "name": "SDLC v2",
-                        "content_json": {"stages": [{"id": "s1", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)}]},
+                        "content_json": {"stages": [{"id": "s1", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)}]},
                     },
                 )
             app.dependency_overrides.clear()
@@ -2233,7 +2233,7 @@ def _load_backfill_script() -> object:
 _LEGACY_MESSY_CONTENT = {
     "stages": [
         {"id": "s1", "name": "Inbox", "type": "manual"},
-        {"id": "s2", "name": "Build", "type": "modulo", "pipeline_id": str(_PIPE_ID)},
+        {"id": "s2", "name": "Build", "type": "farna_control", "pipeline_id": str(_PIPE_ID)},
         {"id": "s2", "name": "Build dup", "type": "manual"},
     ],
     "edges": [
@@ -2295,7 +2295,7 @@ class TestLegacyBackfillScript:
                         stage_id="s2",
                         stage_name="Build",
                         position=1,
-                        stage_type="modulo",
+                        stage_type="farna_control",
                         pipeline_id=_PIPE_ID,
                     ),
                     LifecycleMapStage(

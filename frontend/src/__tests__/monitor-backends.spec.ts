@@ -121,7 +121,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete (window as unknown as Record<string, unknown>).__MODULO_CONFIG__
+  delete (window as unknown as Record<string, unknown>).__FARNA_CONFIG__
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
@@ -585,8 +585,8 @@ describe('monitor/index', () => {
     expect(cfg.grafanaFaro).toEqual({ url: 'https://env-collector' })
   })
 
-  it('prefers the runtime __MODULO_CONFIG__ window override', () => {
-    ;(window as unknown as Record<string, unknown>).__MODULO_CONFIG__ = {
+  it('prefers the runtime __FARNA_CONFIG__ window override', () => {
+    ;(window as unknown as Record<string, unknown>).__FARNA_CONFIG__ = {
       monitor: {
         monitorBackends: ['grafana-faro'],
         sentry: { dsn: 'rt-dsn' },
@@ -603,7 +603,7 @@ describe('monitor/index', () => {
   })
 
   it('falls back to env vars when the runtime config has no monitor key', () => {
-    ;(window as unknown as Record<string, unknown>).__MODULO_CONFIG__ = { other: true }
+    ;(window as unknown as Record<string, unknown>).__FARNA_CONFIG__ = { other: true }
     vi.stubEnv('VITE_MONITOR_BACKEND', 'sentry')
     expect(loadMonitorConfig().monitorBackends).toEqual(['sentry'])
   })

@@ -151,7 +151,7 @@ async def _seed_stage(session: AsyncSession, *, pipeline_id: uuid.UUID = _MAP_PI
             stage_id="build",
             stage_name="Build",
             position=1,
-            stage_type="modulo",
+            stage_type="farna_control",
             pipeline_id=pipeline_id,
         )
     )
