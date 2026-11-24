@@ -100,14 +100,16 @@ manifest `features:` registry.
 - [x] The admission read fails CLOSED: a `SQLAlchemyError` reading the drain
       flag propagates rather than silently admitting a sandbox run while a
       drain may be active (`test_drain_flag_read_failure_propagates`).
-- [x] The refusal is mapped to a typed outcome per run origin: the test-trigger
-      route answers `409 Conflict` through `handle_db_errors`'
-      `TriggersPausedError` arm (`api/db_error_handling.py`), the cron, polling
-      and agent-signal fire jobs return a typed `{status: skipped}` result
-      (`core/cron_helpers.py`, `core/trigger_engine/agent_signal.py`), and the
-      webhook and Slack routes return their own paused payload
-      (`api/routes/webhooks.py`, `api/routes/slack.py`). The manual run and
-      rerun REST routes are the exception (see Known Gaps).
+- [x] The refusal is mapped to a typed outcome by the origins that catch it:
+      the cron, polling and agent-signal fire jobs return a typed
+      `{status: skipped}` result (`core/cron_helpers.py`,
+      `core/trigger_engine/agent_signal.py`), and the webhook and Slack routes
+      return their own paused payload (`api/routes/webhooks.py`,
+      `api/routes/slack.py`). The test-trigger route, the manual run and rerun
+      REST routes, and the MCP `trigger_pipeline` tool do NOT map it: each has
+      a generic `except Exception` arm (or generic tool error arm) that converts
+      the refusal to `500`/`server_error` before `handle_db_errors`'
+      `TriggersPausedError` arm can see it (see Known Gaps).
 - [x] The production deploy composes the control: it enters the drain before
       pre-deploy migrations, waits for `active_sandbox_runs` to converge, and
       clears the drain after the deploy; a genuine control failure refuses the
@@ -129,13 +131,23 @@ manifest `features:` registry.
   the mapped `409` reads "triggers are paused for organisation None" and does
   not name the deployment drain. A caller cannot tell the two refusals apart
   from the mapped response alone.
-- **Manual run and rerun answer `500` during an active drain.** `trigger_run`
-  and `trigger_rerun` (`api/routes/runs.py`) have bespoke `except` chains that
-  map `OrgDeletedError`, `PipelineNotRunnableError` and the rate-limit/lock
-  errors but do NOT catch `TriggersPausedError`, so a drain refusal falls into
-  the generic `except Exception` and returns `500` instead of the `409` the
-  test-trigger route returns. The other origins map it correctly (typed skip or
-  paused payload).
+- **Several origins answer `500`/`server_error` rather than a typed drain
+  refusal.** Three origins do not catch `TriggersPausedError`, so a drain
+  refusal falls into a generic arm instead of a typed response:
+  - the manual `trigger_run` and `trigger_rerun` REST routes
+    (`api/routes/runs.py`) have bespoke `except` chains that map
+    `OrgDeletedError`, `PipelineNotRunnableError` and the rate-limit/lock errors
+    but not the pause refusal, so it reaches the generic `except Exception` and
+    returns `500`;
+  - the test-trigger route (`test_trigger`, `api/routes/triggers.py`) has the
+    same shape: its in-body generic `except Exception` converts the refusal to
+    `500` before the `@handle_db_errors` `TriggersPausedError` arm (which would
+    return `409`) ever sees it;
+  - the MCP `trigger_pipeline` tool (`api/mcp_server.py`) falls into its generic
+    `except Exception` and returns a `server_error`, not a typed drain refusal.
+
+  The cron, polling and agent-signal fire jobs (typed skip) and the webhook and
+  Slack routes (paused payload) do map it correctly.
 - **The sandbox-node scan is top-level and fail-open.** `_graph_contains_sandbox_agent`
   returns `False` for a non-dict graph or a missing `nodes` list, so a malformed
   snapshot would be admitted during a drain. Normal creation always expands a
@@ -155,8 +167,10 @@ manifest `features:` registry.
   `.github/workflows/deploy.yml` and the cited unit/integration suites. The
   per-origin refusal mapping was checked across `api/routes/runs.py`,
   `api/routes/triggers.py`, `api/routes/webhooks.py`, `api/routes/slack.py`,
-  `core/cron_helpers.py` and `core/trigger_engine/agent_signal.py`; the manual
-  run/rerun `500` is recorded as a gap rather than fixed in this docs-only walk.
+  `core/cron_helpers.py` and `core/trigger_engine/agent_signal.py`; the
+  test-trigger, manual run/rerun and MCP `trigger_pipeline` `500`/`server_error`
+  refusals are recorded as a gap rather than fixed in this docs-only walk.
   Status: covered, with the CI-only control, no cancel-on-drain,
-  `TriggersPausedError` reuse, manual-run `500`, fail-open malformed-graph scan
-  and instance-wide scope recorded as honest gaps.
+  `TriggersPausedError` reuse, test-trigger/manual-run/MCP `500`/`server_error`,
+  fail-open malformed-graph scan and instance-wide scope recorded as honest
+  gaps.
