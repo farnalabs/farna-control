@@ -9,11 +9,11 @@ module.exports = {
       // Bundled via @fontsource-variable/inter and
       // @fontsource-variable/jetbrains-mono (FAR-1253) — keeps Tailwind's
       // preflight (html, code/kbd/samp/pre) and `font-sans`/`font-mono`
-      // stacks in line with the body/agent-theme stacks in style.css.
+      // stacks in line with the body stack in style.css.
       fontFamily: {
         sans: ['"Inter Variable"', 'Inter', ...defaultTheme.fontFamily.sans],
         mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', ...defaultTheme.fontFamily.mono],
-        // Brand monospace stack (matches json-viewer.css and the agent theme).
+        // Brand monospace stack (matches json-viewer.css).
         // Used for canvas node kind labels (FAR-1249).
         'brand-mono': ['"JetBrains Mono Variable"', '"JetBrains Mono"', '"SF Mono"', '"Cascadia Code"', 'Consolas', 'ui-monospace', 'monospace'],
       },
@@ -45,16 +45,16 @@ module.exports = {
         'destructive-foreground': 'hsl(var(--destructive-foreground))',
         // Fill-safe counterpart of `destructive` for text-bearing SOLID fills
         // (badges, destructive buttons). `--destructive` is an accent hue, so
-        // `--destructive-foreground` on it is only 3.22:1 (dark) / 3.30:1
-        // (agent) - below the WCAG AA 4.5:1 floor. Use `bg-destructive-fill`
-        // with `text-destructive-foreground` on every solid destructive
-        // surface that carries text.
+        // `--destructive-foreground` on it is only 3.22:1 - below the WCAG AA
+        // 4.5:1 floor. Use `bg-destructive-fill` with
+        // `text-destructive-foreground` on every solid destructive surface that
+        // carries text.
         'destructive-fill': 'hsl(var(--destructive-fill))',
         success: 'hsl(var(--success))',
         // FAR-1938: text-safe counterpart of `success`. `--success` is a
         // fill/accent green - as TEXT it is only 2.30:1 on white in light mode.
         // `--success-text` keeps the hue and darkens light mode; it is an exact
-        // copy of `--success` in the dark and agent themes. Use
+        // copy of `--success` in the dark theme. Use
         // `text-success-text` - never `text-success` - for success COLOURED
         // TEXT (see style.css for the measured ratios).
         'success-text': 'hsl(var(--success-text))',
@@ -63,8 +63,7 @@ module.exports = {
         // tuned as a FILL/accent hue (50% lightness), so amber text on white or
         // on a bg-warning/* tint is only ~1.8-2.1:1 in light mode (WCAG AA needs
         // 4.5:1). `--warning-text` keeps the hue, darkens light mode to 30%
-        // lightness, and is identical to `--warning` in the dark and agent
-        // themes. Use `text-warning-text` - never `text-warning` - for warning
+        // lightness, and is identical to `--warning` in the dark theme. Use `text-warning-text` - never `text-warning` - for warning
         // COLOURED TEXT (see style.css for the measured ratios).
         'warning-text': 'hsl(var(--warning-text))',
         // FAR-1913: text-safe counterpart of `destructive`. `--destructive` is
