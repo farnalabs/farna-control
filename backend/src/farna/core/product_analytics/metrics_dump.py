@@ -42,8 +42,9 @@ _log = logging.getLogger(__name__)
 
 __all__ = ["DUMP_COUNT_KEY", "DUMP_WATERMARK_KEY", "coerce_dump_count", "metrics_dump"]
 
-# Schema version -- bumped when the payload shape changes.
-SCHEMA_VERSION: int = 2
+# Schema version -- bumped when the payload shape changes. v3 renamed the
+# error rollup from ``error_stats`` to the receiver's ``errors`` list.
+SCHEMA_VERSION: int = 3
 
 # Backfill cap (design doc section 8).
 _BACKFILL_MAX_DAYS = 14

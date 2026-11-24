@@ -1,8 +1,9 @@
 """Shared outbound HTTP helper for the product-analytics dump.
 
 Provides retry/timeout/backoff/429 logic (extracted from the Notifier
-pattern) and HMAC signing.  Every exception is caught inside the
-caller — the client itself never re-raises.
+pattern) and HMAC signing.  :meth:`VendorClient.post_batch` catches every
+exception — including the local envelope/signing construction and client
+build — and surfaces it as a return value; it never re-raises.
 """
 
 from __future__ import annotations
@@ -13,12 +14,18 @@ import hmac
 import json
 import logging
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
+from farna.core.model_backend_endpoints import INSECURE_HTTP_NOT_ALLOWED
 from farna.core.ssrf import pinned_async_client
 
 _log = logging.getLogger(__name__)
+
+# The receiver's documented ``status`` values for an accepted batch. Anything
+# else on a 2xx is a contract mismatch, not a delivery.
+_ACCEPTED_BODY_STATUSES = frozenset({"accepted", "stale_sequence"})
 
 # Retry configuration — mirrors Notifier RETRY_DELAYS.
 MAX_ATTEMPTS = 4  # 1 initial + 3 retries
@@ -35,8 +42,31 @@ def _canonical_payload_bytes(payload: dict[str, Any]) -> bytes:
     ``canonical_json(payload, sort_keys=True, separators=(",", ":"))`` — the
     payload **sub-object** only, never the whole request body.  This is the
     sender's byte-for-byte mirror of that canonical form.
+
+    ``ensure_ascii`` is deliberately left at its default (``True``), so a
+    non-ASCII value is signed as its ``\\uXXXX`` escapes. The receiver
+    canonicalises the same way; switching this to ``ensure_ascii=False``
+    would produce valid-looking UTF-8 bytes that the receiver's HMAC does
+    not match. ``test_canonical_bytes_escape_non_ascii`` pins the exact
+    bytes.
     """
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _endpoint_scheme_and_host(endpoint_url: str) -> tuple[str, str]:
+    """Return ``(scheme, host)`` for an endpoint URL, never raising.
+
+    A malformed URL (e.g. a broken IPv6 literal) yields an empty scheme, so
+    the caller refuses it rather than letting ``urlsplit``/``hostname``
+    escape as an exception.
+    """
+    try:
+        parsed = urlsplit(endpoint_url)
+        scheme = parsed.scheme.lower()
+        host = parsed.hostname or parsed.netloc or endpoint_url
+    except ValueError:
+        return "", endpoint_url
+    return scheme, host
 
 
 def sign_outbound_batch(
@@ -113,8 +143,16 @@ class VendorClient:
     """HTTP client for posting metrics batches to the vendor endpoint.
 
     Handles retry with exponential backoff, 429 Retry-After, and
-    per-request timeouts.  All exceptions are caught and surfaced as
-    return values — never re-raised.
+    per-request timeouts.  :meth:`post_batch` catches every exception and
+    surfaces it as a return value — it never re-raises.
+
+    The endpoint must be ``https``: every request carries
+    ``X-Farna-Secret`` in order to bootstrap an unknown instance on first
+    contact, so a plain-``http`` endpoint would put the secret in cleartext
+    on the wire.  ``farna.core.ssrf`` allows ``http`` on purpose (a local
+    model server is a legitimate target for other callers), so this client
+    enforces its own floor and refuses an insecure endpoint before any
+    request is attempted.
     """
 
     def __init__(self, endpoint_url: str, instance_secret: str) -> None:
@@ -193,6 +231,51 @@ class VendorClient:
             timeout=REQUEST_TIMEOUT,
         )
 
+    def _success_terminal(self, resp: httpx.Response, response_code: int) -> tuple[bool, int, str | None]:
+        """Decide whether a 2xx response means the batch was delivered.
+
+        The receiver answers 200 with ``{"status": "accepted"}`` (stored) or
+        ``{"status": "stale_sequence"}`` (already stored — delivered either
+        way); both advance the watermark. Any OTHER parseable status is a
+        contract mismatch and must NOT count as delivered, or the watermark
+        advances past a date the receiver never stored.
+
+        A missing or non-JSON body is treated as accepted, with a WARNING:
+        the receiver is not documented to always return a JSON body, and
+        failing here would re-send every batch forever against a healthy
+        receiver that answers an empty 200.
+        """
+        try:
+            raw_body = resp.text
+        except Exception:
+            # Defensive: a lazy content/decode failure must not escape the
+            # "never re-raises" contract. Treat it as an absent body below.
+            raw_body = ""
+        body: object = None
+        if raw_body:
+            try:
+                body = json.loads(raw_body)
+            except (TypeError, ValueError):
+                body = None
+        if not isinstance(body, dict) or not body.get("status"):
+            _log.warning(
+                "product_analytics.vendor_success_body_unparseable",
+                extra={"status_code": response_code, "response_body": str(raw_body)[:500]},
+            )
+            return True, response_code, None
+        status = body["status"]
+        if status in _ACCEPTED_BODY_STATUSES:
+            return True, response_code, None
+        _log.error(
+            "product_analytics.vendor_success_body_unrecognised",
+            extra={
+                "status_code": response_code,
+                "body_status": str(status)[:100],
+                "response_body": str(raw_body)[:500],
+            },
+        )
+        return False, response_code, f"Unrecognised success status {status!r}: {str(raw_body)[:200]}"
+
     async def _classify_response(
         self,
         resp: httpx.Response,
@@ -203,7 +286,8 @@ class VendorClient:
         Returns ``(terminal, http_error, retried_after_429)``:
 
         - ``terminal`` — the final ``(success, status_code, error_message)``
-          tuple for a success or terminal-400 response, else ``None``.
+          tuple for a delivered batch or a terminal-400 response, else
+          ``None``.
         - ``http_error`` — the ``HTTP <status>: ...`` message for a
           non-success response; ``""`` (unused) on terminal responses.
         - ``retried_after_429`` — True when the 429 Retry-After backoff sleep
@@ -211,8 +295,7 @@ class VendorClient:
         """
         response_code = resp.status_code
         if resp.is_success:
-            terminal: tuple[bool, int, str | None] = (True, response_code, None)
-            return terminal, "", False
+            return self._success_terminal(resp, response_code), "", False
         # Every non-2xx is logged at ERROR with the status and a truncated body.
         # A 422's validation detail is exactly what makes a contract mismatch
         # findable; the previous warning-only path hid it.
@@ -247,17 +330,41 @@ class VendorClient:
         ``metrics_dump._build_payload``; it is wrapped in the receiver's
         ``BatchRequest`` envelope and signed over the payload sub-object.
 
-        Returns ``(success, status_code, error_message)``.
+        Returns ``(success, status_code, error_message)`` and never raises:
+        an insecure endpoint, an envelope/signing failure and a client-build
+        failure all return a failure tuple.
+
+        An endpoint that is not ``https`` is refused before any request is
+        built: the batch carries ``X-Farna-Secret``, so plain ``http`` would
+        leak the instance secret in cleartext.
         """
-        signature = sign_outbound_batch(self._instance_secret, payload, timestamp, sequence)
-        envelope = build_batch_envelope(payload, timestamp, sequence, signature)
-        body = json.dumps(envelope, default=str, separators=(",", ":")).encode()
+        scheme, host = _endpoint_scheme_and_host(self._endpoint_url)
+        if scheme != "https":
+            _log.error(
+                "product_analytics.vendor_endpoint_insecure",
+                extra={"reason": INSECURE_HTTP_NOT_ALLOWED, "host": host, "scheme": scheme},
+            )
+            return False, None, f"{INSECURE_HTTP_NOT_ALLOWED}: {host}"
+
+        try:
+            signature = sign_outbound_batch(self._instance_secret, payload, timestamp, sequence)
+            envelope = build_batch_envelope(payload, timestamp, sequence, signature)
+            body = json.dumps(envelope, default=str, separators=(",", ":")).encode()
+        except Exception as exc:
+            # Envelope construction reads payload keys, so a malformed payload
+            # (KeyError/TypeError) is a real failure — return it, do not let it
+            # escape and crash the SAQ job.
+            _log.error("product_analytics.vendor_batch_build_failed", extra={"error": str(exc)})
+            return False, None, f"EnvelopeError: {exc}"
+
         url = f"{self._endpoint_url}/api/v1/batch"
 
         try:
             client = await self._get_client()
-        except ValueError as exc:
-            return False, None, self._describe_error(exc)
+        except Exception as exc:
+            error = self._describe_error(exc)
+            _log.error("product_analytics.vendor_client_build_failed", extra={"error": error})
+            return False, None, error
 
         last_error: str | None = None
         response_code: int | None = None

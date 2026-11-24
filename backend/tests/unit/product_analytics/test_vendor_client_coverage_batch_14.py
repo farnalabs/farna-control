@@ -5,21 +5,53 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from farna.core.model_backend_endpoints import INSECURE_HTTP_NOT_ALLOWED
 from farna.core.product_analytics.vendor_client import MAX_ATTEMPTS, VendorClient
 
 
 def _payload() -> dict:
     """Minimal aggregate payload carrying the envelope fields the client reads."""
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "date": "2026-08-10",
         "instance_id": "instance-123",
         "errors": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_insecure_http_endpoint_refused_before_any_request(caplog: pytest.LogCaptureFixture):
+    """A plain-``http`` endpoint must never receive the instance secret.
+
+    ``farna.core.ssrf`` deliberately allows ``http`` (a local model server is a
+    legitimate target for other callers), so the client enforces its own floor:
+    every request carries ``X-Farna-Secret``, which would be in cleartext over
+    plain HTTP. The refusal must happen before the transport is touched.
+    """
+    client = VendorClient("http://vendor.example", "shh-secret")
+    existing_http = AsyncMock(is_closed=False)
+    client._http_client = existing_http
+
+    with (
+        patch(
+            "farna.core.product_analytics.vendor_client.pinned_async_client",
+            new_callable=AsyncMock,
+        ) as build_client,
+        caplog.at_level(logging.ERROR, logger="farna.core.product_analytics.vendor_client"),
+    ):
+        result = await client.post_batch(_payload(), 1.0, 2)
+
+    assert result == (False, None, f"{INSECURE_HTTP_NOT_ALLOWED}: vendor.example")
+    # Nothing was sent and no transport was even built.
+    existing_http.post.assert_not_awaited()
+    build_client.assert_not_awaited()
+    records = [record for record in caplog.records if record.levelno == logging.ERROR]
+    assert any(getattr(record, "reason", None) == INSECURE_HTTP_NOT_ALLOWED for record in records)
 
 
 @pytest.mark.asyncio
