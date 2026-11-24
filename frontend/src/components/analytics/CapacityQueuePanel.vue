@@ -143,54 +143,34 @@
 
       <div v-if="capacity.pending.by_pipeline.length" data-testid="capacity-by-pipeline">
         <h3 class="mb-2 text-sm font-medium">{{ $t('views.AnalyticsView.capacity_by_pipeline_title') }}</h3>
-        <div class="table-wrapper">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.AnalyticsView.capacity_col_pipeline') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_pending') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_oldest') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_cap') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_stale') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="row in pipelineRows" :key="row.pipeline_id">
-                <td class="table-cell font-medium">{{ row.pipeline_name || shortId(row.pipeline_id) }}</td>
-                <td class="table-cell-numeric">{{ row.pending_count }}</td>
-                <td class="table-cell-numeric">{{ formatDuration(row.oldest_pending_age_seconds) }}</td>
-                <td class="table-cell-numeric">{{ row.max_concurrent_runs ?? $t('views.AnalyticsView.capacity_none') }}</td>
-                <td class="table-cell-numeric">{{ row.stale_heartbeat_count }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          :columns="pipelineColumns"
+          :rows="pipelineTableRows"
+          :row-clickable="false"
+        >
+          <template #cell-pipeline="{ value }">
+            <span class="font-medium">{{ value }}</span>
+          </template>
+          <template #cell-oldest_pending_age_seconds="{ value }">
+            {{ formatDuration(value as number | null | undefined) }}
+          </template>
+          <template #cell-max_concurrent_runs="{ value }">
+            {{ value ?? $t('views.AnalyticsView.capacity_none') }}
+          </template>
+        </DataTable>
       </div>
 
       <div v-if="capacity.series.length" data-testid="capacity-series">
         <h3 class="mb-2 text-sm font-medium">{{ $t('views.AnalyticsView.capacity_series_title') }}</h3>
-        <div class="table-wrapper">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.AnalyticsView.capacity_col_interval') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_created') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_started') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_completed') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_depth') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="bucket in capacity.series" :key="bucket.interval_start">
-                <td class="table-cell tabular-nums">{{ formatInterval(bucket.interval_start) }}</td>
-                <td class="table-cell-numeric">{{ bucket.created }}</td>
-                <td class="table-cell-numeric">{{ bucket.started }}</td>
-                <td class="table-cell-numeric">{{ bucket.completed }}</td>
-                <td class="table-cell-numeric">{{ bucket.pending_depth }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          :columns="seriesColumns"
+          :rows="seriesTableRows"
+          :row-clickable="false"
+        >
+          <template #cell-interval_start="{ value }">
+            <span class="tabular-nums">{{ formatInterval(String(value)) }}</span>
+          </template>
+        </DataTable>
       </div>
 
       <p class="text-xs text-muted-foreground">
@@ -206,6 +186,7 @@ import BaseCard from "../ui/BaseCard.vue";
 import { useI18n } from "vue-i18n";
 import CardHeader from "../ui/CardHeader.vue";
 import StatCard from "../ui/StatCard.vue";
+import { DataTable, type Column, type DataTableRow } from "../ui/data-table";
 import {
   formatCapacityDuration,
   useAnalyticsStore,
@@ -363,6 +344,48 @@ const pipelineRows = computed<PipelineRow[]>(() => {
     stale_heartbeat_count: attribution.get(row.pipeline_id)?.stale_heartbeat_count ?? 0,
   }));
 });
+
+// Read-only tables (FAR-2728): the shared DataTable primitive owns the shell,
+// the header row and the rows. `id` carries the source key so the row key stays
+// stable, and the display-only cells that are formatted rather than raw
+// (pipeline label, duration, "None" fallback, interval time) are cell slots.
+const pipelineColumns: Column[] = [
+  { key: "pipeline", label: t("views.AnalyticsView.capacity_col_pipeline") },
+  { key: "pending_count", label: t("views.AnalyticsView.capacity_col_pending"), numeric: true },
+  { key: "oldest_pending_age_seconds", label: t("views.AnalyticsView.capacity_col_oldest"), numeric: true },
+  { key: "max_concurrent_runs", label: t("views.AnalyticsView.capacity_col_cap"), numeric: true },
+  { key: "stale_heartbeat_count", label: t("views.AnalyticsView.capacity_col_stale"), numeric: true },
+];
+
+const pipelineTableRows = computed<DataTableRow[]>(() =>
+  pipelineRows.value.map((row) => ({
+    id: row.pipeline_id,
+    pipeline: row.pipeline_name || shortId(row.pipeline_id),
+    pending_count: row.pending_count,
+    oldest_pending_age_seconds: row.oldest_pending_age_seconds,
+    max_concurrent_runs: row.max_concurrent_runs,
+    stale_heartbeat_count: row.stale_heartbeat_count,
+  })),
+);
+
+const seriesColumns: Column[] = [
+  { key: "interval_start", label: t("views.AnalyticsView.capacity_col_interval") },
+  { key: "created", label: t("views.AnalyticsView.capacity_col_created"), numeric: true },
+  { key: "started", label: t("views.AnalyticsView.capacity_col_started"), numeric: true },
+  { key: "completed", label: t("views.AnalyticsView.capacity_col_completed"), numeric: true },
+  { key: "pending_depth", label: t("views.AnalyticsView.capacity_col_depth"), numeric: true },
+];
+
+const seriesTableRows = computed<DataTableRow[]>(() =>
+  capacity.value.series.map((bucket) => ({
+    id: bucket.interval_start,
+    interval_start: bucket.interval_start,
+    created: bucket.created,
+    started: bucket.started,
+    completed: bucket.completed,
+    pending_depth: bucket.pending_depth,
+  })),
+);
 
 onMounted(() => {
   void store.fetchCapacity();

@@ -89,24 +89,13 @@
           <div class="mb-4" aria-hidden="true">
             <div class="h-6 w-40 bg-muted rounded animate-pulse" />
           </div>
-          <div class="table-wrapper animate-pulse" aria-hidden="true">
-              <table class="w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th v-for="i in 8" :key="`th-${i}`" class="table-header">
-                      <div class="h-4 w-16 bg-muted rounded" />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                  <tr v-for="i in 6" :key="`row-${i}`">
-                    <td v-for="j in 8" :key="`cell-${j}`" class="table-cell">
-                      <div class="h-6 bg-muted rounded" :class="j === 1 ? 'w-3/4' : 'w-full'" />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <!-- STATE-3 (ux-conformance): the column count is known before the
+               first row arrives, so the loading placeholder is the shared
+               determinate TableSkeleton (8 columns / 6 rows, matching the real
+               <th> row and row count) instead of a hand-rolled pulse table.
+               `aria-hidden` keeps the loading placeholder out of the
+               accessibility tree, as the bespoke placeholder was. -->
+          <TableSkeleton :columns="8" :rows="6" aria-hidden="true" />
         </div>
 
         <ErrorAlert v-else-if="error" :message="error" :on-retry="loadPipelines" class="mb-6" />
@@ -464,6 +453,7 @@ import FolderListError from '../components/pipelines/FolderListError.vue'
 import { useDataFetch } from '../composables/useDataFetch'
 import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import { ChevronRight, Folder, FolderOpen, MoreVertical, FileStack } from '@lucide/vue'
 import { formatApiError, throwOnError } from '../lib/api/formatError'
 import { invalidFolderListMessage, isFolderList, type FolderItem } from '../lib/api/folders'
