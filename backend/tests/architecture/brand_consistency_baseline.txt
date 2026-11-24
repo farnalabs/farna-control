@@ -720,6 +720,7 @@ docs/product-map/system/system-orgs.md	1
 docs/product-map/teams/org-entity.md	2
 docs/public-launch-checklist.md	1
 docs/quickstart.md	1
+docs/rebrand-persisted-values-migration.md	85
 docs/reviewer-independence-audit.md	2
 docs/schemas/bundle-v2-schema.json	2
 docs/security/bundled-runner-operator-guide.md	11
