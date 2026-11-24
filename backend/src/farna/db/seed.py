@@ -178,7 +178,7 @@ async def first_tenant_organisation(session: Any) -> Any:
 
     The sentinel rows the baseline migration seeds — the nil-UUID
     "Orphan (unattributed errors)" org (``SYSTEM_ORG_ID``) and the library
-    registry org (``MODULO_REGISTRY_ORG_ID``) — are infrastructure, never a
+    registry org (``REGISTRY_ORG_ID``) — are infrastructure, never a
     tenant. "Oldest org" without excluding them picks the orphan org on every
     fresh install, because the migration creates it first (FAR-2581): users
     seeded there are RLS-partitioned away from every tenant and the login

@@ -995,7 +995,7 @@ async def _probe_provider_reachability(data_dir: Path, state: Any) -> list[dict[
         raise RuntimeError("no composed FERNET_KEY (secrets unavailable)")
 
     from farna.db.models.model_backend import ModelBackend
-    from farna.db.models.organisation import MODULO_REGISTRY_ORG_ID, SYSTEM_ORG_ID
+    from farna.db.models.organisation import REGISTRY_ORG_ID, SYSTEM_ORG_ID
     from farna.db.rls import set_rls_org
     from farna.db.url_utils import split_engine_sslmode
 
@@ -1010,7 +1010,7 @@ async def _probe_provider_reachability(data_dir: Path, state: Any) -> list[dict[
             # org context exists; the reserved instance orgs own no backends.
             org_rows = await session.execute(
                 text("SELECT id FROM organisations WHERE deleted_at IS NULL AND id NOT IN (:system, :registry) ORDER BY created_at ASC"),
-                {"system": str(SYSTEM_ORG_ID), "registry": str(MODULO_REGISTRY_ORG_ID)},
+                {"system": str(SYSTEM_ORG_ID), "registry": str(REGISTRY_ORG_ID)},
             )
             org_ids = [row[0] for row in org_rows]
             if not org_ids:

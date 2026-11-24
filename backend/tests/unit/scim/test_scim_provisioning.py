@@ -816,7 +816,7 @@ class TestPatchUser:
 
 
 class TestNoScimRouteSetsOrgRole:
-    """ADR 047: SCIM is exempt via MODULOSCIM_TOKEN, but no route may set an
+    """ADR 047: SCIM is exempt via FARNA_CONTROL_SCIM_TOKEN, but no route may set an
     org role. ``scim_update_user`` has a *functional* role-UPDATE that must
     stay unwired — prove no SCIM route passes ``org_role``."""
 

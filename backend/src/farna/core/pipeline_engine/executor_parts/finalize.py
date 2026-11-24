@@ -194,11 +194,11 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         """FAR-510 — the marker-based downgrade predicate.
 
         Requires ``status == "failed"`` AND the runner's machine marker
-        (``MODULO_SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
+        (``SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
         agent-authored failure shape (honest exit-code failure, business JSON
         self-reporting failure) is never downgraded.
         """
-        return view.get("status") == "failed" and view.get(_ref("MODULO_SYNTHETIC_FAILURE_MARKER")) is True
+        return view.get("status") == "failed" and view.get(_ref("SYNTHETIC_FAILURE_MARKER")) is True
 
     def _downgrade_connector_failures(
         self,
@@ -250,7 +250,7 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
 
         The sandbox_agent runner's synthetic failure paths (generic exception,
         schema validation) do NOT raise — they RETURN a failure envelope
-        stamped with the ``MODULO_SYNTHETIC_FAILURE_MARKER`` machine marker.
+        stamped with the ``SYNTHETIC_FAILURE_MARKER`` machine marker.
         Node completion is output-presence-based, so that node counts as
         completed and the run would finalize ``complete`` — a failed dispatch
         masked as success.

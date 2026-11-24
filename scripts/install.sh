@@ -648,7 +648,7 @@ run_pre_upgrade_dump() {
   # Only the current package name exists: the pre-rebrand backend/src/modulo
   # tree was renamed to backend/src/farna, so a bundle with the old module
   # cannot be run by a helper whose env contract predates the rename. The old
-  # helper reads MODULO_BUNDLED_BIN_DIR; this installer sets only
+  # helper reads the pre-rebrand bundled-bin-dir name; this installer sets only
   # FARNA_CONTROL_BUNDLED_BIN_DIR. Fail with the actionable message instead of
   # invoking a helper whose env contract no longer exists.
   if [[ -f "${old_root}/backend/src/farna/launcher/upgrade.py" ]]; then

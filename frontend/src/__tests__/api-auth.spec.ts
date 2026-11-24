@@ -22,7 +22,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete window.__MODULO_CONFIG__
+  delete window.__FARNA_CONFIG__
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -336,7 +336,7 @@ describe('redirectToLogin', () => {
   })
 
   it('does not redirect when auto-login is configured', () => {
-    window.__MODULO_CONFIG__ = { autoLogin: { username: 'demo', password: 'demo' } }
+    window.__FARNA_CONFIG__ = { autoLogin: { username: 'demo', password: 'demo' } }
     const location = fakeLocation('/dashboard', 'http://localhost/dashboard')
     vi.stubGlobal('location', location)
 
@@ -373,7 +373,7 @@ describe('exitToLogin', () => {
   })
 
   it('redirects to /login even when auto-login is configured', () => {
-    window.__MODULO_CONFIG__ = { autoLogin: { username: 'demo', password: 'demo' } }
+    window.__FARNA_CONFIG__ = { autoLogin: { username: 'demo', password: 'demo' } }
     const location = fakeLocation('/dashboard', 'http://localhost/dashboard')
     vi.stubGlobal('location', location)
 
