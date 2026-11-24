@@ -11,19 +11,114 @@ that path without a database.
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from sqlalchemy.sql.elements import False_
 
 from farna.db.crud.team_scope import (
     BlindPipelineScope,
+    TeamBlindScopeOrgMismatchError,
     account_team_scope_clause,
     pipeline_team_scope_team_blind,
     pipelines_binding_connector,
+    team_blind_org_scope,
     viewer_run_scope_visible,
 )
 from farna.db.models.pipeline import Pipeline
 
 _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+_FOREIGN_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 _PIPELINE_ID = uuid.UUID("00000000-0000-0000-0000-0000000000f1")
+
+
+def _pg_session(guc_prev: tuple[object, object]) -> AsyncMock:
+    """A postgres-dialect session double whose GUC read returns *guc_prev*.
+
+    Every ``execute`` returns the GUC result: the widen/restore statements'
+    result is unused by the helper, so their assertions go through the call
+    log (``await_args_list``) instead.
+    """
+    session = AsyncMock()
+    bind = MagicMock()
+    bind.dialect.name = "postgresql"
+    session.get_bind = MagicMock(return_value=bind)
+    guc_result = MagicMock()
+    guc_result.one.return_value = guc_prev
+    session.execute = AsyncMock(return_value=guc_result)
+    return session
+
+
+def _executed_sql(session: AsyncMock) -> list[str]:
+    return [str(call.args[0]) for call in session.execute.await_args_list]
+
+
+async def test_team_blind_org_scope_refuses_a_foreign_org() -> None:
+    """The widen may not SET the org: a mismatched argument is an authority grant.
+
+    ADR 070 §3: no escape may widen past ``organisation_id``. Before this
+    assertion the helper wrote the ARGUMENT into ``app.organisation_id``, so a
+    caller passing a different org silently crossed the tenant boundary.
+    """
+    session = _pg_session((str(_ORG_ID), ""))
+
+    with pytest.raises(TeamBlindScopeOrgMismatchError) as excinfo:
+        async with team_blind_org_scope(session, _FOREIGN_ORG_ID):
+            pass
+
+    assert excinfo.value.requested_org_id == _FOREIGN_ORG_ID
+    assert excinfo.value.session_org_id == str(_ORG_ID)
+    assert str(_FOREIGN_ORG_ID) in str(excinfo.value)
+    # Exactly the GUC read ran: nothing may be widened or rewritten.
+    assert session.execute.await_count == 1, _executed_sql(session)
+    assert str(_FOREIGN_ORG_ID) not in "".join(_executed_sql(session))
+
+
+async def test_team_blind_org_scope_refuses_when_the_session_has_no_org() -> None:
+    """An unset org context is refused, never adopted from the argument."""
+    session = _pg_session(("", ""))
+
+    with pytest.raises(TeamBlindScopeOrgMismatchError) as excinfo:
+        async with team_blind_org_scope(session, _ORG_ID):
+            pass
+
+    assert excinfo.value.session_org_id in ("", None)
+    assert "<unset>" in str(excinfo.value)
+    assert session.execute.await_count == 1, _executed_sql(session)
+
+
+async def test_team_blind_org_scope_refuses_when_the_session_org_guc_is_null() -> None:
+    """A never-defined GUC reads as SQL NULL, not ``''``; it is refused too.
+
+    ``current_setting('app.organisation_id', true)`` returns NULL when the
+    setting was never defined (the ``''`` case is the pool-checkout reset), so
+    the guard must treat ``None`` as unset rather than fall through to the
+    parse attempt.
+    """
+    session = _pg_session((None, ""))
+
+    with pytest.raises(TeamBlindScopeOrgMismatchError) as excinfo:
+        async with team_blind_org_scope(session, _ORG_ID):
+            pass
+
+    assert excinfo.value.session_org_id is None
+    assert "<unset>" in str(excinfo.value)
+    assert session.execute.await_count == 1, _executed_sql(session)
+
+
+async def test_team_blind_org_scope_widens_only_the_execution_context_for_a_matching_org() -> None:
+    """The legitimate path: same org, widen the TEAM clause, restore afterwards."""
+    session = _pg_session((str(_ORG_ID), ""))
+    entered = False
+
+    async with team_blind_org_scope(session, _ORG_ID):
+        entered = True
+
+    assert entered
+    assert session.execute.await_count == 3, _executed_sql(session)
+    widen_call = session.execute.await_args_list[1]
+    assert "app.execution_context', 'true'" in str(widen_call.args[0])
+    assert widen_call.args[1] == {"oid": str(_ORG_ID)}, "the widened read must stay org-scoped"
+    restore_call = session.execute.await_args_list[2]
+    assert restore_call.args[1] == {"oid": str(_ORG_ID), "exec_ctx": ""}, "the caller's GUCs must be restored"
 
 
 def test_account_team_scope_clause_missing_account_is_fail_closed() -> None:

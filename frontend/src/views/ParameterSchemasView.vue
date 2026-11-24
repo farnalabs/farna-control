@@ -722,12 +722,12 @@
             <div v-if="validateResult.valid" class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text">
               {{ $t('views.ParameterSchemasView.validation_passed') }}
             </div>
-            <div v-else class="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+            <ErrorAlert v-else compact>
               <p class="text-sm font-medium text-destructive-text">{{ $t('views.ParameterSchemasView.validation_failed') }}</p>
               <ul v-if="validateResult.errors?.length" class="mt-1 list-inside list-disc text-sm text-destructive-text">
                 <li v-for="e in validateResult.errors" :key="e">{{ e.field || e.message || e }}</li>
               </ul>
-            </div>
+            </ErrorAlert>
           </div>
         </TabPanel>
       </TabPanels>

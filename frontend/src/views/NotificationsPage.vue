@@ -46,14 +46,13 @@
     <!-- Failure, success and no-op are three MUTUALLY EXCLUSIVE outcomes of
          this page's OWN dismiss-all attempt — the error ref is local (never
          shared store state, QA FAR-1926) and only ever set here. -->
-    <p
+    <ErrorAlert
       v-if="dismissAllError"
       data-testid="notifications-dismiss-all-error"
-      role="alert"
-      class="text-sm text-destructive"
-    >
-      {{ dismissAllError }}
-    </p>
+      compact
+      :message="dismissAllError"
+      :retryable="false"
+    />
     <output
       v-else-if="dismissedAll"
       data-testid="notifications-dismiss-all-success"

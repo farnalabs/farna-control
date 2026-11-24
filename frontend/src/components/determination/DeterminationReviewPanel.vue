@@ -37,16 +37,14 @@
       </p>
     </section>
 
-    <div
+    <ErrorAlert
       v-if="error"
-      role="alert"
-      aria-live="assertive"
-      class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-destructive-text"
+      compact
       data-testid="determination-review-error"
     >
       <p class="text-sm font-medium">{{ $t('views.DeterminationView.review_failed') }}</p>
       <p class="text-sm">{{ error }}</p>
-    </div>
+    </ErrorAlert>
 
     <section class="space-y-2" data-testid="determination-review-derived">
       <h3 class="text-sm font-medium">{{ $t('views.DeterminationView.review_derived_title') }}</h3>
@@ -218,6 +216,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSelect from '../shared/AppSelect.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 import DataCard from '../ui/DataCard.vue'
 import { formatDateShortWithTime } from '../../lib/formatDate'
 import { isUnsettledConfidence } from './confidencePresentation'

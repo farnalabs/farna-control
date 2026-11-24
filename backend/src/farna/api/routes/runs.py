@@ -958,6 +958,15 @@ async def _do_list_runs(
             variant_group_id=query.variant_group_id,
             batch_id=query.batch_id,
             account_id=user.account_id if user.org_role == "viewer" else None,
+            # FAR-2726: the list now accepts mk_ keys, so a TEAM-SCOPED key's
+            # hard team boundary must be applied here exactly as every other
+            # run surface applies it (`_run_owned_by_another_team` on detail,
+            # `team_scope_clause` in the MCP list). JWT principals and org-wide
+            # keys carry team_id=None, so this is a no-op for them and the
+            # existing viewer/account clause above is unchanged. `team_id`
+            # takes precedence over `account_id` in `_runs_list_scope_filters`,
+            # which is the intended boundary for a team-scoped credential.
+            team_id=user.team_id,
         )
         # Child-run cost rollup: ONE GROUP BY query for the whole page, joined
         # in Python — never a per-row aggregate (avoids N+1).
@@ -1029,7 +1038,15 @@ async def list_runs_endpoint(
     variant_group_id: uuid.UUID | None = Query(None),
     batch_id: uuid.UUID | None = Query(None),
     factory: async_sessionmaker[AsyncSession] = Depends(_get_session_factory),
-    user: TenantPrincipal = require_permission(_CODE_RUN_LIST),
+    # any_credential (FAR-2726): the run DETAIL route already accepts an mk_ org
+    # API key (``require_permission_any_credential("run.status")``); the LIST
+    # is the same read family and must not 401 the same credential. Tenant
+    # isolation is unchanged (org predicate + RLS below); the viewer/account
+    # clause is role-based, and ``_do_list_runs`` threads the principal's
+    # ``team_id`` into the shared team filter so a team-scoped key keeps its
+    # hard team boundary on this surface too (matching the MCP list and every
+    # other run read).
+    user: TenantPrincipal = require_permission_any_credential(_CODE_RUN_LIST),
 ) -> dict[str, Any]:
     try:
         query = _ListRunsQuery(

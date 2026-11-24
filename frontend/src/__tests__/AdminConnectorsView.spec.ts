@@ -25,6 +25,15 @@ vi.mock('../lib/api/client', () => ({
 
 import AdminConnectorsView from '../views/AdminConnectorsView.vue'
 
+// Message-rendering stub: the default `ErrorAlert: true` stub drops the
+// message prop, so a converted hand-rolled error surface would render nothing
+// for the tests that assert its text.
+const ErrorAlertStub = {
+  name: 'ErrorAlert',
+  props: ['message'],
+  template: '<div role="alert"><slot />{{ message }}</div>',
+}
+
 function restConnectorItem(id: string, name: string, configJson: Record<string, unknown>) {
   return {
     id,
@@ -41,7 +50,7 @@ function mountView() {
     global: {
       stubs: {
         TableSkeleton: true,
-        ErrorAlert: true,
+        ErrorAlert: ErrorAlertStub,
         FeatureGate: { template: '<div><slot /></div>' },
       },
     },
@@ -90,7 +99,7 @@ describe('AdminConnectorsView', () => {
       global: {
         stubs: {
           TableSkeleton: true,
-          ErrorAlert: true,
+          ErrorAlert: ErrorAlertStub,
           FeatureGate: { template: '<div><slot /></div>' },
         },
       },
@@ -116,7 +125,7 @@ describe('AdminConnectorsView', () => {
       global: {
         stubs: {
           TableSkeleton: true,
-          ErrorAlert: true,
+          ErrorAlert: ErrorAlertStub,
           FeatureGate: { template: '<div><slot /></div>' },
         },
       },
@@ -560,7 +569,7 @@ describe('AdminConnectorsView — FAR-617 add/delete/error-state coverage', () =
       global: {
         stubs: {
           TableSkeleton: true,
-          ErrorAlert: true,
+          ErrorAlert: ErrorAlertStub,
           FeatureGate: { template: '<div><slot /></div>' },
         },
       },
