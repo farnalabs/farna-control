@@ -1006,15 +1006,17 @@
       </Dialog>
 
       <!-- Guardrail Override Dialog -->
-      <Dialog :visible="overrideDialogOpen" :modal="true" :dismissable-mask="true" :style="{ width: '42rem' }" @update:visible="overrideDialogOpen = false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ $t('views.RunDetailGuardrailSummary.override_guardrail') }}</div>
-            <div class="mt-0.5 text-sm text-muted-foreground">
-              {{ $t('views.RunDetailGuardrailSummary.override_guardrail_description') }}
-            </div>
-          </div>
-        </template>
+      <FormDialog
+        v-model:open="overrideDialogOpen"
+        :title="$t('views.RunDetailGuardrailSummary.override_guardrail')"
+        :description="$t('views.RunDetailGuardrailSummary.override_guardrail_description')"
+        :confirm-text="$t('views.RunDetailGuardrailSummary.override_guardrail')"
+        :confirm-loading-text="$t('views.RunDetailGuardrailSummary.override_submitting')"
+        :loading="overrideSubmitting"
+        confirm-test-id="run-detail-override-submit"
+        width="42rem"
+        @confirm="submitOverride"
+      >
         <div class="space-y-4">
           <label for="run-detail-override-input" class="mb-1 block text-sm font-medium">
             {{ $t('views.RunDetailGuardrailSummary.input_payload') }}
@@ -1038,14 +1040,7 @@
             {{ overrideMessage.text }}
           </output>
         </div>
-        <template #footer>
-          <div class="flex justify-end">
-            <Button data-testid="run-detail-override-submit" :disabled="overrideSubmitting" @click="submitOverride">
-              {{ overrideSubmitting ? $t('views.RunDetailGuardrailSummary.override_submitting') : $t('views.RunDetailGuardrailSummary.override_guardrail') }}
-            </Button>
-          </div>
-        </template>
-      </Dialog>
+      </FormDialog>
     </template>
   </div>
 </template>
@@ -1068,6 +1063,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import RunErrorTag from '../components/shared/RunErrorTag.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import KnownFixesPanel from '../components/shared/KnownFixesPanel.vue'
 import AnalyzeRunButton from '../components/runs/AnalyzeRunButton.vue'

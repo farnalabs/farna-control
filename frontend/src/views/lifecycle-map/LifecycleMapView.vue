@@ -299,43 +299,38 @@
     </section>
 
     <!-- Import dialog -->
-    <Dialog :visible="showImportDialog" :modal="true" :dismissable-mask="true" class="sm:max-w-lg" data-testid="lifecycle-map-import-dialog" @update:visible="showImportDialog = $event">
-      <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ $t('views.LifecycleMapView.import_dialog_title') }}</div>
-          <div class="mt-0.5 text-sm text-muted-foreground">
-            {{ $t('views.LifecycleMapView.import_paste_hint') }}
-          </div>
-        </div>
-      </template>
-      <textarea
-        v-model="importPayload"
-        rows="10"
-        class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs"
-        :placeholder="$t('views.LifecycleMapView.import_placeholder')"
-        data-testid="lifecycle-map-import-payload"
-        :aria-label="$t('views.LifecycleMapView.import_payload_label')"
-      />
-      <!-- Import action error: no refetch loader; the Import button is the
-           retry path. -->
-      <ErrorAlert
-        v-if="importError"
-        role="alert"
-        class="mt-3"
-        :message="importError"
-        :retryable="false"
-      />
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined size="small" @click="showImportDialog = false">
-            {{ $t('views.LifecycleMapView.cancel') }}
-          </Button>
-          <Button size="small" :disabled="!importPayload.trim() || importing" data-testid="lifecycle-map-import-confirm" @click="handleImportConfirm">
-            {{ importing ? $t('views.LifecycleMapView.importing') : $t('views.LifecycleMapView.import_map') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    <FormDialog
+      v-model:open="showImportDialog"
+      :title="$t('views.LifecycleMapView.import_dialog_title')"
+      :description="$t('views.LifecycleMapView.import_paste_hint')"
+      :confirm-text="$t('views.LifecycleMapView.import_map')"
+      :confirm-loading-text="$t('views.LifecycleMapView.importing')"
+      :confirm-disabled="!importPayload.trim()"
+      :loading="importing"
+      confirm-test-id="lifecycle-map-import-confirm"
+      width="32rem"
+      @confirm="handleImportConfirm"
+    >
+      <div data-testid="lifecycle-map-import-dialog">
+        <textarea
+          v-model="importPayload"
+          rows="10"
+          class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs"
+          :placeholder="$t('views.LifecycleMapView.import_placeholder')"
+          data-testid="lifecycle-map-import-payload"
+          :aria-label="$t('views.LifecycleMapView.import_payload_label')"
+        />
+        <!-- Import action error: no refetch loader; the Import button is the
+             retry path. -->
+        <ErrorAlert
+          v-if="importError"
+          role="alert"
+          class="mt-3"
+          :message="importError"
+          :retryable="false"
+        />
+      </div>
+    </FormDialog>
 
     <!-- Delete confirmation dialog -->
     <FormDialog
@@ -367,7 +362,6 @@ import FormDialog from '../../components/shared/FormDialog.vue'
 import { formatRunDate, isDispatchedRun } from '../../utils/runUtils'
 import { shortId } from '../../utils/format'
 import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import type { JourneyRunHistoryItem, JourneySummary } from '../../types/lifecycleMap'
 import type { LifecycleMapStage } from '../../stores/lifecycleMaps'
 import Select from '../../components/shared/AppSelect.vue'

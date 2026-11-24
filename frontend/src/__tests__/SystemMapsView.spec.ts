@@ -68,7 +68,12 @@ const FormDialogStub = {
   name: 'FormDialog',
   props: ['open', 'confirmTestId', 'cancelTestId'],
   emits: ['confirm', 'update:open'],
-  template: '<button v-if="open" :data-testid="confirmTestId" @click="$emit(\'confirm\')">confirm</button>',
+  // Both the create form (default slot) and the delete confirmation (no body)
+  // render through this stub; the real FormDialog always renders its footer.
+  template:
+    '<div v-if="open"><slot />' +
+    '<button :data-testid="cancelTestId" @click="$emit(\'update:open\', false)">cancel</button>' +
+    '<button :data-testid="confirmTestId" @click="$emit(\'confirm\')">confirm</button></div>',
 }
 
 function mountView() {
@@ -446,6 +451,42 @@ describe('SystemMapsView', () => {
     expect(wrapper.find('form').exists()).toBe(false)
   })
 
+  it('creates a map from the dialog confirm button', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/feature-flags') return Promise.resolve(flagsResponse())
+      return Promise.resolve(listResponse([map()]))
+    })
+    mockPost.mockResolvedValue({ data: { id: 'new-map', name: 'New map' } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="system-maps-create"]').trigger('click')
+    await wrapper.get('[data-testid="system-map-create-name"]').setValue('New map')
+    await wrapper.get('[data-testid="system-map-create-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/system-maps', { body: { name: 'New map', description: '', visibility: 'org', default_map: false } })
+    expect(wrapper.find('form').exists()).toBe(false)
+  })
+
+  it('closes the create dialog from Cancel without creating a map', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/feature-flags') return Promise.resolve(flagsResponse())
+      return Promise.resolve(listResponse([map()]))
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="system-maps-create"]').trigger('click')
+    expect(wrapper.find('form').exists()).toBe(true)
+    await wrapper.get('[data-testid="system-map-create-cancel"]').trigger('click')
+
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
   it('shows a create error and dismisses it', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path === '/api/v1/admin/feature-flags') return Promise.resolve(flagsResponse())
@@ -522,8 +563,11 @@ describe('SystemMapsView', () => {
 
     const store = useSystemMapsStore()
     await store.fetchMaps()
-    const formDialog = wrapper.findComponent(FormDialogStub)
-    formDialog.vm.$emit('confirm')
+    // Two FormDialogs render (create + delete); confirm the DELETE one.
+    const deleteDialog = wrapper
+      .findAllComponents(FormDialogStub)
+      .find((dialog) => dialog.props('confirmTestId') === 'system-map-delete-confirm-btn')
+    deleteDialog!.vm.$emit('confirm')
     await flushPromises()
 
     expect(mockDelete).not.toHaveBeenCalled()

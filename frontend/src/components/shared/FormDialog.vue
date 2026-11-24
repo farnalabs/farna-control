@@ -12,6 +12,7 @@
         <Button
           severity="secondary"
           outlined
+          :disabled="cancelDisabled"
           :data-testid="cancelTestId"
           @click="modelValue = false"
         >{{ $t('common.cancel') }}</Button>
@@ -40,6 +41,8 @@ const props = withDefaults(defineProps<{
   confirmLoadingText?: string
   confirmDisabled?: boolean
   loading?: boolean
+  /** Disable Cancel while an in-flight request must not be dismissed. */
+  cancelDisabled?: boolean
   confirmSeverity?: 'primary' | 'secondary' | 'success' | 'info' | 'warn' | 'help' | 'danger' | 'contrast'
   cancelTestId?: string
   confirmTestId?: string
