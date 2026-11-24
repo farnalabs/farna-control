@@ -1,15 +1,15 @@
-﻿"""Team-boundary enforcement across the REST run-detail family (ADR 070 Â§4).
+"""Team-boundary enforcement across the REST run-detail family (ADR 070 §4).
 
 ``runs`` carries only the org-isolation RLS policy and no ``visibility``
 column, so a run's team boundary is application-layer. The list and stats
 surfaces clamp in SQL; before this change the per-run reads did not, so a
-holder of a team-scoped API key â€” or a viewer â€” could read another team's run
+holder of a team-scoped API key — or a viewer — could read another team's run
 detail, IO, logs, node outputs, reconstructed prompts, artifact pointers and
 side-car transcripts, its live events, and subscribe to its WebSocket stream.
 
 Every per-run read now routes through one shared clamp
 (:func:`farna.api.run_scope.run_visible_to_principal`) applying the two ADR 070
-clauses â€” team-scoped credential boundary and viewer membership â€” with the
+clauses — team-scoped credential boundary and viewer membership — with the
 organisation admin exempt. A refusal is **404**, never 403, so a run's
 existence is not confirmed outside its boundary.
 
@@ -151,7 +151,7 @@ class _Factory:
 
 
 class TestTeamBoundaryPredicate:
-    """``team_boundary_blocked`` â€” the one predicate both surfaces share."""
+    """``team_boundary_blocked`` — the one predicate both surfaces share."""
 
     def test_foreign_team_owner_blocks_a_team_bound_credential(self) -> None:
         assert run_scope.team_boundary_blocked(_TEAM_A, _TEAM_B)
@@ -204,7 +204,7 @@ class TestRunScopeDecision:
 
     @pytest.mark.asyncio
     async def test_stamped_owner_wins_over_the_pipeline_owner(self) -> None:
-        """The run's stamped owner is authoritative â€” no fallback read at all."""
+        """The run's stamped owner is authoritative — no fallback read at all."""
         with patch("farna.db.crud.team_scope.pipeline_team_scope_team_blind", AsyncMock(return_value=BlindPipelineScope(owner_team_id=_TEAM_B, visibility="team"))) as owner:
             visible = await run_scope.run_visible_to_principal(_decision_session(), _team_scoped_key(), _make_run(owner_team_id=_TEAM_A))
 
@@ -406,7 +406,7 @@ def _artifact_session(run: MagicMock, artifact_row: MagicMock) -> AsyncMock:
 
     Order-independent on purpose: the fixed code loads the run first (and the
     clamp refuses before the artifact read), while the pre-fix code issues only
-    the artifact read â€” so the same session proves either behaviour.
+    the artifact read — so the same session proves either behaviour.
     """
     session = configure_mock_session(AsyncMock())
     authz = _result()
@@ -660,4 +660,3 @@ class TestRunWebSocketAppliesTheClamp:
             loaded = await run_ws._load_run_with_rls(_Factory(session), _ws_principal(), _RUN_ID)  # type: ignore[arg-type]
 
         assert loaded is run
-
