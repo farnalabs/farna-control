@@ -121,9 +121,11 @@
               <button type="button" class="ml-2 underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
             </div>
             <div v-else>
-              <div v-if="membersByTeam[team.id]?.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-                {{ $t('views.SettingsTeamsView.no_members_yet') }}
-              </div>
+              <EmptyState
+                v-if="membersByTeam[team.id]?.length === 0"
+                variant="bare"
+                :title="$t('views.SettingsTeamsView.no_members_yet')"
+              />
               <div v-else class="table-wrapper">
                 <table class="w-full text-sm">
                 <thead>
