@@ -535,10 +535,9 @@
        bg-success/10  4.97:1
        bg-success/15  4.76:1). */
   --success-text: 142 71% 45%;
-  /* FAR-2736: on-fill ink for text drawn ON a --success fill (solid buttons,
-     step markers). --success is a mid-green (~45-50% lightness) in every theme,
-     so white on it is only ~2.3:1; dark ink clears AA on every theme's fill.
-     Mirrors the --warning-foreground-on-fill pattern. */
+  /* FAR-1607 pattern: ink drawn ON a --success fill. --success is a mid-lightness
+     green, so white text on it is only ~2.3:1 (below WCAG AA) while this dark
+     on-fill ink clears it (~8:1). Mirrors --warning-foreground. */
   --success-foreground: 222 29% 9%;
   --warning: 38 92% 50%;
   --warning-text: 38 92% 50%;
@@ -618,7 +617,7 @@
      text-safe value (5.42:1 on white, 4.97:1 on bg-success/10, 4.76:1 on
      bg-success/15). */
   --success-text: 142 71% 28%;
-  /* FAR-2736: see --success-foreground in :root - dark ink on the mid-green fill. */
+  /* FAR-1607 pattern: see --success-foreground in :root - dark ink on the green fill. */
   --success-foreground: 220 29% 6%;
   --warning: 38 92% 50%;
   --warning-text: 38 92% 30%;
@@ -702,7 +701,7 @@ html.light .p-badge-secondary {
   --success: 142 80% 50%;
   /* FAR-1938: see --success-text in :root - an exact copy of --success here. */
   --success-text: 142 80% 50%;
-  /* FAR-2736: see --success-foreground in :root - dark ink on the mid-green fill. */
+  /* FAR-1607 pattern: see --success-foreground in :root - dark ink on the green fill. */
   --success-foreground: 222 30% 8%;
   --warning: 38 95% 55%;
   --warning-text: 38 95% 55%;

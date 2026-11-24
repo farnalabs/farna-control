@@ -58,11 +58,10 @@ module.exports = {
         // `text-success-text` - never `text-success` - for success COLOURED
         // TEXT (see style.css for the measured ratios).
         'success-text': 'hsl(var(--success-text))',
-        // FAR-2736: on-fill ink for text drawn ON a solid `bg-success` surface
-        // (buttons, step markers). `--success` is a mid-green in every theme, so
-        // white on it is only ~2.3:1; this dark ink mirrors the
-        // `--warning-foreground`-on-fill pattern. Use `text-success-foreground`
-        // - never `text-white` - on a solid `bg-success` fill.
+        // FAR-1607 pattern: ink drawn ON a solid `success` fill. `--success` is
+        // a mid-lightness green, so white text on it is only ~2.3:1 (below WCAG
+        // AA); `--success-foreground` is the dark on-fill ink (~8:1). Use
+        // `text-success-foreground` on `bg-success` - never `text-white`.
         'success-foreground': 'hsl(var(--success-foreground))',
         warning: 'hsl(var(--warning))',
         // FAR-1530/FAR-1587: text-safe counterpart of `warning`. `--warning` is
@@ -73,10 +72,10 @@ module.exports = {
         // themes. Use `text-warning-text` - never `text-warning` - for warning
         // COLOURED TEXT (see style.css for the measured ratios).
         'warning-text': 'hsl(var(--warning-text))',
-        // FAR-2736: on-fill ink for text drawn ON a `bg-warning` fill. The
-        // variable is defined in style.css but was previously unmapped here, so
-        // `text-warning-foreground` was silently dropped and the ink fell back
-        // to `--foreground` (light in the dark/agent themes - ~2:1 on amber).
+        // FAR-1607: ink drawn ON a solid `warning` fill - dark in every theme,
+        // because `--warning` is mid-amber. Unlike `--warning-text` (warning
+        // COLOURED text on a neutral surface). Use `text-warning-foreground` on
+        // `bg-warning`; the CSS variable already exists in style.css.
         'warning-foreground': 'hsl(var(--warning-foreground))',
         // FAR-1913: text-safe counterpart of `destructive`. `--destructive` is
         // tuned as a FILL/accent hue, so destructive COLOURED TEXT on a
