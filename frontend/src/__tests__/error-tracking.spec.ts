@@ -54,7 +54,7 @@ beforeEach(() => {
 afterEach(() => {
   const tracker = getErrorTracker()
   if (tracker) tracker.dispose()
-  ;(window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__ = false
+  ;(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = false
   vi.restoreAllMocks()
   mockSessionKey()
   vi.useRealTimers()
@@ -310,8 +310,8 @@ describe('BreadcrumbCollector', () => {
     collector.stopAutoCapture()
   })
 
-  it('respects __MODULO_ERROR_TRACKING_DISABLED__', () => {
-    (window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__ = true
+  it('respects __FARNA_ERROR_TRACKING_DISABLED__', () => {
+    (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = true
     const collector = new BreadcrumbCollector(50)
     collector.startAutoCapture()
 
@@ -535,7 +535,7 @@ describe('ErrorTracker advanced behaviour', () => {
   })
 
   it('captureError is a no-op when tracking is disabled', () => {
-    ;(window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__ = true
+    ;(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = true
     const spy = makeBackendSpy()
     const tracker = createErrorTracker({ monitorBackends: [spy.backend] })
 
@@ -558,7 +558,7 @@ describe('ErrorTracker advanced behaviour', () => {
   })
 
   it('does not install handlers or forward events when disabled at construction', () => {
-    ;(window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__ = true
+    ;(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = true
     const spy = makeBackendSpy()
     const tracker = createErrorTracker({ monitorBackends: [spy.backend] })
     const addListener = vi.spyOn(window, 'addEventListener')

@@ -235,12 +235,12 @@ encrypted media if the archive itself must be encrypted.
 does NOT prune `farna-control backup` directories - delete those yourself.
 
 The `farna-control` and `alembic` commands in this section run from `backend/`, where
-`alembic.ini` and the `farna-control` entry point live (step 1 changes into it).
+`alembic.ini` and the `farna-control` entry point live — run the commands below from it.
 
 ### 1. Take the dump
 
 ```bash
-cd /opt/modulo/backend
+# Run from the backend/ directory (the fallback example above shows the path).
 uv run farna-control backup --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
 ```
 

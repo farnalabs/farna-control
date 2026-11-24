@@ -1,4 +1,5 @@
 import type { Breadcrumb } from './types'
+import { isErrorTrackingDisabled } from '../../config/runtime'
 
 let _collectorInstance: BreadcrumbCollector | null = null
 
@@ -34,7 +35,7 @@ export class BreadcrumbCollector {
   }
 
   add(type: Breadcrumb['type'], data: Record<string, unknown>): void {
-    if ((window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__) return
+    if (isErrorTrackingDisabled()) return
     this.buffer.push({ type, timestamp: new Date().toISOString(), data })
     if (this.buffer.length > this.maxSize) {
       this.buffer = this.buffer.slice(-this.maxSize)

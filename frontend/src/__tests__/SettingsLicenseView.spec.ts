@@ -184,6 +184,23 @@ describe('SettingsLicenseView', () => {
     expect(wrapper.text()).toContain('Team license key active')
   })
 
+  it('renders a Team licence without an org id or expiry and omits those rows', async () => {
+    const { api } = await import('../lib/api/client')
+    mockApiResponses(api.GET, { ...mockLicenseTeam, org_id: null, expires_at: null }, mockFlagsTeam)
+
+    const wrapper = mount(SettingsLicenseView, {
+      global: { plugins: [createPinia()], stubs: dialogStubs },
+    })
+    await nextTick()
+    await nextTick()
+    await nextTick()
+    // A Team key is not guaranteed to carry an org id or an expiry, so the
+    // tier still renders while the licensed-to / expires rows stay absent.
+    expect(wrapper.text()).toContain('Team')
+    expect(wrapper.text()).not.toContain('Licensed to')
+    expect(wrapper.text()).not.toContain('Expires')
+  })
+
   it('renders a non-ISO expiry verbatim instead of Invalid Date', async () => {
     const { api } = await import('../lib/api/client')
     mockApiResponses(api.GET, { ...mockLicenseTeam, expires_at: 'not-a-date' }, mockFlagsTeam)

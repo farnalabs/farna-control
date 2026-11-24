@@ -18,7 +18,7 @@ Built-in visibility is pinned in both directions. Native built-ins
 slice — so a plain ``organisation_id =`` clamp cannot hide them. The RLS policy
 on ``library_primitives`` already restricts rows to
 ``organisation_id = current_setting('app.organisation_id')``, so a sentinel-org
-(``MODULO_REGISTRY_ORG_ID``) row is invisible today and must stay invisible.
+(``REGISTRY_ORG_ID``) row is invisible today and must stay invisible.
 These tests fail if a future clamp hides the built-ins, and they fail if the
 clamp is weakened enough to expose the sentinel partition.
 """

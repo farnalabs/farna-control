@@ -654,7 +654,7 @@ run_pre_upgrade_dump() {
   # Only the current package name exists: the pre-rebrand backend/src/modulo
   # tree was renamed to backend/src/farna, so a bundle with the old module
   # cannot be run by a helper whose env contract predates the rename. The old
-  # helper reads MODULO_BUNDLED_BIN_DIR; this installer sets only
+  # helper reads the pre-rebrand bundled-bin-dir name; this installer sets only
   # FARNA_CONTROL_BUNDLED_BIN_DIR. Fail with the actionable message instead of
   # invoking a helper whose env contract no longer exists.
   if [[ -f "${old_root}/backend/src/farna/launcher/upgrade.py" ]]; then
@@ -676,15 +676,19 @@ run_pre_upgrade_dump() {
   # --data-dir dump (which always dumps — a recovery point before an upgrade is
   # never wrong, just occasionally redundant).
   local -a dump_args=(--data-dir "${DATA_DIR}")
+  # Both the capability probe and the dump run need the helper to find the
+  # bundled pg_dump. Set the value once here (the value test lifts this line
+  # verbatim) and export it so neither invocation repeats the assignment.
+  local FARNA_CONTROL_BUNDLED_BIN_DIR
+  FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin"
+  export FARNA_CONTROL_BUNDLED_BIN_DIR
   if PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
-      FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
       "${py}" -m "${module}" --help 2>/dev/null | grep -q -- "--target-bundle"; then
     dump_args+=(--target-bundle "${bundle_dir}")
   else
     info "WARNING: the installed upgrade helper predates --target-bundle; taking a plain --data-dir dump (it cannot detect whether the new bundle migrates, so a snapshot is always taken)."
   fi
   if snapshot_path="$(PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
-      FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
       "${py}" -m "${module}" "${dump_args[@]}")"; then
     :
   else

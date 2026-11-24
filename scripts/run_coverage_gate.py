@@ -246,7 +246,21 @@ _EXCLUDE_PATTERNS: list[str] = [
     # five fields), failing a PR whose only "uncovered" lines were erased
     # types. Mirrors the ``**/schema.ts`` rationale: no executable code, no
     # coverage to measure.
-    "frontend/src/types/**",
+     "frontend/src/types/**",
+    # TypeScript declaration files (``*.d.ts``) carry only ambient types and
+    # ``interface``/``type`` declarations; the compiler erases them and v8 never
+    # instruments them, so they never appear in the frontend LCOV report. Same
+    # measurement-boundary class as ``frontend/src/types/**`` above: a global
+    # type rename in a declaration file (e.g. ``env.d.ts``) would otherwise be
+    # charged as an unmeasured 0% line and fail a PR whose only frontend change
+    # is a type declaration.
+    "**/*.d.ts",
+    # Static assets under ``frontend/public/**`` are copied into the build
+    # verbatim (the container-startup ``runtime-config.js`` is rewritten at
+    # deploy time) and are never imported by the vitest scan, so they never
+    # reach the LCOV report. Same measurement-boundary class as
+    # ``frontend/*.config.*`` and ``frontend/scripts/**`` above.
+    "frontend/public/**",
     "**/locales/**",
     "tests/**",
     "test_*/**",

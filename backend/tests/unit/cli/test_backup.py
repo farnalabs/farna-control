@@ -132,7 +132,7 @@ class TestResolveUrl:
         assert result == "postgresql://fallback/db"
 
 
-# ── _db_has_modulo_tables ─────────────────────────────────────────────────────
+# ── database-table presence probe ─────────────────────────────────────────────
 
 
 class TestDbHasModuloTables:
