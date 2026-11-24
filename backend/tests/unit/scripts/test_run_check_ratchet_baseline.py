@@ -735,17 +735,25 @@ def test_end_to_end_pr_context_prefers_origin_base_over_head_parent(tmp_path):
     (``origin/main``) catches the loosening. This is the FAR-2699 follow-up:
     ``github.event.before`` on a pull_request synchronize names the branch's
     previous head, which the old chain preferred over the base branch.
+
+    Both env vars are set to the values a real ``pull_request`` run supplies:
+    ``GITHUB_BASE_REF=main`` AND ``RATCHET_BASE_REV`` = the branch's previous head.
+    Setting ``RATCHET_BASE_REV`` is what makes this fail against a guard that
+    prefers the push hint; only making ``GITHUB_BASE_REF`` authoritative passes.
     """
     repo = _make_repo(tmp_path)
     origin_main = _git(repo, "rev-parse", "HEAD").stdout.strip()
     _git(repo, "checkout", "-q", "-b", "feature")
     _write_baseline(repo, "a.py\t9\nb.py\t2\n")
-    _commit_all(repo, "raise a.py on the feature branch")
+    branch_previous_head = _commit_all(repo, "raise a.py on the feature branch")
     (repo / "unrelated.txt").write_text("later\n", encoding="utf-8")
     _commit_all(repo, "unrelated tip commit so HEAD^ is not the base")
     _git(repo, "update-ref", "refs/remotes/origin/main", origin_main)
 
-    proc = _run_counted(repo, extra_env={"GITHUB_BASE_REF": "main"})
+    proc = _run_counted(
+        repo,
+        extra_env={"GITHUB_BASE_REF": "main", "RATCHET_BASE_REV": branch_previous_head},
+    )
 
     assert proc.returncode == 1, proc.stderr
     assert "origin/main" in proc.stderr
@@ -780,6 +788,42 @@ def test_end_to_end_origin_base_beats_the_merge_ref_first_parent(tmp_path):
     assert "origin/main" in proc.stderr
     assert "HEAD^ (first parent" not in proc.stderr
     assert "9 > 1" in proc.stderr
+
+
+def test_resolve_base_ignores_the_push_hint_when_github_base_ref_is_set(tmp_path, monkeypatch):
+    """``GITHUB_BASE_REF`` is authoritative; the push hint never overrides it.
+
+    On a pull_request event both env vars can be present, and the hint names the
+    branch's own previous head - not a base. The guard must ignore it whenever
+    ``GITHUB_BASE_REF`` is set, so correctness does not depend on ``ci.yml``
+    blanking the hint.
+    """
+    repo = _make_repo(tmp_path)
+    (repo / "later.txt").write_text("later\n", encoding="utf-8")
+    _commit_all(repo, "a second commit so HEAD^ exists")
+    _git(repo, "branch", "release")
+    monkeypatch.setenv("GITHUB_BASE_REF", "release")
+    monkeypatch.setenv("RATCHET_BASE_REV", "HEAD")
+
+    rev, why = mod._resolve_base(repo, None)
+
+    assert rev == "release"
+    assert "GITHUB_BASE_REF" in why
+
+
+def test_resolve_base_uses_a_local_base_ref_when_origin_is_absent(tmp_path, monkeypatch):
+    """A fetched ``origin/<base>`` is preferred, but a local ``<base>`` still works."""
+    repo = _make_repo(tmp_path)
+    _git(repo, "branch", "release")
+    (repo / "later.txt").write_text("later\n", encoding="utf-8")
+    _commit_all(repo, "a second commit so HEAD^ exists")
+    monkeypatch.delenv("RATCHET_BASE_REV", raising=False)
+    monkeypatch.setenv("GITHUB_BASE_REF", "release")
+
+    rev, why = mod._resolve_base(repo, None)
+
+    assert rev == "release"
+    assert "GITHUB_BASE_REF" in why
 
 
 def test_resolve_base_falls_through_an_unfetched_base_ref_to_head_parent(tmp_path, monkeypatch):
@@ -818,7 +862,7 @@ def test_end_to_end_all_ratchets_unchanged_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
@@ -830,7 +874,7 @@ def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD^")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_existing_file_brand_entry_fails(tmp_path):
@@ -918,7 +962,7 @@ def test_end_to_end_read_credential_removed_route_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD^")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_read_credential_kind_change_fails(tmp_path):
@@ -967,7 +1011,7 @@ def test_end_to_end_malformed_base_file_is_skipped_with_a_loud_warning(tmp_path)
     assert "[read-credential-allowlist]" in proc.stderr
     assert bad_base in proc.stderr
     assert "SKIPPED" in proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
     assert "1 skipped: unreadable base" in proc.stderr
 
 

@@ -84,27 +84,30 @@ sum constrains them), so raising those two together with ``read routes total``
 still parses - they are a review invariant, not a derived count.
 
 Base revision
-------------
+-------------
 The base is resolved once, in this order, and the choice is printed so a reader
 can see what was compared:
 
 1. ``--base <rev>`` (explicit; used locally, e.g. ``--base origin/main``). An
    explicit rev that does not resolve is a hard failure - never a silent pass.
-2. ``RATCHET_BASE_REV`` in the environment, when non-empty and resolvable. This
-   is a PUSH-event hint only: the workflow passes ``github.event.before`` (the
-   previous main tip), so a raise buried mid-push is caught. It must not be
-   supplied on a pull_request event - there ``github.event.before`` is the
-   branch's own previous head, not a base - and ``ci.yml`` is scoped so it is
-   empty for a PR. An unresolvable hint falls through (a brand-new branch's
-   ``before`` is the all-zero SHA, which names no commit).
-3. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF``. ``GITHUB_BASE_REF`` is
-   the PR's target branch, so it names the base directly. This comes BEFORE
-   ``HEAD^2``: when the PR base ref WAS fetched (``fetch-depth: 0`` fetches
-   ``refs/heads/*``), comparing against the target branch is exact, whereas the
-   merge-ref parent is a snapshot of main taken when GitHub minted the merge
-   commit. If neither candidate resolves we fall through rather than abort -
-   ``HEAD^2`` below is then the true base and aborting would turn a fetch gap
-   into a red PR.
+2. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF``. ``GITHUB_BASE_REF`` is
+   the PR's target branch, so it names the base directly. This is AUTHORITATIVE
+   and comes before the push hint: whenever ``GITHUB_BASE_REF`` is set the
+   environment is describing a pull_request event, so the push-only
+   ``RATCHET_BASE_REV`` hint is ignored outright - correctness must not depend on
+   ``ci.yml`` blanking it. It also comes BEFORE ``HEAD^2``: when the PR base ref
+   WAS fetched (``fetch-depth: 0`` fetches ``refs/heads/*``), comparing against
+   the target branch is exact, whereas the merge-ref parent is a snapshot of main
+   taken when GitHub minted the merge commit. If neither candidate resolves we
+   fall through rather than abort - ``HEAD^2`` below is then the true base and
+   aborting would turn a fetch gap into a red PR.
+3. ``RATCHET_BASE_REV`` in the environment, when non-empty and resolvable, and
+   only when ``GITHUB_BASE_REF`` is unset. This is a PUSH-event hint: the
+   workflow passes ``github.event.before`` (the previous main tip), so a raise
+   buried mid-push is caught. On a pull_request event ``github.event.before`` is
+   the branch's own previous head, not a base, so the hint is never consulted
+   there. An unresolvable hint falls through (a brand-new branch's ``before`` is
+   the all-zero SHA, which names no commit).
 4. ``HEAD^`` when ``HEAD^2`` exists - a pull_request checkout is the PR merge
    commit, whose first parent is the base branch tip. This is the real-CI path
    when ``actions/checkout`` does not fetch ``origin/<base>`` (see the
@@ -254,13 +257,17 @@ def _resolve_base(repo_root: Path, explicit: str | None) -> tuple[str, str]:
 
     1. ``--base`` - the caller asked for a specific revision; an explicit rev
        that does not resolve is a hard failure, never a silent pass.
-    2. ``RATCHET_BASE_REV`` - a PUSH-only hint (``github.event.before``, the
-       previous main tip). On a pull_request event ``before`` is the branch's
-       own previous head, so ``ci.yml`` deliberately leaves this empty there.
-    3. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF`` - the PR's target
-       branch. It beats ``HEAD^2`` because it is the branch itself rather than
-       a snapshot of it; a fetch gap falls through instead of aborting, because
-       ``HEAD^2`` below is then the true base.
+    2. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF`` - the PR's target
+       branch. It is AUTHORITATIVE: whenever ``GITHUB_BASE_REF`` is set the
+       environment describes a pull_request event, so the push-only
+       ``RATCHET_BASE_REV`` hint is ignored outright. It also beats ``HEAD^2``
+       because it is the branch itself rather than a snapshot of it; a fetch gap
+       falls through instead of aborting, because ``HEAD^2`` below is then the
+       true base.
+    3. ``RATCHET_BASE_REV`` - a PUSH-only hint (``github.event.before``, the
+       previous main tip), consulted only when ``GITHUB_BASE_REF`` is unset. On a
+       pull_request event ``before`` is the branch's own previous head, so the
+       hint is never used there.
     4. ``HEAD^2``'s first parent - the pull_request merge-ref checkout, whose
        parent is the base-branch tip even when no ``origin/<base>`` was fetched.
     5. ``HEAD^`` - the documented non-PR fallback (previous commit).
@@ -274,10 +281,10 @@ def _resolve_base(repo_root: Path, explicit: str | None) -> tuple[str, str]:
             raise RatchetError(f"--base {explicit!r} does not resolve to a commit in this repository; refusing to pass with an unreadable base")
         return explicit, "explicit --base"
 
-    hint = os.environ.get(BASE_ENV_VAR, "").strip()
-    if hint and _rev_exists(repo_root, hint):
-        return hint, f"{BASE_ENV_VAR} (push event's previous tip)"
-
+    # GITHUB_BASE_REF is authoritative. It is set only on a pull_request event,
+    # where the push-only RATCHET_BASE_REV hint would be the branch's own
+    # previous head (never a base), so the hint is ignored outright whenever it
+    # is present - correctness must not depend on ci.yml blanking the hint.
     base_ref = os.environ.get("GITHUB_BASE_REF", "").strip()
     if base_ref:
         for candidate in (f"origin/{base_ref}", base_ref):
@@ -286,6 +293,10 @@ def _resolve_base(repo_root: Path, explicit: str | None) -> tuple[str, str]:
         # Neither candidate resolves (a depth-1 checkout can omit both): fall
         # through to the merge-ref parent, which IS the base branch tip. Aborting
         # here would turn a fetch gap into a red PR on an otherwise valid change.
+
+    hint = os.environ.get(BASE_ENV_VAR, "").strip()
+    if not base_ref and hint and _rev_exists(repo_root, hint):
+        return hint, f"{BASE_ENV_VAR} (push event's previous tip)"
 
     if _rev_exists(repo_root, "HEAD^2"):
         return _PARENT_REV, "HEAD^ (first parent of the PR merge commit; origin/<base> was not fetched)"
@@ -1256,7 +1267,7 @@ def _run_all(repo_root: Path, explicit_base: str | None) -> int:
 
     skipped_note = f" ({len(skipped)} skipped: unreadable base)" if skipped else ""
     print(
-        f"ratchet-baseline guard: OK - none of the {len(RATCHETS)} ratchets is loosened against {rev} ({why}){skipped_note}.",
+        f"ratchet-baseline guard: OK - none of the checked ratchets is loosened against {rev} ({why}){skipped_note}.",
         file=sys.stderr,
     )
     return 0
