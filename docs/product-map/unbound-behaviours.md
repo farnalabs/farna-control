@@ -10,8 +10,8 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 458 of 885 ticked behaviours (84 node, 137 feature, 237 module strength).
-Weak bindings (module-only): 237. This count is ratcheted shrink-only in the baseline.
+Bound today: 461 of 896 ticked behaviours (84 node, 137 feature, 240 module strength).
+Weak bindings (module-only): 240. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
 
@@ -806,6 +806,13 @@ Derived status: `partial`
 - `health-checks-21` - External uptime monitoring is GONE – `.github/workflows/uptime-monitor.yml`
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
+## docs/product-map/infra/native-single-install.md
+
+Derived status: `partial`
+
+- `native-single-install-16` - Each first-run install offers an OPTIONAL product-analytics opt-in, ONCE,
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+
 ## docs/product-map/infra/support-diagnostics.md
 
 Derived status: `partial`
@@ -1056,6 +1063,25 @@ Derived status: `partial`
 - `schemas-06` - Inference at `/api/v1/schemas/infer` builds a `definition_json` draft from a
   - why: behaviour text cites a test artefact that does not resolve to a proving test
 
+## docs/product-map/system/key-rotation.md
+
+Derived status: `partial`
+
+- `key-rotation-01` - `POST /api/v1/admin/rotation/rotate-key` accepts
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `key-rotation-02` - The old key is `old_fernet_key` when supplied and otherwise the running
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `key-rotation-03` - A new key shorter than 32 bytes is rejected with `422` before any write
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `key-rotation-05` - The start route is audited twice: the shared `audited()` dependency
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `key-rotation-07` - The lock acquisition fails CLOSED: a Redis error while acquiring answers
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `key-rotation-08` - The status read fails OPEN: `GET /api/v1/admin/rotation/status` answers
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `key-rotation-09` - Rotation is refused with `503` when
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+
 ## docs/product-map/system/runtime.md
 
 Derived status: `partial`
@@ -1155,7 +1181,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 84  Feature: 137  Module (weak): 237
+Node: 84  Feature: 137  Module (weak): 240
 
 ### Weak (module-only) bindings
 
@@ -1338,6 +1364,12 @@ test. The list is ratcheted shrink-only in the baseline: it may not grow.
   - refs: backend/tests/unit/core/test_alert_context.py, backend/tests/unit/core/test_health_alerts.py, backend/tests/unit/core/watchdog/test_worker_liveness.py
 - `hitl-gates-03` - HITL reads are viewer-level and team-membership bounded (PR #2552):
   - refs: backend/tests/unit/api/test_hitl_routes_coverage.py, backend/tests/unit/mcp/test_team_scope_enforcement.py
+- `key-rotation-04` - Access requires the system permission `system.config.manage`, and the
+  - refs: backend/tests/unit/api/test_break_glass_rotation_mint_deny.py, backend/tests/unit/api/test_break_glass_mint_deny.py
+- `key-rotation-06` - Only one rotation may run at a time. With Redis configured the guard is a
+  - refs: backend/tests/unit/api/test_toctou_fixes.py
+- `key-rotation-10` - The background task runs on the cross-org system session factory and
+  - refs: backend/tests/unit/core/test_fernet_rotation.py, backend/tests/integration/test_fernet_rotation_triggers_jsonb_set.py
 - `library-08` - Composite library-primitive credential masking (FAR-1380): the shared
   - refs: backend/tests/unit/api/test_library_primitive_masking.py
 - `library-09` - Library collections (FAR-760): a `library_collection` primitive can be created as a

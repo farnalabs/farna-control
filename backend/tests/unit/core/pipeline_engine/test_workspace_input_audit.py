@@ -32,7 +32,8 @@ from farna.db.crud.run_node_outputs import read_audit_row_outputs_json
 from farna.db.models.base import Base
 from farna.db.models.run_node_outputs import FINAL_ATTEMPT_KEY, RunNodeOutput
 
-_TABLE_NAMES = {"run_node_outputs", "organisations"}
+# ADR 070 Phase 1A: every run_node_outputs write stamps the parent run owner.
+_TABLE_NAMES = {"run_node_outputs", "organisations", "runs"}
 
 _ORG = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
 _RUN_ID = uuid.UUID("01234567-89ab-cdef-0123-456789abcdef")

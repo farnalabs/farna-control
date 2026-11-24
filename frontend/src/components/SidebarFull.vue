@@ -6,7 +6,7 @@
         <!-- The name and tier badge stack: "Farna Control" plus a badge does not
              fit one row in the 256px sidebar, and the name must never wrap. -->
         <span class="flex min-w-0 flex-col items-start gap-1">
-          <h2 data-testid="sidebar-product-name" class="whitespace-nowrap text-lg font-bold leading-tight tracking-tight">{{ $t('components.AppLayout.modulo') }}</h2>
+          <span data-testid="sidebar-product-name" class="whitespace-nowrap text-lg font-bold leading-tight tracking-tight">{{ $t('components.AppLayout.modulo') }}</span>
           <Badge v-if="planStore.currentTier" data-testid="sidebar-tier-badge" severity="secondary" class="max-w-full truncate border border-border text-[10px] px-1.5 py-0 leading-none">
             {{ planStore.getTierLabel(planStore.currentTier) }}
           </Badge>

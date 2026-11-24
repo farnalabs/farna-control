@@ -374,6 +374,7 @@ def record_changed_set_evidence(
     run_id: UUID,
     resolved: ResolvedChangedSet,
     outcome: DiffPolicyOutcome | None = None,
+    owner_team_id: UUID | None = None,
 ) -> list[Any]:
     """Append the changed-set facts to the run's Evidence rows.
 
@@ -381,6 +382,11 @@ def record_changed_set_evidence(
     authorised write path - as the ``derived`` producer (the resolved set is
     computed from observed and reported facts). Returns the appended rows; the
     caller's transaction commits them.
+
+    ``owner_team_id`` (ADR 070 Phase 1A) is the parent run's team, supplied by the
+    caller that holds the run. This function is pure/synchronous on purpose and
+    cannot read the run itself, so omitting it writes an unowned fact - correct
+    only for a run of an org-level pipeline.
 
     Raises :class:`~farna.core.eval_engine.evidence_layer.EvidenceWriteAuthorisationError`
     if a key falls outside the producer's owned namespace.
@@ -396,6 +402,7 @@ def record_changed_set_evidence(
                 subject_id=str(run_id),
                 value=value,
                 producer_type="derived",
+                owner_team_id=owner_team_id,
             )
         )
     return rows

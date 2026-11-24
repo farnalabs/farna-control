@@ -23,6 +23,13 @@ BUILTIN_ORG_ID: uuid.UUID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)
 
+# Provenance the built-in collection bundles carry in ``content_json``'s nested
+# ``trust_header.source``. This value is deliberately FROZEN: it is an
+# operator-editable provenance marker inside a content blob, no product reader
+# consumes it (the authoritative identity is the ``source`` column, which says
+# ``farna_control``), and rewriting stored customer content buys nothing.
+# See the persisted-value migration plan (decision 1: keep).
+
 
 # Repeated seed/label values (S1192). Pure aliases — the strings are part of
 # the seeded primitive content and the log-name contract.

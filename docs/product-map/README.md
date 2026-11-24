@@ -1403,6 +1403,18 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `declared_scopes` recorded but unenforced). `_ORPHANED_BDD_FEATURES` stays
 > empty.
 
+> **Closed this walk (2026-11-24):** tracked one shipped but untracked backend
+> surface: the system-administrator Fernet key-rotation control plane
+> (`system/key-rotation.md`). `POST /api/v1/admin/rotation/rotate-key` and
+> `GET /api/v1/admin/rotation/status` ship REST-only (no manifest route, no UI,
+> no MCP tool) and were documented only in `docs/security/secret-management.md`,
+> so neither product-map layer described them. The entry records the
+> `system.config.manage` floor, break-glass mint-deny, the start/completed audit
+> events, the Redis/in-process rotation lock, the `503` system-role guard and the
+> no-downtime contract, and keeps the honest gaps (process-local last result, no
+> resume/cancel, no failure audit event, no UI, instance-wide scope).
+> `_ORPHANED_BDD_FEATURES` stays empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1494,6 +1506,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-schemas](schemas/schemas.md) => PRD N/A
 
 ### System
+- [feat-key-rotation](system/key-rotation.md) => PRD N/A
 - [feat-org](admin/org.md) => PRD N/A
 - [feat-runtime](system/runtime.md) => PRD N/A
 - [feat-system-config](system/system-config.md) => PRD N/A

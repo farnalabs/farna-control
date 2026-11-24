@@ -5,7 +5,7 @@
     <div
       v-else-if="showDisabled"
       class="relative min-h-[300px]"
-      data-testid="feature-gate-disabled"
+      :data-testid="`feature-gate-disabled-${gateUid}`"
     >
       <div class="pointer-events-none select-none opacity-40">
         <slot />
@@ -14,7 +14,7 @@
         <div
           class="mx-4 rounded-lg border border-warning/30 bg-background/95 p-4 text-center shadow-lg backdrop-blur-sm"
         >
-          <p class="text-sm font-medium text-warning-text" data-testid="feature-gate-title">
+          <p class="text-sm font-medium text-warning-text" :data-testid="`feature-gate-title-${gateUid}`">
             {{ gateTitle }}
           </p>
           <p class="mt-1 text-xs text-muted-foreground">{{ tooltipText }}</p>
@@ -40,12 +40,12 @@
     <div
       v-else
       class="flex items-center justify-center py-16"
-      data-testid="feature-gate-lock"
+      :data-testid="`feature-gate-lock-${gateUid}`"
     >
       <div class="text-center space-y-4">
         <LockIcon :locked="true" :tooltip="tooltipText" />
         <div>
-          <h3 class="text-lg font-semibold" data-testid="feature-gate-title">{{ gateTitle }}</h3>
+          <h3 class="text-lg font-semibold" :data-testid="`feature-gate-title-${gateUid}`">{{ gateTitle }}</h3>
           <p class="text-sm text-muted-foreground">{{ tooltipText }}</p>
         </div>
         <Button
@@ -94,8 +94,10 @@ const props = withDefaults(defineProps<{
 const planStore = usePlanStore();
 
 // FAR-2714: a page can render several gates (e.g. /governance wraps each level
-// in one), so the gate root needs a per-instance id. The disabled/lock/title
-// markers stay static because they identify the gate's state, not the instance.
+// in one), so the gate root needs a per-instance id. FAR-2719: the
+// disabled/lock/title markers carry the same per-instance suffix too, otherwise
+// two gates in different states on one page collide and break Playwright
+// strict-mode getByTestId (e.g. two title nodes, one per gate).
 const gateUid = useId();
 
 const enabled = computed(() => {

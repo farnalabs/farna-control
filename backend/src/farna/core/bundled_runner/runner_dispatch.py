@@ -1251,7 +1251,7 @@ async def _resolve_sandbox_envs_with_script_setup(
 
     # FAR-1690 slice A1: EVERY dispatch mode (script AND llm) issues a
     # short-TTL, run-scoped credential through the CredentialIssuer seam and
-    # stamps its issuance provenance (``modulo_minted`` — attested, NEVER
+    # stamps its issuance provenance (``self_minted`` — attested, NEVER
     # ``observed``). Fail-open: an issuance failure leaves the key absent (the
     # workspace still runs).
     issued = await _sandbox_issue_run_credential_for_sandbox(

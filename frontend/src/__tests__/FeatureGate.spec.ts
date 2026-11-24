@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePlanStore, type PlanEntitlement } from '../stores/planStore'
@@ -34,7 +35,7 @@ describe('FeatureGate', () => {
     })
 
     expect(wrapper.text()).toContain('Gated Content')
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(false)
   })
 
   it('shows the behaviour-off copy when a flag no entitlement covers is disabled', () => {
@@ -46,7 +47,7 @@ describe('FeatureGate', () => {
       slots: { default: 'Gated Content' },
     })
 
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
     expect(lock.exists()).toBe(true)
     expect(lock.text()).toContain('Feature not available')
     expect(lock.text()).not.toContain('Team Feature')
@@ -63,7 +64,7 @@ describe('FeatureGate', () => {
       slots: { default: 'Gated Content' },
     })
 
-    expect(wrapper.find('[data-testid="feature-gate-lock"] a').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"] a').exists()).toBe(false)
   })
 
   it('renders the commercial copy and entitlement label for an ungranted capability', () => {
@@ -75,7 +76,7 @@ describe('FeatureGate', () => {
       slots: { default: 'Gated Content' },
     })
 
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
     expect(lock.text()).toContain('Team Feature')
     expect(lock.find('[data-testid="lock-icon"]').attributes('title')).toBe(
       'Available on higher plan tier — Audit and evidence — /settings/license',
@@ -99,7 +100,7 @@ describe('FeatureGate', () => {
       slots: { default: 'Gated Content' },
     })
 
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
     expect(lock.exists()).toBe(true)
     expect(lock.text()).toContain('Feature not available')
     expect(lock.text()).toContain('turned off for your organization')
@@ -119,7 +120,7 @@ describe('FeatureGate', () => {
       props: { requiredEntitlement: 'identity' },
       slots: { default: 'Gated Content' },
     })
-    expect(lockedWrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(true)
+    expect(lockedWrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(true)
 
     const openWrapper = mount(FeatureGate, {
       props: { requiredEntitlement: 'cost_governance' },
@@ -169,7 +170,7 @@ describe('FeatureGate', () => {
       slots: { default: 'Gated Content' },
     })
 
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
     expect(lock.text()).toContain('Feature not available')
     expect(lock.find('a').exists()).toBe(false)
   })
@@ -183,9 +184,43 @@ describe('FeatureGate', () => {
       slots: { default: 'Gated Content' },
     })
 
-    const banner = wrapper.find('[data-testid="feature-gate-disabled"]')
-    expect(banner.find('[data-testid="feature-gate-title"]').text()).toBe('Feature not available')
+    const banner = wrapper.find('[data-testid^="feature-gate-disabled-"]')
+    expect(banner.find('[data-testid^="feature-gate-title-"]').text()).toBe('Feature not available')
     expect(banner.text()).not.toContain('Team Feature')
     expect(banner.find('a').exists()).toBe(false)
+  })
+
+  it('gives two gates on one page distinct disabled/lock/title ids (FAR-2719)', () => {
+    // A page can render several gates (e.g. /governance). FAR-2714 made the
+    // gate root per-instance; FAR-2719 does the same for the disabled/lock/
+    // title markers, otherwise two gates collide and Playwright strict-mode
+    // getByTestId matches more than one element. Both gates mount inside ONE
+    // app (useId's counter is per-app, so two separate mounts would both
+    // allocate the same suffix and mask the collision).
+    const store = usePlanStore()
+    store.$patch({ features: { mcp_server: false }, entitlements: entitlements() })
+
+    const Host = defineComponent({
+      components: { FeatureGate },
+      template: `
+        <div>
+          <FeatureGate feature-name="mcp_server" :show-disabled="true" />
+          <FeatureGate required-entitlement="identity" />
+        </div>`,
+    })
+
+    const wrapper = mount(Host)
+    const ids = wrapper.findAll('[data-testid]').map((el) => el.attributes('data-testid') ?? '')
+    const gateIds = ids.filter((id) => id.startsWith('feature-gate-'))
+
+    // One disabled banner + one lock screen renders two gate titles; every
+    // gate id across both must be unique.
+    expect(new Set(gateIds).size).toBe(gateIds.length)
+
+    // Each marker carries its per-instance suffix — reverting any of the three
+    // to a static id drops it from its suffixed family and fails here too.
+    expect(gateIds.filter((id) => id.startsWith('feature-gate-disabled-'))).toHaveLength(1)
+    expect(gateIds.filter((id) => id.startsWith('feature-gate-lock-'))).toHaveLength(1)
+    expect(gateIds.filter((id) => id.startsWith('feature-gate-title-'))).toHaveLength(2)
   })
 })

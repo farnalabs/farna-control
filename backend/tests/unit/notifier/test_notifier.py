@@ -20,6 +20,7 @@ from tests.unit.notifier.conftest import begin_context, make_scalar_result, sess
 from farna.core.notifier import (
     MAX_ATTEMPTS,
     MAX_DEAD_LETTERS,
+    NOTIFIER_USER_AGENT,
     RETRY_DELAYS,
     DispatchResult,
     Notifier,
@@ -1230,3 +1231,29 @@ def test_notifier_has_no_unpinned_client_lifecycle() -> None:
     assert not hasattr(notifier_instance, "_get_client")
     assert not hasattr(notifier_instance, "_http_client")
     assert not hasattr(notifier_instance, "close")
+
+
+# ---------------------------------------------------------------------------
+# Persisted-value migration: the outbound wire identifier
+# ---------------------------------------------------------------------------
+
+
+async def test_outbound_notification_user_agent_is_farna_control(notifier: Notifier) -> None:
+    """The delivered POST carries the brand-free user agent, not the retired name.
+
+    Pins the wire value the migration plan changes before the first external
+    install; the ``1.0`` protocol suffix is deliberately unchanged.
+    """
+    ep = _fake_endpoint()
+    with (
+        patch.object(notifier, "_record_delivery", AsyncMock()),
+        patch.object(notifier, "_increment_dead_letter", AsyncMock()),
+        patch.object(notifier, "_reset_dead_letter", AsyncMock()),
+    ):
+        async with respx.mock:
+            route = respx.post(ep.url).mock(Response(200, text="OK"))
+            result = await _do_dispatch(notifier, ep)
+
+    assert result.status == "delivered"
+    assert route.calls.last.request.headers["user-agent"] == NOTIFIER_USER_AGENT
+    assert NOTIFIER_USER_AGENT == "Farna-Control-Notifier/1.0"

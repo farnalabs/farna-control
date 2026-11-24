@@ -10,16 +10,18 @@
  * job, both gated on `frontend`) so a frontend-only PR that introduces drift
  * fails CI at PR time.
  *
- * It mirrors the backend architecture test
- * `backend/tests/architecture/test_design_system_conformance.py`, which runs on
- * backend-heavy PRs, every push to main and workflow_dispatch. Keep the two in
- * step: they read the SAME checked-in baseline, `frontend/design-system-baseline.json`,
- * and the two scans must produce identical counts. Regenerate the baseline with
- * the snippet in the Python module's docstring.
+ * This spec is the SINGLE owner of the guard (FAR-2749). It replaced the
+ * duplicate backend architecture test
+ * `backend/tests/architecture/test_design_system_conformance.py`, which read the
+ * same baseline: keeping two scans in step by hand was itself the drift the
+ * guard exists to prevent. The frontend unit suite is the right home - it runs
+ * on every frontend-touching PR, and a baseline-only change under `frontend/`
+ * triggers that job, whereas the backend architecture suite skips frontend-only
+ * changes.
  *
  * Two rules
  * ---------
- * 1. Absolute rule (no allowlist). A `DataCard` opening tag that
+ * 1. Absolute rule (no allowlist). A `DataCard` or `SectionCard` opening tag that
  *    carries BOTH a title attribute and `padding="none"` fails. That is the
  *    exact defect FAR-2694 fixed: the card renders its own header, so the
  *    padding override leaves that header flush against the card edge.
@@ -50,9 +52,19 @@
  * `frontend/src/components/ui` and `frontend/src/components/shared` (the
  * primitives themselves), plus `frontend/src/components/PageTabs.vue` and
  * `frontend/src/__tests__` are out of scope by construction.
+ *
+ * Regenerating the baseline after a sweep
+ * ---------------------------------------
+ * `frontend/design-system-baseline.json` is generated from the current tree by
+ * this spec's own scanner (`collectCounts()`), with only non-zero entries, sorted
+ * deterministically per pattern. After a sweep lowers counts, regenerate it and
+ * delete entries that reached zero (the ratchet fails on a stale zero entry):
+ *
+ *     cd frontend
+ *     DS_GUARD_WRITE_BASELINE=1 pnpm exec vitest run src/__tests__/design-system-guard.spec.ts
  */
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'fs'
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { join, relative, extname, sep, resolve } from 'path'
 
 const SRC_DIR = join(__dirname, '..')
@@ -189,8 +201,12 @@ function collectCounts(): Counts {
   return counts
 }
 
-function loadBaseline(): Counts {
-  const raw: unknown = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8'))
+function emptyCounts(): Counts {
+  return { card_container: {}, card_header: {}, raw_dialog: {} }
+}
+
+/** Validate a parsed baseline JSON value, rejecting unknown patterns / bad counts. */
+function parseBaseline(raw: unknown): Counts {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new Error(`${BASELINE_NAME} must be a JSON object keyed by pattern`)
   }
@@ -199,7 +215,7 @@ function loadBaseline(): Counts {
   if (unknownPatterns.length) {
     throw new Error(`${BASELINE_NAME} names unknown pattern(s): ${unknownPatterns.join(', ')}; expected ${PATTERNS.join(', ')}`)
   }
-  const baseline: Counts = { card_container: {}, card_header: {}, raw_dialog: {} }
+  const baseline = emptyCounts()
   for (const pattern of PATTERNS) {
     const entries = record[pattern]
     if (typeof entries !== 'object' || entries === null || Array.isArray(entries)) {
@@ -215,10 +231,54 @@ function loadBaseline(): Counts {
   return baseline
 }
 
-/** Offending DataCard tags that combine a title with padding="none". */
+function loadBaseline(): Counts {
+  return parseBaseline(JSON.parse(readFileSync(BASELINE_PATH, 'utf-8')))
+}
+
+interface RatchetResult {
+  regressions: string[]
+  reductions: string[]
+  zeroed: string[]
+}
+
+/**
+ * Compare actual per-file counts against the baseline.
+ *
+ * - a count above its baseline is a regression (new if the baseline is 0, grew
+ *   otherwise) and must fail the guard;
+ * - a baseline entry whose file now counts zero is `zeroed` and must fail (the
+ *   ratchet only shrinks - delete the stale allowance);
+ * - a non-zero reduction is only a `reduction`: it warns so it stays visible,
+ *   but does not fail.
+ */
+function evaluateRatchet(baseline: Counts, actual: Counts): RatchetResult {
+  const regressions: string[] = []
+  const reductions: string[] = []
+  const zeroed: string[] = []
+  for (const pattern of PATTERNS) {
+    for (const [path, count] of Object.entries(actual[pattern])) {
+      const allowed = baseline[pattern][path] ?? 0
+      if (count > allowed) {
+        const kind = allowed === 0 ? 'new' : 'grew'
+        regressions.push(`${pattern}: ${path}: ${count} > ${allowed} (${kind})`)
+      }
+    }
+    for (const [path, allowed] of Object.entries(baseline[pattern])) {
+      const count = actual[pattern][path] ?? 0
+      if (count === 0) {
+        zeroed.push(`${pattern}: ${path}: ${allowed} -> 0`)
+      } else if (count < allowed) {
+        reductions.push(`${pattern}: ${path}: ${allowed} -> ${count}`)
+      }
+    }
+  }
+  return { regressions, reductions, zeroed }
+}
+
+/** Offending DataCard/SectionCard tags that combine a title with padding="none". */
 function titledCardsWithoutPadding(text: string): string[] {
   const offenders: string[] = []
-  for (const tag of openingTags(stripHtmlComments(text), ['DataCard'])) {
+  for (const tag of openingTags(stripHtmlComments(text), ['DataCard', 'SectionCard'])) {
     if (!TITLE_ATTR.test(tag)) continue
     if (!PADDING_NONE.test(tag)) continue
     offenders.push(tag.split(/\s+/).join(' '))
@@ -230,10 +290,18 @@ function lines(values: string[]): string {
   return values.map((value) => `  ${value}`).join('\n')
 }
 
+// Regeneration path (replaces the Python generator deleted with the duplicate
+// backend guard in FAR-2749): `collectCounts()` already emits the exact baseline
+// shape - non-zero entries only, sorted per pattern.
+if (process.env.DS_GUARD_WRITE_BASELINE === '1') {
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(collectCounts(), null, 2)}\n`)
+}
+
 describe('design-system conformance guard (FAR-2710)', () => {
-  it('flags a titled card that sets padding="none", and ignores a commented-out one', () => {
+  it('flags a titled DataCard or SectionCard that sets padding="none", and ignores a commented-out one', () => {
     // Positive control: without these the absolute rule could never fire.
     expect(titledCardsWithoutPadding('<DataCard title="x" padding="none" />')).toHaveLength(1)
+    expect(titledCardsWithoutPadding('<SectionCard title="x" padding="none" />')).toHaveLength(1)
     expect(titledCardsWithoutPadding("<DataCard title='x' :padding=\"'none'\" />")).toHaveLength(1)
     expect(titledCardsWithoutPadding('<!-- <DataCard title="x" padding="none" /> -->')).toHaveLength(0)
     expect(titledCardsWithoutPadding('<DataCard padding="none" />')).toHaveLength(0)
@@ -248,7 +316,22 @@ describe('design-system conformance guard (FAR-2710)', () => {
     expect(countPatterns("<script>import X from 'primevue/button'</script>").raw_dialog).toBe(0)
   })
 
-  it('has no DataCard that combines a title with padding="none"', () => {
+  it('counts all three drift patterns per file', () => {
+    // Positive control for the per-file counts the ratchet compares.
+    const counts = countPatterns(
+      [
+        '<div class="rounded-lg border border-border p-4"></div>',
+        '<div class="card"></div>',
+        '<h3 class="text-base font-semibold">Title</h3>',
+        "import Dialog from 'primevue/dialog'",
+      ].join('\n'),
+    )
+    expect(counts.card_container).toBe(2)
+    expect(counts.card_header).toBe(1)
+    expect(counts.raw_dialog).toBe(1)
+  })
+
+  it('has no DataCard/SectionCard that combines a title with padding="none"', () => {
     const offenders: string[] = []
     for (const path of scannedFiles()) {
       for (const tag of titledCardsWithoutPadding(readFileSync(path, 'utf-8'))) {
@@ -256,35 +339,57 @@ describe('design-system conformance guard (FAR-2710)', () => {
       }
     }
     const title =
-      'A DataCard combines a title with padding="none". The card renders its own header, so the override leaves that header flush against the card edge (the FAR-2694 defect). Drop the padding override, or use the primitive\'s own padding scale instead:'
+      'A DataCard/SectionCard combines a title with padding="none". The card renders its own header, so the override leaves that header flush against the card edge (the FAR-2694 defect). Drop the padding override, or use the primitive\'s own padding scale instead:'
     expect(offenders, title).toEqual([])
   })
 
+  it('rejects a baseline that names an unknown pattern', () => {
+    expect(() => parseBaseline({ card_container: {}, not_a_pattern: {} })).toThrow(/unknown pattern/)
+  })
+
+  it('rejects a baseline count that is not a positive integer', () => {
+    expect(() => parseBaseline({ card_container: { 'frontend/src/X.vue': 0 } })).toThrow(/positive integer/)
+    expect(() => parseBaseline({ card_container: { 'frontend/src/X.vue': -2 } })).toThrow(/positive integer/)
+  })
+
+  it('fails a file that grows beyond its baseline (new and grew)', () => {
+    const baseline = emptyCounts()
+    baseline.card_container['frontend/src/Grown.vue'] = 1
+    const actual = emptyCounts()
+    actual.card_container['frontend/src/Grown.vue'] = 2
+    actual.raw_dialog['frontend/src/New.vue'] = 1
+
+    const result = evaluateRatchet(baseline, actual)
+    expect(result.regressions.join('\n')).toContain('card_container: frontend/src/Grown.vue: 2 > 1 (grew)')
+    expect(result.regressions.join('\n')).toContain('raw_dialog: frontend/src/New.vue: 1 > 0 (new)')
+    expect(result.zeroed).toEqual([])
+  })
+
+  it('fails a baseline entry whose count reached zero', () => {
+    const baseline = emptyCounts()
+    baseline.card_header['frontend/src/Resolved.vue'] = 1
+
+    const result = evaluateRatchet(baseline, emptyCounts())
+    expect(result.zeroed).toHaveLength(1)
+    expect(result.zeroed[0]).toContain('frontend/src/Resolved.vue: 1 -> 0')
+    expect(result.regressions).toEqual([])
+  })
+
+  it('warns but does not fail on a non-zero reduction', () => {
+    const baseline = emptyCounts()
+    baseline.card_container['frontend/src/Reduced.vue'] = 3
+    const actual = emptyCounts()
+    actual.card_container['frontend/src/Reduced.vue'] = 1
+
+    const result = evaluateRatchet(baseline, actual)
+    expect(result.reductions).toHaveLength(1)
+    expect(result.reductions[0]).toContain('frontend/src/Reduced.vue: 3 -> 1')
+    expect(result.regressions).toEqual([])
+    expect(result.zeroed).toEqual([])
+  })
+
   it('never exceeds the checked-in baseline, and shrinks resolved entries to deletion', () => {
-    const baseline = loadBaseline()
-    const actual = collectCounts()
-
-    const regressions: string[] = []
-    const reductions: string[] = []
-    const zeroed: string[] = []
-
-    for (const pattern of PATTERNS) {
-      for (const [path, count] of Object.entries(actual[pattern])) {
-        const allowed = baseline[pattern][path] ?? 0
-        if (count > allowed) {
-          const kind = allowed === 0 ? 'new' : 'grew'
-          regressions.push(`${pattern}: ${path}: ${count} > ${allowed} (${kind})`)
-        }
-      }
-      for (const [path, allowed] of Object.entries(baseline[pattern])) {
-        const count = actual[pattern][path] ?? 0
-        if (count === 0) {
-          zeroed.push(`${pattern}: ${path}: ${allowed} -> 0`)
-        } else if (count < allowed) {
-          reductions.push(`${pattern}: ${path}: ${allowed} -> ${count}`)
-        }
-      }
-    }
+    const { regressions, reductions, zeroed } = evaluateRatchet(loadBaseline(), collectCounts())
 
     for (const line of reductions) {
       console.warn(
@@ -292,7 +397,7 @@ describe('design-system conformance guard (FAR-2710)', () => {
       )
     }
 
-    const grewTitle = `A file gained more hand-rolled card/header/dialog drift than ${BASELINE_NAME} allows. Use the shared primitives (DataCard/CardHeader and the shared dialog wrapper) instead of raising the baseline:`
+    const grewTitle = `A file gained more hand-rolled card/header/dialog drift than ${BASELINE_NAME} allows. Use the shared primitives (DataCard/SectionCard/CardHeader and the shared dialog wrapper) instead of raising the baseline:`
     const zeroTitle = `A baseline entry has fallen to zero, so the ratchet must shrink. Delete these entries from ${BASELINE_NAME} (the sweep has landed, or the pattern was renamed - fix the baseline rather than leaving a stale allowance):`
     expect(regressions, `${grewTitle}\n${lines(regressions)}`).toEqual([])
     expect(zeroed, `${zeroTitle}\n${lines(zeroed)}`).toEqual([])

@@ -3024,6 +3024,14 @@ async def _build_suite_run_or_skip(
     )
 
     scenario_inputs = config.get("scenario_inputs") or {}
+    from farna.db.models.pipeline import Pipeline
+
+    # ADR 070 Phase 1A: a suite run is owned by the team that owns the pipeline
+    # whose trigger fired it. Snapshot it HERE, at creation, from the pipeline as
+    # it is now - never later, because ``pipelines.owner_team_id`` can be
+    # reassigned and a live-pipeline read at read time would move historical
+    # visibility to the new team.
+    owner_team_id = await session.scalar(select(Pipeline.owner_team_id).where(Pipeline.id == pipeline_id))
     try:
         run = await build_suite_run(
             session,
@@ -3033,6 +3041,7 @@ async def _build_suite_run_or_skip(
             model_backend_id=model_backend_id,
             scenario_inputs=scenario_inputs,
             pipeline_id=pipeline_id,
+            owner_team_id=owner_team_id,
         )
     except SuiteRunEmptyDatasetError as exc:
         # Never a silent pass — surface the empty dataset as a missed run.

@@ -838,7 +838,7 @@ async def test_script_mode_injects_run_api_key_env():
     envs = sandbox.commands.run.call_args.kwargs["envs"]
     assert envs["FARNA_CONTROL_API_KEY"] == _FAKE_RUN_KEY
     # FAR-1690 A1: the issuance provenance is stamped alongside the key.
-    assert envs["FARNA_CONTROL_CREDENTIAL_PROVENANCE"] == "modulo_minted"
+    assert envs["FARNA_CONTROL_CREDENTIAL_PROVENANCE"] == "self_minted"
 
 
 async def test_script_mode_mint_failure_fails_open():
@@ -929,7 +929,7 @@ async def test_sandbox_mint_helper_binds_the_run_account_id():
 
     assert issued is not None
     assert issued.secret == _FAKE_RUN_KEY
-    assert issued.provenance == "modulo_minted"
+    assert issued.provenance == "self_minted"
     assert issued.provenance_kind == "attested"
     assert captured["account_id"] == _ACCOUNT_ID
 
@@ -977,7 +977,7 @@ async def test_llm_mode_injects_run_api_key():
     """FAR-1690 A1: LLM mode ALSO mints/injects the run-scoped FARNA_CONTROL_API_KEY.
 
     Every sandbox dispatch issues a run-scoped credential; the issuance
-    provenance ``modulo_minted`` is stamped alongside the key. This is the
+    provenance ``self_minted`` is stamped alongside the key. This is the
     inverse of the pre-A1 script-only behaviour.
     """
     node_def: dict[str, Any] = {
@@ -1001,7 +1001,7 @@ async def test_llm_mode_injects_run_api_key():
 
     envs = sandbox.commands.run.call_args.kwargs["envs"]
     assert envs["FARNA_CONTROL_API_KEY"] == _FAKE_RUN_KEY
-    assert envs["FARNA_CONTROL_CREDENTIAL_PROVENANCE"] == "modulo_minted"
+    assert envs["FARNA_CONTROL_CREDENTIAL_PROVENANCE"] == "self_minted"
 
 
 # ---------------------------------------------------------------------------

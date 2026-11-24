@@ -769,6 +769,34 @@
       "entry": "docs/product-map/auth/jwt-auth.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
+    "key-rotation-01": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "key-rotation-02": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "key-rotation-03": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "key-rotation-05": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "key-rotation-07": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "key-rotation-08": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "key-rotation-09": {
+      "entry": "docs/product-map/system/key-rotation.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
     "library-collections-02": {
       "entry": "docs/product-map/library/library-collections.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
@@ -852,6 +880,10 @@
     "model-backends-08": {
       "entry": "docs/product-map/configure/model-backends.md",
       "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
+    },
+    "native-single-install-16": {
+      "entry": "docs/product-map/infra/native-single-install.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
     "observability-03": {
       "entry": "docs/product-map/observability/observability.md",
@@ -1803,6 +1835,9 @@
     "health-checks-25",
     "health-checks-26",
     "hitl-gates-03",
+    "key-rotation-04",
+    "key-rotation-06",
+    "key-rotation-10",
     "library-08",
     "library-09",
     "library-collections-01",
@@ -2318,6 +2353,16 @@
     "jwt-auth-06": "e9d930c65b3eea0d",
     "jwt-auth-07": "1b8ccd3e334e1f87",
     "jwt-auth-08": "b7bb719fc0489383",
+    "key-rotation-01": "5414669913a4748e",
+    "key-rotation-02": "7e3e54177c01398d",
+    "key-rotation-03": "63d3d344c30536e2",
+    "key-rotation-04": "ba3ebe3b408b9712",
+    "key-rotation-05": "2a7573f67b4c2fb9",
+    "key-rotation-06": "40e6edcac8a0af52",
+    "key-rotation-07": "446cb2080bfc9682",
+    "key-rotation-08": "dca09d5f049865cf",
+    "key-rotation-09": "84a5ce29a714acaf",
+    "key-rotation-10": "f428bac59eb20af6",
     "library-01": "60071f8ea520e886",
     "library-02": "ae473375a6808e20",
     "library-03": "6a9305a383076469",
@@ -2433,6 +2478,7 @@
     "native-single-install-13": "044cc4478f678e7e",
     "native-single-install-14": "c289b89862bd8609",
     "native-single-install-15": "d8fca030e1401f6d",
+    "native-single-install-16": "6428ab3037617163",
     "notifications-01": "d6557b790634b424",
     "notifications-02": "848d95b532a684ef",
     "notifications-03": "712d90edaf14c038",

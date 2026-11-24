@@ -150,6 +150,9 @@ class TestPersistEnforcementRecord:
 
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as conn:
+            # ADR 070 Phase 1A: every run_node_outputs write stamps the parent
+            # run team, so runs must exist in this minimal schema.
+            await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, owner_team_id VARCHAR(32))")
             await conn.run_sync(RunNodeOutput.__table__.create)
 
         sf = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -188,6 +191,9 @@ class TestPersistEnforcementRecord:
 
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as conn:
+            # ADR 070 Phase 1A: every run_node_outputs write stamps the parent
+            # run team, so runs must exist in this minimal schema.
+            await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, owner_team_id VARCHAR(32))")
             await conn.run_sync(RunNodeOutput.__table__.create)
 
         sf = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -287,6 +293,9 @@ class TestEnforcementWriteOrdering:
 
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as conn:
+            # ADR 070 Phase 1A: every run_node_outputs write stamps the parent
+            # run team, so runs must exist in this minimal schema.
+            await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, owner_team_id VARCHAR(32))")
             await conn.run_sync(RunNodeOutput.__table__.create)
         sf = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -344,6 +353,9 @@ class TestPersistSchemaEnforcementRecordCrud:
 
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as conn:
+            # ADR 070 Phase 1A: every run_node_outputs write stamps the parent
+            # run team, so runs must exist in this minimal schema.
+            await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, owner_team_id VARCHAR(32))")
             await conn.run_sync(RunNodeOutput.__table__.create)
         sf = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -499,6 +511,9 @@ class TestTerminalFailureEnforcementRecord:
 
         engine = create_async_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as conn:
+            # ADR 070 Phase 1A: every run_node_outputs write stamps the parent
+            # run team, so runs must exist in this minimal schema.
+            await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, owner_team_id VARCHAR(32))")
             await conn.run_sync(RunNodeOutput.__table__.create)
         sf = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         run_id = uuid.uuid4()

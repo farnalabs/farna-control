@@ -140,6 +140,29 @@ describe('SchemaInferenceView', () => {
     expect(wrapper.text()).toContain('priority')
   })
 
+  it('shows the no-fields hint when the inferred definition has no properties', async () => {
+    ;(api.GET as any).mockResolvedValue({ data: { items: CONNECTORS }, error: undefined })
+    ;(api.POST as any).mockResolvedValue({
+      data: {
+        definition_json: { type: 'object', properties: {} },
+        sample_count: 0,
+        suggestion_name: 'Empty schema',
+        suggestion_description: null,
+      },
+      error: undefined,
+    })
+    const wrapper = await mountView()
+
+    ;(wrapper.vm as any).selectedConnectorId = 'conn-1'
+    await wrapper.find('[data-testid="schema-inference-resource-type"]').setValue('issues')
+    await wrapper.find('[data-testid="schema-inference-infer-schema"]').trigger('click')
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('No fields inferred.')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(0)
+  })
+
   it('shows the inference error message when the API call fails', async () => {
     ;(api.GET as any).mockResolvedValue({ data: { items: CONNECTORS }, error: undefined })
     ;(api.POST as any).mockResolvedValue({ data: undefined, error: { detail: 'LLM returned garbage' } })

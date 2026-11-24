@@ -1947,12 +1947,16 @@ def test_release_schema_freshness_proof_is_wired_into_both_jobs() -> None:
 
     step = _step(workflow, "schema-gate", _SCHEMA_PROOF_STEPS["schema-gate"])
     assert step["if"] == "inputs.mode != 'dry-run'"
-    assert step["env"]["TARGET_SHA"] == "${{ github.sha }}"
+    # FAR-2752: the proof consumes the ONE resolved release target rather than
+    # github.sha, and the release job's proof consumes the same output.
+    assert workflow["jobs"]["schema-gate"]["needs"] == ["resolve-target"]
+    assert step["env"]["TARGET_SHA"] == "${{ needs.resolve-target.outputs.target_sha }}"
 
     release_step = _step(workflow, "release", _SCHEMA_PROOF_STEPS["release"])
     assert release_step["id"] == "schema-freshness"
     assert release_step["env"]["MODE"] == "${{ inputs.mode }}"
     assert release_step["env"]["CUT_SHA"] == "${{ steps.cut-commit.outputs.cut_sha }}"
+    assert release_step["env"]["TARGET_SHA"] == "${{ needs.resolve-target.outputs.target_sha }}"
 
 
 def test_release_schema_freshness_proof_dispatches_ci_for_the_exact_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

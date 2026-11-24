@@ -518,6 +518,16 @@ type
   TExecWait = (ewNoWait, ewWaitUntilTerminated, ewWaitUntilIdle);
   TMsgBoxType = (mbInformation, mbConfirmation, mbError, mbCriticalError);
   TArrayOfString = array of string;
+  TArrayOfBoolean = array of Boolean;
+  { Inno Setup 6.2.2: TInputOptionWizardPage, returned by CreateInputOptionPage.
+    Values is a dynamic Boolean array indexed by option; Add() appends an
+    option. Used by the FAR-2741 product-analytics opt-in page. }
+  TInputOptionWizardPage = class
+  public
+    ID: Integer;
+    Values: TArrayOfBoolean;
+    procedure Add(const S: String);
+  end;
 
 const
   SW_HIDE = 0;
@@ -530,6 +540,7 @@ const
 
 function ExpandConstant(const S: String): String; begin Result := S; end;
 function SaveStringToFile(const FileName: String; const S: AnsiString; const Append: Boolean): Boolean; begin Result := True; end;
+function LoadStringFromFile(const FileName: String; var S: AnsiString): Boolean; begin Result := False; end;
 function FileExists(const Name: String): Boolean; begin Result := False; end;
 function DirExists(const Name: String): Boolean; begin Result := False; end;
 function ForceDirectories(Dir: string): Boolean; begin Result := True; end;
@@ -547,6 +558,8 @@ function Exec(const Filename, Params, WorkingDir: String; const ShowCmd: Integer
 function MsgBox(const Text: String; const Typ: TMsgBoxType; const Buttons: Integer): Integer; begin Result := 0; end;
 function WizardSilent: Boolean; begin Result := False; end;
 function IsUninstaller: Boolean; begin Result := False; end;
+function CreateInputOptionPage(const AfterID: Integer; const ACaption, ADescription, ASubCaption: String; const Exclusive, ListBox: Boolean): TInputOptionWizardPage; begin Result := nil; end;
+procedure TInputOptionWizardPage.Add(const S: String); begin end;
 procedure Abort; begin Halt(1); end;
 __CODE_SECTION__
 begin
@@ -603,6 +616,10 @@ end.
         @{ Name = "Redaction marker"; Pattern = '\[redacted\]' }
         @{ Name = "Support block delimiter"; Pattern = '----- Farna Control install failed: support reference' }
         @{ Name = "GitHub issues URL in support block"; Pattern = 'github.com/farnalabs/farna-control/issues' }
+        @{ Name = "Product analytics opt-in page"; Pattern = 'CreateInputOptionPage' }
+        @{ Name = "Product analytics opt-in writer"; Pattern = 'procedure WriteProductAnalyticsConfig' }
+        @{ Name = "Product analytics endpoint"; Pattern = 'ANALYTICS_ENDPOINT_URL = ''https://telemetry\.farna\.dev''' }
+        @{ Name = "Product analytics config directory"; Pattern = 'ANALYTICS_DATA_SUBDIR' }
     )
 
     $missingPatterns = @()
@@ -651,6 +668,52 @@ end.
         throw "Installer script still references unsupported identifiers: $($forbiddenFound -join ', ')"
     }
     Write-Output "  PASS: no unsupported Pascal Script identifiers ($($forbiddenPatterns.Count) checks)."
+
+    # Product analytics opt-in (FAR-2741). "No telemetry by default" is a stated
+    # differentiator, so the default-OFF half is asserted in BOTH directions
+    # against the comment-stripped source: the decline option is pre-selected and
+    # the accept option never is. The endpoint and the ON switch are pinned too,
+    # so a future edit cannot silently drop one and leave delivery disabled (or
+    # enabled with no transport). FAR-2747: the installer must NOT write or
+    # generate the instance secret - Pascal Script has no cryptographic RNG, so a
+    # secret minted here would be predictable; the launcher mints and persists it
+    # on first boot instead. Both the PRNG generator and the secret line are
+    # therefore forbidden.
+    Write-Output "Checking the product-analytics opt-in contract (default OFF)..."
+    $analyticsChecks = @(
+        @{ Name = "Opt-in page created"; Pattern = 'CreateInputOptionPage\(wpSelectTasks' }
+        @{ Name = "Default is the decline option"; Pattern = 'AnalyticsPage\.Values\[0\] := True' }
+        @{ Name = "Accept option is never pre-selected"; Pattern = 'AnalyticsPage\.Values\[1\] := True'; Forbidden = $true }
+        @{ Name = "Endpoint setting written"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=' }
+        @{ Name = "Installer never writes the instance secret (the launcher generates it)"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET='; Forbidden = $true }
+        @{ Name = "Installer never generates a PRNG instance secret"; Pattern = 'GenerateInstanceSecret'; Forbidden = $true }
+        @{ Name = "Instance switch written"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' }
+        @{ Name = "Decline writes no OFF switch"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=false'; Forbidden = $true }
+        @{ Name = "Config path is the launcher data dir"; Pattern = 'LOG_DIR_NAME \+ ANALYTICS_DATA_SUBDIR' }
+        @{ Name = "Writer runs at post-install"; Pattern = '(?s)ssPostInstall.*WriteProductAnalyticsConfig' }
+        @{ Name = "Page-skip hook exists"; Pattern = 'function ShouldSkipPage' }
+        @{ Name = "Configured-detection helper exists"; Pattern = 'function AnalyticsConfigured' }
+        @{ Name = "Analytics writer appends to an existing config.env"; Pattern = 'SaveStringToFile\(ConfigPath, Content, Append\)' }
+        @{ Name = "Writer no longer aborts when config.env already exists"; Pattern = 'already exists; leaving it unchanged'; Forbidden = $true }
+    )
+    $analyticsFailures = @()
+    foreach ($p in $analyticsChecks) {
+        $matched = $codeOnly -match $p.Pattern
+        if ($p.Forbidden) {
+            if ($matched) { $analyticsFailures += $p.Name }
+        } elseif (-not $matched) {
+            $analyticsFailures += $p.Name
+        }
+    }
+    if ($analyticsFailures.Count -gt 0) {
+        throw "Product-analytics opt-in contract is not satisfied: $($analyticsFailures -join ', ')"
+    }
+    # `{...}` is a Pascal comment, so the comment-stripped text cannot show the
+    # ProgramData constant; assert it against the raw source instead.
+    if ($issContent -notmatch 'ExpandConstant\(''\{commonappdata\}''\)') {
+        throw "Product-analytics opt-in contract is not satisfied: Config path is not resolved from ProgramData"
+    }
+    Write-Output "  PASS: product-analytics opt-in defaults to OFF, writes only the endpoint and switch, and leaves the instance secret to the launcher ($($analyticsChecks.Count) checks)."
 
     # Windows service mode is deferred to Beta (FAR-2347): Alpha installs a
     # foreground-start shortcut and records the limitation with

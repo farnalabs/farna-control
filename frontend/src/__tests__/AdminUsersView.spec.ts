@@ -475,8 +475,8 @@ describe('AdminUsersView', () => {
     })
 
     expect(wrapper.find('[data-testid^="feature-gate-"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(false)
     expect(wrapper.find('table').exists()).toBe(true)
     expect(wrapper.text()).toContain('alice@example.com')
   })
@@ -489,8 +489,8 @@ describe('AdminUsersView', () => {
     // router keeps a commercial route locked until the plan payload lands.
     const wrapper = await mountViewWithPlan({ features: {}, currentTier: 'community' })
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Users')
   })
 
@@ -512,6 +512,7 @@ describe('AdminUsersView', () => {
     })
     await wrapper.findAll('[data-testid="admin-invitations-revoke"]')[0].trigger('click')
     await nextTick()
+    expect(wrapper.find('[data-testid="admin-invitations-cancel-revoke"]').exists()).toBe(true)
     const confirmButton = wrapper.find('[data-testid="admin-invitations-confirm-revoke"]')
     expect(confirmButton.exists()).toBe(true)
     await confirmButton.trigger('click')

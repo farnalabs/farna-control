@@ -134,6 +134,13 @@ class RunAttempt(OrgScoped):
 
     # Retention: deleting the run deletes its attempts (see module docstring).
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    # ADR 070 Phase 1A: the parent run's team, stamped by ``start_attempt`` in the
+    # same transaction that inserts the attempt (resolved from ``runs``, never from
+    # the live pipeline - see ``db/run_ownership.py``). NULL for a run of an
+    # org-level pipeline and for historical attempts of a legacy-unowned run
+    # (whose parent carries ``runs.owner_unresolved = TRUE``). ON DELETE RESTRICT
+    # mirrors ``runs.owner_team_id``: a team with attempts cannot be hard-deleted.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
     # 0-based, per run, contiguous. See the module docstring for the contract.
     attempt_index: Mapped[int] = mapped_column(Integer(), nullable=False)
     # When the attempt began. The allocator defaults this to server time; the
