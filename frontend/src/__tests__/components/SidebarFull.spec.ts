@@ -42,6 +42,13 @@ describe('SidebarFull header', () => {
     expect(name.text()).toBe('Farna Control')
   })
 
+  it('renders the product name as non-heading text so it never precedes the page h1 (FAR-2715)', () => {
+    const wrapper = mountFull()
+    const name = wrapper.get('[data-testid="sidebar-product-name"]')
+    expect(name.element.tagName).toBe('SPAN')
+    expect(wrapper.findAll('h1,h2,h3,h4,h5,h6')).toHaveLength(0)
+  })
+
   it('renders the tier badge', () => {
     const badge = mountFull().get('[data-testid="sidebar-tier-badge"]')
     expect(badge.text()).toBe('Community')
