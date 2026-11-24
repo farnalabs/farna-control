@@ -148,6 +148,13 @@ class RunNodeOutput(Base, TimestampMixin):
     organisation_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    # ADR 070 Phase 1A: the parent run's team, stamped on every write by the
+    # ``crud.run_node_outputs`` chokepoints (and the two direct ``__mwi_audit__``
+    # writers) from ``runs`` - a statement-scoped scalar subquery, never the live
+    # pipeline (see ``db/run_ownership.py`` for why). NULL for a run of an
+    # org-level pipeline and for rows of a legacy-unowned run. ON DELETE RESTRICT
+    # mirrors ``runs.owner_team_id``.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
     # Grammar-derived node id — deliberately NO FK (see module docstring).
     node_id: Mapped[str] = mapped_column(Text(), nullable=False)
     # Marker rows: the FULL original attempt key (evidence preserved, FAR-188).

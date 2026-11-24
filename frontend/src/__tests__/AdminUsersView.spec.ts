@@ -512,6 +512,7 @@ describe('AdminUsersView', () => {
     })
     await wrapper.findAll('[data-testid="admin-invitations-revoke"]')[0].trigger('click')
     await nextTick()
+    expect(wrapper.find('[data-testid="admin-invitations-cancel-revoke"]').exists()).toBe(true)
     const confirmButton = wrapper.find('[data-testid="admin-invitations-confirm-revoke"]')
     expect(confirmButton.exists()).toBe(true)
     await confirmButton.trigger('click')

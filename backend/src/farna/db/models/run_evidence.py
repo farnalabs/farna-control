@@ -40,6 +40,12 @@ class RunEvidence(Base):
     organisation_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
 
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    # ADR 070 Phase 1A: the parent run's team, resolved and stamped by
+    # ``write_evidence_row`` in the same transaction as the probe write (from
+    # ``runs``, never the live pipeline - see ``db/run_ownership.py``). NULL for a
+    # run of an org-level pipeline and for rows of a legacy-unowned run. ON DELETE
+    # RESTRICT mirrors ``runs.owner_team_id``.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
     # FAR-644: no FK to nodes.id — ``nodes`` is the deprecated composite-template
     # store; this node id is a JSON-graph id (pipelines.graph_nodes_json) that
     # never materialises as a ``nodes`` row (see migration 0170's correction),

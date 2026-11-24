@@ -252,7 +252,7 @@ async def sqlite_maker(tmp_path: Any) -> Any:
     engine: AsyncEngine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'attempts.db'}")
     async with engine.begin() as conn:
         await conn.exec_driver_sql("CREATE TABLE organisations (id VARCHAR(32) PRIMARY KEY)")
-        await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, organisation_id VARCHAR(32) NOT NULL, status VARCHAR(20) NOT NULL, claim_token VARCHAR(64), cancellation_requested BOOLEAN NOT NULL DEFAULT 0, error_code VARCHAR(255), error_detail TEXT)")
+        await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, organisation_id VARCHAR(32) NOT NULL, owner_team_id VARCHAR(32), status VARCHAR(20) NOT NULL, claim_token VARCHAR(64), cancellation_requested BOOLEAN NOT NULL DEFAULT 0, error_code VARCHAR(255), error_detail TEXT)")
         await conn.run_sync(RunAttempt.__table__.create)
         await conn.exec_driver_sql("INSERT INTO organisations (id) VALUES (:org)", {"org": ORG.hex})
         await conn.exec_driver_sql(

@@ -108,6 +108,10 @@ async def test_enforcement_record_survives_agent_node() -> None:
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
+        # ADR 070 Phase 1A: every run_node_outputs write stamps the parent run's
+        # team, so the writer reads ``runs`` - the minimal table is all this test
+        # needs (no row: the owner resolves to NULL, which is a valid value).
+        await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, owner_team_id VARCHAR(32))")
         await conn.run_sync(RunNodeOutput.__table__.create)
     sf = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
