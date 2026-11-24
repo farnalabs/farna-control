@@ -116,6 +116,12 @@ can see what was compared:
    push to main compares the new tip against the commit before it, so a raised
    baseline in the pushed commit is caught.
 
+``ci.yml`` still blanks ``RATCHET_BASE_REV`` on a pull_request event. That is now
+belt-and-braces rather than load-bearing: rule 2 ignores the hint whenever
+``GITHUB_BASE_REF`` is set, so the resolver is correct even if the workflow
+passes a PR branch's ``before``. Do not "simplify" the workflow guard away - it
+keeps the two layers agreeing, and a workflow-contract test pins it.
+
 With none of the above resolvable the guard FAILS CLOSED.
 
 Fail-closed rules (an unreadable base must never look like a pass):

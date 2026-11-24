@@ -28,6 +28,7 @@ from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 
 import pytest
+import yaml
 
 for parent in Path(__file__).resolve().parents:
     script_path = parent / "scripts" / "run_check_ratchet_baseline.py"
@@ -35,6 +36,9 @@ for parent in Path(__file__).resolve().parents:
         break
 else:
     raise RuntimeError("Could not find repo root (scripts/run_check_ratchet_baseline.py)")
+
+REPO_ROOT = script_path.parent.parent
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 _loader = SourceFileLoader("run_check_ratchet_baseline", str(script_path))
 mod = module_from_spec(spec_from_loader("run_check_ratchet_baseline", _loader))
@@ -827,16 +831,20 @@ def test_resolve_base_uses_a_local_base_ref_when_origin_is_absent(tmp_path, monk
 
 
 def test_resolve_base_falls_through_an_unfetched_base_ref_to_head_parent(tmp_path, monkeypatch):
-    """A base ref that was not fetched must fall through to HEAD^, not abort.
+    """An unfetched base ref falls through to HEAD^, never the push hint.
 
     ``actions/checkout`` at the default depth does not always create
-    ``origin/<base>``; aborting here would turn a fetch gap into a red PR.
+    ``origin/<base>``; aborting here would turn a fetch gap into a red PR. It
+    must fall through to ``HEAD^`` and, crucially, NOT back to
+    ``RATCHET_BASE_REV``: on a pull_request event that hint is the branch's own
+    previous head, so using it would silently compare the PR against itself.
     """
     repo = _make_repo(tmp_path)
     (repo / "later.txt").write_text("later\n", encoding="utf-8")
     _commit_all(repo, "a second commit so HEAD^ exists")
-    monkeypatch.delenv("RATCHET_BASE_REV", raising=False)
-    monkeypatch.setenv("GITHUB_BASE_REF", "release")
+    tip = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setenv("RATCHET_BASE_REV", tip)  # resolves, but must be ignored
+    monkeypatch.setenv("GITHUB_BASE_REF", "release")  # never fetched
 
     rev, why = mod._resolve_base(repo, None)
 
@@ -1028,3 +1036,35 @@ def test_end_to_end_malformed_working_tree_fails_closed_even_when_the_base_is_al
     assert proc.returncode == 1, proc.stderr
     assert "FAILED CLOSED" in proc.stderr
     assert "[read-credential-allowlist]" in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# ci.yml workflow contract: the wiring that feeds the resolver
+# ---------------------------------------------------------------------------
+def _ratchet_guard_step_env() -> dict[str, str]:
+    """The ``env:`` mapping of the ci.yml step that runs the ratchet guard."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    for job in workflow["jobs"].values():
+        for step in job.get("steps") or []:
+            if "run_check_ratchet_baseline.py" in (step.get("run") or ""):
+                env = step.get("env")
+                assert isinstance(env, dict), "the ratchet guard step has no env mapping"
+                return env
+    raise AssertionError("ci.yml has no step that runs scripts/run_check_ratchet_baseline.py")
+
+
+def test_ci_workflow_wires_the_pr_base_and_keeps_the_push_hint():
+    """The workflow must keep feeding the guard BOTH base signals, correctly gated.
+
+    ``GITHUB_BASE_REF`` is load-bearing: drop it and a pull request is left with
+    only the push hint (the branch's own previous head), reintroducing the
+    FAR-2699 bug. The ``RATCHET_BASE_REV`` blanking is belt-and-braces - the
+    resolver ignores that hint whenever ``GITHUB_BASE_REF`` is set (see
+    ``_resolve_base``) - so do not "simplify" it away: keep it push-gated so the
+    workflow and the resolver agree.
+    """
+    env = _ratchet_guard_step_env()
+
+    assert env.get("GITHUB_BASE_REF") == "${{ github.base_ref }}"
+    assert "github.event.before" in env.get("RATCHET_BASE_REV", "")
+    assert "push" in env.get("RATCHET_BASE_REV", "")

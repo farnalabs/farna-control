@@ -702,9 +702,14 @@ jobs:
           # pull_request event `github.event.before` is the PR BRANCH's previous
           # head, not a base - passing it made the guard compare every PR against
           # its own parent (FAR-2699 follow-up, PR #3461). Leave it empty there.
+          # This blanking is belt-and-braces, not load-bearing: the resolver
+          # ignores RATCHET_BASE_REV whenever GITHUB_BASE_REF is set, so keep
+          # it push-gated rather than "simplifying" it away - the two layers
+          # are the point, and a contract test pins them.
           RATCHET_BASE_REV: ${{ github.event_name == 'push' && github.event.before || '' }}
           # Pull-request events: name the target branch explicitly so the guard
-          # compares against the PR's BASE branch, not its own history.
+          # compares against the PR's BASE branch, not its own history. This IS
+          # load-bearing - dropping it leaves a PR with only the push hint.
           GITHUB_BASE_REF: ${{ github.base_ref }}
         run: uv run --no-build --project backend --no-sync python scripts/run_check_ratchet_baseline.py
       - name: Run connector contract tests
