@@ -85,6 +85,25 @@ async def test_team_blind_org_scope_refuses_when_the_session_has_no_org() -> Non
     assert session.execute.await_count == 1, _executed_sql(session)
 
 
+async def test_team_blind_org_scope_refuses_when_the_session_org_guc_is_null() -> None:
+    """A never-defined GUC reads as SQL NULL, not ``''``; it is refused too.
+
+    ``current_setting('app.organisation_id', true)`` returns NULL when the
+    setting was never defined (the ``''`` case is the pool-checkout reset), so
+    the guard must treat ``None`` as unset rather than fall through to the
+    parse attempt.
+    """
+    session = _pg_session((None, ""))
+
+    with pytest.raises(TeamBlindScopeOrgMismatchError) as excinfo:
+        async with team_blind_org_scope(session, _ORG_ID):
+            pass
+
+    assert excinfo.value.session_org_id is None
+    assert "<unset>" in str(excinfo.value)
+    assert session.execute.await_count == 1, _executed_sql(session)
+
+
 async def test_team_blind_org_scope_widens_only_the_execution_context_for_a_matching_org() -> None:
     """The legitimate path: same org, widen the TEAM clause, restore afterwards."""
     session = _pg_session((str(_ORG_ID), ""))
