@@ -87,7 +87,7 @@ function makeCapture(options: {
     path: options.path,
     viewport,
     url: `http://localhost:4317${options.path}`,
-    title: `Modulo — ${options.slug}`,
+    title: `Farna Control — ${options.slug}`,
     tokens: structuredClone(options.tokens ?? TOKENS),
     components: structuredClone(options.components ?? COMPONENTS),
   }
@@ -182,7 +182,7 @@ describe('assembleFingerprints', () => {
     )
 
     const serialised = JSON.stringify(fingerprints)
-    expect(serialised).not.toContain('Modulo —')
+    expect(serialised).not.toContain('Farna Control —')
     expect(serialised).not.toContain('localhost:4317')
     expect(serialised).not.toContain('--p-badge-height')
     expect(Object.keys(fingerprints['desktop-alpha'])).not.toContain('title')
