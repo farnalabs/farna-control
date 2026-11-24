@@ -254,6 +254,31 @@ describe('VariantGroupBuilder', () => {
     })
   })
 
+  it('disables Cancel in the fire dialog while the request is in flight', async () => {
+    const wrapper = await mountTwoValidVariants()
+    let resolveCreate: (value: unknown) => void = () => {}
+    vi.mocked(api.POST as unknown as (url: string) => Promise<unknown>).mockImplementation((url: string) => {
+      if (url === '/api/v1/variant-groups') {
+        return new Promise((resolve) => { resolveCreate = resolve })
+      }
+      return Promise.resolve({ data: { runs: [], count: 2 }, error: undefined })
+    })
+
+    await wrapper.find('[data-testid="variant-builder-fire"]').trigger('click')
+    await nextTick()
+    const confirmBtn = document.body.querySelector('[data-testid="variant-builder-confirm-fire"]') as HTMLButtonElement
+    const cancelBtn = document.body.querySelector('[data-testid="variant-builder-cancel"]') as HTMLButtonElement
+    expect(cancelBtn.disabled).toBe(false)
+
+    confirmBtn.click()
+    await nextTick()
+    await new Promise(r => setTimeout(r, 0))
+    expect(cancelBtn.disabled).toBe(true)
+
+    resolveCreate({ data: { id: 'g1' }, error: undefined })
+    await flushPromises()
+  })
+
   it('pre-selects the pipeline passed as the initialPipelineId prop', async () => {
     const wrapper = await mountBuilder('p2')
     await new Promise(r => setTimeout(r, 0))

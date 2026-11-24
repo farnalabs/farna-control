@@ -273,6 +273,7 @@
       :confirm-text="$t('views.variantCreator.confirm_fire')"
       :confirm-loading-text="$t('views.variantCreator.firing')"
       :loading="firing"
+      :cancel-disabled="firing"
       cancel-test-id="variant-builder-cancel"
       confirm-test-id="variant-builder-confirm-fire"
       data-testid="variant-builder-confirm"

@@ -607,11 +607,13 @@ describe('PipelineListView', () => {
     await router.push('/pipelines')
     await router.isReady()
     // Attach to the document: @vue/test-utils mounts detached by default, but
-    // PrimeVue teleports the dialog to <body> and focus assertions rely on
-    // document.activeElement, which only updates for live-document elements.
+    // PrimeVue teleports the dialog to <body> and focus/escape assertions rely
+    // on the live document (and on PrimeVue's real enter/leave transition hooks,
+    // which bind the document-level Escape listener — so the transition stub
+    // that the test harness normally applies is disabled here).
     const wrapper = mount(PipelineListView, {
       attachTo: document.body,
-      global: { plugins: [router], stubs: { ErrorAlert: true, FolderTree: true } },
+      global: { plugins: [router], stubs: { ErrorAlert: true, FolderTree: true, transition: false } },
     })
     await flushPromises()
     await nextTick()
@@ -631,7 +633,38 @@ describe('PipelineListView', () => {
     expect(dialog!.querySelector('[data-testid="pipeline-list-rename-cancel"]')).not.toBeNull()
     expect(dialog!.querySelector('[data-testid="pipeline-list-rename-save"]')).not.toBeNull()
 
-    buttonByTestId(dialog!, 'pipeline-list-rename-cancel')!.click()
+    // Focus trap: PrimeVue brackets the modal with hidden focusable sentinels at
+    // each edge; focusing an edge sentinel wraps focus back to the opposite
+    // control inside the dialog, so Tab can never leave it.
+    const firstSentinel = dialog!.querySelector<HTMLElement>('[data-pc-section="firstfocusableelement"]')
+    const lastSentinel = dialog!.querySelector<HTMLElement>('[data-pc-section="lastfocusableelement"]')
+    expect(firstSentinel).not.toBeNull()
+    expect(lastSentinel).not.toBeNull()
+
+    const focusables = Array.from(
+      dialog!.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+    ).filter((el) => !el.classList.contains('p-hidden-focusable'))
+    expect(focusables.length).toBeGreaterThan(1)
+    const firstControl = focusables[0]
+    const lastControl = focusables[focusables.length - 1]
+
+    // Tab from the last control reaches the trailing sentinel and wraps to the
+    // first control; Shift+Tab from the first control wraps to the last.
+    lastControl.focus()
+    expect(document.activeElement).toBe(lastControl)
+    lastSentinel!.focus()
+    await nextTick()
+    expect(document.activeElement).toBe(firstControl)
+
+    firstControl.focus()
+    expect(document.activeElement).toBe(firstControl)
+    firstSentinel!.focus()
+    await nextTick()
+    expect(document.activeElement).toBe(lastControl)
+
+    // Escape closes the dialog (PrimeVue listens for Escape on the document
+    // and matches event.code, not event.key).
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }))
     await nextTick()
     await settle()
     expect(vm.showRenameDialog).toBe(false)
