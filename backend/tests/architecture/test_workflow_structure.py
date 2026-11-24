@@ -1836,6 +1836,60 @@ def test_production_deploy_still_verifies_the_shipped_sha() -> None:
     assert not violations, "the production SHA verification was weakened:\n" + "\n".join(violations)
 
 
+#: (job id, the app host that job's deployed-SHA check probes).
+DEPLOYED_SHA_LEGS = (
+    ("deploy-staging", "staging-farna-control.fly.dev"),
+    ("deploy-production", "farna-control.fly.dev"),
+)
+
+
+def test_deployed_sha_check_survives_a_cold_start() -> None:
+    """Both deployed-SHA checks must wait out a cold start, not fire once.
+
+    A from-zero deploy creates brand-new machines, so the first requests can
+    arrive before the app answers. A single ``curl -m 10`` then fails the step
+    with "No deployment info" even though the app becomes healthy minutes later
+    (observed 2026-11-24). Each leg must poll ``/healthz/ready`` with a bounded
+    budget, fetch ``/api/v1/deployment`` with a bounded retry, and fail loudly
+    on exhaustion - while keeping the SHA comparison itself.
+    """
+    violations: list[str] = []
+    jobs = _deploy_jobs()
+    for job_id, host in DEPLOYED_SHA_LEGS:
+        steps = (jobs.get(job_id) or {}).get("steps") or []
+        step = next(
+            (s for s in steps if isinstance(s, dict) and s.get("name") == "Check deployed SHA"),
+            None,
+        )
+        if step is None:
+            violations.append(f"  {job_id}: no 'Check deployed SHA' step")
+            continue
+        run = str(step.get("run") or "")
+        # Probes the same app host as before.
+        if host not in run:
+            violations.append(f"  {job_id}: the step does not probe {host}")
+        # Waits for readiness before reading the deployment info.
+        if "healthz/ready" not in run:
+            violations.append(f"  {job_id}: the step does not wait for /healthz/ready before checking the SHA")
+        # A bounded retry: numeric attempt caps for BOTH the readiness wait and
+        # the deployment-info fetch, a loop, and a sleep between attempts.
+        attempt_caps = re.findall(r"\$\w*[Aa]ttempts\s*=\s*\d+", run)
+        if len(attempt_caps) < 2:
+            violations.append(f"  {job_id}: expected bounded attempt caps for the readiness and deployment-info waits (found {attempt_caps!r})")
+        if not re.search(r"\b(?:for|while)\b", run):
+            violations.append(f"  {job_id}: the deployed-SHA check has no retry loop")
+        if not re.search(r"Start-Sleep\s+-Seconds\s+\d+", run):
+            violations.append(f"  {job_id}: the retry loop never sleeps between attempts")
+        # Exhaustion is loud, never a silent fall-through.
+        if "::error::" not in run:
+            violations.append(f"  {job_id}: exhausting the retry budget is not reported with a ::error:: annotation")
+        # The SHA comparison itself is preserved.
+        for needle in ("steps.git.outputs.git-sha", ".Substring(0, 7)", "SHA MISMATCH", "exit 1"):
+            if needle not in run:
+                violations.append(f"  {job_id}: the SHA comparison lost {needle!r}")
+    assert not violations, "a deployed-SHA check can fail on a cold start:\n" + "\n".join(violations)
+
+
 def test_production_post_deploy_gates_target_the_deployed_app_host() -> None:
     """The post-deploy gates must exercise the app this job deployed (FAR-2656).
 
