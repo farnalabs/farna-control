@@ -9,6 +9,7 @@ provider changes. This probe does.
 - Config: `configs/provider-contract-probes.yaml`
 - Goldens: `contract-goldens/provider-shapes.json`
 - Workflow: `.github/workflows/provider-contract-probe.yml`
+- Issue body builder: `scripts/provider_contract_probe_report.py`
 - Drift report: `contract-goldens/report.json` (generated, gitignored; uploaded
   as the `provider-contract-report` CI artifact on every run)
 
@@ -406,10 +407,17 @@ On failure, a final `if: failure()` step opens, or appends to, a single open
 issue titled `[provider-contract-probe] nightly drift`, with the report summary
 and the worst probes. The job grants `issues: write` (and keeps `contents: read`
 for checkout) so that step can use the workflow token, while the workflow-wide
-permission stays `contents: read`. The step reads the generated report and stays
-silent in the bootstrap state described above, so the expected red does not
-produce an issue every night. If the run failed before writing a report (an
-install or setup failure), the issue says so instead.
+permission stays `contents: read`. The issue body is built by
+`scripts/provider_contract_probe_report.py` (stdlib only, run with `python3`), not
+by an inline heredoc, so it is unit-tested rather than trusted.
+
+The body is empty - and the step raises nothing - in exactly one state: the
+deliberate bootstrap red described above (zero attempts, no errors, no
+unavailable probes, every skip "not yet recorded"). An `error` or `unavailable`
+row is **never** bootstrap, even when it never issued a request (a malformed
+golden entry is reported before the call is made): that is a real failure and it
+raises the issue. If the run failed before writing a report (an install or setup
+failure), the issue says so instead.
 
 ## Tests
 
@@ -442,3 +450,13 @@ normalisation paths resolve against the recorded shape, every provider has a
 golden), and a registry-coverage test enumerates
 `backend/src/farna/connectors/*` and `backend/src/farna/model_backends/*` and
 fails if a package is in neither `providers` nor `skips`.
+
+`backend/tests/unit/tools/test_provider_contract_probe_report.py` covers the issue
+body builder. It pins that the bootstrap red produces no body; that an `error`
+(or `unavailable`) row during bootstrap is NOT silent; that a drift run produces
+the summary line and the per-probe table; that `pass` rows never reach the table;
+that an unexcused skip is listed with its reason; that a pipe in a detail is
+escaped; that a run which never wrote a report is still raised; and that
+`main` leaves the body file empty exactly in the bootstrap state. One wiring test
+reads the workflow and fails if the issue body stops going through this script
+(e.g. back to an unexecuted heredoc).

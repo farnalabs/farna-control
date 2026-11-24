@@ -137,10 +137,18 @@ jobs:
       # artifact nobody opens. Raise a de-duplicated issue carrying the report
       # summary, and refresh that same issue on every later failing night.
       #
-      # The deliberate bootstrap state is skipped: with no golden recorded yet
-      # the run has zero attempts and every skip is "not yet recorded", so the
-      # red is expected and must not page every night until goldens are recorded
-      # behind review.
+      # The body is built by scripts/provider_contract_probe_report.py, not by an
+      # inline heredoc: the heredoc's bootstrap predicate once classified a real
+      # `error` row (a probe that errored without issuing a request, e.g. a
+      # malformed golden) as the expected bootstrap red and suppressed the issue.
+      # As a module it is unit-tested; a heredoc cannot be.
+      #
+      # The deliberate bootstrap state still raises nothing: with no golden
+      # recorded yet the run has zero attempts, no errors and no unavailable
+      # probes, and every skip is "not yet recorded", so the red is expected and
+      # must not page every night until goldens are recorded behind review. The
+      # script answers with an empty body file in exactly that state and with a
+      # body for every other failure.
       - name: Open or refresh the drift issue
         if: failure()
         env:
@@ -151,54 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           body_file="$(mktemp)"
-          python3 - "${REPORT}" "${body_file}" "${RUN_URL}" <<'PY'
-          import json
-          import sys
-          from pathlib import Path
-
-          report_path, body_path = Path(sys.argv[1]), Path(sys.argv[2])
-          run_url = sys.argv[3]
-          header = f"Nightly provider contract probe failed. Latest failing run: {run_url}"
-
-          try:
-              report = json.loads(report_path.read_text(encoding="utf-8"))
-          except (OSError, ValueError):
-              body_path.write_text(f"{header}\n\nThe run failed before the probe could write a report (install or setup step).\n", encoding="utf-8")
-              raise SystemExit(0)
-
-          summary = report.get("summary") or {}
-          results = report.get("results") or []
-          skipped = [row for row in results if row.get("status") == "skipped"]
-          bootstrap = summary.get("attempted", 0) == 0 and bool(skipped) and all("not yet recorded" in (row.get("reason") or "") for row in skipped)
-          if bootstrap:
-              # Expected red until the goldens are recorded behind review. An
-              # empty body tells the shell step to raise nothing.
-              raise SystemExit(0)
-
-          keys = ("attempted", "passed", "drifted", "unavailable", "errors", "skipped", "skipped_unexcused")
-          lines = [header, "", "Summary: " + ", ".join(f"{key}={summary.get(key, 0)}" for key in keys)]
-          problems = [
-              row
-              for row in results
-              if row.get("status") in ("drift", "error", "unavailable") or (row.get("status") == "skipped" and not row.get("allowed"))
-          ]
-          if problems:
-              lines.extend(["", "| Probe | Status | Detail |", "| --- | --- | --- |"])
-              for row in problems:
-                  detail = ""
-                  if row.get("drift"):
-                      detail = ", ".join(f"{item.get('kind')} {item.get('path')}" for item in row["drift"])
-                  elif row.get("additions"):
-                      detail = "added " + ", ".join(item.get("path", "") for item in row["additions"])
-                  elif row.get("error"):
-                      detail = str(row["error"])
-                  elif row.get("reason"):
-                      detail = str(row["reason"])
-                  detail = detail.replace("|", "\\|")
-                  lines.append(f"| {row.get('provider')}/{row.get('operation')} | {row.get('status')} | {detail} |")
-          lines.extend(["", "Full JSON report: the `provider-contract-report` artifact on that run."])
-          body_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
+          python3 scripts/provider_contract_probe_report.py "${REPORT}" "${body_file}" "${RUN_URL}"
           if [ ! -s "${body_file}" ]; then
             echo "no golden recorded yet (expected bootstrap red) - not raising an issue"
             exit 0
