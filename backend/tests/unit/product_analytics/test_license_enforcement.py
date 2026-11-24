@@ -16,13 +16,19 @@ settled precedence:
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from farna.core.license import _LICENSE_PUBLIC_KEY_HEX, LicenseData, parse_and_verify, set_public_key
+from farna.core.license_signing import encode_license_key
 from farna.core.product_analytics import consent as consent_module
-from farna.core.product_analytics.consent import resolve_instance_analytics_switch
+from farna.core.product_analytics.consent import (
+    partner_license_requires_analytics,
+    resolve_instance_analytics_switch,
+)
 from farna.core.product_analytics.constants import (
     ENV_INSTANCE_SWITCH,
     PARTNER_LICENSE_CLAIM,
@@ -31,6 +37,7 @@ from farna.core.product_analytics.constants import (
     SWITCH_SOURCE_LICENSE,
     SWITCH_SOURCE_OPERATOR,
 )
+from farna.core.registry.crypto import generate_keypair
 
 
 def _licence(*, claim: bool | None = None) -> SimpleNamespace:
@@ -164,3 +171,70 @@ class TestOperatorWins:
         assert state.source == SWITCH_SOURCE_ENV
         assert state.operator_value is False
         assert state.licence_requires_analytics is True
+
+
+# ---------------------------------------------------------------------------
+# Hand-signed partner key: the claim survives a real sign -> parse round-trip
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def signing_keypair() -> Generator[dict[str, str], None, None]:
+    """Make a generated keypair the trusted anchor for the duration of a test."""
+    original = _LICENSE_PUBLIC_KEY_HEX
+    generated = generate_keypair()
+    set_public_key(generated["public_key"])
+    yield generated
+    set_public_key(original)
+
+
+def _partner_payload() -> dict[str, object]:
+    """A complete team payload carrying the analytics claim.
+
+    Every standard claim the product emits is present, so the test proves the
+    claim reads back from a realistically shaped hand-built key rather than a
+    payload reduced to just the claim.
+    """
+    return {
+        "tier": "team",
+        "features": ["team_rbac", "sso", "audit_viewer"],
+        "expires_at": "2999-01-01T00:00:00+00:00",
+        "org_id": "test-org",
+        "renewal_mode": "manual",
+        "term": 12,
+        "licence_id": "lic-partner-analytics-1",
+        "issued_at": "2026-11-24T00:00:00+00:00",
+        PARTNER_LICENSE_CLAIM: True,
+    }
+
+
+def _parsed_partner_licence(keypair: dict[str, str]) -> LicenseData:
+    key = encode_license_key(_partner_payload(), keypair["private_key"])
+    result = parse_and_verify(key)
+    assert result.valid is True
+    assert result.license_data is not None
+    return result.license_data
+
+
+class TestHandSignedPartnerKey:
+    def test_claim_reads_true_after_sign_and_parse(self, signing_keypair: dict[str, str]) -> None:
+        licence = _parsed_partner_licence(signing_keypair)
+        assert partner_license_requires_analytics(licence) is True
+
+    @pytest.mark.asyncio
+    async def test_claim_sets_the_licence_default(self, signing_keypair: dict[str, str]) -> None:
+        licence = _parsed_partner_licence(signing_keypair)
+        state = await _resolve(stored=None, licence=licence)
+        assert state.enabled is True
+        assert state.source == SWITCH_SOURCE_LICENSE
+        assert state.licence_requires_analytics is True
+        assert state.operator_value is None
+
+    @pytest.mark.asyncio
+    async def test_operator_off_still_vetoes_the_hand_signed_claim(self, signing_keypair: dict[str, str]) -> None:
+        licence = _parsed_partner_licence(signing_keypair)
+        state = await _resolve(stored=False, licence=licence)
+        assert state.enabled is False
+        assert state.source == SWITCH_SOURCE_OPERATOR
+        assert state.licence_requires_analytics is True
+        assert state.operator_value is False

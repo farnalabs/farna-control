@@ -190,6 +190,19 @@ describe('ModelBackendSetupView', () => {
     await nextTick()
   })
 
+  // Coverage: the error surface (v-if="error") is only reachable when the
+  // mutation exposes an error, so the flow tests that throw from submit never
+  // rendered it.
+  it('renders the error alert when the mutation exposes an error', () => {
+    window.location.hash = '#token=secret-token-123'
+    mockControls.error = ref('Setup failed. Please try again.')
+    const wrapper = mount(ModelBackendSetupView, {
+      global: { stubs: { PageHeader: true, Button: true, InputText: true } },
+    })
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('Setup failed. Please try again.')
+  })
+
   // Coverage: both arms of the submit-button label ternary.
   it('labels the submit button with the idle action when not loading', () => {
     window.location.hash = '#token=secret-token-123'

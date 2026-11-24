@@ -118,17 +118,51 @@ _INTERNAL_LIFECYCLE_MAP_PERMISSION = "library.search.in_dev"
 _log = logging.getLogger(__name__)
 
 
-def _require_internal_lifecycle_map_access(
-    principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
-    settings: Settings = Depends(get_settings),
-) -> TenantPrincipal:
-    """Keep the retained lifecycle-map API surface on the internal path only."""
+def _enforce_internal_lifecycle_map_access(principal: TenantPrincipal, settings: Settings) -> None:
+    """Single-sourced body of the internal lifecycle-map access gate.
+
+    The two wrappers below differ ONLY in the credential they resolve (the
+    ``_team_membership_or_admin_dep`` precedent): the gate matrix itself is
+    never duplicated.
+    """
     require_in_dev_operator(
         principal,
         _INTERNAL_LIFECYCLE_MAP_PERMISSION,
         require_dev_mode=True,
         settings=settings,
     )
+
+
+def _require_internal_lifecycle_map_access(
+    principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+    settings: Settings = Depends(get_settings),
+) -> TenantPrincipal:
+    """Keep the retained lifecycle-map API surface on the internal path only.
+
+    Any-credential flavour, used by the MUTATION routes. ``POST
+    /{lifecycle_map_id}/journeys/self-report`` is the documented GitHub-Actions
+    writer (PRD §5.2) and declares the any-credential permission/team pair, so
+    its route depends on a probe that resolves the same credential kinds.
+    """
+    _enforce_internal_lifecycle_map_access(principal, settings)
+    return principal
+
+
+def _require_internal_lifecycle_map_read_access(
+    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    settings: Settings = Depends(get_settings),
+) -> TenantPrincipal:
+    """JWT-only twin of the internal access gate for the READ routes (FAR-2730).
+
+    Every lifecycle-map read carries a JWT-only ``require_permission`` gate
+    (``lifecycle_map.list`` / ``run.list``) plus the JWT-only team gate, so an
+    ``mk_`` key is rejected regardless of this probe. Resolving the probe with
+    the any-credential principal did not widen the route — it only implied a
+    capability the read cannot deliver. The reads are an internal, dev-mode
+    dogfood surface (see the product map: "not Alpha-facing"), so the honest
+    contract is JWT-only throughout.
+    """
+    _enforce_internal_lifecycle_map_access(principal, settings)
     return principal
 
 
@@ -153,7 +187,6 @@ def _raise_if_rls_denied(exc: SQLAlchemyError) -> None:
 router = APIRouter(
     prefix="/api/v1/lifecycle-maps",
     tags=["lifecycle_maps"],
-    dependencies=[Depends(_require_internal_lifecycle_map_access)],
 )
 
 
@@ -574,7 +607,7 @@ def _build_detail(lm: Any) -> LifecycleMapDetailResponse:
     )
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_LIST_LIFECYCLE_MAPS_ENDPOINT)
 async def list_lifecycle_maps_endpoint(
     page: int = Query(default=1, ge=1),
@@ -627,7 +660,7 @@ async def list_lifecycle_maps_endpoint(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(audited("lifecycle_map_created", "lifecycle_map", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_created", "lifecycle_map", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_CREATE_LIFECYCLE)
 async def create_lifecycle_map_endpoint(
@@ -696,7 +729,7 @@ async def create_lifecycle_map_endpoint(
 @router.post(
     "/import",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(audited("lifecycle_map_imported", "lifecycle_map", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_imported", "lifecycle_map", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_IMPORT_LIFECYCLE)
 async def import_lifecycle_map_endpoint(
@@ -767,7 +800,7 @@ async def import_lifecycle_map_endpoint(
     return LifecycleMapResponse.model_validate(lifecycle_map)
 
 
-@router.get("/{lifecycle_map_id}/export")
+@router.get("/{lifecycle_map_id}/export", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_EXPORT_LIFECYCLE_MAP_ENDPOINT)
 async def export_lifecycle_map_endpoint(
     lifecycle_map_id: uuid.UUID,
@@ -810,7 +843,7 @@ async def export_lifecycle_map_endpoint(
     return LifecycleMapTransfer(**envelope)
 
 
-@router.get("/{lifecycle_map_id}")
+@router.get("/{lifecycle_map_id}", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_GET_LIFECYCLE_MAP_ENDPOINT)
 async def get_lifecycle_map_endpoint(
     lifecycle_map_id: uuid.UUID,
@@ -851,7 +884,7 @@ async def get_lifecycle_map_endpoint(
 
 @router.put(
     "/{lifecycle_map_id}",
-    dependencies=[Depends(audited("lifecycle_map_updated", "lifecycle_map", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_updated", "lifecycle_map", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_UPDATE_LIFECYCLE)
 async def update_lifecycle_map_endpoint(
@@ -952,7 +985,7 @@ async def update_lifecycle_map_endpoint(
 @router.delete(
     "/{lifecycle_map_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(audited("lifecycle_map_deleted", "lifecycle_map", principal_dep=get_current_tenant_user, fail_closed=True))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_deleted", "lifecycle_map", principal_dep=get_current_tenant_user, fail_closed=True))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_DELETE_LIFECYCLE_MAP_ENDPOINT)
 async def delete_lifecycle_map_endpoint(
@@ -1055,7 +1088,7 @@ async def _resolve_lifecycle_map_team_scope_including_deleted(
 
 @router.post(
     "/{lifecycle_map_id}/restore",
-    dependencies=[Depends(audited("lifecycle_map_restored", "lifecycle_map", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_restored", "lifecycle_map", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_RESTORE_LIFECYCLE)
 async def restore_lifecycle_map_endpoint(
@@ -1119,7 +1152,7 @@ async def restore_lifecycle_map_endpoint(
     return LifecycleMapResponse.model_validate(lifecycle_map)
 
 
-@router.get("/{lifecycle_map_id}/versions")
+@router.get("/{lifecycle_map_id}/versions", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors("lifecycle_maps.list_versions_endpoint")
 async def list_lifecycle_map_versions_endpoint(
     lifecycle_map_id: uuid.UUID,
@@ -1161,7 +1194,7 @@ async def list_lifecycle_map_versions_endpoint(
 @router.post(
     "/{lifecycle_map_id}/versions",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(audited("lifecycle_map_version_saved", "lifecycle_map_version", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_version_saved", "lifecycle_map_version", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_SAVE_VERSION)
 async def save_lifecycle_map_version_endpoint(
@@ -1239,7 +1272,7 @@ async def save_lifecycle_map_version_endpoint(
 
 @router.put(
     "/{lifecycle_map_id}/versions/{version_id}",
-    dependencies=[Depends(audited("lifecycle_map_version_updated", "lifecycle_map_version", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_version_updated", "lifecycle_map_version", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_UPDATE_VERSION)
 async def update_lifecycle_map_version_endpoint(
@@ -1320,7 +1353,7 @@ async def update_lifecycle_map_version_endpoint(
     return _build_version_entry(lifecycle_map)
 
 
-@router.get("/{lifecycle_map_id}/versions/{version}")
+@router.get("/{lifecycle_map_id}/versions/{version}", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors("lifecycle_maps.get_version_endpoint")
 async def get_lifecycle_map_version_endpoint(
     lifecycle_map_id: uuid.UUID,
@@ -1362,7 +1395,7 @@ async def get_lifecycle_map_version_endpoint(
 
 @router.patch(
     "/{lifecycle_map_id}/versions/{version_id}/stages/{stage_id}/graduate",
-    dependencies=[Depends(audited("lifecycle_map_stage_graduated", "lifecycle_map_stage", principal_dep=get_current_tenant_user))],
+    dependencies=[Depends(_require_internal_lifecycle_map_access), Depends(audited("lifecycle_map_stage_graduated", "lifecycle_map_stage", principal_dep=get_current_tenant_user))],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_GRADUATE_STAGE)
 async def graduate_lifecycle_map_stage_endpoint(
@@ -1485,7 +1518,7 @@ def _viewer_account_scope_id(principal: TenantPrincipal) -> uuid.UUID | None:
 _JOURNEY_STATUS_FILTER_VALUES = ("complete", "failed")
 
 
-@router.get("/{lifecycle_map_id}/journeys")
+@router.get("/{lifecycle_map_id}/journeys", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_LIST_JOURNEYS)
 async def list_journeys_endpoint(
     lifecycle_map_id: uuid.UUID,
@@ -1566,7 +1599,7 @@ async def list_journeys_endpoint(
     )
 
 
-@router.get("/{lifecycle_map_id}/journeys/{kind}/{ref}")
+@router.get("/{lifecycle_map_id}/journeys/{kind}/{ref}", dependencies=[Depends(_require_internal_lifecycle_map_read_access)])
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_GET_JOURNEY)
 async def get_journey_endpoint(
     lifecycle_map_id: uuid.UUID,
@@ -1661,13 +1694,14 @@ async def get_journey_endpoint(
 @router.post(
     "/{lifecycle_map_id}/journeys/self-report",
     dependencies=[
+        Depends(_require_internal_lifecycle_map_access),
         Depends(
             audited(
                 "lifecycle_map_journeys_self_reported",
                 "lifecycle_map",
                 principal_dep=get_current_tenant_user_or_api_key,
             )
-        )
+        ),
     ],
 )
 @handle_db_errors(_CODE_LIFECYCLE_MAPS_SELF_REPORT_JOURNEYS_ENDPOINT)

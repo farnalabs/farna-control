@@ -33,12 +33,11 @@
 
       <ErrorAlert v-else-if="error" :message="error" :on-retry="loadAll" />
 
-      <div v-else-if="items.length === 0" class="rounded-lg border bg-card p-8 text-center">
-        <p class="text-lg font-medium">{{ $t('views.SettingsGuardrailsView.no_guardrails_configured') }}</p>
-        <p class="mt-1 text-sm text-muted-foreground">
-          {{ $t('views.SettingsGuardrailsView.no_guardrails_configured_description') }}
-        </p>
-      </div>
+      <EmptyState
+        v-else-if="items.length === 0"
+        :title="$t('views.SettingsGuardrailsView.no_guardrails_configured')"
+        :description="$t('views.SettingsGuardrailsView.no_guardrails_configured_description')"
+      />
 
       <template v-else>
         <div class="table-wrapper">
@@ -276,6 +275,7 @@ import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import { usePlanStore } from '../stores/planStore'
 import { shortId } from '../utils/format'

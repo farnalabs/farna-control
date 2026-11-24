@@ -34,7 +34,7 @@
           />
         </div>
 
-        <p v-if="error" class="text-sm text-destructive-text">{{ error }}</p>
+        <ErrorAlert v-if="error" compact :message="error" :retryable="false" />
 
         <Button type="submit" :disabled="loading || !apiKey.trim()" class="w-full"
           data-testid="model-backend-setup-submit">
@@ -50,6 +50,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '../../components/shared/PageHeader.vue'
+import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import { useApi } from '../../composables/useApi'
 import { getApiErrorCode } from '../../lib/api/apiError'
 import { useMutation } from '../../composables/useMutation'
