@@ -769,6 +769,9 @@ class TestStaleWarning:
     ) -> None:
         client = _client(session=_make_session({"product_analytics": {"level": consent_level}}))
         sources = _patch_sources(
+            # The stale warning now requires the instance switch ON as well as
+            # consent: turning analytics off must silence it (FAR-2740).
+            consent_values={INSTANCE_SWITCH_KEY: True},
             transparency_values={DUMP_WATERMARK_KEY: _stale_timestamp_ago(days_ago)},
             monkeypatch=monkeypatch,
         )
@@ -777,12 +780,69 @@ class TestStaleWarning:
         assert body["warning"] == expected_warning
         _restore_overrides()
 
-    def test_no_last_dump_never_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_last_dump_with_switch_off_never_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Switch OFF is the precondition for silence, not the absence of a dump.
+
+        With the master switch off the instance is deliberately sending
+        nothing, so a never-dumped instance must stay quiet. The switch-ON never
+        case is asserted by ``test_never_dumped_opted_in_instance_warns``.
+        """
         client = _client(session=_make_session(_ORG_ALL))
         sources = _patch_sources(monkeypatch=monkeypatch)
         with sources[0], sources[1]:
             body = _request(client)
+        assert body["instance_enabled"] is False
         assert body["last_successful_dump_at"] is None
+        assert body["warning"] is None
+        _restore_overrides()
+
+    def test_never_dumped_with_switch_on_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _client(session=_make_session(_ORG_ALL))
+        sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["instance_enabled"] is True
+        assert body["warning"] == "never_reached_farnalabs"
+        _restore_overrides()
+
+    def test_never_dumped_recent_consent_is_inside_the_grace_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A freshly opted-in instance must not alarm before its first dump."""
+        recent = (datetime.now(UTC) - timedelta(hours=6)).isoformat()
+        client = _client(session=_make_session({"product_analytics": {"level": LEVEL_ALL, "level_changed_at": recent}}))
+        sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["last_successful_dump_at"] is None
+        assert body["warning"] is None
+        _restore_overrides()
+
+    def test_never_dumped_consent_older_than_the_threshold_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        old = (datetime.now(UTC) - timedelta(days=4)).isoformat()
+        client = _client(session=_make_session({"product_analytics": {"level": LEVEL_ALL, "level_changed_at": old}}))
+        sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["warning"] == "never_reached_farnalabs"
+        _restore_overrides()
+
+    def test_stale_warning_is_silenced_when_the_switch_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _client(session=_make_session(_ORG_ALL))
+        sources = _patch_sources(
+            transparency_values={DUMP_WATERMARK_KEY: _stale_timestamp_ago(4)},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["instance_enabled"] is False
         assert body["warning"] is None
         _restore_overrides()
 
@@ -791,6 +851,7 @@ class TestStaleWarning:
         naive = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=4)).isoformat()
         client = _client(session=_make_session(_ORG_ALL))
         sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
             transparency_values={DUMP_WATERMARK_KEY: naive},
             monkeypatch=monkeypatch,
         )

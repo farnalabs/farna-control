@@ -1977,3 +1977,49 @@ async def test_send_operator_alert_respects_the_environment_allowlist() -> None:
     # The default test environment is not "production", so it is excluded.
     assert delivered is False
     sender.assert_not_awaited()
+
+
+async def test_send_operator_alert_appends_deployment_context_and_host() -> None:
+    """An operator alert must identify its deployment, like the readiness one."""
+    settings = _make_settings(alert_context="Runbook: https://example.com/runbook")
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="<p>fragment</p>",
+        body_text="fragment",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is True
+    html_body = sender.await_args.args[3]
+    text_body = sender.await_args.args[4]
+    for body in (html_body, text_body):
+        assert "Environment:" in body
+        assert "Runbook: https://example.com/runbook" in body
+        assert ha._host() in body
+    # The HTML part stays one well-formed document around the fragment.
+    assert html_body.startswith("<html><body>")
+    assert html_body.endswith("</body></html>")
+    assert "<p>fragment</p>" in html_body
+
+
+async def test_send_operator_alert_uses_the_shared_alerting_gate(caplog: pytest.LogCaptureFixture) -> None:
+    """The disabled path is the shared gate, not a duplicated two-condition check."""
+    settings = _make_settings(smtp_host="", alert_email_to="")
+    sender = AsyncMock(return_value=True)
+
+    with caplog.at_level(logging.INFO, logger="farna.core.health_alerts"):
+        delivered = await ha.send_operator_alert(
+            subject="s",
+            body_html="h",
+            body_text="t",
+            settings=settings,
+            sender=sender,
+        )
+
+    assert delivered is False
+    sender.assert_not_awaited()
+    # The disabled log names the alert channel generically, not "readiness".
+    assert any("operator email alerting" in record.getMessage() for record in caplog.records)

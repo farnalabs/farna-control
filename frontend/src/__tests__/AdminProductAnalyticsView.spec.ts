@@ -130,6 +130,113 @@ describe('AdminProductAnalyticsView', () => {
     expect(wrapper.text()).toContain('Analytics data is not reaching Farnalabs')
   })
 
+  it('shows warning banner when warning is never_reached_farnalabs', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        last_successful_dump_at: null,
+        dump_count_total: 0,
+        consent_level: 'all',
+        instance_enabled: true,
+        warning: 'never_reached_farnalabs',
+      },
+      error: undefined,
+    })
+
+    const wrapper = mount(AdminProductAnalyticsView, {
+      global: {
+        stubs: {
+          LoadingSpinner: true,
+          ErrorAlert: true,
+          DataCard: {
+            template: '<div><h2>{{ title }}</h2><slot /></div>',
+            props: ['title'],
+          },
+          PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
+        },
+      },
+    })
+    await flushPromises()
+    await nextTick()
+
+    // Distinct from the stale 'not reaching' message: the instance is opted in
+    // but has never delivered a successful dump.
+    expect(wrapper.text()).toContain('has not completed a successful analytics dump yet')
+    expect(wrapper.text()).not.toContain('Check your network or consent settings')
+  })
+
+  it('shows the never_reached banner without a failure record', async () => {
+    // The warning can fire before any dump attempt has recorded a failure, so
+    // it must not depend on the failure detail being present.
+    mockGet.mockResolvedValue({
+      data: {
+        last_successful_dump_at: null,
+        dump_count_total: 0,
+        consent_level: 'all',
+        instance_enabled: true,
+        last_failed_dump_at: null,
+        last_dump_failure: null,
+        warning: 'never_reached_farnalabs',
+      },
+      error: undefined,
+    })
+
+    const wrapper = mount(AdminProductAnalyticsView, {
+      global: {
+        stubs: {
+          LoadingSpinner: true,
+          ErrorAlert: true,
+          DataCard: {
+            template: '<div><h2>{{ title }}</h2><slot /></div>',
+            props: ['title'],
+          },
+          PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
+        },
+      },
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="last-dump-failure-detail"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('has not completed a successful analytics dump yet')
+  })
+
+  it('renders the recorded dump failure timestamp and summary', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        last_successful_dump_at: null,
+        dump_count_total: 0,
+        consent_level: 'all',
+        instance_enabled: true,
+        last_failed_dump_at: '2026-02-03T04:05:06+00:00',
+        last_dump_failure: 'status=500: vendor unavailable',
+        warning: 'never_reached_farnalabs',
+      },
+      error: undefined,
+    })
+
+    const wrapper = mount(AdminProductAnalyticsView, {
+      global: {
+        stubs: {
+          LoadingSpinner: true,
+          ErrorAlert: true,
+          DataCard: {
+            template: '<div><h2>{{ title }}</h2><slot /></div>',
+            props: ['title'],
+          },
+          PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
+        },
+      },
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="last-dump-failure-detail"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="last-failed-dump"]').text()).toContain('2026-02-03')
+    expect(wrapper.find('[data-testid="last-dump-failure"]').text()).toContain(
+      'status=500: vendor unavailable',
+    )
+  })
+
   it('hides warning banner when warning is null', async () => {
     mockGet.mockResolvedValue({
       data: {

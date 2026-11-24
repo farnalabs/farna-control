@@ -465,7 +465,11 @@ class TestTransparencyDumpFailureFields:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         stale = (datetime.now(UTC) - timedelta(days=4)).isoformat()
-        body = _t_request(monkeypatch, route_values={DUMP_WATERMARK_KEY: stale})
+        body = _t_request(
+            monkeypatch,
+            route_values={DUMP_WATERMARK_KEY: stale},
+            switch_values={INSTANCE_SWITCH_KEY: True},
+        )
 
         assert body["warning"] == "not_reaching_farnalabs"
 
@@ -476,9 +480,19 @@ class TestStaleDumpWarningNeverDumped:
         assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=False) is None
         assert _stale_dump_warning(None, LEVEL_OFF, instance_enabled=True) is None
 
-    def test_stale_previous_success_is_unchanged(self) -> None:
+    def test_never_dumped_honours_the_consent_grace_window(self) -> None:
+        """A recently opted-in instance is quiet until the threshold elapses."""
+        recent = datetime.now(UTC) - timedelta(hours=6)
+        assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=True, consent_since=recent) is None
+        old = datetime.now(UTC) - timedelta(days=4)
+        assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=True, consent_since=old) == "never_reached_farnalabs"
+
+    def test_stale_previous_success_requires_the_switch(self) -> None:
         stale = (datetime.now(UTC) - timedelta(days=4)).isoformat()
-        assert _stale_dump_warning(stale, LEVEL_ALL) == "not_reaching_farnalabs"
+        assert _stale_dump_warning(stale, LEVEL_ALL, instance_enabled=True) == "not_reaching_farnalabs"
+        # Turning analytics off silences the warning rather than leaving it
+        # forever (FAR-2740).
+        assert _stale_dump_warning(stale, LEVEL_ALL, instance_enabled=False) is None
 
     def test_fresh_dump_never_warns(self) -> None:
         fresh = (datetime.now(UTC) - timedelta(days=1)).isoformat()

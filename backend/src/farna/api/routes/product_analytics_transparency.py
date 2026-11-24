@@ -29,6 +29,7 @@ from farna.core.product_analytics.constants import (
     INSTANCE_SWITCH_KEY,
     LEVEL_ALL,
     LEVEL_OFF,
+    PRODUCT_ANALYTICS_KEY,
     SWITCH_SOURCE_DEFAULT,
     coerce_dump_count,
 )
@@ -114,7 +115,34 @@ async def _resolve_org(
     return result.scalar_one_or_none()
 
 
-async def _instance_consent_level(session: AsyncSession) -> str:
+def _consent_since_from_settings(settings_json: Any) -> datetime | None:
+    """Return when an org's consent was last set, or ``None`` when unknown.
+
+    ``consent.apply_consent_action`` / ``set_level`` persist
+    ``level_changed_at`` as a full ISO datetime. The never-dumped warning uses
+    it as a grace window so a freshly opted-in instance is not alarmed before
+    its first daily dump has had a chance to run (FAR-2740). A missing,
+    malformed, or naive-unparseable value yields ``None`` — the caller then
+    treats the consent as long-standing (warn rather than hide a real failure).
+    """
+    if not isinstance(settings_json, dict):
+        return None
+    block = settings_json.get(PRODUCT_ANALYTICS_KEY)
+    if not isinstance(block, dict):
+        return None
+    raw = block.get("level_changed_at")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+async def _instance_consent_posture(session: AsyncSession) -> tuple[str, datetime | None]:
     """Return the INSTANCE-level consent posture for an unresolved caller org.
 
     Product decision (FAR-1635, Duncan): per-org consent is the preferred
@@ -129,13 +157,24 @@ async def _instance_consent_level(session: AsyncSession) -> str:
     enables the ``all`` level. At least one such org -> ``LEVEL_ALL``; otherwise
     ``LEVEL_OFF``. The ``organisations`` table is not RLS-scoped, so this
     cross-org read is safe on the app-role session.
+
+    Returns ``(level, consent_since)`` where ``consent_since`` is the EARLIEST
+    consent timestamp among the consenting orgs — the instance as a whole has
+    been opted in at least that long, so a just-added org cannot hide a
+    long-standing delivery failure behind its own grace window (FAR-2740).
     """
     stmt = select(Organisation).where(Organisation.status == "active")
     result = await session.execute(stmt)
+    earliest: datetime | None = None
+    consenting = False
     for org in result.scalars():
-        if is_org_consenting(org.settings_json):
-            return LEVEL_ALL
-    return LEVEL_OFF
+        if not is_org_consenting(org.settings_json):
+            continue
+        consenting = True
+        since = _consent_since_from_settings(org.settings_json)
+        if since is not None and (earliest is None or since < earliest):
+            earliest = since
+    return (LEVEL_ALL if consenting else LEVEL_OFF), earliest
 
 
 def _coerce_failure_summary(value: Any) -> str | None:
@@ -157,6 +196,7 @@ def _stale_dump_warning(
     consent_level: str,
     *,
     instance_enabled: bool = False,
+    consent_since: datetime | None = None,
 ) -> str | None:
     """The delivery warning when dumps are not reaching farnalabs.
 
@@ -166,18 +206,35 @@ def _stale_dump_warning(
     * ``never_reached_farnalabs`` — there has NEVER been a successful dump and
       the instance switch is ON, so an opted-in instance is silently delivering
       nothing. This is the state production was in when the dump never
-      completed, and it previously produced NO warning at all. With the switch
-      OFF the instance is deliberately sending nothing, so it stays quiet.
+      completed, and it previously produced NO warning at all.
     * ``not_reaching_farnalabs`` — a previous dump succeeded but the last
-      success is older than *_STALE_WARNING_DAYS*. Unchanged behaviour.
+      success is older than *_STALE_WARNING_DAYS*.
 
-    Both require consent ``all`` (the existing consent basis for this warning).
+    BOTH require the instance switch to be ON: with the switch OFF the instance
+    is deliberately sending nothing, so a warning would outlive the operator's
+    own choice to turn analytics off. Both also require consent ``all`` (the
+    existing consent basis for this warning).
+
+    ``consent_since`` is the grace-window input for the never-dumped case: a
+    freshly opted-in instance must not show a false alarm before its first
+    daily dump has had a chance to run, so ``never_reached_farnalabs`` is
+    suppressed until the consent has been in place longer than
+    *_STALE_WARNING_DAYS*. ``None`` means the consent age is unknown, which is
+    treated as long-standing (surface the real failure rather than hide it).
+
     An unparseable timestamp never warns (best-effort, fail-silent).
     """
     if consent_level != LEVEL_ALL:
         return None
+    if not instance_enabled:
+        return None
     if not last_dump_at:
-        return "never_reached_farnalabs" if instance_enabled else None
+        if consent_since is not None:
+            consent_dt = consent_since.replace(tzinfo=UTC) if consent_since.tzinfo is None else consent_since
+            consent_age_days = (datetime.now(UTC) - consent_dt).total_seconds() / 86400
+            if consent_age_days <= _STALE_WARNING_DAYS:
+                return None
+        return "never_reached_farnalabs"
     try:
         last_dt = datetime.fromisoformat(last_dump_at)
         now = datetime.now(UTC)
@@ -217,7 +274,7 @@ async def _build_transparency(
         (org.settings_json["product_analytics"]["level"], read through
         consent.org_consent_level) is the PREFERRED source. When the caller org
         cannot be resolved the endpoint reports an INSTANCE-level posture
-        instead of a hardcoded "off" (see _instance_consent_level and
+        instead of a hardcoded "off" (see _instance_consent_posture and
         FAR-1635).
     """
     switch = await resolve_instance_analytics_switch(session)
@@ -229,15 +286,21 @@ async def _build_transparency(
     if org is None:
         # Per-org is preferred, but an unresolvable caller org falls back
         # to the instance-level posture ("per instance acceptable").
-        consent_level = await _instance_consent_level(session)
+        consent_level, consent_since = await _instance_consent_posture(session)
     else:
         consent_level = org_consent_level(org.settings_json)
+        consent_since = _consent_since_from_settings(org.settings_json)
 
     last_dump_at = _coerce_last_dump(last_dump_entry.value if last_dump_entry else None)
     dump_count_total = coerce_dump_count(dump_count_entry.value if dump_count_entry else None)
     last_failed_dump_at = _coerce_last_dump(failure_at_entry.value if failure_at_entry else None)
     last_dump_failure = _coerce_failure_summary(failure_summary_entry.value if failure_summary_entry else None)
-    warning = _stale_dump_warning(last_dump_at, consent_level, instance_enabled=switch.enabled)
+    warning = _stale_dump_warning(
+        last_dump_at,
+        consent_level,
+        instance_enabled=switch.enabled,
+        consent_since=consent_since,
+    )
 
     return TransparencyResponse(
         last_successful_dump_at=last_dump_at,

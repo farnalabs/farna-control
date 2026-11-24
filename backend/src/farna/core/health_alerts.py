@@ -287,9 +287,9 @@ def _log_disabled_once(now: float, *, environment_excluded: bool = False) -> Non
         return
     _last_disabled_log_at = now
     if environment_excluded:
-        _log.info("health_alerts.disabled: readiness alerting is off for this environment — set ALERT_ENVIRONMENTS to include it to email the operator (health is still evaluated; no email is sent)")
+        _log.info("health_alerts.disabled: operator email alerting is off for this environment — set ALERT_ENVIRONMENTS to include it to email the operator (the underlying check still runs; no email is sent)")
         return
-    _log.info("health_alerts.disabled: readiness alerting is off — set SMTP_HOST and ALERT_EMAIL_TO to email the operator when readiness degrades (health is still evaluated; no email is sent)")
+    _log.info("health_alerts.disabled: operator email alerting is off — set SMTP_HOST and ALERT_EMAIL_TO to email the operator (the underlying check still runs; no email is sent)")
 
 
 @dataclass
@@ -740,11 +740,18 @@ async def send_operator_alert(
 
     The single reuse point for a non-readiness alert (FAR-2740 wires the failed
     product-analytics dump through it). It deliberately shares the SAME
-    configuration gate, recipient parse, environment allowlist and SMTP sender
-    as the readiness alert, so a second alert source never grows a second
-    notification system to configure. It does NOT touch the readiness dedup
-    state machine: an ad-hoc alert is not a readiness edge, and dedup there is
-    keyed on readiness state.
+    alerting gate (``_resolve_alerting_gate``: configuration + ``ALERT_ENVIRONMENTS``
+    allowlist, with the one rate-limited disabled log), recipient parse and
+    SMTP sender as the readiness alert, so a second alert source never grows a
+    second notification system to configure. It does NOT touch the readiness
+    dedup state machine: an ad-hoc alert is not a readiness edge, and dedup
+    there is keyed on readiness state.
+
+    ``body_html`` is an HTML BODY FRAGMENT and ``body_text`` the plain-text
+    body; this function wraps the fragment in the alert document and appends
+    the shared deployment context (``ALERT_CONTEXT`` + environment) and the
+    sender host, so every operator alert identifies its deployment exactly as
+    the readiness channel does.
 
     Returns ``True`` when the channel is configured AND the sender reports
     success; ``False`` when alerting is disabled (channel unconfigured or this
@@ -753,15 +760,14 @@ async def send_operator_alert(
     aborted by a mail failure.
     """
     settings = settings or get_settings()
-    if not alerting_enabled_for_environment(settings):
-        _log_disabled_once(time.time(), environment_excluded=True)
-        return False
-    if not alerting_configured(settings):
-        _log_disabled_once(time.time())
+    env_excluded = not alerting_enabled_for_environment(settings)
+    if not _resolve_alerting_gate(settings, time.time(), env_excluded=env_excluded):
         return False
     recipients = _recipients(settings)
     send_fn = sender or _send_via_smtp
-    return bool(await send_fn(settings, recipients, subject, body_html, body_text))
+    final_text = f"{body_text}\nDetected on {_host()}\n{alert_context_text(settings)}"
+    final_html = f"<html><body>{body_html}<p>Detected on {html.escape(_host())}</p>{alert_context_html(settings)}</body></html>"
+    return bool(await send_fn(settings, recipients, subject, final_html, final_text))
 
 
 @dataclass
