@@ -106,18 +106,22 @@ _TESTID_LITERAL = re.compile(
 #: testid but carries no ``data-testid`` spelling, so the literal scan above is
 #: blind to it and a documented element fails ``test_element_testids_exist_in_frontend``
 #: even though the surface exists. Collect any attribute name ending in
-#: ``testid`` or ``test-id`` as well. Three static shapes count:
+#: ``testid`` or ``test-id`` as well — including the BARE spellings ``testid``
+#: and ``test-id`` (e.g. ``<Thing test-id="thing-x" />``, used in-tree by
+#: ``HitlNode.vue`` / ``RouterNode.vue`` / ``AdminAssistantView.vue``). Three
+#: static shapes count:
 #:
-#: - a plain attribute value ``x-testid="lit"`` (either quote style);
-#: - a bound string literal ``:x-testid="'lit'"`` / ``:x-testid='"lit"'`` /
-#:   ``:x-testid="`lit`"``;
+#: - a plain attribute value ``x-testid="lit"`` / ``test-id="lit"`` /
+#:   ``testid="lit"`` (either quote style);
+#: - a bound string literal ``:x-testid="'lit'"`` / ``:test-id="'lit'"`` /
+#:   ``:testid="'lit'"`` (or ``'"lit"'`` / ``"`lit`"``);
 #: - a simple ternary whose BOTH branches are string literals, e.g.
 #:   ``:row-testid="open ? 'row-open' : 'row-closed'"``.
 #:
 #: A computed binding (an identifier, concatenation, interpolated template
 #: literal, or a ternary with a dynamic branch) evaluates to a value the scanner
 #: cannot know, so it is never collected - the guard stays conservative.
-_TESTID_ATTR_NAME = r"[A-Za-z][\w-]*(?:testid|test-id)"
+_TESTID_ATTR_NAME = r"(?:[A-Za-z][\w-]*(?:testid|test-id)|testid|test-id)"
 _TESTID_ATTR_STATIC = re.compile(rf"""(?<![\w.:@-]){_TESTID_ATTR_NAME}\s*=\s*(?:"([a-zA-Z0-9_-]+)"|'([a-zA-Z0-9_-]+)')""")
 _TESTID_ATTR_BOUND = re.compile(rf"""(?<![\w.:@-])(?:v-bind:|:){_TESTID_ATTR_NAME}\s*=\s*(?:"([^"]*)"|'([^']*)')""")
 _TESTID_STRING_LITERAL = re.compile(r"""^(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)$""")
@@ -310,6 +314,10 @@ def test_static_testid_scanner_recognises_prop_forms():
     cases = {
         '<Pagination prev-testid="runs-list-prev-page" />': "runs-list-prev-page",
         "<Thing x-test-id='thing-x' />": "thing-x",
+        '<Thing test-id="thing-x" />': "thing-x",
+        "<Thing testid='thing-y' />": "thing-y",
+        """<Thing :test-id="'thing-x'" />""": "thing-x",
+        """<Thing :testid="'thing-y'" />""": "thing-y",
         """<Pagination :prev-testid="'runs-list-prev-page'" />""": "runs-list-prev-page",
         """<Pagination :prev-testid='"runs-list-prev-page"' />""": "runs-list-prev-page",
         '<Pagination :prev-testid="`runs-list-prev-page`" />': "runs-list-prev-page",
@@ -328,6 +336,8 @@ def test_static_testid_scanner_ignores_computed_values():
         '<Pagination :prev-testid="`page-${n}`" />',
         """<Pagination :prev-testid="'a' + suffix" />""",
         """<Thing :row-testid="isOpen ? 'row-open' : dynamic" />""",
+        """<Thing :testid="computedTestid" />""",
+        """<Thing :test-id="'a' + suffix" />""",
     )
     for source in cases:
         assert not _static_testids_in_text(source), f"computed value wrongly collected from {source!r}"
