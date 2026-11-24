@@ -49,12 +49,10 @@ backend/docs/operations/sensitive-data-handling.md	6
 backend/docs/operations/windows-native-launcher.md	1
 backend/entrypoint.sh	3
 backend/pyproject.toml	1
-backend/scripts/gen_seed_sql.py	2
 backend/scripts/generate-sbom.py	5
 backend/scripts/generate_assistant_primer.py	3
 backend/scripts/repair_accounts_fks.py	8
 backend/scripts/sbom-config.json	1
-backend/scripts/seed_library_templates.py	1
 backend/scripts/seed_tier_catalog.py	1
 backend/scripts/spike_saq.py	1
 backend/src/farna/__init__.py	1
