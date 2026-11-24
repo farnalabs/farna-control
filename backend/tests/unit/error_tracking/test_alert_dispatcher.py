@@ -53,6 +53,7 @@ class _FakeClient:
     def __init__(self, *args: object, **kwargs: object) -> None:
         self.responses: list[object] = []
         self.posted: list[tuple[str, bytes]] = []
+        self.sent_headers: list[dict[str, str]] = []
 
     async def __aenter__(self) -> Self:
         return self
@@ -62,6 +63,7 @@ class _FakeClient:
 
     async def post(self, url: str, **kwargs: object) -> object:
         self.posted.append((url, kwargs["content"]))
+        self.sent_headers.append(kwargs.get("headers") or {})
         if self.responses:
             return self.responses.pop(0)
         return _FakeResponse()
@@ -448,6 +450,7 @@ class TestDispatchWebhook:
         assert body["attempt_n"] == 2
         assert body["run_group_id"] == str(run_group_id)
         assert body["message"] == "Agent failed"
+        assert client.sent_headers[0]["User-Agent"] == "Farna-Control-Error-Alert/1.0"
 
     async def test_webhook_slack_url_formats_payload(self) -> None:
         alert = make_alert(webhook_url="https://hooks.slack.com/services/T00/B00/xxx", level="critical")
@@ -553,6 +556,7 @@ class TestDispatchAlertResolved:
         assert body["group_id"] == str(_GROUP_ID)
         assert body["signal"] == "agent.failed"
         assert body["reason"] == "recovered"
+        assert client.sent_headers[0]["User-Agent"] == "Farna-Control-Error-Alert/1.0"
 
     async def test_resolved_webhook_http_error_logs(self, caplog: pytest.LogCaptureFixture) -> None:
         session = make_session()

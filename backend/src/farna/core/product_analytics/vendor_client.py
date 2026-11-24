@@ -225,7 +225,7 @@ class VendorClient:
                     "X-Farna-Signature": signature,
                     "X-Farna-Timestamp": str(timestamp),
                     "X-Farna-Sequence": str(sequence),
-                    "User-Agent": "Modulo-MetricsDump/1.0",
+                    "User-Agent": "Farna-Control-MetricsDump/1.0",
                 },
             ),
             timeout=REQUEST_TIMEOUT,

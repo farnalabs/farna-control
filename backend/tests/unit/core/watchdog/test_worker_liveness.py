@@ -1157,7 +1157,7 @@ class TestWebhookErrorPaths:
         body = json.loads(call.kwargs["content"])
         assert body == {"text": alert_text}
         assert call.kwargs["headers"]["Content-Type"] == "application/json"
-        assert call.kwargs["headers"]["User-Agent"] == "Modulo-Watchdog/1.0"
+        assert call.kwargs["headers"]["User-Agent"] == "Farna-Control-Watchdog/1.0"
 
     async def test_teams_webhook_http_error_status_logs(self, caplog: pytest.LogCaptureFixture) -> None:
         settings = _make_settings(ALERT_TEAMS_WEBHOOK_URL="https://outlook.office.com/webhook/t")
