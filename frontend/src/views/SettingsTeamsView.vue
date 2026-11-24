@@ -50,7 +50,7 @@
             </button>
           </div>
         </div>
-        <div v-if="createError" class="mt-3 text-sm text-destructive">{{ createError }}</div>
+        <ErrorAlert v-if="createError" compact class="mt-3" :message="createError" :retryable="false" />
         <div v-if="createSuccess" class="mt-3 text-sm text-success-text">{{ createSuccess }}</div>
       </DataCard>
 
@@ -116,10 +116,11 @@
             <div v-if="membersLoading[team.id]" class="flex items-center justify-center py-4">
               <LoadingSpinner />
             </div>
-            <div v-else-if="membersError[team.id]" class="mb-3 text-sm text-destructive">
-              {{ membersError[team.id] }}
-              <button type="button" class="ml-2 underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
-            </div>
+            <ErrorAlert v-else-if="membersError[team.id]" compact class="mb-3" :message="membersError[team.id]" :retryable="false">
+              <template #actions>
+                <button type="button" class="underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
+              </template>
+            </ErrorAlert>
             <div v-else>
               <div v-if="membersByTeam[team.id]?.length === 0" class="py-4 text-center text-sm text-muted-foreground">
                 {{ $t('views.SettingsTeamsView.no_members_yet') }}

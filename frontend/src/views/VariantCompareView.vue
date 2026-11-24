@@ -76,9 +76,12 @@
         </EmptyState>
 
         <template v-else>
-          <p v-if="pipelinesError" role="alert" class="text-sm text-destructive">
-            {{ $t('views.variantCompare.pipelinesLoadFailed', { error: pipelinesError }) }}
-          </p>
+          <ErrorAlert
+            v-if="pipelinesError"
+            compact
+            :message="$t('views.variantCompare.pipelinesLoadFailed', { error: pipelinesError })"
+            :retryable="false"
+          />
 
           <DataTable
             data-testid="variant-compare-groups-table"
