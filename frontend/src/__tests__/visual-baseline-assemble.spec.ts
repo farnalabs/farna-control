@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /**
  * Unit + CLI coverage for `tests/visual-baseline/assemble.mjs` (FAR-2734).
@@ -44,13 +44,17 @@ interface Assembler {
 }
 
 // The assembler is plain ESM with no declaration file, and `tsconfig.json` does
-// not `allowJs`, so it is loaded through `createRequire` against an explicit
-// interface instead of a static import TypeScript cannot resolve. The same file
-// is exercised as a CLI below, so the wrapper is not the only thing under test.
-const nodeRequire = createRequire(import.meta.url)
-const { assembleDom, assembleFingerprints, assembleTokens, serialise } = nodeRequire(
-  '../../tests/visual-baseline/assemble.mjs',
-) as Assembler
+// not `allowJs`, so it is loaded with a runtime dynamic `import()` against an
+// explicit interface. `createRequire(...)()` cannot load it: that throws
+// `ERR_REQUIRE_ESM` before Node 20.19, below the documented Node 20+ floor.
+// The specifier is a variable so TypeScript does not try (and fail) to resolve
+// the untyped module statically; `@vite-ignore` keeps it a native import. The
+// same file is exercised as a CLI below, so the wrapper is not the only thing
+// under test.
+const ASSEMBLER_URL = pathToFileURL(resolve(process.cwd(), 'tests/visual-baseline/assemble.mjs')).href
+const { assembleDom, assembleFingerprints, assembleTokens, serialise } = (await import(
+  /* @vite-ignore */ ASSEMBLER_URL
+)) as Assembler
 
 const TOKENS: Record<string, string> = {
   '--p-badge-height': '1.25rem',

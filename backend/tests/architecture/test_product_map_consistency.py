@@ -339,11 +339,16 @@ def test_mapped_route_elements_cover_owning_view_testids():
 
     Every whole-page view that gates its content behind the plan entitlement
     surface (``components/FeatureGate.vue``, which embeds ``LockIcon.vue``)
-    owns the gate's static testids — ``feature-gate`` / ``feature-gate-disabled``
-    / ``feature-gate-lock`` / ``feature-gate-title`` / ``lock-icon`` — just like the FilterBar search
-    surface. The gate wraps the page content, so a newly shipped control on the
-    entitlement card would otherwise stay invisible to Assistant's docs indexer and
-    to ``/api/v1/manifest`` on every gated route.
+    owns the gate's only static testid — ``lock-icon`` — just like the FilterBar
+    search surface. The gate wraps the page content, so a newly shipped control
+    on the entitlement card would otherwise stay invisible to Assistant's docs
+    indexer and to ``/api/v1/manifest`` on every gated route. The gate's own
+    markers (``feature-gate`` / ``feature-gate-disabled`` / ``feature-gate-lock``
+    / ``feature-gate-title``) are per-instance: they carry a ``useId()`` suffix
+    (FAR-2714 / FAR-2719) so several gates on one page never collide, which makes
+    them dynamic testids. They are therefore deliberately NOT registered as
+    static manifest elements, and a route listing ``FeatureGate.vue`` only
+    contributes the embedded ``lock-icon``.
 
     A page header with an action slot owns the ``PageHeader`` right-slot
     surface: the shared ``components/shared/PageHeader.vue`` strips only render
@@ -360,9 +365,14 @@ def test_mapped_route_elements_cover_owning_view_testids():
     A page that renders the shared ``components/shared/JsonViewer.vue``
     (an expanded audit payload, a system-config entry value, a feedback
     correction proposal, a run-output diff leg, or a raw inferred schema) owns
-    its static testids — ``json-viewer`` and the toolbar / string-toggle
-    controls — because the viewer is part of the page surface whenever it is
-    shown. Likewise ``/assistant`` embeds ``components/analytics/AnalyticsChart.vue``
+    no static testids: the whole viewer surface — the root, the toolbar
+    (copy / expand-all / collapse-all) and the long-string toggle controls
+    (expand / collapse / truncated / expanded) — carries a ``useId()`` suffix
+    (FAR-2714 / FAR-2719 / FAR-2724) so several viewers on one page never
+    collide. Those are dynamic testids and are deliberately not registered as
+    static manifest elements, so listing the component on a route contributes
+    nothing to its elements inventory. Likewise ``/assistant`` embeds
+    ``components/analytics/AnalyticsChart.vue``
     through ``AssistantChat.vue`` for analytics-chart turns, so the chart surface
     (``analytics-chart`` / ``analytics-chart-canvas`` / ``analytics-chart-empty``)
     is registered on the route.

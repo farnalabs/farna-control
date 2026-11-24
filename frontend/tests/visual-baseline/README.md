@@ -61,6 +61,7 @@ snapshot is the **permanent** regression guard; the JSON signature it can emit
 | `v5/dom.json` | per-component rendered-DOM signature (v5) |
 | `assemble.mjs` | builds the three aggregates above from a capture run |
 | `compare.mjs` | diffs two capture directories into a delta table |
+| `cli.mjs` | argv parsing, URL-origin reduction and value formatting shared by both scripts |
 
 The capture spec writes **one `<slug>.json` + `<slug>.png` per capture** into
 `PRIMEVUE_BASELINE_OUT`; it does **not** write the aggregate files committed
@@ -90,7 +91,7 @@ node tests/visual-baseline/assemble.mjs \
 | `--out <dir>` | directory the three aggregates are written to, or — with `--check` — compared against |
 | `--note <text>` | the `tokens.json` note. Omitted, the target file's note is preserved, falling back to a generic note for a fresh directory |
 | `--conflicts <json-file>` | replaces the `tokens.json` conflicts block. Omitted, the target file's block is preserved **verbatim** — see below |
-| `--check` | assembles in memory and compares **parsed content** (not bytes) with `--out`. Prints, per file, `OK` / `ADVISORY` / `DIFF` / `MISSING`; writes nothing; exits non-zero only when the content differs |
+| `--check` | assembles in memory and compares **parsed content** (not bytes) with `--out`. Prints, per file, `OK` / `ADVISORY` / `DIFF` / `MISSING`; writes nothing; exits non-zero only when the content differs. `note`/`conflicts` are a documented partial check unless `--note`/`--conflicts` is also given |
 
 The assembler is deterministic: capture slugs and token names are sorted, every
 fingerprint entry emits `url`, then `viewport` (`{ width, height }`), then
@@ -118,6 +119,13 @@ line for that file ("content matches, formatting/key order differs") and the
 exit stays 0. Only a content difference fails, and it is reported concretely —
 a missing slug, a changed value — not as a byte count.
 
+`--check` is a **partial** check of `tokens.json`: the `note` and `conflicts`
+fields are not derivable from the captures, so they are carried over from the
+target file and reported as a `NOTE` line — they are never silently treated as
+matching. Pass `--note` / `--conflicts` to have those fields verified too.
+Everything derived from the captures (the token union, the fingerprints, the
+DOM signatures) is checked in full.
+
 > **The committed v5 files are not assembler-normalised.** `v5/fingerprints.json`
 > and `v5/tokens.json` were assembled by hand before this script existed, in
 > capture order rather than sorted order, so `--check` prints the advisory for
@@ -129,12 +137,19 @@ a missing slug, a changed value — not as a byte count.
 > temporarily reinstalling the PrimeVue 5.0.4 toolchain (`primevue` 5.0.4,
 > `@primeuix/themes` 3.1.0, `@primeuix/styled` 1.2.0) and re-running the capture
 > spec. That cannot be done against the pinned PrimeVue 4.5.5, which produces
-> the **v4 comparison side** rather than this v5 reference. Because the v5
-> toolchain cannot be reinstalled on demand, a value that is *provably* wrong
-> against the current product is still corrected by hand (FAR-2716 hand-edited
-> one recorded `__class` value in `v5/fingerprints.json` when a class was removed)
-> — record why in the commit message. Never hand-write a value speculatively.
+> the **v4 comparison side** rather than this v5 reference.
 > The installed-version re-capture is also outstanding and is not committed here.
+
+> **The retained reference is never rewritten to match the current product.**
+> It records what the v5 capture measured, including values the current tree no
+> longer produces. One known deviation: the Settings → MCP API-keys card was
+> captured with the class `p-card p-component settings-mcp-api-keys-card`, and a
+> later change to the card surface (FAR-2697) makes today's tree emit
+> `card card-base bg-card p-4` instead. That difference is real and belongs in
+> the record — note it here or in `DELTA.md`; do **not** edit the captured
+> `__class` value to the current one, because the reference exists precisely to
+> show what changed. A value is only ever corrected when it was transcribed
+> wrongly from a capture, never because the product moved on.
 
 PNG screenshots are **not** committed: they are ~1.8 MB per run and are
 reproducible from the spec. Capture them with:

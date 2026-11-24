@@ -24,6 +24,8 @@ import { createRequire } from 'node:module'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+import { formatValue, parseArgs, pathOf } from './cli.mjs'
+
 const require = createRequire(import.meta.url)
 
 // pngjs is not a direct dependency; it ships with `qrcode` (a production
@@ -31,23 +33,6 @@ const require = createRequire(import.meta.url)
 // adding a dependency that exists only for measurement.
 const qrcodeRequire = createRequire(require.resolve('qrcode/package.json'))
 const { PNG } = qrcodeRequire('pngjs')
-
-function parseArgs(argv) {
-  const args = {}
-  for (let i = 2; i < argv.length; i++) {
-    const token = argv[i]
-    if (!token.startsWith('--')) continue
-    const key = token.slice(2)
-    const value = argv[i + 1]
-    if (value === undefined || value.startsWith('--')) {
-      args[key] = true
-    } else {
-      args[key] = value
-      i++
-    }
-  }
-  return args
-}
 
 const args = parseArgs(process.argv)
 if (!args.expected || !args.actual) {
@@ -120,16 +105,6 @@ function resolveLightDark(value) {
     i = end + 1
   }
   return out
-}
-
-/** Origin (host:port) is worktree-derived, so compare path+query only. */
-function pathOf(url) {
-  try {
-    const parsed = new URL(url)
-    return parsed.pathname + parsed.search
-  } catch {
-    return url
-  }
 }
 
 function comparePng(expectedPath, actualPath) {
@@ -251,12 +226,6 @@ for (const slug of [...expectedSlugs].filter((s) => actualSlugs.has(s)).sort()) 
 
 report.totalDifferingPixels = totalDifferingPixels
 
-function formatValue(value) {
-  if (value === undefined) return '(absent)'
-  const text = String(value)
-  return text.length > 70 ? `${text.slice(0, 67)}...` : text
-}
-
 console.log(`\nPrimeVue baseline delta — ${expectedDir} -> ${actualDir}\n`)
 if (missing.length) console.log(`MISSING captures (in expected, not actual): ${missing.join(', ')}`)
 if (added.length) console.log(`ADDED captures: ${added.join(', ')}`)
@@ -276,7 +245,9 @@ for (const [slug, page] of Object.entries(report.pages)) {
   console.log(`   ${shotSummary}`)
   if (page.urlChanged) console.log(`   URL CHANGED: ${page.urlBefore} -> ${page.urlAfter}`)
   for (const change of page.tokenChanges) {
-    console.log(`   token ${change.token}: ${formatValue(change.before)} -> ${formatValue(change.after)}`)
+    console.log(
+      `   token ${change.token}: ${formatValue(change.before, { maxLength: 70 })} -> ${formatValue(change.after, { maxLength: 70 })}`,
+    )
   }
   // Group component changes per selector+property with an instance count so a
   // 20-row table change reads as one line.
@@ -285,7 +256,9 @@ for (const [slug, page] of Object.entries(report.pages)) {
     const key = `${change.selector} ${change.property}`
     const entry = grouped.get(key) || { ...change, count: 0, examples: new Set() }
     entry.count++
-    entry.examples.add(`${formatValue(change.before)} -> ${formatValue(change.after)}`)
+    entry.examples.add(
+      `${formatValue(change.before, { maxLength: 70 })} -> ${formatValue(change.after, { maxLength: 70 })}`,
+    )
     grouped.set(key, entry)
   }
   for (const entry of grouped.values()) {

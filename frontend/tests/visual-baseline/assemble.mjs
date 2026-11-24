@@ -38,7 +38,12 @@
  *                           insensitive), not by bytes. Writes nothing. A
  *                           content difference exits non-zero and names it; a
  *                           formatting/key-order-only difference prints one
- *                           `ADVISORY` line and still exits 0
+ *                           `ADVISORY` line and still exits 0. This is a
+ *                           PARTIAL check of `tokens.json`: `note` and
+ *                           `conflicts` are carried from the target and only
+ *                           verified when `--note`/`--conflicts` is supplied,
+ *                           which is reported as a `NOTE` line rather than
+ *                           being silently assumed equal
  *
  * Determinism: capture slugs and token names are sorted, each fingerprint entry
  * always emits `url`, `viewport` ({ width, height }) then `components`, and the
@@ -47,11 +52,16 @@
  *
  * Fail-loud cases (non-zero exit, explicit message): two captures disagreeing
  * on the token name set or a token value, a malformed capture, a `--dom` file
- * with 15 or fewer signatures, and `--check` finding a content difference.
+ * with 15 or fewer signatures, a target `tokens.json` that exists but is not
+ * valid JSON on the write path (it would otherwise be silently overwritten),
+ * and `--check` finding a content difference.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { formatValue, parseArgs, pathOf } from './cli.mjs'
 
 /** JSON indent used by the committed aggregates (and by the capture spec). */
 const INDENT = 1
@@ -65,23 +75,6 @@ const MIN_DOM_SIGNATURES = 15
 /** Serialise a value exactly as the committed aggregates are formatted. */
 export function serialise(value) {
   return `${JSON.stringify(value, null, INDENT)}\n`
-}
-
-/**
- * Reduce an absolute capture URL to path + query.
- *
- * The capture runs against a worktree-derived local port, so the origin must not
- * leak into the committed aggregate (it would make every assembly differ). The
- * comparator does the same reduction, so a capture and its aggregate stay
- * comparable.
- */
-function pathOf(url) {
-  try {
-    const parsed = new URL(url)
-    return parsed.pathname + parsed.search
-  } catch {
-    return url
-  }
 }
 
 function isPlainObject(value) {
@@ -138,11 +131,6 @@ function renderPath(segments) {
     else out += rendered.startsWith('[') ? rendered : `.${rendered}`
   }
   return out
-}
-
-function formatValue(value) {
-  const text = JSON.stringify(value) ?? 'undefined'
-  return text.length > 60 ? `${text.slice(0, 57)}...` : text
 }
 
 /**
@@ -398,23 +386,6 @@ export function loadCaptures(dir) {
   })
 }
 
-function parseArgs(argv) {
-  const args = {}
-  for (let i = 2; i < argv.length; i++) {
-    const token = argv[i]
-    if (!token.startsWith('--')) continue
-    const key = token.slice(2)
-    const value = argv[i + 1]
-    if (value === undefined || value.startsWith('--')) {
-      args[key] = true
-    } else {
-      args[key] = value
-      i++
-    }
-  }
-  return args
-}
-
 function readJsonFile(path, label) {
   if (!existsSync(path)) {
     throw new Error(`${label}: file not found: ${path}`)
@@ -426,14 +397,25 @@ function readJsonFile(path, label) {
   }
 }
 
-function readJsonIfExists(path) {
+/**
+ * Read a target `tokens.json` if it exists.
+ *
+ * On the WRITE path a target that exists but does not parse is a hard failure:
+ * silently treating it as absent would drop the preserved `note`/`conflicts`
+ * block and overwrite a file the operator expected to be carried forward. On
+ * the `--check` path the corrupt file is reported per-file by the comparison
+ * loop already, so `tolerant` returns null there instead of aborting before the
+ * report can name it.
+ */
+function readJsonIfExists(path, { tolerant = false } = {}) {
   if (!existsSync(path)) return null
   try {
     return JSON.parse(readFileSync(path, 'utf8'))
-  } catch {
-    // A corrupt target is a --check/reassembly concern, not a reason to abort:
-    // treat it as absent so the fresh assembly (and the drift report) wins.
-    return null
+  } catch (error) {
+    if (tolerant) return null
+    throw new Error(
+      `tokens: ${path} exists but is not valid JSON: ${error instanceof Error ? error.message : error}`,
+    )
   }
 }
 
@@ -470,7 +452,7 @@ function main(argv) {
   const signatures = readJsonFile(domPath, 'dom')
 
   const targetTokensPath = join(outDir, 'tokens.json')
-  const targetTokens = readJsonIfExists(targetTokensPath)
+  const targetTokens = readJsonIfExists(targetTokensPath, { tolerant: Boolean(args.check) })
 
   const note =
     typeof args.note === 'string'
@@ -497,6 +479,14 @@ function main(argv) {
 
   if (args.check) {
     console.log(`assemble.mjs --check ${outDir}`)
+    if (typeof args.note !== 'string' || typeof args.conflicts !== 'string') {
+      // `note` and `conflicts` are not derivable from the captures, so they are
+      // carried from the target and cannot drift-check themselves. Say so
+      // explicitly rather than letting a green run imply they were verified.
+      console.log(
+        '  NOTE     tokens.json note/conflicts are carried from the target and not verified; pass --note/--conflicts to check them',
+      )
+    }
     let drifted = 0
     let advisory = 0
     const total = Object.keys(aggregates).length
@@ -563,13 +553,14 @@ function main(argv) {
   return 0
 }
 
-// `import.meta.filename` is the module's own path when run by node, and absent
-// under a bundler/transformer (e.g. vitest importing it as a library), so the
-// CLI only runs when this file is the entry point.
+// Compare the module's own file path with the script node was asked to run, so
+// the CLI only executes when this file is the entry point (not when vitest
+// imports it as a library). `import.meta.filename` only exists on Node 20.11+,
+// which silently turned this script into a no-op on the 20.9 floor the docs
+// promise, so derive the path from `import.meta.url` instead.
 const invokedDirectly =
-  typeof import.meta.filename === 'string' && process.argv[1] !== undefined
-    ? resolve(process.argv[1]) === import.meta.filename
-    : false
+  typeof process.argv[1] === 'string' &&
+  resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
 
 if (invokedDirectly) {
   try {
