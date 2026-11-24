@@ -208,6 +208,8 @@ describe('VariantGroupBuilder', () => {
     await nextTick()
     const vmDialog = wrapper.vm as unknown as { showFireDialog: boolean }
     expect(vmDialog.showFireDialog).toBe(true)
+    const cancelBtn = document.body.querySelector('[data-testid="variant-builder-cancel"]') as HTMLElement
+    expect(cancelBtn).not.toBeNull()
     const confirmBtn = document.body.querySelector('[data-testid="variant-builder-confirm-fire"]') as HTMLElement
     confirmBtn.click()
     await nextTick()

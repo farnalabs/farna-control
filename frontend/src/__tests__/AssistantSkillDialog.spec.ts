@@ -61,6 +61,7 @@ describe('AssistantSkillDialog', () => {
     vm.openCreate()
     await nextTick()
     expect(wrapper.text()).toContain('Add Skill')
+    expect(wrapper.find('[data-testid="assistant-skills-form-cancel"]').exists()).toBe(true)
   })
 
   it('has all form fields', async () => {

@@ -177,38 +177,37 @@
     </div>
 
     <!-- Deprecation Confirmation Dialog -->
-    <Dialog v-model:visible="deprecateDialogOpen" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }" data-testid="schema-deprecate-dialog">
-      <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ $t('views.SchemaListView.deprecation_title', { name: deprecateConfirmName }) }}</div>
-          <div class="mt-0.5 text-sm text-muted-foreground">{{ $t('views.SchemaListView.deprecation_description') }}</div>
-        </div>
-      </template>
+    <FormDialog
+      v-model:open="deprecateDialogOpen"
+      :title="$t('views.SchemaListView.deprecation_title', { name: deprecateConfirmName })"
+      :description="$t('views.SchemaListView.deprecation_description')"
+      :confirm-text="$t('views.SchemaListView.deprecate')"
+      :confirm-loading-text="$t('views.SchemaListView.deprecating')"
+      :loading="deprecating"
+      confirm-severity="danger"
+      cancel-test-id="schema-deprecate-cancel"
+      confirm-test-id="schema-deprecate-confirm"
+      data-testid="schema-deprecate-dialog"
+      @confirm="deprecateSchema"
+    >
       <!-- Retry is deliberately omitted (retryable=false): a failed deprecate is
            retried via the dialog's Confirm button, which re-invokes deprecateSchema. -->
       <ErrorAlert v-if="deprecateError" :message="deprecateError" :retryable="false" />
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined data-testid="schema-deprecate-cancel" @click="deprecateDialogOpen = false">
-            {{ $t('views.SchemaListView.cancel') }}
-          </Button>
-          <Button severity="danger" data-testid="schema-deprecate-confirm" :disabled="deprecating" :loading="deprecating" @click="deprecateSchema">
-            {{ deprecating ? $t('views.SchemaListView.deprecating') : $t('views.SchemaListView.deprecate') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
 
     <!-- Move to Folder Dialog -->
-    <Dialog v-model:visible="showMoveToFolder" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }" data-testid="schema-move-dialog">
-      <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ $t('views.SchemaListView.move_to_folder') }}</div>
-          <div v-if="moveTarget" class="mt-0.5 text-sm text-muted-foreground">
-            {{ $t('views.SchemaListView.move_to_folder_description', { name: moveTarget.name }) }}
-          </div>
-        </div>
-      </template>
+    <FormDialog
+      v-model:open="showMoveToFolder"
+      :title="$t('views.SchemaListView.move_to_folder')"
+      :description="moveTarget ? $t('views.SchemaListView.move_to_folder_description', { name: moveTarget.name }) : undefined"
+      :confirm-text="$t('common.save')"
+      :confirm-loading-text="$t('common.saving')"
+      :loading="moving"
+      cancel-test-id="schema-move-cancel"
+      confirm-test-id="schema-move-confirm"
+      data-testid="schema-move-dialog"
+      @confirm="handleMoveToFolder"
+    >
       <div class="space-y-2">
         <button
           type="button"
@@ -238,17 +237,7 @@
              Confirm button re-invokes handleMoveToFolder, so keep it non-retryable. -->
         <ErrorAlert v-if="moveError" :message="moveError" :retryable="false" role="alert" />
       </div>
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined data-testid="schema-move-cancel" @click="showMoveToFolder = false">
-            {{ $t('common.cancel') }}
-          </Button>
-          <Button data-testid="schema-move-confirm" :disabled="moving" :loading="moving" @click="handleMoveToFolder">
-            {{ moving ? $t('common.saving') : $t('common.save') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
 
     <Menu ref="actionMenuRef" :model="actionMenuItems" popup />
   </div>
@@ -264,14 +253,13 @@ import { useApi } from '../composables/useApi'
 import { formatApiError } from '../lib/api/formatError'
 import { invalidFolderListMessage, isFolderList, type FolderItem } from '../lib/api/folders'
 import type { components } from '../lib/api/client'
+import FormDialog from '../components/shared/FormDialog.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import { ChevronRight, Folder, FolderOpen, MoreVertical } from '@lucide/vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import Menu from 'primevue/menu'
 import Select from '../components/shared/AppSelect.vue'
 

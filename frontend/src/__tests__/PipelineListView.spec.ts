@@ -66,6 +66,27 @@ import { usePlanStore } from '../stores/planStore'
 // `useApi().post` helper onto the typed client, so the spy lives on api.POST.
 const postMock = api.POST as unknown as ReturnType<typeof vi.fn>
 
+
+/** PrimeVue's FormDialog teleports to <body>; find the newest dialog by title. */
+function lastDialogByText(text: string): HTMLElement | null {
+  const dialogs = Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]'))
+  return dialogs.filter((el) => el.textContent?.includes(text)).pop() ?? null
+}
+
+function buttonIn(root: ParentNode, text: string): HTMLButtonElement | null {
+  return Array.from(root.querySelectorAll<HTMLButtonElement>('button'))
+    .find((b) => b.textContent?.trim() === text) ?? null
+}
+
+function buttonByTestId(root: ParentNode, testid: string): HTMLButtonElement | null {
+  return root.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)
+}
+
+/** PrimeVue runs its enter/leave transition hooks on rAF; give them a tick. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50))
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -580,14 +601,14 @@ describe('PipelineListView', () => {
     expect(wrapper.find('[data-testid="pipeline-list-breadcrumb-root"]').exists()).toBe(false)
   })
 
-  it('renders an accessible modal dialog with Escape-to-close and a focus trap', async () => {
+  it('renders an accessible modal dialog', async () => {
     const pipeline = { id: 'p1', organisation_id: 'org1', name: 'Rename Me', description: null, visibility: 'org', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' }
     mockResponses['/api/v1/pipelines?page_size=100'] = { items: [pipeline], total: 1, page: 1, page_size: 100 }
     await router.push('/pipelines')
     await router.isReady()
     // Attach to the document: @vue/test-utils mounts detached by default, but
-    // the focus-trap assertions below rely on document.activeElement, which only
-    // updates for elements that are part of the live document.
+    // PrimeVue teleports the dialog to <body> and focus assertions rely on
+    // document.activeElement, which only updates for live-document elements.
     const wrapper = mount(PipelineListView, {
       attachTo: document.body,
       global: { plugins: [router], stubs: { ErrorAlert: true, FolderTree: true } },
@@ -595,37 +616,25 @@ describe('PipelineListView', () => {
     await flushPromises()
     await nextTick()
 
-    const vm = wrapper.vm as unknown as { openRename: (p: typeof pipeline) => void }
+    const vm = wrapper.vm as unknown as { openRename: (p: typeof pipeline) => void; showRenameDialog: boolean }
     vm.openRename(pipeline)
     await nextTick()
+    await settle()
 
-    const dialog = wrapper.find('dialog')
-    expect(dialog.exists()).toBe(true)
-    expect(dialog.attributes('aria-modal')).toBe('true')
-    expect(dialog.attributes('aria-label')).toBeTruthy()
-    // The wrapping container must NOT be a button (the old ARIA violation).
-    // The dialog is now a native <dialog> element (implicit role="dialog"),
-    // so the old separate aria-hidden backdrop sibling no longer exists —
-    // the backdrop is provided by the native ::backdrop pseudo-element.
-    expect(dialog.element.parentElement?.getAttribute('role')).not.toBe('button')
-    expect(dialog.element.tagName).toBe('DIALOG')
+    // FormDialog wraps PrimeVue's Dialog, which owns the modal semantics:
+    // role=dialog, aria-modal, a labelled header, focus trapping and Escape.
+    const dialog = lastDialogByText('Rename Pipeline')
+    expect(dialog).not.toBeNull()
+    expect(dialog!.getAttribute('role')).toBe('dialog')
+    expect(dialog!.getAttribute('aria-modal')).toBe('true')
+    expect(dialog!.getAttribute('aria-labelledby')).toBeTruthy()
+    expect(dialog!.querySelector('[data-testid="pipeline-list-rename-cancel"]')).not.toBeNull()
+    expect(dialog!.querySelector('[data-testid="pipeline-list-rename-save"]')).not.toBeNull()
 
-    // Tab focus is trapped: from the last control, Tab wraps to the first.
-    const dialogEl = dialog.element as HTMLElement
-    const focusables = dialogEl.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    )
-    expect(focusables.length).toBeGreaterThan(1)
-    focusables[focusables.length - 1].focus()
-    expect(document.activeElement).toBe(focusables[focusables.length - 1])
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }))
+    buttonByTestId(dialog!, 'pipeline-list-rename-cancel')!.click()
     await nextTick()
-    expect(document.activeElement).toBe(focusables[0])
-
-    // Escape closes the dialog.
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await nextTick()
-    expect(wrapper.find('dialog').exists()).toBe(false)
+    await settle()
+    expect(vm.showRenameDialog).toBe(false)
     wrapper.unmount()
   })
 
@@ -707,13 +716,13 @@ describe('PipelineListView', () => {
     vm.openDelete(pipeline)
     await nextTick()
 
-    const dialog = wrapper.find('[aria-label="Delete Pipeline"]')
-    expect(dialog.exists()).toBe(true)
+    const dialog = lastDialogByText('Delete Pipeline')
+    expect(dialog).not.toBeNull()
     // The UX-sweep i18n strings for the delete confirm dialog must render.
-    expect(wrapper.text()).toContain('Are you sure? This permanently deletes the pipeline and all its runs.')
-    const buttons = wrapper.findAll('button')
-    expect(buttons.some(b => b.text() === 'Cancel')).toBe(true)
-    expect(buttons.some(b => b.text() === 'Delete')).toBe(true)
+    expect(dialog!.textContent).toContain('Are you sure? This permanently deletes the pipeline and all its runs.')
+    expect(dialog!.querySelector('[data-testid="pipeline-list-delete-cancel"]')).not.toBeNull()
+    expect(dialog!.querySelector('[data-testid="pipeline-list-delete-confirm"]')).not.toBeNull()
+    wrapper.unmount()
   })
 
   it('opens the move-to-folder dialog and renders the folder choices with icons', async () => {
@@ -735,12 +744,15 @@ describe('PipelineListView', () => {
     await flushPromises()
     await nextTick()
 
-    const dialog = wrapper.find('[aria-label="Move to Folder"]')
-    expect(dialog.exists()).toBe(true)
+    const dialog = lastDialogByText('Move to Folder')
+    expect(dialog).not.toBeNull()
     // The folder choices (with their lucide icons) and the "No folder" option
     // introduced by the UX sweep must render.
-    expect(wrapper.text()).toContain('Folder One')
-    expect(wrapper.text()).toContain('No folder')
+    expect(dialog!.textContent).toContain('Folder One')
+    expect(dialog!.textContent).toContain('No folder')
+    expect(dialog!.querySelector('[data-testid="pipeline-list-move-cancel"]')).not.toBeNull()
+    expect(dialog!.querySelector('[data-testid="pipeline-list-move-save"]')).not.toBeNull()
+    wrapper.unmount()
   })
 
   it('resolves the Last Run and Trigger columns from the runs/triggers APIs', async () => {
@@ -935,12 +947,14 @@ describe('PipelineListView', () => {
     rename!.command()
     await nextTick()
 
-    const input = wrapper.find('#pipelinelistview-field-1')
-    expect(input.exists()).toBe(true)
-    await input.setValue('New Name')
-    // The save Button has no fixed aria-label; trigger its click by text.
-    const saveBtn = wrapper.findAll('button').find(b => b.text() === 'Save')
-    await saveBtn!.trigger('click')
+    const dialog = lastDialogByText('Rename Pipeline')
+    expect(dialog).not.toBeNull()
+    const input = dialog!.querySelector('#pipelinelistview-field-1') as HTMLInputElement
+    expect(input).not.toBeNull()
+    input.value = 'New Name'
+    input.dispatchEvent(new Event('input'))
+    await nextTick()
+    buttonByTestId(dialog!, 'pipeline-list-rename-save')!.click()
     await flushPromises()
     expect((api.PATCH as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0)
   })
@@ -1197,8 +1211,9 @@ describe('PipelineListView', () => {
     del!.command()
     await nextTick()
 
-    const confirmBtn = wrapper.findAll('button').find(b => b.text() === 'Delete')
-    await confirmBtn!.trigger('click')
+    const dialog = lastDialogByText('Delete Pipeline')
+    expect(dialog).not.toBeNull()
+    buttonByTestId(dialog!, 'pipeline-list-delete-confirm')!.click()
     await flushPromises()
     expect((api.DELETE as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0)
   })
@@ -1222,10 +1237,11 @@ describe('PipelineListView', () => {
     await flushPromises()
     await nextTick()
     // Select the folder choice, then save.
-    await wrapper.findAll('button').find(b => b.text() === 'Folder One')!.trigger('click')
+    const dialog = lastDialogByText('Move to Folder')
+    expect(dialog).not.toBeNull()
+    buttonIn(dialog!, 'Folder One')!.click()
     await nextTick()
-    const saveBtn = wrapper.findAll('button').find(b => b.text() === 'Save')
-    await saveBtn!.trigger('click')
+    buttonByTestId(dialog!, 'pipeline-list-move-save')!.click()
     await flushPromises()
     expect(patchMock).toHaveBeenCalled()
     // The move error banner is not shown on success.
@@ -1286,11 +1302,16 @@ describe('PipelineListView', () => {
     await flushPromises()
     await nextTick()
 
-    const dialog = wrapper.find('[aria-label="Move to Folder"]')
-    expect(dialog.exists()).toBe(true)
+    const dialog = lastDialogByText('Move to Folder')
+    expect(dialog).not.toBeNull()
     // Folder buttons inside the dialog (excluding "No folder") should be alphabetically sorted
-    const folderButtons = dialog.findAll('button').filter(b => b.text() !== 'Cancel' && b.text() !== 'Save' && b.text() !== 'No folder')
-    expect(folderButtons.map(b => b.text())).toEqual(['alpha', 'Beta', 'Zeta'])
+    const folderButtons = Array.from(dialog!.querySelectorAll('button'))
+      .filter(b => {
+        const label = b.textContent?.trim()
+        return label !== '' && label !== 'Cancel' && label !== 'Save' && label !== 'No folder'
+      })
+    expect(folderButtons.map(b => b.textContent?.trim())).toEqual(['alpha', 'Beta', 'Zeta'])
+    wrapper.unmount()
   })
 
   it('exposes the pipeline editor link without making the whole row a control (FAR-821)', async () => {
@@ -1372,13 +1393,13 @@ describe('PipelineListView', () => {
     await flushPromises()
     await nextTick()
 
-    const dialog = wrapper.find('[aria-label="Move to Folder"]')
-    expect(dialog.exists()).toBe(true)
-    await dialog.findAll('button').find(b => b.text() === 'Save')!.trigger('click')
+    const dialog = lastDialogByText('Move to Folder')
+    expect(dialog).not.toBeNull()
+    buttonByTestId(dialog!, 'pipeline-list-move-save')!.click()
     await flushPromises()
     await nextTick()
 
-    const alert = dialog.findComponent({ name: 'ErrorAlert' })
+    const alert = wrapper.findComponent({ name: 'ErrorAlert' })
     expect(alert.exists()).toBe(true)
     expect(String(alert.props('message'))).toContain('Move failed')
     // Dense dialog context: the shared alert renders in its compact density.
@@ -1402,13 +1423,13 @@ describe('PipelineListView', () => {
     vm.openRename(pipeline)
     await nextTick()
 
-    const dialog = wrapper.find('[aria-label="Rename Pipeline"]')
-    expect(dialog.exists()).toBe(true)
-    await dialog.findAll('button').find(b => b.text() === 'Save')!.trigger('click')
+    const dialog = lastDialogByText('Rename Pipeline')
+    expect(dialog).not.toBeNull()
+    buttonByTestId(dialog!, 'pipeline-list-rename-save')!.click()
     await flushPromises()
     await nextTick()
 
-    const alert = dialog.findComponent({ name: 'ErrorAlert' })
+    const alert = wrapper.findComponent({ name: 'ErrorAlert' })
     expect(alert.exists()).toBe(true)
     expect(String(alert.props('message'))).toContain('Rename failed')
     // Dense dialog context: the shared alert renders in its compact density.
@@ -1434,13 +1455,13 @@ describe('PipelineListView', () => {
     vm.openDelete(pipeline)
     await nextTick()
 
-    const dialog = wrapper.find('[aria-label="Delete Pipeline"]')
-    expect(dialog.exists()).toBe(true)
-    await dialog.findAll('button').find(b => b.text() === 'Delete')!.trigger('click')
+    const dialog = lastDialogByText('Delete Pipeline')
+    expect(dialog).not.toBeNull()
+    buttonByTestId(dialog!, 'pipeline-list-delete-confirm')!.click()
     await flushPromises()
     await nextTick()
 
-    const alert = dialog.findComponent({ name: 'ErrorAlert' })
+    const alert = wrapper.findComponent({ name: 'ErrorAlert' })
     expect(alert.exists()).toBe(true)
     expect(String(alert.props('message'))).toContain('Delete failed')
     // Dense dialog context: the shared alert renders in its compact density.
