@@ -38,7 +38,9 @@ from farna.api.dependencies import get_db_session
 from farna.api.routes import product_analytics_transparency as pat_module
 from farna.api.routes.product_analytics_transparency import (
     TransparencyResponse,
+    _coerce_failure_summary,
     _coerce_last_dump,
+    _consent_since_from_settings,
     _resolve_org,
 )
 from farna.api.routes.product_analytics_transparency import router as transparency_router
@@ -625,6 +627,32 @@ class TestInstanceConsentFallback:
         assert body["consent_level"] == LEVEL_ALL
         _restore_overrides()
 
+    def test_instance_fallback_uses_the_earliest_consent_timestamp(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``consent_since`` is the EARLIEST opt-in, so a just-added org cannot mask a failure.
+
+        The instance aggregate reports the oldest consenting ``level_changed_at``
+        (FAR-2740): with a recent org listed first and a long-standing one
+        second, the never-dumped grace window must use the long-standing one, so
+        the warning still fires. If the newest timestamp leaked through, the
+        recent org would suppress it.
+        """
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        old = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+        client = _client(
+            session=_make_session(
+                instance_levels=[
+                    {"product_analytics": {"level": LEVEL_ALL, "level_changed_at": recent}},
+                    {"product_analytics": {"level": LEVEL_ALL, "level_changed_at": old}},
+                ]
+            )
+        )
+        sources = _patch_sources(consent_values={INSTANCE_SWITCH_KEY: True}, monkeypatch=monkeypatch)
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["consent_level"] == LEVEL_ALL
+        assert body["warning"] == "never_reached_farnalabs"
+        _restore_overrides()
+
     def test_org_less_principal_falls_back_to_instance_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
         client = _client(
             principal=_NO_ORG_ADMIN,
@@ -739,6 +767,57 @@ class TestCoerceLastDump:
     )
     def test_coerces_stored_watermark(self, value: object, expected: object) -> None:
         assert _coerce_last_dump(value) == expected
+
+
+# ---------------------------------------------------------------------------
+# _coerce_failure_summary (the recorded-failure coercion, FAR-2740)
+# ---------------------------------------------------------------------------
+
+
+class TestCoerceFailureSummary:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("status=500: boom", "status=500: boom"),  # a stored summary passes through
+            ("", None),  # an empty string means "cleared"
+            (12345, "12345"),  # any other non-None scalar is stringified
+            (None, None),  # a missing value yields None
+        ],
+    )
+    def test_coerces_stored_failure_summary(self, value: object, expected: object) -> None:
+        assert _coerce_failure_summary(value) == expected
+
+
+# ---------------------------------------------------------------------------
+# _consent_since_from_settings (the never-dumped grace-window input, FAR-2740)
+# ---------------------------------------------------------------------------
+
+
+class TestConsentSinceFromSettings:
+    def test_non_dict_settings_yield_none(self) -> None:
+        assert _consent_since_from_settings(None) is None
+        assert _consent_since_from_settings(["not", "a", "dict"]) is None
+
+    def test_missing_or_non_dict_block_yields_none(self) -> None:
+        assert _consent_since_from_settings({"product_analytics": "off"}) is None
+
+    def test_missing_or_empty_timestamp_yields_none(self) -> None:
+        assert _consent_since_from_settings({"product_analytics": {"level": LEVEL_ALL}}) is None
+        assert _consent_since_from_settings({"product_analytics": {"level_changed_at": ""}}) is None
+
+    def test_malformed_timestamp_yields_none(self) -> None:
+        """An unparseable ``level_changed_at`` must not raise — treat as unknown."""
+        assert _consent_since_from_settings({"product_analytics": {"level_changed_at": "not-a-date"}}) is None
+
+    def test_naive_timestamp_is_treated_as_utc(self) -> None:
+        """A stored timestamp without tzinfo is assumed UTC for age math."""
+        parsed = _consent_since_from_settings({"product_analytics": {"level_changed_at": "2026-08-15T12:00:00"}})
+        assert parsed is not None
+        assert parsed.tzinfo == UTC
+
+    def test_aware_timestamp_is_returned_as_is(self) -> None:
+        parsed = _consent_since_from_settings({"product_analytics": {"level_changed_at": "2026-08-15T12:00:00+00:00"}})
+        assert parsed == datetime(2026, 8, 15, 12, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
