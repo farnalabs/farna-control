@@ -1,0 +1,114 @@
+name: "Provider contract probe (nightly)"
+
+# FAR-2703. Mocks and cassettes prove our code against a frozen assumption;
+# nothing else in the suite detects that a PROVIDER changed. This nightly job
+# makes a cheap, read-only call to every configured connector / model backend
+# and diffs the response SHAPE against the committed golden in
+# contract-goldens/provider-shapes.json. Drift fails the job before a customer
+# notices.
+#
+# Read-only: scripts/provider_contract_probe.py never issues a write. A
+# provider with no credential configured is skipped loudly (a warning in the
+# log and a "skipped" row in the report), never silently passed.
+#
+# The JSON report is uploaded as an artifact on every run, including failures,
+# so a drift can be triaged without re-running.
+
+on:
+  schedule:
+    - cron: "15 4 * * *" # 04:15 UTC daily
+  workflow_dispatch:
+
+# Authenticate GitHub git fetches so `uv sync --frozen` can resolve git-pinned
+# dependencies (e.g. pytest-bdd @ refs/pull/827/head) without an anonymous
+# fetch-by-SHA, which GitHub rejects from CI runners.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/.insteadOf'
+  GIT_CONFIG_VALUE_0: "https://github.com/"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-contract-probe-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Live provider contract probe
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install backend dependencies
+        # The backend lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk),
+        # so `--no-build` would hard-fail the sync. `--frozen` pins exact
+        # revisions, so the build is deterministic and trusted. The shared
+        # wrapper retries the codeload CDN flake those archives hit.
+        run: bash scripts/uv_sync_with_retry.sh --frozen --project backend  # NOSONAR githubactions:S8541: backend lockfile pins source-archive deps; --frozen pins exact revisions so builds are deterministic.
+
+      - name: Probe live provider contracts
+        timeout-minutes: 10
+        env:
+          MODULO_PROBE_ASANA_TOKEN: ${{ secrets.MODULO_PROBE_ASANA_TOKEN }}
+          MODULO_PROBE_BITBUCKET_TOKEN: ${{ secrets.MODULO_PROBE_BITBUCKET_TOKEN }}
+          MODULO_PROBE_BUILDKITE_TOKEN: ${{ secrets.MODULO_PROBE_BUILDKITE_TOKEN }}
+          MODULO_PROBE_CIRCLECI_TOKEN: ${{ secrets.MODULO_PROBE_CIRCLECI_TOKEN }}
+          MODULO_PROBE_CODECLIMATE_TOKEN: ${{ secrets.MODULO_PROBE_CODECLIMATE_TOKEN }}
+          MODULO_PROBE_DATADOG_API_KEY: ${{ secrets.MODULO_PROBE_DATADOG_API_KEY }}
+          MODULO_PROBE_DATADOG_APP_KEY: ${{ secrets.MODULO_PROBE_DATADOG_APP_KEY }}
+          MODULO_PROBE_DISCORD_TOKEN: ${{ secrets.MODULO_PROBE_DISCORD_TOKEN }}
+          MODULO_PROBE_DROPBOX_TOKEN: ${{ secrets.MODULO_PROBE_DROPBOX_TOKEN }}
+          MODULO_PROBE_GITHUB_TOKEN: ${{ secrets.MODULO_PROBE_GITHUB_TOKEN }}
+          MODULO_PROBE_GITLAB_TOKEN: ${{ secrets.MODULO_PROBE_GITLAB_TOKEN }}
+          MODULO_PROBE_LINEAR_TOKEN: ${{ secrets.MODULO_PROBE_LINEAR_TOKEN }}
+          MODULO_PROBE_MICROSOFT_TEAMS_TOKEN: ${{ secrets.MODULO_PROBE_MICROSOFT_TEAMS_TOKEN }}
+          MODULO_PROBE_MONDAY_TOKEN: ${{ secrets.MODULO_PROBE_MONDAY_TOKEN }}
+          MODULO_PROBE_NOTION_TOKEN: ${{ secrets.MODULO_PROBE_NOTION_TOKEN }}
+          MODULO_PROBE_NPM_TOKEN: ${{ secrets.MODULO_PROBE_NPM_TOKEN }}
+          MODULO_PROBE_OPSGENIE_TOKEN: ${{ secrets.MODULO_PROBE_OPSGENIE_TOKEN }}
+          MODULO_PROBE_PAGERDUTY_TOKEN: ${{ secrets.MODULO_PROBE_PAGERDUTY_TOKEN }}
+          MODULO_PROBE_SENTRY_TOKEN: ${{ secrets.MODULO_PROBE_SENTRY_TOKEN }}
+          MODULO_PROBE_SHORTCUT_TOKEN: ${{ secrets.MODULO_PROBE_SHORTCUT_TOKEN }}
+          MODULO_PROBE_SLACK_TOKEN: ${{ secrets.MODULO_PROBE_SLACK_TOKEN }}
+          MODULO_PROBE_SNYK_TOKEN: ${{ secrets.MODULO_PROBE_SNYK_TOKEN }}
+          MODULO_PROBE_SONARQUBE_TOKEN: ${{ secrets.MODULO_PROBE_SONARQUBE_TOKEN }}
+          MODULO_PROBE_TRELLO_KEY: ${{ secrets.MODULO_PROBE_TRELLO_KEY }}
+          MODULO_PROBE_TRELLO_TOKEN: ${{ secrets.MODULO_PROBE_TRELLO_TOKEN }}
+          MODULO_PROBE_ANTHROPIC_TOKEN: ${{ secrets.MODULO_PROBE_ANTHROPIC_TOKEN }}
+          MODULO_PROBE_COHERE_TOKEN: ${{ secrets.MODULO_PROBE_COHERE_TOKEN }}
+          MODULO_PROBE_DEEPSEEK_TOKEN: ${{ secrets.MODULO_PROBE_DEEPSEEK_TOKEN }}
+          MODULO_PROBE_FIREWORKS_TOKEN: ${{ secrets.MODULO_PROBE_FIREWORKS_TOKEN }}
+          MODULO_PROBE_GEMINI_TOKEN: ${{ secrets.MODULO_PROBE_GEMINI_TOKEN }}
+          MODULO_PROBE_GROK_TOKEN: ${{ secrets.MODULO_PROBE_GROK_TOKEN }}
+          MODULO_PROBE_GROQ_TOKEN: ${{ secrets.MODULO_PROBE_GROQ_TOKEN }}
+          MODULO_PROBE_MISTRAL_TOKEN: ${{ secrets.MODULO_PROBE_MISTRAL_TOKEN }}
+          MODULO_PROBE_OPENAI_TOKEN: ${{ secrets.MODULO_PROBE_OPENAI_TOKEN }}
+          MODULO_PROBE_OPENROUTER_TOKEN: ${{ secrets.MODULO_PROBE_OPENROUTER_TOKEN }}
+          MODULO_PROBE_QWEN_TOKEN: ${{ secrets.MODULO_PROBE_QWEN_TOKEN }}
+          MODULO_PROBE_TOGETHERAI_TOKEN: ${{ secrets.MODULO_PROBE_TOGETHERAI_TOKEN }}
+        run: >-
+          uv run --project backend --no-sync --no-build
+          python scripts/provider_contract_probe.py
+          --mode check
+          --report contract-goldens/report.json
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: provider-contract-report
+          path: contract-goldens/report.json
+          if-no-files-found: warn
+          retention-days: 14

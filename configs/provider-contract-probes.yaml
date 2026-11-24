@@ -1,0 +1,636 @@
+# FAR-2703 - live provider contract probes.
+#
+# Every connector type and every model backend in the repo is either a probe
+# (a cheap, read-only call whose *response shape* is pinned to a golden) or an
+# explicit skip with a reason. The probe intentionally talks HTTP to the same
+# endpoint the connector's own health check / cheapest read uses, so it pins the
+# upstream wire contract the connector depends on without instantiating the
+# connector (whose constructors need heterogeneous, per-tenant config).
+#
+# Schema
+# ------
+# defaults:               applied to every probe unless the probe overrides it
+#   success_status_class: "2xx" | "4xx" | ... (status CLASS, not an exact code)
+#   timeout_seconds:      HTTP timeout
+#   max_depth:            shape depth to pin (see scripts/provider_contract_probe.py)
+# providers:              list of probe definitions
+#   id:                   provider id (must be unique across providers + skips)
+#   kind:                 "connector" | "model_backend"
+#   operation:            operation id (unique within the provider)
+#   description:          what the call proves
+#   request:              {method, url, json?, form?}
+#   auth:                 credential declaration (see below)
+#   success_status_class: optional override
+#   max_depth:            optional override
+#   normalise:            list of {path, rule} declared HERE, never in code
+#   static_headers:       literal headers (never secrets)
+#   extra_headers:        header name -> ENV VAR NAME (secret values)
+# skips:                  list of {id, kind, reason}
+#
+# auth.kind
+#   none    - no credential (public endpoint)
+#   bearer  - Authorization: Bearer <env value>
+#   header  - <header>: <template with {token}>  (default header Authorization)
+#   query   - append each params entry as a query parameter from its env var
+#
+# normalise.rule
+#   volatile  - replace the value with the literal "<volatile>" before shaping.
+#               Stabilises ids / timestamps / etags so a change in the value (or
+#               even its scalar type) never reads as drift.
+#   drop      - remove the path entirely before shaping. For optional or
+#               unbounded subtrees (e.g. a map of every published PyPI version).
+#   nullable  - treat a null value as the string "<null>" so a legitimately
+#               null field does not read as a type change.
+#
+# Paths are dot-separated. "*" matches every key of a dict at that level and
+# "[]" matches every element of a list at that level, e.g. "data.[].id".
+#
+# A secret value never enters a golden: goldens store a response SHAPE (key
+# names + value types), never response values.
+
+version: 1
+
+defaults:
+  success_status_class: "2xx"
+  timeout_seconds: 20
+  max_depth: 1
+
+providers:
+  # -------------------------------------------------------------------------
+  # Connectors
+  # -------------------------------------------------------------------------
+  - id: asana
+    kind: connector
+    operation: users_me
+    description: Current user identity (Asana GET /users/me).
+    request:
+      method: GET
+      url: https://app.asana.com/api/1.0/users/me
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_ASANA_TOKEN
+    max_depth: 2
+    normalise:
+      - path: data.gid
+        rule: volatile
+
+  - id: bitbucket
+    kind: connector
+    operation: user
+    description: Current user identity (Bitbucket GET /2.0/user).
+    request:
+      method: GET
+      url: https://api.bitbucket.org/2.0/user
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_BITBUCKET_TOKEN
+
+  - id: buildkite
+    kind: connector
+    operation: user
+    description: Current user identity (Buildkite GET /v2/user).
+    request:
+      method: GET
+      url: https://api.buildkite.com/v2/user
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_BUILDKITE_TOKEN
+
+  - id: circleci
+    kind: connector
+    operation: me
+    description: Current user identity (CircleCI GET /api/v2/me).
+    request:
+      method: GET
+      url: https://circleci.com/api/v2/me
+    auth:
+      kind: header
+      env: MODULO_PROBE_CIRCLECI_TOKEN
+      header: Circle-Token
+
+  - id: codeclimate
+    kind: connector
+    operation: user
+    description: Current user identity (Code Climate GET /v1/user).
+    request:
+      method: GET
+      url: https://api.codeclimate.com/v1/user
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_CODECLIMATE_TOKEN
+
+  - id: datadog
+    kind: connector
+    operation: validate
+    description: API key validation (Datadog GET /api/v1/validate).
+    request:
+      method: GET
+      url: https://api.datadoghq.com/api/v1/validate
+    auth:
+      kind: header
+      env: MODULO_PROBE_DATADOG_API_KEY
+      header: DD-API-KEY
+    extra_headers:
+      DD-APPLICATION-KEY: MODULO_PROBE_DATADOG_APP_KEY
+
+  - id: discord
+    kind: connector
+    operation: users_me
+    description: Bot identity (Discord GET /api/v10/users/@me).
+    request:
+      method: GET
+      url: https://discord.com/api/v10/users/@me
+    auth:
+      kind: header
+      env: MODULO_PROBE_DISCORD_TOKEN
+      header: Authorization
+      template: "Bot {token}"
+    normalise:
+      - path: id
+        rule: volatile
+      - path: global_name
+        rule: nullable
+
+  - id: dropbox_paper
+    kind: connector
+    operation: get_current_account
+    description: Current account (Dropbox POST /2/users/get_current_account; read-only).
+    request:
+      method: POST
+      url: https://api.dropboxapi.com/2/users/get_current_account
+      json: null
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_DROPBOX_TOKEN
+    max_depth: 2
+    normalise:
+      - path: account_id
+        rule: volatile
+
+  - id: github
+    kind: connector
+    operation: rate_limit
+    description: Rate-limit budget (GitHub GET /rate_limit; does not consume quota).
+    request:
+      method: GET
+      url: https://api.github.com/rate_limit
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_GITHUB_TOKEN
+
+  - id: gitlab
+    kind: connector
+    operation: user
+    description: Current user identity (GitLab GET /api/v4/user).
+    request:
+      method: GET
+      url: https://gitlab.com/api/v4/user
+    auth:
+      kind: header
+      env: MODULO_PROBE_GITLAB_TOKEN
+      header: PRIVATE-TOKEN
+
+  - id: linear
+    kind: connector
+    operation: viewer
+    description: GraphQL viewer identity (Linear POST /graphql, read-only query).
+    request:
+      method: POST
+      url: https://api.linear.app/graphql
+      json:
+        query: "{ viewer { id name email } }"
+    auth:
+      kind: header
+      env: MODULO_PROBE_LINEAR_TOKEN
+      header: Authorization
+    max_depth: 3
+    normalise:
+      - path: data.viewer.id
+        rule: volatile
+
+  - id: microsoft_teams
+    kind: connector
+    operation: me
+    description: Current user identity (Microsoft Graph GET /v1.0/me).
+    request:
+      method: GET
+      url: https://graph.microsoft.com/v1.0/me
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_MICROSOFT_TEAMS_TOKEN
+
+  - id: monday
+    kind: connector
+    operation: me
+    description: GraphQL viewer identity (monday.com POST /v2, read-only query).
+    request:
+      method: POST
+      url: https://api.monday.com/v2
+      json:
+        query: "{ me { id name email } }"
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_MONDAY_TOKEN
+    max_depth: 3
+    normalise:
+      - path: data.me.id
+        rule: volatile
+
+  - id: notion
+    kind: connector
+    operation: users_me
+    description: Current bot/user identity (Notion GET /v1/users/me).
+    request:
+      method: GET
+      url: https://api.notion.com/v1/users/me
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_NOTION_TOKEN
+    static_headers:
+      Notion-Version: "2022-06-28"
+    normalise:
+      - path: id
+        rule: volatile
+
+  - id: npm
+    kind: connector
+    operation: whoami
+    description: Token identity (npm registry GET /-/whoami).
+    request:
+      method: GET
+      url: https://registry.npmjs.org/-/whoami
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_NPM_TOKEN
+
+  - id: opsgenie
+    kind: connector
+    operation: users_me
+    description: Current user identity (Opsgenie GET /v2/users/me).
+    request:
+      method: GET
+      url: https://api.opsgenie.com/v2/users/me
+    auth:
+      kind: header
+      env: MODULO_PROBE_OPSGENIE_TOKEN
+      header: Authorization
+      template: "GenieKey {token}"
+    max_depth: 2
+
+  - id: pagerduty
+    kind: connector
+    operation: users_me
+    description: Current user identity (PagerDuty GET /users/me).
+    request:
+      method: GET
+      url: https://api.pagerduty.com/users/me
+    auth:
+      kind: header
+      env: MODULO_PROBE_PAGERDUTY_TOKEN
+      header: Authorization
+      template: "Token token={token}"
+    max_depth: 2
+
+  - id: pypi
+    kind: connector
+    operation: project_json
+    description: Public project metadata (PyPI GET /pypi/pip/json; no credential).
+    request:
+      method: GET
+      url: https://pypi.org/pypi/pip/json
+    auth:
+      kind: none
+    max_depth: 2
+    normalise:
+      # Every published release is an unbounded, fast-changing map - drop it.
+      - path: releases
+        rule: drop
+      - path: info.version
+        rule: volatile
+
+  - id: sentry
+    kind: connector
+    operation: users_me
+    description: Current user identity (Sentry GET /api/0/users/me/).
+    request:
+      method: GET
+      url: https://sentry.io/api/0/users/me/
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_SENTRY_TOKEN
+
+  - id: shortcut
+    kind: connector
+    operation: member
+    description: Current member identity (Shortcut GET /api/v3/member).
+    request:
+      method: GET
+      url: https://api.app.shortcut.com/api/v3/member
+    auth:
+      kind: header
+      env: MODULO_PROBE_SHORTCUT_TOKEN
+      header: Shortcut-Token
+    normalise:
+      - path: id
+        rule: volatile
+
+  - id: slack
+    kind: connector
+    operation: auth_test
+    description: Token identity (Slack POST /api/auth.test; read-only).
+    request:
+      method: POST
+      url: https://slack.com/api/auth.test
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_SLACK_TOKEN
+
+  - id: snyk
+    kind: connector
+    operation: user_me
+    description: Current user identity (Snyk GET /v1/user/me).
+    request:
+      method: GET
+      url: https://api.snyk.io/v1/user/me
+    auth:
+      kind: header
+      env: MODULO_PROBE_SNYK_TOKEN
+      header: Authorization
+      template: "token {token}"
+
+  - id: sonarqube
+    kind: connector
+    operation: authentication_validate
+    description: Token validation (SonarCloud GET /api/authentication/validate).
+    request:
+      method: GET
+      url: https://sonarcloud.io/api/authentication/validate
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_SONARQUBE_TOKEN
+
+  - id: trello
+    kind: connector
+    operation: members_me
+    description: Current member identity (Trello GET /1/members/me; key+token query auth).
+    request:
+      method: GET
+      url: https://api.trello.com/1/members/me
+    auth:
+      kind: query
+      params:
+        key: MODULO_PROBE_TRELLO_KEY
+        token: MODULO_PROBE_TRELLO_TOKEN
+    normalise:
+      - path: id
+        rule: volatile
+
+  # -------------------------------------------------------------------------
+  # Model backends
+  # -------------------------------------------------------------------------
+  - id: anthropic
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Anthropic GET /v1/models).
+    request:
+      method: GET
+      url: https://api.anthropic.com/v1/models
+    auth:
+      kind: header
+      env: MODULO_PROBE_ANTHROPIC_TOKEN
+      header: x-api-key
+    static_headers:
+      anthropic-version: "2023-06-01"
+
+  - id: cohere
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Cohere GET /v1/models).
+    request:
+      method: GET
+      url: https://api.cohere.com/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_COHERE_TOKEN
+
+  - id: deepseek
+    kind: model_backend
+    operation: models
+    description: Model catalogue (DeepSeek GET /models).
+    request:
+      method: GET
+      url: https://api.deepseek.com/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_DEEPSEEK_TOKEN
+
+  - id: fireworks
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Fireworks GET /inference/v1/models).
+    request:
+      method: GET
+      url: https://api.fireworks.ai/inference/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_FIREWORKS_TOKEN
+
+  - id: gemini
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Gemini GET /v1beta/models; key query auth).
+    request:
+      method: GET
+      url: https://generativelanguage.googleapis.com/v1beta/models
+    auth:
+      kind: query
+      params:
+        key: MODULO_PROBE_GEMINI_TOKEN
+
+  - id: grok
+    kind: model_backend
+    operation: models
+    description: Model catalogue (xAI Grok GET /v1/models).
+    request:
+      method: GET
+      url: https://api.x.ai/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_GROK_TOKEN
+
+  - id: groq
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Groq GET /openai/v1/models).
+    request:
+      method: GET
+      url: https://api.groq.com/openai/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_GROQ_TOKEN
+
+  - id: mistral
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Mistral GET /v1/models).
+    request:
+      method: GET
+      url: https://api.mistral.ai/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_MISTRAL_TOKEN
+
+  - id: openai
+    kind: model_backend
+    operation: models
+    description: Model catalogue (OpenAI GET /v1/models).
+    request:
+      method: GET
+      url: https://api.openai.com/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_OPENAI_TOKEN
+
+  - id: openrouter
+    kind: model_backend
+    operation: auth_key
+    description: Key metadata (OpenRouter GET /api/v1/auth/key).
+    request:
+      method: GET
+      url: https://openrouter.ai/api/v1/auth/key
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_OPENROUTER_TOKEN
+
+  - id: qwen
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Qwen DashScope compatible GET /models).
+    request:
+      method: GET
+      url: https://dashscope.aliyuncs.com/compatible-mode/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_QWEN_TOKEN
+
+  - id: togetherai
+    kind: model_backend
+    operation: models
+    description: Model catalogue (Together AI GET /v1/models; top-level array).
+    request:
+      method: GET
+      url: https://api.together.xyz/v1/models
+    auth:
+      kind: bearer
+      env: MODULO_PROBE_TOGETHERAI_TOKEN
+
+# ---------------------------------------------------------------------------
+# Skips - a provider we cannot probe safely, cheaply, or without per-tenant
+# configuration. Every entry states WHY.
+# ---------------------------------------------------------------------------
+skips:
+  # --- connectors ---------------------------------------------------------
+  - id: azure_key_vault
+    kind: connector
+    reason: "Tenant-specific vault host (https://<vault>.vault.azure.net) is required; there is no safe default endpoint."
+  - id: azure_pipelines
+    kind: connector
+    reason: "Organisation-specific host (https://dev.azure.com/<org>) is required; there is no safe default endpoint."
+  - id: azure_repos
+    kind: connector
+    reason: "Organisation-specific host (https://dev.azure.com/<org>) is required; there is no safe default endpoint."
+  - id: ci_runner
+    kind: connector
+    reason: "Internal abstraction over multiple CI providers; it has no single upstream wire contract to pin."
+  - id: confluence
+    kind: connector
+    reason: "Site-specific Atlassian host (https://<site>.atlassian.net) is required; there is no safe default endpoint."
+  - id: filesystem
+    kind: connector
+    reason: "Local filesystem connector; it has no network provider contract."
+  - id: gitea
+    kind: connector
+    reason: "Self-hosted instance host is required; there is no default host to probe."
+  - id: grafana
+    kind: connector
+    reason: "Self-hosted instance host is required; there is no default host to probe."
+  - id: jenkins
+    kind: connector
+    reason: "Self-hosted instance host is required; there is no default host to probe."
+  - id: jira
+    kind: connector
+    reason: "Site-specific Atlassian host (https://<site>.atlassian.net) is required; there is no safe default endpoint."
+  - id: n8n
+    kind: connector
+    reason: "Self-hosted instance host is required; there is no default host to probe."
+  - id: onepassword
+    kind: connector
+    reason: "1Password Connect server host and token are required; there is no default host."
+  - id: plane
+    kind: connector
+    reason: "Instance-specific host (self-hosted or regional Plane Cloud) is required; there is no safe default endpoint."
+  - id: rest
+    kind: connector
+    reason: "Generic HTTP connector; its target is chosen per use, so there is no fixed provider contract."
+  - id: shell
+    kind: connector
+    reason: "Local command connector; it has no network provider contract."
+  - id: sharepoint
+    kind: connector
+    reason: "Site-scoped Microsoft Graph API; the identity call is already covered by the microsoft_teams probe, and no standalone safe read exists without a site."
+  - id: teamcity
+    kind: connector
+    reason: "Self-hosted instance host is required; there is no default host to probe."
+  - id: ticket_tracker
+    kind: connector
+    reason: "Internal abstraction over Linear and Jira; Linear is probed directly and Jira is skipped (site-specific host)."
+  - id: youtrack
+    kind: connector
+    reason: "Instance-specific host is required; there is no default host to probe."
+
+  # --- model backends -----------------------------------------------------
+  - id: ai21
+    kind: model_backend
+    reason: "No documented read-only identity endpoint (model listing is not publicly documented and requires account context)."
+  - id: azure_openai
+    kind: model_backend
+    reason: "Resource-specific host and a deployment name are required; there is no safe default endpoint."
+  - id: bedrock
+    kind: model_backend
+    reason: "AWS SigV4 request signing is required; that is outside this probe's plain-HTTP scope."
+  - id: jan
+    kind: model_backend
+    reason: "Local runtime; there is no hosted provider contract."
+  - id: llamacpp
+    kind: model_backend
+    reason: "Local runtime; there is no hosted provider contract."
+  - id: lm_studio
+    kind: model_backend
+    reason: "Local runtime; there is no hosted provider contract."
+  - id: localai
+    kind: model_backend
+    reason: "Local runtime; there is no hosted provider contract."
+  - id: ollama
+    kind: model_backend
+    reason: "Local runtime; there is no hosted provider contract."
+  - id: opencode
+    kind: model_backend
+    reason: "Local CLI agent; it has no HTTP provider contract."
+  - id: perplexity
+    kind: model_backend
+    reason: "No documented read-only identity or model-listing endpoint."
+  - id: stub
+    kind: model_backend
+    reason: "Test double; it has no upstream provider."
+  - id: tgi
+    kind: model_backend
+    reason: "Self-hosted Text Generation Inference host is required; there is no default host."
+  - id: vertexai
+    kind: model_backend
+    reason: "Google Cloud OAuth token minting from a service account is required; that is outside this probe's plain-HTTP scope."
+  - id: vllm
+    kind: model_backend
+    reason: "Self-hosted vLLM host is required; there is no default host."
+  - id: watsonx
+    kind: model_backend
+    reason: "IBM IAM API-key-to-bearer token exchange is required; that is outside this probe's plain-HTTP scope."
