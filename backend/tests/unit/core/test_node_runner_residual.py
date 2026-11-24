@@ -2401,7 +2401,7 @@ async def test_mint_run_api_key_falls_back_to_first_admin(monkeypatch: pytest.Mo
     value = await nr._sandbox_issue_run_credential_for_sandbox(session_factory=lambda: session, org_id=_ORG_ID, run_id=_RUN_UUID_STR, node_id="n1", sandbox_timeout=60)
     assert value is not None
     assert value.secret == "raw-key"
-    assert value.provenance == "modulo_minted"
+    assert value.provenance == "self_minted"
     assert minted.await_args.kwargs["account_id"] == admin_id
 
 
@@ -3287,6 +3287,7 @@ async def test_sandbox_context_file_write_failure_returns_synthetic_failure_enve
         result = await fn(_run_state())
     assert result["telemetry"]["status"] == "failed"
     assert result["telemetry"]["error_type"] == "RuntimeError"
+    assert result["telemetry"]["synthetic_failure"] is True
     assert result["telemetry"]["modulo_synthetic_failure"] is True
     span.add_event.assert_called()
 

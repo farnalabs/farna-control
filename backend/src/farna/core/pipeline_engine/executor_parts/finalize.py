@@ -197,8 +197,18 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         (``SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
         agent-authored failure shape (honest exit-code failure, business JSON
         self-reporting failure) is never downgraded.
+
+        Dual-read: a stored row written before the rebrand carries only a
+        legacy marker key (``LEGACY_SYNTHETIC_FAILURE_MARKERS``), and a run can
+        outlive a rolling deploy, so the predicate treats the new and every
+        legacy key as the same terminal/synthetic signal until the drop
+        release.
         """
-        return view.get("status") == "failed" and view.get(_ref("SYNTHETIC_FAILURE_MARKER")) is True
+        if view.get("status") != "failed":
+            return False
+        if view.get(_ref("SYNTHETIC_FAILURE_MARKER")) is True:
+            return True
+        return any(view.get(marker) is True for marker in _ref("LEGACY_SYNTHETIC_FAILURE_MARKERS"))
 
     def _downgrade_connector_failures(
         self,
@@ -248,12 +258,13 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
     ) -> tuple[str, str | None, str | None]:
         """FAR-510 — downgrade a masked sandbox-agent failure to an honest fail.
 
-        The sandbox_agent runner's synthetic failure paths (generic exception,
-        schema validation) do NOT raise — they RETURN a failure envelope
-        stamped with the ``SYNTHETIC_FAILURE_MARKER`` machine marker.
-        Node completion is output-presence-based, so that node counts as
-        completed and the run would finalize ``complete`` — a failed dispatch
-        masked as success.
+        The sandbox_agent runner's generic-exception path does NOT raise — it
+        RETURNS a failure envelope stamped with the ``SYNTHETIC_FAILURE_MARKER``
+        machine marker. (The schema-validation path no longer returns such an
+        envelope: FAR-780 made it raise a retryable error instead.) Node
+        completion is output-presence-based, so that node counts as completed
+        and the run would finalize ``complete`` — a failed dispatch masked as
+        success.
 
         Only a ``complete`` final_status is inspected (failed/eval_failed/etc.
         are already honest). A match is a completed output on a node the
