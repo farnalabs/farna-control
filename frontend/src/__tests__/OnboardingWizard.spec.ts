@@ -257,6 +257,30 @@ describe('OnboardingWizard — inference (step 2)', () => {
     expect(rows[1].text()).toContain('no')
   })
 
+  it('shows the no-fields hint when the inferred definition has no properties', async () => {
+    ;(api.POST as Mock).mockImplementation(async (url: string) => {
+      if (url === '/api/v1/schemas/infer') {
+        return {
+          data: {
+            suggestion_name: 'Empty schema',
+            suggestion_description: null,
+            definition_json: { type: 'object', properties: {} },
+          },
+          error: undefined,
+        }
+      }
+      return { data: null, error: undefined }
+    })
+    const wrapper = await advanceToStep2()
+    await wrapper.find('[data-testid="onboarding-wizard-resource-type"]').setValue('issues')
+    await wrapper.find('[data-testid="onboarding-wizard-infer-schema"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Draft: Empty schema')
+    expect(wrapper.text()).toContain('No fields inferred.')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(0)
+  })
+
   it('shows the inference failure from the error envelope', async () => {
     ;(api.POST as Mock).mockImplementation(async (url: string) => {
       if (url === '/api/v1/schemas/infer') return { data: undefined, error: { detail: 'inference blew up' } }
