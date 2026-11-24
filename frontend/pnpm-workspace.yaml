@@ -400,3 +400,5 @@ minimumReleaseAgeExclude:
   - '@lucide/vue@1.77.0'
   - 'fast-check@4.11.0'
   - '@lucide/vue@1.78.0'
+  - '@grafana/faro-core@2.15.0'
+  - '@grafana/faro-web-sdk@2.15.0'
