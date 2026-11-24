@@ -670,16 +670,21 @@ end.
     # Product analytics opt-in (FAR-2741). "No telemetry by default" is a stated
     # differentiator, so the default-OFF half is asserted in BOTH directions
     # against the comment-stripped source: the decline option is pre-selected and
-    # the accept option never is. The three settings and the endpoint are pinned
-    # too, so a future edit cannot silently drop one and leave delivery disabled
-    # (or enabled with no transport).
+    # the accept option never is. The endpoint and the ON switch are pinned too,
+    # so a future edit cannot silently drop one and leave delivery disabled (or
+    # enabled with no transport). FAR-2747: the installer must NOT write or
+    # generate the instance secret - Pascal Script has no cryptographic RNG, so a
+    # secret minted here would be predictable; the launcher mints and persists it
+    # on first boot instead. Both the PRNG generator and the secret line are
+    # therefore forbidden.
     Write-Output "Checking the product-analytics opt-in contract (default OFF)..."
     $analyticsChecks = @(
         @{ Name = "Opt-in page created"; Pattern = 'CreateInputOptionPage\(wpSelectTasks' }
         @{ Name = "Default is the decline option"; Pattern = 'AnalyticsPage\.Values\[0\] := True' }
         @{ Name = "Accept option is never pre-selected"; Pattern = 'AnalyticsPage\.Values\[1\] := True'; Forbidden = $true }
         @{ Name = "Endpoint setting written"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=' }
-        @{ Name = "Instance secret setting written"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=' }
+        @{ Name = "Installer never writes the instance secret (the launcher generates it)"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET='; Forbidden = $true }
+        @{ Name = "Installer never generates a PRNG instance secret"; Pattern = 'GenerateInstanceSecret'; Forbidden = $true }
         @{ Name = "Instance switch written"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' }
         @{ Name = "Decline writes no OFF switch"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=false'; Forbidden = $true }
         @{ Name = "Config path is the launcher data dir"; Pattern = 'ANALYTICS_CONFIG_DIR = ''\\Modulo\\data''' }
@@ -702,7 +707,7 @@ end.
     if ($issContent -notmatch 'ExpandConstant\(''\{commonappdata\}''\)') {
         throw "Product-analytics opt-in contract is not satisfied: Config path is not resolved from ProgramData"
     }
-    Write-Output "  PASS: product-analytics opt-in defaults to OFF and writes all three settings ($($analyticsChecks.Count) checks)."
+    Write-Output "  PASS: product-analytics opt-in defaults to OFF, writes only the endpoint and switch, and leaves the instance secret to the launcher ($($analyticsChecks.Count) checks)."
 
     # Windows service mode is deferred to Beta (FAR-2347): Alpha installs a
     # foreground-start shortcut and records the limitation with

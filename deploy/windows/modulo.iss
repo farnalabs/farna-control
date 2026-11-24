@@ -24,14 +24,16 @@
 ; the real runtime build and is deliberately required at compile time.
 ;
 ; Product analytics (FAR-2741): the wizard shows ONE optional page, defaulting to
-; "do not send". Choosing to send writes the three
+; "do not send". Choosing to send writes the
 ; FARNA_CONTROL_PRODUCT_ANALYTICS_* settings into the native config file
 ; (%PROGRAMDATA%\Modulo\data\config.env) before the launcher ever starts.
 ; Declining writes nothing at all, so "no telemetry by default" stays true.
-; NOTE: Pascal Script exposes only Random (Setup seeds it at startup), so the
-; instance secret below is generated from that PRNG rather than a cryptographic
-; source; the Windows payload is Beta-only and unpublished. See the FAR-2741
-; delivery report before promoting Windows out of Beta.
+; FAR-2747: the per-instance secret is NOT generated here. Pascal Script has
+; only Setup's seeded Random, so a secret minted by the installer would be
+; predictable and every install's HMAC key would be guessable. The launcher
+; generates a 32-byte hex secret on first boot when the endpoint is set, and
+; persists it in config.env, so the installer writes only the endpoint and the
+; ON switch.
 ; Build example:
 ;   iscc /DVERSION_NUM=0.4.0 /DBUNDLE_ARCH=amd64 /DBUNDLE_DIR=C:\bundle modulo.iss
 ;
@@ -159,12 +161,12 @@ const
   LOG_EXT = '.log';
   SUPPORT_REF_LENGTH = 8;
   HEX_CHARS = '0123456789abcdef';
-  { Product analytics (FAR-2741): the native launcher's config file directory,
-    the endpoint analytics is sent to, and the length of the generated instance
-    secret (64 hex characters = 32 bytes). }
+  { Product analytics (FAR-2741): the native launcher's config file directory
+    and the endpoint analytics is sent to. The instance secret is deliberately
+    NOT generated here (FAR-2747) - the launcher mints and persists it on
+    first boot. }
   ANALYTICS_CONFIG_DIR = '\Modulo\data';
   ANALYTICS_ENDPOINT_URL = 'https://telemetry.farna.dev';
-  ANALYTICS_SECRET_HEX_CHARS = 64;
 
 var
   SupportRef: string;
@@ -489,10 +491,11 @@ end;
 
 { --- product analytics opt-in (FAR-2741) ----------------------------------
   One optional wizard page, shown once, defaulting to "do not send". Choosing
-  to send writes the endpoint, a per-instance secret and the ON switch into the
-  launcher's config.env before it starts. Declining writes nothing: absence is
-  the off state, so the switch is deliberately NOT written as false. The page
-  explains in plain words what is sent and where it goes. }
+  to send writes the endpoint and the ON switch into the launcher's config.env
+  before it starts; the launcher adds the per-instance secret on first boot
+  (FAR-2747 - Pascal Script has no cryptographic RNG). Declining writes
+  nothing: absence is the off state, so the switch is deliberately NOT written
+  as false. The page explains in plain words what is sent and where it goes. }
 
 procedure InitializeWizard;
 begin
@@ -512,16 +515,6 @@ begin
   AnalyticsPage.Add('Send anonymous aggregate analytics');
   { Default OFF: the first option is the selected one. }
   AnalyticsPage.Values[0] := True;
-end;
-
-function GenerateInstanceSecret: String;
-var
-  I: Integer;
-begin
-  { Pascal Script has no cryptographic RNG; Setup seeds Random at startup. }
-  Result := '';
-  for I := 1 to ANALYTICS_SECRET_HEX_CHARS do
-    Result := Result + Copy(HEX_CHARS, Random(16) + 1, 1);
 end;
 
 function AnalyticsOptedIn: Boolean;
@@ -555,15 +548,13 @@ begin
   end;
   Content :=
     'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=' + ANALYTICS_ENDPOINT_URL + #13#10 +
-    'FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=' + GenerateInstanceSecret + #13#10 +
     'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' + #13#10;
   if not SaveStringToFile(ConfigPath, Content, False) then
   begin
     MarkFailure('post-install', 'could not write the product-analytics settings to ' + ConfigPath);
     Exit;
   end;
-  { The secret itself is never logged. }
-  WriteInstallLog('Product analytics: opt-in accepted; settings written to ' + ConfigPath);
+  WriteInstallLog('Product analytics: opt-in accepted; endpoint and ON switch written to ' + ConfigPath + ' (the launcher generates the instance secret on first boot)');
 end;
 
 function InitializeSetup: Boolean;
