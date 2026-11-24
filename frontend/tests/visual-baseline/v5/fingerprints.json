@@ -3128,7 +3128,7 @@
      "gap": "normal",
      "box-shadow": "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.1) 0px 1px 2px -1px",
      "__text": "API KeysCreate and manage API keys for MCP client authenticationCreate MCP API K",
-     "__class": "p-card p-component settings-mcp-api-keys-card"
+     "__class": "card card-base bg-card p-4"
     },
     {
      "display": "flex",
