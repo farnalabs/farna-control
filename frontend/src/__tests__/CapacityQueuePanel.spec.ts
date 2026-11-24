@@ -132,7 +132,7 @@ describe('CapacityQueuePanel', () => {
     expect(mockGet).toHaveBeenCalled()
     const [url] = mockGet.mock.calls[0]
     expect(url).toBe('/api/v1/analytics/capacity')
-    // The metric tiles are MetricCards: the test id marks the card, so the
+    // The metric tiles are StatCards: the test id marks the card, so the
     // assertion covers the tile's label and its value together.
     expect(wrapper.find('[data-testid="capacity-pending-total"]').text()).toContain('3')
     expect(wrapper.find('[data-testid="capacity-verdict"]').text()).toContain('Draining')

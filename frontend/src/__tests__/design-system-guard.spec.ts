@@ -19,7 +19,7 @@
  *
  * Two rules
  * ---------
- * 1. Absolute rule (no allowlist). A `DataCard` or `SectionCard` opening tag that
+ * 1. Absolute rule (no allowlist). A `DataCard` opening tag that
  *    carries BOTH a title attribute and `padding="none"` fails. That is the
  *    exact defect FAR-2694 fixed: the card renders its own header, so the
  *    padding override leaves that header flush against the card edge.
@@ -215,10 +215,10 @@ function loadBaseline(): Counts {
   return baseline
 }
 
-/** Offending DataCard/SectionCard tags that combine a title with padding="none". */
+/** Offending DataCard tags that combine a title with padding="none". */
 function titledCardsWithoutPadding(text: string): string[] {
   const offenders: string[] = []
-  for (const tag of openingTags(stripHtmlComments(text), ['DataCard', 'SectionCard'])) {
+  for (const tag of openingTags(stripHtmlComments(text), ['DataCard'])) {
     if (!TITLE_ATTR.test(tag)) continue
     if (!PADDING_NONE.test(tag)) continue
     offenders.push(tag.split(/\s+/).join(' '))
@@ -234,7 +234,7 @@ describe('design-system conformance guard (FAR-2710)', () => {
   it('flags a titled card that sets padding="none", and ignores a commented-out one', () => {
     // Positive control: without these the absolute rule could never fire.
     expect(titledCardsWithoutPadding('<DataCard title="x" padding="none" />')).toHaveLength(1)
-    expect(titledCardsWithoutPadding("<SectionCard title='x' :padding=\"'none'\" />")).toHaveLength(1)
+    expect(titledCardsWithoutPadding("<DataCard title='x' :padding=\"'none'\" />")).toHaveLength(1)
     expect(titledCardsWithoutPadding('<!-- <DataCard title="x" padding="none" /> -->')).toHaveLength(0)
     expect(titledCardsWithoutPadding('<DataCard padding="none" />')).toHaveLength(0)
     expect(titledCardsWithoutPadding('<DataCard title="x" padding="sm" />')).toHaveLength(0)
@@ -248,7 +248,7 @@ describe('design-system conformance guard (FAR-2710)', () => {
     expect(countPatterns("<script>import X from 'primevue/button'</script>").raw_dialog).toBe(0)
   })
 
-  it('has no DataCard/SectionCard that combines a title with padding="none"', () => {
+  it('has no DataCard that combines a title with padding="none"', () => {
     const offenders: string[] = []
     for (const path of scannedFiles()) {
       for (const tag of titledCardsWithoutPadding(readFileSync(path, 'utf-8'))) {
@@ -256,7 +256,7 @@ describe('design-system conformance guard (FAR-2710)', () => {
       }
     }
     const title =
-      'A DataCard/SectionCard combines a title with padding="none". The card renders its own header, so the override leaves that header flush against the card edge (the FAR-2694 defect). Drop the padding override, or use the primitive\'s own padding scale instead:'
+      'A DataCard combines a title with padding="none". The card renders its own header, so the override leaves that header flush against the card edge (the FAR-2694 defect). Drop the padding override, or use the primitive\'s own padding scale instead:'
     expect(offenders, title).toEqual([])
   })
 
@@ -292,7 +292,7 @@ describe('design-system conformance guard (FAR-2710)', () => {
       )
     }
 
-    const grewTitle = `A file gained more hand-rolled card/header/dialog drift than ${BASELINE_NAME} allows. Use the shared primitives (DataCard/SectionCard/CardHeader and the shared dialog wrapper) instead of raising the baseline:`
+    const grewTitle = `A file gained more hand-rolled card/header/dialog drift than ${BASELINE_NAME} allows. Use the shared primitives (DataCard/CardHeader and the shared dialog wrapper) instead of raising the baseline:`
     const zeroTitle = `A baseline entry has fallen to zero, so the ratchet must shrink. Delete these entries from ${BASELINE_NAME} (the sweep has landed, or the pattern was renamed - fix the baseline rather than leaving a stale allowance):`
     expect(regressions, `${grewTitle}\n${lines(regressions)}`).toEqual([])
     expect(zeroed, `${zeroTitle}\n${lines(zeroed)}`).toEqual([])

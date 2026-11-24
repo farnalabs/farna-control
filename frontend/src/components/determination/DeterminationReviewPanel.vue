@@ -1,11 +1,11 @@
 <template>
-  <BaseCard padding="md" class="space-y-5" data-testid="determination-review">
-    <CardHeader
-      heading-level="h2"
-      header-class="mb-0!"
-      :title="$t('views.DeterminationView.review_title')"
-    />
-
+  <DataCard
+    as="section"
+    data-testid="determination-review"
+    :title="$t('views.DeterminationView.review_title')"
+    heading-level="h2"
+  >
+    <div class="space-y-5">
     <section
       v-if="review"
       class="rounded-lg border border-success/40 bg-success/5 p-3 space-y-2"
@@ -210,15 +210,15 @@
         {{ $t('views.DeterminationView.review_needs_review') }}
       </button>
     </div>
-  </BaseCard>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseCard from '../ui/BaseCard.vue'
-import CardHeader from '../ui/CardHeader.vue'
 import AppSelect from '../shared/AppSelect.vue'
+import DataCard from '../ui/DataCard.vue'
 import { formatDateShortWithTime } from '../../lib/formatDate'
 import { isUnsettledConfidence } from './confidencePresentation'
 import type {

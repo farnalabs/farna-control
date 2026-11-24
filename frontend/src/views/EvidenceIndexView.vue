@@ -21,17 +21,20 @@
     <ErrorAlert v-if="store.error" :message="store.error" :on-retry="store.fetchIndex" />
     <template v-if="store.index">
       <section class="grid gap-3 sm:grid-cols-3" :aria-label="$t('views.EvidenceIndexView.summary_label')">
-        <MetricCard :label="$t('views.EvidenceIndexView.pack_version')" :value="store.index.pack_version" />
-        <MetricCard :label="$t('views.EvidenceIndexView.generated_at')" :value="formatDate(store.index.generated_at)" />
-        <MetricCard :label="$t('views.EvidenceIndexView.coverage')" :value="store.index.complete ? $t('views.EvidenceIndexView.complete') : $t('views.EvidenceIndexView.incomplete')" />
+        <StatCard :label="$t('views.EvidenceIndexView.pack_version')" :value="store.index.pack_version" />
+        <StatCard :label="$t('views.EvidenceIndexView.generated_at')" :value="formatDate(store.index.generated_at)" />
+        <StatCard :label="$t('views.EvidenceIndexView.coverage')" :value="store.index.complete ? $t('views.EvidenceIndexView.complete') : $t('views.EvidenceIndexView.incomplete')" />
       </section>
 
-      <SectionCard
+      <DataCard
         :title="$t('views.EvidenceIndexView.artifacts_title')"
+        heading-level="h2"
+        variant="bordered"
+        padding="md"
         role="region"
         :aria-label="$t('views.EvidenceIndexView.artifacts_title')"
       >
-        <template #header>
+        <template #headerActions>
           <span aria-live="polite" class="text-sm text-muted-foreground">{{ store.index.artifacts.length }}</span>
         </template>
         <EmptyState v-if="!store.index.artifacts.length" :title="$t('views.EvidenceIndexView.empty_title')" :description="$t('views.EvidenceIndexView.empty_description')" />
@@ -40,7 +43,7 @@
             <tbody class="divide-y divide-border"><tr v-for="artifact in store.index.artifacts" :key="artifact.artifact_type" class="align-top"><td class="table-cell font-medium">{{ artifact.artifact_type }}</td><td class="table-cell"><span class="rounded-full bg-muted px-2 py-1 text-xs">{{ artifact.status }}</span><div v-if="artifact.absence_reason" class="mt-1 text-xs text-muted-foreground">{{ artifact.absence_reason }}</div></td><td class="table-cell">{{ artifact.provenance }}</td><td class="table-cell">{{ artifact.record_count ?? '—' }}</td><td class="table-cell max-w-sm break-words font-mono text-xs">{{ artifact.location }}</td></tr></tbody>
           </table>
         </div>
-      </SectionCard>
+      </DataCard>
       <p v-if="store.index.missing_artifact_types.length" aria-live="polite" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{{ $t('views.EvidenceIndexView.missing', { count: store.index.missing_artifact_types.length }) }}</p>
     </template>
   </div>
@@ -52,8 +55,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { useEvidenceStore } from '../stores/evidence'
 
 const store = useEvidenceStore()

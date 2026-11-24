@@ -18,16 +18,8 @@
 
     <BaseCard v-else-if="profileLoading" padding="lg" class="space-y-6" data-testid="my-profile-profile-loading">
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
-      <div class="space-y-4" aria-busy="true">
-        <div class="flex items-center gap-4 pb-4 border-b border-border">
-          <SkeletonBlock height-class="h-14 w-14 rounded-full" />
-          <div class="space-y-2">
-            <SkeletonBlock height-class="h-5 w-40" />
-            <SkeletonBlock height-class="h-4 w-56" />
-            <SkeletonBlock height-class="h-4 w-16" />
-          </div>
-        </div>
-        <SkeletonBlock height-class="h-4 w-48" />
+      <div aria-busy="true">
+        <CardSkeleton :lines="4" />
       </div>
     </BaseCard>
 
@@ -49,7 +41,7 @@
     </BaseCard>
 
     <FeatureGate feature-name="team_rbac" show-disabled>
-      <SectionCard :title="$t('views.MyProfileView.my_teams')">
+      <DataCard padding="lg" :title="$t('views.MyProfileView.my_teams')" heading-level="h2">
         <div v-if="myTeamsLoading" data-testid="my-profile-my-teams-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -73,18 +65,20 @@
           :title="$t('views.MyProfileView.not_a_member_of_any_team')"
         />
         <div v-else class="space-y-2">
-          <div v-for="team in myTeams" :key="team.team_id" class="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2" data-testid="my-profile-my-team">
+          <div v-for="team in myTeams" :key="team.team_id" class="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2" :data-testid="`my-profile-my-team-${team.team_id}`">
             <span class="font-medium">{{ team.team_name }}</span>
             <span class="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary-text">{{ teamRoleLabel(team.role) }}</span>
           </div>
         </div>
-      </SectionCard>
+      </DataCard>
     </FeatureGate>
 
-    <SectionCard
+    <DataCard
+      padding="lg"
+      data-testid="my-profile-hitl-email-section"
       :title="$t('views.MyProfileView.hitl_email_alerts')"
       :description="$t('views.MyProfileView.hitl_email_alerts_description')"
-      data-testid="my-profile-hitl-email-section"
+      heading-level="h2"
     >
 
       <div v-if="hitlPrefsLoading" data-testid="my-profile-hitl-email-loading">
@@ -164,11 +158,11 @@
           {{ hitlSaving ? $t('common.saving') : $t('common.save') }}
         </Button>
       </div>
-    </SectionCard>
+    </DataCard>
 
-    <SectionCard :title="$t('views.MyProfileView.change_password')">
+    <DataCard padding="lg" :title="$t('views.MyProfileView.change_password')" heading-level="h2">
       <ChangePasswordForm />
-    </SectionCard>
+    </DataCard>
   </div>
 </template>
 
@@ -178,10 +172,11 @@ import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import ChangePasswordForm from '../components/shared/ChangePasswordForm.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import Button from 'primevue/button'

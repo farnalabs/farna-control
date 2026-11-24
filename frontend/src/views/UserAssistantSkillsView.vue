@@ -28,9 +28,9 @@
           </thead>
           <tbody class="divide-y divide-border">
             <tr
-              v-for="skill in skills"
-              :key="skill.id"
-              :data-testid="`assistant-user-skill-row-${skill.id}`"
+              v-for="(skill, index) in skills"
+              :key="rowKey(skill, index)"
+              :data-testid="`assistant-user-skill-row-${rowKey(skill, index)}`"
               class="transition-colors hover:bg-muted/30"
             >
               <td class="table-cell font-medium">{{ skill.name }}</td>
@@ -50,7 +50,7 @@
               <td class="table-cell">
                 <button
                   type="button"
-                  :data-testid="`assistant-user-skill-toggle-${skill.id}`"
+                  :data-testid="`assistant-user-skill-toggle-${rowKey(skill, index)}`"
                   class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
                   :class="skill.active ? 'bg-success/10 text-success-text' : 'bg-muted text-muted-foreground'"
                   :disabled="!!skillToggling[skill.id]"
@@ -68,7 +68,7 @@
                 <div class="flex items-center justify-end gap-1">
                   <button
                     type="button"
-                    :data-testid="`assistant-user-skill-edit-${skill.id}`"
+                    :data-testid="`assistant-user-skill-edit-${rowKey(skill, index)}`"
                     class="rounded p-1 text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     :aria-label="$t('views.AdminAssistantView.edit_skill')"
                     :title="$t('views.AdminAssistantView.edit_skill')"
@@ -78,7 +78,7 @@
                   </button>
                   <button
                     type="button"
-                    :data-testid="`assistant-user-skill-delete-${skill.id}`"
+                    :data-testid="`assistant-user-skill-delete-${rowKey(skill, index)}`"
                     class="rounded p-1 text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     :aria-label="$t('views.AdminAssistantView.delete_skill')"
                     :title="$t('components.assistant.AssistantSkillDialog.delete_skill')"
@@ -131,6 +131,13 @@ const { loading, error: loadError, data: skillsResp, load: loadSkills } = useDat
 )
 
 const skills = computed(() => skillsResp.value ?? [])
+
+// FAR-2714: the row testids must never interpolate `undefined`. The API
+// contract guarantees `id`; fall back to the list position if a payload ever
+// omits it, so both the row key and every testid stay defined and unique.
+function rowKey(skill: SkillItem, index: number): string {
+  return skill.id || `skill-${index}`
+}
 
 watch(skillsResp, () => {
   assistantStore.signalSkillsChanged()

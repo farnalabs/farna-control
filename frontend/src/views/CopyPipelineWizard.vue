@@ -15,7 +15,7 @@
           <div
             class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors"
             :class="step === i + 1 ? 'bg-primary text-primary-foreground' : step > i + 1 ? 'bg-success/20 text-success-text' : 'bg-muted text-muted-foreground'"
-            data-testid="copy-wizard-step-indicator"
+            :data-testid="`copy-wizard-step-indicator-${i}`"
           >
             <Check v-if="step > i + 1" :size="14" aria-hidden="true" />
             <span v-else>{{ i + 1 }}</span>
@@ -36,7 +36,6 @@
           heading-level="h2"
           padding="lg"
         >
-
           <FilterBar class="mb-4"
             :search="{ placeholder: $t('views.CopyPipelineWizard.search_pipelines_by_name') }"
             :search-value="searchQuery"
@@ -51,18 +50,18 @@
               class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors"
               :class="visibilityFilter === f.value ? 'bg-primary text-primary-foreground border-primary' : 'border-input text-muted-foreground hover:bg-accent'"
               @click="visibilityFilter = f.value"
-              data-testid="copy-wizard-visibility-filter"
+              :data-testid="`copy-wizard-visibility-filter-${f.value}`"
             >
               {{ f.label }}
             </button>
           </div>
 
-          <div v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0" class="card p-8 text-center">
-            <p class="text-lg font-medium">{{ $t('views.CopyPipelineWizard.no_pipelines_available') }}</p>
-            <p class="mt-1 text-sm text-muted-foreground">
-              {{ $t('views.CopyPipelineWizard.create_one_from_the_library_first') }}
-            </p>
-          </div>
+          <EmptyState
+            v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0"
+            variant="bare"
+            :title="$t('views.CopyPipelineWizard.no_pipelines_available')"
+            :description="$t('views.CopyPipelineWizard.create_one_from_the_library_first')"
+          />
 
           <div v-else-if="filteredPipelines.length === 0" class="py-12 text-center text-sm text-muted-foreground">
             {{ $t('views.CopyPipelineWizard.no_pipelines_match_your_search') }}
@@ -111,7 +110,6 @@
           padding="lg"
           class="mb-6"
         >
-
           <div class="space-y-4">
             <div>
               <label for="copypipelinewizard-field-6" class="block text-sm font-medium text-foreground mb-1">{{ $t('views.CopyPipelineWizard.new_pipeline_name') }}</label>
@@ -216,7 +214,6 @@
           padding="lg"
           class="mb-6"
         >
-
           <div class="space-y-4">
             <div class="bg-muted rounded-lg p-4">
               <h3 class="text-sm font-medium text-foreground mb-2">{{ $t('views.CopyPipelineWizard.source_pipeline') }}</h3>
@@ -369,6 +366,7 @@ import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
 import BackLink from '../components/BackLink.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
 import type { OwnershipValue } from '../components/OwnershipPicker.vue'

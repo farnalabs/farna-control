@@ -1,17 +1,17 @@
 <template>
-  <BaseCard padding="md" class="space-y-5" data-testid="determination-proposal">
-    <CardHeader
-      heading-level="h2"
-      header-class="mb-0!"
-      :title="$t('views.DeterminationView.proposal_title')"
-    >
-      <template #actions>
-        <span v-if="proposal" class="text-xs text-muted-foreground">
-          {{ $t('views.DeterminationView.review_state_' + proposal.review_state) }}
-        </span>
-      </template>
-    </CardHeader>
+  <DataCard
+    as="section"
+    data-testid="determination-proposal"
+    :title="$t('views.DeterminationView.proposal_title')"
+    heading-level="h2"
+  >
+    <template v-if="proposal" #headerActions>
+      <span class="text-xs text-muted-foreground">
+        {{ $t('views.DeterminationView.review_state_' + proposal.review_state) }}
+      </span>
+    </template>
 
+    <div class="space-y-5">
     <div
       v-if="loading"
       class="flex items-center gap-3 text-sm text-muted-foreground"
@@ -220,15 +220,15 @@
 
       <DeterminationEvidencePanel :element="selectedElement" @close="clearSelection" />
     </template>
-  </BaseCard>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import BaseCard from '../ui/BaseCard.vue'
-import CardHeader from '../ui/CardHeader.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import DataCard from '../ui/DataCard.vue'
 import DeterminationEvidencePanel from './DeterminationEvidencePanel.vue'
 import DeterminationEvidenceRefs from './DeterminationEvidenceRefs.vue'
 import DeterminationProvenanceTrail from './DeterminationProvenanceTrail.vue'

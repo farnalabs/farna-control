@@ -22,15 +22,7 @@
     </PageHeader>
     <!-- Loading skeleton grid -->
     <div v-if="loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <div v-for="n in 6" :key="n" class="card p-4">
-        <div class="flex items-center gap-3">
-          <div class="h-9 w-9 animate-pulse rounded-lg bg-muted" />
-          <div class="min-w-0 flex-1 space-y-2">
-            <div class="h-3 w-20 animate-pulse rounded bg-muted" />
-            <div class="h-6 w-12 animate-pulse rounded bg-muted" />
-          </div>
-        </div>
-      </div>
+      <CardSkeleton v-for="n in 6" :key="n" :lines="2" />
     </div>
     <!-- Full-page error -->
     <ErrorAlert v-else-if="error && !summary" :message="error" :on-retry="retryDashboard" />
@@ -47,34 +39,38 @@
       />
       <!-- Row 1: Summary stat cards -->
       <div :class="['grid gap-4 sm:grid-cols-2 lg:grid-cols-4 transition-opacity duration-200', periodRefreshing ? 'opacity-60' : 'opacity-100']">
-        <StatCard :label="$t('views.DashboardView.pipelines')" :value="cardValue(summary.period?.metrics?.active_pipelines?.current, summary.active_pipelines)" color="primary" to="/pipelines" :delta="periodMetrics?.active_pipelines ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :neutral-trend="true">
+        <StatCard data-testid="dashboard-stats-card-pipelines" :label="$t('views.DashboardView.pipelines')" :value="cardValue(summary.period?.metrics?.active_pipelines?.current, summary.active_pipelines)" color="primary" to="/pipelines" :delta="periodMetrics?.active_pipelines ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :neutral-trend="true">
           <template #icon><GitBranch class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard :label="$t('views.DashboardView.total_runs')" :value="cardValue(summary.period?.metrics?.total_runs?.current, summary.total_runs)" color="primary" to="/runs" :delta="periodMetrics?.total_runs ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
+        <StatCard data-testid="dashboard-stats-card-total-runs" :label="$t('views.DashboardView.total_runs')" :value="cardValue(summary.period?.metrics?.total_runs?.current, summary.total_runs)" color="primary" to="/runs" :delta="periodMetrics?.total_runs ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
           <template #icon><BarChart2 class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard :label="$t('views.DashboardView.running')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.running?.current, summary.run_counts_by_status?.running ?? 0)" color="success" :to="`/runs?status=${RUN_STATUS.RUNNING}`" :delta="periodMetrics?.run_counts_by_status?.running ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
+        <StatCard data-testid="dashboard-stats-card-running" :label="$t('views.DashboardView.running')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.running?.current, summary.run_counts_by_status?.running ?? 0)" color="success" :to="`/runs?status=${RUN_STATUS.RUNNING}`" :delta="periodMetrics?.run_counts_by_status?.running ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined">
           <template #icon><Activity class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard :label="$t('views.DashboardView.awaiting_human')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.awaiting_human?.current, summary.run_counts_by_status?.awaiting_human ?? 0)" color="warning" :to="`/runs?status=${RUN_STATUS.AWAITING_HUMAN}`" :delta="periodMetrics?.run_counts_by_status?.awaiting_human ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
+        <StatCard data-testid="dashboard-stats-card-awaiting-human" :label="$t('views.DashboardView.awaiting_human')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.awaiting_human?.current, summary.run_counts_by_status?.awaiting_human ?? 0)" color="warning" :to="`/runs?status=${RUN_STATUS.AWAITING_HUMAN}`" :delta="periodMetrics?.run_counts_by_status?.awaiting_human ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
           <template #icon><Clock class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
       </div>
       <div class="grid gap-4 sm:grid-cols-2">
-        <StatCard :label="$t('views.DashboardView.failed')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.failed?.current, summary.run_counts_by_status?.failed ?? 0)" color="destructive" :to="`/runs?status=${RUN_STATUS.FAILED}`" :delta="periodMetrics?.run_counts_by_status?.failed ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
+        <StatCard data-testid="dashboard-stats-card-failed" :label="$t('views.DashboardView.failed')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.failed?.current, summary.run_counts_by_status?.failed ?? 0)" color="destructive" :to="`/runs?status=${RUN_STATUS.FAILED}`" :delta="periodMetrics?.run_counts_by_status?.failed ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
           <template #icon><XCircle class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
-        <StatCard :label="$t('views.DashboardView.idle')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.idle?.current, summary.run_counts_by_status?.idle ?? 0)" color="muted" to="/pipelines" :delta="periodMetrics?.run_counts_by_status?.idle ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
+        <StatCard data-testid="dashboard-stats-card-idle" :label="$t('views.DashboardView.idle')" :value="cardValue(summary.period?.metrics?.run_counts_by_status?.idle?.current, summary.run_counts_by_status?.idle ?? 0)" color="muted" to="/pipelines" :delta="periodMetrics?.run_counts_by_status?.idle ?? null" :no-baseline-label="selectedWindow != null ? $t('views.DashboardView.no_prior_data') : undefined" :inverted="true">
           <template #icon><PauseCircle class="h-4 w-4" aria-hidden="true" /></template>
         </StatCard>
       </div>
       <!-- Eval pass rate + Token spend -->
       <div class="grid gap-4 sm:grid-cols-2">
         <!-- Eval pass rate card -->
-        <router-link to="/eval-editor" class="card card-hover p-4 block" data-testid="dashboard-eval-rate">
-          <p class="text-sm font-medium text-muted-foreground mb-2">{{ $t('views.DashboardView.eval_pass_rate') }}</p>
-           <div v-if="hasEvalData">
-             <p class="text-2xl font-semibold tabular-nums">{{ evalRateDisplay }}</p>
+        <StatCard
+          to="/eval-editor"
+          data-testid="dashboard-eval-rate"
+          :label="$t('views.DashboardView.eval_pass_rate')"
+          :value="hasEvalData ? evalRateDisplay : undefined"
+        >
+          <template #content>
+           <div v-if="hasEvalData" class="mt-1">
              <div class="flex items-center gap-2 mt-1">
                <span v-if="evalPeriodDelta?.delta_pct != null" :class="evalDeltaClass" class="inline-flex items-center text-sm font-medium">
                  <span aria-hidden="true">{{ evalDeltaArrow }}</span>{{ evalDeltaPctText }}
@@ -95,14 +91,19 @@
              <span class="font-semibold">{{ $t('common.na') }}</span>
              <span>{{ $t('views.DashboardView.no_eval_data_yet') }}</span>
            </div>
-        </router-link>
+          </template>
+        </StatCard>
         <!-- Token spend card -->
-        <router-link :to="costsDestination" class="card card-hover p-4 block" data-testid="dashboard-token-spend">
-          <p class="text-sm font-medium text-muted-foreground mb-2">{{ spendLabel }}</p>
+        <StatCard
+          :to="costsDestination"
+          data-testid="dashboard-token-spend"
+          :label="spendLabel"
+          :value="hasSpendData ? formatMoney(totalSpend, currencyCode, 2) : undefined"
+        >
+          <template #content>
           <template v-if="hasSpendData">
-            <div class="flex items-baseline gap-2">
-              <p class="text-2xl font-semibold tabular-nums">{{ formatMoney(totalSpend, currencyCode, 2) }}</p>
-              <span v-if="spendDeltaPct != null" :class="spendDeltaClass" class="text-xs font-medium">
+            <div v-if="spendDeltaPct != null" class="mt-1">
+              <span :class="spendDeltaClass" class="text-xs font-medium">
                 <span aria-hidden="true">{{ spendDeltaArrow }}</span>{{ spendDeltaPctText }}
               </span>
             </div>
@@ -112,7 +113,8 @@
           <div v-else class="flex flex-col items-center justify-center gap-1 py-6 text-sm text-muted-foreground" aria-live="polite" data-testid="dashboard-token-spend-empty">
             <span>{{ $t('views.DashboardView.no_token_spend_data_yet') }}</span>
           </div>
-        </router-link>
+          </template>
+        </StatCard>
       </div>
       <!-- Team breakdown (Team only) -->
       <DataCard
@@ -227,11 +229,7 @@
         </div>
       </DataCard>
       <!-- Recent runs list -->
-      <DataCard
-        :title="$t('views.DashboardView.recent_runs')"
-        heading-level="h2"
-        data-testid="dashboard-recent-runs"
-      >
+      <TableCard data-testid="dashboard-recent-runs" :title="$t('views.DashboardView.recent_runs')" heading-level="h2">
         <DataTable
           :columns="recentRunColumns"
           :rows="summary.recent_runs"
@@ -263,7 +261,7 @@
             <span class="text-xs text-muted-foreground">{{ String(row.trigger_type ?? '') }}</span>
           </template>
         </DataTable>
-      </DataCard>
+      </TableCard>
     </template>
   </div>
 </template>
@@ -278,9 +276,11 @@ import { useSystemMapsStore } from '../stores/systemMaps'
 import { useDashboardStore } from '../stores/dashboard'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
-import StatCard from '../components/StatCard.vue'
-import { DataTable, type Column } from '../components/ui/data-table'
+import StatCard from '../components/ui/StatCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import TableCard from '../components/ui/TableCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
+import { DataTable, type Column } from '../components/ui/data-table'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'
 import { RUN_STATUS } from '../constants/filters'
 import { formatMoney } from '../lib/money'

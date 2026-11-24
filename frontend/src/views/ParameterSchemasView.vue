@@ -378,8 +378,8 @@
 
         <!-- Parameter Sets Tab -->
         <TabPanel value="sets" class="space-y-4 pt-4">
-          <SectionCard :title="$t('views.ParameterSchemasView.parameter_sets')">
-            <template #header>
+          <DataCard :title="$t('views.ParameterSchemasView.parameter_sets')" heading-level="h2" variant="bordered" padding="md">
+            <template #headerActions>
               <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
                 {{ $t('views.ParameterSchemasView.new_set') }}
               </Button>
@@ -447,7 +447,7 @@
               </div>
             </div>
           </div>
-          </SectionCard>
+          </DataCard>
 
           <!-- Set Editor -->
           <div v-if="editingSet" class="rounded-lg border bg-card p-4 space-y-4">
@@ -748,7 +748,7 @@ import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'
 import Tabs from 'primevue/tabs'

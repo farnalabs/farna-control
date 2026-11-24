@@ -1,5 +1,7 @@
 <template>
-  <SectionCard
+  <DataCard
+    variant="bordered"
+    heading-level="h2"
     :title="$t('views.ProductAnalytics.settings_title')"
     :description="$t('views.ProductAnalytics.settings_description')"
   >
@@ -35,13 +37,13 @@
         </div>
       </div>
     </div>
-  </SectionCard>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import SectionCard from '../shared/SectionCard.vue'
+import DataCard from '../ui/DataCard.vue'
 import ProductAnalyticsError from './ProductAnalyticsError.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 import { useProductAnalyticsStore } from '../../stores/productAnalyticsStore'

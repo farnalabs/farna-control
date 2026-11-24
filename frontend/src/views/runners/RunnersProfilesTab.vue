@@ -5,17 +5,20 @@
     <ErrorAlert v-else-if="store.error" :message="store.error" :on-retry="store.fetchProfiles" />
 
     <template v-else-if="rows.length === 0">
-      <div v-if="search" class="card p-8 text-center">
-        <p class="text-lg font-medium">{{ $t('views.RunnersProfilesTab.no_profiles_match', { search }) }}</p>
-        <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.RunnersProfilesTab.try_a_different_search_term') }}</p>
-      </div>
-      <div v-else class="card p-8 text-center">
-        <p class="text-lg font-medium">{{ $t('views.RunnersProfilesTab.no_runner_profiles') }}</p>
-        <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.RunnersProfilesTab.no_runner_profiles_hint') }}</p>
+      <EmptyState
+        v-if="search"
+        :title="$t('views.RunnersProfilesTab.no_profiles_match', { search })"
+        :description="$t('views.RunnersProfilesTab.try_a_different_search_term')"
+      />
+      <EmptyState
+        v-else
+        :title="$t('views.RunnersProfilesTab.no_runner_profiles')"
+        :description="$t('views.RunnersProfilesTab.no_runner_profiles_hint')"
+      >
         <Button class="mt-4" data-testid="envprofile-list-empty-create" @click="$router.push('/admin/runners/profiles/new')">
           {{ $t('views.RunnersProfilesTab.new_profile') }}
         </Button>
-      </div>
+      </EmptyState>
     </template>
 
     <template v-else>
@@ -39,8 +42,9 @@
         <BaseCard
           v-for="row in filteredRows"
           :key="row.profile.id"
-          padding="md"
-          :class="row.available ? 'flex flex-col gap-3' : 'flex flex-col gap-3 border-dashed'"
+          padding="lg"
+          :unavailable="!row.available"
+          class="flex flex-col gap-3"
           :data-unavailable="!row.available || undefined"
         >
           <div class="flex items-start justify-between">
@@ -234,6 +238,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import EmptyState from '../../components/shared/EmptyState.vue'
 import BaseCard from '../../components/ui/BaseCard.vue'
 import { useEnvironmentProfilesStore, type EnvironmentProfileSummary } from '../../stores/environmentProfiles'
 import { getAuthHeaders, api } from '../../lib/api/client'

@@ -1,12 +1,12 @@
 <template>
-  <BaseCard padding="md" class="space-y-5" data-testid="determination-rerun">
-    <CardHeader
-      heading-level="h2"
-      header-class="mb-0!"
-      :title="$t('views.DeterminationView.rerun_title')"
-      :description="$t('views.DeterminationView.rerun_hint')"
-    />
-
+  <DataCard
+    as="section"
+    data-testid="determination-rerun"
+    :title="$t('views.DeterminationView.rerun_title')"
+    :description="$t('views.DeterminationView.rerun_hint')"
+    heading-level="h2"
+  >
+    <div class="space-y-5">
     <p
       class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
       data-testid="determination-rerun-not-activated"
@@ -383,15 +383,15 @@
         </section>
       </section>
     </template>
-  </BaseCard>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseCard from '../ui/BaseCard.vue'
-import CardHeader from '../ui/CardHeader.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import DataCard from '../ui/DataCard.vue'
 import DeterminationEvidenceRefs from './DeterminationEvidenceRefs.vue'
 import DeterminationRerunAttempt from './DeterminationRerunAttempt.vue'
 import SourceInventorySummary from './DeterminationRerunSourceSummary.vue'

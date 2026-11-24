@@ -9,8 +9,10 @@
       <div class="page-wide">
         <PageHeader :title="$t('views.SettingsMonitorConfigView.browser_monitoring')" :subtitle="$t('views.SettingsMonitorConfigView.description')" />
 
-        <DataCard variant="bordered" padding="md" card-class="text-sm text-muted-foreground">
-          {{ $t('views.SettingsMonitorConfigView.explainer') }}
+        <DataCard variant="bordered" padding="md">
+          <div class="text-sm text-muted-foreground">
+            {{ $t('views.SettingsMonitorConfigView.explainer') }}
+          </div>
         </DataCard>
 
         <div v-if="loading" class="flex items-center justify-center h-32">

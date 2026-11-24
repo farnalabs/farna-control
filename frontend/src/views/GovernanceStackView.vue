@@ -13,8 +13,8 @@
       <BaseCard
         v-for="level in levels"
         :key="level.id"
+        as="article"
         padding="lg"
-        role="article"
         :data-testid="`governance-level-${level.id}`"
       >
         <CardHeader

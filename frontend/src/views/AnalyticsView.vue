@@ -32,11 +32,7 @@
         data-testid="analytics-error"
       />
 
-      <div v-if="store.loading" class="card p-4" data-testid="analytics-loading">
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-lg bg-muted" />
-        </div>
-      </div>
+      <CardSkeleton v-if="store.loading" data-testid="analytics-loading" :lines="3" />
 
       <template v-else-if="store.results">
         <div
@@ -85,19 +81,19 @@
               data-testid="analytics-capacity-summary"
               aria-live="polite"
             >
-              <MetricCard
+              <StatCard
                 :label="$t('views.AnalyticsView.capacity_avg_queue_wait')"
                 :value="formatCapacityMs(store.capacitySummary.avgQueueWaitMs)"
               />
-              <MetricCard
+              <StatCard
                 :label="$t('views.AnalyticsView.capacity_failures')"
                 :value="store.capacitySummary.totalCapacityFailures.toLocaleString()"
               />
-              <MetricCard
+              <StatCard
                 :label="$t('views.AnalyticsView.capacity_avg_wait')"
                 :value="formatCapacityMs(store.capacitySummary.avgCapacityWaitMs)"
               />
-              <MetricCard
+              <StatCard
                 :label="$t('views.AnalyticsView.capacity_stalls')"
                 :value="store.capacitySummary.totalStalls.toLocaleString()"
               />
@@ -112,14 +108,11 @@
             />
           </DataCard>
 
-          <details class="card p-4" data-testid="analytics-details">
-            <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
-              <span class="inline-flex items-center gap-2">
-                <span aria-hidden="true">▸</span>
-                {{ $t('views.AnalyticsView.show_details') }}
-              </span>
-              <span class="ml-2 text-xs font-normal text-muted-foreground">{{ $t('views.AnalyticsView.delta_hint') }}</span>
-            </summary>
+          <CollapsibleCard
+            data-testid="analytics-details"
+            :title="$t('views.AnalyticsView.show_details')"
+            :description="$t('views.AnalyticsView.delta_hint')"
+          >
             <div class="mt-4" data-testid="analytics-table">
               <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-base font-semibold">{{ $t('views.AnalyticsView.trend_table_title') }}</h2>
@@ -158,20 +151,15 @@
                 </table>
               </div>
             </div>
-          </details>
+          </CollapsibleCard>
 
-          <details class="card p-4" data-testid="analytics-capacity-details">
-            <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
-              <span class="inline-flex items-center gap-2">
-                <span aria-hidden="true">▸</span>
-                {{ $t('views.AnalyticsView.capacity_panel_title') }}
-              </span>
-              <span class="ml-2 text-xs font-normal text-muted-foreground">
-                {{ $t('views.AnalyticsView.capacity_panel_subtitle') }}
-              </span>
-            </summary>
+          <CollapsibleCard
+            data-testid="analytics-capacity-details"
+            :title="$t('views.AnalyticsView.capacity_panel_title')"
+            :description="$t('views.AnalyticsView.capacity_panel_subtitle')"
+          >
             <CapacityQueuePanel class="mt-4" />
-          </details>
+          </CollapsibleCard>
         </div>
       </template>
     </template>
@@ -189,7 +177,9 @@ import AnalyticsChart from "../components/analytics/AnalyticsChart.vue";
 import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";
 import CapacityQueuePanel from "../components/analytics/CapacityQueuePanel.vue";
 import DataCard from "../components/ui/DataCard.vue";
-import MetricCard from "../components/ui/MetricCard.vue";
+import CollapsibleCard from "../components/ui/CollapsibleCard.vue";
+import CardSkeleton from "../components/ui/CardSkeleton.vue";
+import StatCard from "../components/ui/StatCard.vue";
 import { formatApiError } from "../lib/api/formatError";
 import { errorCodeLabel, executionOriginLabel } from "../utils/runUtils";
 import {

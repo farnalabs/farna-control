@@ -41,7 +41,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -66,7 +66,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: { template: '<div data-testid="loading-spinner">loading</div>' },
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -89,7 +89,7 @@ describe('AdminProductAnalyticsView', () => {
             template: '<div data-testid="error-alert">{{ message }}</div>',
             props: ['message', 'onRetry'],
           },
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -116,7 +116,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -147,7 +147,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -179,7 +179,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -213,7 +213,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -244,7 +244,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -277,7 +277,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -310,7 +310,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -342,7 +342,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -375,7 +375,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -410,7 +410,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -445,7 +445,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -481,7 +481,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -527,7 +527,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -562,7 +562,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -599,7 +599,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -643,7 +643,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -687,7 +687,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -718,7 +718,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -750,7 +750,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -781,7 +781,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -802,7 +802,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -829,7 +829,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div class="section-card"><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -864,7 +864,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: true,
           ErrorAlert: true,
-          SectionCard: {
+          DataCard: {
             template: '<div><h2>{{ title }}</h2><slot /></div>',
             props: ['title'],
           },
@@ -886,7 +886,7 @@ describe('AdminProductAnalyticsView', () => {
         stubs: {
           LoadingSpinner: { template: '<div data-testid="loading">loading</div>' },
           ErrorAlert: true,
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },
@@ -910,7 +910,7 @@ describe('AdminProductAnalyticsView', () => {
             template: '<div data-testid="error-alert"><button data-testid="retry-btn" @click="onRetry">Retry</button></div>',
             props: ['message', 'onRetry'],
           },
-          SectionCard: { template: '<div><slot /></div>', props: ['title'] },
+          DataCard: { template: '<div><slot /></div>', props: ['title'] },
           PageHeader: { template: '<div />', props: ['title', 'subtitle'] },
         },
       },

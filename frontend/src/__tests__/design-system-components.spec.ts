@@ -17,12 +17,14 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import CardContent from '../components/ui/CardContent.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
+import CardTable from '../components/ui/CardTable.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
 import SummaryCard from '../components/ui/SummaryCard.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
+import TableCard from '../components/ui/TableCard.vue'
 
 describe('useDeltaFormatting', () => {
   it.each([
@@ -108,9 +110,9 @@ describe('BaseCard', () => {
   it.each([
     ['default', undefined, 'bg-card'],
     ['explicit default', 'default', 'bg-card'],
-    ['bordered', 'bordered', 'border'],
-    ['elevated', 'elevated', 'shadow'],
+    ['bordered (deprecated alias)', 'bordered', 'bg-card'],
     ['muted', 'muted', 'bg-muted/50'],
+    ['warning', 'warning', 'border-warning/30'],
     ['context', 'context', 'bg-primary/5'],
   ] as const)('maps the %s variant', (_name, variant, expectedClass) => {
     const wrapper = mount(BaseCard, { props: { variant } })
@@ -123,6 +125,7 @@ describe('BaseCard', () => {
     ['sm', 'sm', 'p-3'],
     ['md', 'md', 'p-4'],
     ['lg', 'lg', 'p-6'],
+    ['xl', 'xl', 'p-8'],
     ['default', undefined, 'p-4'],
   ] as const)('maps %s padding', (_name, padding, expectedClass) => {
     const wrapper = mount(BaseCard, { props: { padding } })
@@ -133,8 +136,6 @@ describe('BaseCard', () => {
   it.each([
     ['none', 'none', ''],
     ['sm', 'sm', 'shadow-sm'],
-    ['md', 'md', 'shadow'],
-    ['lg', 'lg', 'shadow-lg'],
     ['default', undefined, ''],
   ] as const)('maps %s elevation', (_name, elevation, expectedClass) => {
     const wrapper = mount(BaseCard, { props: { elevation } })
@@ -143,8 +144,23 @@ describe('BaseCard', () => {
       expect(wrapper.classes()).toContain(expectedClass)
     } else {
       expect(wrapper.classes()).not.toContain('shadow-sm')
-      expect(wrapper.classes()).not.toContain('shadow-lg')
     }
+  })
+
+  it('adds the pressable interaction classes only when pressable', () => {
+    const plain = mount(BaseCard)
+    const pressable = mount(BaseCard, { props: { pressable: true } })
+
+    expect(plain.classes()).not.toContain('card-hover')
+    expect(plain.classes()).not.toContain('cursor-pointer')
+    expect(pressable.classes()).toEqual(
+      expect.arrayContaining(['card-hover', 'cursor-pointer', 'transition-colors', 'hover:bg-accent/30']),
+    )
+  })
+
+  it('adds the dashed border only when unavailable', () => {
+    expect(mount(BaseCard).classes()).not.toContain('border-dashed')
+    expect(mount(BaseCard, { props: { unavailable: true } }).classes()).toContain('border-dashed')
   })
 
   it('maps visual props, custom classes, test ids, and named slots', () => {
@@ -164,7 +180,7 @@ describe('BaseCard', () => {
     })
 
     expect(wrapper.attributes('data-testid')).toBe('base-card')
-    expect(wrapper.classes()).toEqual(expect.arrayContaining(['card', 'card-base', 'bg-card', 'border', 'p-6', 'shadow-sm', 'custom-card']))
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(['card', 'card-base', 'bg-card', 'p-6', 'shadow-sm', 'custom-card']))
     expect(wrapper.find('[data-testid="base-header"]').text()).toBe('Header')
     expect(wrapper.find('[data-testid="base-content"]').text()).toBe('Content')
     expect(wrapper.find('[data-testid="base-footer"]').text()).toBe('Footer')
@@ -236,58 +252,152 @@ describe('CardHeader and DataCard', () => {
     expect(plain.find('.card-header').classes()).not.toContain('border-b')
   })
 
-  it('uses custom description styling instead of the default muted class', () => {
-    const custom = mount(CardHeader, {
-      props: { description: 'Custom description', descriptionClass: 'text-destructive' },
-    })
-    const defaultDescription = mount(CardHeader, { props: { description: 'Default description' } })
+  it('maps the md header size to the default title and description styles', () => {
+    const header = mount(CardHeader, { props: { title: 'Default', description: 'Context' } })
 
-    expect(custom.find('p').classes()).toContain('text-destructive')
-    expect(custom.find('p').classes()).not.toContain('text-muted-foreground')
-    expect(defaultDescription.find('p').classes()).toContain('text-muted-foreground')
+    expect(header.find('h3').classes()).toEqual(expect.arrayContaining(['text-base', 'font-semibold']))
+    expect(header.find('p').classes()).toEqual(expect.arrayContaining(['mt-1', 'text-sm', 'text-muted-foreground']))
   })
 
-  it('passes header styling and test id through DataCard', () => {
-    const wrapper = mount(DataCard, {
-      props: {
-        title: 'Details',
-        description: 'Context',
-        titleClass: 'title-custom',
-        descriptionClass: 'description-custom',
-        dataTestId: 'styled-card',
-      },
+  it('maps the sm header size to the compact title and description styles', () => {
+    const header = mount(CardHeader, {
+      props: { title: 'Compact', description: 'Context', size: 'sm' },
     })
 
-    expect(wrapper.find('[data-testid="styled-card-header"]').classes()).toContain('card-header')
-    expect(wrapper.find('h3').classes()).toContain('title-custom')
-    expect(wrapper.find('p').classes()).toContain('description-custom')
+    expect(header.find('h3').classes()).toEqual(expect.arrayContaining(['text-sm', 'font-medium']))
+    expect(header.find('p').classes()).toEqual(expect.arrayContaining(['mt-1', 'text-xs', 'text-muted-foreground']))
   })
 
-     it('does not render an empty header for a title-less, action-less DataCard', () => {
-      const wrapper = mount(DataCard, { slots: { default: '<p>Body</p>' } })
+  it('does not render an empty header for a title-less, action-less DataCard', () => {
+    const wrapper = mount(DataCard, { slots: { default: '<p>Body</p>' } })
 
-      expect(wrapper.find('.card-header').exists()).toBe(false)
-      expect(wrapper.find('.card-content').text()).toBe('Body')
-    })
+    expect(wrapper.find('.card-header').exists()).toBe(false)
+    expect(wrapper.find('.card-content').text()).toBe('Body')
+  })
 
-    it('does not render an empty CardHeader without title, description, or actions', () => {
-      const wrapper = mount(CardHeader)
+  it('does not render an empty CardHeader without title, description, or actions', () => {
+    const wrapper = mount(CardHeader)
 
-      expect(wrapper.find('.card-header').exists()).toBe(false)
-    })
+    expect(wrapper.find('.card-header').exists()).toBe(false)
+  })
 
-
-   it('keeps SectionCard headings at h2', () => {
-    const wrapper = mount(SectionCard, { props: { title: 'Settings' } })
+  it('keeps DataCard headings at the requested level', () => {
+    const wrapper = mount(DataCard, { props: { title: 'Settings', headingLevel: 'h2' } })
 
     expect(wrapper.find('h2').text()).toBe('Settings')
     expect(wrapper.find('h3').exists()).toBe(false)
   })
+
+  it('derives header, content and footer test ids from the card test id', () => {
+    const full = mount(DataCard, {
+      props: { title: 'Details', dataTestId: 'derived' },
+      slots: { default: '<p>Body</p>', footer: '<p>Footer</p>' },
+    })
+    const contentOnly = mount(DataCard, {
+      props: { dataTestId: 'derived' },
+      slots: { default: '<p>Body</p>' },
+    })
+    const empty = mount(DataCard, { props: { dataTestId: 'derived' } })
+
+    expect(full.find('[data-testid="derived-header"]').exists()).toBe(true)
+    expect(full.find('[data-testid="derived-content"]').exists()).toBe(true)
+    expect(full.find('[data-testid="derived-footer"]').exists()).toBe(true)
+    expect(contentOnly.find('[data-testid="derived-header"]').exists()).toBe(false)
+    expect(contentOnly.find('[data-testid="derived-content"]').exists()).toBe(true)
+    expect(contentOnly.find('[data-testid="derived-footer"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="derived-header"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="derived-content"]').exists()).toBe(false)
+    expect(empty.find('[data-testid="derived-footer"]').exists()).toBe(false)
+  })
 })
 
-describe('MetricCard', () => {
+describe('CardContent, CardTable and CardSkeleton', () => {
+  it.each([
+    ['none', 'none', 'p-0'],
+    ['sm', 'sm', 'p-3'],
+    ['md', 'md', 'p-4'],
+    ['default', undefined, 'p-0'],
+  ] as const)('maps %s CardContent padding', (_name, padding, expectedClass) => {
+    const wrapper = mount(CardContent, { props: { padding } })
+
+    expect(wrapper.classes()).toContain('card-content')
+    expect(wrapper.classes()).toContain(expectedClass)
+  })
+
+  it('renders a CardTable heading strip and a focusable, labelled scroll region', () => {
+    const wrapper = mount(CardTable, {
+      props: { heading: 'Rows', label: 'Attempt history table' },
+      slots: { default: '<table><tbody><tr><td>row</td></tr></tbody></table>' },
+    })
+
+    expect(wrapper.text()).toContain('Rows')
+    const scroll = wrapper.find('.overflow-x-auto')
+    expect(scroll.attributes('tabindex')).toBe('0')
+    expect(scroll.attributes('aria-label')).toBe('Attempt history table')
+    expect(scroll.find('table').exists()).toBe(true)
+  })
+
+  it('omits the CardTable heading strip when no heading is supplied', () => {
+    const wrapper = mount(CardTable, { slots: { default: '<p>body</p>' } })
+
+    expect(wrapper.find('.border-b').exists()).toBe(false)
+    expect(wrapper.find('.overflow-x-auto').attributes('aria-label')).toBeUndefined()
+  })
+
+  it('renders CardSkeleton as a hidden animated BaseCard with the requested lines', () => {
+    const wrapper = mount(CardSkeleton, { props: { lines: 3, dataTestId: 'skeleton-card' } })
+
+    expect(wrapper.classes()).toContain('card')
+    expect(wrapper.classes()).toContain('card-base')
+    expect(wrapper.classes()).toContain('animate-pulse')
+    expect(wrapper.attributes('aria-hidden')).toBe('true')
+    expect(wrapper.attributes('data-testid')).toBe('skeleton-card')
+    // one heading block + three line blocks
+    expect(wrapper.findAll('.bg-muted').length).toBe(4)
+  })
+
+  it('omits the CardSkeleton heading block when heading is false', () => {
+    const wrapper = mount(CardSkeleton, { props: { heading: false, lines: 1 } })
+
+    expect(wrapper.findAll('.bg-muted').length).toBe(1)
+  })
+})
+
+describe('TableCard', () => {
+  const tableSlot = { default: '<table><tbody><tr><td>row</td></tr></tbody></table>' }
+
+  it('renders a bare table untouched when neither heading nor table label is supplied', () => {
+    const wrapper = mount(TableCard, { slots: tableSlot })
+
+    expect(wrapper.find('.overflow-x-auto').exists()).toBe(false)
+    expect(wrapper.find('table').exists()).toBe(true)
+  })
+
+  it('opts into the CardTable region from a table label alone', () => {
+    const wrapper = mount(TableCard, { props: { tableLabel: 'Rows table' }, slots: tableSlot })
+
+    const scroll = wrapper.find('.overflow-x-auto')
+    expect(scroll.exists()).toBe(true)
+    expect(scroll.attributes('aria-label')).toBe('Rows table')
+  })
+
+  it('opts into the CardTable region from a heading alone', () => {
+    const wrapper = mount(TableCard, { props: { heading: 'Rows' }, slots: tableSlot })
+
+    expect(wrapper.text()).toContain('Rows')
+    expect(wrapper.find('.overflow-x-auto').exists()).toBe(true)
+  })
+
+  it('honours an explicit padding over the header-derived default', () => {
+    const wrapper = mount(TableCard, { props: { title: 'Rows', padding: 'lg' }, slots: tableSlot })
+
+    expect(wrapper.find('.card').classes()).toContain('p-6')
+  })
+})
+
+describe('StatCard metric tile', () => {
   it('renders delta values, direction, percentage, and custom test id', () => {
-    const wrapper = mount(MetricCard, {
+    const wrapper = mount(StatCard, {
       props: { label: 'Runs', value: 12, delta: 2, deltaPct: 16.25, dataTestId: 'metric-card' },
     })
 
@@ -307,7 +417,7 @@ describe('MetricCard', () => {
       [{ delta: 0, deltaPct: 0 }, '0 (0.0%)'],
       [{ delta: 2, deltaPct: -16.25 }, '+2 (-16.3%)'],
     ])('renders valid delta combinations safely: %o', (deltaProps, expected) => {
-      const wrapper = mount(MetricCard, {
+      const wrapper = mount(StatCard, {
         props: { label: 'Runs', value: 12, ...deltaProps },
       })
 
@@ -327,14 +437,14 @@ describe('MetricCard', () => {
       ['muted', 'text-muted-foreground'],
       ['primary', ''],
     ] as const)('maps %s value color', (color, expectedClass) => {
-      const wrapper = mount(MetricCard, { props: { label: 'Runs', value: 1, color } })
+      const wrapper = mount(StatCard, { props: { label: 'Runs', value: 1, color } })
 
       if (expectedClass) expect(wrapper.find('.text-2xl').classes()).toContain(expectedClass)
       else expect(wrapper.find('.text-2xl').classes()).not.toContain('text-success-text')
     })
 
     it('preserves the absent test id when no custom id is provided', () => {
-       expect(mount(MetricCard, { props: { label: 'Runs', value: 1 } }).attributes('data-testid')).toBeUndefined()
+       expect(mount(StatCard, { props: { label: 'Runs', value: 1 } }).attributes('data-testid')).toBeUndefined()
      })
 
 
@@ -344,7 +454,7 @@ describe('MetricCard', () => {
      [{ value: 50, max: 0 }, '0%'],
      [{ value: 50, max: -10 }, '0%'],
    ])('clamps progress safely for %o', (progress, width) => {
-     const wrapper = mount(MetricCard, {
+     const wrapper = mount(StatCard, {
        props: { label: 'Capacity', value: 'Full', progress },
      })
 
@@ -352,7 +462,7 @@ describe('MetricCard', () => {
    })
 
     it('uses the destructive style for over-max progress', () => {
-      const wrapper = mount(MetricCard, {
+      const wrapper = mount(StatCard, {
         props: { label: 'Capacity', value: 'Full', progress: { value: 120, max: 100 } },
       })
 
@@ -360,10 +470,10 @@ describe('MetricCard', () => {
     })
 
      it('falls back to zero progress for non-finite values', () => {
-       const invalidMax = mount(MetricCard, {
+       const invalidMax = mount(StatCard, {
          props: { label: 'Capacity', value: 'Unknown', progress: { value: 50, max: Number.NaN } },
        })
-       const invalidValue = mount(MetricCard, {
+       const invalidValue = mount(StatCard, {
          props: { label: 'Capacity', value: 'Unknown', progress: { value: Number.NaN, max: 100 } },
        })
 
@@ -372,7 +482,7 @@ describe('MetricCard', () => {
      })
 
      it('covers absent progress and invalid delta computed fallbacks', () => {
-       const wrapper = mount(MetricCard, { props: { label: 'Capacity', value: 'Unknown' } })
+       const wrapper = mount(StatCard, { props: { label: 'Capacity', value: 'Unknown' } })
        const vm = wrapper.vm as unknown as { progressBarClass: string; deltaArrow: string; deltaClass: string }
 
        expect(vm.progressBarClass).toBe('bg-primary')
@@ -400,19 +510,20 @@ describe('MetricCard', () => {
        [{ value: 99, max: 100 }, 'bg-warning'],
        [{ value: 100, max: 100 }, 'bg-destructive'],
      ] as const)('maps progress %o to %s', (progress, expectedClass) => {
-        const wrapper = mount(MetricCard, { props: { label: 'Capacity', value: 'Half', progress } })
+        const wrapper = mount(StatCard, { props: { label: 'Capacity', value: 'Half', progress } })
 
         expect(wrapper.find('[style]').classes()).toContain(expectedClass)
      })
  })
 
 describe('StatCard', () => {
-  it('binds a custom test id and preserves the default', () => {
+  it('binds a custom test id and emits none by default', () => {
     const custom = mount(StatCard, { props: { label: 'Runs', value: 12, dataTestId: 'custom-stat' } })
     const fallback = mount(StatCard, { props: { label: 'Runs', value: 12 } })
 
     expect(custom.find('[data-testid="custom-stat"]').exists()).toBe(true)
-    expect(fallback.find('[data-testid="dashboard-stats-card"]').exists()).toBe(true)
+    expect(fallback.find('[data-testid="dashboard-stats-card-pipelines"]').exists()).toBe(false)
+    expect(fallback.attributes('data-testid')).toBeUndefined()
   })
 
   it.each([
@@ -422,7 +533,10 @@ describe('StatCard', () => {
     ['destructive', 'bg-destructive/10', 'text-destructive'],
     ['muted', 'bg-muted', 'text-muted-foreground'],
   ] as const)('maps %s color tokens', (color, iconClass, valueClass) => {
-    const wrapper = mount(StatCard, { props: { label: 'Runs', value: 12, color } })
+    const wrapper = mount(StatCard, {
+      props: { label: 'Runs', value: 12, color },
+      slots: { icon: '<circle cx="12" cy="12" r="4" />' },
+    })
 
     expect(wrapper.find('svg').element.parentElement?.className).toContain(iconClass)
     if (valueClass) expect(wrapper.find('.text-2xl').classes()).toContain(valueClass)
@@ -448,6 +562,30 @@ describe('StatCard', () => {
 
     expect(incomplete.find('[data-testid="stat-no-baseline"]').exists()).toBe(false)
     expect(invalid.find('.text-xs').exists()).toBe(false)
+  })
+
+  it('falls back to the primary icon background when no colour is supplied', () => {
+    const wrapper = mount(StatCard, {
+      props: { label: 'Runs', value: 12 },
+      slots: { icon: '<circle cx="12" cy="12" r="4" />' },
+    })
+
+    expect(wrapper.find('svg').element.parentElement?.className).toContain('bg-primary/10')
+  })
+
+  it('omits the delta row when only an absolute delta is available without a baseline label', () => {
+    const wrapper = mount(StatCard, {
+      props: {
+        label: 'Runs',
+        value: 12,
+        progress: { value: 50, max: 100 },
+        delta: { current: 12, previous: 10 },
+      },
+    })
+
+    expect(wrapper.find('.text-xs').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stat-no-baseline"]').exists()).toBe(false)
+    expect(wrapper.find('[style]').attributes('style')).toContain('width: 50%')
   })
 
      it('renders percentage-only deltas and omits a delta when no valid values remain', () => {

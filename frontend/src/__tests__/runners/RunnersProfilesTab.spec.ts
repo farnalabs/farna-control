@@ -488,6 +488,26 @@ describe('RunnersProfilesTab', () => {
     expect(wrapper.find('[data-testid="envprofile-list-empty-create"]').exists()).toBe(true)
   })
 
+  it('shows the search-aware empty state when a search is active and every profile is gone', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useEnvironmentProfilesStore()
+    store.$patch({ profiles: [BUNDLED_PROFILE] as never })
+    const wrapper = mount(RunnersProfilesTab, { props: { status: makeStatus(), reloadStatus } })
+    await nextTick()
+    await flushPromises()
+
+    await wrapper.find('[data-testid="envprofile-list-search"]').setValue('gone')
+    await nextTick()
+
+    store.$patch({ profiles: [] as never })
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No profiles match')
+    expect(wrapper.text()).toContain('gone')
+  })
+
   it('surfaces the pull-remediation hint when the image is not pulled', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

@@ -13,7 +13,8 @@
       :subtitle="isEdit ? $t('views.EnvironmentProfileForm.edit_subtitle') : $t('views.EnvironmentProfileForm.create_subtitle')"
     />
 
-    <form @submit.prevent="handleSubmit" class="card max-w-3xl p-6 space-y-5">
+    <DataCard padding="lg" class="max-w-3xl">
+    <form @submit.prevent="handleSubmit" class="space-y-5">
       <div>
         <label for="environmentprofileform-field-7" class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.name') }} <span class="text-destructive">*</span></label>
         <input id="environmentprofileform-field-7"
@@ -243,11 +244,13 @@
         </button>
       </div>
     </form>
+    </DataCard>
   </div>
 </template>
 
 <script setup lang="ts">
 import PageHeader from '../../components/shared/PageHeader.vue'
+import DataCard from '../../components/ui/DataCard.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

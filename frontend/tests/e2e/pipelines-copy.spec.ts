@@ -8,6 +8,6 @@ test.describe('Copy Pipeline', { tag: "@regression" }, () => {
     await loginAsAdmin(page, env)
     await page.goto('/pipelines/copy')
     await expect(page.locator('h1')).toContainText('Copy Pipeline')
-    await expect(page.getByTestId('copy-wizard-step-indicator').first()).toBeVisible()
+    await expect(page.getByTestId('copy-wizard-step-indicator-0')).toBeVisible()
   })
 })

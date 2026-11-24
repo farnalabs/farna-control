@@ -60,22 +60,22 @@
       </div>
 
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
+        <StatCard
           :label="$t('views.AnalyticsView.capacity_pending_now')"
           :value="capacity.pending.total"
           data-testid="capacity-pending-total"
         />
-        <MetricCard
+        <StatCard
           :label="$t('views.AnalyticsView.capacity_oldest_pending')"
           :value="formatDuration(capacity.pending.oldest_pending_age_seconds)"
           data-testid="capacity-oldest-pending"
         />
-        <MetricCard
+        <StatCard
           :label="$t('views.AnalyticsView.capacity_drain_ratio')"
           :value="drainRatioLabel"
           data-testid="capacity-drain-ratio"
         />
-        <MetricCard
+        <StatCard
           :label="$t('views.AnalyticsView.capacity_org_cap_use')"
           :value="orgCapUseLabel"
           data-testid="capacity-org-cap-use"
@@ -202,10 +202,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
-import { useI18n } from "vue-i18n";
 import BaseCard from "../ui/BaseCard.vue";
+import { useI18n } from "vue-i18n";
 import CardHeader from "../ui/CardHeader.vue";
-import MetricCard from "../ui/MetricCard.vue";
+import StatCard from "../ui/StatCard.vue";
 import {
   formatCapacityDuration,
   useAnalyticsStore,

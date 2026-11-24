@@ -37,19 +37,10 @@
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
       <div class="space-y-4" aria-busy="true">
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <BaseCard v-for="n in 3" :key="'summary-' + n" padding="md">
-            <div class="h-3 w-20 animate-pulse rounded bg-muted" />
-            <div class="mt-2 h-5 w-16 animate-pulse rounded bg-muted" />
-          </BaseCard>
+          <CardSkeleton v-for="n in 3" :key="'summary-' + n" :heading="false" :lines="2" />
         </div>
-        <BaseCard padding="md">
-          <SkeletonBlock height-class="h-5 w-32" />
-          <SkeletonBlock class="mt-3" height-class="h-9 w-64" />
-        </BaseCard>
-        <BaseCard padding="md">
-          <SkeletonBlock height-class="h-5 w-48" />
-          <SkeletonBlock class="mt-2" height-class="h-16 w-full" />
-        </BaseCard>
+        <CardSkeleton :lines="1" />
+        <CardSkeleton :lines="2" />
       </div>
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadDetail" />
@@ -65,33 +56,32 @@
         {{ $t('views.AdminErrorDetailView.instance_scope_readonly') }}
       </BaseCard>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <BaseCard padding="md">
-          <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.level') }}</span>
-          <p class="mt-0.5">
-            <span :class="levelBadgeClass(group.level_peak)">{{ group.level_peak }}</span>
-          </p>
-        </BaseCard>
-        <BaseCard padding="md">
-          <span class="text-xs font-medium text-muted-foreground capitalize">{{ $t('views.AdminErrorDetailView.status') }}</span>
-          <p class="mt-0.5">
-            <span :class="statusBadgeClass(group.status)" class="capitalize">{{ group.status }}</span>
-          </p>
-        </BaseCard>
-        <MetricCard
-          :label="$t('views.AdminErrorDetailView.occurrences')"
-          :value="group.count"
-        />
+        <StatCard :label="$t('views.AdminErrorDetailView.level')" color="muted">
+          <template #content>
+            <p class="mt-0.5">
+              <span :class="levelBadgeClass(group.level_peak)">{{ group.level_peak }}</span>
+            </p>
+          </template>
+        </StatCard>
+        <StatCard :label="$t('views.AdminErrorDetailView.status')" color="muted">
+          <template #content>
+            <p class="mt-0.5">
+              <span :class="statusBadgeClass(group.status)" class="capitalize">{{ group.status }}</span>
+            </p>
+          </template>
+        </StatCard>
+        <StatCard :label="$t('views.AdminErrorDetailView.occurrences')" :value="group.count" />
       </div>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BaseCard padding="md">
+        <DataCard>
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.first_seen') }}</span>
           <p class="mt-0.5 text-sm">{{ formatErrorDate(group.first_seen) }}</p>
-        </BaseCard>
-        <BaseCard padding="md">
+        </DataCard>
+        <DataCard>
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminErrorDetailView.last_seen') }}</span>
           <p class="mt-0.5 text-sm">{{ formatErrorDate(group.last_seen) }}</p>
-        </BaseCard>
+        </DataCard>
       </div>
 
       <!-- FAR-2374: every error-record write is gated on `errors.manage`
@@ -327,11 +317,12 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
-import DataCard from '../components/ui/DataCard.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

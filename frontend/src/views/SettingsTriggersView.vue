@@ -28,7 +28,7 @@
       v-if="isOrgAdmin"
       variant="bordered"
       padding="md"
-      card-class="mb-4"
+      class="mb-4"
       heading-level="h2"
       :title="$t('views.SettingsTriggersView.pause_all_triggers')"
       :description="$t('views.SettingsTriggersView.pause_all_triggers_description')"

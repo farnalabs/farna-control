@@ -5,9 +5,12 @@
       :subtitle="$t('views.EvidenceView.subtitle')"
     />
 
-    <SectionCard
+    <DataCard
       :title="$t('views.EvidenceView.run_picker_title')"
       :description="$t('views.EvidenceView.run_picker_description')"
+      heading-level="h2"
+      variant="bordered"
+      padding="md"
       role="region"
       :aria-label="$t('views.EvidenceView.run_picker_title')"
       data-testid="evidence-run-picker"
@@ -57,7 +60,7 @@
       <p v-else-if="!recentRunsLoading && recentRuns.length === 0" class="text-sm text-muted-foreground" data-testid="evidence-recent-runs-empty">
         {{ $t('views.EvidenceView.no_recent_runs') }}
       </p>
-    </SectionCard>
+    </DataCard>
 
     <form class="flex flex-wrap items-end gap-3" @submit.prevent="load">
       <div>
@@ -173,7 +176,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { fetchRuns, type RunListItem } from '../lib/api/runs'

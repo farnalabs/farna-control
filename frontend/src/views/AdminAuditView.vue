@@ -544,9 +544,9 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'

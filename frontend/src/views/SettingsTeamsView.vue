@@ -13,7 +13,13 @@
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadTeams" />
 
     <div v-if="!loading && !error">
-      <SectionCard v-if="showCreateForm" class="max-w-3xl" :title="$t('views.SettingsTeamsView.new_team')">
+      <DataCard
+        v-if="showCreateForm"
+        padding="lg"
+        class="max-w-3xl"
+        :title="$t('views.SettingsTeamsView.new_team')"
+        heading-level="h2"
+      >
         <div class="space-y-4">
           <div>
             <label for="settingsteamsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.name') }}</label>
@@ -46,7 +52,7 @@
         </div>
         <div v-if="createError" class="mt-3 text-sm text-destructive">{{ createError }}</div>
         <div v-if="createSuccess" class="mt-3 text-sm text-success-text">{{ createSuccess }}</div>
-      </SectionCard>
+      </DataCard>
 
       <EmptyState
         v-if="teams.length === 0"
@@ -239,11 +245,11 @@ import TableActions from '../components/shared/TableActions.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import TeamNotificationEndpoints from '../components/TeamNotificationEndpoints.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { ChevronRight, Plus } from '@lucide/vue'
