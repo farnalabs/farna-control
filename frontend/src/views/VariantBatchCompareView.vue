@@ -195,9 +195,7 @@
     <LoadingSpinner v-if="comparisonsLoading" />
     <ErrorAlert v-else-if="comparisonsError" :message="comparisonsError" :on-retry="loadComparisons" />
     <template v-else>
-      <div v-if="comparisons.length === 0" class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-        {{ $t('views.variantBatch.noComparisons') }}
-      </div>
+      <EmptyState v-if="comparisons.length === 0" :title="$t('views.variantBatch.noComparisons')" />
       <div v-else class="table-wrapper">
         <table class="w-full text-left text-sm">
           <thead>

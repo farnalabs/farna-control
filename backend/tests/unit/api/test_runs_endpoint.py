@@ -3248,6 +3248,9 @@ class TestListRunsObservability:
     def test_viewer_list_passes_account_scope(self, client: TestClient, mock_session) -> None:
         app.dependency_overrides[get_current_tenant_user] = lambda: TenantPrincipal(username="viewer", organisation_id=_ORG_ID, account_id=_USER_ID, org_role="viewer")
         app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(username="viewer", organisation_id=_ORG_ID, account_id=_USER_ID, org_role="viewer")
+        # FAR-2726: the run list resolves through the any-credential principal
+        # now, so the viewer override must be applied to that dependency too.
+        app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: TenantPrincipal(username="viewer", organisation_id=_ORG_ID, account_id=_USER_ID, org_role="viewer")
         page = MagicMock(items=[], total=0, page=1, page_size=20, next_cursor=None, has_more=False)
         with (
             patch("farna.api.routes.runs.db_list_runs", new_callable=AsyncMock, return_value=page) as list_runs,

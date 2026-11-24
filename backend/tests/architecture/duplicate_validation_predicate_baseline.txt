@@ -34,7 +34,6 @@
 #   cd backend && uv run python scripts/update_duplicate_validation_predicate_baseline.py
 {"block": ["api/mcp_server.py:_parse_api_key_expires_at", "api/routes/api_keys.py:_parse_expires_at"]}
 {"block": ["api/routes/health.py:_configured_queues", "core/watchdog/worker_liveness.py:_configured_queues"]}
-{"block": ["cli/backup.py:_pg_child_env", "launcher/upgrade.py:_pg_child_env"]}
 {"block": ["core/feedback_manager/__init__.py:_dispatch_reject_correction_in_session", "core/guardrails/conformance.py:_set_rls", "db/crud/organisation.py:delete_organisation"]}
 {"block": ["core/pipeline_execution.py:_utc_or_none", "db/crud/token_family.py:_as_utc_aware"]}
 {"block": ["core/trigger_engine/__init__.py:_store_raw_payload", "core/trigger_engine/slack_app_mention.py:_store_raw_payload"]}
@@ -80,7 +79,6 @@
 {"near_body": ["api/routes/admin.py:_list_org_accounts", "api/routes/service_accounts.py:_list_service_accounts"]}
 {"near_body": ["api/routes/analytics.py:_csv_stream_line", "api/routes/audit.py:_csv_stream_line"]}
 {"near_body": ["api/routes/composite_templates.py:_mask_sub_pipeline_graph", "api/routes/pipelines.py:_masked_snapshot_graph"]}
-{"near_body": ["cli/backup.py:_decredential_url", "launcher/upgrade.py:_decredential_url"]}
 {"near_body": ["core/cleanup_jobs/trigger_events_cleanup.py:cleanup_old_trigger_events", "core/cleanup_jobs/webhook_dedup_cleanup.py:cleanup_old_webhook_events"]}
 {"near_body": ["core/cron_helpers.py:compute_next_send", "core/reports/scheduler.py:compute_next_send"]}
 {"near_body": ["core/guardrails/policy_pack.py:_safe_input_path", "core/guardrails/sandbox_bridge.py:_safe_config_path"]}

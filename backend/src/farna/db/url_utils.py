@@ -45,7 +45,8 @@ real Postgres URL; prefix-only rewriting is strictly safer and matches the
 Settings contract.
 """
 
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+import os
+from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
 # ---------------------------------------------------------------------------
 # The three database role names (THE single definition, FAR-2570)
@@ -80,6 +81,7 @@ _REQUIRE_TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 _PLAINTEXT_SSLMODES = frozenset({"disable"})
 
 _POSTGRES_PREFIX = "postgres://"
+_POSTGRESQL_PREFIX = "postgresql://"
 _POSTGRES_ASYNC_PREFIX = "postgresql+asyncpg://"
 
 
@@ -99,6 +101,95 @@ def fix_database_url(url: str) -> str:
 
 
 _POSTGRES_SCHEMES = frozenset({"postgres", "postgresql", "postgresql+asyncpg", "postgresql+psycopg"})
+
+#: SQLAlchemy driver prefixes that a libpq client (psycopg / pg_dump / psql)
+#: cannot parse. libpq only understands ``postgresql://`` / ``postgres://``.
+_LIBPQ_UNSUPPORTED_PREFIXES = ("postgresql+asyncpg://", "postgresql+psycopg://", "postgresql+psycopg2://")
+
+
+def normalise_libpq_url(url: str) -> str:
+    """Rewrite a SQLAlchemy Postgres URL into the plain libpq scheme.
+
+    Every snapshot/restore entry point receives the URL the APPLICATION is
+    configured with — ``postgresql+asyncpg://`` in the shipped container —
+    while ``psycopg``, ``pg_dump`` and ``psql`` speak libpq only and reject the
+    ``+driver`` scheme outright (libpq: ``missing "=" after
+    "postgresql+asyncpg://..."``; psycopg: ``invalid dsn``). Normalising in ONE
+    place is what stops the two dump producers (the pre-upgrade snapshot and
+    ``farna-control backup``) from disagreeing about which schemes work.
+
+    ``postgres://`` is accepted as an alias for ``postgresql://`` (libpq
+    treats it as one, and the repo's own docs use it). Any other scheme is
+    refused loudly rather than handed to a driver that would fail confusingly
+    deeper in the call stack.
+    """
+    if url.startswith(_LIBPQ_UNSUPPORTED_PREFIXES):
+        return _POSTGRESQL_PREFIX + url.split("://", 1)[1]
+    if url.startswith(_POSTGRES_PREFIX):
+        return _POSTGRESQL_PREFIX + url[len(_POSTGRES_PREFIX) :]
+    if url.startswith(_POSTGRESQL_PREFIX):
+        return url
+    scheme = urlsplit(url).scheme or "<no scheme>"
+    raise ValueError(f"expected a PostgreSQL URL (postgresql:// or postgresql+asyncpg://), got scheme {scheme!r}")
+
+
+def split_postgres_credentials(url: str) -> tuple[str, str | None]:
+    """Split the password out of a Postgres URL.
+
+    Returns ``(url_without_password, password)`` with the password UNQUOTED.
+    The credential-free URL is what may appear in an argv element or an error
+    message; the password belongs in the child-scoped ``PGPASSWORD`` env (or a
+    psycopg ``password=`` connect argument), never in argv (world-readable via
+    ``/proc/<pid>/cmdline``) and never in a driver's error text.
+
+    A URL with no password is returned unchanged with ``None``. Username,
+    host, port, database, query string and scheme are preserved verbatim, so
+    this is safe to apply to an already-normalised libpq URL.
+    """
+    parts = urlsplit(url)
+    password = parts.password
+    if password is None:
+        return url, None
+    hostname = parts.hostname or ""
+    if ":" in hostname:  # IPv6 literal: urlsplit strips the brackets
+        hostname = f"[{hostname}]"
+    # ``urlsplit`` does NOT percent-decode the username, so it is already in the
+    # encoded form ``urlunsplit`` expects. Re-quoting it would double-encode an
+    # already percent-encoded name (``us%40er`` -> ``us%2540er``).
+    userinfo = f"{parts.username}@" if parts.username else ""
+    netloc = f"{userinfo}{hostname}"
+    if parts.port is not None:
+        netloc += f":{parts.port}"
+    return urlunsplit(parts._replace(netloc=netloc)), unquote(password)
+
+
+def pg_child_env(password: str | None) -> dict[str, str]:
+    """Child-scoped environment for pg_dump/psql: the password ONLY as PGPASSWORD.
+
+    The companion to :func:`split_postgres_credentials`: the credential-free URL
+    is the argv element, and the password travels here, in the child's
+    environment, so it never appears in a world-readable ``/proc/<pid>/cmdline``.
+    Any inherited ``PGPASSWORD`` is dropped first so an unrelated one cannot leak
+    into the child. The ONE implementation every dump/restore producer calls.
+    """
+    env = dict(os.environ)
+    env.pop("PGPASSWORD", None)
+    if password is not None:
+        env["PGPASSWORD"] = password
+    return env
+
+
+def psycopg_connect_args(url: str) -> tuple[str, str | None]:
+    """``(dsn, password)`` that connect psycopg to *url* WITHOUT the password in the DSN.
+
+    The one entry every snapshot/restore psycopg connection goes through: the
+    SQLAlchemy scheme is normalised, the password is lifted out of the DSN and
+    returned separately so it can be passed as ``psycopg.connect(password=...)``.
+    That keeps the credential out of every error message psycopg renders from
+    the DSN (a connection failure quotes the DSN verbatim), which is exactly how
+    a superuser password used to reach stderr.
+    """
+    return split_postgres_credentials(normalise_libpq_url(url))
 
 
 def _ssl_value_for_mode(raw_value: str) -> str | bool:

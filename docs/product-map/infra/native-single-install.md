@@ -138,7 +138,12 @@ manifest `features:` registry.
       <!-- behaviour: native-single-install-06 | tests: backend/tests/unit/scripts/test_install_support_block.py::test_support_block_names_target_stage_log_and_reference -->
 - [x] An upgrade enforces a pre-upgrade `pg_dump` through the old bundle's
       runtime: the dump goes to a versioned snapshot inside the data dir, must be
-      non-empty, and any failure aborts before the binary swap. The database
+      non-empty, and any failure aborts before the binary swap. The dump is
+      taken ONLY when a migration against the NEW bundle is actually pending —
+      the shared helper owns that decision (`--target-bundle` names the bundle
+      being upgraded TO, never the old install running the helper), so an
+      installer re-run cannot rotate the recovery points for nothing and an
+      unreadable target fails closed. The database
       password never appears in argv, a live holder on the data-dir lock is
       refused, and a stop-then-rerun flow requires `--skip-backup` as an explicit
       acknowledgement that a verified snapshot already exists. A failed boot
@@ -148,7 +153,9 @@ manifest `features:` registry.
       `::test_dump_password_is_never_in_argv`,
       `::test_perform_upgrade_live_process_aborts`,
       `::test_perform_upgrade_skip_backup_runs_no_dump`,
-      `::test_perform_upgrade_boot_failure_prints_snapshot_and_restore`).
+      `::test_perform_upgrade_boot_failure_prints_snapshot_and_restore`,
+      `test_upgrade_skip_backup.py::TestThePendingCheckCannotBeBypassed`,
+      `test_compose_restore_wiring.py::TestTheInstallerCannotBypassThePendingCheck`).
       <!-- behaviour: native-single-install-07 | tests: backend/tests/unit/launcher/test_upgrade.py::test_pre_upgrade_dump_reports_snapshot -->
 - [x] The in-product `farna-control upgrade <target-version>` performs the same
       verified flow: it stages and re-verifies the signed release, rejects a

@@ -45,6 +45,18 @@ _loader.exec_module(mod)
 
 BASELINE = "backend/tests/architecture/brand_consistency_baseline.txt"
 ARCH = "backend/tests/architecture"
+READ_CREDENTIAL_ALLOWLIST = "backend/tests/unit/api/read_credential_jwt_only_allowlist.txt"
+
+# The read-credential allowlist carries a frozen header, so every fixture below
+# keeps its counts consistent with its entries - the parser rejects drift.
+_READ_CREDENTIAL_BASE_HEADER = "# Frozen (test):\n#   read routes total: 3\n#   jwt_only: 1   shared_secret: 1   any_credential: 1   public/exempt: 0\n"
+_READ_CREDENTIAL_BASE = _READ_CREDENTIAL_BASE_HEADER + ("jwt_only\tGET\t/api/v1/a\treason a\nshared_secret\tGET\t/scim/v2/b\tSCIM shared secret\n")
+_READ_CREDENTIAL_LOOSENED = "# Frozen (test):\n#   read routes total: 4\n#   jwt_only: 2   shared_secret: 1   any_credential: 1   public/exempt: 0\njwt_only\tGET\t/api/v1/a\treason a\njwt_only\tGET\t/api/v1/extra\treason extra\nshared_secret\tGET\t/scim/v2/b\tSCIM shared secret\n"
+_READ_CREDENTIAL_TIGHTENED = "# Frozen (test):\n#   read routes total: 2\n#   jwt_only: 0   shared_secret: 1   any_credential: 1   public/exempt: 0\nshared_secret\tGET\t/scim/v2/b\tSCIM shared secret\n"
+_READ_CREDENTIAL_KIND_CHANGED = "# Frozen (test):\n#   read routes total: 3\n#   jwt_only: 0   shared_secret: 2   any_credential: 1   public/exempt: 0\nshared_secret\tGET\t/api/v1/a\treason a\nshared_secret\tGET\t/scim/v2/b\tSCIM shared secret\n"
+_READ_CREDENTIAL_REWORDED = _READ_CREDENTIAL_BASE_HEADER + ("jwt_only\tGET\t/api/v1/a\ta better reason\nshared_secret\tGET\t/scim/v2/b\tanother reason\n")
+_READ_CREDENTIAL_STALE_HEADER = _READ_CREDENTIAL_BASE_HEADER + ("jwt_only\tGET\t/api/v1/a\treason a\njwt_only\tGET\t/api/v1/extra\treason extra\nshared_secret\tGET\t/scim/v2/b\tSCIM shared secret\n")
+_READ_CREDENTIAL_BAD_ARITHMETIC = "# Frozen (test):\n#   read routes total: 9\n#   jwt_only: 1   shared_secret: 1   any_credential: 1   public/exempt: 0\njwt_only\tGET\t/api/v1/a\treason a\nshared_secret\tGET\t/scim/v2/b\tSCIM shared secret\n"
 
 
 def _ratchet(key: str) -> mod.Ratchet:
@@ -210,6 +222,11 @@ _CASES: dict[str, tuple[str, str, str]] = {
         "sonar.coverage.exclusions=tests/**,docs/**,scripts/**\n",
         "sonar.coverage.exclusions=tests/**\n",
     ),
+    "read-credential-allowlist": (
+        _READ_CREDENTIAL_BASE,
+        _READ_CREDENTIAL_LOOSENED,
+        _READ_CREDENTIAL_TIGHTENED,
+    ),
 }
 
 
@@ -359,6 +376,68 @@ def test_duplicate_predicate_parse_errors_fail_closed(text):
 
 
 # ---------------------------------------------------------------------------
+# Read-credential allowlist (FAR-2727 / FAR-2731)
+# ---------------------------------------------------------------------------
+def test_read_credential_allowlist_parses_entries_and_frozen_counts():
+    parsed = mod._parse_read_credential_allowlist(_READ_CREDENTIAL_BASE, source="t")
+
+    assert parsed.entries == {("GET", "/api/v1/a"): "jwt_only", ("GET", "/scim/v2/b"): "shared_secret"}
+    assert parsed.counts["read routes total"] == 3
+
+
+def test_read_credential_allowlist_rejects_an_entry_the_header_does_not_count():
+    with pytest.raises(mod.RatchetError, match="frozen header says"):
+        mod._parse_read_credential_allowlist(_READ_CREDENTIAL_STALE_HEADER, source="t")
+
+
+def test_read_credential_allowlist_rejects_inconsistent_header_arithmetic():
+    with pytest.raises(mod.RatchetError, match="frozen header is inconsistent"):
+        mod._parse_read_credential_allowlist(_READ_CREDENTIAL_BAD_ARITHMETIC, source="t")
+
+
+def test_read_credential_allowlist_rejects_an_unknown_kind():
+    text = _READ_CREDENTIAL_BASE.replace("jwt_only\tGET\t/api/v1/a", "bogus\tGET\t/api/v1/a")
+
+    with pytest.raises(mod.RatchetError, match="unknown credential kind"):
+        mod._parse_read_credential_allowlist(text, source="t")
+
+
+def test_read_credential_allowlist_rejects_a_duplicate_route():
+    text = _READ_CREDENTIAL_BASE.replace(
+        "shared_secret\tGET\t/scim/v2/b\tSCIM shared secret",
+        "shared_secret\tGET\t/api/v1/a\tduplicate",
+    )
+
+    with pytest.raises(mod.RatchetError, match="duplicate allowlist entry"):
+        mod._parse_read_credential_allowlist(text, source="t")
+
+
+def test_read_credential_allowlist_rejects_a_line_without_four_fields():
+    text = _READ_CREDENTIAL_BASE + "jwt_only\tGET\t/api/v1/c\n"
+
+    with pytest.raises(mod.RatchetError, match="expected 4 tab-separated fields"):
+        mod._parse_read_credential_allowlist(text, source="t")
+
+
+def test_read_credential_allowlist_reason_rewording_is_not_a_loosening():
+    ratchet = _ratchet("read-credential-allowlist")
+    base = ratchet.parse(_READ_CREDENTIAL_BASE, source="base")
+    reworded = ratchet.parse(_READ_CREDENTIAL_REWORDED, source="reworded")
+
+    assert not ratchet.loosenings(base, reworded)
+
+
+def test_read_credential_allowlist_kind_change_is_a_loosening():
+    ratchet = _ratchet("read-credential-allowlist")
+    base = ratchet.parse(_READ_CREDENTIAL_BASE, source="base")
+    kind_changed = ratchet.parse(_READ_CREDENTIAL_KIND_CHANGED, source="kind-changed")
+
+    findings = ratchet.loosenings(base, kind_changed)
+
+    assert any("CHANGED" in finding for finding in findings)
+
+
+# ---------------------------------------------------------------------------
 # End-to-end: real subprocess against a throwaway git repository
 # ---------------------------------------------------------------------------
 _TIMEOUT_SECONDS = 60
@@ -382,6 +461,7 @@ _RATCHET_FIXTURES: dict[str, str] = {
     ".trivyignore": "# header\n",
     ".semgrepignore": "node_modules/\n",
     "sonar-project.properties": "sonar.coverage.exclusions=tests/**\n",
+    READ_CREDENTIAL_ALLOWLIST: _READ_CREDENTIAL_BASE,
 }
 
 
@@ -638,7 +718,7 @@ def test_end_to_end_all_ratchets_unchanged_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 17 ratchets is loosened" in proc.stderr
+    assert "none of the 18 ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
@@ -650,7 +730,7 @@ def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD^")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 17 ratchets is loosened" in proc.stderr
+    assert "none of the 18 ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_existing_file_brand_entry_fails(tmp_path):
@@ -715,3 +795,51 @@ def test_end_to_end_all_ratchets_introduced_ratchet_passes_with_notice(tmp_path)
     assert proc.returncode == 0, proc.stderr
     assert "introduces the ratchet" in proc.stderr
     assert "[trivyignore]" in proc.stderr
+
+
+def test_end_to_end_read_credential_added_route_fails_naming_it(tmp_path):
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_LOOSENED)
+    _commit_all(repo, "add a non-mk_ read to the allowlist")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "[read-credential-allowlist]" in proc.stderr
+    assert "ADDED" in proc.stderr
+    assert "/api/v1/extra" in proc.stderr
+
+
+def test_end_to_end_read_credential_removed_route_passes(tmp_path):
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_TIGHTENED)
+    _commit_all(repo, "remove a read from the allowlist")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 0, proc.stderr
+    assert "none of the 18 ratchets is loosened" in proc.stderr
+
+
+def test_end_to_end_read_credential_kind_change_fails(tmp_path):
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_KIND_CHANGED)
+    _commit_all(repo, "change an allowlisted route's credential kind")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "[read-credential-allowlist]" in proc.stderr
+    assert "CHANGED" in proc.stderr
+
+
+def test_end_to_end_read_credential_header_drift_fails_closed(tmp_path):
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_STALE_HEADER)
+    _commit_all(repo, "add an entry without updating the frozen header")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "FAILED CLOSED" in proc.stderr
+    assert "[read-credential-allowlist]" in proc.stderr

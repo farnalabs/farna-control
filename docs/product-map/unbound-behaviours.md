@@ -10,8 +10,8 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 443 of 869 ticked behaviours (79 node, 137 feature, 227 module strength).
-Weak bindings (module-only): 227. This count is ratcheted shrink-only in the baseline.
+Bound today: 458 of 885 ticked behaviours (84 node, 137 feature, 237 module strength).
+Weak bindings (module-only): 237. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
 
@@ -745,6 +745,8 @@ Derived status: `partial`
 
 - `backup-restore-12` - `.github/workflows/backup-restore-nightly.yml` runs
   - why: behaviour text names no test; only code paths (or nothing) are cited
+- `backup-restore-28` - The compose release bundle ships `compose-restore.sh` — the one documented
+  - why: behaviour text names no test; only code paths (or nothing) are cited
 
 ## docs/product-map/infra/container-deployment.md
 
@@ -1153,7 +1155,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 79  Feature: 137  Module (weak): 227
+Node: 84  Feature: 137  Module (weak): 237
 
 ### Weak (module-only) bindings
 
@@ -1232,6 +1234,26 @@ test. The list is ratcheted shrink-only in the baseline: it may not grow.
   - refs: backend/tests/unit/scripts/test_restore.py
 - `backup-restore-11` - `scripts/backup-prune.py` applies the documented retention policy (7 daily,
   - refs: backend/tests/unit/scripts/test_backup_prune.py, backend/tests/unit/scripts/test_backup_prune_classify_one.py
+- `backup-restore-13` - Both upgrade paths take a pre-upgrade snapshot immediately before the
+  - refs: backend/tests/unit/launcher/test_upgrade_snapshot.py
+- `backup-restore-14` - The snapshot refuses the upgrade before writing anything when the output
+  - refs: backend/tests/unit/launcher/test_upgrade_snapshot.py
+- `backup-restore-15` - A dump is accepted only when it is PROVEN complete at dump time:
+  - refs: backend/tests/unit/launcher/test_upgrade_snapshot.py
+- `backup-restore-16` - Retention is BOUNDED: it keeps the two newest VERIFIED snapshots plus
+  - refs: backend/tests/unit/launcher/test_upgrade_snapshot.py
+- `backup-restore-18` - The disk guard accounts for the snapshots retention KEEPS, not just the
+  - refs: backend/tests/unit/launcher/test_upgrade_snapshot.py
+- `backup-restore-20` - A dump is replayable by the release that took it: pg_dump emits the
+  - refs: backend/tests/unit/db/test_plain_dump.py
+- `backup-restore-22` - The stop does not leave the restore without a database: the launcher's
+  - refs: backend/tests/integration/test_restore_bundled_cluster_window.py
+- `backup-restore-24` - Restore refuses a MISSING dump when the archive describes one (a silent
+  - refs: backend/tests/unit/cli/test_backup_restore_semantics.py
+- `backup-restore-25` - The compose path's recovery VERIFIES before it destroys: the helper
+  - refs: backend/tests/unit/cli/test_backup_restore_semantics.py, backend/tests/unit/scripts/test_compose_restore_wiring.py
+- `backup-restore-26` - `--skip-backup` skips the DUMP, not the recovery point: it refuses unless
+  - refs: backend/tests/unit/launcher/test_upgrade_skip_backup.py
 - `connectors-01` - A REST connector is creatable with a declarative endpoint (base_url + path
   - refs: backend/tests/unit/api/test_connectors_endpoint.py
 - `connectors-26` - A connector's operation scope is UNRESTRICTED unless a non-empty

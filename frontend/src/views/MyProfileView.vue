@@ -145,13 +145,13 @@
           </div>
         </div>
 
-        <p
+        <ErrorAlert
           v-if="hitlSaveError"
-          role="alert"
-          aria-live="assertive"
-          class="text-sm text-destructive"
           data-testid="my-profile-hitl-email-error"
-        >{{ hitlSaveError }}</p>
+          compact
+          :message="hitlSaveError"
+          :retryable="false"
+        />
         <p v-if="hitlSaveSuccess" class="text-sm text-success-text" aria-live="polite" data-testid="my-profile-hitl-email-success">{{ $t('views.MyProfileView.hitl_email_saved') }}</p>
 
         <Button type="button" :disabled="hitlSaving" class="border border-primary/30 w-full sm:w-auto" data-testid="my-profile-hitl-email-save" @click="saveHitlEmailPrefs">

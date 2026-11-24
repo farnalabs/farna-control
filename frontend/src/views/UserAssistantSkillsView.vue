@@ -92,7 +92,7 @@
           </tbody>
         </table>
       </div>
-      <div v-if="skillToggleError" class="px-4 pt-2 text-sm text-destructive">{{ skillToggleError }}</div>
+      <ErrorAlert v-if="skillToggleError" compact class="mx-4 mt-2" :message="skillToggleError" :retryable="false" />
     </template>
     <AssistantSkillDialog
       ref="skillDialogRef"
