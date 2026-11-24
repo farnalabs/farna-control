@@ -23,6 +23,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 import farna.core.pipeline_execution as pe
 import farna.core.run_terminal_advance as rta
 from farna.db.models.run import ACTIVE_RUN_STATUSES, Run
+from farna.db.rls import set_rls_org as _canonical_set_rls_org
 
 
 @pytest.fixture(autouse=True)
@@ -2726,7 +2727,7 @@ class TestSetRlsOrg:
         session.get_bind = MagicMock(return_value=bind_mock)
         org_id = uuid.uuid4()
 
-        await pe.set_rls_org(session, org_id)
+        await _canonical_set_rls_org(session, org_id)
 
         assert session.info["org_id"] == org_id
 
@@ -2740,7 +2741,7 @@ class TestSetRlsOrg:
         session.execute = AsyncMock()
         org_id = uuid.uuid4()
 
-        await pe.set_rls_org(session, org_id)
+        await _canonical_set_rls_org(session, org_id)
 
         session.execute.assert_awaited_once()
         stmt, params = session.execute.await_args.args
