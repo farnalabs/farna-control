@@ -5,11 +5,13 @@
     <FeatureGate feature-name="error_forwarders" show-disabled>
 
       <div v-if="loading" class="space-y-6">
-        <div
+        <BaseCard
           v-for="n in 3"
           :key="`error-forwarders-skeleton-${n}`"
           data-testid="error-forwarders-skeleton"
-          class="rounded-lg border bg-card p-4 shadow-sm animate-pulse"
+          padding="md"
+          elevation="sm"
+          class="animate-pulse"
         >
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-lg bg-muted" />
@@ -19,7 +21,7 @@
             </div>
             <div class="h-6 w-11 rounded-full bg-muted" />
           </div>
-        </div>
+        </BaseCard>
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadForwarders" />

@@ -16,31 +16,31 @@
       </div>
 
       <div v-if="loading" data-testid="settings-observability-loading" class="space-y-6">
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 h-5 w-40 bg-muted rounded" />
           <div class="mb-1 h-4 w-32 bg-muted rounded" />
           <div class="h-9 w-full bg-muted rounded" />
-        </div>
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        </BaseCard>
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 flex items-center justify-between">
             <div class="h-5 w-32 bg-muted rounded" />
             <div class="h-8 w-28 bg-muted rounded" />
           </div>
           <div class="h-9 w-full bg-muted rounded" />
-        </div>
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        </BaseCard>
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 h-5 w-36 bg-muted rounded" />
           <div class="mb-1 h-4 w-40 bg-muted rounded" />
           <div class="h-9 w-full bg-muted rounded" />
           <div class="mt-2 h-3 w-2/3 bg-muted rounded" />
-        </div>
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        </BaseCard>
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 h-5 w-28 bg-muted rounded" />
           <div class="flex items-center gap-3">
             <div class="h-6 w-11 rounded-full bg-muted" />
             <div class="h-4 w-48 bg-muted rounded" />
           </div>
-        </div>
+        </BaseCard>
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadSettings" />
@@ -249,6 +249,7 @@ import { usePlanStore } from '../stores/planStore'
 import { formatApiError } from '../lib/api/formatError'
 import FeatureGate from '../components/FeatureGate.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Button from 'primevue/button'
 import { X } from '@lucide/vue'
