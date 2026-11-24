@@ -77,8 +77,11 @@ not identity, so rewording it passes. The file header freezes the counts it was
 created with; the parser asserts ``jwt_only`` and ``shared_secret`` each equal
 the parsed entries of that kind (and so their sum equals the entry count) and
 that ``read routes total`` equals ``jwt_only + shared_secret + any_credential +
-public/exempt`` - so an author cannot silently edit a frozen number, whether
-alone or alongside an added entry.
+public/exempt``. ``jwt_only`` and ``shared_secret`` are therefore pinned to the
+parsed entries: they cannot be edited on their own or alongside an added entry.
+``any_credential`` and ``public/exempt`` are human-recorded (only the four-way
+sum constrains them), so raising those two together with ``read routes total``
+still parses - they are a review invariant, not a derived count.
 
 Base revision
 -------------
