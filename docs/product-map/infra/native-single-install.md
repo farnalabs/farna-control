@@ -219,7 +219,10 @@ manifest `features:` registry.
       defaulting to OFF: the Linux and macOS installers ask on an interactive
       terminal (and take the default silently when stdin is not a terminal or
       `--no-telemetry-prompt` is passed), and the Windows wizard shows one
-      custom page with the decline option pre-selected. Accepting on Linux or
+      custom page with the decline option pre-selected (skipped once a decision
+      is already recorded in `config.env`; on an upgrade from a build that
+      predates the opt-in it appends the two keys to the launcher's existing
+      file). Accepting on Linux or
       macOS writes `FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL`,
       `FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET` (a freshly generated
       secret) and `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true` into the

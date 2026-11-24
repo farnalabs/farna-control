@@ -163,8 +163,9 @@ configure_product_analytics() {
   fi
 
   printf '\nFarna Control can send anonymous product analytics to Farnalabs.\n'
-  printf 'It is OFF unless you choose to turn it on now, and you can change this\n'
-  printf 'later in the app (Administration, Product analytics).\n\n'
+  printf 'It is OFF unless you choose to turn it on now. You can turn it off\n'
+  printf 'later in the app (Administration, Product analytics); turning it on\n'
+  printf 'after declining requires updating the instance configuration.\n\n'
   printf 'If you turn it on, once a day this instance sends aggregate counts only:\n'
   printf '  - how many organisations, pipelines, agents, schemas, teams, model\n'
   printf '    backends, connector instances and triggers exist\n'

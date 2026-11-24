@@ -1142,8 +1142,9 @@ configure_product_analytics_optin() {
   # Rules (FAR-2741):
   #   * Ask ONCE, during first-run setup, default OFF. An existing config.env
   #     means setup already happened, so a re-run/upgrade never asks again.
-  #   * The operator environment always wins: if any of the three names is
-  #     already set, never ask and never persist a copy.
+  #   * The operator environment always wins for each name it supplies, so a
+  #     copy of an environment value is never persisted. The persisted lines for
+  #     the names it does NOT supply are still carried over.
   #   * ACCEPT writes all three (endpoint, a freshly generated instance secret,
   #     and the ON switch). DECLINE writes NOTHING - absence is the off state,
   #     so `..._ENABLED=false` is deliberately not written either.
@@ -1152,19 +1153,42 @@ configure_product_analytics_optin() {
   #   * Existing analytics lines are carried over verbatim so a re-run of this
   #     installer cannot silently turn analytics off (or rotate the secret).
   local config_path="$1" existing="$2"
-  local endpoint secret enabled answer instance_secret
+  local endpoint secret enabled answer instance_secret carry key line
   product_analytics_block=""
-
-  if [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL:-}" \
-     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" \
-     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]]; then
-    info "product analytics: configured through the environment; leaving config.env unchanged"
-    return 0
-  fi
 
   endpoint="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=//p' | head -n 1)"
   secret="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=//p' | head -n 1)"
   enabled="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=//p' | head -n 1)"
+
+  if [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL:-}" \
+     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" \
+     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]]; then
+    # Never persist a copy of an environment value, but DO carry over the
+    # persisted lines for the names the environment did not supply.
+    # ensure_runtime_keys rewrites config.env from `product_analytics_block`
+    # after stripping these three lines, so returning here with an empty block
+    # would silently delete a persisted endpoint/secret/switch on a partial
+    # env override and the next boot could rotate the secret or leave
+    # analytics off (FAR-2741 review).
+    carry=""
+    while IFS= read -r line; do
+      key="${line%%=*}"
+      case "${key}" in
+        FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL)
+          [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL:-}" ]] && continue ;;
+        FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET)
+          [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" ]] && continue ;;
+        FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED)
+          [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]] && continue ;;
+      esac
+      carry="${carry}${line}"$'\n'
+    done < <(printf '%s\n' "${existing}" \
+      | sed -n '/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=/p')
+    product_analytics_block="${carry%$'\n'}"
+    info "product analytics: configured through the environment; keeping the persisted settings it did not override"
+    return 0
+  fi
+
   if [[ -n "${endpoint}" || -n "${secret}" || -n "${enabled}" ]] || [[ -e "${config_path}" ]]; then
     # Already answered (or this is an upgrade): keep whatever is there.
     product_analytics_block="$(printf '%s\n' "${existing}" \
@@ -1186,8 +1210,9 @@ configure_product_analytics_optin() {
 
   info ""
   info "Farna Control can send anonymous product analytics to Farnalabs."
-  info "It is OFF unless you choose to turn it on now, and you can change this"
-  info "later in the app (Administration, Product analytics)."
+  info "It is OFF unless you choose to turn it on now. You can turn it off"
+  info "later in the app (Administration, Product analytics); turning it on"
+  info "after declining requires updating the instance configuration."
   info ""
   info "If you turn it on, once a day this instance sends aggregate counts only:"
   info "  - how many organisations, pipelines, agents, schemas, teams, model"

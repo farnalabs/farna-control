@@ -510,8 +510,9 @@ begin
     'and outcomes); counts of error families; and an inventory of which provider ' +
     'and connector types are in use. No prompts, pipeline outputs, credentials or ' +
     'customer content are sent. It goes to the Farnalabs telemetry service at ' +
-    ANALYTICS_ENDPOINT_URL + '. You can change this later in the app ' +
-    '(Administration, Product analytics).',
+    ANALYTICS_ENDPOINT_URL + '. You can turn it off later in the app ' +
+    '(Administration, Product analytics); turning it on after declining ' +
+    'requires updating the instance configuration.',
     True, False);
   AnalyticsPage.Add('Do not send analytics (default)');
   AnalyticsPage.Add('Send anonymous aggregate analytics');
@@ -524,11 +525,42 @@ begin
   Result := (AnalyticsPage <> nil) and AnalyticsPage.Values[1];
 end;
 
+function AnalyticsConfigPath: String;
+begin
+  Result := ExpandConstant('{commonappdata}') + '\' + LOG_DIR_NAME + ANALYTICS_DATA_SUBDIR + '\config.env';
+end;
+
+{ True when a previous run already recorded an analytics decision in config.env.
+  The page is skipped in that case, so the installer never shows a choice whose
+  answer WriteProductAnalyticsConfig would have to ignore. On an upgrade from a
+  version that predates FAR-2741 the launcher has written config.env but it has
+  no analytics switch, so the page still appears and ACCEPT appends the keys. }
+function AnalyticsConfigured: Boolean;
+var
+  ConfigPath: String;
+  Content: AnsiString;
+begin
+  Result := False;
+  ConfigPath := AnalyticsConfigPath;
+  if not FileExists(ConfigPath) then
+    Exit;
+  if not LoadStringFromFile(ConfigPath, Content) then
+    Exit;
+  Result := Pos('FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=', Content) > 0;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (AnalyticsPage <> nil) and (PageID = AnalyticsPage.ID) and AnalyticsConfigured;
+end;
+
 procedure WriteProductAnalyticsConfig;
 var
   ConfigDir: String;
   ConfigPath: String;
   Content: String;
+  Existing: AnsiString;
+  Append: Boolean;
 begin
   if not AnalyticsOptedIn then
   begin
@@ -537,12 +569,6 @@ begin
   end;
   ConfigDir := ExpandConstant('{commonappdata}') + '\' + LOG_DIR_NAME + ANALYTICS_DATA_SUBDIR;
   ConfigPath := ConfigDir + '\config.env';
-  { Ask once: an existing config.env means this install already answered. }
-  if FileExists(ConfigPath) then
-  begin
-    WriteInstallLog('Product analytics: ' + ConfigPath + ' already exists; leaving it unchanged.');
-    Exit;
-  end;
   if not ForceDirectories(ConfigDir) then
   begin
     MarkFailure('post-install', 'could not create the native data directory for the analytics opt-in: ' + ConfigDir);
@@ -551,7 +577,21 @@ begin
   Content :=
     'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=' + ANALYTICS_ENDPOINT_URL + #13#10 +
     'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' + #13#10;
-  if not SaveStringToFile(ConfigPath, Content, False) then
+  { The page is only shown when the analytics switch is absent, so ACCEPT either
+    creates config.env (fresh install) or appends to the launcher's existing
+    file (an upgrade from a version that predates FAR-2741). Appending keeps the
+    launcher's SECRET_KEY/FERNET_KEY lines intact. }
+  Append := FileExists(ConfigPath);
+  if Append then
+  begin
+    Existing := '';
+    if LoadStringFromFile(ConfigPath, Existing) then
+    begin
+      if (Length(Existing) > 0) and (Existing[Length(Existing)] <> #10) then
+        Content := #13#10 + Content;
+    end;
+  end;
+  if not SaveStringToFile(ConfigPath, Content, Append) then
   begin
     MarkFailure('post-install', 'could not write the product-analytics settings to ' + ConfigPath);
     Exit;

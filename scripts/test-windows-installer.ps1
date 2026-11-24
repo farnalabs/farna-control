@@ -524,6 +524,7 @@ type
     option. Used by the FAR-2741 product-analytics opt-in page. }
   TInputOptionWizardPage = class
   public
+    ID: Integer;
     Values: TArrayOfBoolean;
     procedure Add(const S: String);
   end;
@@ -539,6 +540,7 @@ const
 
 function ExpandConstant(const S: String): String; begin Result := S; end;
 function SaveStringToFile(const FileName: String; const S: AnsiString; const Append: Boolean): Boolean; begin Result := True; end;
+function LoadStringFromFile(const FileName: String; var S: AnsiString): Boolean; begin Result := False; end;
 function FileExists(const Name: String): Boolean; begin Result := False; end;
 function DirExists(const Name: String): Boolean; begin Result := False; end;
 function ForceDirectories(Dir: string): Boolean; begin Result := True; end;
@@ -689,6 +691,10 @@ end.
         @{ Name = "Decline writes no OFF switch"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=false'; Forbidden = $true }
         @{ Name = "Config path is the launcher data dir"; Pattern = 'LOG_DIR_NAME \+ ANALYTICS_DATA_SUBDIR' }
         @{ Name = "Writer runs at post-install"; Pattern = '(?s)ssPostInstall.*WriteProductAnalyticsConfig' }
+        @{ Name = "Page-skip hook exists"; Pattern = 'function ShouldSkipPage' }
+        @{ Name = "Configured-detection helper exists"; Pattern = 'function AnalyticsConfigured' }
+        @{ Name = "Analytics writer appends to an existing config.env"; Pattern = 'SaveStringToFile\(ConfigPath, Content, Append\)' }
+        @{ Name = "Writer no longer aborts when config.env already exists"; Pattern = 'already exists; leaving it unchanged'; Forbidden = $true }
     )
     $analyticsFailures = @()
     foreach ($p in $analyticsChecks) {
