@@ -945,6 +945,40 @@ def require_feature(feature_name: str) -> DependsParameter:
     return cast("DependsParameter", Depends(_check))
 
 
+def require_feature_any_credential(feature_name: str) -> DependsParameter:
+    """FastAPI dependency factory — feature gate for a JWT OR ``mk_`` API-key caller.
+
+    Identical entitlement decision to :func:`require_feature`, but the plan is
+    resolved from :func:`get_plan_context_any_credential`, which authenticates
+    through ``get_current_tenant_user_or_api_key`` rather than the JWT-only
+    ``get_current_user``. Plain :func:`require_feature` therefore rejects an
+    ``mk_`` org API key with 401 *before* the handler even when the route's
+    permission gate is the any-credential variant — the exact regression that
+    made ``GET/POST /api/v1/schemas/{schema_id}/versions`` contradict their
+    FAR-681 ``any_credential`` comment (FAR-2729).
+
+    Use this ONLY on a route that is already any-credential: paired with a
+    JWT-only ``require_permission`` gate it would still narrow the route.
+
+    Like :func:`require_feature`, this reads only the tier/licence-derived plan
+    state; it does NOT apply ``organisations.settings_json.feature_overrides``.
+
+    .. code-block:: python
+
+       dependencies=[require_feature_any_credential("schema_version_history")]
+    """
+
+    def _check(ctx: PlanContext = Depends(get_plan_context_any_credential)) -> None:
+        if not ctx.feature_enabled(feature_name):
+            raise ProblemException(
+                ProblemType.FEATURE_REQUIRED,
+                detail=_feature_required_detail(feature_name, ctx.tier()),
+                instance=feature_name,
+            )
+
+    return cast("DependsParameter", Depends(_check))
+
+
 def require_entitlement(entitlement_key: str) -> DependsParameter:
     """FastAPI dependency factory — blocks a route unless the plan holds an ENTITLEMENT.
 
@@ -1289,12 +1323,17 @@ async def get_anonymous_plan_context(
     return await resolve_anonymous_plan_context(settings, session)
 
 
-async def get_plan_context(
-    current_user: AuthenticatedPrincipal = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
-    settings: Settings = Depends(get_settings),
+async def _resolve_plan_context_for_org(
+    session: AsyncSession,
+    settings: Settings,
+    organisation_id: uuid.UUID | None,
 ) -> PlanContext:
-    """FastAPI dependency — resolve plan context per-org.
+    """Resolve the plan context for one organisation.
+
+    Shared resolution body of :func:`get_plan_context` (JWT principal) and
+    :func:`get_plan_context_any_credential` (JWT or ``mk_`` API key). The
+    caller supplies the organisation id from whichever principal it
+    authenticated; the resolution order is identical either way.
 
     Resolution order:
     1. Org-level license key (from ``org.settings_json["license_key"]``)
@@ -1307,10 +1346,10 @@ async def get_plan_context(
     from farna.db.crud.organisation import get_organisation
 
     org = None
-    if current_user.organisation_id is not None:
+    if organisation_id is not None:
         try:
             async with session.begin():
-                org = await get_organisation(session, current_user.organisation_id)
+                org = await get_organisation(session, organisation_id)
         except ProgrammingError:
             logger.exception("api.dependencies")
 
@@ -1332,6 +1371,38 @@ async def get_plan_context(
         logger.warning("Session does not support resolve_plan_context — returning CommunityTier")
 
         return CommunityTier()
+
+
+async def get_plan_context(
+    current_user: AuthenticatedPrincipal = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+) -> PlanContext:
+    """FastAPI dependency — resolve plan context per-org from a JWT principal.
+
+    See :func:`_resolve_plan_context_for_org` for the resolution order. Use
+    :func:`get_plan_context_any_credential` instead when the route must accept
+    an ``mk_`` org API key (FAR-2729).
+    """
+    return await _resolve_plan_context_for_org(session, settings, current_user.organisation_id)
+
+
+async def get_plan_context_any_credential(
+    principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+) -> PlanContext:
+    """FastAPI dependency — plan context for a JWT OR ``mk_`` org API-key caller.
+
+    Drop-in for :func:`get_plan_context` on a route that is documented as
+    accepting the CI/CD API-key credential (PRD §5.2 / §9.3): it resolves the
+    organisation through ``get_current_tenant_user_or_api_key`` instead of the
+    JWT-only ``get_current_user``, so an ``mk_`` key is not rejected as an
+    invalid JWT before the feature gate runs. Pair it with the any-credential
+    permission gate; a JWT-only ``require_permission`` beside it would still
+    narrow the route.
+    """
+    return await _resolve_plan_context_for_org(session, settings, principal.organisation_id)
 
 
 async def get_current_tenant_user_optional(
