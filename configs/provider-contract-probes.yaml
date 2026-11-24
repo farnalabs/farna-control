@@ -11,21 +11,38 @@
 # ------
 # defaults:               applied to every probe unless the probe overrides it
 #   success_status_class: "2xx" | "4xx" | ... (status CLASS, not an exact code)
-#   timeout_seconds:      HTTP timeout
+#   timeout_seconds:      per-request HTTP timeout
 #   max_depth:            shape depth to pin (see scripts/provider_contract_probe.py)
+#   strict_shape:         when true (the default) an ADDED object key is drift
+#   deadline_seconds:     overall wall-clock budget for the whole check run
+#   retry:                attempts / base_delay_seconds / max_delay_seconds
 # providers:              list of probe definitions
 #   id:                   provider id (must be unique across providers + skips)
 #   kind:                 "connector" | "model_backend"
 #   operation:            operation id (unique within the provider)
 #   description:          what the call proves
 #   request:              {method, url, json?, form?}
+#   allowed_host:         the ONLY host the request.url may target (read-only)
 #   auth:                 credential declaration (see below)
+#   env_vars:             the ONLY env var names this probe may read; auth.env,
+#                         auth.params values and extra_headers values must be a
+#                         subset (a config edit cannot pull in another secret)
 #   success_status_class: optional override
 #   max_depth:            optional override
+#   strict_shape:         optional override
+#   timeout_seconds:      optional override
 #   normalise:            list of {path, rule} declared HERE, never in code
 #   static_headers:       literal headers (never secrets)
 #   extra_headers:        header name -> ENV VAR NAME (secret values)
 # skips:                  list of {id, kind, reason}
+# allow_missing_credential: mapping provider id -> reason. A recorded golden
+#                         with no credential in the environment FAILS the run
+#                         unless the id is listed here (rotated secret guard).
+# allow_missing_golden:   mapping provider id -> reason. A probe with NO golden
+#                         entry FAILS the run unless the id is listed here.
+# allow_unrecorded_golden: mapping provider id -> reason. A golden whose
+#                         recorded_at is null (hand-authored, never recorded
+#                         live) FAILS the run unless the id is listed here.
 #
 # auth.kind
 #   none    - no credential (public endpoint)
@@ -45,6 +62,11 @@
 # Paths are dot-separated. "*" matches every key of a dict at that level and
 # "[]" matches every element of a list at that level, e.g. "data.[].id".
 #
+# Read-only guarantee: only GET/HEAD are accepted, except the hardcoded
+# read-only-POST providers in scripts/provider_contract_probe.py. The host must
+# equal `allowed_host`, so a config edit cannot redirect a credential elsewhere
+# without that edit being visible against the pinned host.
+#
 # A secret value never enters a golden: goldens store a response SHAPE (key
 # names + value types), never response values.
 
@@ -54,6 +76,12 @@ defaults:
   success_status_class: "2xx"
   timeout_seconds: 20
   max_depth: 1
+  strict_shape: true
+  deadline_seconds: 1500
+  retry:
+    attempts: 3
+    base_delay_seconds: 1.0
+    max_delay_seconds: 30.0
 
 providers:
   # -------------------------------------------------------------------------
@@ -66,9 +94,12 @@ providers:
     request:
       method: GET
       url: https://app.asana.com/api/1.0/users/me
+    allowed_host: app.asana.com
     auth:
       kind: bearer
       env: MODULO_PROBE_ASANA_TOKEN
+    env_vars:
+      - MODULO_PROBE_ASANA_TOKEN
     max_depth: 2
     normalise:
       - path: data.gid
@@ -81,9 +112,12 @@ providers:
     request:
       method: GET
       url: https://api.bitbucket.org/2.0/user
+    allowed_host: api.bitbucket.org
     auth:
       kind: bearer
       env: MODULO_PROBE_BITBUCKET_TOKEN
+    env_vars:
+      - MODULO_PROBE_BITBUCKET_TOKEN
 
   - id: buildkite
     kind: connector
@@ -92,9 +126,12 @@ providers:
     request:
       method: GET
       url: https://api.buildkite.com/v2/user
+    allowed_host: api.buildkite.com
     auth:
       kind: bearer
       env: MODULO_PROBE_BUILDKITE_TOKEN
+    env_vars:
+      - MODULO_PROBE_BUILDKITE_TOKEN
 
   - id: circleci
     kind: connector
@@ -103,10 +140,13 @@ providers:
     request:
       method: GET
       url: https://circleci.com/api/v2/me
+    allowed_host: circleci.com
     auth:
       kind: header
       env: MODULO_PROBE_CIRCLECI_TOKEN
       header: Circle-Token
+    env_vars:
+      - MODULO_PROBE_CIRCLECI_TOKEN
 
   - id: codeclimate
     kind: connector
@@ -115,9 +155,12 @@ providers:
     request:
       method: GET
       url: https://api.codeclimate.com/v1/user
+    allowed_host: api.codeclimate.com
     auth:
       kind: bearer
       env: MODULO_PROBE_CODECLIMATE_TOKEN
+    env_vars:
+      - MODULO_PROBE_CODECLIMATE_TOKEN
 
   - id: datadog
     kind: connector
@@ -126,10 +169,14 @@ providers:
     request:
       method: GET
       url: https://api.datadoghq.com/api/v1/validate
+    allowed_host: api.datadoghq.com
     auth:
       kind: header
       env: MODULO_PROBE_DATADOG_API_KEY
       header: DD-API-KEY
+    env_vars:
+      - MODULO_PROBE_DATADOG_API_KEY
+      - MODULO_PROBE_DATADOG_APP_KEY
     extra_headers:
       DD-APPLICATION-KEY: MODULO_PROBE_DATADOG_APP_KEY
 
@@ -140,11 +187,14 @@ providers:
     request:
       method: GET
       url: https://discord.com/api/v10/users/@me
+    allowed_host: discord.com
     auth:
       kind: header
       env: MODULO_PROBE_DISCORD_TOKEN
       header: Authorization
       template: "Bot {token}"
+    env_vars:
+      - MODULO_PROBE_DISCORD_TOKEN
     normalise:
       - path: id
         rule: volatile
@@ -159,9 +209,12 @@ providers:
       method: POST
       url: https://api.dropboxapi.com/2/users/get_current_account
       json: null
+    allowed_host: api.dropboxapi.com
     auth:
       kind: bearer
       env: MODULO_PROBE_DROPBOX_TOKEN
+    env_vars:
+      - MODULO_PROBE_DROPBOX_TOKEN
     max_depth: 2
     normalise:
       - path: account_id
@@ -174,9 +227,12 @@ providers:
     request:
       method: GET
       url: https://api.github.com/rate_limit
+    allowed_host: api.github.com
     auth:
       kind: bearer
       env: MODULO_PROBE_GITHUB_TOKEN
+    env_vars:
+      - MODULO_PROBE_GITHUB_TOKEN
 
   - id: gitlab
     kind: connector
@@ -185,10 +241,13 @@ providers:
     request:
       method: GET
       url: https://gitlab.com/api/v4/user
+    allowed_host: gitlab.com
     auth:
       kind: header
       env: MODULO_PROBE_GITLAB_TOKEN
       header: PRIVATE-TOKEN
+    env_vars:
+      - MODULO_PROBE_GITLAB_TOKEN
 
   - id: linear
     kind: connector
@@ -199,10 +258,13 @@ providers:
       url: https://api.linear.app/graphql
       json:
         query: "{ viewer { id name email } }"
+    allowed_host: api.linear.app
     auth:
       kind: header
       env: MODULO_PROBE_LINEAR_TOKEN
       header: Authorization
+    env_vars:
+      - MODULO_PROBE_LINEAR_TOKEN
     max_depth: 3
     normalise:
       - path: data.viewer.id
@@ -215,9 +277,12 @@ providers:
     request:
       method: GET
       url: https://graph.microsoft.com/v1.0/me
+    allowed_host: graph.microsoft.com
     auth:
       kind: bearer
       env: MODULO_PROBE_MICROSOFT_TEAMS_TOKEN
+    env_vars:
+      - MODULO_PROBE_MICROSOFT_TEAMS_TOKEN
 
   - id: monday
     kind: connector
@@ -228,9 +293,12 @@ providers:
       url: https://api.monday.com/v2
       json:
         query: "{ me { id name email } }"
+    allowed_host: api.monday.com
     auth:
       kind: bearer
       env: MODULO_PROBE_MONDAY_TOKEN
+    env_vars:
+      - MODULO_PROBE_MONDAY_TOKEN
     max_depth: 3
     normalise:
       - path: data.me.id
@@ -243,9 +311,12 @@ providers:
     request:
       method: GET
       url: https://api.notion.com/v1/users/me
+    allowed_host: api.notion.com
     auth:
       kind: bearer
       env: MODULO_PROBE_NOTION_TOKEN
+    env_vars:
+      - MODULO_PROBE_NOTION_TOKEN
     static_headers:
       Notion-Version: "2022-06-28"
     normalise:
@@ -259,9 +330,12 @@ providers:
     request:
       method: GET
       url: https://registry.npmjs.org/-/whoami
+    allowed_host: registry.npmjs.org
     auth:
       kind: bearer
       env: MODULO_PROBE_NPM_TOKEN
+    env_vars:
+      - MODULO_PROBE_NPM_TOKEN
 
   - id: opsgenie
     kind: connector
@@ -270,11 +344,14 @@ providers:
     request:
       method: GET
       url: https://api.opsgenie.com/v2/users/me
+    allowed_host: api.opsgenie.com
     auth:
       kind: header
       env: MODULO_PROBE_OPSGENIE_TOKEN
       header: Authorization
       template: "GenieKey {token}"
+    env_vars:
+      - MODULO_PROBE_OPSGENIE_TOKEN
     max_depth: 2
 
   - id: pagerduty
@@ -284,11 +361,14 @@ providers:
     request:
       method: GET
       url: https://api.pagerduty.com/users/me
+    allowed_host: api.pagerduty.com
     auth:
       kind: header
       env: MODULO_PROBE_PAGERDUTY_TOKEN
       header: Authorization
       template: "Token token={token}"
+    env_vars:
+      - MODULO_PROBE_PAGERDUTY_TOKEN
     max_depth: 2
 
   - id: pypi
@@ -298,8 +378,10 @@ providers:
     request:
       method: GET
       url: https://pypi.org/pypi/pip/json
+    allowed_host: pypi.org
     auth:
       kind: none
+    env_vars: []
     max_depth: 2
     normalise:
       # Every published release is an unbounded, fast-changing map - drop it.
@@ -315,9 +397,12 @@ providers:
     request:
       method: GET
       url: https://sentry.io/api/0/users/me/
+    allowed_host: sentry.io
     auth:
       kind: bearer
       env: MODULO_PROBE_SENTRY_TOKEN
+    env_vars:
+      - MODULO_PROBE_SENTRY_TOKEN
 
   - id: shortcut
     kind: connector
@@ -326,10 +411,13 @@ providers:
     request:
       method: GET
       url: https://api.app.shortcut.com/api/v3/member
+    allowed_host: api.app.shortcut.com
     auth:
       kind: header
       env: MODULO_PROBE_SHORTCUT_TOKEN
       header: Shortcut-Token
+    env_vars:
+      - MODULO_PROBE_SHORTCUT_TOKEN
     normalise:
       - path: id
         rule: volatile
@@ -341,9 +429,12 @@ providers:
     request:
       method: POST
       url: https://slack.com/api/auth.test
+    allowed_host: slack.com
     auth:
       kind: bearer
       env: MODULO_PROBE_SLACK_TOKEN
+    env_vars:
+      - MODULO_PROBE_SLACK_TOKEN
 
   - id: snyk
     kind: connector
@@ -352,11 +443,14 @@ providers:
     request:
       method: GET
       url: https://api.snyk.io/v1/user/me
+    allowed_host: api.snyk.io
     auth:
       kind: header
       env: MODULO_PROBE_SNYK_TOKEN
       header: Authorization
       template: "token {token}"
+    env_vars:
+      - MODULO_PROBE_SNYK_TOKEN
 
   - id: sonarqube
     kind: connector
@@ -365,9 +459,12 @@ providers:
     request:
       method: GET
       url: https://sonarcloud.io/api/authentication/validate
+    allowed_host: sonarcloud.io
     auth:
       kind: bearer
       env: MODULO_PROBE_SONARQUBE_TOKEN
+    env_vars:
+      - MODULO_PROBE_SONARQUBE_TOKEN
 
   - id: trello
     kind: connector
@@ -376,11 +473,15 @@ providers:
     request:
       method: GET
       url: https://api.trello.com/1/members/me
+    allowed_host: api.trello.com
     auth:
       kind: query
       params:
         key: MODULO_PROBE_TRELLO_KEY
         token: MODULO_PROBE_TRELLO_TOKEN
+    env_vars:
+      - MODULO_PROBE_TRELLO_KEY
+      - MODULO_PROBE_TRELLO_TOKEN
     normalise:
       - path: id
         rule: volatile
@@ -395,10 +496,13 @@ providers:
     request:
       method: GET
       url: https://api.anthropic.com/v1/models
+    allowed_host: api.anthropic.com
     auth:
       kind: header
       env: MODULO_PROBE_ANTHROPIC_TOKEN
       header: x-api-key
+    env_vars:
+      - MODULO_PROBE_ANTHROPIC_TOKEN
     static_headers:
       anthropic-version: "2023-06-01"
 
@@ -409,9 +513,12 @@ providers:
     request:
       method: GET
       url: https://api.cohere.com/v1/models
+    allowed_host: api.cohere.com
     auth:
       kind: bearer
       env: MODULO_PROBE_COHERE_TOKEN
+    env_vars:
+      - MODULO_PROBE_COHERE_TOKEN
 
   - id: deepseek
     kind: model_backend
@@ -420,9 +527,12 @@ providers:
     request:
       method: GET
       url: https://api.deepseek.com/models
+    allowed_host: api.deepseek.com
     auth:
       kind: bearer
       env: MODULO_PROBE_DEEPSEEK_TOKEN
+    env_vars:
+      - MODULO_PROBE_DEEPSEEK_TOKEN
 
   - id: fireworks
     kind: model_backend
@@ -431,9 +541,12 @@ providers:
     request:
       method: GET
       url: https://api.fireworks.ai/inference/v1/models
+    allowed_host: api.fireworks.ai
     auth:
       kind: bearer
       env: MODULO_PROBE_FIREWORKS_TOKEN
+    env_vars:
+      - MODULO_PROBE_FIREWORKS_TOKEN
 
   - id: gemini
     kind: model_backend
@@ -442,10 +555,13 @@ providers:
     request:
       method: GET
       url: https://generativelanguage.googleapis.com/v1beta/models
+    allowed_host: generativelanguage.googleapis.com
     auth:
       kind: query
       params:
         key: MODULO_PROBE_GEMINI_TOKEN
+    env_vars:
+      - MODULO_PROBE_GEMINI_TOKEN
 
   - id: grok
     kind: model_backend
@@ -454,9 +570,12 @@ providers:
     request:
       method: GET
       url: https://api.x.ai/v1/models
+    allowed_host: api.x.ai
     auth:
       kind: bearer
       env: MODULO_PROBE_GROK_TOKEN
+    env_vars:
+      - MODULO_PROBE_GROK_TOKEN
 
   - id: groq
     kind: model_backend
@@ -465,9 +584,12 @@ providers:
     request:
       method: GET
       url: https://api.groq.com/openai/v1/models
+    allowed_host: api.groq.com
     auth:
       kind: bearer
       env: MODULO_PROBE_GROQ_TOKEN
+    env_vars:
+      - MODULO_PROBE_GROQ_TOKEN
 
   - id: mistral
     kind: model_backend
@@ -476,9 +598,12 @@ providers:
     request:
       method: GET
       url: https://api.mistral.ai/v1/models
+    allowed_host: api.mistral.ai
     auth:
       kind: bearer
       env: MODULO_PROBE_MISTRAL_TOKEN
+    env_vars:
+      - MODULO_PROBE_MISTRAL_TOKEN
 
   - id: openai
     kind: model_backend
@@ -487,9 +612,12 @@ providers:
     request:
       method: GET
       url: https://api.openai.com/v1/models
+    allowed_host: api.openai.com
     auth:
       kind: bearer
       env: MODULO_PROBE_OPENAI_TOKEN
+    env_vars:
+      - MODULO_PROBE_OPENAI_TOKEN
 
   - id: openrouter
     kind: model_backend
@@ -498,9 +626,12 @@ providers:
     request:
       method: GET
       url: https://openrouter.ai/api/v1/auth/key
+    allowed_host: openrouter.ai
     auth:
       kind: bearer
       env: MODULO_PROBE_OPENROUTER_TOKEN
+    env_vars:
+      - MODULO_PROBE_OPENROUTER_TOKEN
 
   - id: qwen
     kind: model_backend
@@ -509,9 +640,12 @@ providers:
     request:
       method: GET
       url: https://dashscope.aliyuncs.com/compatible-mode/v1/models
+    allowed_host: dashscope.aliyuncs.com
     auth:
       kind: bearer
       env: MODULO_PROBE_QWEN_TOKEN
+    env_vars:
+      - MODULO_PROBE_QWEN_TOKEN
 
   - id: togetherai
     kind: model_backend
@@ -520,9 +654,62 @@ providers:
     request:
       method: GET
       url: https://api.together.xyz/v1/models
+    allowed_host: api.together.xyz
     auth:
       kind: bearer
       env: MODULO_PROBE_TOGETHERAI_TOKEN
+    env_vars:
+      - MODULO_PROBE_TOGETHERAI_TOKEN
+
+# ---------------------------------------------------------------------------
+# Fail-closed exceptions. An entry needs a reason. Nothing is excused by
+# default: our hand-authored baseline goldens have NOT been recorded live, so
+# each provider below is listed explicitly until its `recorded_at` is set by a
+# reviewed `--mode record`. When a provider is recorded, delete its line here.
+#
+# A NEW provider added to `providers:` with no golden, or a recorded provider
+# whose credential has rotated away, is NOT listed here and therefore fails the
+# run - which is the point.
+# ---------------------------------------------------------------------------
+allow_missing_credential: {}
+allow_missing_golden: {}
+allow_unrecorded_golden:
+  asana: "hand-authored baseline; not yet recorded live"
+  bitbucket: "hand-authored baseline; not yet recorded live"
+  buildkite: "hand-authored baseline; not yet recorded live"
+  circleci: "hand-authored baseline; not yet recorded live"
+  codeclimate: "hand-authored baseline; not yet recorded live"
+  datadog: "hand-authored baseline; not yet recorded live"
+  discord: "hand-authored baseline; not yet recorded live"
+  dropbox_paper: "hand-authored baseline; not yet recorded live"
+  github: "hand-authored baseline; not yet recorded live"
+  gitlab: "hand-authored baseline; not yet recorded live"
+  linear: "hand-authored baseline; not yet recorded live"
+  microsoft_teams: "hand-authored baseline; not yet recorded live"
+  monday: "hand-authored baseline; not yet recorded live"
+  notion: "hand-authored baseline; not yet recorded live"
+  npm: "hand-authored baseline; not yet recorded live"
+  opsgenie: "hand-authored baseline; not yet recorded live"
+  pagerduty: "hand-authored baseline; not yet recorded live"
+  pypi: "hand-authored baseline; not yet recorded live"
+  sentry: "hand-authored baseline; not yet recorded live"
+  shortcut: "hand-authored baseline; not yet recorded live"
+  slack: "hand-authored baseline; not yet recorded live"
+  snyk: "hand-authored baseline; not yet recorded live"
+  sonarqube: "hand-authored baseline; not yet recorded live"
+  trello: "hand-authored baseline; not yet recorded live"
+  anthropic: "hand-authored baseline; not yet recorded live"
+  cohere: "hand-authored baseline; not yet recorded live"
+  deepseek: "hand-authored baseline; not yet recorded live"
+  fireworks: "hand-authored baseline; not yet recorded live"
+  gemini: "hand-authored baseline; not yet recorded live"
+  grok: "hand-authored baseline; not yet recorded live"
+  groq: "hand-authored baseline; not yet recorded live"
+  mistral: "hand-authored baseline; not yet recorded live"
+  openai: "hand-authored baseline; not yet recorded live"
+  openrouter: "hand-authored baseline; not yet recorded live"
+  qwen: "hand-authored baseline; not yet recorded live"
+  togetherai: "hand-authored baseline; not yet recorded live"
 
 # ---------------------------------------------------------------------------
 # Skips - a provider we cannot probe safely, cheaply, or without per-tenant

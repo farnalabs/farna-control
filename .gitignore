@@ -119,3 +119,8 @@ qa-findings-lens*.json
 
 # The evidence FILE (alpha-exit-evidence.json) IS committed — it is the template.
 .githooks/
+
+# Provider contract probe: generated drift report (FAR-2703; never committed)
+/contract-goldens/report.json
+/contract-goldens/report.json.tmp
+/contract-goldens/provider-shapes.json.tmp

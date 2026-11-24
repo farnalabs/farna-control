@@ -9,8 +9,8 @@ provider changes. This probe does.
 - Config: `configs/provider-contract-probes.yaml`
 - Goldens: `contract-goldens/provider-shapes.json`
 - Workflow: `.github/workflows/provider-contract-probe.yml`
-- Drift report: `contract-goldens/report.json` (generated; uploaded as the
-  `provider-contract-report` CI artifact on every run)
+- Drift report: `contract-goldens/report.json` (generated, gitignored; uploaded
+  as the `provider-contract-report` CI artifact on every run)
 
 The probe calls the same cheap read-only endpoint each connector's own health
 check (or cheapest read) uses. It deliberately does **not** instantiate the
@@ -28,15 +28,24 @@ A golden stores a **shape tree**, never response values:
 
 A check extracts the same tree from the live response and diffs it:
 
-| Drift kind     | Meaning                                   | Fails the job? |
-| -------------- | ----------------------------------------- | -------------- |
-| `missing`      | A pinned key is absent                    | Yes            |
-| `type_changed` | A pinned key changed value type           | Yes            |
-| `added`        | The provider added an unpinned key        | No (reported)  |
+| Drift kind     | Meaning                                                     | Fails the job? |
+| -------------- | ----------------------------------------------------------- | -------------- |
+| `missing`      | A pinned key is absent                                      | Yes            |
+| `type_changed` | A pinned key changed value type                             | Yes            |
+| `emptied`      | A pinned array is now empty                                 | Yes            |
+| `populated`    | A previously empty array now has items                      | Yes            |
+| `added`        | The provider added an unpinned object key                   | Yes by default |
 
-Additive changes are reported in the JSON report (`additions`) but do not fail,
-so a provider adding a field never wakes anyone up. Set `strict_shape: true` on
-a probe to make additions fail too.
+`added` is breaking because `strict_shape` defaults to `true`: a provider
+adding an unexpected top-level field can change how our parser behaves. Set
+`strict_shape: false` on a probe (or in `defaults`) to report additions in the
+JSON report's `additions` list without failing. This is the documented escape
+hatch when a provider routinely adds fields.
+
+Arrays are compared as a **union of every element** (not just `value[0]`), so a
+polymorphic listing is described in full. A key present in only some elements is
+marked optional and its later absence is not drift. An array that goes from
+having items to `[]` (or the reverse) is always breaking drift.
 
 Because goldens hold key names and type names only, **a secret or customer value
 can never reach a golden**. Request and response headers are never persisted,
@@ -55,20 +64,72 @@ python scripts/provider_contract_probe.py --dry-run
 # write the report but never exit non-zero on drift
 python scripts/provider_contract_probe.py --report-only
 
-# explicitly (re)record ONE golden — the ONLY path that writes a golden
+# explicitly (re)record ONE golden - the ONLY path that writes a golden
 python scripts/provider_contract_probe.py --mode record --provider github --operation rate_limit
 ```
 
-Exit codes: `0` clean (or report-only / dry-run), `1` drift or probe error,
-`2` config error / usage error.
+Exit codes: `0` clean (or report-only / dry-run), `1` drift, a probe error, an
+unavailable provider, an unexcused skip, or "no probe passed although probes
+were expected", `2` config error / usage error.
 
 Useful flags: `--config PATH`, `--goldens PATH`, `--report PATH`,
 `--provider ID` (restrict a check to one provider).
 
+## Fail-closed skips
+
+A probe is never silently skipped. Each of these is a **failure** unless the
+provider id appears, with a reason, in the matching top-level allow list in the
+config; an allow-listed skip is reported as `NOTE` in the log and `allowed:
+true` in the report, so it is always visible:
+
+| Condition                                | Allow list                  |
+| ---------------------------------------- | --------------------------- |
+| No credential in the environment         | `allow_missing_credential`  |
+| No golden entry for the probe            | `allow_missing_golden`      |
+| Golden exists but `recorded_at` is null  | `allow_unrecorded_golden`   |
+
+This catches a rotated secret (a recorded provider whose token disappeared) and
+a newly added provider nobody recorded. Our committed goldens are hand-authored,
+so every current provider is listed in `allow_unrecorded_golden`; recording a
+golden (below) means deleting its line, after which it is genuinely probed.
+
+The run also fails if it attempted at least one probe and **none passed**.
+
+## Read-only and credential confinement
+
+The config controls the URL, method and env var names, so the loader enforces
+the read-only guarantee before any request:
+
+- The URL must be `https`, must not embed userinfo, and its host must equal the
+  probe's `allowed_host`. Redirecting a credential to another host therefore
+  requires a visible `allowed_host` change.
+- Only `GET` and `HEAD` are accepted. `POST` is rejected unless the provider id
+  is on the hardcoded `READ_ONLY_POST_ALLOWLIST` in the script (currently
+  `dropbox_paper`, `linear`, `monday`, `slack` - each a read query).
+- `auth.env`, every `auth.params` value and every `extra_headers` value must
+  appear in the probe's `env_vars`. A config edit cannot pull in an undeclared
+  secret.
+- `auth.template` may reference only `{token}`; header names are validated.
+
+## Transient failures, timeouts and deadlines
+
+A network error, `429` or any `5xx` is retried (default: 3 attempts) with
+exponential backoff and jitter, honouring `Retry-After` on `429`. After the
+attempts are exhausted the probe is reported as **`provider_unavailable`**, not
+contract drift - one transient failure can never be recorded as a shape change.
+Tune `defaults.retry` (`attempts`, `base_delay_seconds`, `max_delay_seconds`).
+
+Each request uses the configured timeout (`defaults.timeout_seconds`, or a
+per-probe `timeout_seconds`). The whole run also has an overall wall-clock
+deadline (`defaults.deadline_seconds`, default 1500s / 25 min); probes past it
+are reported and the run ends. The JSON report is written **after every probe**,
+so a killed run still leaves a usable report. The workflow's step budget exceeds
+the in-script deadline.
+
 ## Adding a provider
 
 1. Decide whether it can be probed safely and cheaply. If not, add a **skip**
-   entry with a reason (see below) — every connector type and model backend must
+   entry with a reason (see below) - every connector type and model backend must
    appear in the config as either a probe or a skip.
 2. Add a probe under `providers:`:
 
@@ -78,11 +139,14 @@ Useful flags: `--config PATH`, `--goldens PATH`, `--report PATH`,
      operation: users_me        # unique within the provider
      description: Current user identity (Example GET /users/me).
      request:
-       method: GET
+       method: GET              # GET/HEAD, or POST only if allowlisted
        url: https://api.example.com/users/me
+     allowed_host: api.example.com
      auth:
        kind: bearer             # none | bearer | header | query
        env: MODULO_PROBE_EXAMPLE_TOKEN
+     env_vars:                  # the ONLY env vars this probe may read
+       - MODULO_PROBE_EXAMPLE_TOKEN
      max_depth: 1               # how many shape levels to pin
      normalise:                 # volatile handling lives HERE, not in code
        - path: data.id
@@ -92,7 +156,18 @@ Useful flags: `--config PATH`, `--goldens PATH`, `--report PATH`,
 3. Add the credential as a repo secret named exactly as the config's `env`
    (or `params` / `extra_headers` env names), and pass it through in the
    workflow's `Probe live provider contracts` step.
-4. Record the golden behind review (below), then commit it.
+4. Record the golden behind review (below), then commit it and delete the
+   provider's line from `allow_unrecorded_golden`.
+
+### Request bodies
+
+`request` may carry a body:
+
+- `json: <value>` - JSON body. `json: null` sends a literal `null` body (needed
+  by Dropbox no-argument RPCs).
+- `form: {key: value}` - `application/x-www-form-urlencoded` body.
+
+At most one of `json` / `form` may be set.
 
 ### Credential kinds
 
@@ -112,7 +187,7 @@ Declared per probe in the config, never in code:
 
 | Rule       | Effect                                                              |
 | ---------- | ------------------------------------------------------------------- |
-| `volatile` | Replace the value with `<volatile>` (stabilises ids, timestamps, etags — even across scalar types) |
+| `volatile` | Replace the value with `<volatile>` (stabilises ids, timestamps, etags - even across scalar types) |
 | `drop`     | Remove the path before shaping (optional or unbounded subtrees)     |
 | `nullable` | Treat `null` as the string `<null>` (a legitimately null field is not a type change) |
 
@@ -134,12 +209,14 @@ golden. When a provider legitimately changes shape:
    ```
 
 3. Review the `contract-goldens/provider-shapes.json` diff: it must contain
-   only the intended shape change. A new or removed key is the whole point of
-   the review.
-4. Commit the golden with the change that depends on it.
+   only the intended shape change. Record mode rewrites the file in the same
+   canonical, compact inline-leaf format the repo commits, so re-recording one
+   provider changes one block - nothing else reflows.
+4. Commit the golden with the change that depends on it, and remove that
+   provider from `allow_unrecorded_golden`.
 
-If a probe has no golden, check mode **skips it loudly** (a warning on stderr
-and a `skipped` row in the report). It never creates a golden.
+If a probe has no golden, check mode **fails** it by default (allow-list it
+explicitly if that is intended). Check mode never creates a golden.
 
 ## Skip list and why
 
@@ -192,7 +269,7 @@ HTTP.
 | `vllm` | Self-hosted host required. |
 | `watsonx` | IBM IAM token exchange required (outside plain-HTTP scope). |
 
-## Credential inventory (names only — values live in repo secrets)
+## Credential inventory (names only - values live in repo secrets)
 
 Connectors:
 
@@ -219,22 +296,45 @@ Model backends:
 `MODULO_PROBE_OPENAI_TOKEN`, `MODULO_PROBE_OPENROUTER_TOKEN`,
 `MODULO_PROBE_QWEN_TOKEN`, `MODULO_PROBE_TOGETHERAI_TOKEN`.
 
-`pypi` is public and needs no credential. A missing credential skips that probe
-with a warning; it does not fail the run and it does not count as a pass.
+`pypi` is public and needs no credential. A missing credential on a probe that
+**should** run fails the run unless the provider is explicitly allow-listed.
 
 ## Drift report
 
-`contract-goldens/report.json` is written on every check (override with
+`contract-goldens/report.json` is written after every probe (override with
 `--report`). It contains, per probe: `status` (`pass` / `drift` / `skipped` /
-`error`), `status_code`, the breaking `drift` list, and the `additions` list,
-plus a summary and the config's skip list. It never contains a credential,
-request header, or response value. In CI it is uploaded as the
-`provider-contract-report` artifact on every run, including failures.
+`unavailable` / `error`), `status_code`, `attempts`, the breaking `drift` list,
+and the `additions` list, plus a summary (`expected`, `passed`, `drifted`,
+`unavailable`, `skipped`, `skipped_unexcused`, `errors`, `additions`) and the
+config's skip list. It never contains a credential, request header, or response
+value. In CI it is uploaded as the `provider-contract-report` artifact on every
+run, including failures.
+
+## Workflow and credentials in CI
+
+The nightly job checks out `main` and installs the backend with `uv sync
+--frozen`. `GITHUB_TOKEN` is scoped to **that install step only** (it
+authenticates the git fetches `uv sync` makes for git-pinned dependencies), so
+no later step or third-party action can read it; it is not in workflow-level
+`env`. Provider credentials are passed only to the probe step.
 
 ## Tests
 
-`backend/tests/unit/tools/test_provider_contract_probe.py` uses respx and a
-temp directory. It proves: a mutated golden fails; a changed shape is reported
-and not auto-accepted; a secret never appears in output; a missing credential is
-skipped loudly with no request; record mode writes a golden while check mode is
-read-only; and a normalisation rule absorbs a volatile field.
+`backend/tests/unit/tools/test_provider_contract_probe.py` uses respx and a temp
+directory. It proves, among other things: a mutated golden fails; a changed
+shape is reported and not auto-accepted; a secret never appears in output;
+missing credential / missing golden / unrecorded golden each fail by default and
+pass only via an allow list; `429` is retried honouring `Retry-After` and a
+persistent `5xx` ends as `provider_unavailable` (not drift); an emptied or
+populated array is breaking and array shapes are unioned; `added` is breaking by
+default; the loader rejects a non-allowlisted POST, a host mismatch, embedded
+URL credentials and an undeclared header env var; one probe's exception does not
+abort the run and still writes the report; record mode rewrites only the
+selected provider in the committed format.
+
+Two further tests load the real artefacts: `configs/provider-contract-probes.yaml`
+and `contract-goldens/provider-shapes.json` (unique ids, valid status classes,
+normalisation paths resolve against the recorded shape, every provider has a
+golden), and a registry-coverage test enumerates
+`backend/src/farna/connectors/*` and `backend/src/farna/model_backends/*` and
+fails if a package is in neither `providers` nor `skips`.

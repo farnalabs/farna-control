@@ -2,14 +2,21 @@ name: "Provider contract probe (nightly)"
 
 # FAR-2703. Mocks and cassettes prove our code against a frozen assumption;
 # nothing else in the suite detects that a PROVIDER changed. This nightly job
-# makes a cheap, read-only call to every configured connector / model backend
+# makes a cheap, read-only call to every *recorded* connector / model backend
 # and diffs the response SHAPE against the committed golden in
 # contract-goldens/provider-shapes.json. Drift fails the job before a customer
 # notices.
 #
-# Read-only: scripts/provider_contract_probe.py never issues a write. A
-# provider with no credential configured is skipped loudly (a warning in the
-# log and a "skipped" row in the report), never silently passed.
+# Read-only: scripts/provider_contract_probe.py never issues a write (GET/HEAD,
+# plus a hardcoded read-only-POST allowlist). The script's config pins each
+# provider's allowed_host.
+#
+# Fail-closed: a golden that has not been recorded live, a missing golden, or a
+# missing credential FAILS the run unless the provider id is listed with a
+# reason in configs/provider-contract-probes.yaml. The committed goldens are
+# hand-authored and not yet recorded, so each is currently listed in
+# `allow_unrecorded_golden`; recording one (behind review) means deleting its
+# line, and it is then genuinely probed here.
 #
 # The JSON report is uploaded as an artifact on every run, including failures,
 # so a drift can be triaged without re-running.
@@ -18,14 +25,6 @@ on:
   schedule:
     - cron: "15 4 * * *" # 04:15 UTC daily
   workflow_dispatch:
-
-# Authenticate GitHub git fetches so `uv sync --frozen` can resolve git-pinned
-# dependencies (e.g. pytest-bdd @ refs/pull/827/head) without an anonymous
-# fetch-by-SHA, which GitHub rejects from CI runners.
-env:
-  GIT_CONFIG_COUNT: "1"
-  GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/.insteadOf'
-  GIT_CONFIG_VALUE_0: "https://github.com/"
 
 permissions:
   contents: read
@@ -38,7 +37,10 @@ jobs:
   probe:
     name: Live provider contract probe
     runs-on: ubicloud-standard-2
-    timeout-minutes: 20
+    # 25-minute in-script deadline (defaults.deadline_seconds) plus install and
+    # report upload. The step budget must exceed the script's own deadline, or
+    # the runner kills the job before the probe can write its failure report.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,10 +58,19 @@ jobs:
         # so `--no-build` would hard-fail the sync. `--frozen` pins exact
         # revisions, so the build is deterministic and trusted. The shared
         # wrapper retries the codeload CDN flake those archives hit.
+        #
+        # GITHUB_TOKEN is scoped to THIS STEP ONLY: it authenticates the git
+        # fetches `uv sync --frozen` makes for git-pinned deps. It is never in
+        # workflow-level env, so no later step or third-party action can read
+        # it, and the step-scoped env is discarded when the step ends.
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/.insteadOf'
+          GIT_CONFIG_VALUE_0: "https://github.com/"
         run: bash scripts/uv_sync_with_retry.sh --frozen --project backend  # NOSONAR githubactions:S8541: backend lockfile pins source-archive deps; --frozen pins exact revisions so builds are deterministic.
 
       - name: Probe live provider contracts
-        timeout-minutes: 10
+        timeout-minutes: 30
         env:
           MODULO_PROBE_ASANA_TOKEN: ${{ secrets.MODULO_PROBE_ASANA_TOKEN }}
           MODULO_PROBE_BITBUCKET_TOKEN: ${{ secrets.MODULO_PROBE_BITBUCKET_TOKEN }}

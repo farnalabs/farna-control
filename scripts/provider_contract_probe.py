@@ -18,7 +18,8 @@ record       explicitly (re)write ONE golden. This is the ONLY path that
 Design notes
 ------------
 * Read-only calls only. The config names the cheapest read-only operation for
-  each provider; this script never issues a write.
+  each provider, pins ``allowed_host``, and the loader rejects any non-GET/HEAD
+  method unless the provider id is on a hardcoded read-only-POST allowlist.
 * Goldens store a SHAPE, never response values, so a secret (or any customer
   data) can never reach a golden.
 * Volatile-value handling (ids, timestamps, etags) is declared in the probe
@@ -26,6 +27,12 @@ Design notes
 * Request/response headers are never persisted. Tokenised URL userinfo and any
   credential value are scrubbed from every error string before it is written or
   printed.
+* Transient failures (network error, 429, 5xx) are retried with exponential
+  backoff and jitter, honouring ``Retry-After``. After exhaustion they are
+  classified ``provider_unavailable`` - never contract drift.
+* Fail-closed: a missing credential, a missing golden, or a golden that has not
+  yet been recorded fails the run unless the provider id is named in the
+  matching explicit allow list (with a reason) in the config.
 
 Standard library plus httpx and PyYAML only (both already runtime deps).
 """
@@ -36,7 +43,9 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -54,11 +63,32 @@ VOLATILE = "<volatile>"
 NULLABLE = "<null>"
 _DROP = object()
 
-_BREAKING_KINDS = frozenset({"missing", "type_changed"})
+#: A shape-diff kind that fails the run.
+_BREAKING_KINDS = frozenset({"missing", "type_changed", "emptied", "populated"})
+
+#: Methods that can never mutate a provider.
+_READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
+
+#: Providers whose pinned read-only operation is an HTTP POST (a read query),
+#: not a write. Hardcoded so a config edit cannot turn a POST into a write
+#: without a code review of this list.
+READ_ONLY_POST_ALLOWLIST = frozenset({"dropbox_paper", "linear", "monday", "slack"})
+
+#: A 429 or any 5xx means "cannot verify right now", never "the contract
+#: changed". Retried, then reported as ``provider_unavailable``.
+_RETRYABLE_STATUS = frozenset({429}) | frozenset(range(500, 600))
+
+_DEFAULT_RETRY = {"attempts": 3, "base_delay_seconds": 1.0, "max_delay_seconds": 30.0}
+
+_HEADER_NAME_CHARS = frozenset("!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
 class ProbeConfigError(Exception):
     """The probe configuration is malformed or internally inconsistent."""
+
+
+class ProviderUnavailableError(Exception):
+    """A provider could not be reached or answered transiently forever."""
 
 
 # ---------------------------------------------------------------------------
@@ -145,24 +175,90 @@ def normalise(payload: Any, rules: list[dict[str, str]]) -> Any:
     return result
 
 
+def _mark_optional(shape: dict[str, Any]) -> dict[str, Any]:
+    return {**shape, "optional": True}
+
+
+def _merge_shapes(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Union two element shapes so one array covers every element it contains.
+
+    A key missing from some elements is marked ``optional`` so its absence in a
+    later response is not reported as drift.
+    """
+    if left is None:
+        return right
+    if right is None:
+        return left
+
+    left_type = left.get("type")
+    right_type = right.get("type")
+    if left_type != right_type:
+        left_types = set(left.get("types") or [left_type])
+        right_types = set(right.get("types") or [right_type])
+        merged = left_types | right_types
+        if len(merged) == 1:
+            return {"type": merged.pop()}
+        return {"type": "mixed", "types": sorted(merged)}
+
+    if left_type == "object":
+        left_keys = left.get("keys") or {}
+        right_keys = right.get("keys") or {}
+        keys: dict[str, Any] = {}
+        for key in sorted(set(left_keys) | set(right_keys)):
+            if key in left_keys and key in right_keys:
+                keys[key] = _merge_shapes(left_keys[key], right_keys[key])
+            elif key in left_keys:
+                keys[key] = _mark_optional(left_keys[key])
+            else:
+                keys[key] = _mark_optional(right_keys[key])
+        return {"type": "object", "keys": keys}
+
+    if left_type == "array":
+        return {"type": "array", "items": _merge_shapes(left.get("items"), right.get("items"))}
+
+    return left
+
+
 def shape_of(value: Any, depth: int, max_depth: int) -> dict[str, Any]:
-    """Describe *value* as a shape tree down to *max_depth* levels."""
+    """Describe *value* as a shape tree down to *max_depth* levels.
+
+    Arrays union the shape of *every* element, so a polymorphic listing is
+    described in full rather than by an arbitrary first item.
+    """
     node: dict[str, Any] = {"type": _type_name(value)}
     if depth >= max_depth:
         return node
     if isinstance(value, dict):
         node["keys"] = {key: shape_of(value[key], depth + 1, max_depth) for key in sorted(value)}
     elif isinstance(value, list):
-        node["items"] = shape_of(value[0], depth + 1, max_depth) if value else None
+        merged: dict[str, Any] | None = None
+        for item in value:
+            merged = _merge_shapes(merged, shape_of(item, depth + 1, max_depth))
+        node["items"] = merged
     return node
+
+
+def _shapes_equal(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
+    """True when *actual* satisfies *expected* (used for ``mixed`` unions)."""
+    expected_type = expected.get("type")
+    actual_type = actual.get("type")
+    if expected_type == "mixed":
+        if actual_type == "mixed":
+            return True
+        return actual_type in set(expected.get("types") or [])
+    if actual_type == "mixed":
+        return expected_type in set(actual.get("types") or [])
+    return expected_type == actual_type
 
 
 def diff_shape(expected: dict[str, Any], actual: dict[str, Any], path: str = "$") -> list[dict[str, Any]]:
     """Diff two shape trees. Returns a list of drift records."""
+    if not _shapes_equal(expected, actual):
+        return [{"path": path, "kind": "type_changed", "expected": expected.get("type"), "actual": actual.get("type")}]
+
     expected_type = expected.get("type")
-    actual_type = actual.get("type")
-    if expected_type != actual_type:
-        return [{"path": path, "kind": "type_changed", "expected": expected_type, "actual": actual_type}]
+    if expected_type == "mixed":
+        return []
 
     diffs: list[dict[str, Any]] = []
     if expected_type == "object":
@@ -171,6 +267,8 @@ def diff_shape(expected: dict[str, Any], actual: dict[str, Any], path: str = "$"
         for key in sorted(expected_keys):
             child_path = f"{path}.{key}"
             if key not in actual_keys:
+                if expected_keys[key].get("optional"):
+                    continue
                 diffs.append({"path": child_path, "kind": "missing", "expected": expected_keys[key].get("type"), "actual": None})
             else:
                 diffs.extend(diff_shape(expected_keys[key], actual_keys[key], child_path))
@@ -178,14 +276,58 @@ def diff_shape(expected: dict[str, Any], actual: dict[str, Any], path: str = "$"
     elif expected_type == "array":
         expected_items = expected.get("items")
         actual_items = actual.get("items")
-        if expected_items and actual_items:
+        if expected_items and not actual_items:
+            # The array is now empty where items were pinned: a listing silently
+            # lost its payload, which is a breaking change, not "no items today".
+            diffs.append({"path": f"{path}[]", "kind": "emptied", "expected": expected_items.get("type"), "actual": None})
+        elif actual_items and not expected_items:
+            diffs.append({"path": f"{path}[]", "kind": "populated", "expected": None, "actual": actual_items.get("type")})
+        elif expected_items and actual_items:
             diffs.extend(diff_shape(expected_items, actual_items, f"{path}[]"))
     return diffs
+
+
+def path_in_shape(shape: Any, tokens: list[str]) -> bool:
+    """True when a ``normalise.path`` resolves against a recorded shape."""
+    if not tokens:
+        return isinstance(shape, dict)
+    if not isinstance(shape, dict):
+        return False
+    token = tokens[0]
+    rest = tokens[1:]
+    if token == "*":
+        keys = shape.get("keys") or {}
+        return bool(keys) and all(path_in_shape(child, rest) for child in keys.values())
+    if token == "[]":
+        items = shape.get("items")
+        return isinstance(items, dict) and path_in_shape(items, rest)
+    keys = shape.get("keys")
+    if not isinstance(keys, dict) or token not in keys:
+        return False
+    return path_in_shape(keys[token], rest)
 
 
 # ---------------------------------------------------------------------------
 # Config loading / validation
 # ---------------------------------------------------------------------------
+
+
+def _valid_status_class(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 3 and value.endswith("xx") and value[0].isdigit()
+
+
+def _validate_allow_list(config: dict[str, Any], name: str) -> dict[str, str]:
+    raw = config.get(name) or {}
+    if not isinstance(raw, dict):
+        raise ProbeConfigError(f"'{name}' must be a mapping of provider id -> reason")
+    result: dict[str, str] = {}
+    for provider_id, reason in raw.items():
+        if not isinstance(provider_id, str) or not provider_id.strip():
+            raise ProbeConfigError(f"{name}: provider id must be a non-empty string")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ProbeConfigError(f"{name}: {provider_id} needs a non-empty reason")
+        result[provider_id] = reason
+    return result
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -201,10 +343,16 @@ def load_config(path: Path) -> dict[str, Any]:
     skips = data.get("skips") or []
     if not isinstance(providers, list) or not isinstance(skips, list):
         raise ProbeConfigError("'providers' and 'skips' must be lists")
+    if not providers and not skips:
+        raise ProbeConfigError("config declares no providers and no skips")
 
     defaults = data.get("defaults") or {}
     if not isinstance(defaults, dict):
         raise ProbeConfigError("'defaults' must be a mapping")
+    _validate_defaults(defaults)
+
+    for name in ("allow_missing_credential", "allow_missing_golden", "allow_unrecorded_golden"):
+        data[name] = _validate_allow_list(data, name)
 
     seen: set[str] = set()
     for skip in skips:
@@ -219,7 +367,39 @@ def load_config(path: Path) -> dict[str, Any]:
             raise ProbeConfigError(f"duplicate provider id: {probe['id']}")
         seen.add(probe["id"])
 
+    for name in ("allow_missing_credential", "allow_missing_golden", "allow_unrecorded_golden"):
+        for provider_id in data[name]:
+            if provider_id not in seen:
+                raise ProbeConfigError(f"{name} names an unknown provider id: {provider_id}")
+
     return data
+
+
+def _validate_defaults(defaults: dict[str, Any]) -> None:
+    status_class = defaults.get("success_status_class", "2xx")
+    if not _valid_status_class(status_class):
+        raise ProbeConfigError(f"defaults: invalid success_status_class {status_class!r}")
+    timeout = defaults.get("timeout_seconds", 20)
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        raise ProbeConfigError("defaults: timeout_seconds must be a positive number")
+    max_depth = defaults.get("max_depth", 1)
+    if not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 0:
+        raise ProbeConfigError("defaults: max_depth must be a non-negative integer")
+    if not isinstance(defaults.get("strict_shape", True), bool):
+        raise ProbeConfigError("defaults: strict_shape must be a boolean")
+    deadline = defaults.get("deadline_seconds", 1500)
+    if not isinstance(deadline, (int, float)) or isinstance(deadline, bool) or deadline <= 0:
+        raise ProbeConfigError("defaults: deadline_seconds must be a positive number")
+    retry = defaults.get("retry", _DEFAULT_RETRY)
+    if not isinstance(retry, dict):
+        raise ProbeConfigError("defaults: retry must be a mapping")
+    attempts = retry.get("attempts", 3)
+    if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 1:
+        raise ProbeConfigError("defaults: retry.attempts must be a positive integer")
+    for field in ("base_delay_seconds", "max_delay_seconds"):
+        value = retry.get(field, _DEFAULT_RETRY[field])
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+            raise ProbeConfigError(f"defaults: retry.{field} must be a non-negative number")
 
 
 def _require_skip_fields(skip: Any) -> None:
@@ -228,6 +408,31 @@ def _require_skip_fields(skip: Any) -> None:
     for field in ("id", "kind", "reason"):
         if not isinstance(skip.get(field), str) or not skip[field].strip():
             raise ProbeConfigError(f"skip is missing a non-empty {field!r}: {skip!r}")
+
+
+def _validate_header_name(name: Any, where: str) -> None:
+    if not isinstance(name, str) or not name or any(char not in _HEADER_NAME_CHARS for char in name):
+        raise ProbeConfigError(f"{where}: invalid header name {name!r}")
+
+
+def _validate_template(template: Any, where: str) -> None:
+    if not isinstance(template, str):
+        raise ProbeConfigError(f"{where}: template must be a string")
+    placeholders: list[str] = []
+    index = 0
+    while True:
+        start = template.find("{", index)
+        if start == -1:
+            break
+        end = template.find("}", start)
+        if end == -1:
+            raise ProbeConfigError(f"{where}: unterminated template placeholder")
+        placeholders.append(template[start + 1 : end])
+        index = end + 1
+    if any(placeholder != "token" for placeholder in placeholders):
+        raise ProbeConfigError(f"{where}: template may only reference '{{token}}'")
+    if not placeholders:
+        raise ProbeConfigError(f"{where}: template must contain '{{token}}'")
 
 
 def _validate_probe(probe: Any, defaults: dict[str, Any]) -> None:
@@ -239,30 +444,65 @@ def _validate_probe(probe: Any, defaults: dict[str, Any]) -> None:
     if probe["kind"] not in ("connector", "model_backend"):
         raise ProbeConfigError(f"unknown kind {probe['kind']!r} for {probe['id']}")
 
-    request = probe.get("request")
-    if not isinstance(request, dict):
-        raise ProbeConfigError(f"{probe['id']}: 'request' must be a mapping")
-    if request.get("method") not in ("GET", "POST"):
-        raise ProbeConfigError(f"{probe['id']}: request.method must be GET or POST")
-    if not isinstance(request.get("url"), str) or not request["url"].startswith("https://"):
-        raise ProbeConfigError(f"{probe['id']}: request.url must be an https URL")
-
+    _validate_request(probe)
     _validate_auth(probe)
+    _validate_env_vars(probe)
 
     status_class = probe.get("success_status_class", defaults.get("success_status_class", "2xx"))
-    if not isinstance(status_class, str) or len(status_class) != 3 or not status_class.endswith("xx") or not status_class[0].isdigit():
+    if not _valid_status_class(status_class):
         raise ProbeConfigError(f"{probe['id']}: invalid success_status_class {status_class!r}")
 
     max_depth = probe.get("max_depth", defaults.get("max_depth", 1))
     if not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 0:
         raise ProbeConfigError(f"{probe['id']}: max_depth must be a non-negative integer")
 
+    timeout = probe.get("timeout_seconds", defaults.get("timeout_seconds", 20))
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+        raise ProbeConfigError(f"{probe['id']}: timeout_seconds must be a positive number")
+
+    if not isinstance(probe.get("strict_shape", defaults.get("strict_shape", True)), bool):
+        raise ProbeConfigError(f"{probe['id']}: strict_shape must be a boolean")
+
     rules = probe.get("normalise") or []
     if not isinstance(rules, list):
         raise ProbeConfigError(f"{probe['id']}: 'normalise' must be a list")
     for rule in rules:
-        if not isinstance(rule, dict) or not isinstance(rule.get("path"), str) or rule.get("rule") not in ("drop", "volatile", "nullable"):
+        if not isinstance(rule, dict) or not isinstance(rule.get("path"), str) or not rule["path"].strip() or rule.get("rule") not in ("drop", "volatile", "nullable"):
             raise ProbeConfigError(f"{probe['id']}: invalid normalise rule {rule!r}")
+
+
+def _validate_request(probe: dict[str, Any]) -> None:
+    request = probe.get("request")
+    if not isinstance(request, dict):
+        raise ProbeConfigError(f"{probe['id']}: 'request' must be a mapping")
+
+    method = request.get("method")
+    if not isinstance(method, str) or method not in _READ_ONLY_METHODS | {"POST"}:
+        raise ProbeConfigError(f"{probe['id']}: request.method must be GET, HEAD or POST")
+    if method == "POST" and probe["id"] not in READ_ONLY_POST_ALLOWLIST:
+        raise ProbeConfigError(f"{probe['id']}: POST is only allowed for providers on the hardcoded read-only-POST allowlist; use GET/HEAD or add the provider there deliberately")
+
+    url = request.get("url")
+    if not isinstance(url, str) or not url.startswith("https://"):
+        raise ProbeConfigError(f"{probe['id']}: request.url must be an https URL")
+    parts = urlsplit(url)
+    if parts.username or parts.password or "@" in parts.netloc:
+        raise ProbeConfigError(f"{probe['id']}: request.url must not embed credentials")
+    if parts.hostname is None:
+        raise ProbeConfigError(f"{probe['id']}: request.url has no host")
+    if parts.query:
+        raise ProbeConfigError(f"{probe['id']}: request.url must not carry a query string; use auth.params")
+
+    allowed_host = probe.get("allowed_host")
+    if not isinstance(allowed_host, str) or not allowed_host.strip():
+        raise ProbeConfigError(f"{probe['id']}: allowed_host is required")
+    if parts.hostname.lower() != allowed_host.lower():
+        raise ProbeConfigError(f"{probe['id']}: request.url host {parts.hostname!r} does not match allowed_host {allowed_host!r}")
+
+    if "json" in request and "form" in request:
+        raise ProbeConfigError(f"{probe['id']}: request cannot set both json and form")
+    if "form" in request and not isinstance(request["form"], dict):
+        raise ProbeConfigError(f"{probe['id']}: request.form must be a mapping")
 
 
 def _validate_auth(probe: dict[str, Any]) -> None:
@@ -272,28 +512,79 @@ def _validate_auth(probe: dict[str, Any]) -> None:
     kind = auth.get("kind")
     if kind not in ("none", "bearer", "header", "query"):
         raise ProbeConfigError(f"{probe['id']}: unknown auth kind {kind!r}")
-    if kind in ("bearer", "header") and not auth.get("env"):
+    if kind in ("bearer", "header") and (not isinstance(auth.get("env"), str) or not auth["env"]):
         raise ProbeConfigError(f"{probe['id']}: auth.env is required for {kind} auth")
+    if kind == "header":
+        _validate_header_name(auth.get("header", "Authorization"), f"{probe['id']}: auth.header")
+        if "template" in auth:
+            _validate_template(auth["template"], f"{probe['id']}: auth.template")
     if kind == "query":
         params = auth.get("params")
         if not isinstance(params, dict) or not params:
             raise ProbeConfigError(f"{probe['id']}: auth.params must be a non-empty mapping for query auth")
         for name, env in params.items():
-            if not isinstance(name, str) or not isinstance(env, str) or not env:
+            if not isinstance(name, str) or not name or not isinstance(env, str) or not env:
                 raise ProbeConfigError(f"{probe['id']}: auth.params entries must map a name to an env var")
 
     extra = probe.get("extra_headers") or {}
     if not isinstance(extra, dict):
         raise ProbeConfigError(f"{probe['id']}: 'extra_headers' must be a mapping")
+    for header_name, env in extra.items():
+        _validate_header_name(header_name, f"{probe['id']}: extra_headers")
+        if not isinstance(env, str) or not env:
+            raise ProbeConfigError(f"{probe['id']}: extra_headers values must be env var names")
+
     static = probe.get("static_headers") or {}
     if not isinstance(static, dict):
         raise ProbeConfigError(f"{probe['id']}: 'static_headers' must be a mapping")
+    for header_name, value in static.items():
+        _validate_header_name(header_name, f"{probe['id']}: static_headers")
+        if not isinstance(value, str):
+            raise ProbeConfigError(f"{probe['id']}: static_headers values must be strings")
+
+
+def _used_env_vars(probe: dict[str, Any]) -> set[str]:
+    auth = probe["auth"]
+    used: set[str] = set()
+    if auth["kind"] in ("bearer", "header"):
+        used.add(auth["env"])
+    elif auth["kind"] == "query":
+        used.update(auth["params"].values())
+    used.update((probe.get("extra_headers") or {}).values())
+    return used
+
+
+def _validate_env_vars(probe: dict[str, Any]) -> None:
+    env_vars = probe.get("env_vars")
+    if not isinstance(env_vars, list) or any(not isinstance(name, str) or not name for name in env_vars):
+        raise ProbeConfigError(f"{probe['id']}: 'env_vars' must be a list of env var names")
+    if len(env_vars) != len(set(env_vars)):
+        raise ProbeConfigError(f"{probe['id']}: 'env_vars' contains duplicates")
+    declared = set(env_vars)
+    undeclared = sorted(_used_env_vars(probe) - declared)
+    if undeclared:
+        raise ProbeConfigError(f"{probe['id']}: credential env vars not declared in env_vars: {', '.join(undeclared)}")
+    for name in declared:
+        if not name.replace("_", "").isalnum() or name.upper() != name:
+            raise ProbeConfigError(f"{probe['id']}: invalid env var name {name!r}")
 
 
 def _probe_settings(probe: dict[str, Any], defaults: dict[str, Any]) -> tuple[str, int]:
     status_class = probe.get("success_status_class", defaults.get("success_status_class", "2xx"))
     max_depth = probe.get("max_depth", defaults.get("max_depth", 1))
     return status_class, max_depth
+
+
+def _probe_timeout(probe: dict[str, Any], defaults: dict[str, Any]) -> float:
+    return float(probe.get("timeout_seconds", defaults.get("timeout_seconds", 20)))
+
+
+def _retry_settings(defaults: dict[str, Any]) -> tuple[int, float, float]:
+    retry = defaults.get("retry") or {}
+    attempts = int(retry.get("attempts", _DEFAULT_RETRY["attempts"]))
+    base = float(retry.get("base_delay_seconds", _DEFAULT_RETRY["base_delay_seconds"]))
+    max_delay = float(retry.get("max_delay_seconds", _DEFAULT_RETRY["max_delay_seconds"]))
+    return attempts, base, max_delay
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +690,45 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _is_compact(node: Any) -> bool:
+    if isinstance(node, dict):
+        return all(not isinstance(value, (dict, list)) for value in node.values())
+    if isinstance(node, list):
+        return all(not isinstance(value, (dict, list)) or (isinstance(value, dict) and _is_compact(value)) for value in node)
+    return True
+
+
+def _format_json(node: Any, level: int) -> str:
+    """Format like the committed goldens: expanded structures, inline leaves."""
+    if _is_compact(node):
+        return json.dumps(node, ensure_ascii=False, separators=(", ", ": "))
+    pad = "  " * level
+    inner = "  " * (level + 1)
+    if isinstance(node, dict):
+        if not node:
+            return "{}"
+        parts = [f"{inner}{json.dumps(key, ensure_ascii=False)}: {_format_json(value, level + 1)}" for key, value in node.items()]
+        return "{\n" + ",\n".join(parts) + f"\n{pad}}}"
+    if isinstance(node, list):
+        if not node:
+            return "[]"
+        parts = [f"{inner}{_format_json(value, level + 1)}" for value in node]
+        return "[\n" + ",\n".join(parts) + f"\n{pad}]"
+    return json.dumps(node, ensure_ascii=False)
+
+
+def _write_goldens(path: Path, manifest: dict[str, Any]) -> None:
+    """Write the manifest in the compact inline-leaf format the repo commits.
+
+    Rewriting in one canonical format keeps a single-provider re-record to a
+    single-provider diff: the rest of the file serialises identically.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(_format_json(manifest, 0) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
 def _record_golden(manifest: dict[str, Any], key: str, status_class: str, max_depth: int, shape: dict[str, Any]) -> None:
     manifest.setdefault("schema_version", GOLDEN_SCHEMA_VERSION)
     manifest["goldens"][key] = {
@@ -414,10 +744,10 @@ def _record_golden(manifest: dict[str, Any], key: str, status_class: str, max_de
 # ---------------------------------------------------------------------------
 
 
-def _call(client: httpx.Client, probe: dict[str, Any], headers: dict[str, str], params: dict[str, str]) -> httpx.Response:
+def _call(client: httpx.Client, probe: dict[str, Any], headers: dict[str, str], params: dict[str, str], timeout: float) -> httpx.Response:
     request = probe["request"]
     call_headers = dict(headers)
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, Any] = {"timeout": timeout}
     if "json" in request:
         payload = request["json"]
         if payload is None:
@@ -427,7 +757,74 @@ def _call(client: httpx.Client, probe: dict[str, Any], headers: dict[str, str], 
             call_headers.setdefault("Content-Type", "application/json")
         else:
             kwargs["json"] = payload
+    elif "form" in request:
+        kwargs["data"] = dict(request["form"])
     return client.request(request["method"], request["url"], headers=call_headers, params=params, **kwargs)
+
+
+def _jitter(scale: float) -> float:
+    if scale <= 0:
+        return 0.0
+    # os.urandom keeps this free of the (non-cryptographic) random module; jitter
+    # only has to de-correlate retries across concurrent runs.
+    return (int.from_bytes(os.urandom(4), "big") / 2**32) * scale
+
+
+def _backoff_delay(attempt: int, retry_after: float | None, base: float, max_delay: float) -> float:
+    if retry_after is not None:
+        return min(max(retry_after, 0.0), max_delay)
+    exponential = base * (2 ** (attempt - 1))
+    return min(exponential + _jitter(exponential), max_delay)
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return max((when - datetime.now(UTC)).total_seconds(), 0.0)
+
+
+#: Indirection so tests can run the retry path without real sleeping.
+_sleep = time.sleep
+
+
+def _call_with_retries(
+    client: httpx.Client,
+    probe: dict[str, Any],
+    defaults: dict[str, Any],
+    headers: dict[str, str],
+    params: dict[str, str],
+    deadline: float,
+) -> tuple[httpx.Response, int]:
+    attempts, base, max_delay = _retry_settings(defaults)
+    timeout = _probe_timeout(probe, defaults)
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        if time.monotonic() >= deadline:
+            raise ProviderUnavailableError("overall deadline exceeded before request")
+        try:
+            response = _call(client, probe, headers, params, timeout)
+        except httpx.TransportError as exc:
+            last_error = exc
+            if attempt >= attempts:
+                raise ProviderUnavailableError(f"transport error after {attempts} attempt(s): {exc}") from exc
+            _sleep(_backoff_delay(attempt, None, base, max_delay))
+            continue
+        if response.status_code in _RETRYABLE_STATUS and attempt < attempts:
+            _sleep(_backoff_delay(attempt, _retry_after_seconds(response), base, max_delay))
+            continue
+        return response, attempt
+    raise ProviderUnavailableError(f"request failed after {attempts} attempt(s): {last_error}")
 
 
 def _shape_from_response(probe: dict[str, Any], defaults: dict[str, Any], response: httpx.Response) -> dict[str, Any]:
@@ -437,90 +834,110 @@ def _shape_from_response(probe: dict[str, Any], defaults: dict[str, Any], respon
     return shape_of(normalised, 0, max_depth)
 
 
+def _row(probe: dict[str, Any], status: str, **fields: Any) -> dict[str, Any]:
+    return {"provider": probe["id"], "operation": probe["operation"], "status": status, **fields}
+
+
+def _skip(probe: dict[str, Any], reason: str, *, allowed: bool) -> dict[str, Any]:
+    print(f"{'NOTE' if allowed else 'WARNING'}: skipping {_golden_key(probe['id'], probe['operation'])} - {reason}", file=sys.stderr)
+    return _row(probe, "skipped", reason=reason, allowed=allowed)
+
+
 def _check_one(
     client: httpx.Client,
     probe: dict[str, Any],
     defaults: dict[str, Any],
     manifest: dict[str, Any],
+    allow: dict[str, dict[str, str]],
+    deadline: float,
 ) -> dict[str, Any]:
+    secrets: list[str] = []
+    provider_id = probe["id"]
+    key = _golden_key(provider_id, probe["operation"])
+    try:
+        golden = manifest["goldens"].get(key)
+        if golden is None:
+            return _skip(probe, f"no golden recorded for {key}; run --mode record behind review", allowed=provider_id in allow["missing_golden"])
+        if golden.get("recorded_at") in (None, ""):
+            return _skip(probe, f"golden for {key} is not yet recorded; record it behind review", allowed=provider_id in allow["unrecorded_golden"])
+        if not isinstance(golden.get("shape"), dict):
+            return _row(probe, "error", error="malformed golden entry (no shape)")
+
+        headers, params, secrets, missing = _resolve_credentials(probe)
+        if missing:
+            return _skip(probe, "missing credential: " + ", ".join(missing), allowed=provider_id in allow["missing_credential"])
+
+        expected_class = golden.get("success_status_class") or _probe_settings(probe, defaults)[0]
+        response, attempts = _call_with_retries(client, probe, defaults, headers, params, deadline)
+
+        actual_class = f"{response.status_code // 100}xx"
+        if actual_class != expected_class:
+            if response.status_code in _RETRYABLE_STATUS:
+                return _row(probe, "unavailable", status_code=response.status_code, attempts=attempts, error="provider_unavailable")
+            return _row(probe, "error", status_code=response.status_code, attempts=attempts, error=f"status class {actual_class} != expected {expected_class}")
+
+        try:
+            actual_shape = _shape_from_response(probe, defaults, response)
+        except ValueError as exc:
+            return _row(probe, "error", status_code=response.status_code, error=_scrub(f"non-JSON response: {exc}", secrets))
+
+        diffs = diff_shape(golden["shape"], actual_shape)
+        breaking = [diff for diff in diffs if diff["kind"] in _BREAKING_KINDS]
+        additions = [diff for diff in diffs if diff["kind"] == "added"]
+        strict = bool(probe.get("strict_shape", defaults.get("strict_shape", True)))
+        is_drift = bool(breaking) or (strict and bool(additions))
+        return _row(
+            probe,
+            "drift" if is_drift else "pass",
+            status_code=response.status_code,
+            attempts=attempts,
+            drift=breaking,
+            additions=additions,
+        )
+    except ProviderUnavailableError as exc:
+        return _row(probe, "unavailable", error=_scrub(str(exc), secrets))
+    except Exception as exc:  # a single probe must never abort the whole run
+        return _row(probe, "error", error=_scrub(f"{type(exc).__name__}: {exc}", secrets))
+
+
+def _record_one(
+    client: httpx.Client,
+    probe: dict[str, Any],
+    defaults: dict[str, Any],
+    manifest: dict[str, Any],
+    goldens_path: Path,
+    deadline: float,
+) -> int:
     key = _golden_key(probe["id"], probe["operation"])
-    headers, params, secrets, missing = _resolve_credentials(probe)
-    if missing:
-        reason = "missing credential: " + ", ".join(missing)
-        print(f"WARNING: skipping {key} - {reason}", file=sys.stderr)
-        return {"provider": probe["id"], "operation": probe["operation"], "status": "skipped", "reason": reason}
-
-    golden = manifest["goldens"].get(key)
-    if golden is None:
-        reason = f"no golden recorded for {key}; run --mode record behind review"
-        print(f"WARNING: skipping {key} - {reason}", file=sys.stderr)
-        return {"provider": probe["id"], "operation": probe["operation"], "status": "skipped", "reason": reason}
-    if not isinstance(golden.get("shape"), dict):
-        return {"provider": probe["id"], "operation": probe["operation"], "status": "error", "error": "malformed golden entry (no shape)"}
-
-    expected_class = golden.get("success_status_class") or _probe_settings(probe, defaults)[0]
+    secrets: list[str] = []
     try:
-        response = _call(client, probe, headers, params)
-    except httpx.HTTPError as exc:
-        return {"provider": probe["id"], "operation": probe["operation"], "status": "error", "error": _scrub(str(exc), secrets)}
+        headers, params, secrets, missing = _resolve_credentials(probe)
+        if missing:
+            print(f"ERROR: cannot record {key} - missing credential: {', '.join(missing)}", file=sys.stderr)
+            return 2
 
-    actual_class = f"{response.status_code // 100}xx"
-    if actual_class != expected_class:
-        return {
-            "provider": probe["id"],
-            "operation": probe["operation"],
-            "status": "error",
-            "status_code": response.status_code,
-            "error": f"status class {actual_class} != expected {expected_class}",
-        }
+        expected_class, max_depth = _probe_settings(probe, defaults)
+        response, _ = _call_with_retries(client, probe, defaults, headers, params, deadline)
 
-    try:
-        actual_shape = _shape_from_response(probe, defaults, response)
-    except ValueError as exc:
-        return {"provider": probe["id"], "operation": probe["operation"], "status": "error", "error": _scrub(f"non-JSON response: {exc}", secrets)}
+        actual_class = f"{response.status_code // 100}xx"
+        if actual_class != expected_class:
+            print(f"ERROR: cannot record {key} - status class {actual_class} != expected {expected_class}", file=sys.stderr)
+            return 1
 
-    diffs = diff_shape(golden["shape"], actual_shape)
-    breaking = [diff for diff in diffs if diff["kind"] in _BREAKING_KINDS]
-    additions = [diff for diff in diffs if diff["kind"] == "added"]
-    strict = bool(probe.get("strict_shape", False))
-    is_drift = bool(breaking) or (strict and bool(additions))
-    return {
-        "provider": probe["id"],
-        "operation": probe["operation"],
-        "status": "drift" if is_drift else "pass",
-        "status_code": response.status_code,
-        "drift": breaking,
-        "additions": additions,
-    }
-
-
-def _record_one(client: httpx.Client, probe: dict[str, Any], defaults: dict[str, Any], manifest: dict[str, Any], goldens_path: Path) -> int:
-    key = _golden_key(probe["id"], probe["operation"])
-    headers, params, secrets, missing = _resolve_credentials(probe)
-    if missing:
-        print(f"ERROR: cannot record {key} - missing credential: {', '.join(missing)}", file=sys.stderr)
-        return 2
-
-    expected_class, max_depth = _probe_settings(probe, defaults)
-    try:
-        response = _call(client, probe, headers, params)
-    except httpx.HTTPError as exc:
+        try:
+            shape = _shape_from_response(probe, defaults, response)
+        except ValueError as exc:
+            print(f"ERROR: cannot record {key} - non-JSON response: {_scrub(str(exc), secrets)}", file=sys.stderr)
+            return 1
+    except ProviderUnavailableError as exc:
         print(f"ERROR: cannot record {key} - {_scrub(str(exc), secrets)}", file=sys.stderr)
         return 1
-
-    actual_class = f"{response.status_code // 100}xx"
-    if actual_class != expected_class:
-        print(f"ERROR: cannot record {key} - status class {actual_class} != expected {expected_class}", file=sys.stderr)
-        return 1
-
-    try:
-        shape = _shape_from_response(probe, defaults, response)
-    except ValueError as exc:
-        print(f"ERROR: cannot record {key} - non-JSON response: {_scrub(str(exc), secrets)}", file=sys.stderr)
+    except Exception as exc:  # report any failure, never crash the recorder
+        print(f"ERROR: cannot record {key} - {_scrub(f'{type(exc).__name__}: {exc}', secrets)}", file=sys.stderr)
         return 1
 
     _record_golden(manifest, key, expected_class, max_depth, shape)
-    _write_json(goldens_path, manifest)
+    _write_goldens(goldens_path, manifest)
     print(f"RECORDED {key} -> {goldens_path}")
     return 0
 
@@ -532,9 +949,14 @@ def _dry_run(probes: list[dict[str, Any]], defaults: dict[str, Any], manifest: d
         safe_url = _safe_url(request["url"], _query_secret_param_names(probe))
         _, _, _, missing = _resolve_credentials(probe)
         credential_state = "MISSING" if missing else "present"
-        golden_state = "present" if key in manifest["goldens"] else "MISSING"
-        auth_kind = probe["auth"]["kind"]
-        print(f"DRY-RUN {key}: {request['method']} {safe_url} auth={auth_kind} credential={credential_state} golden={golden_state}")
+        golden = manifest["goldens"].get(key)
+        if golden is None:
+            golden_state = "MISSING"
+        elif golden.get("recorded_at") in (None, ""):
+            golden_state = "UNRECORDED"
+        else:
+            golden_state = "recorded"
+        print(f"DRY-RUN {key}: {request['method']} {safe_url} auth={probe['auth']['kind']} credential={credential_state} golden={golden_state}")
     return 0
 
 
@@ -544,13 +966,18 @@ def _dry_run(probes: list[dict[str, Any]], defaults: dict[str, Any], manifest: d
 
 
 def _build_report(mode: str, config_path: Path, goldens_path: Path, results: list[dict[str, Any]], skips: list[dict[str, Any]]) -> dict[str, Any]:
+    skipped = [r for r in results if r["status"] == "skipped"]
+    skipped_unexcused = [r for r in skipped if not r.get("allowed")]
     summary = {
         "total": len(results),
         "passed": sum(1 for r in results if r["status"] == "pass"),
         "drifted": sum(1 for r in results if r["status"] == "drift"),
-        "skipped": sum(1 for r in results if r["status"] == "skipped"),
+        "skipped": len(skipped),
+        "skipped_unexcused": len(skipped_unexcused),
+        "unavailable": sum(1 for r in results if r["status"] == "unavailable"),
         "errors": sum(1 for r in results if r["status"] == "error"),
         "additions": sum(len(r.get("additions", [])) for r in results),
+        "expected": len(results) - len(skipped),
         "skipped_by_design": len(skips),
     }
     return {
@@ -574,7 +1001,10 @@ def _print_results(results: list[dict[str, Any]]) -> None:
             details = "; ".join(f"{d['kind']} {d['path']}" for d in result.get("drift", []))
             print(f"DRIFT {key}: {details}")
         elif status == "skipped":
-            print(f"SKIP  {key}: {result.get('reason', '')}")
+            label = "SKIP" if result.get("allowed") else "FAIL-SKIP"
+            print(f"{label} {key}: {result.get('reason', '')}")
+        elif status == "unavailable":
+            print(f"UNAVAILABLE {key}: {result.get('error', '')}")
         else:
             print(f"ERROR {key}: {result.get('error', '')}")
 
@@ -597,6 +1027,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _load_manifest_or_exit(path: Path) -> dict[str, Any] | int:
+    try:
+        return _load_goldens(path)
+    except (ProbeConfigError, json.JSONDecodeError, OSError) as exc:
+        print(f"config error: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = _parse_args(argv)
@@ -604,18 +1042,27 @@ def main(argv: list[str] | None = None) -> int:
     except ProbeConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"config error: {exc}", file=sys.stderr)
+        return 2
 
     defaults = config.get("defaults") or {}
     probes: list[dict[str, Any]] = config["providers"]
     skips: list[dict[str, Any]] = config["skips"]
+    allow = {
+        "missing_credential": config["allow_missing_credential"],
+        "missing_golden": config["allow_missing_golden"],
+        "unrecorded_golden": config["allow_unrecorded_golden"],
+    }
+
+    manifest = _load_manifest_or_exit(args.goldens)
+    if isinstance(manifest, int):
+        return manifest
 
     if args.dry_run:
-        try:
-            manifest = _load_goldens(args.goldens)
-        except (ProbeConfigError, json.JSONDecodeError) as exc:
-            print(f"config error: {exc}", file=sys.stderr)
-            return 2
         return _dry_run(probes, defaults, manifest)
+
+    deadline = time.monotonic() + float(defaults.get("deadline_seconds", 1500))
 
     if args.mode == "record":
         if not args.provider or not args.operation:
@@ -625,34 +1072,34 @@ def main(argv: list[str] | None = None) -> int:
         if not selected:
             print(f"error: no probe configured for {args.provider}/{args.operation}", file=sys.stderr)
             return 2
-        try:
-            manifest = _load_goldens(args.goldens)
-        except (ProbeConfigError, json.JSONDecodeError) as exc:
-            print(f"config error: {exc}", file=sys.stderr)
-            return 2
-        with httpx.Client(timeout=30.0, follow_redirects=False) as client:
-            return _record_one(client, selected[0], defaults, manifest, args.goldens)
-
-    try:
-        manifest = _load_goldens(args.goldens)
-    except (ProbeConfigError, json.JSONDecodeError) as exc:
-        print(f"config error: {exc}", file=sys.stderr)
-        return 2
+        with httpx.Client(follow_redirects=False) as client:
+            return _record_one(client, selected[0], defaults, manifest, args.goldens, deadline)
 
     selected = [p for p in probes if not args.provider or p["id"] == args.provider]
-    with httpx.Client(timeout=30.0, follow_redirects=False) as client:
-        results = [_check_one(client, probe, defaults, manifest) for probe in selected]
+    results: list[dict[str, Any]] = []
+    with httpx.Client(follow_redirects=False) as client:
+        for probe in selected:
+            results.append(_check_one(client, probe, defaults, manifest, allow, deadline))
+            # Write after every probe so a killed run still leaves a usable report.
+            _write_json(args.report, _build_report(args.mode, args.config, args.goldens, results, skips))
 
     _print_results(results)
     report = _build_report(args.mode, args.config, args.goldens, results, skips)
     _write_json(args.report, report)
 
     summary = report["summary"]
-    print(f"summary: {summary['passed']} passed, {summary['drifted']} drifted, {summary['skipped']} skipped, {summary['errors']} errors, {summary['additions']} additive changes; report -> {args.report}")
+    print(
+        f"summary: {summary['passed']} passed, {summary['drifted']} drifted, {summary['unavailable']} unavailable, {summary['skipped']} skipped ({summary['skipped_unexcused']} unexcused), {summary['errors']} errors, {summary['additions']} additive changes; report -> {args.report}",
+        file=sys.stderr,
+    )
 
     if args.report_only:
         return 0
-    if summary["drifted"] or summary["errors"]:
+    failures = summary["drifted"] + summary["errors"] + summary["unavailable"] + summary["skipped_unexcused"]
+    if failures:
+        return 1
+    if summary["passed"] == 0 and summary["expected"] > 0:
+        print("error: not a single probe passed although probes were expected", file=sys.stderr)
         return 1
     return 0
 
