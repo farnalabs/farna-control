@@ -1,14 +1,18 @@
 <template>
-  <Dialog :visible="dialogOpen" :modal="true" :dismissable-mask="true" class="sm:max-w-lg" @update:visible="closeForm">
-    <template #header>
-      <div>
-        <div class="text-lg font-semibold">{{ editingId ? "Edit Skill" : "Add Skill" }}</div>
-        <div class="mt-0.5 text-sm text-muted-foreground">
-          {{ editingId ? editDescription : createDescription }}
-        </div>
-      </div>
-    </template>
-
+  <FormDialog
+    v-model:open="dialogOpen"
+    :title="editingId ? 'Edit Skill' : 'Add Skill'"
+    :description="editingId ? editDescription : createDescription"
+    :confirm-text="editingId ? 'Update' : 'Create'"
+    :confirm-loading-text="'Saving...'"
+    :loading="saving"
+    :confirm-disabled="!form.name.trim()"
+    width="32rem"
+    cancel-test-id="assistant-skills-form-cancel"
+    confirm-test-id="assistant-skills-form-submit"
+    @confirm="save"
+    @update:open="onFormOpenChange"
+  >
     <form @submit.prevent="save" class="space-y-4">
         <div>
           <label for="assistantskilldialog-field-5" class="mb-1 block text-sm font-medium"
@@ -70,50 +74,34 @@
         <div v-if="saveError" class="text-sm text-destructive">
           {{ saveError }}
         </div>
-        <div class="flex gap-2 justify-end">
-          <button
-            type="button"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
-            data-testid="assistant-skills-form-cancel"
-            @click="closeForm"
-          >
-            Cancel
-          </button>
-          <Button :disabled="saving || !form.name.trim()" type="submit" data-testid="assistant-skills-form-submit">
-            {{ submitLabel }}
-          </Button>
-        </div>
+        <!-- FormDialog renders the visible confirm button in its footer, outside
+             this form; a hidden submit keeps Enter-to-submit working. -->
+        <button type="submit" hidden>Save</button>
       </form>
-  </Dialog>
+  </FormDialog>
 
-  <Dialog :visible="deleteOpen" :modal="true" :dismissable-mask="true" class="sm:max-w-sm" @update:visible="deleteOpen = false">
-    <template #header>
-      <div class="text-lg font-semibold">{{ $t('components.assistant.AssistantSkillDialog.delete_skill') }}</div>
-    </template>
+  <FormDialog
+    v-model:open="deleteOpen"
+    :title="$t('components.assistant.AssistantSkillDialog.delete_skill')"
+    confirm-text="Delete"
+    confirm-loading-text="Deleting..."
+    :loading="deleting"
+    confirm-severity="danger"
+    width="24rem"
+    cancel-test-id="assistant-skills-delete-cancel"
+    confirm-test-id="assistant-skills-delete-confirm"
+    @confirm="confirmDelete"
+  >
     <p class="text-sm text-muted-foreground">
       Are you sure you want to delete "{{ deletingName }}"? This action
       cannot be undone.
     </p>
-    <div class="flex gap-2 justify-end">
-      <button
-        type="button"
-        class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
-        data-testid="assistant-skills-delete-cancel"
-        @click="deleteOpen = false"
-      >
-        Cancel
-      </button>
-      <Button :disabled="deleting" type="button" severity="danger" data-testid="assistant-skills-delete-confirm" @click="confirmDelete">
-        {{ deleting ? "Deleting..." : "Delete" }}
-      </Button>
-    </div>
-  </Dialog>
+  </FormDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from "vue";
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import { ref, reactive } from "vue";
+import FormDialog from "@/components/shared/FormDialog.vue";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
 
@@ -156,10 +144,6 @@ const saving = ref(false);
 const deleting = ref(false);
 const saveError = ref<string | null>(null);
 
-const submitLabel = computed(() => {
-  if (saving.value) return "Saving...";
-  return editingId.value ? "Update" : "Create";
-});
 
 const form = reactive({
   name: "",
@@ -195,6 +179,15 @@ function closeForm() {
   dialogOpen.value = false;
   editingId.value = null;
   saveError.value = null;
+}
+
+// The old dialog's @update:visible handler reset the edit state on ANY close
+// (X, mask, Escape, cancel), not only the programmatic close. Preserve that.
+function onFormOpenChange(open: boolean | undefined) {
+  if (!open) {
+    editingId.value = null;
+    saveError.value = null;
+  }
 }
 
 function openDelete(skill: SkillFormItem) {

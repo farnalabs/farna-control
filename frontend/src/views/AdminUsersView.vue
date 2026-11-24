@@ -348,24 +348,17 @@
     </Dialog>
 
     <!-- Revoke invitation confirmation -->
-    <Dialog
-      :visible="showRevokeDialog"
-      :modal="true"
-      :dismissable-mask="true"
-      :style="{ width: '24rem' }"
-      @update:visible="showRevokeDialog = false"
-    >
-      <template #header>
-        <div class="text-lg font-semibold">{{ $t('views.AdminUsersView.revoke_invitation') }}</div>
-      </template>
-      <p class="text-sm text-muted-foreground">{{ $t('views.AdminUsersView.confirm_revoke_invitation', { email: revokeTarget?.email ?? '' }) }}</p>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <Button severity="secondary" outlined data-testid="admin-invitations-cancel-revoke" @click="showRevokeDialog = false">{{ $t('common.cancel') }}</Button>
-          <Button severity="danger" data-testid="admin-invitations-confirm-revoke" @click="revokeInvitation">{{ $t('common.confirm') }}</Button>
-        </div>
-      </template>
-    </Dialog>
+    <FormDialog
+      v-model:open="showRevokeDialog"
+      :title="$t('views.AdminUsersView.revoke_invitation')"
+      :description="$t('views.AdminUsersView.confirm_revoke_invitation', { email: revokeTarget?.email ?? '' })"
+      :confirm-text="$t('common.confirm')"
+      confirm-severity="danger"
+      width="24rem"
+      cancel-test-id="admin-invitations-cancel-revoke"
+      confirm-test-id="admin-invitations-confirm-revoke"
+      @confirm="revokeInvitation"
+    />
   </div>
   </FeatureGate>
 </template>
