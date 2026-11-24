@@ -124,3 +124,7 @@ qa-findings-lens*.json
 /contract-goldens/report.json
 /contract-goldens/report.json.tmp
 /contract-goldens/provider-shapes.json.tmp
+
+# Pre-upgrade database snapshots (FAR-2667) are operator data, never committed.
+/deploy/compose/backups/
+/backups/

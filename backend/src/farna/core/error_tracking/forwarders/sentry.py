@@ -154,7 +154,7 @@ class SentryErrorForwarder(BaseForwarder):
 
             headers = {
                 "Content-Type": "application/json",
-                "User-Agent": "Modulo-Error-Forwarder/1.0",
+                "User-Agent": "Farna-Control-Error-Forwarder/1.0",
             }
             if auth_token:
                 headers["Authorization"] = f"Bearer {auth_token}"

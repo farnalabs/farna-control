@@ -138,6 +138,7 @@ from farna.core.pipeline_engine.model_backend_errors import (
 )
 from farna.core.pipeline_engine.modulo_saver import ModuloPostgresSaver  # noqa: F401
 from farna.core.pipeline_engine.node_runner import (
+    LEGACY_SYNTHETIC_FAILURE_MARKERS,  # noqa: F401
     SYNTHETIC_FAILURE_MARKER,  # noqa: F401
     ConnectorNodeFailedError,
     OutputSchemaValidationError,

@@ -573,12 +573,16 @@
           </template>
         </CardHeader>
 
-        <div v-if="nodeEntries.length === 0 && run.status !== 'failed'" class="py-4 text-center text-sm text-muted-foreground">
-          {{ $t('views.RunDetailView.no_node_data') }}
-        </div>
-        <div v-else-if="nodeEntries.length === 0 && run.status === 'failed'" class="py-4 text-center text-sm text-muted-foreground">
-          {{ $t('views.RunDetailView.no_node_data_failed') }}
-        </div>
+        <EmptyState
+          v-if="nodeEntries.length === 0 && run.status !== 'failed'"
+          variant="bare"
+          :title="$t('views.RunDetailView.no_node_data')"
+        />
+        <EmptyState
+          v-else-if="nodeEntries.length === 0 && run.status === 'failed'"
+          variant="bare"
+          :title="$t('views.RunDetailView.no_node_data_failed')"
+        />
 
         <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
@@ -1060,6 +1064,7 @@ import CardHeader from '../components/ui/CardHeader.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import RunErrorTag from '../components/shared/RunErrorTag.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import DataCard from '../components/ui/DataCard.vue'

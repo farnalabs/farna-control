@@ -747,15 +747,24 @@ _SANDBOX_EGRESS_RESOLVE_TIMEOUT = 5.0
 # cannot drift.
 SANDBOX_AGENT_FAILED_SUMMARY = "Sandbox agent execution failed"
 
-# FAR-510: machine marker stamped on BOTH sandbox_agent synthetic failure
-# envelopes (generic-exception + schema-validation). The executor's
-# finalize-time downgrade predicate requires ``status == "failed"`` AND this
-# field True — marker-based, so an agent-authored failure shape (which never
-# carries the runner's internal marker) can never collide. Single source of
-# truth so runner and executor cannot drift.
-# Persisted value: the key is written into node output JSON that recovery and
-# backfill read across releases, so rename the CONSTANT, never the string.
-SYNTHETIC_FAILURE_MARKER = "modulo_synthetic_failure"
+# FAR-510: machine marker stamped on a sandbox_agent synthetic failure envelope
+# (the generic-exception path). The executor's finalize-time downgrade predicate
+# requires ``status == "failed"`` AND this field True. Single source of truth so
+# runner and executor cannot drift.
+# Persisted value: NAMESPACED on purpose. The finalize scan also inspects the
+# pure agent return (``outputs_json``) for the envelope fields, so the marker
+# key must be collision-resistant: a bare ``synthetic_failure`` would let an
+# agent-authored ``{"status": "failed", "synthetic_failure": true}`` masquerade
+# as the runner's marker and downgrade a run that should finalize complete.
+# The product namespace keeps it out of the agent's business JSON. Rename the
+# CONSTANT, never the string.
+SYNTHETIC_FAILURE_MARKER = "farna_control_synthetic_failure"
+#: Legacy key written by releases before the rebrand. Persisted node telemetry
+#: (and older ``outputs_json`` rows) can still carry it, and a run can outlive a
+#: rolling deploy, so the writer stamps BOTH keys (dual-write) and the finalize
+#: predicate reads BOTH (dual-read) until the drop release. Do not write only
+#: this key.
+LEGACY_SYNTHETIC_FAILURE_MARKERS: tuple[str, ...] = ("modulo_synthetic_failure",)
 
 
 def _bridge_escalation_failure_detail(exit_code: int, stdout_raw: str) -> str | None:
@@ -8865,7 +8874,7 @@ async def _sandbox_issue_run_credential_for_sandbox(
     (``core.credential_issuer``). The default Modulo-minted provider computes
     the TTL as ``max(15 min, node_timeout + 5 min)`` capped by the org max
     (default 1 hour), links the key to the run (``OrgApiKey.run_id``), and
-    stamps the issuance provenance ``modulo_minted`` (attested — NEVER
+    stamps the issuance provenance ``self_minted`` (attested — NEVER
     ``observed``).
 
     Fail-open: a mint failure returns ``None`` — the sandbox runs without the
@@ -10041,6 +10050,10 @@ def _build_sandbox_node_envelope(
     )
     if output.modulo_synthetic_failure:
         inner[SYNTHETIC_FAILURE_MARKER] = True
+        # Dual-write: an older release may finalize a run this release wrote,
+        # and it reads only the legacy key. Both are persisted until R3.
+        for _legacy_marker in LEGACY_SYNTHETIC_FAILURE_MARKERS:
+            inner[_legacy_marker] = True
     inner["attempt_key"] = output.attempt_key
     # FAR-1780: type every agent-claimed datum in the envelope ``reported``
     # under the ONE envelope ``provenance`` key (a per-datum map) — the
@@ -12301,7 +12314,7 @@ async def _sandbox_prepare_exec_environment(
         # token and never only the long-lived host credentials. The key is
         # per-run, revoked at run finalization (and by the compensating
         # sweep), and its issuance provenance is stamped as
-        # ``modulo_minted`` (attested — NEVER ``observed``). Fail-open: an
+        # ``self_minted`` (attested — NEVER ``observed``). Fail-open: an
         # issuance failure leaves the key absent (the sandbox still runs).
         _issued_credential = await _exec_issue_run_credential_for_sandbox(_exec_ctx)
         if _issued_credential is not None:

@@ -65,23 +65,36 @@ def _boot_strap_matrix(tmp_path: Any, monkeypatch: Any, *, recorded_heads: list[
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _b: {"3ab2c1d"})
     counter = {"n": 0}
 
-    def dump(data_dir: Any, *, bin_dir: Any = None) -> Any:
+    def dump(
+        data_dir: Any,
+        *,
+        bin_dir: Any = None,
+        output_dir: Any = None,
+        release: Any = None,
+        target_heads: Any = None,
+        target_bundle: Any = None,
+    ) -> Any:
+        # The production seam also receives target_heads / target_bundle; this
+        # fake always snapshots, so it accepts and ignores them.
         counter["n"] += 1
         import json as json_module
 
-        from farna.launcher.upgrade import PreUpgradeSnapshot
+        from farna.launcher.upgrade import SnapshotRef
 
+        payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
         snapshot_dir = data_dir / f"pre-upgrade-dump-fake-{counter['n']}"
         snapshot_dir.mkdir()
-        (snapshot_dir / "database.sql").write_bytes(b"-- the enforced dump\n")
+        (snapshot_dir / "database.sql").write_bytes(payload)
         (snapshot_dir / "backup-info.json").write_text(
             json_module.dumps({"schema_versions": recorded_heads or ["3ab2c1d"]}),
             encoding="utf-8",
         )
-        return PreUpgradeSnapshot(
+        return SnapshotRef(
             directory=snapshot_dir,
             dump_path=snapshot_dir / "database.sql",
-            bytes=19,
+            checksum="0" * 64,
+            bytes=len(payload),
+            schema_heads=list(recorded_heads or ["3ab2c1d"]),
             created_at="fake-dump-epoch",
         )
 
@@ -150,7 +163,11 @@ def test_poisoned_artifact_refusal_and_verbatim_restore_recovers_previous(tmp_pa
     assert str(snapshot_path) in refusal
     restore_line = _upgrade_restore_head(refusal)
     assert f"ln -sfn versions/1.1.0 {plant['install_root'] / 'current'}" in restore_line
+    # No --db-url: a native operator's shell has no DATABASE_ADMIN_URL, so the
+    # emitted command must not reference one. `restore --data-dir` resolves the
+    # bundled cluster from the data dir's own config.env.
     assert f"farna-control restore {snapshot_path} --data-dir {plant['data_dir']} --yes" in restore_line
+    assert "DATABASE_ADMIN_URL" not in restore_line
     # The EMITTED command executes VERBATIM end-to-end: a PATH shim stands
     # in for the `farna-control` binary (recording the argv), so the REAL `ln -sfn`
     # swap-back runs — a crash-safe POSIX primitive, never a sub-GUI copy.
@@ -174,7 +191,8 @@ def test_poisoned_artifact_refusal_and_verbatim_restore_recovers_previous(tmp_pa
     assert final_args[0] == "restore"
     assert final_args[1] == str(snapshot_path)
     assert "--data-dir" in final_args
-    assert final_args[-1] == "--yes"
+    assert "--yes" in final_args
+    assert "--db-url" not in final_args
     # The restore pointer now names the PREVIOUS release again, yet the
     # upgrade marker (still on disk) recorded the snapshot for recovery.
     current_link = plant["install_root"] / "current"

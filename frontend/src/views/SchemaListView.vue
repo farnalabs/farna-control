@@ -53,26 +53,13 @@
           role="alert"
         />
 
-        <div v-if="loading" aria-hidden="true" class="table-wrapper">
-          <table class="w-full text-left text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.SchemaListView.name') }}</th>
-                <th class="table-header">{{ $t('views.SchemaListView.description') }}</th>
-                <th class="table-header capitalize">{{ $t('views.SchemaListView.status') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.SchemaListView.actions') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="row in 6" :key="row">
-                <td class="table-cell"><div class="h-4 w-32 rounded bg-muted/50" /></td>
-                <td class="table-cell"><div class="h-4 w-full max-w-md rounded bg-muted/50" /></td>
-                <td class="table-cell"><div class="h-4 w-16 rounded bg-muted/50" /></td>
-                <td class="table-cell"><div class="ml-auto h-4 w-8 rounded bg-muted/50" /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <!-- STATE-3 (ux-conformance): the column count is known before the
+             first row arrives, so the loading placeholder is the shared
+             determinate TableSkeleton (4 columns / 6 rows, matching the real
+             <th> row and row count) instead of a hand-rolled pulse table.
+             `aria-hidden` keeps the loading placeholder out of the
+             accessibility tree, as the bespoke placeholder was. -->
+        <TableSkeleton v-if="loading" :columns="4" :rows="6" aria-hidden="true" />
 
         <ErrorAlert v-else-if="error" :message="error" :on-retry="loadSchemas" />
 
@@ -267,6 +254,7 @@ import type { components } from '../lib/api/client'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import { ChevronRight, Folder, FolderOpen, MoreVertical } from '@lucide/vue'
