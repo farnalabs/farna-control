@@ -146,7 +146,7 @@ const hasNodeDetails = computed(() => humanOnly.value !== null || teamName.value
     >{{ $t('views.PipelineEditorView.governance_expiry', { expiry: expiryLabel }) }}</span>
     <span
       v-if="policyGate"
-      class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+      class="inline-flex items-center gap-1 rounded bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-text"
       :aria-label="$t('views.PipelineEditorView.governance_guardrail')"
       :title="$t('views.PipelineEditorView.governance_guardrail_hint')"
       data-testid="pipeline-node-governance-guardrail"

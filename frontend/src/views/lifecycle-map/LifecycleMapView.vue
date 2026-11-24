@@ -57,9 +57,7 @@
     </header>
 
     <section class="page-wide">
-      <div v-if="isLoadingDetail" class="flex items-center justify-center py-20">
-        <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
+      <LoadingSpinner v-if="isLoadingDetail" />
 
       <ErrorAlert
         v-else-if="detailError"
@@ -277,7 +275,7 @@
                   v-if="isDispatchedJourneyRun(run)"
                   :data-testid="`journey-run-dispatched-${run.run_id}`"
                   :title="$t('common.execution_origin.dispatched_hint')"
-                  class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
+                  class="inline-flex items-center rounded-full bg-run-dispatched/10 px-2 py-0.5 text-xs font-medium text-run-dispatched-text dark:bg-run-dispatched-surface"
                 >{{ $t('common.execution_origin.dispatched') }}</span>
                 <span class="text-muted-foreground">{{ formatRunDate(run.completed_at) }}</span>
               </li>
@@ -364,6 +362,7 @@ import LifecycleMapRenderer from '../../components/lifecycle-map/LifecycleMapRen
 import ProvenanceBadge from '../../components/lifecycle-map/ProvenanceBadge.vue'
 import JourneyCard from '../../components/lifecycle-map/JourneyCard.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import FormDialog from '../../components/shared/FormDialog.vue'
 import { formatRunDate, isDispatchedRun } from '../../utils/runUtils'
 import { shortId } from '../../utils/format'

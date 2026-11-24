@@ -419,7 +419,7 @@ function statusBadgeClass(status: string): string {
   const classMap: Record<string, string> = {
     pending: 'bg-pending/10 text-pending',
     routing: 'bg-warning/10 text-warning-text',
-    correcting: 'bg-purple-100 text-purple-700',
+    correcting: 'bg-eval-proposal text-eval-proposal-text',
     resolved: 'bg-success/10 text-success-text',
     escalated: 'bg-destructive/10 text-destructive-text',
     dismissed: 'bg-muted text-muted-foreground',

@@ -271,6 +271,36 @@ describe('AssistantOnlyView', () => {
     expect(fetchPlanMock).toHaveBeenCalled()
   })
 
+  it('exposes the session and sub-tab bars as StateTabs tablists', async () => {
+    localStorage.setItem('assistant-active-session', 'session-1')
+    ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [makeSession('session-1', 'Alpha')] } })
+    const tabsStore = useAssistantTabsStore()
+    tabsStore.tabs.push({ tabId: 'tab-1', sessionId: 'session-1' })
+    const wrapper = mount(AssistantOnlyView)
+    await flushPromises()
+
+    const sessionBar = wrapper.get('[data-testid="assistant-only-tab-bar"]')
+    // The session tabs carry a per-tab close button, so the tablist keeps its
+    // buttons out of its own subtree and claims them with aria-owns.
+    const sessionTablist = sessionBar.get('[role="tablist"]')
+    expect(sessionTablist.attributes('aria-label')).toBeTruthy()
+    expect(sessionTablist.attributes('aria-owns')).toContain(
+      wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('id'),
+    )
+    expect(sessionTablist.element.contains(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').element)).toBe(false)
+    expect(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('aria-controls')).toBe('assistant-only-panel-chat')
+
+    const subBar = wrapper.get('[data-testid="assistant-only-subtab-bar"]')
+    expect(subBar.attributes('role')).toBe('tablist')
+    expect(subBar.attributes('aria-label')).toBeTruthy()
+    expect(subBar.attributes('aria-owns')).toBeUndefined()
+    expect(wrapper.get('[data-testid="assistant-only-subtab-chat"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="assistant-only-subtab-chat"]').attributes('aria-controls')).toBe('assistant-only-panel-chat')
+    expect(wrapper.get('[data-testid="assistant-only-subtab-skills"]').attributes('tabindex')).toBe('-1')
+  })
+
   it('renders a streaming indicator on the active tab', async () => {
     localStorage.setItem('assistant-active-session', 'session-1')
     ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [makeSession('session-1', 'Alpha')], total: 1 } })

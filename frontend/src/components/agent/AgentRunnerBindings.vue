@@ -136,7 +136,7 @@ watch(
     </dt>
     <dd class="mt-1">
       <p class="text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.runner_bindings_help') }}</p>
-      <p v-if="bindings.length > 0" class="mt-1 text-[11px] text-amber-500">
+      <p v-if="bindings.length > 0" class="mt-1 text-[11px] text-warning-text">
         {{ $t('views.PipelineEditorView.runner_bindings_local_warning') }}
       </p>
       <ul v-if="bindings.length > 0" class="mt-1 space-y-1" data-testid="pipeline-editor-runner-bindings-rows">

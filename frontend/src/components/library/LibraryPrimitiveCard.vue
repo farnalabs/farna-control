@@ -51,20 +51,14 @@
 
     <div v-if="showAutoUpdate && prim.forked_from" class="flex items-center gap-2 mb-3">
       <span class="text-xs text-muted-foreground">{{ $t('views.LibraryView.auto_update') }}</span>
-      <button type="button"
-        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
-        :class="prim.auto_update ? 'bg-primary' : 'bg-muted'"
-        role="switch"
-        :aria-checked="prim.auto_update"
-        :disabled="toggleLoading[prim.id]"
-        @click="$emit('toggle-auto-update', prim)"
+      <ToggleSwitch
+        :checked="prim.auto_update"
+        :disabled="!!toggleLoading[prim.id]"
+        :toggling="!!toggleLoading[prim.id]"
+        :label="$t('views.LibraryView.auto_update')"
         :data-testid="`auto-update-toggle-${prim.id}`"
-      >
-        <span
-          class="inline-block h-3.5 w-3.5 rounded-full bg-background transition-transform"
-          :class="prim.auto_update ? 'translate-x-[18px]' : 'translate-x-[2px]'"
-        />
-      </button>
+        @toggle="$emit('toggle-auto-update', prim)"
+      />
     </div>
 
     <div class="flex items-center gap-2 mt-auto">
@@ -90,6 +84,7 @@
 
 <script setup lang="ts">
 import BaseCard from '../ui/BaseCard.vue'
+import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
 export interface LibraryPrimitive {
   id: string
