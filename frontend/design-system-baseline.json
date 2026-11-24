@@ -91,8 +91,6 @@
   "raw_dialog": {
     "frontend/src/components/licence/LicenceRenewalNotice.vue": 1,
     "frontend/src/components/settings/McpOauthClientsCard.vue": 1,
-    "frontend/src/components/variants/VariantGroupBuilder.vue": 1,
-    "frontend/src/views/AdminRunRetentionView.vue": 1,
     "frontend/src/views/AdminUsersView.vue": 1,
     "frontend/src/views/RunDetailView.vue": 1,
     "frontend/src/views/SettingsMcpView.vue": 1,
