@@ -32,7 +32,7 @@ app = 'farna-control'
 # that is a manual `fly scale count app=2 -a farna-control` (+1 app machine at the
 # [[vm]]-declared size), not a config change.
 # Whole-org standing (verified 2026-09-02): 11 machines across 7 apps in org
-# `personal`, ~8 started 24/7: farna-control 3 + staging-farna-control 2 + modulo-telemetry 2
+# `personal`, ~8 started 24/7: farna-control 3 + staging-farna-control 2 + farna-control-telemetry 2
 # (fra, 1 running) + library-modulo 1 (ams, autostop, mostly stopped) + 3 Fly
 # Postgres APPS, each on its own volume (modulo-app-db 2CPU/4gb,
 # modulo-staging-db, library-modulo-db).
@@ -53,7 +53,7 @@ app = 'farna-control'
 # retired - not provisioned, no app, no machines, no cost.
 # Org `modulo-admin` (separate org/bill) holds the only MPG cluster this token can
 # see: `flyctl mpg list` -> modulo-telemetry-db (org modulo-admin, fra, basic,
-# status ready, attached apps: modulo-telemetry). [FAR-1882 2026-10-17] The wording
+# status ready, attached apps: farna-control-telemetry). [FAR-1882 2026-10-17] The wording
 # that stood here claimed TWO clusters with one ORPHANED and flagged a
 # `fly mpg destroy` cleanup (needs-human) - corrected: no orphaned cluster was
 # observed, this one is ATTACHED and serving telemetry, so destroying it would take

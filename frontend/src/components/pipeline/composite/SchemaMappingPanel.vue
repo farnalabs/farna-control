@@ -8,6 +8,7 @@ import Tab from 'primevue/tab'
 import TabPanels from 'primevue/tabpanels'
 import TabPanel from 'primevue/tabpanel'
 import FieldMappingPair from './FieldMappingPair.vue'
+import EmptyState from '../../shared/EmptyState.vue'
 import type { SchemaField } from '../../../types/pipeline'
 
 const props = defineProps<{
@@ -103,9 +104,7 @@ watch(
 
 <template>
   <div class="space-y-3">
-    <div v-if="!composite" class="py-4 text-center text-sm text-muted-foreground">
-      No composite selected.
-    </div>
+    <EmptyState v-if="!composite" variant="bare" title="No composite selected." />
 
     <template v-else>
       <div class="flex items-center gap-2">
@@ -133,9 +132,11 @@ watch(
             <div v-if="loading" class="py-4 text-center text-xs text-muted-foreground">
               Loading schemas...
             </div>
-            <div v-else-if="sourceFields.length === 0 && targetFields.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-              No schemas available for input mapping.
-            </div>
+            <EmptyState
+              v-else-if="sourceFields.length === 0 && targetFields.length === 0"
+              variant="bare"
+              title="No schemas available for input mapping."
+            />
             <div v-else>
               <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
                 <span v-if="sourceFields.length > 0">
@@ -161,9 +162,11 @@ watch(
             <div v-if="loading" class="py-4 text-center text-xs text-muted-foreground">
               Loading schemas...
             </div>
-            <div v-else-if="outputSourceFields.length === 0 && outputTargetFields.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-              No schemas available for output mapping.
-            </div>
+            <EmptyState
+              v-else-if="outputSourceFields.length === 0 && outputTargetFields.length === 0"
+              variant="bare"
+              title="No schemas available for output mapping."
+            />
             <div v-else>
               <div class="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
                 <span v-if="outputSourceFields.length > 0">

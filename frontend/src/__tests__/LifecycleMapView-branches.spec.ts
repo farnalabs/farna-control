@@ -396,7 +396,7 @@ describe('LifecycleMapView branches — delete success', () => {
 
 // ── delete error ────────────────────────────────────────────────────────
 describe('LifecycleMapView branches — delete error', () => {
-  it('does not crash when delete fails', async () => {
+  it('renders the delete-error alert when delete fails with the dialog open', async () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       // Only fail DELETE requests for the map, pass through GET
       if (String(url).includes('/lifecycle-maps/map-1') && init?.method === 'DELETE') {
@@ -409,15 +409,20 @@ describe('LifecycleMapView branches — delete error', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    // Call handleDeleteConfirm directly via vm
-    const vm = wrapper.vm as unknown as { handleDeleteConfirm: () => Promise<void> }
+    // Open the confirmation dialog first, so its slot (including the converted
+    // ErrorAlert surface) is mounted when the delete attempt fails.
+    const vm = wrapper.vm as unknown as { showDeleteDialog: boolean; handleDeleteConfirm: () => Promise<void> }
+    vm.showDeleteDialog = true
+    await flushPromises()
+
     await vm.handleDeleteConfirm()
     await flushPromises()
 
-    // The component should not crash — the error is caught internally
-    // The deleteError ref is set but the FormDialog is stubbed so we can't see it.
-    // Just verify the component is still mounted and didn't throw.
+    // The component should not crash — the error is caught and surfaced.
     expect(wrapper.exists()).toBe(true)
+    // The dialog teleports its body to <body>, where the ErrorAlert stub renders
+    // the failure message.
+    expect(document.body.textContent).toContain('delete failed')
     wrapper.unmount()
   })
 })

@@ -112,11 +112,12 @@
         class="flex flex-1 items-center justify-center p-8"
         data-testid="assistant-only-empty"
       >
-        <div class="space-y-3 text-center">
-          <h2 class="text-lg font-semibold">{{ $t('components.assistant.AssistantOnlyView.no_tabs_yet') }}</h2>
-          <p class="text-sm text-muted-foreground">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</p>
+        <EmptyState
+          :title="$t('components.assistant.AssistantOnlyView.no_tabs_yet')"
+          :description="$t('components.assistant.AssistantOnlyView.start_new')"
+        >
           <Button size="small" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
-        </div>
+        </EmptyState>
       </div>
 
       <div
@@ -124,10 +125,9 @@
         class="flex flex-1 items-center justify-center p-8"
         data-testid="assistant-only-no-active"
       >
-        <div class="space-y-3 text-center">
-          <p class="text-sm text-muted-foreground">{{ $t('components.assistant.AssistantOnlyView.select_tab_or_new') }}</p>
+        <EmptyState :title="$t('components.assistant.AssistantOnlyView.select_tab_or_new')">
           <Button size="small" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
-        </div>
+        </EmptyState>
       </div>
 
       <div v-else class="flex flex-1 overflow-hidden" data-testid="assistant-only-chat">
@@ -189,6 +189,7 @@ import AssistantChat from '@/components/assistant/AssistantChat.vue'
 import AssistantSkillManager from '@/components/assistant/AssistantSkillManager.vue'
 import AssistantContextSources from '@/components/assistant/AssistantContextSources.vue'
 import AssistantSessionDrawer from '@/components/assistant/AssistantSessionDrawer.vue'
+import EmptyState from '@/components/shared/EmptyState.vue'
 
 const router = useRouter()
 const { t } = useI18n()

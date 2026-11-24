@@ -89,16 +89,14 @@
       <span>{{ $t('views.DeterminationView.comparison_loading') }}</span>
     </div>
 
-    <div
+    <ErrorAlert
       v-else-if="error"
-      role="alert"
-      aria-live="assertive"
-      class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-destructive-text"
+      compact
       data-testid="determination-comparison-error"
     >
       <p class="text-sm font-medium">{{ $t('views.DeterminationView.comparison_failed') }}</p>
       <p class="text-sm">{{ error }}</p>
-    </div>
+    </ErrorAlert>
 
     <p
       v-else-if="!comparison"
@@ -417,6 +415,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 import DataCard from '../ui/DataCard.vue'
 import DeterminationComparisonProvenance from './DeterminationComparisonProvenance.vue'
 import { confidenceBadgeClass } from './confidencePresentation'

@@ -282,6 +282,40 @@ Backups are encrypted with AES-256-CBC (PBKDF2, 600K iterations). See
   location, or hardware security module).
 - Verify backup integrity with `--dry-run` before relying on it for DR.
 
+### 3.6 Pre-upgrade snapshots: read/write access from the application container (accepted residual)
+
+FAR-2667 makes the pre-upgrade `pg_dump` unskippable by having the container
+entrypoint take it immediately before the migrations run. That snapshot is a
+**plain-SQL dump of every tenant's rows**, and it is written from the same
+process that serves tenants.
+
+**Accepted residual, recorded deliberately:** the application process can READ
+and WRITE its own disaster-recovery point. The mount is not read-only from the
+application's point of view, and an attacker who achieves code execution inside
+the container can both exfiltrate the full-fleet dump and delete or corrupt it.
+
+Why this is accepted rather than redesigned in this change:
+
+- the same container already holds the DB **owner/superuser connection URL**
+  (`DATABASE_ADMIN_URL`) and can read every row through the database anyway, so
+  the dump adds no confidentiality exposure the container did not already have;
+- being unskippable is worth more than the marginal gain: a snapshot an operator
+  has to remember is a snapshot that is missing when it is needed, and moving the
+  dump to a separate one-off container reintroduces exactly that failure mode;
+- the snapshot volume is **outside** the `postgres_data` volume, survives image
+  replacement and `compose down`, and is removed only by `compose down -v`
+  (which also removes the database).
+
+Operator mitigations that reduce the blast radius without changing the design:
+run the deployment on a host the app process cannot use as a foothold for other
+tenants' hosts, apply the image's unprivileged user (the image runs as
+`www-data`), keep `snapshot_data` on encrypted storage if the threat model
+includes disk theft, and copy snapshots off-host — a snapshot on the same host
+as the database is not a backup.
+
+Follow-up (out of scope here): a separate, short-lived snapshot container with a
+read-only mount of the data volume and a write-only mount of the snapshot volume.
+
 ---
 
 ## 4. API Security
