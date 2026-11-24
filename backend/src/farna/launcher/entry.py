@@ -81,7 +81,7 @@ _log = logging.getLogger(__name__)
 # instead of the installed app's first boot; the Windows launcher and the Linux
 # bundle wrapper are held to the same name by unit tests, not by their builds.
 # FAR-2554: the launchers kept
-# exporting the pre-rebrand ``MODULO_BUNDLED_BIN_DIR`` after the resolver was
+# exporting the pre-rebrand bin-dir name after the resolver was
 # renamed, so the env value was ignored and the boot fell through to the
 # ``<sys.prefix>/bundled/bin`` default that no bundle produces.
 BUNDLED_BIN_DIR_ENV = "FARNA_CONTROL_BUNDLED_BIN_DIR"

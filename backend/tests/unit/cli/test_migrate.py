@@ -292,6 +292,55 @@ class TestAuth:
         # Will fail later due to DB, but auth should pass
         assert "Admin authentication required" not in result.output
 
+    @patch("farna.cli.migrate.decode_principal")
+    def test_cli_auth_from_admin_token_env(self, mock_decode: MagicMock) -> None:
+        """Positive: a non-empty FARNA_CONTROL_ADMIN_TOKEN authenticates the CLI."""
+        from farna.auth.jwt import AuthenticatedPrincipal
+
+        mock_decode.return_value = AuthenticatedPrincipal(
+            username="admin",
+            organisation_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            account_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+            org_role="admin",
+        )
+        runner = CliRunner()
+        with patch.dict("os.environ", {"FARNA_CONTROL_ADMIN_TOKEN": "env.jwt.token", "FARNA_CONTROL_ADMIN_SECRET": ""}):
+            result = runner.invoke(cli, ["export-org", "00000000-0000-0000-0000-000000000001"])
+
+        assert "Admin authentication required" not in result.output
+        assert mock_decode.call_args.args[0] == "env.jwt.token"
+
+    @patch("farna.cli.migrate.decode_principal")
+    def test_explicit_empty_token_does_not_fall_through_to_the_env(self, mock_decode: MagicMock) -> None:
+        """An explicit ``--token ""`` is not "unset": the env var must not fill it."""
+        runner = CliRunner()
+        with patch.dict("os.environ", {"FARNA_CONTROL_ADMIN_TOKEN": "env.jwt.token", "FARNA_CONTROL_ADMIN_SECRET": ""}):
+            result = runner.invoke(cli, ["--token", "", "export-org", "00000000-0000-0000-0000-000000000001"])
+
+        assert "Admin authentication required" in result.output
+        mock_decode.assert_not_called()
+
+    @patch("farna.cli.migrate.decode_principal")
+    def test_explicit_token_beats_the_admin_token_env(self, mock_decode: MagicMock) -> None:
+        """``--token`` takes precedence over FARNA_CONTROL_ADMIN_TOKEN."""
+        from farna.auth.jwt import AuthenticatedPrincipal
+
+        mock_decode.return_value = AuthenticatedPrincipal(
+            username="admin",
+            organisation_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            account_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+            org_role="admin",
+        )
+        runner = CliRunner()
+        with patch.dict("os.environ", {"FARNA_CONTROL_ADMIN_TOKEN": "env.jwt.token", "FARNA_CONTROL_ADMIN_SECRET": ""}):
+            result = runner.invoke(
+                cli,
+                ["--token", "flag.jwt.token", "export-org", "00000000-0000-0000-0000-000000000001"],
+            )
+
+        assert "Admin authentication required" not in result.output
+        assert mock_decode.call_args.args[0] == "flag.jwt.token"
+
 
 class TestResolveAdminAuth:
     def test_no_token_no_env_returns_none(self) -> None:

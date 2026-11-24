@@ -4,12 +4,12 @@
     <template v-else>
       <PageHeader :title="$t('views.AgentOutputDiffView.agent_output_diff')" :subtitle="$t('views.AgentOutputDiffView.subtitle')" />
 
-      <div v-if="loadingRuns" class="rounded-lg border bg-card p-6" data-testid="diff-loading">
+      <BaseCard v-if="loadingRuns" padding="lg" data-testid="diff-loading">
         <div class="grid gap-4">
           <div v-for="n in 3" :key="n" class="h-9 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
-      <div v-else class="rounded-lg border bg-card p-6">
+      </BaseCard>
+      <BaseCard v-else padding="lg">
         <div class="flex flex-col items-stretch gap-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div class="flex min-w-0 flex-1 flex-col gap-1.5">
             <label for="agentoutputdiffview-field-run-a" class="text-xs font-medium text-muted-foreground">{{ $t('views.AgentOutputDiffView.run_a') }}</label>
@@ -90,13 +90,13 @@
         <p v-else-if="!loadingRuns && recentRuns.length === 0" aria-live="polite" class="mt-4 text-sm text-muted-foreground" data-testid="diff-recent-runs-empty">
           {{ $t('views.AgentOutputDiffView.no_eligible_runs') }}
         </p>
-      </div>
+      </BaseCard>
 
-      <div v-if="loading" class="rounded-lg border bg-card p-6" data-testid="diff-comparing">
+      <BaseCard v-if="loading" padding="lg" data-testid="diff-comparing">
         <div class="grid gap-4">
           <div v-for="n in 3" :key="n" class="h-9 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </BaseCard>
       <div v-else-if="result" class="space-y-6">
         <div
           v-if="!result.has_diff"
@@ -139,7 +139,7 @@
           </div>
         </details>
 
-        <DataCard padding="none" card-class="overflow-hidden">
+        <DataCard padding="none" class="overflow-hidden">
           <div class="border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
             {{ $t('views.AgentOutputDiffView.line_level_diff') }} <span class="ml-2 text-green-700 dark:text-green-400">{{ $t('views.AgentOutputDiffView.plus_added') }}</span> <span class="ml-1 text-red-700 dark:text-red-400">{{ $t('views.AgentOutputDiffView.minus_removed') }}</span>
           </div>
@@ -191,6 +191,7 @@ import type { components } from '../lib/api/client'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'

@@ -162,13 +162,19 @@
             <h2 v-else class="text-base font-semibold text-foreground">{{ $t('views.PipelineListView.all_pipelines') }}</h2>
           </div>
           <!-- Table / Tree view -->
-          <div class="card rounded-lg border border-border overflow-hidden">
+          <TableCard class="rounded-lg border border-border overflow-hidden">
             <p id="pipeline-list-table-scroll-instructions" class="sr-only">
               {{ $t('views.PipelineListView.table_scroll_instructions') }}
             </p>
             <div class="relative">
               <div class="pointer-events-none absolute right-0 top-0 z-10 h-full w-8 bg-gradient-to-l from-background to-transparent sm:hidden" aria-hidden="true" />
-              <div class="table-wrapper focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset" tabindex="0" aria-describedby="pipeline-list-table-scroll-instructions">
+              <!-- The scroll region is the shared CardTable primitive: it owns the
+                   focusable viewport, so the shell class and the sr-only scroll
+                   instruction attach to the scroll container itself. -->
+              <CardTable
+                class="table-wrapper focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset"
+                describedby="pipeline-list-table-scroll-instructions"
+              >
               <table class="w-full min-w-max text-left text-sm">
               <thead>
                 <tr>
@@ -278,9 +284,9 @@
                 </template>
               </tbody>
               </table>
-              </div>
+              </CardTable>
             </div>
-          </div>
+          </TableCard>
         </div>
 
       </div>
@@ -450,6 +456,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, type Ref } 
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
+import TableCard from '../components/ui/TableCard.vue'
+import CardTable from '../components/ui/CardTable.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'

@@ -875,9 +875,10 @@ async def list_primitives(
     """Return org-scoped and Native library primitives merged into a single page.
 
     ``source`` (when given) restricts the result to exactly that source
-    value — e.g. ``source="modulo"`` returns only Native library built-ins,
-    ``source="local"`` returns only the org's own saved primitives, and
-    ``source="registry"`` returns only the org's DB rows carrying that source.
+    value — e.g. ``source="farna_control"`` returns only Native library
+    built-ins, ``source="local"`` returns only the org's own saved primitives,
+    and ``source="registry"`` returns only the org's DB rows carrying that
+    source.
     ``source="community"`` is retired (FAR-2592): the parameter is still
     accepted for compatibility but always returns no rows, and
     community-sourced rows are excluded from the merged listing (the legacy
@@ -914,7 +915,7 @@ async def list_primitives(
     # universe count and is passed through unchanged.
     org_items = list(org_page.items)
     builtin_items: list[LibraryPrimitive] = []
-    if source is None or source == "modulo":
+    if source is None or source == "farna_control":
         builtin_items = _filter_builtins(
             primitive_type=primitive_type,
             primitive_types=primitive_types,

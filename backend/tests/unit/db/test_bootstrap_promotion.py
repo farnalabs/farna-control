@@ -20,11 +20,12 @@ import pytest
 
 import farna.db.bootstrap as bootstrap_module
 from farna.db.url_utils import derive_system_database_url, fix_database_url, split_postgres_sslmode
+from tests.helpers.env_prefixes import retired_env_name
 from tests.unit._source_scan import iter_source_text
 
-#: The pre-rebrand system-URL alias, split so the brand-drift gate does not count
-#: this internal identifier as product-name copy (same pattern as test_settings).
-_PRE_REBRAND_SYSTEM_URL_ENV = "MOD" + "ULO" + "_SYSTEM_DATABASE_URL"
+#: The pre-rebrand system-URL alias, from the one assembled construction so the
+#: brand-drift gate does not count this internal identifier as product copy.
+_PRE_REBRAND_SYSTEM_URL_ENV = retired_env_name("SYSTEM_DATABASE_URL")
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DEPLOY_SHIM = _REPO_ROOT / "deploy" / "fly" / "bootstrap_db.py"

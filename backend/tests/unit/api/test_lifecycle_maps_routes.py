@@ -34,7 +34,7 @@ _NOW = datetime(2026, 9, 1, 12, 0, 0, tzinfo=UTC)
 
 _CONTENT = {
     "stages": [
-        {"id": "stage-1", "name": "Build", "type": "modulo", "x": 1.0, "y": 2.0},
+        {"id": "stage-1", "name": "Build", "type": "farna_control", "x": 1.0, "y": 2.0},
         {"id": "stage-2", "name": "Merge", "type": "external", "external_url": "https://ci.example.com"},
     ],
     "edges": [{"id": "e1", "source": "stage-1", "target": "stage-2", "trigger_type": "auto"}],
@@ -392,7 +392,7 @@ def test_get_map_detail_decodes_stages_and_edges(client: tuple[TestClient, _Harn
     body = resp.json()
     assert body["current_version"] == 3
     assert [s["id"] for s in body["stages"]] == ["stage-1", "stage-2"]
-    assert body["stages"][0]["type"] == "modulo"
+    assert body["stages"][0]["type"] == "farna_control"
     assert body["stages"][1]["external_url"] == "https://ci.example.com"
     assert [t["id"] for t in body["transitions"]] == ["e1"]
     assert body["versions"][0]["version"] == 3

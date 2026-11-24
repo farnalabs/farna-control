@@ -9,23 +9,7 @@
     />
 
     <div v-if="loading" class="space-y-4" aria-busy="true">
-      <div v-for="i in 3" :key="i" class="card p-5 animate-pulse">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex-1 space-y-3">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="h-5 w-24 bg-muted rounded" />
-              <div class="h-5 w-20 bg-muted rounded" />
-            </div>
-            <div class="h-4 w-1/3 bg-muted rounded" />
-            <div class="h-3 w-2/3 bg-muted rounded" />
-            <div class="h-3 w-1/2 bg-muted rounded" />
-          </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <div class="h-9 w-20 bg-muted rounded" />
-            <div class="h-9 w-20 bg-muted rounded" />
-          </div>
-        </div>
-      </div>
+      <CardSkeleton v-for="i in 3" :key="i" class="p-5" :lines="3" />
     </div>
 
     <ErrorAlert v-else-if="pageError" :message="pageError" :on-retry="loadProposals" />
@@ -239,6 +223,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import AppSelect from '../components/shared/AppSelect.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { formatDateShortWithTime } from '../lib/formatDate'
 

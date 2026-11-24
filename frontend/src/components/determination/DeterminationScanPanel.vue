@@ -1,12 +1,17 @@
 <template>
-  <section class="card p-4 space-y-4" data-testid="determination-scan">
-    <header class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.scan_title') }}</h2>
-      <span v-if="scan" class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
+  <DataCard
+    as="section"
+    data-testid="determination-scan"
+    :title="$t('views.DeterminationView.scan_title')"
+    heading-level="h2"
+  >
+    <template v-if="scan" #headerActions>
+      <span class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
         {{ scan.summary }}
       </span>
-    </header>
+    </template>
 
+    <div class="space-y-4">
     <div
       v-if="loading"
       class="flex items-center gap-3 text-sm text-muted-foreground"
@@ -99,12 +104,14 @@
         </ul>
       </section>
     </template>
-  </section>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import DataCard from '../ui/DataCard.vue'
 import { confidenceBadgeClass } from './confidencePresentation'
 import type { DeterminationScanResponse } from '../../composables/useDetermination'
 

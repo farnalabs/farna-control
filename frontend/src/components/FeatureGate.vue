@@ -1,5 +1,5 @@
 <template>
-  <div class="relative" data-testid="feature-gate">
+  <div class="relative" :data-testid="`feature-gate-${gateUid}`">
     <slot v-if="enabled" />
 
     <div
@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useId } from "vue";
 import Button from 'primevue/button'
 import { useI18n } from "vue-i18n";
 import { usePlanStore } from "../stores/planStore";
@@ -92,6 +92,11 @@ const props = withDefaults(defineProps<{
 });
 
 const planStore = usePlanStore();
+
+// FAR-2714: a page can render several gates (e.g. /governance wraps each level
+// in one), so the gate root needs a per-instance id. The disabled/lock/title
+// markers stay static because they identify the gate's state, not the instance.
+const gateUid = useId();
 
 const enabled = computed(() => {
   if (props.featureName) return planStore.featureEnabled(props.featureName);

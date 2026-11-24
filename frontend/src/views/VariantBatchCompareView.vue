@@ -115,8 +115,8 @@
         </div>
 
         <div v-if="expandedRunIds.size > 0" class="space-y-4">
-          <h3 class="text-base font-semibold">{{ $t('views.variantBatch.detailTitle') }}</h3>
-          <div v-for="run in rankedRuns.filter(r => expandedRunIds.has(r.run_id))" :key="run.run_id" class="rounded-lg border bg-card p-4" :data-testid="`variant-batch-detail-${run.run_id}`">
+          <CardHeader :title="$t('views.variantBatch.detailTitle')" />
+          <BaseCard v-for="run in rankedRuns.filter(r => expandedRunIds.has(r.run_id))" :key="run.run_id" padding="md" :data-testid="`variant-batch-detail-${run.run_id}`">
             <div class="mb-2 flex items-center justify-between">
               <span class="font-mono text-xs font-semibold">{{ run.variant_name }}</span>
               <a :href="`/runs/${run.run_id}`" class="text-xs text-primary-text hover:underline" :data-testid="`variant-batch-run-link-${run.run_id}`">
@@ -173,7 +173,7 @@
               <JsonViewer :data="run.node_outputs" :show-toolbar="false" :max-height="'16rem'" />
             </div>
             <div v-else class="text-xs text-muted-foreground">{{ $t('views.variantBatch.noOutput') }}</div>
-          </div>
+          </BaseCard>
         </div>
       </div>
 
@@ -185,12 +185,13 @@
     </template>
 
   <div class="page-wide mt-8 border-t pt-6">
-    <div class="mb-3 flex items-center justify-between">
-      <h2 class="text-base font-semibold">{{ $t('views.variantBatch.myComparisons') }}</h2>
-      <router-link to="/variants/compare" class="text-sm text-primary-text hover:underline" data-testid="variant-batch-new-comparison">
-        {{ $t('views.variantBatch.createComparison') }}
-      </router-link>
-    </div>
+    <CardHeader :title="$t('views.variantBatch.myComparisons')" heading-level="h2">
+      <template #actions>
+        <router-link to="/variants/compare" class="text-sm text-primary-text hover:underline" data-testid="variant-batch-new-comparison">
+          {{ $t('views.variantBatch.createComparison') }}
+        </router-link>
+      </template>
+    </CardHeader>
     <LoadingSpinner v-if="comparisonsLoading" />
     <ErrorAlert v-else-if="comparisonsError" :message="comparisonsError" :on-retry="loadComparisons" />
     <template v-else>
@@ -251,6 +252,8 @@ import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Button from 'primevue/button'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import { formatMoney } from '../lib/money'
 import { useOrgCurrency } from '../composables/useOrgCurrency'
 import {

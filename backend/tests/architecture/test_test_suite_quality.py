@@ -1123,7 +1123,7 @@ def _is_mark_decorator(dec: ast.AST) -> bool:
     return "mark" in parts
 
 
-_MODULO_TEST_STYLE_SCOPE_VAR = "FARNA_CONTROL_TEST_STYLE_SCOPE"
+_TEST_STYLE_SCOPE_VAR = "FARNA_CONTROL_TEST_STYLE_SCOPE"
 
 
 @functools.cache
@@ -1134,7 +1134,7 @@ def _resolve_scope_paths() -> frozenset[Path] | None:
     and non-empty, or ``None`` when it is unset / empty (meaning full scan).
     Invalid or non-existent entries are silently dropped.
     """
-    raw = os.environ.get(_MODULO_TEST_STYLE_SCOPE_VAR, "")
+    raw = os.environ.get(_TEST_STYLE_SCOPE_VAR, "")
     if not raw or not raw.strip():
         return None
     resolved: set[Path] = set()

@@ -1,5 +1,9 @@
 <template>
-  <div :class="rootClass">
+  <component
+    :is="isBare ? 'div' : BaseCard"
+    v-bind="rootProps"
+    class="text-center"
+  >
     <slot name="icon">
       <svg
         width="48"
@@ -23,11 +27,12 @@
     <div v-if="$slots.default" class="mt-6">
       <slot />
     </div>
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import BaseCard from '../ui/BaseCard.vue'
 
 const props = withDefaults(defineProps<{
   title: string
@@ -41,7 +46,6 @@ const props = withDefaults(defineProps<{
   variant?: 'card' | 'bare'
 }>(), { variant: 'card' })
 
-const rootClass = computed(() =>
-  props.variant === 'bare' ? 'text-center' : 'card p-8 text-center',
-)
+const isBare = computed(() => props.variant === 'bare')
+const rootProps = computed(() => (isBare.value ? {} : { padding: 'xl' as const }))
 </script>

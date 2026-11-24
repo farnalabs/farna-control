@@ -62,7 +62,7 @@ _PIN_TYPE_ORDER: tuple[str, ...] = ("schema", "agent", "workflow", "pipeline_tem
 # in-code registry, which lives outside the installing org's RLS slice.
 # Only built-ins qualify: nothing sourced from outside the org may be
 # resolvable as a visible-everywhere primitive.
-_VISIBLE_EVERYWHERE_SOURCES = frozenset({"modulo"})
+_VISIBLE_EVERYWHERE_SOURCES = frozenset({"farna_control"})
 
 # Library-primitive ``content_json["fields"]`` → JSON Schema type conversion.
 _FIELD_TYPE_MAP: dict[str, str] = {

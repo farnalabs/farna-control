@@ -12,11 +12,7 @@
            instead of an indeterminate spinner. -->
       <div v-if="loading" class="space-y-6" aria-busy="true" data-testid="admin-spend-limits-loading">
         <span class="sr-only" role="status">{{ $t('common.loading') }}</span>
-        <div v-for="n in 3" :key="n" class="card space-y-3 p-6">
-          <SkeletonBlock height-class="h-5 w-48" />
-          <SkeletonBlock height-class="h-4 w-72" />
-          <SkeletonBlock height-class="h-10 w-full" />
-        </div>
+        <CardSkeleton v-for="n in 3" :key="n" class="p-6" :lines="3" />
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadData" />
@@ -219,6 +215,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import { formatMoney } from '../lib/money'

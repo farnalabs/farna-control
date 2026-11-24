@@ -83,7 +83,7 @@ describe('AgentOutputDiffView', () => {
     await flushPromises()
     await nextTick()
 
-    const controls = wrapper.find('.rounded-lg.border.bg-card.p-6 > .flex')
+    const controls = wrapper.find('.card-base.p-6 > .flex')
     expect(controls.classes()).toEqual(expect.arrayContaining(['flex-col', 'sm:flex-row']))
 
     const selects = wrapper.findAllComponents({ name: 'Select' })
@@ -434,7 +434,7 @@ describe('AgentOutputDiffView', () => {
     await new Promise(r => setTimeout(r, 0))
     await nextTick()
 
-    const viewers = wrapper.findAll('[data-testid="json-viewer"]')
+    const viewers = wrapper.findAll('.json-viewer')
     expect(viewers.length).toBeGreaterThanOrEqual(2)
     const text = viewers.map(v => v.text()).join(' ')
     expect(text).toContain('summary')

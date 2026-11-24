@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test as base, expect, type Page } from '@playwright/test'
+import yaml from 'js-yaml'
 import { startCoverage, stopCoverage } from './coverage'
 import { getLocalE2eBaseUrl, getTestEnv, type TestEnv } from './env'
 import { loginThroughUi } from './login'
@@ -185,6 +187,168 @@ const MOCK_PLAN = {
   entitlements: MOCK_ENTITLEMENTS,
 }
 
+/**
+ * FAR-2713: the caller-scoped permission list the router gate and the sidebar
+ * read (`GET /api/v1/auth/permissions` → `{ permissions: string[] }`, resolved
+ * server-side from the backend permission registry). It is NOT the generic
+ * `{items,total}` envelope: answering that shape leaves
+ * `planStore.userPermissions` empty, the gate fails closed, and every route
+ * declaring `required_permissions` (the compliance evidence index, analytics,
+ * determination, evals, library search, system maps, ...) is refused before its
+ * view ever mounts.
+ *
+ * The mock models a fully-enabled org admin, so it grants exactly the
+ * permissions the product's own route manifest declares. Deriving them from
+ * `src/manifest.yaml` (rather than hard-coding a list) keeps the mock in step
+ * when a route adds a gate — a static list would silently refuse that route
+ * again.
+ */
+function manifestRoutePermissions(): string[] {
+  const manifestPath = resolve(__dirname, '../../../src/manifest.yaml')
+  const manifest = yaml.load(readFileSync(manifestPath, 'utf-8')) as {
+    routes?: Record<string, { required_permissions?: string[] | null }>
+  }
+  const names = new Set<string>()
+  for (const entry of Object.values(manifest.routes ?? {})) {
+    for (const name of entry.required_permissions ?? []) names.add(name)
+  }
+  return [...names].sort()
+}
+
+const MOCK_PERMISSIONS = manifestRoutePermissions()
+
+/**
+ * FAR-2713: fixtures for the four admin surfaces the general mock answered with
+ * the generic envelope. Each payload mirrors the generated OpenAPI type the
+ * view actually consumes (frontend/src/lib/api/schema.ts), with at least one
+ * row so cards, tables and definition tiles render content rather than an
+ * empty or error state.
+ */
+const MOCK_NOW = '2026-07-07T09:00:00Z'
+
+// GET /api/v1/evidence/redaction-rules → RedactionRuleResponse[] (bare array).
+// The seeded catch-all (`*` / viewer) mirrors migration 0320 / org creation.
+const MOCK_REDACTION_RULES = [
+  {
+    id: '00000000-0000-4000-8000-00000000e001',
+    key_pattern: '*',
+    role: 'viewer',
+    redacted_fields: [],
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+  {
+    id: '00000000-0000-4000-8000-00000000e002',
+    key_pattern: 'api_key',
+    role: 'operator',
+    redacted_fields: ['sensitive_output'],
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+  {
+    id: '00000000-0000-4000-8000-00000000e003',
+    key_pattern: 'internal_metadata',
+    role: 'admin',
+    redacted_fields: ['internal_metadata'],
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+]
+
+// GET /api/v1/compliance/evidence-index → EvidenceIndex (a structured object,
+// never the envelope). `detail.human_only_counts_are_lower_bounds` and a
+// `pipeline-snapshot:` identifier are included so the view's lower-bound banner
+// and its concise snapshot label render too.
+const MOCK_EVIDENCE_INDEX = {
+  pack_version: '2026.07.1',
+  pack_content_hash: 'sha256:4f1c0f4b9a2e7d3c8b5a6f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c',
+  pack_published_at: '2026-07-01T00:00:00Z',
+  generated_at: MOCK_NOW,
+  period_from: null,
+  period_to: null,
+  product_version: '0.9.0',
+  organisation_id: '1',
+  framework_ids: ['soc2', 'iso27001'],
+  coverage: {
+    soc2: { access_control: 4, audit_logging: 3 },
+    iso27001: { access_control: 2 },
+  },
+  complete: true,
+  missing_artifact_types: [],
+  artifacts: [
+    {
+      artifact_type: 'audit_log',
+      status: 'present',
+      provenance: 'observed',
+      description: 'Organisation audit trail export',
+      location: '/api/v1/admin/audit',
+      identifiers: ['audit-log:2026-07'],
+      record_count: 42,
+      detail: { human_only_counts_are_lower_bounds: false },
+      mapping_row_ids: ['soc2-cc6.1', 'iso27001-a.12.4'],
+      absence_reason: null,
+    },
+    {
+      artifact_type: 'run_snapshot',
+      status: 'present',
+      provenance: 'observed',
+      description: 'Frozen pipeline snapshot for a completed run',
+      location: '/runs/101',
+      identifiers: ['pipeline-snapshot:00000000-0000-4000-8000-00000000e101@v2'],
+      record_count: 1,
+      detail: { human_only_counts_are_lower_bounds: true },
+      mapping_row_ids: ['soc2-cc7.2'],
+    },
+    {
+      artifact_type: 'customer_policy',
+      status: 'customer_supplied',
+      provenance: 'customer-supplied',
+      description: 'Customer-managed security policy document',
+      location: 'customer-managed',
+      identifiers: ['policy:acme-sec-1'],
+      record_count: null,
+      detail: {},
+      mapping_row_ids: ['iso27001-a.5.1'],
+    },
+  ],
+}
+
+// GET /api/v1/plugins → PluginResponse[] (bare array). `capabilities` is a
+// JSON array (the backend field is a set), which the view's pluginTypeLabel
+// calls `.includes` on.
+const MOCK_PLUGINS = [
+  {
+    PLUGIN_ID: 'farnalabs.github-connector',
+    display_name: 'GitHub Connector',
+    description: 'Bidirectional GitHub integration for pipelines and pull requests',
+    version: '1.4.0',
+    capabilities: ['connector_type'],
+    health_ok: true,
+    health_detail: 'Registry reachable',
+    health_checked_at: MOCK_NOW,
+  },
+  {
+    PLUGIN_ID: 'farnalabs.anthropic-backend',
+    display_name: 'Anthropic Model Backend',
+    description: 'Anthropic Claude model backend',
+    version: '2.0.1',
+    capabilities: ['model_backend'],
+    health_ok: false,
+    health_detail: 'API key not configured',
+    health_checked_at: MOCK_NOW,
+  },
+  {
+    PLUGIN_ID: 'farnalabs.core-tools',
+    display_name: 'Core Tools',
+    description: 'Built-in pipeline node types',
+    version: '0.9.0',
+    capabilities: [],
+    health_ok: true,
+    health_detail: 'OK',
+    health_checked_at: null,
+  },
+]
+
 // Shared date spine for the dashboard summary/trends fixtures. Kept as data
 // (rather than inlined per series) so the seven trends arrays stay the same
 // length and every series lines up on the same dates for the charts.
@@ -214,6 +378,16 @@ export async function setupLocalMockApi(page: Page) {
     ) return route.fallback()
     if (url.includes('/api/v1/me/settings')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ locale: 'en-US' }) })
+    }
+    if (url.includes('/api/v1/auth/permissions')) {
+      // FAR-2713: `{ permissions: string[] }` — never the generic
+      // {items,total} envelope (see MOCK_PERMISSIONS). Registered before the
+      // generic GET catch-all so `required_permissions` routes render.
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ permissions: MOCK_PERMISSIONS }),
+      })
     }
     if (url.includes('/api/v1/me')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: '1', email: 'admin@example.com', display_name: 'Admin' }) })
@@ -378,6 +552,31 @@ export async function setupLocalMockApi(page: Page) {
       // `TypeError: anomalies.value.filter is not a function` (FAR-2614).
       // Registered BEFORE the generic GET catch-all below so it is reachable.
       return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    }
+    if (url.includes('/api/v1/evidence/redaction-rules') && method === 'GET') {
+      // `list_redaction_rules_endpoint` returns a BARE ARRAY (`list[RedactionRuleResponse]`).
+      // AdminEvidenceRedactionView reads `rules.value.some(...)` / `.length` /
+      // iteration over it, so the {items,total} envelope throws
+      // `TypeError: rules.value.some is not a function` and the whole view's
+      // render fails (no h1, no table). Registered before the generic GET
+      // catch-all below.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_REDACTION_RULES) })
+    }
+    if (url.includes('/api/v1/compliance/evidence-index') && method === 'GET') {
+      // Structured `EvidenceIndex` object (coverage map + artifacts array),
+      // never the envelope: ComplianceEvidenceIndexView reads
+      // `indexData.coverage` and `.artifacts.filter(...)`, so the envelope
+      // throws `Cannot read properties of undefined (reading 'filter')` and
+      // the definition tiles never render.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_EVIDENCE_INDEX) })
+    }
+    if (url.includes('/api/v1/plugins') && method === 'GET') {
+      // `list_plugins_endpoint` returns a BARE ARRAY (`list[PluginResponse]`).
+      // AdminPluginsView iterates it and calls `capabilities.includes(...)` in
+      // pluginTypeLabel; the envelope makes each row an object whose
+      // `capabilities` is undefined, so the render throws and the page has no
+      // h1 or table.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PLUGINS) })
     }
     if (method === 'GET') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0 }) })

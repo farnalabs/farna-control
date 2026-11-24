@@ -164,18 +164,21 @@
             data-testid="admin-run-retention-error-msg"
           />
           <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div class="rounded-lg border bg-muted p-4 text-center">
-              <p class="text-2xl font-semibold" data-testid="admin-run-retention-total-runs">{{ totalCount }}</p>
-              <p class="text-xs text-muted-foreground">{{ $t('views.AdminRunRetentionView.matching_runs') }}</p>
-            </div>
-            <div class="rounded-lg border bg-muted p-4 text-center">
-              <p class="text-2xl font-semibold" data-testid="admin-run-retention-total-bytes">{{ formatBytes(displayTerminalBytes) }}</p>
-              <p class="text-xs text-muted-foreground">{{ $t('views.AdminRunRetentionView.estimated_reclaimable') }}</p>
-            </div>
-            <div class="rounded-lg border bg-muted p-4 text-center">
-              <p class="text-2xl font-semibold" data-testid="admin-run-retention-terminal-runs">{{ displayTerminalCount }}</p>
-              <p class="text-xs text-muted-foreground">{{ $t('views.AdminRunRetentionView.terminal_purgeable') }}</p>
-            </div>
+            <StatCard
+              :label="$t('views.AdminRunRetentionView.matching_runs')"
+              :value="totalCount"
+              data-testid="admin-run-retention-total-runs"
+            />
+            <StatCard
+              :label="$t('views.AdminRunRetentionView.estimated_reclaimable')"
+              :value="formatBytes(displayTerminalBytes)"
+              data-testid="admin-run-retention-total-bytes"
+            />
+            <StatCard
+              :label="$t('views.AdminRunRetentionView.terminal_purgeable')"
+              :value="displayTerminalCount"
+              data-testid="admin-run-retention-terminal-runs"
+            />
           </div>
       </DataCard>
 
@@ -274,6 +277,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import Select from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'

@@ -79,7 +79,7 @@ def lifecycle_map_exists_with_manual_stage(name: str, stage_id: str, ctx: dict[s
 
 @given(parsers.parse('a lifecycle map named "{name}" exists with a modulo stage "{stage_id}"'))
 def lifecycle_map_exists_with_modulo_stage(name: str, stage_id: str, ctx: dict[str, Any], request: Any) -> None:
-    content_json = {"stages": [{"id": stage_id, "name": stage_id.replace("-", " ").title(), "type": "modulo"}]}
+    content_json = {"stages": [{"id": stage_id, "name": stage_id.replace("-", " ").title(), "type": "farna_control"}]}
     lm = _make_lifecycle_map(name=name, content_json=content_json)
     ctx["lifecycle_map"] = lm
     request.node._lifecycle_map = lm
@@ -295,7 +295,7 @@ def post_import_lifecycle_map_conflict(request: Any, client: Any) -> None:
         "format_version": "1",
         "name": "Conflicting",
         "content_json": {
-            "stages": [{"id": "s1", "name": "Inbox", "type": "modulo", "pipeline_id": str(uuid.uuid4())}],
+            "stages": [{"id": "s1", "name": "Inbox", "type": "farna_control", "pipeline_id": str(uuid.uuid4())}],
             "edges": [],
         },
     }
@@ -395,7 +395,7 @@ def put_update_lifecycle_map_description(description: str, ctx: dict[str, Any], 
 @when(parsers.parse("I update the lifecycle map content to include {count:d} stages"))
 def put_update_lifecycle_map_content(count: int, ctx: dict[str, Any], request: Any, client: Any) -> None:
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
-    stages = [{"id": f"stage-{i}", "name": f"Stage {i}", "type": "modulo"} for i in range(count)]
+    stages = [{"id": f"stage-{i}", "name": f"Stage {i}", "type": "farna_control"} for i in range(count)]
     content_json = {"stages": stages}
     with (
         patch("farna.api.routes.lifecycle_maps.get_lifecycle_map", new=AsyncMock()) as mock_get,
@@ -432,7 +432,7 @@ def save_version_of_lifecycle_map(count: int, ctx: dict[str, Any], request: Any,
     SQL-assertion tests and the Postgres integration tests instead.
     """
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
-    stages = [{"id": f"stage-{i}", "name": f"Stage {i}", "type": "modulo"} for i in range(count)]
+    stages = [{"id": f"stage-{i}", "name": f"Stage {i}", "type": "farna_control"} for i in range(count)]
     with patch("farna.api.routes.lifecycle_maps.save_map_version", new=AsyncMock()) as mock_save:
         updated = _make_lifecycle_map(name=current.name, version=current.version + 1, content_json={"stages": stages})
         mock_save.return_value = updated
@@ -450,7 +450,7 @@ def save_version_with_circular_transition(ctx: dict[str, Any], request: Any, cli
     ``LifecycleMapContentError`` raised by the content validator to a 422."""
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
     stages = [
-        {"id": "stage-0", "name": "Stage 0", "type": "modulo"},
+        {"id": "stage-0", "name": "Stage 0", "type": "farna_control"},
         {"id": "stage-1", "name": "Stage 1", "type": "manual"},
     ]
     edges = [
@@ -471,7 +471,7 @@ def save_version_with_dangling_edge(ctx: dict[str, Any], request: Any, client: A
     """POST /versions with an edge referencing an undefined stage — the route
     maps the ``LifecycleMapContentError`` raised by the content validator to a 422."""
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
-    stages = [{"id": "stage-0", "name": "Stage 0", "type": "modulo"}]
+    stages = [{"id": "stage-0", "name": "Stage 0", "type": "farna_control"}]
     edges = [{"id": "edge-0", "source": "stage-0", "target": "stage-ghost"}]
     with patch("farna.api.routes.lifecycle_maps.save_map_version", new=AsyncMock()) as mock_save:
         mock_save.side_effect = LifecycleMapContentError("lifecycle-map edge/transition #0 (id 'edge-0'): target stage 'stage-ghost' is not defined in stages")
@@ -488,7 +488,7 @@ def save_version_with_duplicate_stage_ids(ctx: dict[str, Any], request: Any, cli
     ``LifecycleMapContentError`` raised by the content validator to a 422."""
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
     stages = [
-        {"id": "stage-0", "name": "Stage 0", "type": "modulo"},
+        {"id": "stage-0", "name": "Stage 0", "type": "farna_control"},
         {"id": "stage-0", "name": "Stage 0 again", "type": "manual"},
     ]
     with patch("farna.api.routes.lifecycle_maps.save_map_version", new=AsyncMock()) as mock_save:
@@ -515,7 +515,7 @@ def save_version_capture_audit(ctx: dict[str, Any], request: Any, client: Any, m
     ``lifecycle_map.version_saved`` event flowing through the real route's
     ``_record_audit`` (FAR-203)."""
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
-    stages = [{"id": "stage-0", "name": "Stage 0", "type": "modulo"}]
+    stages = [{"id": "stage-0", "name": "Stage 0", "type": "farna_control"}]
     begin_nested_cm = AsyncMock()
     begin_nested_cm.__aenter__ = AsyncMock(return_value=None)
     begin_nested_cm.__aexit__ = AsyncMock(return_value=False)
@@ -541,7 +541,7 @@ def save_version_as_current_user(ctx: dict[str, Any], request: Any, client: Any)
     account as its version actor (updated_by) — pins that the version entry's
     created_by reflects the saving account, not a static null."""
     current = ctx.get("lifecycle_map", _make_lifecycle_map())
-    stages = [{"id": "stage-0", "name": "Stage 0", "type": "modulo"}]
+    stages = [{"id": "stage-0", "name": "Stage 0", "type": "farna_control"}]
     with patch("farna.api.routes.lifecycle_maps.save_map_version", new=AsyncMock()) as mock_save:
         updated = _make_lifecycle_map(
             name=current.name,

@@ -656,7 +656,7 @@ def _make_tiered_primitive(*, name: str, slug: str, tier: str) -> Any:
     return LibraryPrimitive(
         id=uuid.uuid4(),
         organisation_id=BUILTIN_ORG_ID,
-        source="modulo",
+        source="farna_control",
         primitive_type="schema",
         name=name,
         slug=slug,

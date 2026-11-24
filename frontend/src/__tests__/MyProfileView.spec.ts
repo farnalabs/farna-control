@@ -64,7 +64,7 @@ describe('MyProfileView', () => {
     await nextTick()
 
     expect(wrapper.text()).toContain('My Teams')
-    const teamRows = wrapper.findAll('[data-testid="my-profile-my-team"]')
+    const teamRows = wrapper.findAll('[data-testid^="my-profile-my-team-"]')
     expect(teamRows.length).toBe(2)
     expect(teamRows[0].text()).toContain('Engineering')
     expect(teamRows[0].text()).toContain('Operator')
@@ -474,7 +474,7 @@ describe('MyProfileView HITL email alerts', () => {
     })
 
     expect(wrapper.text()).toContain('Failed to load preferences')
-    const preferenceError = wrapper.find('[data-testid="my-profile-hitl-email-section"] > div.my-profile-hitl-email-load-error')
+    const preferenceError = wrapper.find('[data-testid="my-profile-hitl-email-section"] .my-profile-hitl-email-load-error')
     // Exactly one live region for this message: ErrorAlert's root owns it, and
     // the wrapper must not add a second announcement of the same failure.
     expect(preferenceError.attributes('role')).toBeUndefined()

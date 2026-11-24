@@ -80,13 +80,12 @@
         class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
         data-testid="library-loading-skeleton"
       >
-        <div v-for="n in pageSize" :key="`library-skeleton-${n}`" class="card p-5 flex flex-col gap-3">
-          <SkeletonBlock height-class="h-5 w-24" />
-          <SkeletonBlock height-class="h-5 w-3/4" />
-          <SkeletonBlock height-class="h-4 w-full" />
-          <SkeletonBlock height-class="h-4 w-2/3" />
-          <SkeletonBlock class="mt-2" height-class="h-8 w-full" />
-        </div>
+        <CardSkeleton
+          v-for="n in pageSize"
+          :key="`library-skeleton-${n}`"
+          class="p-5 flex flex-col gap-3"
+          :lines="4"
+        />
       </div>
 
       <ErrorAlert
@@ -206,8 +205,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import PageTabs from '../components/PageTabs.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import LibraryPrimitiveCard from '../components/library/LibraryPrimitiveCard.vue'
 import { useDataFetch } from '../composables/useDataFetch'
 import { formatApiError } from '../lib/api/formatError'

@@ -312,7 +312,7 @@ def discovery_persisted_stage_types(ctx: dict[str, Any]) -> None:
     content = persisted[0]
     stage_types = {stage["name"]: stage["type"] for stage in content["stages"]}
     assert stage_types == {
-        "build": "modulo",
+        "build": "farna_control",
         "webhook": "manual",
         "github": "placeholder",
         "Build Folder": "placeholder",

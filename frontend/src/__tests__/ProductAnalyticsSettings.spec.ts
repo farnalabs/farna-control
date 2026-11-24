@@ -54,7 +54,7 @@ function mountSettings(props: Record<string, unknown> = {}) {
       stubs: {
         ProductAnalyticsError: true,
         ToggleSwitch: true,
-        SectionCard: { template: '<div class="section-card"><slot /></div>' },
+        DataCard: { template: '<div class="section-card"><slot /></div>' },
       },
     },
     props,

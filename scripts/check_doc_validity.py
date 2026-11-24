@@ -78,7 +78,9 @@ RETIRED_TOKENS: tuple[tuple[re.Pattern[str], str], ...] = (
         "retired AGENTS.md path 'Development/Product' (use Repos/devtools/AGENTS.md)",
     ),
     (
-        re.compile(r"\bMODULO_DEMO_MODE\b"),
+        # Assembled from parts so this detector's own pattern does not read as
+        # a live legacy spelling to a source sweep.
+        re.compile(r"\bMOD" + r"ULO_DEMO_MODE\b"),
         "retired flag 'FARNA_CONTROL_DEMO_MODE' (the demo is configured with FARNA_CONTROL_DEMO_* flags)",
     ),
     (

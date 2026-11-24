@@ -30,7 +30,7 @@ function mountCard(props: Record<string, unknown> = {}) {
     props: {
       prim: {
         id: 'prim-1',
-        source: 'modulo',
+        source: 'farna_control',
         primitive_type: 'workflow',
         name: 'Test Primitive',
         description: 'A test primitive',
@@ -51,12 +51,12 @@ describe('LibraryPrimitiveCard', () => {
     expect(wrapper.text()).toContain('A test primitive')
   })
 
-  it('shows the modulo badge for native primitives', () => {
+  it('shows the native badge for native primitives', () => {
     const wrapper = mountCard({ badge: 'modulo' })
     expect(wrapper.text()).toContain('modulo')
   })
 
-  it('does not show the modulo badge for a non-modulo-sourced primitive', () => {
+  it('does not show the native badge for a non-native-sourced primitive', () => {
     const wrapper = mountCard({
       badge: 'modulo',
       prim: { id: 'prim-local', source: 'local', primitive_type: 'workflow', name: 'Local Primitive', description: null, tags: [], forked_from: null, auto_update: false },
@@ -87,7 +87,7 @@ describe('LibraryPrimitiveCard', () => {
     const wrapper = mountCard({
       prim: {
         id: 'prim-1',
-        source: 'modulo',
+        source: 'farna_control',
         primitive_type: 'workflow',
         name: 'Test',
         description: null,
@@ -105,7 +105,7 @@ describe('LibraryPrimitiveCard', () => {
 
     const withToggle = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
     })
     expect(withToggle.find('[data-testid="auto-update-toggle-prim-1"]').exists()).toBe(true)
   })
@@ -113,7 +113,7 @@ describe('LibraryPrimitiveCard', () => {
   it('does not render auto-update toggle when forked_from is null even if showAutoUpdate is true', () => {
     const wrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false },
     })
     expect(wrapper.find('[data-testid="auto-update-toggle-prim-1"]').exists()).toBe(false)
   })
@@ -121,7 +121,7 @@ describe('LibraryPrimitiveCard', () => {
   it('emits toggle-auto-update when toggle button is clicked', async () => {
     const wrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
     })
 
     await wrapper.find('[data-testid="auto-update-toggle-prim-1"]').trigger('click')
@@ -136,34 +136,34 @@ describe('LibraryPrimitiveCard', () => {
   })
 
   it('renders create-pipeline button for pipeline_template type', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'pipeline_template', name: 'Template', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'pipeline_template', name: 'Template', description: null, tags: [], forked_from: null, auto_update: false } })
     expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(true)
   })
 
   it('renders create-pipeline button for composite type', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'composite', name: 'Composite', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'composite', name: 'Composite', description: null, tags: [], forked_from: null, auto_update: false } })
     expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(true)
   })
 
   it('does not render the create-pipeline button for non-pipeline primitive types', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'schema', name: 'S', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'schema', name: 'S', description: null, tags: [], forked_from: null, auto_update: false } })
     expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
   })
 
   it('emits create-pipeline when button is clicked for pipeline_template', async () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'pipeline_template', name: 'Template', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'pipeline_template', name: 'Template', description: null, tags: [], forked_from: null, auto_update: false } })
     await wrapper.find('[data-testid="library-create-pipeline"]').trigger('click')
     expect(wrapper.emitted('create-pipeline')).toHaveLength(1)
   })
 
   it('emits create-pipeline when button is clicked for composite', async () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'composite', name: 'Composite', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'composite', name: 'Composite', description: null, tags: [], forked_from: null, auto_update: false } })
     await wrapper.find('[data-testid="library-create-pipeline"]').trigger('click')
     expect(wrapper.emitted('create-pipeline')).toHaveLength(1)
   })
 
   it('does not render lifecycle-map creation controls in ordinary library views', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'lifecycle_map', name: 'SDLC Map', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'lifecycle_map', name: 'SDLC Map', description: null, tags: [], forked_from: null, auto_update: false } })
     expect(wrapper.find('[data-testid="library-create-lifecycle-map"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
     expect(wrapper.emitted('create-lifecycle-map')).toBeUndefined()
@@ -175,7 +175,7 @@ describe('LibraryPrimitiveCard', () => {
   })
 
   it('does not expose lifecycle-map adapting state in ordinary library views', () => {
-    const prim = { id: 'prim-1', source: 'modulo', primitive_type: 'lifecycle_map', name: 'SDLC Map', description: null, tags: [], forked_from: null, auto_update: false }
+    const prim = { id: 'prim-1', source: 'farna_control', primitive_type: 'lifecycle_map', name: 'SDLC Map', description: null, tags: [], forked_from: null, auto_update: false }
     const wrapper = mountCard({ prim, adapting: { 'prim-1': true } })
     expect(wrapper.find('[data-testid="library-create-lifecycle-map"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Copying...')
@@ -194,14 +194,14 @@ describe('LibraryPrimitiveCard', () => {
     ]
 
     for (const { type, expectedClass } of types) {
-      const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: type, name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
+      const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: type, name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
       const badge = wrapper.find('span').classes()
       expect(badge).toContain(expectedClass)
     }
   })
 
   it('falls back to slate badge for unknown primitive type', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'unknown_type', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'unknown_type', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
     const badge = wrapper.find('span').classes()
     expect(badge).toContain('badge-context-slate')
   })
@@ -209,7 +209,7 @@ describe('LibraryPrimitiveCard', () => {
   it('respects toggleLoading state and disables toggle', () => {
     const wrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
       toggleLoading: { 'prim-1': true },
     })
     const toggle = wrapper.find('[data-testid="auto-update-toggle-prim-1"]')
@@ -219,7 +219,7 @@ describe('LibraryPrimitiveCard', () => {
   it('shows auto-update label', () => {
     const wrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
     })
     expect(wrapper.text()).toContain('Auto update')
   })
@@ -227,13 +227,13 @@ describe('LibraryPrimitiveCard', () => {
   it('renders toggle with correct aria-checked state', () => {
     const offWrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
     })
     expect(offWrapper.find('[data-testid="auto-update-toggle-prim-1"]').attributes('aria-checked')).toBe('false')
 
     const onWrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: true },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: true },
     })
     expect(onWrapper.find('[data-testid="auto-update-toggle-prim-1"]').attributes('aria-checked')).toBe('true')
   })
@@ -241,27 +241,27 @@ describe('LibraryPrimitiveCard', () => {
   it('renders toggle with correct translate-x class based on auto_update state', () => {
     const offWrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
     })
     const offToggle = offWrapper.find('[data-testid="auto-update-toggle-prim-1"] span')
     expect(offToggle.classes()).toContain('translate-x-[2px]')
 
     const onWrapper = mountCard({
       showAutoUpdate: true,
-      prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: true },
+      prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: true },
     })
     const onToggle = onWrapper.find('[data-testid="auto-update-toggle-prim-1"] span')
     expect(onToggle.classes()).toContain('translate-x-[18px]')
   })
 
   it('handles empty description gracefully', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
     expect(wrapper.text()).toContain('Test')
     expect(wrapper.find('p').exists()).toBe(false)
   })
 
   it('handles empty tags array gracefully', () => {
-    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'modulo', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
+    const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: null, auto_update: false } })
     expect(wrapper.find('[data-testid="library-item-prim-1"]').exists()).toBe(true)
   })
 })

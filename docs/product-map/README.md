@@ -1258,6 +1258,19 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > version-aware-history UI, create-only re-scan and missing loop runtime remain
 > the honest unchecked gaps. `_ORPHANED_BDD_FEATURES` stays empty.
 
+> **Closed this walk (2026-11-23):** tracked two shipped but untracked backend
+> surfaces: the FAR-1692 S1/S2 external-agent registry
+> (`configure/external-agent-registry.md`) and MCP server registry plus
+> tool-definition pinning (`configure/mcp-server-registry.md`). Both ship
+> REST-only (`/api/v1/external-agents`, `/api/v1/mcp-servers`) with no manifest
+> route, no UI and no MCP tools, so neither layer of the product map described
+> them and they were invisible to the feature graph and to Assistant's
+> documentation indexer. Each entry records the CRUD contract, the permission
+> floors, org/team scoping, audit events, the detect-and-surface drift decision,
+> and the honest gaps (no ingestion leg, no UI, unreachable `blocked` pin state,
+> `declared_scopes` recorded but unenforced). `_ORPHANED_BDD_FEATURES` stays
+> empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1287,8 +1300,10 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 ### Configure
 - [feat-apply](configure/apply.md) => PRD N/A
 - [feat-connectors](configure/connectors.md) => PRD N/A
+- [feat-external-agent-registry](configure/external-agent-registry.md) => PRD N/A
 - [feat-guardrails](configure/guardrails.md) => PRD N/A
 - [feat-mcp](configure/mcp.md) => PRD N/A
+- [feat-mcp-server-registry](configure/mcp-server-registry.md) => PRD N/A
 - [feat-model-backends](configure/model-backends.md) => PRD N/A
 - [feat-assistant](configure/assistant.md) => PRD 8.23
 

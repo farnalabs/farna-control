@@ -1,21 +1,22 @@
 <template>
-  <section class="card p-4" data-testid="capacity-queue-panel" aria-labelledby="capacity-queue-heading">
-    <div class="mb-3 flex items-start justify-between gap-3">
-      <div>
-        <h2 id="capacity-queue-heading" class="text-base font-semibold">
-          {{ $t('views.AnalyticsView.capacity_panel_title') }}
-        </h2>
-        <p class="mt-0.5 text-xs text-muted-foreground">
-          {{ $t('views.AnalyticsView.capacity_panel_subtitle') }}
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
+  <BaseCard
+    padding="md"
+    role="region"
+    :aria-label="$t('views.AnalyticsView.capacity_panel_title')"
+    data-testid="capacity-queue-panel"
+  >
+    <CardHeader
+      heading-level="h2"
+      :title="$t('views.AnalyticsView.capacity_panel_title')"
+      :description="$t('views.AnalyticsView.capacity_panel_subtitle')"
+    >
+      <template #actions>
         <output
           v-if="store.capacity"
           class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
           :class="verdictClass"
           data-testid="capacity-verdict"
-          aria-labelledby="capacity-queue-heading"
+          :aria-label="$t('views.AnalyticsView.capacity_panel_title')"
         >
           {{ verdictLabel }}
         </output>
@@ -28,8 +29,8 @@
         >
           {{ $t('views.AnalyticsView.capacity_refresh') }}
         </button>
-      </div>
-    </div>
+      </template>
+    </CardHeader>
 
     <p
       v-if="store.capacityError"
@@ -58,26 +59,28 @@
         </div>
       </div>
 
-      <dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_pending_now') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-pending-total">{{ capacity.pending.total }}</dd>
-        </div>
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_oldest_pending') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-oldest-pending">
-            {{ formatDuration(capacity.pending.oldest_pending_age_seconds) }}
-          </dd>
-        </div>
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_drain_ratio') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-drain-ratio">{{ drainRatioLabel }}</dd>
-        </div>
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_org_cap_use') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-org-cap-use">{{ orgCapUseLabel }}</dd>
-        </div>
-      </dl>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_pending_now')"
+          :value="capacity.pending.total"
+          data-testid="capacity-pending-total"
+        />
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_oldest_pending')"
+          :value="formatDuration(capacity.pending.oldest_pending_age_seconds)"
+          data-testid="capacity-oldest-pending"
+        />
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_drain_ratio')"
+          :value="drainRatioLabel"
+          data-testid="capacity-drain-ratio"
+        />
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_org_cap_use')"
+          :value="orgCapUseLabel"
+          data-testid="capacity-org-cap-use"
+        />
+      </div>
 
       <div class="rounded-lg border border-border p-3 text-sm" data-testid="capacity-limits">
         <div class="flex flex-wrap gap-x-6 gap-y-1">
@@ -194,12 +197,15 @@
         {{ $t('views.AnalyticsView.capacity_generated_at', { at: formatInterval(capacity.generated_at) }) }}
       </p>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
+import BaseCard from "../ui/BaseCard.vue";
 import { useI18n } from "vue-i18n";
+import CardHeader from "../ui/CardHeader.vue";
+import StatCard from "../ui/StatCard.vue";
 import {
   formatCapacityDuration,
   useAnalyticsStore,

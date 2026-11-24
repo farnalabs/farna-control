@@ -5566,7 +5566,7 @@ async def _trigger_pipeline_impl(
     if run_id is None:
         raise RuntimeError("_trigger_pipeline_impl: manual run creation returned no error and no run id")
 
-    await dispatch_run(str(run_id), str(org_id), queue="runs")
+    await dispatch_run(str(run_id), str(org_id))
 
     return {
         "run_id": str(run_id),

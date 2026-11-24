@@ -51,7 +51,7 @@ const mapDetail = {
   description: null,
   owner: null,
   owner_team_id: null,
-  stages: [{ id: 'stage-1', name: 'Build', description: null, type: 'modulo', owner_badge: null, graduated: false, pipeline_id: null, external_url: null }],
+  stages: [{ id: 'stage-1', name: 'Build', description: null, type: 'farna_control', owner_badge: null, graduated: false, pipeline_id: null, external_url: null }],
   transitions: [{ id: 'e1', source_stage_id: 'stage-1', target_stage_id: 'stage-1', trigger_type: 'auto', description: null }],
   versions: [{ id: '00000000-0000-0000-0000-000000000001', version: 1, created_at: '2026-01-01T00:00:00Z', created_by: null }],
   current_version: 1,

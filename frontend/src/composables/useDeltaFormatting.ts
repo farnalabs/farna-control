@@ -12,8 +12,8 @@ export function arrowFor(delta: number): string {
 
 /**
  * Returns the CSS class for a delta value.
- * For MetricCard (non-inverted): success-text for positive, destructive for negative, muted for zero.
- * For StatCard (with inverted option): respects the inverted flag.
+ * Default (non-inverted): success-text for positive, destructive for negative, muted for zero.
+ * With `inverted` set, the polarity flips (a rising value is bad).
  */
 export function classFor(delta: number, inverted = false): string {
   if (delta > 0) return inverted ? 'text-destructive' : 'text-success-text'

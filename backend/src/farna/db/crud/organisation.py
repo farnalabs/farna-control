@@ -20,7 +20,7 @@ from farna.db.models.evidence_redaction_rule import (
     EvidenceRedactionRule,
 )
 from farna.db.models.organisation import (
-    MODULO_REGISTRY_ORG_ID,
+    REGISTRY_ORG_ID,
     SYSTEM_ORG_ID,
     Organisation,
 )
@@ -74,7 +74,7 @@ class OrgSettingsPatchContextUnreadableError(OrgSettingsPatchContextError):
 
 
 # Sentinel org IDs that must never resolve a login page.
-_SENTINEL_ORG_IDS: frozenset[uuid.UUID] = frozenset({SYSTEM_ORG_ID, MODULO_REGISTRY_ORG_ID})
+_SENTINEL_ORG_IDS: frozenset[uuid.UUID] = frozenset({SYSTEM_ORG_ID, REGISTRY_ORG_ID})
 
 # The (column, require_live_row) POLICY TABLE (FAR-1832 QA F13a) — ONE source
 # of truth shared by both dialects. ``settings_json`` MUST refuse a soft-deleted
@@ -852,7 +852,7 @@ def _invalidate_settings_derived_caches() -> None:
 # An org counts for login when ALL of:
 #   - status == 'active'
 #   - deleted_at IS NULL
-#   - id is not a sentinel (SYSTEM_ORG_ID, MODULO_REGISTRY_ORG_ID)
+#   - id is not a sentinel (SYSTEM_ORG_ID, REGISTRY_ORG_ID)
 
 
 def is_login_active_org(org: Organisation) -> bool:

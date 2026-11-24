@@ -1,11 +1,13 @@
 <template>
-  <div
+  <component
+    :is="as"
     :class="[
       'card',
       'card-base',
       variantClass,
       paddingClass,
       elevationClass,
+      stateClass,
       props.class,
     ]"
     :data-testid="dataTestId"
@@ -13,28 +15,45 @@
     <slot name="header" />
     <slot />
     <slot name="footer" />
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{
-  variant?: 'default' | 'bordered' | 'elevated' | 'muted' | 'context'
-  padding?: 'none' | 'sm' | 'md' | 'lg'
-  elevation?: 'none' | 'sm' | 'md' | 'lg'
+type CardElement = 'div' | 'section' | 'form' | 'details' | 'article' | 'aside' | 'nav' | 'li'
+
+const props = withDefaults(defineProps<{
+  variant?: 'default' | 'bordered' | 'muted' | 'warning' | 'context'
+  padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl'
+  elevation?: 'none' | 'sm'
+  pressable?: boolean
+  unavailable?: boolean
+  // The card surface is a visual primitive, not an element choice: a caller
+  // that needs section/form/details semantics keeps it while still getting the
+  // shared surface.
+  as?: CardElement
   class?: string
   dataTestId?: string
-}>()
+}>(), {
+  variant: 'default',
+  padding: 'md',
+  elevation: 'none',
+  pressable: false,
+  unavailable: false,
+  as: 'div',
+})
 
 const variantClass = computed(() => {
   switch (props.variant) {
+    // 'bordered' is a deprecated alias of 'default' - the `.card` base class
+    // already supplies the border, so the two render identically.
     case 'bordered':
-      return 'bg-card border border-border'
-    case 'elevated':
-      return 'bg-card shadow'
+      return 'bg-card'
     case 'muted':
       return 'bg-muted/50'
+    case 'warning':
+      return 'bg-card border-warning/30'
     case 'context':
       return 'bg-primary/5 border border-primary/20'
     case 'default':
@@ -53,6 +72,8 @@ const paddingClass = computed(() => {
       return 'p-4'
     case 'lg':
       return 'p-6'
+    case 'xl':
+      return 'p-8'
     default:
       return 'p-4'
   }
@@ -60,18 +81,18 @@ const paddingClass = computed(() => {
 
 const elevationClass = computed(() => {
   switch (props.elevation) {
-    case 'none':
-      return ''
     case 'sm':
       return 'shadow-sm'
-    case 'md':
-      return 'shadow'
-    case 'lg':
-      return 'shadow-lg'
+    case 'none':
     default:
       return ''
   }
 })
+
+const stateClass = computed(() => ({
+  'card-hover cursor-pointer transition-colors hover:bg-accent/30': props.pressable,
+  'border-dashed': props.unavailable,
+}))
 </script>
 
 <style scoped>
