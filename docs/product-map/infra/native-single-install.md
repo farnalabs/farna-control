@@ -215,6 +215,20 @@ manifest `features:` registry.
       `::test_the_info_file_states_the_coming_soon_limitation`,
       `::test_architecture_identifiers_are_gated_on_the_6_3_boundary`,
       `test_windows_installer_inno_setup_step.py::test_both_jobs_have_an_inno_setup_install_step`).
+- [x] Each first-run install offers an OPTIONAL product-analytics opt-in, ONCE,
+      defaulting to OFF: the Linux and macOS installers ask on an interactive
+      terminal (and take the default silently when stdin is not a terminal or
+      `--no-telemetry-prompt` is passed), and the Windows wizard shows one
+      custom page with the decline option pre-selected. Accepting writes
+      `FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL`,
+      `FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET` (a freshly generated
+      secret) and `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true` into the
+      launcher's `config.env` (owner-only mode 600 on POSIX); declining writes
+      none of the three, so "no telemetry by default" holds
+      (`scripts/install.sh`, `scripts/macos/install.sh`,
+      `deploy/windows/modulo.iss`;
+      `scripts/test-windows-installer.ps1` compiles the installer `[Code]`
+      against Inno support stubs and asserts the default-OFF contract).
 - [x] The release pipeline gates the native artifacts end to end: the Linux
       bundle and `.deb` are built, the macOS DMGs are built on both native
       architectures, and the Windows installer is included only when the
@@ -262,6 +276,13 @@ manifest `features:` registry.
 
 ## QA History
 
+- 2026-11-24: FAR-2741 added the install-time product-analytics opt-in to all
+  three install paths, extended `scripts/test-windows-installer.ps1` with the
+  default-OFF contract checks, and documented the three variables in both
+  `.env.prod.example` files and `docs/configuration-reference.md`. Verified the
+  Linux installer end to end in a throwaway HOME (decline writes nothing,
+  accept writes all three with a mode-600 file) and the Windows `[Code]`
+  section compiles under Free Pascal; ISCC cannot run on the Linux host.
 - 2026-11-22: Added this tracker after walking the product map and finding the
   shipped native single-install distribution (ADR 031) had no entry in either
   product-map layer, even though the Linux bundle installer, macOS DMG pipeline,

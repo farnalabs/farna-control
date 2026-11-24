@@ -147,6 +147,16 @@ FORCE=0
 FROM_FILE=""
 FROM_BUNDLE=""
 SKIP_BACKUP=0
+# Product-analytics opt-in (FAR-2741). The prompt is shown ONCE, during
+# first-run setup, on an interactive terminal; it defaults to OFF and never
+# blocks an unattended install. Declining writes nothing at all, so "no
+# telemetry by default" stays true on every install.
+NO_TELEMETRY_PROMPT=0
+PRODUCT_ANALYTICS_ENDPOINT_URL="https://telemetry.farna.dev"
+# Set to a non-empty multi-line string ONLY when the three settings should be
+# persisted in config.env (an accepted opt-in, or values carried over from an
+# earlier run). An empty value means "write none of them".
+product_analytics_block=""
 
 die() {
   printf 'ERROR: %b\n' "$*" >&2
@@ -179,6 +189,10 @@ Options:
                            bundled stack is stopped (the swap needs it stopped,
                            and a stopped stack cannot be dumped). The installer
                            prints the snapshot path it left behind.
+  --no-telemetry-prompt    Do not ask the first-run product-analytics question;
+                           take the default (OFF). Use this for scripted or
+                           unattended installs. The prompt is also skipped
+                           automatically when stdin is not a terminal.
   --help                   Show this help.
 
 Environment overrides:
@@ -735,6 +749,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_BACKUP=1
       shift
       ;;
+    --no-telemetry-prompt)
+      NO_TELEMETRY_PROMPT=1
+      shift
+      ;;
     --help | -h)
       usage
       exit 0
@@ -1115,6 +1133,92 @@ if [[ -f "${DATA_DIR}/state.json" ]]; then
   fi
 fi
 
+configure_product_analytics_optin() {
+  # configure_product_analytics_optin <config_path> <existing_contents>
+  #
+  # Decides what (if anything) to persist for product analytics and sets the
+  # global `product_analytics_block` to the zero-or-more config.env lines.
+  #
+  # Rules (FAR-2741):
+  #   * Ask ONCE, during first-run setup, default OFF. An existing config.env
+  #     means setup already happened, so a re-run/upgrade never asks again.
+  #   * The operator environment always wins: if any of the three names is
+  #     already set, never ask and never persist a copy.
+  #   * ACCEPT writes all three (endpoint, a freshly generated instance secret,
+  #     and the ON switch). DECLINE writes NOTHING - absence is the off state,
+  #     so `..._ENABLED=false` is deliberately not written either.
+  #   * Non-interactive (stdin not a TTY) or --no-telemetry-prompt takes the
+  #     default silently and never blocks an unattended install.
+  #   * Existing analytics lines are carried over verbatim so a re-run of this
+  #     installer cannot silently turn analytics off (or rotate the secret).
+  local config_path="$1" existing="$2"
+  local endpoint secret enabled answer instance_secret
+  product_analytics_block=""
+
+  if [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL:-}" \
+     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" \
+     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]]; then
+    info "product analytics: configured through the environment; leaving config.env unchanged"
+    return 0
+  fi
+
+  endpoint="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=//p' | head -n 1)"
+  secret="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=//p' | head -n 1)"
+  enabled="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=//p' | head -n 1)"
+  if [[ -n "${endpoint}" || -n "${secret}" || -n "${enabled}" ]] || [[ -e "${config_path}" ]]; then
+    # Already answered (or this is an upgrade): keep whatever is there.
+    product_analytics_block="$(printf '%s\n' "${existing}" \
+      | sed -n '/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=/p')"
+    if [[ -n "${product_analytics_block}" ]]; then
+      info "product analytics: keeping the existing opt-in settings"
+    fi
+    return 0
+  fi
+
+  if [[ "${NO_TELEMETRY_PROMPT}" -eq 1 ]]; then
+    info "product analytics: off (--no-telemetry-prompt; the default)"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    info "product analytics: off (non-interactive install; the default)"
+    return 0
+  fi
+
+  info ""
+  info "Farna Control can send anonymous product analytics to Farnalabs."
+  info "It is OFF unless you choose to turn it on now, and you can change this"
+  info "later in the app (Administration, Product analytics)."
+  info ""
+  info "If you turn it on, once a day this instance sends aggregate counts only:"
+  info "  - how many organisations, pipelines, agents, schemas, teams, model"
+  info "    backends, connector instances and triggers exist"
+  info "  - run statistics (counts, durations and outcomes)"
+  info "  - counts of error families"
+  info "  - an inventory of which provider and connector types are in use"
+  info "No prompts, pipeline outputs, credentials or customer content are sent."
+  info "It goes to Farnalabs' telemetry service at ${PRODUCT_ANALYTICS_ENDPOINT_URL}."
+  info ""
+  answer=""
+  printf 'Send anonymous aggregate product analytics? [y/N] '
+  read -r answer || answer=""
+  case "${answer}" in
+    [Yy] | [Yy][Ee][Ss]) ;;
+    *)
+      info "product analytics: off (the default)"
+      return 0
+      ;;
+  esac
+
+  instance_secret=""
+  if command -v openssl >/dev/null 2>&1; then
+    instance_secret="$(openssl rand -hex 32)" || instance_secret=""
+  fi
+  [[ -n "${instance_secret}" ]] || die "could not generate the product-analytics instance secret with openssl (at least 32 random bytes are required)"
+  printf -v product_analytics_block 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=%s\nFARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=%s\nFARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' \
+    "${PRODUCT_ANALYTICS_ENDPOINT_URL}" "${instance_secret}"
+  info "product analytics: on (you can change this later in the app)"
+}
+
 ensure_runtime_keys() {
   # Persist the application keys before the first launcher start. Values from
   # the operator environment or an existing config.env win; generated values
@@ -1146,17 +1250,26 @@ ensure_runtime_keys() {
   [[ -n "${fernet_key}" ]] || fernet_key="$(openssl rand -base64 32 | tr -d '\n')" || die "could not generate FERNET_KEY with openssl"
   [[ -n "${secret_key}" && -n "${fernet_key}" ]] || die "openssl generated an empty native runtime key"
 
+  configure_product_analytics_optin "${config_path}" "${existing}"
+
   temp_path="${config_path}.tmp.$$"
   umask 077
   {
     if [[ -n "${existing}" ]]; then
-      printf '%s\n' "${existing}" | sed '/^SECRET_KEY=/d; /^FERNET_KEY=/d'
+      printf '%s\n' "${existing}" \
+        | sed '/^SECRET_KEY=/d; /^FERNET_KEY=/d; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=/d; /^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=/d; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=/d'
     fi
     printf 'SECRET_KEY=%s\n' "${secret_key}"
     printf 'FERNET_KEY=%s\n' "${fernet_key}"
+    if [[ -n "${product_analytics_block}" ]]; then
+      printf '%s\n' "${product_analytics_block}"
+    fi
   } > "${temp_path}" || die "could not write native runtime configuration"
   chmod 600 -- "${temp_path}" || die "could not secure native runtime configuration"
   mv -f -- "${temp_path}" "${config_path}" || die "could not install native runtime configuration"
+  if [[ -n "${product_analytics_block}" ]]; then
+    info "  product analytics settings: ${config_path} (mode 600, never commit this file)"
+  fi
 }
 
 # --- lay out the versioned install + `current` symlink ----------------------
