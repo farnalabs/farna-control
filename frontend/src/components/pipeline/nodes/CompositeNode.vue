@@ -34,21 +34,21 @@ const portIndicator = computed(() => {
 
 <template>
   <div
-    class="relative rounded-lg border-2 border-indigo-500/60 bg-indigo-500/10 px-4 py-3 shadow-sm"
+    class="relative rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-3 shadow-sm"
   >
     <span
-      class="absolute -top-2 left-2 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-300"
+      class="absolute -top-2 left-2 rounded-full border border-node-composite/40 bg-node-composite/20 px-2 py-0.5 text-[10px] font-medium text-node-composite-muted"
     >
       Composite
     </span>
-    <div class="mt-1 text-sm font-semibold text-indigo-100">
+    <div class="mt-1 text-sm font-semibold text-node-composite-strong">
       {{ compositeName || node.data.label || "Composite" }}
     </div>
     <div class="mt-0.5 flex items-center gap-2">
-      <span class="text-[10px] text-indigo-300/70">{{ portIndicator }}</span>
+      <span class="text-[10px] text-node-composite-muted/70">{{ portIndicator }}</span>
     </div>
     <button type="button"
-      class="mt-1 inline-flex items-center gap-1 rounded bg-indigo-500/20 px-2 py-0.5 text-[10px] text-indigo-300 hover:bg-indigo-500/30"
+      class="mt-1 inline-flex items-center gap-1 rounded bg-node-composite/20 px-2 py-0.5 text-[10px] text-node-composite-muted hover:bg-node-composite/30"
       @click.stop="emit('expand', id)"
     >
       <svg

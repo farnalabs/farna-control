@@ -149,7 +149,7 @@ function closeDialog() {
             class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
             :class="
               step === s.num
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-action-build text-white'
                 : step > s.num
                   ? 'bg-success text-white'
                   : 'bg-muted text-muted-foreground'
@@ -232,7 +232,7 @@ function closeDialog() {
           >
             {{ port.description }}
           </p>
-          <code class="mt-1 block text-[10px] text-indigo-400">{{
+          <code class="mt-1 block text-[10px] text-node-port-soft">{{
             portRef(port)
           }}</code>
         </div>
@@ -329,7 +329,7 @@ function closeDialog() {
         <div v-else />
         <button type="button"
           :disabled="!canProceed || loading"
-          class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          class="rounded-lg bg-action-build px-4 py-2 text-sm font-medium text-white hover:bg-action-build-hover disabled:opacity-50"
           @click="nextStep"
         >
           {{ primaryLabel }}

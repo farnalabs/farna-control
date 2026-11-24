@@ -112,7 +112,7 @@ watch(
         <h4 class="text-sm font-medium">{{ $t('components.pipeline.composite.SchemaMappingPanel.schema_mapping') }}</h4>
         <span
           v-if="inputSchemaId || outputSchemaId"
-          class="rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
+          class="rounded border border-node-composite/30 bg-node-composite/10 px-1.5 py-0.5 text-[10px] text-node-composite-muted"
         >
           {{ Object.keys(props.inputMapping).length + Object.keys(props.outputMapping).length }} mapped
         </span>

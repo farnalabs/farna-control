@@ -9,7 +9,7 @@
       <span v-if="humanOnly" class="rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium text-warning-text" data-testid="pipeline-edge-semantic-hitl">
         · {{ t('views.PipelineEditorView.semantic_badge_human_only') }}
       </span>
-      <span v-if="evalName" class="rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300" data-testid="pipeline-edge-semantic-eval">
+      <span v-if="evalName" class="rounded bg-eval-marker/10 px-1.5 py-0.5 text-[10px] font-medium text-eval-marker-text" data-testid="pipeline-edge-semantic-eval">
         {{ t('views.PipelineEditorView.semantic_badge_eval') }} · {{ evalName }}
       </span>
     </div>
@@ -19,7 +19,7 @@
       </span>
     </div>
     <div v-if="isLlm" class="absolute translate-y-4 translate-x-2">
-      <span class="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-900 dark:text-purple-300" data-testid="edge-badge-llm">
+      <span class="rounded bg-edge-llm px-1.5 py-0.5 text-[10px] font-medium text-edge-llm-text" data-testid="edge-badge-llm">
         {{ t('views.PipelineEditorView.llm_badge') }}{{ routingLabel ? `: ${routingLabel}` : '' }}
       </span>
     </div>

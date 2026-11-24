@@ -174,7 +174,7 @@ async function detectPlaceholders() {
           {{ detectLoading ? '...' : 'Detect' }}
         </button>
         <button type="button"
-          class="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+          class="rounded-md bg-action-build px-2 py-1 text-xs font-medium text-white hover:bg-action-build-hover"
           @click="openAddForm"
         >
           + Add Port
@@ -215,7 +215,7 @@ async function detectPlaceholders() {
           >
             {{ port.description }}
           </p>
-          <code class="mt-1 block text-[10px] text-indigo-400">{{
+          <code class="mt-1 block text-[10px] text-node-port-soft">{{
             portRef(port)
           }}</code>
         </div>
@@ -316,7 +316,7 @@ async function detectPlaceholders() {
           <input aria-label="checkbox"
             v-model="form.required"
             type="checkbox"
-            class="h-4 w-4 rounded border-gray-300 text-indigo-500 focus:ring-indigo-500"
+            class="h-4 w-4 rounded border-gray-300 text-node-port focus:ring-node-port"
           />
           <label for="portdefinitionpanel-field-2" class="text-xs text-muted-foreground">{{ $t('components.pipeline.composite.PortDefinitionPanel.required') }}</label>
         </div>
@@ -324,7 +324,7 @@ async function detectPlaceholders() {
           <input id="portdefinitionpanel-field-2"
             v-model="form.multiline"
             type="checkbox"
-            class="h-4 w-4 rounded border-gray-300 text-indigo-500 focus:ring-indigo-500"
+            class="h-4 w-4 rounded border-gray-300 text-node-port focus:ring-node-port"
           />
           <span class="text-xs text-muted-foreground">{{ $t('components.pipeline.composite.PortDefinitionPanel.multiline') }}</span>
         </div>

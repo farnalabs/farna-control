@@ -546,6 +546,58 @@
   --warning-foreground: 222 29% 9%;
   --pending: 210 40% 60%;
   --preview: 18 60% 50%;
+  /* FAR-2746 (workstream 7b): IDENTITY colours, named for the entity each
+     one identifies rather than the hue. Every value is the Tailwind v4 OKLCH
+     palette shade recorded beside it, i.e. exactly what the converted sites
+     rendered before, so the refactor changes nothing visually in either
+     theme. `:root` is the dark palette (the app is dark-first), so the dark
+     values live here and `.light` re-declares the light values below. Kept
+     separate from the status tokens (success / warning / destructive): a
+     node's identity is not a status.
+
+     Node identity */
+  --node-router: oklch(58.5% 0.233 277.117);          /* indigo-500 */
+  --node-router-text: oklch(78.5% 0.115 274.713);     /* indigo-300 (light: indigo-600) */
+  --node-router-surface: oklch(35.9% 0.144 278.697);  /* indigo-900 (light: indigo-500) */
+  --node-dispatch: oklch(71.5% 0.143 215.221);        /* cyan-500 */
+  --node-dispatch-text: oklch(86.5% 0.127 207.078);   /* cyan-300 (light: cyan-700) */
+  --node-dispatch-surface: oklch(39.8% 0.07 227.392); /* cyan-900 (light: cyan-500) */
+  --node-agent: oklch(35.9% 0.144 278.697);           /* indigo-900 (light: indigo-100) */
+  --node-agent-text: oklch(78.5% 0.115 274.713);      /* indigo-300 (light: indigo-600) */
+  --node-composite: oklch(58.5% 0.233 277.117);       /* indigo-500 */
+  --node-composite-text: oklch(78.5% 0.115 274.713);  /* indigo-300 (light: indigo-700) */
+  --node-composite-muted: oklch(78.5% 0.115 274.713); /* indigo-300 */
+  --node-composite-strong: oklch(93% 0.034 272.788);  /* indigo-100 */
+  --node-composite-code: oklch(67.3% 0.182 276.935);  /* indigo-400 */
+  --node-port: oklch(58.5% 0.233 277.117);            /* indigo-500 */
+  --node-port-soft: oklch(67.3% 0.182 276.935);       /* indigo-400 */
+  --library-wizard: oklch(58.5% 0.233 277.117);       /* indigo-500 */
+  --library-wizard-soft: oklch(67.3% 0.182 276.935);  /* indigo-400 */
+  /* Builder actions (the execute / publish / author primary action) */
+  --action-build: oklch(51.1% 0.262 276.966);         /* indigo-600 */
+  --action-build-hover: oklch(58.5% 0.233 277.117);   /* indigo-500 */
+  --action-build-border: oklch(78.5% 0.115 274.713);  /* indigo-300 */
+  --action-link: oklch(58.5% 0.233 277.117);          /* indigo-500 */
+  --action-link-hover: oklch(67.3% 0.182 276.935);    /* indigo-400 */
+  /* Run provenance: a dispatched run (part of its work ran outside Farna
+     Control) must never read like one Farna Control executed itself. */
+  --run-dispatched: oklch(71.5% 0.143 215.221);       /* cyan-500 */
+  --run-dispatched-text: oklch(86.5% 0.127 207.078);  /* cyan-300 (light: cyan-700) */
+  --run-dispatched-surface: oklch(39.8% 0.07 227.392);/* cyan-900 (light: cyan-500) */
+  /* Markers */
+  --eval-marker: oklch(62.7% 0.265 303.9);            /* purple-500 */
+  --eval-marker-text: oklch(82.7% 0.119 306.383);     /* purple-300 (light: purple-700) */
+  --edge-llm: oklch(38.1% 0.176 304.987);             /* purple-900 (light: purple-100) */
+  --edge-llm-text: oklch(82.7% 0.119 306.383);        /* purple-300 (light: purple-600) */
+  --eval-proposal: oklch(94.6% 0.033 307.174);        /* purple-100 (both themes) */
+  --eval-proposal-text: oklch(49.6% 0.265 301.924);   /* purple-700 (both themes) */
+  --redaction-marker: oklch(62.7% 0.265 303.9);       /* purple-500 */
+  --redaction-marker-text: oklch(55.8% 0.288 302.321);/* purple-600 (both themes) */
+  /* Output diff */
+  --diff-added: oklch(72.3% 0.219 149.579);           /* green-500 */
+  --diff-added-text: oklch(79.2% 0.209 151.711);      /* green-400 (light: green-700) */
+  --diff-removed: oklch(63.7% 0.237 25.331);          /* red-500 */
+  --diff-removed-text: oklch(70.4% 0.191 22.216);     /* red-400 (light: red-700) */
   --border: 213 19% 18%;
   --input: 213 19% 18%;
   --ring: 169 100% 50%;
@@ -619,6 +671,45 @@
   --warning-foreground: 220 29% 6%;
   --pending: 210 40% 60%;
   --preview: 18 60% 40%;
+  /* FAR-2746: light-mode identity values. These mirror the former light
+     classes exactly (the `dark:` half of each pair lives in :root above). */
+  --node-router: oklch(58.5% 0.233 277.117);          /* indigo-500 */
+  --node-router-text: oklch(51.1% 0.262 276.966);     /* indigo-600 */
+  --node-router-surface: oklch(58.5% 0.233 277.117);  /* indigo-500 */
+  --node-dispatch: oklch(71.5% 0.143 215.221);        /* cyan-500 */
+  --node-dispatch-text: oklch(52% 0.105 223.128);     /* cyan-700 */
+  --node-dispatch-surface: oklch(71.5% 0.143 215.221);/* cyan-500 */
+  --node-agent: oklch(93% 0.034 272.788);             /* indigo-100 */
+  --node-agent-text: oklch(51.1% 0.262 276.966);      /* indigo-600 */
+  --node-composite: oklch(58.5% 0.233 277.117);       /* indigo-500 */
+  --node-composite-text: oklch(45.7% 0.24 277.023);   /* indigo-700 */
+  --node-composite-muted: oklch(78.5% 0.115 274.713); /* indigo-300 */
+  --node-composite-strong: oklch(93% 0.034 272.788);  /* indigo-100 */
+  --node-composite-code: oklch(67.3% 0.182 276.935);  /* indigo-400 */
+  --node-port: oklch(58.5% 0.233 277.117);            /* indigo-500 */
+  --node-port-soft: oklch(67.3% 0.182 276.935);       /* indigo-400 */
+  --library-wizard: oklch(58.5% 0.233 277.117);       /* indigo-500 */
+  --library-wizard-soft: oklch(67.3% 0.182 276.935);  /* indigo-400 */
+  --action-build: oklch(51.1% 0.262 276.966);         /* indigo-600 */
+  --action-build-hover: oklch(58.5% 0.233 277.117);   /* indigo-500 */
+  --action-build-border: oklch(78.5% 0.115 274.713);  /* indigo-300 */
+  --action-link: oklch(58.5% 0.233 277.117);          /* indigo-500 */
+  --action-link-hover: oklch(67.3% 0.182 276.935);    /* indigo-400 */
+  --run-dispatched: oklch(71.5% 0.143 215.221);       /* cyan-500 */
+  --run-dispatched-text: oklch(52% 0.105 223.128);    /* cyan-700 */
+  --run-dispatched-surface: oklch(71.5% 0.143 215.221);/* cyan-500 */
+  --eval-marker: oklch(62.7% 0.265 303.9);            /* purple-500 */
+  --eval-marker-text: oklch(49.6% 0.265 301.924);     /* purple-700 */
+  --edge-llm: oklch(94.6% 0.033 307.174);             /* purple-100 */
+  --edge-llm-text: oklch(55.8% 0.288 302.321);        /* purple-600 */
+  --eval-proposal: oklch(94.6% 0.033 307.174);        /* purple-100 (both themes) */
+  --eval-proposal-text: oklch(49.6% 0.265 301.924);   /* purple-700 (both themes) */
+  --redaction-marker: oklch(62.7% 0.265 303.9);       /* purple-500 */
+  --redaction-marker-text: oklch(55.8% 0.288 302.321);/* purple-600 (both themes) */
+  --diff-added: oklch(72.3% 0.219 149.579);           /* green-500 */
+  --diff-added-text: oklch(52.7% 0.154 150.069);      /* green-700 */
+  --diff-removed: oklch(63.7% 0.237 25.331);          /* red-500 */
+  --diff-removed-text: oklch(50.5% 0.213 27.518);     /* red-700 */
   --border: 215 15% 85%;
   --input: 215 15% 85%;
   --ring: 170 95% 26%;
