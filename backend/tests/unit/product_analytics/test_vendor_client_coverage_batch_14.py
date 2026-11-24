@@ -71,6 +71,7 @@ async def test_vendor_client_sends_x_farna_headers_and_no_x_modulo_headers():
     assert {"X-Farna-Signature", "X-Farna-Timestamp", "X-Farna-Sequence"} <= set(headers)
     assert headers["X-Farna-Timestamp"] == "1.0"
     assert headers["X-Farna-Sequence"] == "7"
+    assert headers["User-Agent"] == "Farna-Control-MetricsDump/1.0"
     legacy = [name for name in headers if name.lower().startswith("x-farna-control-")]
     assert len(legacy) == 0
     await client.close()

@@ -31,6 +31,7 @@ from farna.core.credential_issuer import (
     IssuedRunCredential,
     default_credential_issuer,
 )
+from farna.core.node_output_split import split_node_output
 from farna.core.pipeline_engine.executor import PipelineExecutor
 from farna.core.pipeline_engine.node_runner import (
     LEGACY_SYNTHETIC_FAILURE_MARKERS,
@@ -67,7 +68,12 @@ def test_default_issuer_writes_brand_free_companions() -> None:
 
 
 def test_synthetic_failure_envelope_dual_writes_both_markers() -> None:
-    """The runner's synthetic-failure envelope carries both marker keys."""
+    """The runner's synthetic-failure envelope carries both marker keys.
+
+    Asserted on the envelope AND on the write-side split (the ``node_telemetry``
+    entry that actually lands in ``run_node_outputs.node_telemetry_json``), so
+    this proves a real stored row carries both keys end to end.
+    """
     envelope = _build_sandbox_node_envelope(
         node_id="node-x",
         output=_SandboxNodeOutput(
@@ -84,6 +90,11 @@ def test_synthetic_failure_envelope_dual_writes_both_markers() -> None:
     assert telemetry[SYNTHETIC_FAILURE_MARKER] is True
     for legacy_marker in LEGACY_SYNTHETIC_FAILURE_MARKERS:
         assert telemetry[legacy_marker] is True
+
+    _, stored_telemetry = split_node_output(envelope, "sandbox_agent", None)
+    assert stored_telemetry[SYNTHETIC_FAILURE_MARKER] is True
+    for legacy_marker in LEGACY_SYNTHETIC_FAILURE_MARKERS:
+        assert stored_telemetry[legacy_marker] is True
 
 
 def test_predicate_treats_new_and_legacy_markers_as_synthetic() -> None:

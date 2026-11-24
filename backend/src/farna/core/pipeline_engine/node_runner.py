@@ -749,13 +749,16 @@ SANDBOX_AGENT_FAILED_SUMMARY = "Sandbox agent execution failed"
 
 # FAR-510: machine marker stamped on a sandbox_agent synthetic failure envelope
 # (the generic-exception path). The executor's finalize-time downgrade predicate
-# requires ``status == "failed"`` AND this field True — marker-based, so an
-# agent-authored failure shape (which never carries the runner's internal
-# marker) can never collide. Single source of truth so runner and executor
-# cannot drift.
-# Persisted value: brand-free so the next product rename never touches it.
-# Rename the CONSTANT, never the string.
-SYNTHETIC_FAILURE_MARKER = "synthetic_failure"
+# requires ``status == "failed"`` AND this field True. Single source of truth so
+# runner and executor cannot drift.
+# Persisted value: NAMESPACED on purpose. The finalize scan also inspects the
+# pure agent return (``outputs_json``) for the envelope fields, so the marker
+# key must be collision-resistant: a bare ``synthetic_failure`` would let an
+# agent-authored ``{"status": "failed", "synthetic_failure": true}`` masquerade
+# as the runner's marker and downgrade a run that should finalize complete.
+# The product namespace keeps it out of the agent's business JSON. Rename the
+# CONSTANT, never the string.
+SYNTHETIC_FAILURE_MARKER = "farna_control_synthetic_failure"
 #: Legacy key written by releases before the rebrand. Persisted node telemetry
 #: (and older ``outputs_json`` rows) can still carry it, and a run can outlive a
 #: rolling deploy, so the writer stamps BOTH keys (dual-write) and the finalize
@@ -8871,7 +8874,7 @@ async def _sandbox_issue_run_credential_for_sandbox(
     (``core.credential_issuer``). The default Modulo-minted provider computes
     the TTL as ``max(15 min, node_timeout + 5 min)`` capped by the org max
     (default 1 hour), links the key to the run (``OrgApiKey.run_id``), and
-    stamps the issuance provenance ``modulo_minted`` (attested — NEVER
+    stamps the issuance provenance ``self_minted`` (attested — NEVER
     ``observed``).
 
     Fail-open: a mint failure returns ``None`` — the sandbox runs without the

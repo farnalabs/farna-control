@@ -914,6 +914,5 @@ zizmor.yml	1
 
 # Added by the persisted-value migration: files that spell a frozen legacy
 # alias or the kept trust-header provenance literal.
-backend/src/farna/db/migrations/versions/0365_backfill_synthetic_failure_marker.py	1
 backend/tests/architecture/test_persisted_identifier_contract.py	4
 backend/tests/unit/core/test_persisted_value_migration.py	1

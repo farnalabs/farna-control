@@ -29,6 +29,7 @@ import farna.core.pipeline_engine.llm_judge as llm_judge
 import farna.core.pipeline_engine.node_runner as nr
 from farna.connectors.base import CIRun, CIRunLog, CIRunStatus
 from farna.core.pipeline_engine.node_runner import (
+    SYNTHETIC_FAILURE_MARKER,
     SandboxNodeFailedError,
     ScriptBudgetKilledError,
     ScriptInvalidOutputError,
@@ -3287,7 +3288,7 @@ async def test_sandbox_context_file_write_failure_returns_synthetic_failure_enve
         result = await fn(_run_state())
     assert result["telemetry"]["status"] == "failed"
     assert result["telemetry"]["error_type"] == "RuntimeError"
-    assert result["telemetry"]["synthetic_failure"] is True
+    assert result["telemetry"][SYNTHETIC_FAILURE_MARKER] is True
     assert result["telemetry"]["modulo_synthetic_failure"] is True
     span.add_event.assert_called()
 

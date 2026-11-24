@@ -166,9 +166,13 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         view, and the first artifact's inner ``output``.
 
         A post-P1b stored ``outputs_json`` value is the PURE agent return
-        (``None`` or agent-authored business JSON) — scanned top-level only; the
-        marker requirement in the predicate keeps agent-authored JSON
-        collision-free.
+        (``None`` or agent-authored business JSON), so it IS scanned top-level
+        as a legacy-envelope fallback. Collision-freedom therefore comes from
+        the marker being NAMESPACED (``SYNTHETIC_FAILURE_MARKER`` /
+        ``LEGACY_SYNTHETIC_FAILURE_MARKERS``), never from a bare
+        ``synthetic_failure`` key: an agent-authored
+        ``{"status": "failed", "synthetic_failure": true}`` must not masquerade
+        as the runner's marker.
         """
         views: list[dict[str, Any]] = []
         if not isinstance(value, dict):

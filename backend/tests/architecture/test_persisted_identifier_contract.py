@@ -30,10 +30,14 @@ from farna.core.pipeline_engine.node_runner import (
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _MANIFEST = _REPO_ROOT / "frontend" / "src" / "manifest.yaml"
 
-#: Brand-free targets and their legacy aliases, agreed in the migration plan.
+#: Targets and their legacy aliases, agreed in the migration plan. ``self_minted``
+#: is brand-free; the synthetic marker is namespaced for collision-resistance.
 _SELF_MINTED = "self_minted"
 _SELF_MINTED_LEGACY = "modulo_minted"
-_SYNTHETIC_FAILURE = "synthetic_failure"
+#: NAMESPACED, not bare: the finalize scan also sees the pure agent return, so
+#: the marker must stay collision-resistant (see the plan's product-prefixed
+#: alternative). A bare ``synthetic_failure`` would collide with agent JSON.
+_SYNTHETIC_FAILURE = "farna_control_synthetic_failure"
 _SYNTHETIC_FAILURE_LEGACY = "modulo_synthetic_failure"
 _NOTIFIER_USER_AGENT = "Farna-Control-Notifier/1.0"
 #: Decision 1: the built-in trust-header provenance value is deliberately KEPT.
