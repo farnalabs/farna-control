@@ -45,7 +45,7 @@
             v-if="!expandedPlainString"
             type="button"
             class="json-viewer-string-toggle"
-            data-testid="json-viewer-string-expand"
+            :data-testid="`json-viewer-string-expand-${viewerUid}`"
             :aria-expanded="false"
             :aria-label="t('components.JsonViewer.expand_string')"
             @click="expandedPlainString = true"
@@ -56,7 +56,7 @@
             v-else
             type="button"
             class="json-viewer-string-toggle"
-            data-testid="json-viewer-string-collapse"
+            :data-testid="`json-viewer-string-collapse-${viewerUid}`"
             :aria-expanded="true"
             :aria-label="t('components.JsonViewer.collapse_string')"
             @click="expandedPlainString = false"
@@ -121,6 +121,9 @@ const props = withDefaults(
 const { t } = useI18n()
 // FAR-2714: a page can render more than one viewer (e.g. /admin/system/config,
 // a run-output diff), so the root and its toolbar need per-instance ids.
+// FAR-2719: the long-string expand/collapse toggles carry the same suffix, so
+// two viewers each showing an expandable string do not collide (strict-mode
+// getByTestId matches exactly one element).
 const viewerUid = useId()
 const copied = ref(false)
 const deepRef = ref(props.deep)
@@ -234,7 +237,7 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
         {
           type: 'button',
           class: 'json-viewer-string-toggle',
-          'data-testid': 'json-viewer-string-collapse',
+          'data-testid': `json-viewer-string-collapse-${viewerUid}`,
           'aria-expanded': 'true',
           'aria-label': t('components.JsonViewer.collapse_string'),
           onClick: toggle,
@@ -251,7 +254,7 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
       {
         type: 'button',
         class: 'json-viewer-string-toggle',
-        'data-testid': 'json-viewer-string-expand',
+        'data-testid': `json-viewer-string-expand-${viewerUid}`,
         'aria-expanded': 'false',
         'aria-label': t('components.JsonViewer.expand_string'),
         onClick: toggle,

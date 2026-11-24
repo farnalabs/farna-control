@@ -251,7 +251,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await expect(truncated).toContainText(`… ${expectedCount} chars`)
     await expect(truncated).not.toContainText(longText.slice(500))
 
-    await page.getByTestId('json-viewer-string-expand').first().click()
+    await page.locator('[data-testid^="json-viewer-string-expand-"]').first().click()
     await expect(page.getByTestId('json-viewer-string-expanded').first()).toContainText(longText)
   })
 
@@ -307,7 +307,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
 
     // The expand toggle and char count keep their natural size next to the
     // wrapped preview — they must never be squeezed into vertical slivers.
-    const toggleBox = await page.getByTestId('json-viewer-string-expand').first().boundingBox()
+    const toggleBox = await page.locator('[data-testid^="json-viewer-string-expand-"]').first().boundingBox()
     expect(toggleBox, 'expand toggle rendered').not.toBeNull()
     expect(toggleBox!.width, 'expand toggle must keep its label width').toBeGreaterThan(40)
     expect(toggleBox!.height, 'expand toggle must stay one label tall').toBeLessThanOrEqual(30)
@@ -410,7 +410,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
         const lineWidths = Array.from(byLine.values())
         const textBox = text.getBoundingClientRect()
         const scroll = el.closest('.overflow-auto')
-        const toggle = el.querySelector('[data-testid="json-viewer-string-expand"]')
+        const toggle = el.querySelector('[data-testid^="json-viewer-string-expand-"]')
         const toggleBox = toggle?.getBoundingClientRect()
         return {
           lineCount: lineWidths.length,
@@ -493,11 +493,11 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
       ).toBeLessThanOrEqual(2)
 
       // 6. The expand control actually works at this viewport.
-      await page.getByTestId('json-viewer-string-expand').first().click()
+      await page.locator('[data-testid^="json-viewer-string-expand-"]').first().click()
       const expanded = page.getByTestId('json-viewer-string-expanded').first()
       await expect(expanded).toContainText(longText.slice(0, 60))
 
-      await page.getByTestId('json-viewer-string-collapse').first().click()
+      await page.locator('[data-testid^="json-viewer-string-collapse-"]').first().click()
       await expect(truncated).toBeVisible()
       await expect(page.getByTestId('json-viewer-string-expanded')).toHaveCount(0)
     })

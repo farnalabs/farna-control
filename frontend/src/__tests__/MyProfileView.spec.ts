@@ -123,7 +123,7 @@ describe('MyProfileView', () => {
     await nextTick()
     await nextTick()
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(true)
   })
 
   it('shows the My Teams error card only when the feature is enabled', async () => {
@@ -153,7 +153,7 @@ describe('MyProfileView', () => {
     await nextTick()
     await nextTick()
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Failed to load teams')
     expect(wrapper.findAll('[data-testid="error-alert-retry"]').length).toBe(1)
   })
