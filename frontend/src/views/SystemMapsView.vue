@@ -128,8 +128,17 @@
     <Menu ref="actionMenuRef" :key="actionMenuKey" :model="actionMenuItems" popup />
 
     <!-- Create Map Dialog -->
-    <Dialog v-model:visible="createDialogOpen" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }" :header="$t('views.SystemMapsView.create_map')" data-testid="system-map-create-dialog">
-      <form @submit.prevent="submitCreate" class="w-full space-y-4">
+    <FormDialog
+      v-model:open="createDialogOpen"
+      :title="$t('views.SystemMapsView.create_map')"
+      :confirm-text="$t('common.create')"
+      :confirm-loading-text="$t('common.creating')"
+      :loading="creating"
+      cancel-test-id="system-map-create-cancel"
+      confirm-test-id="system-map-create-submit"
+      @confirm="submitCreate"
+    >
+      <form @submit.prevent="submitCreate" class="w-full space-y-4" data-testid="system-map-create-dialog">
         <div>
           <label :for="nameId" class="block text-sm font-medium mb-1">{{ $t('views.SystemMapsView.name') }} <span class="text-destructive">*</span></label>
           <InputText :id="nameId" v-model="createForm.name" class="w-full" :placeholder="$t('views.SystemMapsView.name_placeholder')" :aria-required="true" data-testid="system-map-create-name" />
@@ -138,12 +147,8 @@
           <label :for="descId" class="block text-sm font-medium mb-1">{{ $t('views.SystemMapsView.description') }}</label>
           <Textarea :id="descId" v-model="createForm.description" class="w-full" :placeholder="$t('views.SystemMapsView.description_placeholder')" rows="3" data-testid="system-map-create-description" />
         </div>
-        <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="rounded-md border px-3 py-2 text-sm font-medium" @click="createDialogOpen = false" data-testid="system-map-create-cancel">{{ $t('common.cancel') }}</button>
-          <button type="submit" class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" :disabled="creating" data-testid="system-map-create-submit">{{ creating ? $t('common.creating') : $t('common.create') }}</button>
-        </div>
       </form>
-    </Dialog>
+    </FormDialog>
 
     <!-- Delete Confirmation -->
     <FormDialog
@@ -171,7 +176,6 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import Pagination from '../components/shared/Pagination.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
-import Dialog from 'primevue/dialog'
 import Menu from 'primevue/menu'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
