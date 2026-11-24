@@ -1896,7 +1896,7 @@ async def trigger_run(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
-    await dispatch_run(str(run_id), str(org_id), queue="runs")
+    await dispatch_run(str(run_id), str(org_id))
 
     return run_response
 
@@ -2085,7 +2085,7 @@ async def trigger_rerun(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
-    await dispatch_run(str(run_id_new), str(org_id), queue="runs")
+    await dispatch_run(str(run_id_new), str(org_id))
 
     return run_response
 
@@ -3585,7 +3585,6 @@ async def _resume_recovered_node(
         outcome, _job_id = await dispatch_run(
             str(run_id),
             str(org_id),
-            queue="runs",
             job_type="resume_run",
             resume_data=resume_data,
         )
@@ -3792,7 +3791,6 @@ async def _redispatch_guardrail_override(*, run_id: uuid.UUID, org_id: uuid.UUID
         outcome, _job_id = await dispatch_run(
             str(run_id),
             str(org_id),
-            queue="runs",
             job_type=job_type,
         )
     except Exception as exc:

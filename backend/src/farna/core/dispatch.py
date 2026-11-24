@@ -716,7 +716,7 @@ async def dispatch_run(
     run_id: str,
     org_id: str,
     *,
-    queue: str = "runs",
+    queue: str | None = None,
     job_type: str = "execute_run",
     resume_data: dict[str, Any] | None = None,
     fail_fast: bool = False,
@@ -755,6 +755,13 @@ async def dispatch_run(
     ``key_suffix`` (default empty) makes the SAQ job key ``run:{run_id}:{suffix}``;
     ``dispatcher_reconcile`` re-dispatches with a FRESH suffix so SAQ key dedupe
     never suppresses the recovery enqueue.
+
+    ``queue`` defaults to ``None`` and resolves to ``settings.saq_runs_queue`` —
+    the ONE configured runs queue name (``runs`` on prod, ``staging-runs`` on
+    staging). Callers must NOT pass a hardcoded ``"runs"``: on a deployment whose
+    runs worker listens on a different configured name it would enqueue to a
+    queue no worker consumes, leaving the run ``pending`` forever (the bug this
+    signature closed).
     """
     settings = get_settings()
     rid = uuid.UUID(str(run_id))

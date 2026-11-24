@@ -182,6 +182,34 @@ class TestDispatchRunRouting:
         assert args[3] != JOB_ID
 
     @pytest.mark.asyncio
+    async def test_default_queue_is_the_configured_runs_queue(self) -> None:
+        """A dispatch with no explicit queue must enqueue on ``settings.saq_runs_queue``.
+
+        The runs worker listens on the configured name (``runs`` on prod,
+        ``staging-runs`` on staging). A hardcoded ``"runs"`` default enqueues to a
+        queue no worker consumes on staging, leaving every triggered run
+        ``pending`` forever — the staging-e2e "run never reached the expected
+        status (last: pending)" failure this pins.
+        """
+        with (
+            patch.object(dispatch, "get_settings", return_value=_make_settings(saq_runs_queue="staging-runs")),
+            _rls_patch(),
+            patch.object(dispatch, "_capacity_deferred", new_callable=AsyncMock, return_value=False),
+            patch.object(dispatch, "_org_capacity_deferred", new_callable=AsyncMock, return_value=False),
+            patch.object(dispatch, "_open_session", return_value=_MockSession()),
+            patch.object(dispatch, "_record_dispatched", new_callable=AsyncMock),
+            _enqueue_patch(return_value=(JOB_ID, False)) as enqueue,
+            patch.object(dispatch, "_record_saq_job", new_callable=AsyncMock),
+        ):
+            outcome, job_id = await dispatch.dispatch_run(RUN_ID, ORG_ID)
+
+        assert outcome == "enqueued"
+        assert job_id == JOB_ID
+        enqueue.assert_awaited_once()
+        # _enqueue_saq(run_id, org_id, queue_name, ...) — the 3rd positional arg.
+        assert enqueue.await_args.args[2] == "staging-runs"
+
+    @pytest.mark.asyncio
     async def test_resume_enqueues_and_sets_dispatcher(self) -> None:
         # resume_run enqueues to SAQ (worker wiring, F6a).
         with (
