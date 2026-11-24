@@ -119,3 +119,7 @@ qa-findings-lens*.json
 
 # The evidence FILE (alpha-exit-evidence.json) IS committed — it is the template.
 .githooks/
+
+# Pre-upgrade database snapshots (FAR-2667) are operator data, never committed.
+/deploy/compose/backups/
+/backups/
