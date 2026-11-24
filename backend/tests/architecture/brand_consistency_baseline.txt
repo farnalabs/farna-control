@@ -504,7 +504,6 @@ backend/tests/unit/core/watchdog/test_worker_liveness.py	1
 backend/tests/unit/cron_helpers/test_cron_helpers.py	4
 backend/tests/unit/crud/test_run_retention_crud.py	1
 backend/tests/unit/db/crud/test_library_org_clamp.py	3
-backend/tests/unit/db/crud/test_offset_has_more_sweep.py	9
 backend/tests/unit/db/crud/test_organisation.py	3
 backend/tests/unit/db/crud/test_run_coverage_extra.py	2
 backend/tests/unit/db/test_apply_bundled_runner_template.py	3
