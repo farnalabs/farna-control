@@ -1983,6 +1983,207 @@ def test_schema_gate_wait_budget_fits_the_release_job_timeout() -> None:
     assert budget <= jobs["schema-gate"]["timeout-minutes"] * 60
 
 
+# ---------------------------------------------------------------------------
+# FAR-2752: the release target is resolved ONCE (origin/main sampled once, or
+# an explicit target_sha pin) and the schema gate and every publishing job
+# consume that one value. These tests execute the resolve step for real.
+# ---------------------------------------------------------------------------
+_RESOLVE_TARGET_STEP_NAME = "Resolve the target commit (pin or origin/main)"
+
+
+def _resolve_target_run() -> str:
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["resolve-target"]["steps"]
+    step = steps[_step_names(steps).index(_RESOLVE_TARGET_STEP_NAME)]
+    run = step.get("run")
+    assert isinstance(run, str), "the resolve step must contain a shell run block"
+    return run
+
+
+def _resolve_target_repo(tmp_path: Path) -> tuple[Path, dict[str, str], dict[str, str]]:
+    """A repo with a base commit, an advanced main, a divergent commit, an
+    ahead-of-main commit and a tag - enough to exercise every refusal."""
+    repo = tmp_path / "resolve-repo"
+    remote = tmp_path / "resolve-remote.git"
+    repo.mkdir()
+    _cut_git("init", "--bare", str(remote))
+    _cut_git("init", "-b", "main", str(repo))
+    identity = ("-c", "user.name=Test", "-c", "user.email=test@example.com")
+
+    def commit(name: str, message: str) -> str:
+        (repo / name).write_text(message, encoding="utf-8")
+        _cut_git("add", ".", cwd=repo)
+        _cut_git(*identity, "commit", "-m", message, cwd=repo)
+        return _cut_git("rev-parse", "HEAD", cwd=repo).stdout.strip()
+
+    base = commit("base.txt", "base")
+    _cut_git("remote", "add", "origin", str(remote), cwd=repo)
+    _cut_git("push", "origin", "main", cwd=repo)
+
+    # Advance main so a divergent side branch shares a merge base with it but is
+    # neither its ancestor nor its descendant.
+    main_tip = commit("main.txt", "main-2")
+    _cut_git("push", "origin", "main", cwd=repo)
+
+    _cut_git("checkout", "-q", "-b", "side", base, cwd=repo)
+    divergent = commit("side.txt", "side")
+    _cut_git("checkout", "-q", "main", cwd=repo)
+
+    # A commit that descends main: "newer than origin/main".
+    _cut_git("checkout", "-q", "-b", "ahead", main_tip, cwd=repo)
+    ahead = commit("ahead.txt", "ahead")
+    _cut_git("checkout", "-q", "main", cwd=repo)
+
+    _cut_git(*identity, "tag", "-a", "v9.9.9", "-m", "test tag", base, cwd=repo)
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "GITHUB_OUTPUT": str(tmp_path / "resolve-output"),
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "resolve-summary"),
+        }
+    )
+    return repo, env, {"base": base, "main": main_tip, "divergent": divergent, "ahead": ahead}
+
+
+def _run_resolve_target(repo: Path, env: dict[str, str], *, mode: str, requested: str) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
+    run_env = {**env, "MODE": mode, "REQUESTED_SHA": requested}
+    result = _run_bash(_resolve_target_run(), cwd=repo, env=run_env)
+    outputs: dict[str, str] = {}
+    path = Path(env["GITHUB_OUTPUT"])
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                outputs[key] = value
+    return result, outputs
+
+
+@pytest.mark.posix_only
+def test_resolve_target_defaults_to_a_single_origin_main_sample(tmp_path: Path) -> None:
+    repo, env, refs = _resolve_target_repo(tmp_path)
+    result, outputs = _run_resolve_target(repo, env, mode="recut", requested="")
+
+    assert result.returncode == 0, result.stderr
+    assert outputs["target_sha"] == refs["main"]
+    assert outputs["target_pinned"] == "false"
+
+
+@pytest.mark.posix_only
+def test_resolve_target_accepts_a_pin_to_an_ancestor_of_main(tmp_path: Path) -> None:
+    repo, env, refs = _resolve_target_repo(tmp_path)
+    result, outputs = _run_resolve_target(repo, env, mode="recut", requested=refs["base"])
+
+    assert result.returncode == 0, result.stderr
+    assert outputs["target_sha"] == refs["base"]
+    assert outputs["target_pinned"] == "true"
+
+
+@pytest.mark.posix_only
+def test_resolve_target_refuses_a_pin_that_is_not_on_main(tmp_path: Path) -> None:
+    repo, env, refs = _resolve_target_repo(tmp_path)
+    result, outputs = _run_resolve_target(repo, env, mode="recut", requested=refs["divergent"])
+
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "[target_sha_not_on_main]" in combined
+    assert "not on main's history" in combined
+    assert outputs == {}
+
+
+@pytest.mark.posix_only
+def test_resolve_target_refuses_a_pin_that_is_newer_than_main(tmp_path: Path) -> None:
+    repo, env, refs = _resolve_target_repo(tmp_path)
+    result, _outputs = _run_resolve_target(repo, env, mode="recut", requested=refs["ahead"])
+
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "[target_sha_newer_than_main]" in combined
+    assert "newer than origin/main" in combined
+
+
+@pytest.mark.posix_only
+def test_resolve_target_refuses_a_pin_that_does_not_exist(tmp_path: Path) -> None:
+    repo, env, _refs = _resolve_target_repo(tmp_path)
+    result, _outputs = _run_resolve_target(repo, env, mode="recut", requested="0" * 40)
+
+    assert result.returncode != 0
+    assert "[target_sha_missing]" in result.stdout + result.stderr
+
+
+@pytest.mark.posix_only
+def test_resolve_target_refuses_a_tag_instead_of_a_commit(tmp_path: Path) -> None:
+    repo, env, _refs = _resolve_target_repo(tmp_path)
+    result, _outputs = _run_resolve_target(repo, env, mode="recut", requested="v9.9.9")
+
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "[target_sha_is_tag]" in combined
+    assert "names a git tag" in combined
+
+
+@pytest.mark.posix_only
+def test_resolve_target_refuses_a_pin_for_promote(tmp_path: Path) -> None:
+    repo, env, refs = _resolve_target_repo(tmp_path)
+    result, _outputs = _run_resolve_target(repo, env, mode="promote", requested=refs["base"])
+
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "[target_sha_unsupported_mode]" in combined
+    assert "not supported for mode 'promote'" in combined
+
+
+@pytest.mark.posix_only
+def test_resolve_target_refuses_a_pin_for_cut(tmp_path: Path) -> None:
+    """`cut` tags the merge commit of a version-bump PR, so a pin cannot
+    describe the commit it will publish."""
+    repo, env, refs = _resolve_target_repo(tmp_path)
+    result, _outputs = _run_resolve_target(repo, env, mode="cut", requested=refs["base"])
+
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "[target_sha_unsupported_mode]" in combined
+    assert "not supported for mode 'cut'" in combined
+    assert "version-bump PR" in combined
+
+
+def test_release_schema_gate_and_publish_share_the_single_resolved_target() -> None:
+    """One resolved value reaches the gate, the tag and the release notes."""
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+
+    assert jobs["schema-gate"]["needs"] == ["resolve-target"]
+    assert jobs["release"]["needs"] == ["preflight", "resolve-target"]
+    # publish-release consumes the value re-exported by the release job, never a
+    # second resolution of its own.
+    assert jobs["release"]["outputs"]["target_sha"] == "${{ steps.rc-output.outputs.target_sha }}"
+    assert "resolve-target" not in jobs["publish-release"]["needs"]
+
+    inputs = workflow["on"]["workflow_dispatch"]["inputs"]
+    assert inputs["target_sha"]["type"] == "string"
+    assert inputs["target_sha"].get("required", False) is False
+
+    release_steps = jobs["release"]["steps"]
+    release_names = _step_names(release_steps)
+    schema_env = release_steps[release_names.index("Assert schema-freshness gate green on exact cut/recut commit")]["env"]
+    recut_step = release_steps[release_names.index("Recut from current main")]
+    assert schema_env["TARGET_SHA"] == "${{ needs.resolve-target.outputs.target_sha }}"
+    assert recut_step["env"]["TARGET_SHA"] == "${{ needs.resolve-target.outputs.target_sha }}"
+
+    # The recut tag is cut from the resolved value, never a second live read.
+    recut_script = recut_step["run"]
+    assert 'git checkout --detach "$TARGET_SHA"' in recut_script
+    assert "git rev-parse origin/main" not in recut_script
+    assert "git checkout --detach origin/main" not in recut_script
+
+    # And the published RC trace records the same commit.
+    publish_steps = jobs["publish-release"]["steps"]
+    publish_names = _step_names(publish_steps)
+    create = publish_steps[publish_names.index("Create GitHub Release with assets")]
+    assert create["env"]["TARGET_SHA"] == "${{ needs.release.outputs.target_sha }}"
+    assert "Target commit:" in create["run"]
+
+
 @pytest.mark.posix_only
 def test_protected_cut_cleanup_executes_hold_deletion_after_preparation_failure(tmp_path: Path) -> None:
     repo, _log, env = _cut_harness(tmp_path)
