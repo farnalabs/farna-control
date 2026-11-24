@@ -106,22 +106,31 @@
                 </tbody>
               </table>
             </div>
-
-            <div v-if="total > pageSize" class="flex items-center justify-end mt-4 px-4 pb-4" data-testid="system-maps-pagination">
-              <Pagination
-                :has-prev="page > 1"
-                :has-next="page < Math.ceil(total / pageSize)"
-                :page-label="$t('views.SystemMapsView.page_of', { page: page, total: Math.ceil(total / pageSize) })"
-                :prev-label="$t('common.previous')"
-                :next-label="$t('common.next')"
-                prev-testid="system-maps-prev"
-                next-testid="system-maps-next"
-                @prev="loadMaps(page - 1)"
-                @next="loadMaps(page + 1)"
-              />
-            </div>
           </template>
         </template>
+
+        <!-- FAR-2751: keep the footer OUTSIDE the loading swap above, so the
+             Pagination `page X of Y` polite live region survives a page load.
+             Re-mounting the region with the new text already present is not
+             announced; a text change inside a persistent node is. The controls
+             are disabled during the fetch instead of disappearing with it. -->
+        <div
+          v-if="!error && !unavailable && maps.length > 0 && total > pageSize"
+          class="flex items-center justify-end mt-4 px-4 pb-4"
+          data-testid="system-maps-pagination"
+        >
+          <Pagination
+            :has-prev="page > 1 && !loading"
+            :has-next="page < Math.ceil(total / pageSize) && !loading"
+            :page-label="$t('views.SystemMapsView.page_of', { page: page, total: Math.ceil(total / pageSize) })"
+            :prev-label="$t('common.previous')"
+            :next-label="$t('common.next')"
+            prev-testid="system-maps-prev"
+            next-testid="system-maps-next"
+            @prev="loadMaps(page - 1)"
+            @next="loadMaps(page + 1)"
+          />
+        </div>
       </main>
     </div>
 

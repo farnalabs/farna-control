@@ -307,7 +307,7 @@ routes:
     /evals/editor:
         name: eval-editor
         breadcrumb: Eval Editor
-        parent: /
+        parent: /evals
         product_map: [feat-evals]
         # FAR-2609: the editor is a WRITE surface. `eval.list` resolves to viewer
         # and the router admits on ANY of these, so listing it here let a viewer
@@ -326,7 +326,7 @@ routes:
     /evals/proposals:
         name: eval-proposals-queue
         breadcrumb: Eval Proposals
-        parent: /
+        parent: /evals
         product_map: [feat-evals]
         # The queue LIST is `feedback.list` (viewer floor) - reading which eval
         # gaps were detected is genuinely useful to a viewer/auditor, so the

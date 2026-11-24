@@ -421,6 +421,11 @@ async def test_seed_fixture_ids_are_deterministic_and_org_scoped(session: AsyncS
     assert [row.id for row in variants] == [seed_demo_module.demo_fixture_id(org.id, "variant-group:demo-review-strategies")]
     assert [row.id for row in feedback] == [seed_demo_module.demo_fixture_id(org.id, "feedback:demo-review-1")]
     assert [row.id for row in evidence] == [seed_demo_module.demo_fixture_id(org.id, "evidence:risk.demo_review_score")]
+    # The run-subject evidence row must carry its subject run's team: it bypasses
+    # append_evidence, so nothing else would ever stamp it.
+    subjects = {str(run.id): run.owner_team_id for run in (await session.execute(select(Run))).scalars()}
+    assert evidence[0].owner_team_id is not None
+    assert evidence[0].owner_team_id == subjects[evidence[0].subject_id]
     assert seed_demo_module.demo_fixture_id(org.id, "model-backend:Demo Stub Fast") != seed_demo_module.demo_fixture_id(uuid.uuid4(), "model-backend:Demo Stub Fast")
 
 

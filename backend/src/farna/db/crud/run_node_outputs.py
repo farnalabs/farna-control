@@ -123,6 +123,7 @@ from farna.db.models.run_node_outputs import (
     json_bytes,
 )
 from farna.db.rls import OutputsRlsMismatch, read_rls_org
+from farna.db.run_ownership import resolve_run_owner_team_id, run_owner_team_id_subquery
 
 _log = logging.getLogger(__name__)
 
@@ -685,6 +686,12 @@ def _upsert_group_stmt(
     INSERT still happens for a new row.
     """
     values: dict[str, Any] = {"run_id": run_id, "organisation_id": organisation_id}
+    # ADR 070 Phase 1A: stamp the parent run's team. It is a statement-scoped
+    # scalar subquery, so the hot path (every node completion) spends no extra
+    # round trip, and it reads ``runs`` inside this transaction - the run's owner
+    # is immutable, and copying the LIVE pipeline instead would silently move a
+    # historical run's visibility to a reassigned team (db/run_ownership.py).
+    values["owner_team_id"] = run_owner_team_id_subquery(run_id)
     for present, column in zip(signature, _SIDE_COLUMNS, strict=True):
         if present:
             values[column] = None
@@ -1572,6 +1579,10 @@ async def persist_artifact_pointers(
     values = {
         "run_id": run_id,
         "organisation_id": organisation_id,
+        # ADR 070 Phase 1A: this upsert bypasses ``upsert_rows`` and binds
+        # ``values`` per row, so the run's owner is resolved to a plain value here
+        # (a scalar subquery would be bound as a parameter).
+        "owner_team_id": await resolve_run_owner_team_id(session, run_id),
         "node_id": node_id,
         "attempt_key": attempt_key,
         "artifacts_json": _sanitise_jsonb_for_store(pointers or None, run_id=run_id, label="artifacts"),
@@ -1612,6 +1623,9 @@ async def persist_schema_enforcement_record(
     values = {
         "run_id": run_id,
         "organisation_id": organisation_id,
+        # ADR 070 Phase 1A: same rule as persist_artifact_pointers - this upsert
+        # binds ``values`` per row, so the owner is resolved, not a subquery.
+        "owner_team_id": await resolve_run_owner_team_id(session, run_id),
         "node_id": node_id,
         "attempt_key": attempt_key,
         "schema_enforcement_json": _sanitise_jsonb_for_store(enforcement_record, run_id=run_id, label="schema enforcement"),

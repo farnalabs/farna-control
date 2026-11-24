@@ -267,46 +267,23 @@
     </template>
     </div>
 
-    <Dialog
-      v-if="showFireDialog"
-      :visible="showFireDialog"
-      :modal="true"
-      :dismissable-mask="true"
+    <FormDialog
+      v-model:open="showFireDialog"
+      :title="$t('views.variantCreator.confirm_title')"
+      :confirm-text="$t('views.variantCreator.confirm_fire')"
+      :confirm-loading-text="$t('views.variantCreator.firing')"
+      :loading="firing"
+      :cancel-disabled="firing"
+      cancel-test-id="variant-builder-cancel"
+      confirm-test-id="variant-builder-confirm-fire"
       data-testid="variant-builder-confirm"
-      @update:visible="showFireDialog = false"
+      @confirm="fireBatch"
     >
-      <template #header>
-        <div class="text-lg font-semibold">{{ $t('views.variantCreator.confirm_title') }}</div>
-      </template>
       <p class="text-sm text-muted-foreground">
         {{ $t('views.variantCreator.confirm_body', { count: variants.length }) }}
       </p>
       <ErrorAlert v-if="fireError" :message="fireError" class="mt-3" />
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <Button
-            severity="secondary"
-            outlined
-            type="button"
-            :disabled="firing"
-            data-testid="variant-builder-cancel"
-            @click="showFireDialog = false"
-          >
-            {{ $t('views.variantCreator.cancel') }}
-          </Button>
-          <Button
-            severity="primary"
-            type="button"
-            :disabled="firing"
-            data-testid="variant-builder-confirm-fire"
-            @click="fireBatch"
-          >
-            <span v-if="firing" class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            {{ firing ? $t('views.variantCreator.firing') : $t('views.variantCreator.confirm_fire') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
   </DataCard>
 </template>
 
@@ -319,9 +296,9 @@ import type { components } from '../../lib/api/client'
 import { useDataFetch } from '../../composables/useDataFetch'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
+import FormDialog from '../shared/FormDialog.vue'
 import Button from 'primevue/button'
 import EmptyState from '../shared/EmptyState.vue'
-import Dialog from 'primevue/dialog'
 import Select from '../shared/AppSelect.vue'
 import { formatApiError } from '../../lib/api/formatError'
 import DataCard from '../ui/DataCard.vue'

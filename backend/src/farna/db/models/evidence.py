@@ -66,6 +66,13 @@ class Evidence(Base, TimestampMixin):
     key: Mapped[str] = mapped_column(Text(), nullable=False)
     subject_type: Mapped[str] = mapped_column(Text(), nullable=False)
     subject_id: Mapped[str] = mapped_column(Text(), nullable=False)
+    # ADR 070 Phase 1A: the owning team of a RUN-subject fact, stamped at write
+    # time by the producer that knows the run (``append_evidence(owner_team_id=
+    # ...)``) from ``runs`` - never the live pipeline (see ``db/run_ownership.py``).
+    # Deliberately NULL for every non-run subject (``trigger_event``, ...): those
+    # facts have no run to inherit from, so they are not team-owned and must never
+    # be given a fabricated team. ON DELETE RESTRICT mirrors ``runs.owner_team_id``.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
     value: Mapped[Any] = mapped_column(JSONB_COL, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

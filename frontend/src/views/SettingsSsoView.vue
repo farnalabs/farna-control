@@ -107,28 +107,14 @@
                   </svg>
                 </button>
                 <TableActions class="whitespace-nowrap" :actions="ssoActions(provider)" />
-                <span tabindex="0"
-                  class="relative inline-flex shrink-0 cursor-pointer items-center"
+                <ToggleSwitch
+                  :checked="provider.enabled"
+                  :label="$t('views.SettingsSsoView.toggle_provider')"
+                  :disabled="togglingId === provider.id"
+                  :toggling="togglingId === provider.id"
                   data-testid="settings-sso-toggle"
-                  :aria-label="$t('views.SettingsSsoView.toggle_provider')"
-                  role="switch"
-                  :aria-checked="provider.enabled"
-                  :class="{ 'opacity-50 pointer-events-none': togglingId === provider.id }"
-                  @click.stop.prevent="toggleProvider(provider)"
-                  @keydown.enter.stop.prevent="toggleProvider(provider)"
-                  @keydown.space.stop.prevent="toggleProvider(provider)"
-                >
-                  <div
-                    class="h-6 w-11 rounded-full transition-colors"
-                    :class="provider.enabled ? 'bg-primary' : 'bg-input'"
-                  >
-                    <div
-                      class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                      :class="provider.enabled ? 'translate-x-[1.375rem]' : 'translate-x-0.5'"
-                      style="margin-top: 2px;"
-                    />
-                  </div>
-                </span>
+                  @toggle="toggleProvider(provider)"
+                />
               </div>
             </div>
 
@@ -204,6 +190,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'

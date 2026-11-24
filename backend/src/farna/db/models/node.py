@@ -48,6 +48,13 @@ class Node(OrgScoped):
     retry_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     retry_delay_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     account_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False, index=True)
+    # ADR 070 Phase 1A: the owning team, inherited from ``pipelines.owner_team_id``
+    # (a node is pipeline-scoped, not run-scoped). No production writer exists on
+    # this DEPRECATED composite-template table today, so nothing stamps it yet;
+    # migration 0365 backfills it only for pipelines that never changed owner, and
+    # a future writer must populate it in the insert's own transaction. NULL =
+    # org-level pipeline, or a pipeline whose ownership moved (ambiguous history).
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
 
     children: Mapped[list["Node"]] = relationship(
         "Node",
