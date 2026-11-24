@@ -114,7 +114,10 @@ test.describe('Real-stack journeys: pipeline lifecycle', { tag: '@regression' },
 
       // Rename via the row's action menu. Retry until the rename dialog
       // actually opens: the popup can self-hide before the command lands.
-      const dialog = page.locator('dialog').filter({ has: page.locator('#pipelinelistview-field-1') })
+      // PipelineListView renders rename via the PrimeVue FormDialog
+      // (div.p-dialog[role=dialog]), so select by ARIA role, not the native
+      // <dialog> element the old inline dialog used.
+      const dialog = page.getByRole('dialog').filter({ has: page.locator('#pipelinelistview-field-1') })
       await clickRowAction(page, row, 'Rename', async () => {
         await expect(dialog).toBeVisible({ timeout: 5_000 })
       })
@@ -241,7 +244,10 @@ test.describe('Real-stack journeys: pipeline lifecycle', { tag: '@regression' },
       // before the item's command lands, silently no-opping a single
       // activation. This journey was skipped whenever pipeline_delete was
       // unresolvable, so it never picked the helper up (see setup/row-menu.ts).
-      const dialog = page.locator('dialog').filter({ hasText: 'Delete Pipeline' })
+      // PipelineListView renders delete via the PrimeVue FormDialog
+      // (div.p-dialog[role=dialog]), so select by ARIA role, not the native
+      // <dialog> element the old inline dialog used.
+      const dialog = page.getByRole('dialog').filter({ hasText: 'Delete Pipeline' })
       await clickRowAction(page, row, 'Delete', async () => {
         await expect(dialog).toBeVisible({ timeout: 5_000 })
       })

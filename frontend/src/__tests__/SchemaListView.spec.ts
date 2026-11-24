@@ -259,6 +259,7 @@ describe('SchemaListView', () => {
     await flushPromises()
     await nextTick()
     expect(document.body.textContent).toContain('Move to Folder')
+    expect(document.body.querySelector('[data-testid="schema-move-cancel"]')).not.toBeNull()
 
     const folderBtn = document.body.querySelector('[data-testid="schema-move-folder-folder-1"]') as HTMLElement | null
     expect(folderBtn).not.toBeNull()

@@ -113,9 +113,20 @@ function mountView(attachToBody = false) {
   })
 }
 
-/** The native `close` event is queued as a task (see the jsdom dialog shim). */
-function flushCloseEvent(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0))
+/** FormDialog/PrimeVue teleports to <body>, outside the mounted wrapper. */
+function saveAsDialog(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>('[role="dialog"]')
+}
+
+function dialogButtonByTestId(testid: string): HTMLButtonElement {
+  const button = saveAsDialog()?.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)
+  if (!button) throw new Error(`dialog button "${testid}" not found`)
+  return button
+}
+
+/** PrimeVue runs its enter/leave transition hooks on rAF; give them a tick. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50))
 }
 
 async function flush() {
@@ -355,62 +366,71 @@ describe('CompositeEditorView', () => {
   it('save-as dialog opens from the toolbar, accepts a name, and closes on cancel', async () => {
     const wrapper = mountView()
     await flush()
-    expect(wrapper.find('#compositeeditorview-field-2').exists()).toBe(false)
+    expect(saveAsDialog()).toBeNull()
 
     const saveAsBtn = wrapper.findAll('button').find((b) => b.text().trim() === 'Save as composite')!
     await saveAsBtn.trigger('click')
     await nextTick()
-    const nameInput = wrapper.find('#compositeeditorview-field-2')
-    expect(nameInput.exists()).toBe(true)
+    await flush()
+    const nameInput = document.body.querySelector<HTMLInputElement>('#compositeeditorview-field-2')
+    expect(nameInput).not.toBeNull()
+    expect(saveAsDialog()!.querySelector('[data-testid="composite-save-as-cancel"]')).not.toBeNull()
 
-    await nameInput.setValue('Draft Composite')
-    const cancelBtn = wrapper.findAll('button').find((b) => b.text().trim() === 'Cancel')!
-    await cancelBtn.trigger('click')
+    nameInput!.value = 'Draft Composite'
+    nameInput!.dispatchEvent(new Event('input'))
     await nextTick()
-    await flushCloseEvent()
-    expect(wrapper.find('#compositeeditorview-field-2').exists()).toBe(false)
+    dialogButtonByTestId('composite-save-as-cancel').click()
+    await nextTick()
+    await flush()
+    expect(saveAsDialog()).toBeNull()
     expect(postMock).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('save-as dialog is a real modal <dialog> and closes on Escape from the focused field', async () => {
+  it('save-as dialog is a modal dialog with accessible labelling', async () => {
     const wrapper = mountView(true)
     await flush()
 
     const saveAsBtn = wrapper.findAll('button').find((b) => b.text().trim() === 'Save as composite')!
     await saveAsBtn.trigger('click')
     await nextTick()
+    await flush()
+    await settle()
 
-    const dialog = wrapper.find('dialog')
-    expect(dialog.exists()).toBe(true)
-    expect(dialog.attributes('role')).toBeUndefined()
-    const dialogEl = dialog.element as HTMLDialogElement
-    expect(dialogEl.open).toBe(true)
-    const focused = document.activeElement as HTMLElement | null
-    expect(focused).not.toBeNull()
-    expect(dialogEl.contains(focused)).toBe(true)
+    // FormDialog wraps PrimeVue's Dialog, which owns the modal semantics:
+    // role=dialog, aria-modal, focus trapping and Escape.
+    const dialog = saveAsDialog()
+    expect(dialog).not.toBeNull()
+    expect(dialog!.getAttribute('role')).toBe('dialog')
+    expect(dialog!.getAttribute('aria-modal')).toBe('true')
+    expect(dialog!.getAttribute('aria-labelledby')).toBeTruthy()
 
-    focused!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    dialogButtonByTestId('composite-save-as-cancel').click()
     await nextTick()
-    await flushCloseEvent()
+    await flush()
+    await settle()
 
-    expect(dialogEl.open).toBe(false)
-    expect(wrapper.find('#compositeeditorview-field-2').exists()).toBe(false)
+    expect(saveAsDialog()).toBeNull()
     wrapper.unmount()
   })
 
   it('open/close save-as dialog helpers are safe no-ops while the dialog is not rendered', async () => {
     const wrapper = mountView()
     await flush()
-    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(saveAsDialog()).toBeNull()
 
     const vm = wrapper.vm as unknown as {
       openSaveAsDialog: () => void
       closeSaveAsDialog: () => void
     }
     expect(() => vm.openSaveAsDialog()).not.toThrow()
+    await nextTick()
+    await flush()
+    expect(saveAsDialog()).not.toBeNull()
     expect(() => vm.closeSaveAsDialog()).not.toThrow()
-    expect(wrapper.find('dialog').exists()).toBe(false)
+    await nextTick()
+    await flush()
+    expect(saveAsDialog()).toBeNull()
     wrapper.unmount()
   })
 
@@ -420,13 +440,13 @@ describe('CompositeEditorView', () => {
 
     await wrapper.findAll('button').find((b) => b.text().trim() === 'Save as composite')!.trigger('click')
     await nextTick()
-    const dialogEl = wrapper.find('dialog').element as HTMLDialogElement
-    expect(dialogEl.open).toBe(true)
+    await flush()
+    expect(saveAsDialog()).not.toBeNull()
 
     const vm = wrapper.vm as unknown as { openSaveAsDialog: () => void }
-    // A second showModal() would throw InvalidStateError; the guard no-ops.
     expect(() => vm.openSaveAsDialog()).not.toThrow()
-    expect(dialogEl.open).toBe(true)
+    await nextTick()
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1)
     wrapper.unmount()
   })
 
@@ -436,16 +456,18 @@ describe('CompositeEditorView', () => {
 
     await wrapper.findAll('button').find((b) => b.text().trim() === 'Save as composite')!.trigger('click')
     await nextTick()
-    const dialog = wrapper.find('dialog')
-    expect((dialog.element as HTMLDialogElement).open).toBe(true)
+    await flush()
+    expect(saveAsDialog()).not.toBeNull()
 
-    // A click whose target is the dialog itself is a ::backdrop click.
-    await dialog.trigger('click')
+    // PrimeVue dismisses on a mask mousedown+mouseup whose target is the mask.
+    const mask = document.body.querySelector<HTMLElement>('.p-dialog-mask')
+    expect(mask).not.toBeNull()
+    mask!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    mask!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
     await nextTick()
-    await flushCloseEvent()
+    await flush()
 
-    expect((dialog.element as HTMLDialogElement).open).toBe(false)
-    expect(wrapper.find('#compositeeditorview-field-2').exists()).toBe(false)
+    expect(saveAsDialog()).toBeNull()
     wrapper.unmount()
   })
 
@@ -457,12 +479,14 @@ describe('CompositeEditorView', () => {
     ;(trigger.element as HTMLElement).focus()
     await trigger.trigger('click')
     await nextTick()
-    const dialogEl = wrapper.find('dialog').element as HTMLDialogElement
-    expect(dialogEl.contains(document.activeElement as HTMLElement)).toBe(true)
+    await flush()
+    await settle()
 
-    await wrapper.findAll('button').find((b) => b.text().trim() === 'Cancel')!.trigger('click')
+    dialogButtonByTestId('composite-save-as-cancel').click()
     await nextTick()
     await nextTick()
+    await flush()
+    await settle()
 
     expect(document.activeElement).toBe(trigger.element)
     wrapper.unmount()
@@ -474,9 +498,11 @@ describe('CompositeEditorView', () => {
 
     await wrapper.findAll('button').find((b) => b.text().trim() === 'Save as composite')!.trigger('click')
     await nextTick()
-    expect((wrapper.find('dialog').element as HTMLDialogElement).open).toBe(true)
+    await flush()
+    expect(saveAsDialog()).not.toBeNull()
     expect(() => wrapper.unmount()).not.toThrow()
-    expect(document.querySelector('dialog')).toBeNull()
+    await nextTick()
+    expect(saveAsDialog()).toBeNull()
 
     // A fresh instance must still open its dialog — an unmount that left modal
     // state or a close handler behind would break this mount.
@@ -484,7 +510,8 @@ describe('CompositeEditorView', () => {
     await flush()
     await remounted.findAll('button').find((b) => b.text().trim() === 'Save as composite')!.trigger('click')
     await nextTick()
-    expect((remounted.find('dialog').element as HTMLDialogElement).open).toBe(true)
+    await flush()
+    expect(saveAsDialog()).not.toBeNull()
     remounted.unmount()
   })
 
@@ -498,15 +525,19 @@ describe('CompositeEditorView', () => {
     const saveAsBtn = wrapper.findAll('button').find((b) => b.text().trim() === 'Save as composite')!
     await saveAsBtn.trigger('click')
     await nextTick()
-    await wrapper.find('#compositeeditorview-field-2').setValue('Duplicate')
+    await flush()
+    const nameInput = document.body.querySelector<HTMLInputElement>('#compositeeditorview-field-2')!
+    nameInput.value = 'Duplicate'
+    nameInput.dispatchEvent(new Event('input'))
+    await nextTick()
 
     postMock.mockRejectedValue(new Error('name already taken'))
-    await wrapper.find('[data-testid="composite-save-as-submit"]').trigger('click')
+    document.body.querySelector<HTMLButtonElement>('[data-testid="composite-save-as-submit"]')!.click()
     await flush()
 
-    const alert = wrapper.find('[role="alert"]')
-    expect(alert.exists()).toBe(true)
-    expect(alert.text()).toContain('name already taken')
+    const alert = saveAsDialog()!.querySelector('[role="alert"]')
+    expect(alert).not.toBeNull()
+    expect(alert!.textContent).toContain('name already taken')
     // FAR-1669: the saveAsError box is the shared ErrorAlert (role="alert"
     // falls through to its root) carrying the message — a bespoke destructive
     // <div> (pre-conversion markup) would fail findComponent, so this proves
@@ -518,7 +549,7 @@ describe('CompositeEditorView', () => {
     // Retry = click Save again; no separate loader, so no in-place retry.
     expect(errorAlert.props('retryable')).toBe(false)
     expect(wrapper.find('[data-testid="error-alert-retry"]').exists()).toBe(false)
-    expect(wrapper.find('#compositeeditorview-field-2').exists()).toBe(true)
+    expect(document.body.querySelector('#compositeeditorview-field-2')).not.toBeNull()
     expect(routerPush).not.toHaveBeenCalled()
     wrapper.unmount()
   })
