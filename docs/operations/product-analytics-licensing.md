@@ -60,8 +60,14 @@ print(licence_key)
 
 Notes:
 
-- `expires_at` must be timezone-aware and in the future, or `parse_and_verify`
-  rejects the key as expired/malformed.
+- `expires_at` should be timezone-aware (an ISO 8601 instant with an offset) and
+  in the future. It must parse as a valid ISO 8601 instant, or `parse_and_verify`
+  rejects the key as malformed. Two lenient behaviours are worth knowing: a
+  **naive** `expires_at` (no offset) is read as local time rather than rejected,
+  and the capability lapses at `expires_at + LICENCE_GRACE_DAYS` (14 days), not
+  at `expires_at` itself, so a key dated slightly in the past still verifies as
+  valid. Only `starts_at` is strictly required to be timezone-aware. Prefer an
+  offset-aware future value for an unambiguous mint.
 - The private key must be the half matching the deployment's trusted public
   anchor (`FARNA_CONTROL_LICENSE_PUBLIC_KEY`). A key signed by any other keypair
   fails signature verification at install time.
@@ -77,6 +83,11 @@ restart so the running process picks it up), then confirm the effective switch:
 curl -s https://<your-instance>/api/v1/product-analytics/transparency \
   -H "Authorization: Bearer <token>"
 ```
+
+The token must hold the `system.config.manage` system permission:
+`GET /api/v1/product-analytics/transparency` is gated by
+`require_system_permission("system.config.manage")`, so a normal Bearer token
+without that permission returns `403`.
 
 With no stored operator value and no
 `FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED` set, the response reports:
