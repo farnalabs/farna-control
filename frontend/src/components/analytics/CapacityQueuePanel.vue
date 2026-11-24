@@ -32,32 +32,32 @@
       </template>
     </CardHeader>
 
-    <p
+    <ErrorAlert
       v-if="store.capacityError"
-      class="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-sm text-destructive-text"
-      role="alert"
+      compact
+      :message="store.capacityError"
+      :retryable="false"
       data-testid="capacity-error"
-    >
-      {{ store.capacityError }}
-    </p>
+    />
 
     <div v-else-if="store.capacityLoading && !store.capacity" class="text-sm text-muted-foreground" data-testid="capacity-loading">
       {{ $t('views.AnalyticsView.capacity_loading') }}
     </div>
 
     <div v-else-if="store.capacity" class="space-y-4">
-      <div
+      <ErrorAlert
         v-if="health.stall_suspected"
-        class="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive-text"
-        role="alert"
+        compact
         data-testid="capacity-stall-alert"
       >
-        <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true"></span>
-        <div>
-          <p class="font-medium">{{ $t('views.AnalyticsView.capacity_stall_title') }}</p>
-          <p class="mt-0.5">{{ $t('views.AnalyticsView.capacity_stall_detail', { intervals: health.stall_intervals }) }}</p>
+        <div class="flex items-start gap-2">
+          <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true"></span>
+          <div>
+            <p class="font-medium">{{ $t('views.AnalyticsView.capacity_stall_title') }}</p>
+            <p class="mt-0.5">{{ $t('views.AnalyticsView.capacity_stall_detail', { intervals: health.stall_intervals }) }}</p>
+          </div>
         </div>
-      </div>
+      </ErrorAlert>
 
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -206,6 +206,7 @@ import BaseCard from "../ui/BaseCard.vue";
 import { useI18n } from "vue-i18n";
 import CardHeader from "../ui/CardHeader.vue";
 import StatCard from "../ui/StatCard.vue";
+import ErrorAlert from "../shared/ErrorAlert.vue";
 import {
   formatCapacityDuration,
   useAnalyticsStore,

@@ -177,7 +177,7 @@
                   </label>
             </div>
           </div>
-          <div v-if="accessError" class="text-sm text-destructive">{{ accessError }}</div>
+          <ErrorAlert v-if="accessError" compact :message="accessError" :retryable="false" />
           <Button
                   :disabled="accessSaving"
                   data-testid="assistant-access-save"
@@ -258,7 +258,7 @@
               data-testid="assistant-allowed-models"
             />
           </div>
-            <div v-if="modelError" class="text-sm text-destructive">{{ modelError }}</div>
+            <ErrorAlert v-if="modelError" compact :message="modelError" :retryable="false" />
             <Button
                   :disabled="modelSaving"
                   data-testid="assistant-model-save"
@@ -286,7 +286,7 @@
               data-testid="assistant-system-prompt"
             />
           </div>
-            <div v-if="promptError" class="text-sm text-destructive">{{ promptError }}</div>
+            <ErrorAlert v-if="promptError" compact :message="promptError" :retryable="false" />
             <Button
                   :disabled="promptSaving"
                   data-testid="assistant-prompt-save"
@@ -314,7 +314,7 @@
               data-testid="assistant-guidance"
             />
           </div>
-            <div v-if="guidanceError" class="text-sm text-destructive">{{ guidanceError }}</div>
+            <ErrorAlert v-if="guidanceError" compact :message="guidanceError" :retryable="false" />
             <Button
                   :disabled="guidanceSaving"
                   data-testid="assistant-guidance-save"
@@ -415,7 +415,7 @@
             </tbody>
           </table>
         </div>
-        <div v-if="skillError" class="px-3 pt-2 text-sm text-destructive">{{ skillError }}</div>
+        <ErrorAlert v-if="skillError" compact class="mx-3 mt-2" :message="skillError" :retryable="false" />
       </DataCard>
       <AssistantSkillDialog
         ref="skillDialogRef"
@@ -470,7 +470,7 @@
             </tbody>
           </table>
         </div>
-        <div v-if="contextError" class="mt-2 text-sm text-destructive">{{ contextError }}</div>
+        <ErrorAlert v-if="contextError" compact class="mt-2" :message="contextError" :retryable="false" />
       </DataCard>
       <!-- Skills as Knowledge Sources -->
       <DataCard
@@ -519,6 +519,7 @@
 </template>
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, reactive, computed, watch } from 'vue'

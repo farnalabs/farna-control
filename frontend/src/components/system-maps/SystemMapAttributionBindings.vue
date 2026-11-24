@@ -8,7 +8,7 @@
       <LoadingSpinner v-if="loading" />
     </div>
 
-    <div v-if="error" class="mt-3 rounded border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive" role="alert">{{ error }}</div>
+    <ErrorAlert v-if="error" compact class="mt-3" :message="error" :retryable="false" />
 
     <form v-if="!readOnly" class="mt-4 grid gap-3 md:grid-cols-4" @submit.prevent="createBinding">
       <div class="grid gap-1 text-xs">
@@ -100,6 +100,7 @@ import { useI18n } from 'vue-i18n'
 import type { AttributionBinding, AttributionBindingCreate, SystemMapNode } from '../../stores/systemMaps'
 import { api } from '../../lib/api/client'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 import AppSelect from '../shared/AppSelect.vue'
 
 interface Pipeline { id: string; name: string }

@@ -58,16 +58,14 @@
         <span>{{ $t('views.DeterminationView.rerun_loading') }}</span>
       </div>
 
-      <div
+      <ErrorAlert
         v-else-if="error"
-        role="alert"
-        aria-live="assertive"
-        class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-destructive-text"
+        compact
         data-testid="determination-rerun-error"
       >
         <p class="text-sm font-medium">{{ $t('views.DeterminationView.rerun_failed') }}</p>
         <p class="text-sm">{{ error }}</p>
-      </div>
+      </ErrorAlert>
 
       <p
         v-else-if="!result"
@@ -391,6 +389,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 import DataCard from '../ui/DataCard.vue'
 import DeterminationEvidenceRefs from './DeterminationEvidenceRefs.vue'
 import DeterminationRerunAttempt from './DeterminationRerunAttempt.vue'
