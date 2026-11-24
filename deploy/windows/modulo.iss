@@ -26,7 +26,8 @@
 ; Product analytics (FAR-2741): the wizard shows ONE optional page, defaulting to
 ; "do not send". Choosing to send writes the
 ; FARNA_CONTROL_PRODUCT_ANALYTICS_* settings into the native config file
-; (%PROGRAMDATA%\Modulo\data\config.env) before the launcher ever starts.
+; (the launcher's data-dir config.env under commonappdata) before the launcher
+; ever starts.
 ; Declining writes nothing at all, so "no telemetry by default" stays true.
 ; FAR-2747: the per-instance secret is NOT generated here. Pascal Script has
 ; only Setup's seeded Random, so a secret minted by the installer would be
@@ -161,11 +162,12 @@ const
   LOG_EXT = '.log';
   SUPPORT_REF_LENGTH = 8;
   HEX_CHARS = '0123456789abcdef';
-  { Product analytics (FAR-2741): the native launcher's config file directory
-    and the endpoint analytics is sent to. The instance secret is deliberately
-    NOT generated here (FAR-2747) - the launcher mints and persists it on
-    first boot. }
-  ANALYTICS_CONFIG_DIR = '\Modulo\data';
+  { Product analytics (FAR-2741): the launcher's config file lives in its data
+    directory - the same product folder name used for logs (LOG_DIR_NAME) plus
+    a 'data' subfolder, rooted at commonappdata - and the endpoint analytics is
+    sent to. The instance secret is deliberately NOT generated here (FAR-2747) -
+    the launcher mints and persists it on first boot. }
+  ANALYTICS_DATA_SUBDIR = '\data';
   ANALYTICS_ENDPOINT_URL = 'https://telemetry.farna.dev';
 
 var
@@ -533,7 +535,7 @@ begin
     WriteInstallLog('Product analytics: not enabled (default). No analytics settings written.');
     Exit;
   end;
-  ConfigDir := ExpandConstant('{commonappdata}') + ANALYTICS_CONFIG_DIR;
+  ConfigDir := ExpandConstant('{commonappdata}') + '\' + LOG_DIR_NAME + ANALYTICS_DATA_SUBDIR;
   ConfigPath := ConfigDir + '\config.env';
   { Ask once: an existing config.env means this install already answered. }
   if FileExists(ConfigPath) then

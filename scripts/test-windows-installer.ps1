@@ -617,7 +617,7 @@ end.
         @{ Name = "Product analytics opt-in page"; Pattern = 'CreateInputOptionPage' }
         @{ Name = "Product analytics opt-in writer"; Pattern = 'procedure WriteProductAnalyticsConfig' }
         @{ Name = "Product analytics endpoint"; Pattern = 'ANALYTICS_ENDPOINT_URL = ''https://telemetry\.farna\.dev''' }
-        @{ Name = "Product analytics config directory"; Pattern = 'ANALYTICS_CONFIG_DIR' }
+        @{ Name = "Product analytics config directory"; Pattern = 'ANALYTICS_DATA_SUBDIR' }
     )
 
     $missingPatterns = @()
@@ -687,7 +687,7 @@ end.
         @{ Name = "Installer never generates a PRNG instance secret"; Pattern = 'GenerateInstanceSecret'; Forbidden = $true }
         @{ Name = "Instance switch written"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' }
         @{ Name = "Decline writes no OFF switch"; Pattern = 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=false'; Forbidden = $true }
-        @{ Name = "Config path is the launcher data dir"; Pattern = 'ANALYTICS_CONFIG_DIR = ''\\Modulo\\data''' }
+        @{ Name = "Config path is the launcher data dir"; Pattern = 'LOG_DIR_NAME \+ ANALYTICS_DATA_SUBDIR' }
         @{ Name = "Writer runs at post-install"; Pattern = '(?s)ssPostInstall.*WriteProductAnalyticsConfig' }
     )
     $analyticsFailures = @()

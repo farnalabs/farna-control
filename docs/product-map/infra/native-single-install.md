@@ -229,7 +229,7 @@ manifest `features:` registry.
       endpoint is configured and no secret exists; declining writes
       none of them, so "no telemetry by default" holds
       (`scripts/install.sh`, `scripts/macos/install.sh`,
-      `deploy/windows/modulo.iss`, `backend/src/farna/launcher/config_source.py`;
+      `deploy/windows/`, `backend/src/farna/launcher/config_source.py`;
       `scripts/test-windows-installer.ps1` compiles the installer `[Code]`
       against Inno support stubs and asserts the default-OFF contract).
 - [x] The release pipeline gates the native artifacts end to end: the Linux
