@@ -372,7 +372,7 @@ def _policy_failures(policies: TablePolicies) -> list[str]:
     return failures
 
 
-async def test_tenant_table_census_is_complete(tenant_policy_census: dict[str, TablePolicies]) -> None:
+def test_tenant_table_census_is_complete(tenant_policy_census: dict[str, TablePolicies]) -> None:
     """The gate must sweep every RLS tenant table, and the population is pinned.
 
     The count is a deliberate baseline (ADR 070 §2: "today's state is
@@ -385,7 +385,7 @@ async def test_tenant_table_census_is_complete(tenant_policy_census: dict[str, T
     assert not stale, f"exception list names tables that are not RLS tenant tables: {stale}"
 
 
-async def test_every_tenant_table_policy_is_org_first(tenant_policy_census: dict[str, TablePolicies]) -> None:
+def test_every_tenant_table_policy_is_org_first(tenant_policy_census: dict[str, TablePolicies]) -> None:
     """Every table in scope must shape its policy as ``org equality [AND ...]``.
 
     Exempt tables are checked separately (``test_exemptions_are_real_and_current``)
@@ -407,7 +407,7 @@ def _widened_arm(predicate: str) -> str | None:
     return "org_context_is_null" if _ORG_GUC.search(tail) else "organisation_id_is_null"
 
 
-async def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, TablePolicies]) -> None:
+def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, TablePolicies]) -> None:
     """Each exemption must still describe the shape it is excused for.
 
     Guards both directions: an entry with no reason/ADR is rejected, and an entry
@@ -432,7 +432,7 @@ async def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, T
     assert not problems, "exception list is out of date:\n" + "\n".join(problems)
 
 
-async def test_exception_list_covers_the_known_six() -> None:
+def test_exception_list_covers_the_known_six() -> None:
     """The six ADR-named tables must all be enumerated, with the documented arms."""
     missing = sorted(set(_REQUIRED_EXEMPTIONS) - set(_EXEMPTIONS))
     assert not missing, f"exception list is missing the ADR-named tables: {missing}"
@@ -476,6 +476,16 @@ async def test_exception_list_covers_the_known_six() -> None:
         # A non-null-safe org GUC reference still counts as the org equality (it
         # fails closed by raising rather than by returning rows).
         ("(organisation_id = (current_setting('app.organisation_id'::text))::uuid)", "SINGLE", True),
+    ],
+    ids=[
+        "single-org-equality",
+        "and-team-predicate",
+        "or-org-context-is-null",
+        "or-organisation-id-is-null",
+        "keyword-inside-string-literal",
+        "org-check-not-first",
+        "no-org-gate-subquery",
+        "non-null-safe-org-guc",
     ],
 )
 def test_parser_reads_top_level_structure(predicate: str, expected_operator: str, expected_org_first: bool) -> None:
@@ -673,7 +683,7 @@ def _org_contexts(seed: TenantSeed) -> dict[str, RlsContext]:
     }
 
 
-async def test_behavioural_subset_scope_metadata_is_as_expected(tenant_policy_census: dict[str, TablePolicies]) -> None:
+def test_behavioural_subset_scope_metadata_is_as_expected(tenant_policy_census: dict[str, TablePolicies]) -> None:
     """Pin which behavioural tables carry the team predicate today.
 
     Without this, a Phase 1B flip (runs becoming team-scoped) would change what
