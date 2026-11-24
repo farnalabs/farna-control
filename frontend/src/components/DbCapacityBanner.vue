@@ -171,6 +171,14 @@ const navItems = getNavGroups().flatMap((group) => group.items)
 function lockedDestination(item: NavItem, reason: NonTierRefusal): string {
   const params = new URLSearchParams({ from: item.to, reason })
   if (item.requiredEntitlement) params.set('entitlement', item.requiredEntitlement)
+  // FAR-2688: carry the roles that would grant access so the locked page can
+  // name them instead of falling back to the generic "ask for the role that
+  // includes it". The naming copy is FAR-2687 (open PR at the time of writing);
+  // carrying the parameter here is additive — until it lands the locked page
+  // simply ignores it, and a below-tier/tier lock is unchanged.
+  if (reason === 'role' && item.requiredRoles?.length) {
+    params.set('role', item.requiredRoles.join(','))
+  }
   return `/locked?${params.toString()}`
 }
 

@@ -391,11 +391,15 @@ describe('useSystemMapsStore CRUD', () => {
     mockPost.mockResolvedValue({ data: undefined })
     mockGet.mockResolvedValue({ data: { id: 'map-1', published_revision_id: null } })
     const store = useSystemMapsStore()
+    // A dashboard load before publishing settled on "nothing published"; the
+    // publish must clear that stale answer so the panel does not stay collapsed.
+    store.overviewEmpty = true
 
     await store.publish('map-1', 'rev-1')
 
     expect(mockPost).toHaveBeenCalledWith('/api/v1/system-maps/{map_id}/revisions/{rev_id}/publish', { params: { path: { map_id: 'map-1', rev_id: 'rev-1' } } })
     expect(mockGet).toHaveBeenCalledWith('/api/v1/system-maps/{map_id}', { params: { path: { map_id: 'map-1' } } })
+    expect(store.overviewEmpty).toBe(false)
 
     mockPost.mockResolvedValue({ error: { detail: 'nope' } })
     await expect(store.publish('map-1', 'rev-1')).rejects.toThrow('Could not publish revision')

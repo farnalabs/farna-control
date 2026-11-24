@@ -34,7 +34,7 @@ from farna.core.audit_coverage import audited
 from farna.core.connector_refs import connector_ref_type_id
 from farna.core.feature_flags import get_registry
 from farna.core.library_service import (
-    MODULO_ORG_ID as _BUILTIN_ORG_ID,
+    BUILTIN_ORG_ID as _BUILTIN_ORG_ID,
 )
 from farna.core.library_service import (
     BuiltinPrimitiveReadOnlyError,
@@ -144,7 +144,7 @@ _CODE_LIBRARY_SEARCH = "library.search"
 _GRANT_LIBRARY_SEARCH_IN_DEV = "library.search.in_dev"
 _VISIBILITY_PATTERN = "^(org|team)$"
 _CODE_LIBRARY_WRITE = "library.write"
-_BUILTIN_SOURCE = "modulo"
+_BUILTIN_SOURCE = "farna_control"
 
 _MSG_LIBRARY_FEATURE_TEMPORARILY_UNAVAILABLE = "The library feature is temporarily unavailable due to a database issue. Please retry."
 _CODE_LIBRARY_MANAGE = "library.manage"
@@ -804,8 +804,13 @@ async def _load_draft_collection(
     ``library_collection`` primitive, and 400 when it is not in the ``draft``
     state (only draft collections can be mutated or published). Centralised so
     the update/publish endpoints share a single validation path.
+
+    FAR-2696: the resolver is org-clamped with ``explicit_org_filter``. Both
+    callers WRITE to the row they load (update its pins, or publish it), so on
+    a ``BYPASSRLS`` connection an id-only read would let a caller mutate
+    another organisation's draft. The clamp makes a foreign id a 404.
     """
-    prim = await get_primitive(session, org_id, primitive_id)
+    prim = await get_primitive(session, org_id, primitive_id, explicit_org_filter=org_id)
     if prim is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

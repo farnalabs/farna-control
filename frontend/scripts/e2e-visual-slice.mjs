@@ -80,6 +80,10 @@ const SLICE = [
   'tests/e2e/pipeline-editor-select-overlay.spec.ts',
   // FAR-2541: SSO provider card layout at 390/640/1280px, local mocks.
   'tests/e2e/sso-mobile.spec.ts',
+  // FAR-2694: the titled DataCard header inset on /admin/costs/controls — a
+  // card left at padding="none" puts its heading flush against the card edge.
+  // Local mocks, three cheap deterministic tests (~15s).
+  'tests/e2e/admin-cost-controls.spec.ts',
 ]
 
 /**

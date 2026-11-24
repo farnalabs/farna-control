@@ -312,7 +312,7 @@ async def _setup_team_members(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_team_members(session, team_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_team_members(session, team_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_teams(session: AsyncSession) -> PageCall:
@@ -350,7 +350,7 @@ async def _setup_schema_versions(session: AsyncSession) -> PageCall:
             )
         )
     await session.flush()
-    return lambda page, page_size: list_schema_versions(session, schema_id, page=page, page_size=page_size)
+    return lambda page, page_size: list_schema_versions(session, schema_id, org_id=_ORG, page=page, page_size=page_size)
 
 
 async def _setup_runs(session: AsyncSession) -> PageCall:
@@ -436,11 +436,11 @@ async def test_final_offset_page_reports_no_more(session: AsyncSession, setup: S
 # real (a mocked session cannot see it).
 # ---------------------------------------------------------------------------
 
-_SOURCE_MIX: dict[str, int] = {"local": 3, "modulo": 2}
+_SOURCE_MIX: dict[str, int] = {"local": 3, "farna_control": 2}
 
 
 async def _setup_library_primitives_mixed_source(session: AsyncSession) -> None:
-    # ``source='local'``/``'modulo'`` rows must leave every registry-only field
+    # ``source='local'``/``'farna_control'`` rows must leave every registry-only field
     # NULL (ck_library_primitives_source_fields), which is the column default —
     # so no explicit NULLs are needed here.
     for source, count in _SOURCE_MIX.items():
@@ -464,12 +464,12 @@ async def test_library_primitive_source_filter_narrows_count_and_rows(session: A
     await _setup_library_primitives_mixed_source(session)
 
     local_page = await list_library_primitives(session, org_id=_ORG, source="local", page=1, page_size=10)
-    modulo_page = await list_library_primitives(session, org_id=_ORG, source="modulo", page=1, page_size=10)
+    farna_page = await list_library_primitives(session, org_id=_ORG, source="farna_control", page=1, page_size=10)
 
     assert local_page.total == _SOURCE_MIX["local"]
     assert [primitive.source for primitive in local_page.items] == ["local"] * _SOURCE_MIX["local"]
-    assert modulo_page.total == _SOURCE_MIX["modulo"]
-    assert [primitive.source for primitive in modulo_page.items] == ["modulo"] * _SOURCE_MIX["modulo"]
+    assert farna_page.total == _SOURCE_MIX["farna_control"]
+    assert [primitive.source for primitive in farna_page.items] == ["farna_control"] * _SOURCE_MIX["farna_control"]
 
 
 async def test_library_primitive_source_filter_has_more_tracks_filtered_total(session: AsyncSession) -> None:

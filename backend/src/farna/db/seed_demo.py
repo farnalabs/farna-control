@@ -2361,7 +2361,7 @@ def _lifecycle_map_content(
             {
                 "id": "implement",
                 "name": "Implement",
-                "type": "modulo",
+                "type": "farna_control",
                 "description": "Demo Governance Pipeline: implement, score PR risk, human review when risky, open PR.",
                 "pipeline_id": str(gov_pipeline.id),
                 "owner": "Engineering",
@@ -2371,7 +2371,7 @@ def _lifecycle_map_content(
             {
                 "id": "review",
                 "name": "Review",
-                "type": "modulo",
+                "type": "farna_control",
                 "description": "PR Review & Triage: automated review, severity and summary on the PR.",
                 "pipeline_id": str(review_pipeline.id),
                 "owner": "Engineering",

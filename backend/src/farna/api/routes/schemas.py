@@ -618,7 +618,7 @@ async def list_schema_versions_endpoint(
             schema = await get_schema(session, schema_id)
             if schema is None or schema.organisation_id != principal.organisation_id:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_SCHEMA_NOT_FOUND)
-            result = await list_schema_versions(session, schema_id, page=page, page_size=page_size)
+            result = await list_schema_versions(session, schema_id, org_id=principal.organisation_id, page=page, page_size=page_size)
     except IntegrityError:
         logger.exception("schemas.list_schema_versions_endpoint")
         raise HTTPException(
@@ -790,7 +790,7 @@ async def _load_latest_definition(session: AsyncSession, schema_id: uuid.UUID, p
         schema = await get_schema(session, schema_id)
         if schema is None or schema.organisation_id != principal.organisation_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_SCHEMA_NOT_FOUND)
-        sv = await _get_latest_version(session, schema_id)
+        sv = await _get_latest_version(session, schema_id, principal.organisation_id)
         if sv is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schema has no versions")
     return sv
@@ -1299,12 +1299,12 @@ async def _load_migration_versions(
     async with session.begin():
         await set_rls_org(session, principal.organisation_id)
         await _assert_owns_schema(session, req.from_schema_id, principal)
-        from_sv = await _get_latest_version(session, req.from_schema_id)
+        from_sv = await _get_latest_version(session, req.from_schema_id, principal.organisation_id)
         if from_sv is None:
             raise HTTPException(status_code=404, detail="Source schema has no versions")
 
         await _assert_owns_schema(session, req.to_schema_id, principal)
-        to_sv = await _get_latest_version(session, req.to_schema_id)
+        to_sv = await _get_latest_version(session, req.to_schema_id, principal.organisation_id)
         if to_sv is None:
             raise HTTPException(status_code=404, detail="Target schema has no versions")
     return from_sv, to_sv
@@ -1505,9 +1505,9 @@ async def migration_plan_endpoint(
     return plan_dict
 
 
-async def _get_latest_version(session: AsyncSession, schema_id: uuid.UUID) -> Any:
-    """Fetch the latest SchemaVersion for a given schema_id."""
-    versions = await list_schema_versions(session, schema_id, page=1, page_size=1)
+async def _get_latest_version(session: AsyncSession, schema_id: uuid.UUID, org_id: uuid.UUID) -> Any:
+    """Fetch the latest SchemaVersion for a given schema_id, org-clamped (FAR-2689)."""
+    versions = await list_schema_versions(session, schema_id, org_id=org_id, page=1, page_size=1)
     return versions.items[0] if versions.items else None
 
 

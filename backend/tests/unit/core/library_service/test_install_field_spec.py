@@ -12,13 +12,13 @@ from typing import Any, cast
 
 import pytest
 
-from farna.core.library_service._seed_data import _MODULO_PRIMITIVES
+from farna.core.library_service._seed_data import _BUILTIN_PRIMITIVES
 from farna.core.library_service.install import (
     _definition_from_field_spec,
     _schema_definition_from_content,
 )
 
-SCHEMA_SEEDS = [p for p in _MODULO_PRIMITIVES if p.primitive_type == "schema"]
+SCHEMA_SEEDS = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == "schema"]
 SCHEMA_SEEDS_BY_SLUG = {p.slug: p for p in SCHEMA_SEEDS}
 
 

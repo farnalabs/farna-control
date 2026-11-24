@@ -312,7 +312,7 @@ class TestSchemaVersions:
         mock_session.execute = AsyncMock(side_effect=[count_mock, listing])
         from farna.db.crud.schema import list_schema_versions
 
-        result = await list_schema_versions(mock_session, _SCHEMA_ID, page=2, page_size=10)
+        result = await list_schema_versions(mock_session, _SCHEMA_ID, org_id=_ORG_ID, page=2, page_size=10)
         assert result.total == 2
         assert result.items == versions
         assert result.page == 2
@@ -321,6 +321,6 @@ class TestSchemaVersions:
         mock_session.execute = AsyncMock(side_effect=ProgrammingError("42P01", None, Exception("boom")))
         from farna.db.crud.schema import list_schema_versions
 
-        result = await list_schema_versions(mock_session, _SCHEMA_ID)
+        result = await list_schema_versions(mock_session, _SCHEMA_ID, org_id=_ORG_ID)
         assert result.total == 0
         assert not result.items

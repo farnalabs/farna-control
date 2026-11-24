@@ -1264,7 +1264,7 @@ async def list_bindings_endpoint(
             agent = await get_agent(session, agent_id)
             if agent is None or agent.organisation_id != principal.organisation_id:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_AGENT_NOT_FOUND)
-            bindings = await list_bindings_for_agent(session, agent_id)
+            bindings = await list_bindings_for_agent(session, agent_id, org_id=principal.organisation_id)
     except SQLAlchemyError as exc:
         raise_session_contract_error(exc, "agents.list_bindings_endpoint")
         _log.exception(_MSG_DATABASE_OPERATION_FAILED)
@@ -1321,7 +1321,7 @@ async def replace_bindings_endpoint(
             # Audit diff carries env-var NAMES only — never values (values are
             # not stored on the binding row at all; the credential stays
             # encrypted in the referenced backend).
-            before_rows = await list_bindings_for_agent(session, agent_id)
+            before_rows = await list_bindings_for_agent(session, agent_id, org_id=principal.organisation_id)
             before_targets = {row.target_env_var for row in before_rows}
             after_targets = {spec["target_env_var"] for spec in specs}
             created = await replace_agent_bindings(

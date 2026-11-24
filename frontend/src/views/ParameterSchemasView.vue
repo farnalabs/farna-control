@@ -378,12 +378,12 @@
 
         <!-- Parameter Sets Tab -->
         <TabPanel value="sets" class="space-y-4 pt-4">
-          <header class="flex items-center justify-between">
-            <h3 class="text-base font-semibold">{{ $t('views.ParameterSchemasView.parameter_sets') }}</h3>
-            <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
-              {{ $t('views.ParameterSchemasView.new_set') }}
-            </Button>
-          </header>
+          <SectionCard :title="$t('views.ParameterSchemasView.parameter_sets')">
+            <template #header>
+              <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
+                {{ $t('views.ParameterSchemasView.new_set') }}
+              </Button>
+            </template>
 
           <div v-if="setsLoading">
             <output class="sr-only" aria-live="polite">{{ $t('views.ParameterSchemasView.loading_sets') }}</output>
@@ -447,6 +447,7 @@
               </div>
             </div>
           </div>
+          </SectionCard>
 
           <!-- Set Editor -->
           <div v-if="editingSet" class="rounded-lg border bg-card p-4 space-y-4">
@@ -747,6 +748,7 @@ import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import SectionCard from '../components/shared/SectionCard.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'
 import Tabs from 'primevue/tabs'

@@ -36,7 +36,7 @@ const router = createRouter({
 const NATIVE_ITEM = {
   id: 'native-1',
   organisation_id: 'org-1',
-  source: 'modulo',
+  source: 'farna_control',
   primitive_type: 'workflow',
   name: 'PRD to Requirements',
   slug: 'prd-to-requirements',
@@ -191,7 +191,7 @@ describe('LibraryView', () => {
   it('does not render lifecycle-map primitives in the native library surface', async () => {
     getMock.mockResolvedValue({
       items: [
-        { id: 'lm-prim-1', organisation_id: 'org-1', source: 'modulo', primitive_type: 'lifecycle_map', name: 'SDLC Map', slug: 'sdlc-map', description: null, author: 'modulo', version: '1.0', tags: [], visibility: 'community', forked_from: null, auto_update: true, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
+        { id: 'lm-prim-1', organisation_id: 'org-1', source: 'farna_control', primitive_type: 'lifecycle_map', name: 'SDLC Map', slug: 'sdlc-map', description: null, author: 'modulo', version: '1.0', tags: [], visibility: 'community', forked_from: null, auto_update: true, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
       ],
       total: 1,
       page: 1,

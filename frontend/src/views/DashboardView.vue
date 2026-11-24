@@ -41,7 +41,7 @@
            which requires `!summary`. -->
       <ErrorAlert v-if="error" class="mb-4" :message="error" :on-retry="retryDashboard" />
       <DashboardSystemOverview
-        v-if="systemMapsStore.accessLoaded && systemMapsStore.systemMapsEnabled"
+        v-if="systemOverviewVisible"
         :window-days="selectedWindow ?? 7"
         class="mb-4"
       />
@@ -115,11 +115,14 @@
         </router-link>
       </div>
       <!-- Team breakdown (Team only) -->
-      <div v-if="isTeam && summary.teams && summary.teams.length > 0" class="card p-4">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">{{ $t('views.DashboardView.team_breakdown') }}</h2>
+      <DataCard
+        v-if="isTeam && summary.teams && summary.teams.length > 0"
+        :title="$t('views.DashboardView.team_breakdown')"
+        heading-level="h2"
+      >
+        <template #headerActions>
           <span class="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">{{ $t('views.DashboardView.team') }}</span>
-        </div>
+        </template>
         <!-- FAR-2539: clip at the card edge and scroll inside it on phones. -->
         <!-- A11Y-3: the scroll region is a keyboard-reachable focus stop. The
              sr-only instructions and focus ring mirror the DataTable and
@@ -189,12 +192,14 @@
           </tbody>
         </table>
         </div>
-      </div>
+      </DataCard>
       <!-- Trend chart section -->
-      <div v-if="planStore.featureEnabled('dashboard_charts')" class="card p-4" data-testid="dashboard-run-activity">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-base font-semibold">{{ $t('views.DashboardView.run_activity') }}</h2>
-        </div>
+      <DataCard
+        v-if="planStore.featureEnabled('dashboard_charts')"
+        :title="$t('views.DashboardView.run_activity')"
+        heading-level="h2"
+        data-testid="dashboard-run-activity"
+      >
         <div v-if="trendData.length > 1" class="space-y-4">
           <div>
             <p class="text-xs font-medium text-muted-foreground mb-1">{{ $t('views.DashboardView.run_count') }}</p>
@@ -220,10 +225,13 @@
         <div v-else class="mt-2 flex h-12 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground" aria-live="polite">
           {{ $t('views.DashboardView.no_data_trends') }}
         </div>
-      </div>
+      </DataCard>
       <!-- Recent runs list -->
-      <div class="card p-4" data-testid="dashboard-recent-runs">
-        <h2 class="text-base font-semibold mb-4">{{ $t('views.DashboardView.recent_runs') }}</h2>
+      <DataCard
+        :title="$t('views.DashboardView.recent_runs')"
+        heading-level="h2"
+        data-testid="dashboard-recent-runs"
+      >
         <DataTable
           :columns="recentRunColumns"
           :rows="summary.recent_runs"
@@ -255,7 +263,7 @@
             <span class="text-xs text-muted-foreground">{{ String(row.trigger_type ?? '') }}</span>
           </template>
         </DataTable>
-      </div>
+      </DataCard>
     </template>
   </div>
 </template>
@@ -272,6 +280,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Sparkline from '../components/shared/Sparkline.vue'
 import StatCard from '../components/StatCard.vue'
 import { DataTable, type Column } from '../components/ui/data-table'
+import DataCard from '../components/ui/DataCard.vue'
 import { ChevronUp, ChevronDown, GitBranch, BarChart2, Activity, Clock, XCircle, PauseCircle } from '@lucide/vue'
 import { RUN_STATUS } from '../constants/filters'
 import { formatMoney } from '../lib/money'
@@ -287,6 +296,21 @@ const { currencyCode, loadCurrency } = useOrgCurrency()
 const planStore = usePlanStore()
 const systemMapsStore = useSystemMapsStore()
 const dashboardStore = useDashboardStore()
+
+/**
+ * FAR-2638: System Maps ships at Beta, so its dashboard entry point obeys the
+ * SAME release gate the sidebar and the router read from the manifest
+ * (`systemMapsStore.systemMapsReleased` → `private_preview` needs developer
+ * mode, never a demo session). `systemMapsEnabled` alone is not enough: it
+ * derives from the viewer-floor `system_maps.read` permission, so on its own
+ * it kept the card on an alpha dashboard while the route bounced back here.
+ */
+const systemOverviewVisible = computed(
+  () =>
+    systemMapsStore.accessLoaded &&
+    systemMapsStore.systemMapsEnabled &&
+    systemMapsStore.systemMapsReleased,
+)
 
 const loading = computed(() => dashboardStore.loading)
 const error = computed(() => dashboardStore.error)
@@ -334,6 +358,14 @@ const costsDestination = computed(() => {
   if (!refusal) return '/admin/costs'
   const params = new URLSearchParams({ from: costsNavItem.to, reason: refusal })
   if (costsNavItem.requiredEntitlement) params.set('entitlement', costsNavItem.requiredEntitlement)
+  // FAR-2688: carry the roles that would grant access so the locked page can
+  // name them instead of falling back to the generic "ask for the role that
+  // includes it". The naming copy is FAR-2687 (open PR at the time of writing);
+  // carrying the parameter here is additive — until it lands the locked page
+  // simply ignores it, and a below-tier/tier lock is unchanged.
+  if (refusal === 'role' && costsNavItem.requiredRoles?.length) {
+    params.set('role', costsNavItem.requiredRoles.join(','))
+  }
   return `/locked?${params.toString()}`
 })
 

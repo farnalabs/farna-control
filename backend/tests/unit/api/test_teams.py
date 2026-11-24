@@ -615,6 +615,29 @@ class TestListMembers:
         assert resp.status_code == 200
         assert resp.json()["total"] == 0
 
+    def test_threads_the_callers_org_and_the_team_into_the_query(self, client: TestClient) -> None:
+        """FAR-2689: the member list is clamped by ORG as well as by TEAM.
+
+        The org — not the team — is the tenant boundary. The team filter stays;
+        the org predicate is an additional ``AND`` so a ``BYPASSRLS`` session
+        cannot enumerate another org's members for a guessed team id. This
+        pins that the org is the CALLER's own and the team is not lost.
+        """
+        page_result = MagicMock(items=[_make_membership()], total=1, page=1, page_size=20)
+        list_mock = AsyncMock(return_value=page_result)
+        with (
+            patch("farna.api.routes.teams.get_team", return_value=_make_team()),
+            patch("farna.api.routes.teams.list_team_members", new=list_mock),
+            patch("farna.api.routes.teams.set_rls_org"),
+            patch("farna.api.routes.teams.set_rls_user_context"),
+        ):
+            resp = client.get(f"/api/v1/teams/{_TEAM_ID}/members")
+        assert resp.status_code == 200
+        call_args = list_mock.await_args
+        assert call_args is not None
+        assert call_args.kwargs["org_id"] == _ORG_ID
+        assert call_args.kwargs["team_id"] == _TEAM_ID
+
     def test_cross_org_returns_404(self, client: TestClient) -> None:
         """IDOR guard: members of a cross-org team must not be enumerable."""
         cross_org_team = _make_team(organisation_id=uuid.UUID("00000000-0000-0000-0000-000000000099"))

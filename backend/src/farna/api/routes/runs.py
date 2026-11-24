@@ -248,6 +248,38 @@ def _run_detail_statement(principal: TenantPrincipal, run_id: uuid.UUID) -> Sele
     return select(Run).options(selectinload(Run.pipeline)).where(Run.id == run_id, Run.organisation_id == principal.organisation_id)
 
 
+async def _run_owned_by_another_team(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    run: Run,
+) -> bool:
+    """True when a team-scoped API key must not access *run* (FAR-681 boundary).
+
+    ``runs`` carries only org-isolation RLS (ADR 038 §5 has no ``visibility``
+    column here), so a team-scoped ``mk_`` key's hard team boundary
+    (``principal.team_id``) has to be applied explicitly on every run read and
+    mutation, exactly as the MCP run tools do via
+    ``_team_scoped_key_mismatch``. The run's stamped ``owner_team_id`` is the
+    source of truth; a pre-stamp row (NULL) falls back to the pipeline's current
+    owner, resolved TEAM-BLIND (``run_effective_owner_team_id``) so another
+    team's ``visibility='team'`` pipeline — hidden from a caller-facing read by
+    ``rls_team_isolation`` — cannot resolve to None and fail open. A pipeline
+    that is absent (or soft-deleted) even team-blind is a denial, never an
+    org-level run. Org-level runs (no owner team) remain visible to every
+    team-scoped key, matching the list filter (``team_scope_clause``). JWT
+    principals and org-wide keys carry ``team_id=None`` and are unaffected.
+    """
+    if getattr(principal, "team_id", None) is None:
+        return False
+    from farna.db.crud.team_scope import run_effective_owner_team_id
+
+    resolved = await run_effective_owner_team_id(session, run)
+    if not resolved.pipeline_present:
+        return True
+    owner_team_id = resolved.owner_team_id
+    return owner_team_id is not None and owner_team_id != principal.team_id
+
+
 async def _do_get_run(
     factory: async_sessionmaker[AsyncSession],
     principal: TenantPrincipal,
@@ -258,6 +290,8 @@ async def _do_get_run(
         await set_rls_user_context(session, principal.account_id, principal.org_role)
         run = (await session.execute(_run_detail_statement(principal, run_id))).scalar_one_or_none()
         if run is None:
+            raise RunNotFoundError(run_id)
+        if await _run_owned_by_another_team(session, principal, run):
             raise RunNotFoundError(run_id)
         return run
 
@@ -288,6 +322,8 @@ async def _do_get_run_with_gate(
         # schema-enforcement readers of `_do_get_run` do not pay for it.
         run = (await session.execute(_run_detail_statement(principal, run_id).options(selectinload(Run.snapshot).load_only(PipelineSnapshot.snapshot_version)))).scalar_one_or_none()
         if run is None:
+            raise RunNotFoundError(run_id)
+        if await _run_owned_by_another_team(session, principal, run):
             raise RunNotFoundError(run_id)
         return run, await _run_gate_fired(session, run)
 
@@ -1983,6 +2019,8 @@ async def trigger_rerun(
             source_run = await get_run(session, run_id, organisation_id=org_id)
             if source_run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, source_run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             run = await _create_rerun_run(session, principal, source_run)
             run_id_new = run.id
             # Build the response while the transaction is still open (same
@@ -2647,6 +2685,8 @@ async def get_run_work_item_enrichment(
             run = await get_run(session, run_id, organisation_id=principal.organisation_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             refs = run.work_item_refs
             raw_payload = getattr(run, "input_payload", None)
             payload = raw_payload if isinstance(raw_payload, dict) else None
@@ -3185,7 +3225,9 @@ async def list_run_attempts(
             run = await get_run(session, run_id, organisation_id=principal.organisation_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
-            attempts = await db_list_attempts(session, run_id)
+            if await _run_owned_by_another_team(session, principal, run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_LIST_RUN_ATTEMPTS)
         raise HTTPException(

@@ -115,7 +115,7 @@ async def _seed_map_fixtures(session: AsyncSession) -> None:
             stage_id="review",
             stage_name="Review",
             position=1,
-            stage_type="modulo",
+            stage_type="farna_control",
             pipeline_id=_STAGE_PIPELINE,
         )
     )

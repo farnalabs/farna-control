@@ -11,8 +11,10 @@ import pytest
 
 from farna.core.runtime_provider import ExecResult, WorkspaceSpec
 from farna.core.runtime_provider.docker import (
+    _CREATED_AT_LABEL,
     _DEFAULT_HARDENING_MEMORY_MB,
     _DEFAULT_WORKSPACE_NETWORK,
+    _DEPLOYMENT_IDENTITY_LABEL,
     DockerRuntimeProvider,
 )
 from farna.util import WorkspaceNetworkValidationError
@@ -1022,6 +1024,10 @@ async def test_create_workspace_reserved_identity_labels_cannot_be_restamped(
     # Non-reserved keys still round-trip exactly as supplied.
     assert labels["modulo.run.id"] == "7d9f0000-0000-4000-8000-000000000001"
     assert labels["custom.key"] == "custom-value"
+    # FAR-2693 dual-write: the current keys carry the same authoritative
+    # values alongside the legacy ones.
+    assert labels[_DEPLOYMENT_IDENTITY_LABEL] == provider._deployment_identity()
+    assert int(labels[_CREATED_AT_LABEL]) > 1
 
 
 def test_build_workspace_labels_identity_is_authoritative(

@@ -192,7 +192,7 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 function stageNodeClasses(data: Record<string, unknown>): Record<string, boolean> {
   const type = data.type as string
   return {
-    'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-950/30 cursor-pointer': type === 'modulo',
+    'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-950/30 cursor-pointer': type === 'farna_control',
     'border-emerald-500 dark:border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer border-dashed': type === 'external',
     'border-amber-500 dark:border-amber-400 bg-amber-50 dark:bg-amber-950/30 border-dotted': type === 'manual',
     'border-muted-foreground/20 bg-muted/20 border-dashed opacity-60': type === 'placeholder',
@@ -313,7 +313,7 @@ function onStageClick(nodeProps: { id: string; data: Record<string, unknown> }):
 
   if (!stage) return
 
-  if (type === 'modulo' && props.onModuloStageClick) {
+  if (type === 'farna_control' && props.onModuloStageClick) {
     props.onModuloStageClick(stage)
   } else if (type === 'external' && props.onExternalStageClick) {
     props.onExternalStageClick(stage)

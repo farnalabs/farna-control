@@ -12,12 +12,12 @@
         <DataCard
           :title="$t('views.AdminCostControlsView.budget_overview')"
           :description="$t('views.AdminCostControlsView.current_billing_period_spend_vs_budget')"
-          padding="none"
+          heading-level="h2"
         >
           <template #default>
             <LoadingSpinner v-if="costsLoading" />
             <div v-else-if="costsError" class="text-sm text-destructive">{{ costsError }}</div>
-             <div v-else class="space-y-4 p-6">
+             <div v-else class="space-y-4">
                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                  <MetricCard
                    :label="$t('views.AdminCostBreakdownView.total_spend')"
@@ -60,11 +60,10 @@
            :title="$t('views.AdminCostControlsView.team_budgets')"
            :description="$t('views.AdminCostControlsView.set_per_team_budget_caps')"
 
-           padding="none"
            heading-level="h2"
          >
            <template #default>
-            <EmptyState v-if="teams.length === 0" :title="$t('views.AdminCostControlsView.no_teams_found')" />
+            <EmptyState v-if="teams.length === 0" variant="bare" :title="$t('views.AdminCostControlsView.no_teams_found')" />
             <DataTable
               v-else
               :columns="[
@@ -105,6 +104,7 @@
          <DataCard
            :title="$t('views.AdminCostControlsView.alert_thresholds')"
            :description="$t('views.AdminCostControlsView.receive_notifications_when_spend_reaches_thresholds')"
+           heading-level="h2"
          >
            <template #default>
             <div class="space-y-3">
@@ -144,6 +144,7 @@
          <DataCard
            :title="$t('views.AdminCostControlsView.circuit_breaker')"
            :description="$t('views.AdminCostControlsView.automatically_stop_agent_runs_when_budget_exceeded')"
+           heading-level="h2"
          >
            <template #default>
             <div class="flex items-center justify-between rounded-lg border p-4">
@@ -165,6 +166,7 @@
          <DataCard
            :title="$t('views.AdminCostControlsView.billing_settings')"
            :description="$t('views.AdminCostControlsView.configure_currency_and_billing_period')"
+           heading-level="h2"
          >
            <template #default>
             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">

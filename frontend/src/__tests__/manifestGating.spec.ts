@@ -47,6 +47,62 @@ function loadManifest(): Manifest {
   return yaml.load(raw) as Manifest
 }
 
+/** The shipping sidebar item for a path, if the nav actually renders one. */
+function navItemFor(path: string): NavItem | undefined {
+  for (const group of getNavGroups()) {
+    const item = group.items.find((candidate) => candidate.to === path)
+    if (item) return item
+  }
+  return undefined
+}
+
+/**
+ * The item the visibility predicate sees for a route.
+ *
+ * A `detail_page` contributes no rendered sidebar row (the nav builder skips
+ * it), so for those paths the item is rebuilt from the route's own manifest
+ * entry with the fields `toNavItem` maps. That still drives the shipping
+ * `isNavItemVisible` predicate against this route's declared gate — it is not
+ * a source-text scrape of the visibility string.
+ */
+function gateItemFor(path: string): NavItem | undefined {
+  const shipping = navItemFor(path)
+  if (shipping) return shipping
+  const route = loadManifest().routes[path]
+  if (!route) return undefined
+  return {
+    to: path,
+    icon: '',
+    label: path,
+    labelKey: '',
+    visibility: route.visibility as NavItem['visibility'],
+    requiredRoles: route.required_roles ?? null,
+    requiredEntitlement: (route.required_entitlement as string | null | undefined) ?? null,
+    requiredPermissions: route.required_permissions ?? null,
+    requiredFeatureFlag: (route.feature_flag as string | null | undefined) ?? null,
+  }
+}
+
+/**
+ * The most permissive context that still exercises the devMode gate: every
+ * role/entitlement/permission requirement a release-gated route could carry is
+ * satisfied, so only `visibility` can hide it.
+ */
+function visibilityContext(overrides: Partial<NavVisibilityContext> = {}): NavVisibilityContext {
+  return {
+    isSystemAdmin: true,
+    userRole: 'admin',
+    userPermissions: ['compliance.evidence_index.read', 'system_maps.read', 'determination.scan'],
+    devMode: false,
+    tierInfoLoaded: true,
+    planLoaded: true,
+    isEntitlementGranted: () => true,
+    isDemoSession: false,
+    isFeatureEnabled: () => true,
+    ...overrides,
+  }
+}
+
 describe('manifest merge-key gating (js-yaml regression guard)', () => {
   const manifest = loadManifest()
   const routes = manifest.routes
@@ -104,13 +160,23 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
   })
 
   it('/system-maps published reads are authenticated viewer routes, not anonymous public routes (FAR-2363)', () => {
+    // FAR-2363 made these published reads viewer-readable rather than
+    // anonymous. FAR-2638 then moved System Maps to Beta and hid it from
+    // customers and the read-only demo, so BOTH the list and the detail route
+    // are now `private_preview` (a public detail page for a release-gated
+    // feature would still be reachable by URL). The tier/role/permission floor
+    // is unchanged on both.
+    const expectedVisibility: Record<string, string> = {
+      '/system-maps': 'private_preview',
+      '/system-maps/:id': 'private_preview',
+    }
     for (const path of ['/system-maps', '/system-maps/:id']) {
       const route = routes[path]
       expect(route, `${path} must exist`).toBeDefined()
       expect(route.required_entitlement == null, `${path} required_entitlement`).toBe(true)
       expect(route.required_roles, `${path} required_roles`).toEqual(['viewer', 'operator', 'admin'])
       expect(route.required_permissions, `${path} required_permissions`).toEqual(['system_maps.read'])
-      expect(route.visibility, `${path} visibility`).toBe('public')
+      expect(route.visibility, `${path} visibility`).toBe(expectedVisibility[path])
     }
   })
 
@@ -166,6 +232,69 @@ describe('manifest merge-key gating (js-yaml regression guard)', () => {
   })
 })
 
+describe('release-gated surfaces stay out of the alpha nav (FAR-2638)', () => {
+  // The canonical release list puts System Maps in Beta and Determination in
+  // GA, so neither may render in an alpha instance's sidebar. Both are gated
+  // the same way the other preview routes are: `visibility: private_preview`,
+  // which the sidebar (isNavItemVisible) and the router
+  // (enforceRoleTierVisibility) both read — hidden for every customer and for
+  // the read-only demo, reachable only with developer mode on. They are
+  // promoted to `public` when Beta (System Maps) and GA (Determination) enable
+  // them.
+  //
+  // Like the FAR-2615 block below, this drives the REAL derivation rather than
+  // pinning a data string: the routes come off disk via js-yaml, the sidebar
+  // decision comes from the shipping navigation code, and the router half from
+  // `hydrateManifestMeta`. `/system-maps/:id` is a detail page, so it has no
+  // rendered sidebar row — `gateItemFor` rebuilds its item from the same
+  // manifest entry so the predicate is still exercised.
+  const routes = loadManifest().routes
+  const RELEASE_GATED_ROUTES = [
+    { path: '/system-maps', release: 'Beta' },
+    // The detail route is release-gated too: a public detail page would stay
+    // reachable by URL even with the list hidden (FAR-2638).
+    { path: '/system-maps/:id', release: 'Beta' },
+    { path: '/determination', release: 'GA' },
+  ] as const
+
+  for (const { path, release } of RELEASE_GATED_ROUTES) {
+    it(`${path} is declared private_preview until ${release}`, () => {
+      const route = routes[path]
+      expect(route, `${path} must exist in the manifest`).toBeDefined()
+      expect(
+        route.visibility,
+        `${path} ships at ${release} and must be private_preview so it stays out of the alpha nav (FAR-2638)`,
+      ).toBe('private_preview')
+    })
+
+    it(`${path} is hidden while developer mode is off and reachable with it on`, () => {
+      const item = gateItemFor(path)
+      // Vacuity guard: a path that contributes no gate item would satisfy the
+      // hidden assertion for the wrong reason.
+      if (!item) throw new Error(`${path} must contribute a navigation gate item`)
+      expect(
+        isNavItemVisible(item, visibilityContext()),
+        `${path} must stay hidden from the sidebar when developer mode is off (FAR-2638)`,
+      ).toBe(false)
+      expect(
+        isNavItemVisible(item, visibilityContext({ devMode: true })),
+        `${path} must be reachable with developer mode on (FAR-2638)`,
+      ).toBe(true)
+    })
+
+    it(`${path} hydrates the router's visibility gate as private_preview`, () => {
+      const routeName = routes[path].name
+      expect(typeof routeName, `${path} must carry a route name`).toBe('string')
+      const route = { name: routeName, meta: {} as Record<string, unknown> }
+      hydrateManifestMeta(route as never)
+      expect(
+        route.meta.visibility,
+        `${path} must bounce to the dashboard while developer mode is off (FAR-2638)`,
+      ).toBe('private_preview')
+    })
+  }
+})
+
 describe('Beta surfaces stay out of the alpha nav (FAR-2615)', () => {
   // Risk Assessment and Compliance Evidence Index were ratified as BETA
   // surfaces, so neither may appear in an alpha instance's nav. Both are
@@ -180,32 +309,6 @@ describe('Beta surfaces stay out of the alpha nav (FAR-2615)', () => {
   // shipping navigation code — not a source-text scrape and not a mock.
   const routes = loadManifest().routes
   const BETA_PREVIEW_ROUTES = ['/risk-assessment', '/admin/compliance/evidence-index'] as const
-
-  function navItemFor(path: string): NavItem | undefined {
-    for (const group of getNavGroups()) {
-      const item = group.items.find((candidate) => candidate.to === path)
-      if (item) return item
-    }
-    return undefined
-  }
-
-  function visibilityContext(overrides: Partial<NavVisibilityContext> = {}): NavVisibilityContext {
-    return {
-      isSystemAdmin: true,
-      userRole: 'admin',
-      // The most permissive context that still exercises the devMode gate:
-      // every role/tier/permission requirement these routes could carry is
-      // satisfied, so only `visibility` can hide them.
-      userPermissions: ['compliance.evidence_index.read'],
-      devMode: false,
-      tierInfoLoaded: true,
-      planLoaded: true,
-      isEntitlementGranted: () => true,
-      isDemoSession: false,
-      isFeatureEnabled: () => true,
-      ...overrides,
-    }
-  }
 
   for (const path of BETA_PREVIEW_ROUTES) {
     it(`${path} is declared private_preview in the manifest`, () => {

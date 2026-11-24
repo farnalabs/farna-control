@@ -40,10 +40,14 @@ eval routes (FAR-947). ``lifecycle_maps`` needed BOTH layers: before 0287 it
 had only strict org RLS, so the membership gate here was its only team
 enforcement.
 
-``runs`` has ``owner_team_id`` but no ``visibility`` column and strict org RLS.
+``runs`` has ``owner_team_id`` but no ``visibility`` column and only org RLS.
 Run access is derived from pipeline access (ADR 038): a run executes with the
-pipeline owner's authority, so runs stay on the org-role floor and
-``owner_team_id`` is metadata, not a security control.  For ``trigger_run``
+pipeline owner's authority, so org-role callers stay on the org-role floor.
+A team-scoped API key's hard team boundary is nonetheless a SECURITY control
+on every run surface: the routes apply it explicitly with the shared
+``run_effective_owner_team_id`` resolver, which resolves a pre-stamp (NULL)
+run owner through a TEAM-BLIND pipeline read so a team-private pipeline hidden
+by ``rls_team_isolation`` cannot fail the boundary open.  For ``trigger_run``
 (POST /runs), the pipeline_id in the **request body** is read by a body resolver.
 
 The matrix mapping each team-scoped route to its ``owner_team_id`` source is the

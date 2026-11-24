@@ -30,9 +30,12 @@
       <ErrorAlert v-else-if="error" :message="error" :on-retry="retry" class="mb-6" />
 
       <template v-else-if="step === 1">
-        <div class="card p-6">
-          <h2 class="text-lg font-medium text-foreground mb-1">{{ $t('views.CopyPipelineWizard.select_source_pipeline') }}</h2>
-          <p class="text-sm text-muted-foreground mb-4">{{ $t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt') }}</p>
+        <DataCard
+          :title="$t('views.CopyPipelineWizard.select_source_pipeline')"
+          :description="$t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt')"
+          heading-level="h2"
+          padding="lg"
+        >
 
           <FilterBar class="mb-4"
             :search="{ placeholder: $t('views.CopyPipelineWizard.search_pipelines_by_name') }"
@@ -92,7 +95,7 @@
               </p>
             </button>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex justify-end mt-6">
           <Button :disabled="!selectedPipeline" class="px-6 py-2.5" @click="step = 2" data-testid="copy-wizard-next-step1">
@@ -102,8 +105,12 @@
       </template>
 
       <template v-else-if="step === 2">
-        <div class="card p-6 mb-6">
-          <h2 class="text-lg font-medium text-foreground mb-4">{{ $t('views.CopyPipelineWizard.copy_configuration') }}</h2>
+        <DataCard
+          :title="$t('views.CopyPipelineWizard.copy_configuration')"
+          heading-level="h2"
+          padding="lg"
+          class="mb-6"
+        >
 
           <div class="space-y-4">
             <div>
@@ -185,7 +192,7 @@
               </label>
             </div>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex items-center justify-between">
           <button
@@ -203,8 +210,12 @@
       </template>
 
       <template v-else-if="step === 3">
-        <div class="card p-6 mb-6">
-          <h2 class="text-lg font-medium text-foreground mb-4">{{ $t('views.CopyPipelineWizard.review_copy') }}</h2>
+        <DataCard
+          :title="$t('views.CopyPipelineWizard.review_copy')"
+          heading-level="h2"
+          padding="lg"
+          class="mb-6"
+        >
 
           <div class="space-y-4">
             <div class="bg-muted rounded-lg p-4">
@@ -257,7 +268,7 @@
               </p>
             </div>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex items-center justify-between">
           <button
@@ -275,7 +286,7 @@
       </template>
 
       <template v-else-if="step === 4">
-        <div class="card p-6">
+        <BaseCard padding="lg">
           <div v-if="progressStep === 'preparing'" class="text-center py-8">
             <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
             <p class="text-sm text-muted-foreground">{{ $t('views.CopyPipelineWizard.preparing_copy') }}</p>
@@ -339,7 +350,7 @@
               </button>
             </div>
           </div>
-        </div>
+        </BaseCard>
       </template>
     </section>
   </div>
@@ -351,6 +362,8 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Check, ChevronRight, X, XCircle } from '@lucide/vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'

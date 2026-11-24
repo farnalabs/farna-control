@@ -739,7 +739,7 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         )
         # FAR-1690 A3 (run_teardown.RunTeardownSeal): the sealed terminal step —
         # revoke the run's per-run API key (FAR-296 Phase 3b), then destroy every
-        # workspace labelled modulo.run.id = run_id, then write one
+        # workspace labelled with the run id, then write one
         # run.teardown_sealed fact. Revoke-first, fail-closed. Failure-isolated
         # so a seal failure never crashes terminalization (the key's short-TTL
         # expiry in validate_api_key is the credential backstop; the

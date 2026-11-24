@@ -1108,6 +1108,8 @@ class TestGetSchemaVersions(AuthContext):
         assert item["version"] == "1.0.0"
         assert item["definition_json"] == {"type": "object"}
         assert mock_get_schema.await_args.args[1] == schema.id
+        # FAR-2689: the version read carries the caller's org, not just the id.
+        assert mock_list_versions.await_args.kwargs["org_id"] == ORG_ID
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     @patch("farna.api.mcp_server._session")
