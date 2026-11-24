@@ -1,10 +1,6 @@
 <template>
   <div>
-    <div v-if="loading" class="flex items-center justify-center py-4">
-      <div
-        class="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"
-      />
-    </div>
+    <LoadingSpinner v-if="loading" />
 
     <div v-else-if="error" class="mb-3 text-sm text-destructive">
       {{ error }}
@@ -339,6 +335,7 @@ import { ref, computed, onMounted } from "vue";
 import { api } from "../lib/api/client";
 import { useCurrentUser } from "../composables/useCurrentUser";
 import Button from 'primevue/button'
+import LoadingSpinner from './shared/LoadingSpinner.vue'
 import { formatApiError } from "../lib/api/formatError";
 import type { components } from "../lib/api/client";
 import { Pencil, Play, Trash2, Plus } from "@lucide/vue";

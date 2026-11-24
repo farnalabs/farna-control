@@ -49,24 +49,12 @@
                 v-if="!fwd.configured"
                 class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600"
               >{{ $t('views.SettingsErrorForwardersView.not_configured') }}</span>
-              <button
-                type="button"
+              <ToggleSwitch
+                :checked="fwd.enabled"
                 data-testid="error-forwarders-toggle"
-                class="relative inline-flex h-6 w-11 items-center"
-                :aria-label="$t('views.SettingsErrorForwardersView.toggle_forwarder', { name: fwd.display_name })"
-                @click="toggleForwarder(fwd)"
-              >
-                <div
-                  class="h-6 w-11 rounded-full transition-colors"
-                  :class="fwd.enabled ? 'bg-primary' : 'bg-input'"
-                >
-                  <div
-                    class="h-5 w-5 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform"
-                    :class="fwd.enabled ? 'translate-x-[1.375rem]' : ''"
-                    style="margin-top: 2px;"
-                  />
-                </div>
-              </button>
+                :label="$t('views.SettingsErrorForwardersView.toggle_forwarder', { name: fwd.display_name })"
+                @toggle="toggleForwarder(fwd)"
+              />
             </template>
           </CardHeader>
 
@@ -285,6 +273,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import Button from 'primevue/button'

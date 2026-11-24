@@ -57,9 +57,7 @@
     </header>
 
     <section class="page-wide">
-      <div v-if="isLoadingDetail" class="flex items-center justify-center py-20">
-        <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
+      <LoadingSpinner v-if="isLoadingDetail" />
 
       <ErrorAlert
         v-else-if="detailError"
@@ -366,6 +364,7 @@ import LifecycleMapRenderer from '../../components/lifecycle-map/LifecycleMapRen
 import ProvenanceBadge from '../../components/lifecycle-map/ProvenanceBadge.vue'
 import JourneyCard from '../../components/lifecycle-map/JourneyCard.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import FormDialog from '../../components/shared/FormDialog.vue'
 import { formatRunDate, isDispatchedRun } from '../../utils/runUtils'
 import { shortId } from '../../utils/format'

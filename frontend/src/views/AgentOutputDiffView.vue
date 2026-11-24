@@ -6,7 +6,7 @@
 
       <BaseCard v-if="loadingRuns" padding="lg" data-testid="diff-loading">
         <div class="grid gap-4">
-          <div v-for="n in 3" :key="n" class="h-9 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock v-for="n in 3" :key="n" height-class="h-9 w-full" />
         </div>
       </BaseCard>
       <BaseCard v-else padding="lg">
@@ -94,7 +94,7 @@
 
       <BaseCard v-if="loading" padding="lg" data-testid="diff-comparing">
         <div class="grid gap-4">
-          <div v-for="n in 3" :key="n" class="h-9 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock v-for="n in 3" :key="n" height-class="h-9 w-full" />
         </div>
       </BaseCard>
       <div v-else-if="result" class="space-y-6">
@@ -190,6 +190,7 @@ import { useMutation } from '../composables/useMutation'
 import type { components } from '../lib/api/client'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import PageHeader from '../components/shared/PageHeader.vue'

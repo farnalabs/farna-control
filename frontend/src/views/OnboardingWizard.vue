@@ -43,9 +43,9 @@
       <!-- Step 1: Connect Tools -->
       <div v-if="currentStep === 1" class="space-y-4">
         <div v-if="loadingConnectors" class="space-y-3 py-4" aria-hidden="true">
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock height-class="h-16 w-full" />
+          <SkeletonBlock height-class="h-16 w-full" />
+          <SkeletonBlock height-class="h-16 w-full" />
         </div>
         <ErrorAlert v-else-if="connectorsError" :message="connectorsError" :on-retry="loadConnectors" />
         <EmptyState v-else-if="connectors.length === 0" :title="$t('views.OnboardingWizard.no_connectors_found')">
@@ -204,7 +204,7 @@
       <!-- Step 4: Browse Library -->
       <div v-if="currentStep === 4" class="space-y-4">
         <div v-if="loadingLibrary" class="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-hidden="true">
-          <div v-for="n in 4" :key="n" class="h-24 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock v-for="n in 4" :key="n" height-class="h-24 w-full" />
         </div>
         <ErrorAlert v-else-if="libraryError" :message="libraryError" :on-retry="loadLibrary" />
         <EmptyState v-else-if="libraryItems.length === 0" :title="$t('views.OnboardingWizard.no_library_items')" />
@@ -300,7 +300,7 @@
       <!-- Step 6: Telemetry Opt-In (FAR-1131) -->
       <div v-if="currentStep === 6" class="space-y-4">
         <div v-if="telemetryLoading" class="space-y-3 py-4" aria-hidden="true">
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock height-class="h-16 w-full" />
         </div>
         <div v-else>
           <div class="rounded-lg border border-dashed p-6 text-center">
@@ -465,6 +465,7 @@ import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
