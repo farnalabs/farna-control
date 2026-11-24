@@ -683,23 +683,14 @@
 
                   <!-- Operator enable/disable toggle (CO-5) -->
                   <div v-if="policyGate.exists" class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      role="switch"
-                      :aria-checked="policyGate.enabled"
-                      :aria-label="$t('views.EvalEditorView.policyGate.toggleAriaLabel')"
-                      data-testid="policy-gate-toggle"
-                      class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors"
-                      :class="policyGate.enabled ? 'bg-primary' : 'bg-input'"
+                    <ToggleSwitch
+                      :checked="policyGate.enabled"
+                      :label="$t('views.EvalEditorView.policyGate.toggleAriaLabel')"
                       :disabled="gateToggleBusy"
-                      @click="requestToggleGate"
-                    >
-                      <span
-                        class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                        :class="policyGate.enabled ? 'translate-x-4' : 'translate-x-0.5'"
-                        aria-hidden="true"
-                      />
-                    </button>
+                      :toggling="gateToggleBusy"
+                      data-testid="policy-gate-toggle"
+                      @toggle="requestToggleGate"
+                    />
                     <span class="text-xs text-muted-foreground">
                       {{ policyGate.enabled
                         ? $t('views.EvalEditorView.policyGate.enabledDescription')
@@ -995,6 +986,7 @@ import { usePlanStore } from '../stores/planStore'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil, Trash2 } from '@lucide/vue'
