@@ -1493,3 +1493,27 @@ def test_request_stop_defaults_to_the_realistic_wait() -> None:
 
     default = inspect.signature(supervisor_module.request_stop).parameters["timeout"].default
     assert default == supervisor_module.STOP_CONFIRM_TIMEOUT_SECONDS
+
+
+def test_reconcile_keeps_a_live_restore_window_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A LIVE restore-window record is a handle on a process, not debris."""
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir()
+    cleared: list[Path] = []
+    monkeypatch.setattr(supervisor_module, "live_restore_window_pid", lambda _data_dir: 4242)
+    monkeypatch.setattr(supervisor_module, "clear_restore_window_pidfile", lambda data_dir: cleared.append(data_dir))
+
+    assert supervisor_module.reconcile_orphans(pgdata) == "swept_debris"
+    assert cleared == [], "a live window record must never be cleared as debris"
+
+
+def test_read_window_pidfile_empty_is_none(tmp_path: Path) -> None:
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text("", encoding="ascii")
+
+    assert supervisor_module.read_restore_window_pidfile(tmp_path) is None
+
+
+def test_read_window_pidfile_skips_blank_lines(tmp_path: Path) -> None:
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text("\n4242\n", encoding="ascii")
+
+    assert supervisor_module.read_restore_window_pidfile(tmp_path) == 4242

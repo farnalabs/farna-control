@@ -162,6 +162,16 @@ class TestNoSnapshotWhenTheTargetHeadIsApplied:
         monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", lambda *_a, **_k: SimpleNamespace(directory=snapshot_dir))
         assert _preflight(tmp_path, skip_backup=False) == snapshot_dir
 
+    def test_a_pending_dump_that_returns_none_yields_no_snapshot(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+        """A probe that says "pending" but a dump that declines must not invent a path."""
+        monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _d: ["head-a"])
+        monkeypatch.setattr(upgrade_module, "_bundle_alembic_heads", lambda _b: {"head-b"})
+        monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", lambda *_a, **_k: None)
+
+        with caplog.at_level("WARNING", logger="farna.launcher.upgrade"):
+            assert _preflight(tmp_path, skip_backup=False) is None
+        assert "snapshot_skipped_after_pending_probe" in caplog.text
+
 
 class TestTheDowngradeGuardRunsBeforeTheSnapshot:
     """FAR-2667 acceptance criterion 8 on the NATIVE pre-flight path.

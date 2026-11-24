@@ -359,8 +359,7 @@ def _redact_secrets(text: str, password: str | None = None) -> str:
     if not password:
         return redacted
     for candidate in {password, urllib.parse.quote(password, safe=""), urllib.parse.quote_plus(password)}:
-        if candidate:
-            redacted = redacted.replace(candidate, "***")
+        redacted = redacted.replace(candidate, "***")
     return redacted
 
 

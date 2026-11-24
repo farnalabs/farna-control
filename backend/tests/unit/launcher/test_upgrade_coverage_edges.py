@@ -418,3 +418,31 @@ class TestDiskUsageUnreadable:
         monkeypatch.setattr(shutil, "disk_usage", _boom)
         with pytest.raises(UpgradeError, match="cannot measure free space"):
             upgrade_module.enforce_snapshot_disk_headroom(_DB_URL, tmp_path)
+
+
+class TestSnapshotByteWalk:
+    def test_only_regular_non_symlinked_files_are_counted(self, tmp_path: Path) -> None:
+        """Directories and symlinks (even to a file) are never followed or sized."""
+        directory = tmp_path / "snapshot"
+        directory.mkdir()
+        (directory / "database.sql").write_bytes(b"12345")
+        nested = directory / "nested"
+        nested.mkdir()
+        (nested / "extra.bin").write_bytes(b"xx")
+        target = tmp_path / "outside.bin"
+        target.write_bytes(b"0123456789")
+        (directory / "link.bin").symlink_to(target)
+
+        assert upgrade_module._snapshot_bytes(directory) == 7
+
+
+class TestHardenSnapshotPermissions:
+    def test_a_non_posix_host_is_a_noop(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """chmod is a no-op on Windows, so the hardening must skip, not warn."""
+        monkeypatch.setattr(upgrade_module, "os", SimpleNamespace(name="nt"))
+        chmod_calls: list[tuple[Path, int]] = []
+        monkeypatch.setattr(Path, "chmod", lambda path, mode: chmod_calls.append((path, mode)))
+
+        upgrade_module._harden_snapshot_permissions(tmp_path / "snapshot", tmp_path / "database.sql")
+
+        assert chmod_calls == []

@@ -317,3 +317,53 @@ class TestArchiveMember:
         monkeypatch.setattr(Path, "resolve", _resolve)
         with pytest.raises(click.ClickException, match="path outside the archive"):
             backup_mod._archive_member(archive, "file.txt")
+
+
+class TestStopBundledClusterOnWindows:
+    def test_windows_skips_the_sigint_rung_and_waits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """SIGINT cannot reach a child on Windows, so the fast rung is skipped."""
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(sys, "platform", "win32")
+        process = MagicMock()
+        process.poll.return_value = None
+
+        backup_mod._stop_bundled_cluster(process, Path(backup_mod._RESTORE_PG_LOG))
+
+        process.send_signal.assert_not_called()
+        process.wait.assert_called_once()
+
+
+class TestStopIdentifiedPid:
+    def test_a_non_posix_host_refuses_rather_than_pretend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+
+        assert backup_mod._stop_identified_pid(4242) is False
+
+    def test_a_pid_that_survives_every_signal_is_reported_not_stopped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Exhausting SIGINT/SIGTERM/SIGKILL must report the truth, not assume success."""
+        from farna.launcher import supervisor as supervisor_module
+
+        ticks = [0.0]
+
+        def _monotonic() -> float:
+            ticks[0] += 1_000_000.0
+            return ticks[0]
+
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(backup_mod.os, "kill", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+        monkeypatch.setattr(backup_mod.time, "monotonic", _monotonic)
+
+        assert backup_mod._stop_identified_pid(4242) is False
+
+
+class TestReapLeftoverWindowPostmaster:
+    def test_a_leftover_that_survives_the_stop_is_refused_loudly(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.launcher import supervisor as supervisor_module
+
+        monkeypatch.setattr(supervisor_module, "live_restore_window_pid", lambda _data_dir: 4321)
+        monkeypatch.setattr(backup_mod, "_stop_identified_pid", lambda _pid, **_kwargs: False)
+
+        with pytest.raises(click.ClickException, match="cannot stop it"):
+            backup_mod._reap_leftover_window_postmaster(tmp_path)
